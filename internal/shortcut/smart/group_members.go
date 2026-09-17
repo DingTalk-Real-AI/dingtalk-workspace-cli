@@ -22,6 +22,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
@@ -80,6 +81,9 @@ var GroupMembers = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（搜群关键词，用群名里连续的核心词）", Required: true},
+		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "用户成员起始游标", Aliases: []string{"page-token"}},
+		{Name: "single-page", Type: shortcut.FlagBool, Desc: "只读取一页用户成员，保留实际续页信息"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Default: "0", Desc: "后续页请求间隔毫秒（0–60000）"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "最大用户成员页数；--page-limit 必须在 1-500 之间"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -154,6 +158,9 @@ var ChatMembersList = shortcut.Shortcut{
 		{Name: "chat", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
 		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
 		{Name: "member-types", Type: shortcut.FlagStringSlice, Desc: "成员类型；--member-types 仅接受 user/bot；不传则同时返回"},
+		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "用户成员起始游标", Aliases: []string{"page-token"}},
+		{Name: "single-page", Type: shortcut.FlagBool, Desc: "只读取一页用户成员，保留实际续页信息"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Default: "0", Desc: "后续页请求间隔毫秒（0–60000）"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "用户成员桶最大页数；--page-limit 必须在 1-500 之间"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -203,6 +210,9 @@ var ChatMembersList = shortcut.Shortcut{
 				"openConversationId": groupID,
 			})
 			if botErr == nil {
+				if _, err := chatshortcut.StrictChatCollection(data, "bots", "robots", "list", "items"); err != nil {
+					return err
+				}
 				bots := groupBotProject(data)
 				payload["bots"] = bots
 				buckets["bots"] = map[string]any{
@@ -255,6 +265,9 @@ var ChatMembersList = shortcut.Shortcut{
 }
 
 func validateGroupMembersPageLimit(rt *shortcut.RuntimeContext) error {
+	if rt.Int("page-delay") < 0 || rt.Int("page-delay") > 60000 {
+		return apperrors.NewValidation("--page-delay 必须在0–60000之间")
+	}
 	if limit := rt.Int("page-limit"); limit < 1 || limit > groupMembersHardPageLimit {
 		return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 	}
@@ -278,10 +291,23 @@ func collectGroupUserMembers(rt *shortcut.RuntimeContext, groupID string, pageLi
 		failures:   []map[string]any{},
 		stopReason: "source_complete",
 	}
-	cursor := "0"
+	cursor := rt.StrFirst("page-token", "cursor")
+	if cursor == "" {
+		cursor = "0"
+	}
+	if rt.Bool("single-page") {
+		pageLimit = 1
+	}
 	seenCursors := map[string]bool{cursor: true}
 	seenIDs := map[string]bool{}
 	for result.pagesFetched < pageLimit {
+		if result.pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				result.failures = append(result.failures, map[string]any{"stage": "delay", "error": err.Error()})
+				result.stopReason = "delay_interrupted"
+				return result, nil
+			}
+		}
 		data, err := rt.CallMCPData("chat", "get_group_members", map[string]any{
 			"openconversation_id": groupID,
 			"cursor":              cursor,
@@ -300,6 +326,9 @@ func collectGroupUserMembers(rt *shortcut.RuntimeContext, groupID string, pageLi
 			return result, err
 		}
 		result.pagesFetched++
+		if _, err := chatshortcut.StrictChatCollection(data, "list", "members", "memberList", "items", "records"); err != nil {
+			return result, err
+		}
 		for _, member := range groupMemberProject(data) {
 			stableID := strings.TrimSpace(fmt.Sprint(member["openDingtalkId"]))
 			if stableID != "" && stableID != "<nil>" && seenIDs[stableID] {
@@ -325,6 +354,7 @@ func collectGroupUserMembers(rt *shortcut.RuntimeContext, groupID string, pageLi
 		result.hasMore = hasMore
 		if !hasMore {
 			result.complete = true
+			result.nextCursor = ""
 			result.stopReason = "source_complete"
 			return result, nil
 		}
@@ -424,6 +454,11 @@ func groupBotProject(data map[string]any) []map[string]any {
 			"openBotId":      groupMemberFirst(bot, "openBotId", "botId"),
 			"robotCode":      groupMemberFirst(bot, "robotCode", "code"),
 		}
+		for _, key := range []string{"creator", "isCreator", "manageable", "status", "avatar", "icon", "robotName"} {
+			if v, ok := bot[key]; ok {
+				row[key] = v
+			}
+		}
 		out = append(out, row)
 	}
 	return out
@@ -458,7 +493,12 @@ func groupMemberProject(data map[string]any) []map[string]any {
 			"name":           groupMemberFirst(m, "memberEmpName", "empName", "name", "userName", "staffName"),
 			"nick":           groupMemberFirst(m, "memberNick", "nick", "groupNick", "memberGroupNick"),
 			"role":           groupMemberFirst(m, "memberRoleDesc", "roleDesc", "role"),
-			"openDingtalkId": groupMemberFirst(m, "openDingtalkId", "openDingTalkId", "memberDingtalkId"),
+			"openDingtalkId": groupMemberFirst(m, "openDingtalkId", "openDingTalkId"),
+		}
+		for _, key := range []string{"memberDingtalkId", "memberEmpName", "memberNick", "memberGroupNick", "memberRole", "memberRoleDesc", "roleType", "avatar", "avatarUrl"} {
+			if v, ok := m[key]; ok {
+				row[key] = v
+			}
 		}
 		out = append(out, row)
 	}

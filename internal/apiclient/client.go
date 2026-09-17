@@ -32,6 +32,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 const (
@@ -97,9 +99,10 @@ type RawAPIResponse struct {
 
 // APIClient wraps an HTTP client for DingTalk OpenAPI calls.
 type APIClient struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	Token      string
+	BaseURL     string
+	HTTPClient  *http.Client
+	Token       string
+	DingTalkExt string
 }
 
 // NewClient creates an APIClient with sensible defaults.
@@ -190,6 +193,9 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 		httpReq.Header.Set("Content-Type", contentType)
 	}
 	httpReq.Header.Set("User-Agent", "dws-cli/raw-api")
+	if c.DingTalkExt != "" {
+		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
+	}
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {

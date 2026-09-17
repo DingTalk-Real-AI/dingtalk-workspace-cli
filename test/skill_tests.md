@@ -39,7 +39,7 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 | 产品 | Skill 参考文档 | 命令数 | 用例数 |
 |------|---------------|--------|--------|
-| `aitable` | `references/products/aitable.md` | 16 | 41 |
+| `aitable` | `references/products/aitable.md` | 16 | 49 |
 | `attendance` | `references/products/attendance.md` | 4 | 16 |
 | `calendar` | `references/products/calendar.md` | 13 | 30 |
 | `chat` | `references/products/chat.md` | 13 | 31 |
@@ -57,7 +57,7 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 ## 测试用例
 
-### aitable（41 条）
+### aitable（49 条）
 
 #### `dws aitable base create`
 
@@ -234,8 +234,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **aitable_aitable_record_query_005**
 - Prompt: 查询 base123 的 table456 中的记录，按字段 fld1 降序排列
-- Expected: `dws aitable record query --base-id base123 --table-id table456 --sort '[{"fieldId":"fld1","order":"desc"}]' --format json`
-- Flags: `--base-id` = `base123`, `--sort` = `[{"fieldId":"fld1","order":"desc"}]`, `--table-id` = `table456`
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --sort '[{"fieldId":"fld1","direction":"desc"}]' --format json`
+- Flags: `--base-id` = `base123`, `--sort` = `[{"fieldId":"fld1","direction":"desc"}]`, `--table-id` = `table456`
 
 **aitable_aitable_record_query_006**
 - Prompt: 查询 base123 的 table456 中状态为进行中的记录
@@ -246,6 +246,47 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 在 base123 的 table456 中搜索关键词 项目评审，只返回字段 fld1,fld2，每页10条
 - Expected: `dws aitable record query --base-id base123 --table-id table456 --keyword 项目评审 --limit 10 --field-ids fld1,fld2 --format json`
 - Flags: `--base-id` = `base123`, `--field-ids` = `fld1,fld2`, `--keyword` = `项目评审`, `--limit` = `10`, `--table-id` = `table456`
+
+**aitable_aitable_record_query_008**
+- Prompt: 完整拉取 base123 的 table456 所有记录用于汇总
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --all --page-limit 0 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--all` = `true`, `--page-limit` = `0`
+
+**aitable_aitable_record_query_009**
+- Prompt: 上一页返回 records 为空但 nextCursor 为 cur2，继续查 base123/table456
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --cursor cur2 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--cursor` = `cur2`
+
+**aitable_aitable_record_query_010**
+- Prompt: record query --all 由于 page-limit 截断，错误详情里 cursor 是 cur_resume，继续完整拉取
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --all --page-limit 0 --cursor cur_resume --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--all` = `true`, `--page-limit` = `0`, `--cursor` = `cur_resume`
+
+**aitable_aitable_record_query_011**
+- Prompt: 查询 base123/table456 状态为进行中，字段已解析为 fldStatus，选项 ID 为 optDoing
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","optDoing"]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","optDoing"]}]}`
+
+**aitable_aitable_record_query_012**
+- Prompt: 查询负责人是张三的记录，张三已通过 aisearch 唯一解析为 userId staff123
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldOwner",[{"userId":"staff123"}]]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldOwner",[{"userId":"staff123"}]]}]}`
+
+**aitable_aitable_record_query_013**
+- Prompt: 查询部门是研发部的记录，研发部已通过 contact +resolve-dept 唯一解析为 deptId 987
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldDept",[{"departmentId":"987"}]]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldDept",[{"departmentId":"987"}]]}]}`
+
+**aitable_aitable_record_query_014**
+- Prompt: 查询关联客户为阿里巴巴的记录，客户记录已唯一解析为 recCustomer1
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldCustomer","recCustomer1"]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldCustomer","recCustomer1"]}]}`
+
+**aitable_aitable_record_query_015**
+- Prompt: 查询 base123 的 table456 中优先级为高的记录，还不知道表里有哪些字段
+- Expected: `dws aitable field get --base-id base123 --table-id table456 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`
+- 说明: 查询指定数据前必须先完整读一遍表头，确定"优先级"对应的 fieldId 与类型后，再解析"高"并组装 filters
 
 #### `dws aitable table create`
 
@@ -270,6 +311,28 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 删除 base123 中的数据表 table456，说明原因是该表已废弃
 - Expected: `dws aitable table delete --base-id base123 --table-id table456 --reason 该表已废弃 --format json`
 - Flags: `--base-id` = `base123`, `--reason` = `该表已废弃`, `--table-id` = `table456`
+
+#### `dws aitable psql`
+
+**aitable_aitable_psql_001**
+- Prompt: 查看 AI 表格 base123 里有哪些可以用 PostgreSQL 查询的数据表
+- Expected: `dws aitable psql --database base123 --list`
+- Flags: `--database` = `base123`, `--list` = `true`
+
+**aitable_aitable_psql_002**
+- Prompt: 查看 AI 表格 base123 中数据表 table456 的 SQL 字段结构和类型
+- Expected: `dws aitable psql --database base123 --table table456`
+- Flags: `--database` = `base123`, `--table` = `table456`
+
+**aitable_aitable_psql_003**
+- Prompt: 用 PostgreSQL 查询 AI 表格 base123 的数据表1前10条
+- Expected: `dws aitable psql --database base123 --command 'SELECT * FROM "数据表1" LIMIT 10'`
+- Flags: `--database` = `base123`, `--command` = `SELECT * FROM "数据表1" LIMIT 10`
+
+**aitable_aitable_psql_004**
+- Prompt: 用 LEFT JOIN 查询 AI 表格 base123，数据表1的业务名称等于数据表2的文本
+- Expected: `dws aitable psql --database base123 --command 'SELECT * FROM "数据表1" LEFT JOIN "数据表2" ON "数据表1"."业务名称" = "数据表2"."文本"'`
+- Flags: `--database` = `base123`, `--command` = `SELECT * FROM "数据表1" LEFT JOIN "数据表2" ON "数据表1"."业务名称" = "数据表2"."文本"`
 
 #### `dws aitable table get`
 
@@ -1240,8 +1303,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **event_negative_oa_crud_001**
 - Prompt: 查询 8 月第一周待我处理的审批单
-- Expected: `dws oa approval list-pending --start "2026-08-01T00:00:00+08:00" --end "2026-08-08T00:00:00+08:00" --format json`
-- Flags: `--end` = `2026-08-08T00:00:00+08:00`, `--start` = `2026-08-01T00:00:00+08:00`
+- Expected: `dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-07 --format json`
+- Flags: `--create-time-from` = `2026-08-01`, `--create-time-to` = `2026-08-07`
 
 #### `dws dev app event list`
 

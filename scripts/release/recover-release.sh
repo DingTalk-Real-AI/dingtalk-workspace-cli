@@ -10,11 +10,12 @@ VERSION="${1:-}"
 REMOTE=""
 FAILED_RUN_ID=""
 FAILED_RUN_ATTEMPT=""
+DRAFT_RELEASE_ID=""
 EXPECTED_REPOSITORY="DingTalk-Real-AI/dingtalk-workspace-cli"
 
 usage() {
   cat >&2 <<'EOF'
-usage: recover-release.sh <version> --remote <name> [--failed-run <run-id>] [--failed-attempt <attempt>]
+usage: recover-release.sh <version> --remote <name> [--failed-run <run-id>] [--failed-attempt <attempt>] [--draft-release-id <release-id>]
 
 Recovers one failed existing release tag through the protected default-branch
 Release workflow. It never creates, moves, or deletes a tag.
@@ -28,6 +29,7 @@ while [ "$#" -gt 0 ]; do
     --remote) [ "$#" -ge 2 ] || { usage; exit 2; }; REMOTE="$2"; shift 2 ;;
     --failed-run) [ "$#" -ge 2 ] || { usage; exit 2; }; FAILED_RUN_ID="$2"; shift 2 ;;
     --failed-attempt) [ "$#" -ge 2 ] || { usage; exit 2; }; FAILED_RUN_ATTEMPT="$2"; shift 2 ;;
+    --draft-release-id) [ "$#" -ge 2 ] || { usage; exit 2; }; DRAFT_RELEASE_ID="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'unknown recovery argument: %s\n' "$1" >&2; usage; exit 2 ;;
   esac
@@ -49,6 +51,12 @@ if [ -n "$FAILED_RUN_ATTEMPT" ]; then
   }
   printf '%s\n' "$FAILED_RUN_ATTEMPT" | grep -Eq '^[1-9][0-9]*$' || {
     printf 'invalid failed Release run attempt: %s\n' "$FAILED_RUN_ATTEMPT" >&2
+    exit 2
+  }
+fi
+if [ -n "$DRAFT_RELEASE_ID" ]; then
+  printf '%s\n' "$DRAFT_RELEASE_ID" | grep -Eq '^[1-9][0-9]*$' || {
+    printf 'invalid draft GitHub Release ID: %s\n' "$DRAFT_RELEASE_ID" >&2
     exit 2
   }
 fi
@@ -247,6 +255,9 @@ printf '  tag object: %s\n' "$tag_object"
 printf '  commit:     %s\n' "$commit"
 printf '  failed run: https://github.com/%s/actions/runs/%s/attempts/%s\n' \
   "$EXPECTED_REPOSITORY" "$FAILED_RUN_ID" "$FAILED_RUN_ATTEMPT"
+if [ -n "$DRAFT_RELEASE_ID" ]; then
+  printf '  draft ID:   %s\n' "$DRAFT_RELEASE_ID"
+fi
 [ -t 0 ] || { printf '%s\n' 'interactive recovery confirmation is required' >&2; exit 1; }
 printf 'Type %s to request machine-verified recovery: ' "$VERSION"
 IFS= read -r confirmation
@@ -254,7 +265,7 @@ IFS= read -r confirmation
 
 nonce="${commit}-$(date +%s)-$$"
 workflow_sha="$(git rev-parse "refs/remotes/$REMOTE/main")"
-gh workflow run release.yml \
+set -- \
   --repo "$EXPECTED_REPOSITORY" \
   --ref main \
   -f "recover_release_version=$VERSION" \
@@ -264,6 +275,10 @@ gh workflow run release.yml \
   -f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT" \
   -f "recover_release_nonce=$nonce" \
   -f "recover_release_confirmation=$VERSION"
+if [ -n "$DRAFT_RELEASE_ID" ]; then
+  set -- "$@" -f "recover_draft_release_id=$DRAFT_RELEASE_ID"
+fi
+gh workflow run release.yml "$@"
 
 expected_title="Release recovery $VERSION at $commit $nonce"
 started_at="$(date +%s)"

@@ -520,12 +520,25 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 //  3. insert_document_block with attachment element
 //  4. list_document_blocks → prove the uploaded resource is visible in the document
 func runMediaInsert(cmd *cobra.Command, _ []string) error {
-	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
-	if err != nil {
-		return err
-	}
+	return insertDocMediaFile(cmd, "", "", deps.Out.PrintJSON)
+}
 
-	filePath := mustGetFlag(cmd, "file")
+// InsertDocMediaFile inserts one file into an explicitly selected document for
+// a composite creation flow. It does not inherit the document's title as the
+// attachment filename. The caller validates every local path before creation.
+func InsertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(any) error) error {
+	return insertDocMediaFile(cmd, nodeID, filePath, emit)
+}
+func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(any) error) error {
+	composite := nodeID != ""
+	if !composite {
+		var err error
+		nodeID, err = mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+		if err != nil {
+			return err
+		}
+		filePath = mustGetFlag(cmd, "file")
+	}
 	if filePath == "" {
 		return fmt.Errorf("flag --file is required")
 	}
@@ -539,6 +552,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	fileName, _ := cmd.Flags().GetString("name")
+	if composite {
+		fileName = ""
+	}
 	if fileName == "" {
 		fileName = filepath.Base(filePath)
 	} else if filepath.Ext(fileName) == "" {
@@ -553,9 +569,18 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	fileSize := fileInfo.Size()
+	fileView, _ := cmd.Flags().GetString("file-view")
+	if fileView != "" {
+		if fileView != "preview" && fileView != "summary" {
+			return fmt.Errorf("file-view仅支持preview/summary")
+		}
+		if strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("file-view仅适用于附件，不支持图片")
+		}
+	}
 
 	if deps.Caller.DryRun() {
-		return deps.Out.PrintJSON(map[string]any{
+		return emit(map[string]any{
 			"contractVersion": "doc.operation.v1",
 			"dry_run":         true,
 			"preview_kind":    "plan",
@@ -574,9 +599,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	// Step 1: get upload credentials (uploadUrl + resourceId)
-	deps.Out.PrintInfo(fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	fmt.Fprintln(cmd.ErrOrStderr(), fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
 
-	credText, err := callMCPToolReturnText(ctx, "get_doc_attachment_upload_info", map[string]any{
+	credText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
 		"fileName": fileName,
 		"fileSize": float64(fileSize),
@@ -592,7 +617,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 2: HTTP PUT file to OSS
-	deps.Out.PrintInfo("[2/4] 上传文件到 OSS...")
+	fmt.Fprintln(cmd.ErrOrStderr(), "[2/4] 上传文件到 OSS...")
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -615,7 +640,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 3: insert block into document
-	deps.Out.PrintInfo("[3/4] 插入块到文档...")
+	fmt.Fprintln(cmd.ErrOrStderr(), "[3/4] 插入块到文档...")
 
 	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
 
@@ -642,6 +667,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		if mimeType == "text/markdown" {
 			viewType = "summary"
 		}
+		if fileView != "" {
+			viewType = fileView
+		}
 		element = map[string]any{
 			"blockType": "attachment",
 			"attachment": map[string]any{
@@ -667,7 +695,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		insertArgs["referenceBlockId"] = v
 	}
 
-	insertText, err := callMCPToolReturnText(ctx, "insert_document_block", insertArgs)
+	insertText, err := callMCPToolReturnTextOnServer(ctx, "doc", "insert_document_block", insertArgs)
 	if err != nil {
 		return apperrors.NewAPI(
 			"附件已上传，但正文 block 插入结果未知；请先检查媒体列表，不要重复上传或插入",
@@ -698,8 +726,8 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 	insertedBlockID := insertedDocBlockID(insertResult)
 
-	deps.Out.PrintInfo("[4/4] 回读验证媒体块...")
-	verifiedBlockID, verifyErr := verifyInsertedDocMedia(ctx, nodeID, insertedBlockID, resourceID, resourceURL)
+	fmt.Fprintln(cmd.ErrOrStderr(), "[4/4] 回读验证媒体块...")
+	verifiedBlockID, verifyErr := verifyInsertedDocMediaView(ctx, nodeID, insertedBlockID, resourceID, resourceURL, fileView)
 	if verifyErr != nil {
 		return docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, verifyErr)
 	}
@@ -707,7 +735,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		insertedBlockID = verifiedBlockID
 	}
 
-	return deps.Out.PrintJSON(map[string]any{
+	return emit(map[string]any{
 		"contractVersion": "doc.operation.v1",
 		"ok":              true,
 		"status":          "success",
@@ -753,6 +781,9 @@ func docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName s
 var docMediaVerifyWait = waitForDocVerification
 
 func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, resourceURL string) (string, error) {
+	return verifyInsertedDocMediaView(ctx, nodeID, blockID, resourceID, resourceURL, "")
+}
+func verifyInsertedDocMediaView(ctx context.Context, nodeID, blockID, resourceID, resourceURL, view string) (string, error) {
 	delays := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
 	var lastErr error
 	for attempt := 0; attempt <= len(delays); attempt++ {
@@ -761,7 +792,7 @@ func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, re
 			lastErr = err
 		} else {
 			lastErr = nil
-			if found := findVerifiedMediaBlock(blocks, blockID, resourceID, resourceURL); found != "" {
+			if found := findVerifiedMediaBlock(blocks, blockID, resourceID, resourceURL); found != "" && docMediaViewMatches(blocks, found, view) {
 				return found, nil
 			}
 		}
@@ -775,6 +806,50 @@ func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, re
 		return "", fmt.Errorf("媒体资源在有界回读窗口内仍无法读取: %w", lastErr)
 	}
 	return "", fmt.Errorf("媒体资源在有界回读窗口内仍不可见")
+}
+
+// MCP summary is persisted as the editor's wideCard; preview is unchanged.
+// The mapping is checked against the exact block ID, never another attachment.
+func docMediaViewMatches(value any, blockID, requested string) bool {
+	if requested == "" {
+		return true
+	}
+	expected := requested
+	if requested == "summary" {
+		expected = "wideCard"
+	}
+	var walk func(any) bool
+	walk = func(v any) bool {
+		switch x := v.(type) {
+		case []any:
+			if len(x) > 1 {
+				_, isNode := x[0].(string)
+				if attrs, ok := x[1].(map[string]any); ok && isNode && directDocBlockIdentity(attrs) == blockID {
+					return attrs["viewType"] == expected
+				}
+			}
+			for _, c := range x {
+				if walk(c) {
+					return true
+				}
+			}
+		case map[string]any:
+			if _, ok := x["jsonml"].(string); ok {
+				if decoded := docMediaReadbackValue(x); decoded != nil {
+					if _, same := decoded.(map[string]any); !same {
+						return walk(decoded)
+					}
+				}
+			}
+			for _, c := range x {
+				if walk(c) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(value)
 }
 
 func waitForDocVerification(ctx context.Context, delay time.Duration) error {
@@ -1401,7 +1476,8 @@ func newDocCommand() *cobra.Command {
 	infoCmd := &cobra.Command{
 		Use:   "info",
 		Short: "获取文档元信息",
-		Long:  `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。`,
+		Long: `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。
+节点为快捷方式 (extension=dlink) 时，响应额外返回一跳目标的 linkSourceInfo；字段名沿用服务端定义，语义是链接目标。`,
 		Example: `  dws doc info --node DOC_ID
   dws doc info --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1425,17 +1501,18 @@ func newDocCommand() *cobra.Command {
 				CLIPath:        "doc info",
 				PrimaryCLIPath: "doc info",
 			},
-			Description: "获取文档元信息（标题/类型/创建者/权限等）",
+			Description: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "get_document_info"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取文档元信息（标题/类型/创建者/权限等）",
+				AgentSummary: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo，供内容类型路由",
 				UseWhen: []string{
 					"用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
-					"准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时",
+					"准备内容读取、编辑、导出或类型路由，需先看 contentType/extension；extension=dlink 时改用 linkSourceInfo.nodeId 继续解析时",
+					"需要区分快捷方式入口与目标时：内容操作使用 linkSourceInfo.nodeId，明确移动/重命名/删除快捷方式入口本身仍使用顶层 nodeId",
 				},
 				AvoidWhen: []string{
 					"已确认是 adoc 且只要正文改用 dws doc read",
@@ -2397,21 +2474,29 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	})
 
 	blockDeleteCmd := &cobra.Command{
-		Use:     "delete",
-		Short:   "删除块元素",
-		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>`,
+		Use:   "delete",
+		Short: "删除块元素",
+		Long: `删除文档中的块元素。
+
+--block-id 支持逗号分隔一次删除多个块，如 --block-id a,b,c，单次最多 50 个。
+`,
+		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
+  dws doc block delete --node DOC_ID --block-id BLOCK_A,BLOCK_B,BLOCK_C --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
 				return err
 			}
-			blockID := mustGetFlag(cmd, "block-id")
+			blockIDs, err := NormalizeBlockIDs(mustGetFlag(cmd, "block-id"))
+			if err != nil {
+				return err
+			}
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
 			return callMCPTool("delete_document_block", map[string]any{
 				"nodeId":  nodeID,
-				"blockId": blockID,
+				"blockId": strings.Join(blockIDs, ","),
 			})
 		},
 	}
@@ -2428,20 +2513,27 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				CLIPath:        "doc block delete",
 				PrimaryCLIPath: "doc block delete",
 			},
-			Description: "删除块元素（不可逆）",
+			Description: "删除块元素（不可逆），--block-id 支持逗号分隔一次删多个",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "delete_document_block"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "删除块元素（不可逆）",
-				UseWhen:      []string{"用户确认后删除文档中指定块元素时"},
+				AgentSummary: "删除块元素（不可逆），支持逗号分隔一次删除多个块",
+				UseWhen: []string{
+					"用户确认后删除文档中指定块元素时",
+					"需要删除多个块时用逗号分隔一次传入，不要循环调用",
+				},
 				AvoidWhen: []string{
 					"未确认或 blockId 不明时不要删；先 block list",
 					"删整篇文档用 doc/drive delete",
+					"单次超过 50 个块时拆成多次调用",
 				},
-				Examples: []string{"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json"},
+				Examples: []string{
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json",
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B> --format json",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId"},
@@ -2820,7 +2912,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 
 	// block delete
 	blockDeleteCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
-	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填)")
+	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个")
 
 	blockCmd.AddCommand(blockListCmd, blockInsertCmd, blockUpdateCmd, blockDeleteCmd)
 

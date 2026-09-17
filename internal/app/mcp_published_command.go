@@ -17,7 +17,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -25,6 +27,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -34,10 +37,35 @@ import (
 
 type mcpPublishedTransport interface {
 	Tools(context.Context, string) (transport.ToolsListResult, error)
-	Invoke(context.Context, string, string, map[string]any) (transport.ToolCallResult, error)
+	InvokeValidated(context.Context, string, string, map[string]any) (publishedmcp.ValidatedInvocationResult, error)
 }
 
 type mcpPublishedTransportFactory func(context.Context) (mcpPublishedTransport, error)
+
+const maxMCPPublishedParamsBytes = 1 << 20
+
+var validateMCPPublishedResult = output.ValidateResult
+
+type mcpPublishedInvokeResult struct {
+	MCPID                 string                   `json:"mcpId"`
+	Tool                  string                   `json:"tool"`
+	InputSchemaValidation string                   `json:"inputSchemaValidation"`
+	InputSchemaDigest     string                   `json:"inputSchemaDigest"`
+	Result                transport.ToolCallResult `json:"result"`
+}
+
+func mcpPublishedExactArgs(count int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(count)(cmd, args); err != nil {
+			return apperrors.NewValidation(
+				err.Error(),
+				apperrors.WithReason("invalid_positionals"),
+				apperrors.WithHint("Usage: "+cmd.UseLine()),
+			)
+		}
+		return nil
+	}
+}
 
 func newMCPPublishedGroup(caller edition.ToolCaller, factory mcpPublishedTransportFactory) *cobra.Command {
 	group := &cobra.Command{
@@ -66,19 +94,24 @@ func newMCPPublishedToolsCommand(caller edition.ToolCaller, factory mcpPublished
 		Use:               "tools <mcpId>",
 		Short:             "列出当前身份可用的已发布 MCP 工具",
 		Example:           "  dws mcp published tools 2480 --format json",
-		Args:              cobra.ExactArgs(1),
+		Args:              mcpPublishedExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mcpID := strings.TrimSpace(args[0])
-			endpoint, err := resolvePublishedMCPEndpoint(cmd.Context(), caller, mcpID)
+			ctx, cancel, err := mcpPublishedOperationContext(cmd)
 			if err != nil {
 				return err
 			}
-			client, err := factory(cmd.Context())
+			defer cancel()
+			endpoint, err := resolvePublishedMCPEndpoint(ctx, mcpPublishedCallerWithDeadline(caller, ctx), mcpID)
 			if err != nil {
 				return err
 			}
-			tools, err := client.Tools(cmd.Context(), endpoint)
+			client, err := factory(ctx)
+			if err != nil {
+				return err
+			}
+			tools, err := client.Tools(ctx, endpoint)
 			if err != nil {
 				return fmt.Errorf("列出已发布 MCP 工具: %w", err)
 			}
@@ -123,9 +156,9 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 	cmd := &cobra.Command{
 		Use:               "invoke <mcpId> <tool>",
 		Short:             "调用当前身份可用的已发布 MCP 工具",
-		Long:              "调用指定 mcpId 下的已发布工具。由于远端工具的副作用无法由静态 CLI Contract 判断，真实调用一律需要显式确认。",
+		Long:              "调用指定 mcpId 下的已发布工具。由于远端工具的副作用无法由静态 CLI Contract 判断，真实调用一律需要显式确认。安全门禁能力标识：inputSchemaDigest (fresh_core_subset_snapshot)。",
 		Example:           `  dws mcp published invoke 2480 search --params '{"query":"example"}' --dry-run --format json`,
-		Args:              cobra.ExactArgs(2),
+		Args:              mcpPublishedExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE:              runMCPPublishedInvoke(caller, factory),
 	}
@@ -139,6 +172,7 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 		},
 	)
 	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		OutputRollout: output.RolloutDualValidate,
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high",
 			Confirmation: "user_required", Idempotency: "unknown",
@@ -154,6 +188,25 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 			},
 			Description: "经确认后按 mcpId 和工具名调用当前身份可用的已发布 MCP 工具",
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation, RemoteReads: false},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"required":["mcpId","tool"],
+					"properties":{
+						"mcpId":{"type":"string","description":"MCP 市场服务 ID"},
+						"tool":{"type":"string","description":"经全量实时发现后精确唯一匹配的工具名"},
+						"kind":{"type":"string","description":"dry-run 预演的调用类型"},
+						"dry_run":{"type":"boolean","description":"是否仅完成本地预演"},
+						"executed":{"type":"boolean","description":"是否已发送远端工具调用"},
+						"product":{"type":"string","description":"固定为 mcp 的产品标识"},
+						"arguments":{"type":"object","description":"本地预演中解析后的工具参数"},
+						"inputSchemaValidation":{"type":"string","description":"本次调用前刚获取的 inputSchema 核心约束子集快照校验证据；快照未与服务端当前 Schema 原子绑定"},
+						"inputSchemaDigest":{"type":"string","description":"本次已校验 inputSchema 快照的确定性 JSON 编码 SHA-256 十六进制摘要；保留数字的词法表示"},
+						"result":{"description":"已发布 MCP 工具返回的任意远端结果"}
+					}
+				}`),
+			},
 			Interface: &contract.InterfaceSpec{
 				Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable,
 				Reason: "Resolves a per-identity endpoint through mcp-meta and invokes an arbitrary published server tool; the static wrapper therefore cannot bind one pinned interface_ref or infer the remote tool's effect.",
@@ -176,7 +229,7 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 			return err
 		}
 		if corecmd.BoolFlag(cmd, "dry-run") {
-			return output.WriteCommandPayload(cmd, map[string]any{
+			payload := map[string]any{
 				"kind":      "helper_invocation",
 				"dry_run":   true,
 				"executed":  false,
@@ -184,32 +237,92 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 				"mcpId":     mcpID,
 				"tool":      tool,
 				"arguments": params,
-			}, output.FormatJSON)
+			}
+			if err := validateMCPPublishedResult(output.Success(payload, output.WithDryRun())); err != nil {
+				return err
+			}
+			return output.WriteCommandPayload(cmd, payload, output.FormatJSON)
 		}
-		endpoint, err := resolvePublishedMCPEndpoint(cmd.Context(), caller, mcpID)
+		ctx, cancel, err := mcpPublishedOperationContext(cmd)
 		if err != nil {
 			return err
 		}
-		client, err := factory(cmd.Context())
+		defer cancel()
+		endpoint, err := resolvePublishedMCPEndpoint(ctx, mcpPublishedCallerWithDeadline(caller, ctx), mcpID)
 		if err != nil {
 			return err
 		}
-		result, err := client.Invoke(cmd.Context(), endpoint, tool, params)
+		client, err := factory(ctx)
 		if err != nil {
-			return fmt.Errorf("调用已发布 MCP 工具: %w", err)
+			return err
 		}
-		if result.IsError {
+		invocation, err := client.InvokeValidated(ctx, endpoint, tool, params)
+		if err != nil {
+			return err
+		}
+		if invocation.Result.IsError {
 			return apperrors.NewAPI(
-				"已发布 MCP 工具返回错误: "+extractMCPErrorMessage(result),
+				"已发布 MCP 工具返回错误: "+extractMCPErrorMessage(invocation.Result),
 				apperrors.WithReason("published_mcp_tool_error"),
 			)
 		}
-		return output.WriteCommandPayload(cmd, map[string]any{
-			"mcpId":    mcpID,
-			"tool":     tool,
-			"endpoint": transport.RedactURL(endpoint),
-			"result":   result,
-		}, output.FormatJSON)
+		payload := mcpPublishedInvokeResult{
+			MCPID:                 mcpID,
+			Tool:                  tool,
+			InputSchemaValidation: invocation.InputSchemaValidation,
+			InputSchemaDigest:     invocation.InputSchemaDigest,
+			Result:                invocation.Result,
+		}
+		if err := validateMCPPublishedResult(output.Success(payload)); err != nil {
+			return err
+		}
+		return output.WriteCommandPayload(cmd, payload, output.FormatJSON)
+	}
+}
+
+func mcpPublishedOperationContext(cmd *cobra.Command) (context.Context, context.CancelFunc, error) {
+	ctx := cmd.Context()
+	flag := cmd.Flags().Lookup("timeout")
+	if flag == nil {
+		return ctx, func() {}, nil
+	}
+	timeoutSeconds, err := cmd.Flags().GetInt("timeout")
+	if err != nil {
+		return ctx, func() {}, err
+	}
+	if timeoutSeconds <= 0 || int64(timeoutSeconds) > math.MaxInt64/int64(time.Second) {
+		return ctx, func() {}, apperrors.NewValidation(
+			"--timeout 必须是正整数秒且不能超出支持范围",
+			apperrors.WithReason("invalid_timeout"),
+		)
+	}
+	operationCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
+	return operationCtx, cancel, nil
+}
+
+func mcpPublishedCallerWithDeadline(caller edition.ToolCaller, ctx context.Context) edition.ToolCaller {
+	deadline, hasDeadline := ctx.Deadline()
+	if caller == nil || !hasDeadline {
+		return caller
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return caller
+	}
+	switch typed := caller.(type) {
+	case recordingToolCaller:
+		typed.inner = mcpPublishedCallerWithDeadline(typed.inner, ctx)
+		return typed
+	case *toolCallerAdapter:
+		runtime, ok := typed.runner.(*runtimeRunner)
+		if !ok || runtime == nil || runtime.transport == nil {
+			return caller
+		}
+		runtimeClone := *runtime
+		runtimeClone.transport = runtime.transport.WithHTTPTimeout(remaining)
+		return &toolCallerAdapter{runner: &runtimeClone, flags: typed.flags}
+	default:
+		return caller
 	}
 }
 
@@ -229,8 +342,17 @@ func parseMCPPublishedInvoke(cmd *cobra.Command, args []string) (string, string,
 	if err != nil {
 		return "", "", nil, err
 	}
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) > maxMCPPublishedParamsBytes {
+		return "", "", nil, apperrors.NewValidation(fmt.Sprintf("--params 不能超过 %d 字节", maxMCPPublishedParamsBytes))
+	}
+	if err := jsonutil.RejectDuplicateObjectKeys([]byte(trimmed)); err != nil {
+		return "", "", nil, apperrors.NewValidation("--params 必须是 JSON 对象")
+	}
 	var params map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &params); err != nil || params == nil {
+	decoder := json.NewDecoder(strings.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&params); err != nil || params == nil {
 		return "", "", nil, apperrors.NewValidation("--params 必须是 JSON 对象")
 	}
 	return mcpID, tool, params, nil
@@ -254,6 +376,9 @@ func resolvePublishedMCPEndpoint(ctx context.Context, caller edition.ToolCaller,
 	for _, block := range result.Content {
 		if block.Type != "text" || strings.TrimSpace(block.Text) == "" {
 			continue
+		}
+		if err := jsonutil.RejectDuplicateObjectKeys([]byte(block.Text)); err != nil {
+			return "", fmt.Errorf("MCP 元服务返回了无效 JSON: %w", err)
 		}
 		if err := apperrors.ClassifyMCPResponseText(block.Text); err != nil {
 			return "", err
@@ -300,6 +425,12 @@ func resolveMCPPublishedClientConfig(
 	var base *transport.Client
 	if runtime, ok := runner.(*runtimeRunner); ok {
 		base = runtime.transport
+	}
+	if base == nil {
+		base = transport.NewClient(nil)
+	}
+	if flags != nil && flags.Timeout > 0 {
+		base = base.WithHTTPTimeout(time.Duration(flags.Timeout) * time.Second)
 	}
 	return base, token, resolveIdentityHeaders(), nil
 }

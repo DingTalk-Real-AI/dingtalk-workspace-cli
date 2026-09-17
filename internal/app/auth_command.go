@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -31,6 +32,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
@@ -267,7 +269,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 						return planErr
 					}
 					if authLoginRecommendPlanSkipsInteractiveAuthorization(initialPlan) {
-						fmt.Fprintln(cmd.ErrOrStderr(), "推荐权限已全部授权或没有可授权项")
+						fmt.Fprintln(cmd.ErrOrStderr(), i18n.T("推荐权限已全部授权或没有可授权项"))
 						return nil
 					}
 					var err error
@@ -314,22 +316,22 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(w)
-			fmt.Fprintln(w, authLoginStatusLine("登录成功！"))
+			fmt.Fprintln(w, authLoginStatusLine(i18n.T("登录成功！")))
 			if tokenData != nil {
 				if tokenData.CorpName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业", tokenData.CorpName))
+					fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业"), tokenData.CorpName))
 				}
 				if tokenData.CorpID != "" {
-					fmt.Fprintln(w, authLoginInfoLine("企业 ID", tokenData.CorpID))
+					fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业 ID"), tokenData.CorpID))
 				}
 				if tokenData.UserName != "" {
-					fmt.Fprintln(w, authLoginInfoLine("用户", tokenData.UserName))
+					fmt.Fprintln(w, authLoginInfoLine(i18n.T("用户"), tokenData.UserName))
 				}
 				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintln(w, authLoginInfoLine("有效期", expiry))
+					fmt.Fprintln(w, authLoginInfoLine(i18n.T("有效期"), expiry))
 				}
 			}
-			fmt.Fprintln(w, authLoginMutedStyle().Render("Token 将自动刷新，无需重复登录"))
+			fmt.Fprintln(w, authLoginMutedStyle().Render(i18n.T("Token 将自动刷新，无需重复登录")))
 			return nil
 		},
 	}
@@ -1051,12 +1053,20 @@ func timeOrEmpty(t time.Time) string {
 func authLoginFormatExpiry(t time.Time) string {
 	remaining := time.Until(t)
 	if remaining <= 0 {
-		return "已过期"
+		return i18n.T("已过期")
 	}
 	if remaining > 24*time.Hour {
-		return fmt.Sprintf("%.0f 天后", remaining.Hours()/24)
+		days := math.Round(remaining.Hours() / 24)
+		if days == 1 {
+			return i18n.T("1 天后")
+		}
+		return i18n.Tf("%.0f 天后", days)
 	}
-	return fmt.Sprintf("%.0f 小时后", remaining.Hours())
+	hours := math.Round(remaining.Hours())
+	if hours == 1 {
+		return i18n.T("1 小时后")
+	}
+	return i18n.Tf("%.0f 小时后", hours)
 }
 
 // authLoginDisplayExpiry 返回用于显示的有效期（优先显示 refresh token 有效期）

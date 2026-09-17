@@ -1706,7 +1706,7 @@
 **event_negative_oa_crud_001** ✅ PASS
 
 - Prompt: 查询 8 月第一周待我处理的审批单
-- Expected: `dws oa approval list-pending --start "2026-08-01T00:00:00+08:00" --end "2026-08-08T00:00:00+08:00" --format json`
+- Expected: `dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-07 --format json`
 - Skill Reference: skills/multi/dingtalk-event/SKILL.md
 - Command path: PASS (oa approval list-pending)
 - Flags: PASS (2 flags validated)

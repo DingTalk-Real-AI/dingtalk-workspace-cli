@@ -9,10 +9,10 @@
 
 | 树 | 路径 | 角色 |
 |---|---|---|
-| **mono**（单 skill） | `skills/mono/` | 单一 `SKILL.md` 入口 + `references/products/*` 产品面 + 全局协议 |
-| **multi**（多 skill） | `skills/multi/` | 平铺 `dingtalk-*` 产品 skill + 必选 `dingtalk-shared` |
+| **mono**（单 skill） | `skills/mono/` | 单一 `SKILL.md` 入口 + `references/products/*` 产品面 + 全局协议。对公共 `npx skills add` 隐藏（`metadata.internal: true`）；`dws skill setup --mode mono` 仍安装 |
+| **multi**（多 skill） | `skills/multi/` | 平铺 `dingtalk-*` 产品 skill + 必选 `dingtalk-shared`。公共 Agent Skills CLI 与 `dws skill setup` 的默认源 |
 
-Agent / 安装面选哪棵树由**行为分支**决定；本文件只规定树内合同。
+Agent / 安装面选哪棵树由**行为分支**决定；本文件只规定树内合同。`npx skills add` 在 `skills/` 内最多走三层，因此 `skills/multi/<name>/SKILL.md` 可被发现，无需再扁平到 `skills/<name>/`。
 
 ## 2. Multi 目录合同（如何新增一个产品 skill）
 
@@ -86,7 +86,10 @@ skills/mono/
 | `<root>/mono/` | 与 `skills/mono/` 同构 |
 | `<root>/multi/` | 与 `skills/multi/` 同构 |
 
-质检可断言源树形状；**不**断言安装器默认解压哪棵。
+质检可断言源树形状；**不**断言安装器默认解压哪棵。显式执行
+`dws skill setup --source <path> --mode <mode>` 时，`<path>` 可以是这棵 Zip
+的解压根目录、对应的 `<root>/<mode>` 目录，或源码仓库根目录；安装器按所选
+mode 解析到唯一的实际内容树。
 
 ## 6. 变更流程
 

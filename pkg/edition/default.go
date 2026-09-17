@@ -67,6 +67,11 @@ func openSupplementServers() []ServerInfo {
 			Prefixes: []string{"recruit", "job"},
 		},
 		{
+			ID:       "contract",
+			Name:     "智能合同",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/571e843ffa2f7546207fcae482d0d47a43bb7e5317bc717172998e1e00691710",
+		},
+		{
 			ID:       "drive-internal",
 			Name:     "钉钉知识管理-内部",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02",

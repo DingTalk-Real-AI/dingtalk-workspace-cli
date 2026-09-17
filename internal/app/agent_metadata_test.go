@@ -24,10 +24,12 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	outputpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -205,7 +207,7 @@ func TestCrossPlatformCoverageAgentMetadataConfigRegistrationAndMasking(t *testi
 	var output strings.Builder
 	command.SetOut(&output)
 	command.SetArgs([]string{"--category", string(configmeta.CategoryExternal), "--show-values", "--json"})
-	if err := command.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(command); err != nil {
 		t.Fatalf("config list failed: %v", err)
 	}
 	rawOutput := output.String()
@@ -563,6 +565,9 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	t.Setenv(agentproduct.EnvName, "")
 	t.Setenv(envDWSAgentVersion, "2.0.0")
 	t.Setenv(envDWSAgentExt, `{"ua":"test-agent/2.0"}`)
+	testseam.Swap(t, &runtimeContextResolve, func() runtimecontext.Result {
+		return runtimecontext.ReadyResultForTest("runtime-context-value")
+	})
 
 	oldEdition := edition.Get()
 	t.Cleanup(func() { edition.Override(oldEdition) })
@@ -658,6 +663,7 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 			"X-Plugin":        "yes",
 			"X-Dws-Agent-Ver": "plugin-must-not-forge-version",
 			"X-Dws-Agent-Ext": `{"source":"plugin"}`,
+			"X-DingTalk-Ext":  `{"umid":"plugin-must-not-forge-runtime"}`,
 		},
 	}
 	registerPluginHTTPServer(pluginDescriptor)
@@ -685,8 +691,14 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	if captured[0].headers[transport.HeaderAgentVersion] != "2.0.0" || captured[0].headers[transport.HeaderAgentExt] != `{"ua":"test-agent/2.0"}` {
 		t.Fatalf("built-in MCP metadata = %#v", captured[0].headers)
 	}
+	if captured[0].headers[runtimecontext.HeaderName] != `{"umid":"runtime-context-value"}` {
+		t.Fatalf("built-in runtime context = %#v", captured[0].headers)
+	}
 	if hasHeaderFold(captured[1].headers, transport.HeaderAgentVersion) || hasHeaderFold(captured[1].headers, transport.HeaderAgentExt) {
 		t.Fatalf("plugin request leaked Agent metadata: %#v", captured[1].headers)
+	}
+	if hasHeaderFold(captured[1].headers, runtimecontext.HeaderName) {
+		t.Fatalf("plugin request leaked runtime context: %#v", captured[1].headers)
 	}
 	if got := captured[1].headers["X-Plugin"]; got != "yes" {
 		t.Fatalf("plugin-owned header = %q, want yes", got)
@@ -703,6 +715,7 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	if got := pluginRequestHeaders(&PluginAuth{ExtraHeaders: map[string]string{
 		"X-DWS-AGENT-VER": "forged",
 		"X-DWS-AGENT-EXT": `{"forged":true}`,
+		"X-DINGTALK-EXT":  `{"umid":"forged"}`,
 	}}); got != nil {
 		t.Fatalf("reserved-only plugin Headers survived sanitization: %#v", got)
 	}

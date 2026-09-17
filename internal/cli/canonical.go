@@ -23,10 +23,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// schemaCommandCatalogError / payloads use deliverySchemaCatalog
-// (RegisterSchemaSourceRoot → ResolveSchemaBuild). There is no committed
-// Schema Catalog embed fallback.
-var schemaCommandCatalogError = deliverySchemaCatalogError
+// schemaCommandCatalogError is retained as a command-boundary test seam. The
+// default must not load the monolithic Catalog: each route selects its own
+// Meta/product/all loader below.
+var schemaCommandCatalogError = func() error { return nil }
 
 // NewMCPCommand registers the mcp product declaration and returns its root
 // command. The app layer attaches reviewed static MCP helpers as
@@ -37,13 +37,14 @@ func NewMCPCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mcp",
 		HelpReferences: contract.HelpReferences{
-			RelatedSkills: []string{"dingtalk-shared"},
+			RelatedSkills: []string{"dingtalk-misc", "dingtalk-shared"},
 			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("MCP 开发与动态调用指南", "dingtalk-misc", "references/dev/mcp.md"),
 				contract.SkillDocumentation("Schema 与 MCP 使用指南", "dingtalk-shared", "references/schema-usage.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并静态查看或调用已发布工具",
+			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并动态发现、校验或调用已发布工具",
 			UseWhen: []string{
 				"需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端",
 				"已知 mcpId，需要查看或调用当前身份可用的已发布 MCP 工具",
@@ -101,6 +102,18 @@ func NewSchemaCommand() *cobra.Command {
 			if err := schemaCommandCatalogError(); err != nil {
 				return fmt.Errorf("load typed Schema registry: %w", err)
 			}
+			if !all && compact && len(args) == 1 &&
+				output.ResolveFormat(cmd, output.FormatJSON) == output.FormatJSON &&
+				output.ResolveFields(cmd) == "" && output.ResolveJQ(cmd) == "" &&
+				runtimeDeliveryLiveCatalog.Load() == nil {
+				auditSchemaDeliveryAccess("query loader")
+				if runtime := activeSchemaCacheRuntime(); runtime != nil {
+					if data, ok := runtime.renderedCompactLeaf(args[0]); ok {
+						_, err := cmd.OutOrStdout().Write(data)
+						return err
+					}
+				}
+			}
 			var payload map[string]any
 			var err error
 			if all {
@@ -123,30 +136,4 @@ func NewSchemaCommand() *cobra.Command {
 	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束、安全语义和返回契约")
 	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
 	return cmd
-}
-
-// splitSchemaPathTokens splits a CLI path on dots, slashes, and
-// whitespace, returning only non-empty tokens.
-func splitSchemaPathTokens(raw string) []string {
-	fields := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == '.' || r == '/' || r == ' ' || r == '\t'
-	})
-	out := fields[:0]
-	for _, f := range fields {
-		if s := strings.TrimSpace(f); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// normalizeSchemaQueryCLIPath accepts the historical query spellings while
-// keeping authored Registry CLI paths strict and space-separated. Canonical
-// identity lookup still runs before this compatibility normalization.
-func normalizeSchemaQueryCLIPath(path string) string {
-	parts := splitSchemaPathTokens(strings.TrimSpace(path))
-	if len(parts) > 0 && parts[0] == "dws" {
-		parts = parts[1:]
-	}
-	return strings.Join(parts, " ")
 }

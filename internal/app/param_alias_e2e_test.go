@@ -96,6 +96,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 			}
 		}
 		return `{"success":true,"nodeId":"node-1","workspaceId":"source-1","folderId":"source-folder"}`
+	case "list_wikiSpaces":
+		return `{"success":true,"wikiSpaces":[{"workspaceId":"drive-1","name":"我的文档"}],"hasMore":false}`
 	case "create_calendar_event":
 		return `{"success":true,"result":{"eventId":"event-1"}}`
 	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":
@@ -119,8 +121,18 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "list_conversation_message_v2", "list_individual_chat_message":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "search_messages":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "list_message_favorites":
+		return `{"result":{"items":[],"hasMore":false}}`
+	case "get_group_members", "list_group_bots":
+		return `{"result":{"list":[],"hasMore":false}}`
+	case "list_conversations_by_category":
+		return `{"result":{"conversations":[{"openConversationId":"fixture-conversation"}],"hasMore":false}}`
 	case "list_messages_by_ids":
-		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","content":"fixture message"}]}}`
+		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","senderOpenDingTalkId":"` + appFixtureCurrentDOpenID + `","content":"fixture message","resources":[{"resourceId":"resource-1","resourceIdType":"mediaId","resourceType":"image"}]}]}}`
 	case "get_conversation_info":
 		return `{"result":{"openConversationId":"fixture-conversation","convThreadEnabled":false}}`
 	case "search_contact_by_key_word":
@@ -162,8 +174,10 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		}
 		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
 		return string(encoded)
-	case "get_cover", "get_node_stats":
+	case "get_cover":
 		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1","views":1}}`
 	case "get_file_publish_status":
 		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
 	case "create_folder", "create_shortcut":

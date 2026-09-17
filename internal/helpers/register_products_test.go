@@ -30,7 +30,7 @@ func TestCrossPlatformCoveragePublicProductCommandsBuildCompleteUniqueTrees(t *t
 
 	for _, want := range []string{
 		"agoal", "aisearch", "aitable", "attendance", "calendar", "chat",
-		"contact", "devdoc", "ding", "doc", "drive", "live", "mail",
+		"contact", "devdoc", "ding", "doc", "drive", "html", "live", "mail",
 		"markdown", "minutes", "oa", "recruit", "report", "sheet", "todo", "wiki", "whiteboard",
 	} {
 		if !seenProducts[want] {

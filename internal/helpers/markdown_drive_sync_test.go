@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -95,7 +96,7 @@ func executeMarkdownDriveCommand(t *testing.T, product *cobra.Command, input io.
 	} else {
 		root.SetErr(io.Discard)
 	}
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func executeMarkdownGlobalDryRun(t *testing.T, product *cobra.Command, args ...string) error {
@@ -113,7 +114,7 @@ func executeMarkdownGlobalDryRun(t *testing.T, product *cobra.Command, args ...s
 	if deps != nil && deps.Out != nil {
 		root.SetErr(deps.Out.errW)
 	}
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func writeMarkdownDriveFixture(t *testing.T, name, content string) string {
@@ -388,6 +389,7 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"downloadUrl":"https://download.test/current.md","fileName":"current.md"}`},
 			},
 		}
@@ -400,7 +402,8 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].tool != "download_file" {
 			t.Fatalf("local preview calls = %#v", caller.calls)
 		}
 		var payload map[string]any
@@ -578,7 +581,7 @@ func TestCrossPlatformCoverageMarkdownCreateFolderAutoRouting(t *testing.T) {
 
 func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProbe(t *testing.T) {
 	t.Run("conflicting explicit routes fail closed", func(t *testing.T) {
-		got, err := resolveMarkdownCreateTarget(context.Background(), "folder", "space", "workspace")
+		got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, "folder", "space", "workspace")
 		if err == nil || got {
 			t.Fatalf("useDoc=%v err=%v, want false with an error", got, err)
 		}
@@ -599,7 +602,7 @@ func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProb
 		t.Run(test.name, func(t *testing.T) {
 			caller := &markdownDriveCaller{format: "json"}
 			installMarkdownDriveDeps(t, caller)
-			got, err := resolveMarkdownCreateTarget(context.Background(), test.folderID, test.spaceID, test.workspaceID)
+			got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, test.folderID, test.spaceID, test.workspaceID)
 			if err != nil || got != test.wantDoc {
 				t.Fatalf("useDoc=%v err=%v, want useDoc=%v", got, err, test.wantDoc)
 			}
@@ -705,7 +708,7 @@ func TestMarkdownOutputPathRejectsRemoteSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	if _, err := resolveMarkdownOutputPath(dir, "../../remote.md"); err == nil || !strings.Contains(err.Error(), "符号链接") {
+	if _, err := resolveTextOutputPath(dir, "../../remote.md", markdownTextFileSpec); err == nil || !strings.Contains(err.Error(), "符号链接") {
 		t.Fatalf("expected symlink rejection, got %v", err)
 	}
 	if data, err := os.ReadFile(target); err != nil || string(data) != "keep" {
@@ -718,6 +721,7 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
 				{text: `{"updated":true}`},
 			},
@@ -738,10 +742,14 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		if uploaded != "# changed" {
 			t.Fatalf("uploaded content = %q", uploaded)
 		}
-		if len(caller.calls) != 2 {
+		if len(caller.calls) != 3 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		for _, call := range caller.calls {
+		// The remote target type is probed even with an explicit --name.
+		if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" {
+			t.Fatalf("target probe call = %#v", caller.calls[0])
+		}
+		for _, call := range caller.calls[1:] {
 			if call.server != "drive" || call.args["overwriteFileId"] != "file-1" {
 				t.Fatalf("overwrite call = %#v", call)
 			}
@@ -853,7 +861,7 @@ func TestMarkdownPatchCancellationStopsBeforeUploadMetadata(t *testing.T) {
 	_ = stderr
 }
 
-func TestMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
 	names := map[string]string{
 		`../../escape.md`:       "escape.md",
 		`..\..\windows.md`:      "windows.md",
@@ -884,6 +892,7 @@ func TestMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
 	}
 	if !isTimeoutCLIError(&CLIError{Code: CodeNetworkTimeout}) ||
 		!isTimeoutCLIError(errors.New("request timeout")) ||
+		!isTimeoutCLIError(context.DeadlineExceeded) ||
 		!isPermissionCLIError(&CLIError{Code: CodeAuthPermission}) ||
 		!isPermissionCLIError(&PATError{RawJSON: `{}`}) {
 		t.Fatal("typed routing errors were not classified")
@@ -1080,11 +1089,11 @@ func TestMarkdownContentSourcesAndHumanDiffs(t *testing.T) {
 
 	longBefore := strings.Repeat("old\n", 25)
 	longAfter := strings.Repeat("new\n", 25)
-	overwriteDiff := renderMarkdownOverwriteDiff("node-1", longBefore, longAfter)
+	overwriteDiff := renderTextOverwriteDiff("node-1", longBefore, longAfter, markdownTextFileSpec)
 	if !strings.Contains(overwriteDiff, "... (") || !strings.Contains(overwriteDiff, "No write performed") {
 		t.Fatalf("overwrite diff did not truncate safely:\n%s", overwriteDiff)
 	}
-	if err := printMarkdownPatchDiff("node-1", "old", "new", 1); err != nil {
+	if err := printTextPatchDiff("node-1", "old", "new", 1, markdownTextFileSpec); err != nil {
 		t.Fatal(err)
 	}
 	if text := stdout.String(); !strings.Contains(text, "markdown patch") || !strings.Contains(text, "- old") || !strings.Contains(text, "+ new") {
@@ -1266,26 +1275,33 @@ func TestMarkdownOverwritePreservesRemoteName(t *testing.T) {
 	}
 }
 
-func TestMarkdownDomainResolutionErrorsAreActionable(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownDomainResolutionErrorsAreActionable(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		want string
+		name      string
+		steps     []markdownDriveStep
+		want      string
+		wantCause error
 	}{
-		{name: "timeout", err: context.DeadlineExceeded, want: "超时"},
-		{name: "permission", err: &CLIError{Code: CodeAuthPermission, Message: "denied"}, want: "无权限"},
-		{name: "not found", err: errors.New("missing"), want: "均未找到"},
+		{name: "deadline", steps: []markdownDriveStep{{err: context.DeadlineExceeded}, {err: context.DeadlineExceeded}}, want: "超时", wantCause: context.DeadlineExceeded},
+		{name: "drive canceled", steps: []markdownDriveStep{{err: context.Canceled}, {err: errors.New("missing")}}, want: context.Canceled.Error(), wantCause: context.Canceled},
+		{name: "doc canceled", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: context.Canceled}}, want: context.Canceled.Error(), wantCause: context.Canceled},
+		{name: "doc deadline", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: context.DeadlineExceeded}}, want: "超时", wantCause: context.DeadlineExceeded},
+		{name: "permission", steps: []markdownDriveStep{{err: &CLIError{Code: CodeAuthPermission, Message: "denied"}}, {err: &CLIError{Code: CodeAuthPermission, Message: "denied"}}}, want: "无权限"},
+		{name: "not found", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: errors.New("missing")}}, want: "均未找到"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			caller := &markdownDriveCaller{
 				format: "json",
-				steps:  []markdownDriveStep{{err: test.err}, {err: test.err}},
+				steps:  test.steps,
 			}
 			installMarkdownDriveDeps(t, caller)
 			_, err := resolveFileDomain(context.Background(), "node-1")
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want substring %q", err, test.want)
+			}
+			if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+				t.Fatalf("route error = %v, want cause %v", err, test.wantCause)
 			}
 			if len(caller.calls) != 2 {
 				t.Fatalf("route probes = %#v", caller.calls)

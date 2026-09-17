@@ -102,7 +102,6 @@ var Book = shortcut.Shortcut{
 		// creating the event, so an unknown/ambiguous name fails cheaply without
 		// leaving a dangling event behind.
 		var userIDs []string
-		var userNames []string
 		withPeople := rt.Changed("with") && strings.TrimSpace(rt.Str("with")) != ""
 		if withPeople {
 			for _, name := range strings.Split(rt.Str("with"), ",") {
@@ -115,7 +114,6 @@ var Book = shortcut.Shortcut{
 					return err
 				}
 				userIDs = append(userIDs, user.userID)
-				userNames = append(userNames, user.name)
 			}
 			if len(userIDs) == 0 {
 				return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
@@ -170,7 +168,8 @@ var Book = shortcut.Shortcut{
 			}
 		}
 
-		// Step 4 — prove the final state before returning one composed result.
+		// Step 4 — verify the created event. Participant identities cannot be
+		// read back, so their addition is confirmed by the write receipt above.
 		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
 		if err != nil {
 			return err
@@ -182,33 +181,21 @@ var Book = shortcut.Shortcut{
 		if err := calendarSmartVerifyCreatedEvent(event, eventID, rt.Str("title"), start, end); err != nil {
 			return err
 		}
-		if len(userIDs) > 0 {
-			participants, err := rt.CallMCPData("calendar", "get_calendar_participants", map[string]any{"eventId": eventID})
-			if err != nil {
-				return err
-			}
-			present, err := calendarSmartAttendees(participants)
-			if err != nil {
-				return err
-			}
-			currentUserID, err := calendarSmartCurrentUserID(rt, present)
-			if err != nil {
-				return err
-			}
-			if err := calendarSmartVerifyAttendees(present, userIDs, userNames, currentUserID); err != nil {
-				return err
-			}
+		result := map[string]any{
+			"success":       true,
+			"eventId":       eventID,
+			"verified":      len(userIDs) == 0,
+			"eventVerified": true,
+			"event":         event,
 		}
-		return rt.Output(map[string]any{
-			"success":  true,
-			"eventId":  eventID,
-			"verified": true,
-			"event":    event,
-		})
+		if len(userIDs) > 0 {
+			result["attendeesAcknowledged"] = true
+		}
+		return rt.Output(result)
 	},
 }
 
 func init() {
-	finalizeCalendarSmart(&Book, "已创建并通过精确读回验证的日程")
+	finalizeCalendarSmart(&Book, "已创建的日程；eventVerified=true 表示日程 ID、标题和时间已读回验证；带参会人时 attendeesAcknowledged=true、verified=false，仅依据添加接口成功回执确认邀请；不带参会人时 verified=true")
 	shortcut.Register(Book)
 }

@@ -52,27 +52,39 @@ const (
 
 var (
 	registryMu      sync.Mutex
-	publicFactories []Factory
+	publicFactories []registeredFactory
 )
 
-func RegisterPublic(factory Factory) {
+type registeredFactory struct {
+	name    string
+	factory Factory
+}
+
+func RegisterPublicNamed(name string, factory Factory) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	publicFactories = append(publicFactories, factory)
+	publicFactories = append(publicFactories, registeredFactory{name: name, factory: factory})
 }
 
 func NewPublicCommands(runner executor.Runner) []*cobra.Command {
 	return buildCommands(publicFactories, runner)
 }
 
-func buildCommands(factories []Factory, runner executor.Runner) []*cobra.Command {
+func buildCommands(factories []registeredFactory, runner executor.Runner) []*cobra.Command {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 
 	out := make([]*cobra.Command, 0, len(factories))
-	for _, factory := range factories {
-		handler := factory()
+	for _, registered := range factories {
+		handler := registered.factory()
 		command := handler.Command(runner)
+		builtName := "<nil>"
+		if command != nil {
+			builtName = command.Name()
+		}
+		if builtName != registered.name {
+			panic(fmt.Sprintf("public command factory %q built %q", registered.name, builtName))
+		}
 		out = append(out, command)
 	}
 	sort.Slice(out, func(i, j int) bool {

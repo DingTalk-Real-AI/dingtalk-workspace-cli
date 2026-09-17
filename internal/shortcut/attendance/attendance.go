@@ -495,7 +495,7 @@ var GetApproveTemplate = shortcut.Shortcut{
 	Command:     "+get-approve-template",
 	Product:     serverWukong,
 	Description: "查询补卡/请假/加班/外出/出差审批提交链接",
-	Intent:      "当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。",
+	Intent:      "当用户需要发起考勤审批时使用：加班、外出、出差场景返回可直接打开填写并提交的审批链接（本命令只返回链接、不代替提交）；请假与补卡场景作为 dws oa 域发起工作流的第一步模板定位（返回 formName/processCode/submitUrl），并为 CLI 暂不支持的模板（哺乳假、需上传证明材料的请假；含需上传证据图片控件的补卡）提供客户端提交链接兜底。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -517,9 +517,12 @@ var GetApproveTemplate = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询补卡/请假/加班/外出/出差审批提交链接",
-			UseWhen:      []string{"当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws attendance +get-approve-template --type leave"},
+			UseWhen:      []string{"当用户需要发起考勤审批时使用：加班、外出、出差场景返回可直接打开填写并提交的审批链接（本命令只返回链接、不代替提交）；请假与补卡场景作为 dws oa 域发起工作流的第一步模板定位（返回 formName/processCode/submitUrl），并为 CLI 暂不支持的模板（哺乳假、需上传证明材料的请假；含需上传证据图片控件的补卡）提供客户端提交链接兜底。"},
+			AvoidWhen: []string{
+				"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令",
+				"请假模板支持 CLI 直接发起（请假套件）时，不要停留在提交链接引导，应继续走请假工作流（oa approval form-schema → attendance approve leave-duration → attendance approve leave-check → oa approval create-instance）",
+			},
+			Examples: []string{"dws attendance +get-approve-template --type leave"},
 		},
 	},
 	Flags: []shortcut.Flag{

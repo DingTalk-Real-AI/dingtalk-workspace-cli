@@ -347,6 +347,15 @@ Definition（仅声明；不可编译）
 4. `DeclareLeafMetadata` 传入 Flags/Call/RunE/PostMount 等执行面字段直接 panic，防止半接管；**唯一允许的执行钩子是 `Validate`**，与 `ConfirmSafety` 同在 RunE 层（禁止只挂 PreRunE——直接调 `RunE` / `proxySubCmd` 会跳过 PreRunE）。无独立 Caller 的本地/PAT 命令必须提供 `Validate`，否则会回退成确认抢先。
 5. **长期展望**（非当前硬要求）：更多 Shortcut 可收敛到 mcpbind 形态 1/2，并减少仅为参数装配而存在的 `Execute` 函数体。不得把「必须删除 `Shortcut.Execute` / 必须 mcpbind」写成当前门禁。
 
+参数校验与错误治理的接入约定见
+[统一命令框架参数校验方案](unified-validation-errors-v2.md)。Tier1 与 Tier2 的自定义
+Validate 均由 `corecmd.WithValidation` 构造执行包装；失败不会进入后续确认或业务步骤，
+后续步骤错误不重分类。Tier2 的 deferred caller 继续留在迁移接缝中。
+
+Cobra 接入由装配结束后的 `corecmd.PrepareCommandTree` 一次完成，独立命令亦如此；
+`corecmd.New` 不安装 local/final 双层适配器。app 工厂返回已准备的 root，测试扩展需在
+工厂组装回调内挂载。重复执行沿用 Cobra 有状态语义，独立调用需从工厂重新构造。
+
 #### 5.0.3 与目标 `Contract` 的对应
 
 ```text

@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 func TestNewClient_DefaultBaseURL(t *testing.T) {
@@ -75,6 +77,23 @@ func TestDo_Success(t *testing.T) {
 	}
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCrossPlatformCoverageDoDingTalkExtensionHeader(t *testing.T) {
+	c := NewClient("test-token", "")
+	c.DingTalkExt = `{"umid":"runtime-value"}`
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("runtime extension = %q", got)
+		}
+		if got := r.Header.Get(AuthHeader); got != "test-token" {
+			t.Fatalf("auth header changed = %q", got)
+		}
+		return jsonHTTPResponse(`{"ok":true}`), nil
+	})
+	if _, err := c.Do(context.Background(), RawAPIRequest{Method: "GET", Path: "/v1.0/test"}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -155,8 +174,9 @@ func TestIsLegacyAPI(t *testing.T) {
 	}
 }
 
-func TestDo_LegacyAPI_TokenInQueryParam(t *testing.T) {
+func TestCrossPlatformCoverageDoLegacyAPITokenInQueryParam(t *testing.T) {
 	c := NewClient("legacy-token", "")
+	c.DingTalkExt = `{"umid":"legacy-value"}`
 	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		// Legacy API: token should be in query param.
 		if r.URL.Query().Get(LegacyAuthParam) != "legacy-token" {
@@ -165,6 +185,9 @@ func TestDo_LegacyAPI_TokenInQueryParam(t *testing.T) {
 		// Should NOT have the new-style auth header.
 		if r.Header.Get(AuthHeader) != "" {
 			t.Errorf("expected no auth header for legacy API, got %q", r.Header.Get(AuthHeader))
+		}
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("legacy runtime extension = %q", got)
 		}
 		return jsonHTTPResponse(`{"errcode":0,"errmsg":"ok","result":{"userid":"user1"}}`), nil
 	})
@@ -231,11 +254,15 @@ func TestResolvePageLimit(t *testing.T) {
 	}
 }
 
-func TestPaginateAll_ProgressLog(t *testing.T) {
+func TestCrossPlatformCoveragePaginateAllProgressLog(t *testing.T) {
 	callCount := 0
 	c := NewClient("test-token", "")
+	c.DingTalkExt = `{"umid":"paginated-value"}`
 	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		callCount++
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("page %d runtime extension = %q", callCount, got)
+		}
 		var body string
 		if callCount >= 3 {
 			body = `{"result":{"has_more":false,"items":[1,2]}}`

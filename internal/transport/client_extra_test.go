@@ -64,15 +64,16 @@ func TestMatchDomain(t *testing.T) {
 	}
 }
 
-func TestRedactURL(t *testing.T) {
+func TestCrossPlatformCoverageRedactURL(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		input string
 		want  string
 	}{
-		{"https://api.example.com/path", "https://api.example.com/path"},
-		{"https://api.example.com/path?key=secret&token=abc", ""},
-		{"not a url ://", "not a url ://"},
+		{"https://api.example.com/path-secret", "https://api.example.com"},
+		{"https://api.example.com/path?key=secret&token=abc", "https://api.example.com"},
+		{"https://user:password@api.example.com/path#secret-fragment", "https://api.example.com"},
+		{"not a url ://", "<invalid-endpoint>"},
 	}
 	for _, tt := range tests {
 		got := RedactURL(tt.input)
@@ -83,6 +84,24 @@ func TestRedactURL(t *testing.T) {
 			}
 		} else if got != tt.want {
 			t.Fatalf("RedactURL(%s) = %s, want %s", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageValidateTrustedEndpoint(t *testing.T) {
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "")
+	client := NewClient(nil)
+	if err := client.ValidateTrustedEndpoint("https://mcp-gw.dingtalk.com/credential-path?token=secret"); err != nil {
+		t.Fatalf("trusted endpoint rejected: %v", err)
+	}
+	for _, endpoint := range []string{
+		"https://evil.example/mcp",
+		"https://user:password@mcp-gw.dingtalk.com/mcp",
+		"ftp://localhost/mcp",
+		"://invalid",
+	} {
+		if err := client.ValidateTrustedEndpoint(endpoint); err == nil {
+			t.Fatalf("untrusted endpoint %q accepted", endpoint)
 		}
 	}
 }
@@ -117,8 +136,8 @@ func TestDoWithRetryRedactsGatewayQueryInHeaderDebugLog(t *testing.T) {
 	if strings.Contains(out, "key=secret") || strings.Contains(out, "secret") {
 		t.Fatalf("debug log leaked gateway key: %s", out)
 	}
-	if !strings.Contains(out, "key=REDACTED") {
-		t.Fatalf("debug log did not include redacted endpoint, got: %s", out)
+	if !strings.Contains(out, `"endpoint":"https://mcp-gw.dingtalk.com"`) || strings.Contains(out, "/server/demo") {
+		t.Fatalf("debug log did not reduce endpoint to its origin, got: %s", out)
 	}
 }
 

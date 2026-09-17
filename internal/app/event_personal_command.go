@@ -155,6 +155,7 @@ var (
 	personalLoadTokenData               = authpkg.LoadTokenData
 	personalLoadProfiles                = authpkg.LoadProfiles
 	personalClientID                    = authpkg.ClientID
+	personalClientIDMetadata            = authpkg.ClientIDMetadata
 	personalRuntimeEventClientID        = runtimePersonalEventClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
 )
@@ -171,8 +172,15 @@ func newEventSchemaCommand() *cobra.Command {
 	var formatRaw string
 	var flatten bool
 	cmd := &cobra.Command{
-		Use:               "schema <event_key>",
-		Short:             "显示事件 schema",
+		Use:   "schema <event_key>",
+		Short: "显示事件 schema",
+		Long: `显示指定个人事件的输出字段 Schema。
+
+默认描述兼容 transport envelope；Agent 或脚本使用 --flatten 时，应同时查询
+--flatten Schema。互动卡片回调的回答、问题、操作者、业务与会话上下文位于
+payload.body，结构化业务上下文优先读取 payload.body.actionData.context。`,
+		Example: `  dws event schema user_card_action_triggered --flatten -f json
+  dws event schema user_im_message_receive_at --flatten -f json`,
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -222,14 +230,14 @@ func newEventSchemaCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM、OA 或 Todo event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				UseWhen:      []string{"已知任一公开个人 IM、OA、VoIP、Todo 或互动卡片 event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
 				},
 				Examples: []string{
 					"dws event schema user_im_message_receive_at --flatten --format json",
-					"dws event schema user_oa_approval_task_created --flatten --format json",
+					"dws event schema user_card_action_triggered --flatten --format json",
 				},
 			},
 		},
@@ -303,7 +311,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -572,7 +580,7 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -846,7 +854,10 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 			RoleTypes:      plan.RoleTypes,
 		})
 		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
-		ruleJSON, _ := personal.CanonicalJSON(ruleParam)
+		ruleJSON := ""
+		if ruleParam != nil {
+			ruleJSON, _ = personal.CanonicalJSON(ruleParam)
+		}
 		fmt.Fprintf(w, "  subscription[%d]  : event_key=%s rule_type=%s rule_param=%s",
 			i, plan.EventKey, ruleType, ruleJSON)
 		if filter != "" {
@@ -916,13 +927,13 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 }
 
 func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
-	if err := validatePersonalOAOrVoIPOptions(eventKey, opts); err != nil {
+	if err := validatePersonalUnfilteredEventOptions(eventKey, opts); err != nil {
 		return err
 	}
 	return validatePersonalTodoOptions(eventKey, opts)
 }
 
-func validatePersonalOAOrVoIPOptions(eventKey string, opts personalConsumeOptions) error {
+func validatePersonalUnfilteredEventOptions(eventKey string, opts personalConsumeOptions) error {
 	changed := personalUnsupportedOptionNames(opts)
 	if len(changed) == 0 {
 		return nil
@@ -934,6 +945,7 @@ func validatePersonalOAOrVoIPOptions(eventKey string, opts personalConsumeOption
 	categoryName := map[string]string{
 		"oa":   "OA",
 		"voip": "VoIP",
+		"card": "card",
 	}[def.Category]
 	if categoryName == "" {
 		return nil
@@ -1108,7 +1120,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 		return err
 	}
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event status --as user: %w", err)
 	}
@@ -1252,7 +1264,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -1391,16 +1403,16 @@ func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, bu
 	fmt.Fprintf(w, "cancelled %d personal subscription(s); %s\n", len(subscribeIDs), busState)
 }
 
-func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, options ...personalIdentityOptions) (personal.Identity, error) {
+	opts := personalIdentityOption(options)
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride)
+		// Preserve the stored-token path's profile identity precedence. Only the
+		// internal bus supplies a parent-resolved override directly to the resolver.
+		opts.ClientID = ""
+		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
-	clientIDOverride := ""
-	if len(clientIDOverrides) > 0 {
-		clientIDOverride = strings.TrimSpace(clientIDOverrides[0])
-	}
-	return resolvePersonalEventIdentityWithToken(ctx, configDir, sourceIDOverride, explicitToken, clientIDOverride)
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
 }
 
 // resolvePersonalEventIdentityWithToken resolves only non-sensitive identity
@@ -1409,9 +1421,17 @@ func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, source
 // --token must never be replaced with, persisted into, or used to refresh a
 // local OAuth profile.
 func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+	opts := personalIdentityOptions{}
+	if len(clientIDOverrides) > 0 {
+		opts.ClientID = clientIDOverrides[0]
+	}
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
+}
+
+func resolvePersonalEventIdentityWithTokenOptions(ctx context.Context, configDir, sourceIDOverride, explicitToken string, opts personalIdentityOptions) (personal.Identity, error) {
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
 	if strings.Contains(strings.TrimSpace(authpkg.RuntimeProfile()), ",") {
 		return personal.Identity{}, fmt.Errorf("personal events require exactly one --profile")
@@ -1419,10 +1439,7 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 
 	corpID := resolveRuntimeDefault(ctx, "$corpId")
 	userID := resolveRuntimeDefault(ctx, "$currentUserId")
-	clientID := ""
-	if len(clientIDOverrides) > 0 {
-		clientID = strings.TrimSpace(clientIDOverrides[0])
-	}
+	clientID := strings.TrimSpace(opts.ClientID)
 	if clientID == "" {
 		// An edition hook or explicit environment value is runtime identity,
 		// not persisted app state. Resolve it before profiles.json so a complete
@@ -1455,18 +1472,10 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 			}
 		}
 	}
-	if clientID == "" {
-		// Persisted/global app credentials are only a fallback after the
-		// selected profile, so an old app config cannot override profile.ClientID.
-		clientID = strings.TrimSpace(personalClientID())
-	}
-	if clientID == "" {
-		if id, _, _, _, resolveErr := personalResolveAppCredentialsStrict(configDir); resolveErr == nil {
-			clientID = strings.TrimSpace(id)
-		}
-	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
+	var err error
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
 
 	sourceID := strings.TrimSpace(sourceIDOverride)
@@ -1523,7 +1532,7 @@ func selectPersonalEventProfileMetadata(cfg *authpkg.ProfilesConfig, selector st
 	return authpkg.ResolveProfileMetadata(cfg, strings.TrimSpace(selector))
 }
 
-func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string) (personal.Identity, error) {
+func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string, options ...personalIdentityOptions) (personal.Identity, error) {
 	accessToken, err := personalResolveAuxiliaryAccessToken(ctx, configDir, "")
 	if err != nil {
 		return personal.Identity{}, err
@@ -1545,17 +1554,15 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if userID == "" {
 		userID = resolveRuntimeDefault(ctx, "$currentUserId")
 	}
-	if clientID == "" {
-		clientID = personalClientID()
+	opts := personalIdentityOption(options)
+	if id := strings.TrimSpace(opts.ClientID); id != "" {
+		clientID = id
 	}
-	if clientID == "" {
-		if id, _, _, _, err := personalResolveAppCredentialsStrict(configDir); err == nil {
-			clientID = id
-		}
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
-	}
+
 	sourceID := strings.TrimSpace(sourceIDOverride)
 	if sourceID == "" {
 		sourceID = personalEventStreamSourceID("")

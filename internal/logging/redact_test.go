@@ -17,9 +17,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
-func TestIsSensitiveKey(t *testing.T) {
+func TestCrossPlatformCoverageIsSensitiveKey(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -34,6 +36,10 @@ func TestIsSensitiveKey(t *testing.T) {
 		{"dws_agent_ext", true},
 		{"x-dws-agent-ext", true},
 		{"X-Dws-Agent-Ext", true},
+		{"x-dingtalk-ext", true},
+		{"X-DingTalk-Ext", true},
+		{"umid", true},
+		{"UMID", true},
 		{"DWS_AGENT_VER", false},
 		{"x-dws-agent-ver", false},
 		{"client_secret", true},
@@ -132,20 +138,21 @@ func TestSanitizeArguments_Empty(t *testing.T) {
 	}
 }
 
-func TestRedactHeaders(t *testing.T) {
+func TestCrossPlatformCoverageRedactHeaders(t *testing.T) {
 	t.Parallel()
 	headers := make(http.Header)
 	headers.Set("Authorization", "Bearer test-credential-value")
 	headers.Set("Content-Type", "application/json")
 	headers.Set("DWS_AGENT_EXT", `{"umt":"test-umt-value"}`)
 	headers.Set("x-dws-agent-ext", `{"ua":"test-agent-value"}`)
+	headers.Set(requestmeta.DingTalkExtHeader, `{"umid":"test-runtime-value"}`)
 	attrs := RedactHeaders(headers)
-	if len(attrs) != 4 {
-		t.Fatalf("expected 4 attrs, got %d", len(attrs))
+	if len(attrs) != 5 {
+		t.Fatalf("expected 5 attrs, got %d", len(attrs))
 	}
 	for _, attr := range attrs {
 		switch attr.Key {
-		case "header.authorization", "header.dws_agent_ext", "header.x-dws-agent-ext":
+		case "header.authorization", "header.dws_agent_ext", "header.x-dws-agent-ext", "header.x-dingtalk-ext":
 			if !strings.Contains(attr.Value.String(), "***") {
 				t.Fatalf("%s should be redacted: %s", attr.Key, attr.Value.String())
 			}

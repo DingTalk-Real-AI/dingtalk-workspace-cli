@@ -5,6 +5,7 @@
 用法:
     python oa_pending_review.py                # 最近 7 天
     python oa_pending_review.py --days 30      # 最近 30 天
+    python oa_pending_review.py --query 补卡   # 按关键词筛选
     python oa_pending_review.py --dry-run
 """
 
@@ -41,6 +42,12 @@ def to_iso(dt: datetime) -> str:
     return dt.strftime('%Y-%m-%dT%H:%M:%S+08:00')
 
 
+def unwrap_result(value: Any) -> Any:
+    if isinstance(value, dict) and 'result' in value:
+        return value['result']
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='查看待我审批列表'
@@ -48,6 +55,7 @@ def main():
     parser.add_argument(
         '--days', type=int, default=7, help='查询天数 (默认 7)'
     )
+    parser.add_argument('--query', help='待审批关键词（可选）')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
@@ -55,12 +63,15 @@ def main():
     start = now - timedelta(days=args.days)
 
     print(f"📋 查询待审批 (最近 {args.days} 天)...")
-    data = run_dws([
+    list_args = [
         'oa', 'approval', 'list-pending',
         '--start', to_iso(start),
         '--end', to_iso(now),
-        '--format', 'json',
-    ], dry_run=args.dry_run)
+    ]
+    if args.query:
+        list_args.extend(['--query', args.query])
+    list_args.extend(['--format', 'json'])
+    data = run_dws(list_args, dry_run=args.dry_run)
 
     if args.dry_run:
         run_dws([
@@ -77,7 +88,7 @@ def main():
     if isinstance(data, list):
         instances = data
     elif isinstance(data, dict):
-        inner = data.get('result', data)
+        inner = unwrap_result(data)
         if isinstance(inner, dict):
             instances = inner.get('processInstanceList',
                                   inner.get('items', []))
@@ -117,6 +128,7 @@ def main():
             '--instance-id', inst_id,
             '--format', 'json',
         ])
+        detail = unwrap_result(detail)
         if detail and isinstance(detail, dict):
             forms = detail.get('formComponentValues', [])
             if forms:

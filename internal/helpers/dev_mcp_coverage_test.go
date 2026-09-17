@@ -16,12 +16,14 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -113,7 +115,7 @@ func newHSFUpdateCoverageCommand(t *testing.T) *cobra.Command {
 	return cmd
 }
 
-func TestDevMCPCoverageGroupHelp(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPGroupHelp(t *testing.T) {
 	for _, args := range [][]string{
 		{"dev", "mcp"},
 		{"dev", "mcp", "service"},
@@ -127,7 +129,7 @@ func TestDevMCPCoverageGroupHelp(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(args)
-			if err := root.ExecuteContext(t.Context()); err != nil {
+			if err := corecmd.ExecuteContextForTest(root, t.Context()); err != nil {
 				t.Fatalf("execute help: %v", err)
 			}
 			if out.Len() == 0 {
@@ -137,7 +139,7 @@ func TestDevMCPCoverageGroupHelp(t *testing.T) {
 	}
 }
 
-func TestDevMCPCoverageCommandRunErrors(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 	failed := mcpCoverageErrorRunner{err: errors.New("runner failed")}
 
 	tests := []struct {
@@ -197,11 +199,11 @@ func TestDevMCPCoverageCommandRunErrors(t *testing.T) {
 	} {
 		root := newDevAppTestRoot(failed)
 		root.SetArgs(args)
-		requireMCPError(t, root.ExecuteContext(t.Context()), "runner failed")
+		requireMCPError(t, corecmd.ExecuteContextForTest(root, t.Context()), "runner failed")
 	}
 }
 
-func TestDevMCPCoverageCredentialContentEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPCredentialContentEdges(t *testing.T) {
 	cmd := newDevMCPCredentialSaveCommand(&captureRunner{})
 	setMCPFlag(t, cmd, "content", `{}`)
 	setMCPFlag(t, cmd, "content-file", "also.json")
@@ -229,7 +231,7 @@ func TestDevMCPCoverageCredentialContentEdges(t *testing.T) {
 	requireMCPError(t, err, "为必填")
 }
 
-func TestDevMCPCoverageToolUpsertJSONEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPToolUpsertJSONEdges(t *testing.T) {
 	tests := []struct {
 		name    string
 		flag    string
@@ -274,7 +276,7 @@ func TestDevMCPCoverageToolUpsertJSONEdges(t *testing.T) {
 	requireMCPError(t, err, "--name")
 }
 
-func TestDevMCPCoverageValidationEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPValidationEdges(t *testing.T) {
 	if err := devMCPValidateToolName(""); err != nil {
 		t.Fatalf("blank optional name: %v", err)
 	}
@@ -315,6 +317,13 @@ func TestDevMCPCoverageValidationEdges(t *testing.T) {
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$"}}), ".type 为必填")
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "bad"}}), "只支持")
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "fixed"}}), ".source 为必填")
+	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "reference", "source": "$.node_start.x", "expression": "GET('x',{})"}}), ".expression 不适用于 reference/fixed")
+	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "source": "GET('x',{})"}}), ".expression 为必填")
+	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "expression": json.Number("123")}}), ".expression 为必填")
+	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "source": "GET('x',{})", "expression": "GET('x',{})"}}), ".source 不适用于 express")
+	if err := devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "expression": "GET('x',{})"}}); err != nil {
+		t.Fatalf("valid express mapping: %v", err)
+	}
 
 	requireMCPError(t, devMCPValidateToolUpsertParams(map[string]any{
 		"name":        "get_record",
@@ -343,7 +352,7 @@ func TestDevMCPCoverageValidationEdges(t *testing.T) {
 	requireMCPError(t, err, "JSON 数组")
 }
 
-func TestDevMCPCoverageContractValidators(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPContractValidators(t *testing.T) {
 	contract := devMCPContract(nil, "tool", "dev mcp tool", "description", false)
 	if got := contract.Selection.Examples[0]; got != "dws dev mcp tool" {
 		t.Fatalf("fallback example = %q", got)
@@ -393,7 +402,7 @@ func TestDevMCPCoverageContractValidators(t *testing.T) {
 	requireMCPError(t, validateDevMCPMemberMutation(member, nil), "--user-ids")
 }
 
-func TestDevMCPCoverageHSFParamEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPHSFParamEdges(t *testing.T) {
 	createTests := []struct {
 		name    string
 		mutate  func(*testing.T, *cobra.Command)
@@ -449,7 +458,7 @@ func TestDevMCPCoverageHSFParamEdges(t *testing.T) {
 	}
 }
 
-func TestDevMCPCoverageMappingLintEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPMappingLintEdges(t *testing.T) {
 	if err := devMCPLintInputMappings([]any{"skip"}, nil, nil); err != nil {
 		t.Fatalf("skip invalid input mapping: %v", err)
 	}
@@ -502,7 +511,7 @@ func TestDevMCPCoverageMappingLintEdges(t *testing.T) {
 	}
 }
 
-func TestDevMCPCoveragePublishAndStoredMappingEdges(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPPublishAndStoredMappingEdges(t *testing.T) {
 	cmd := newDevMCPToolPublishCommand(&captureRunner{})
 	var stderr bytes.Buffer
 	cmd.SetErr(&stderr)
@@ -570,7 +579,7 @@ func TestDevMCPCoveragePublishAndStoredMappingEdges(t *testing.T) {
 	}
 }
 
-func TestDevMCPCoverageSmallHelpers(t *testing.T) {
+func TestCrossPlatformCoverageDevMCPSmallHelpers(t *testing.T) {
 	cmd := &cobra.Command{}
 	if annotateDevMCPTool(cmd, "tool").Annotations["mcp-tool"] != "tool" {
 		t.Fatal("annotation missing")

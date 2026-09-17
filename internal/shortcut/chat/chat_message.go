@@ -14,6 +14,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,12 +28,16 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 const directMessagesHardPageLimit = 500
+const messageDecryptFailedOriginalContentKey = "_contentDecryptFailedOriginal"
 
 // MessagesSend sends a text/markdown message as the current user
 // (send_personal_message, chat server). Media/file variants are not covered.
@@ -318,8 +323,11 @@ var MessagesList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		rawMessages := listMessagesResolveMaps(data)
+		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 		payload := map[string]any{"count": len(messages), "messages": messages}
+		applyMessageDecryptLedger(payload, decryptLedger)
 		direction := "older"
 		if rt.Bool("forward") {
 			direction = "newer"
@@ -358,6 +366,16 @@ func listMessagesProjectWithReactions(data map[string]any, includeReactions bool
 	return out
 }
 
+func projectMessageMapsWithReactions(raw []map[string]any, includeReactions bool) []map[string]any {
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if row := listMessageProjectOneWithReactions(item, includeReactions); len(row) > 0 {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // listMessageProjectOne projects a single message into the native
 // {messageId, senderId, msgType, createTime, text(, forwarded)} shape, reused
 // recursively for forwarded chat records.
@@ -367,6 +385,9 @@ func listMessageProjectOne(m map[string]any) map[string]any {
 
 func listMessageProjectOneWithReactions(m map[string]any, includeReactions bool) map[string]any {
 	row := chatmsg.ProjectMessageV1(m, includeReactions)
+	if original, ok := m[messageDecryptFailedOriginalContentKey].(string); ok && strings.TrimSpace(original) != "" {
+		row["text"] = original
+	}
 	// The established mget/list projection omits absent scalar fields; keep
 	// that wire behavior even though the shared chat/search view retains them.
 	for _, key := range []string{"sender", "text", "createTime"} {
@@ -418,6 +439,248 @@ func listMessagesResolveMaps(data map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+type messageDecryptLedger struct {
+	candidateCount int
+	decryptedCount int
+	failures       []map[string]any
+}
+
+var messageReadCryptoClient = newMessageReadCryptoClient()
+
+var (
+	messageReadCurrentIdentity = msgcrypto.CurrentIdentity
+	messageReadOpenSession     = msgcrypto.OpenSession
+	messageReadAvailable       = msgcrypto.Available
+)
+
+func newMessageReadCryptoClient() *messagecrypto.Client {
+	return &messagecrypto.Client{
+		Identity: func(ctx context.Context, configDir string) (messagecrypto.Identity, error) {
+			identity, err := messageReadCurrentIdentity(ctx, configDir)
+			return messagecrypto.Identity{CorpID: identity.CorpID, StaffID: identity.StaffID}, err
+		},
+		OpenSession: func(ctx context.Context, opts messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			session, err := messageReadOpenSession(ctx, msgcrypto.SessionOptions{
+				ConfigDir:           opts.ConfigDir,
+				CLIVersion:          opts.CLIVersion,
+				KeyServer:           firstNonEmptyShortcutString(opts.KeyServer, msgcrypto.DefaultSafeChatKeyServer),
+				AllowedRedirectHost: firstNonEmptyShortcutString(opts.AllowedRedirectHost, msgcrypto.DefaultSafeChatRedirectHost),
+				KeystoreDir:         opts.KeystoreDir,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &messagecrypto.Session{
+				Cipher:  session.Cipher,
+				CorpID:  session.CorpID,
+				StaffID: session.StaffID,
+				Close:   session.Close,
+			}, nil
+		},
+		BackendReady: messageReadAvailable,
+		PolicyCache:  messagecrypto.NewPolicyCache(time.Now),
+	}
+}
+
+func decryptMessageItemsIfRequested(rt *shortcut.RuntimeContext, messages []map[string]any) messageDecryptLedger {
+	if rt.DryRun() || messageReadCryptoClient == nil || messageReadCryptoClient.BackendReady == nil ||
+		!messageReadCryptoClient.BackendReady() {
+		return messageDecryptLedger{}
+	}
+	items := collectEncryptedMessageItems(messages)
+	if len(items) == 0 {
+		return messageDecryptLedger{}
+	}
+	filtered, ledger := filterMessageDecryptItemsByPolicy(rt, items)
+	if len(filtered) == 0 {
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	result, err := messageReadCryptoClient.BatchDecryptInbound(rt.Command().Context(), rt, messagecrypto.Options{}, filtered)
+	if err != nil {
+		for _, item := range filtered {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+		}
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	index := indexMessageMapsByID(messages)
+	for _, item := range result.Items {
+		if item.Status != "" && item.Status != "success" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+			continue
+		}
+		if strings.TrimSpace(item.PlaintextContent) == "" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
+			continue
+		}
+		for _, message := range index[item.MessageID] {
+			message["content"] = item.PlaintextContent
+			message["contentDecrypted"] = true
+			message["cryptoLayer"] = "ding+safechat"
+			if item.KeyVersion > 0 {
+				message["dingKeyVersion"] = item.KeyVersion
+			}
+		}
+		ledger.decryptedCount++
+	}
+	for _, item := range result.Failures {
+		ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+	}
+	markMessageDecryptFailures(messages, ledger.failures)
+	return ledger
+}
+
+func filterMessageDecryptItemsByPolicy(
+	rt *shortcut.RuntimeContext,
+	items []messagecrypto.BatchDecryptItem,
+) ([]messagecrypto.BatchDecryptItem, messageDecryptLedger) {
+	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
+	ledger := messageDecryptLedger{candidateCount: len(items)}
+	for _, item := range items {
+		decision, err := messageReadCryptoClient.PolicyDecision(rt.Command().Context(), rt, messagecrypto.Options{
+			Identity:           "user",
+			MsgType:            "text",
+			OpenConversationID: item.ConversationID,
+		})
+		if err != nil {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			continue
+		}
+		if decision.Enabled {
+			filtered = append(filtered, item)
+		}
+	}
+	ledger.candidateCount = len(filtered)
+	return filtered, ledger
+}
+
+func collectEncryptedMessageItems(messages []map[string]any) []messagecrypto.BatchDecryptItem {
+	items := make([]messagecrypto.BatchDecryptItem, 0)
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID == "" || messageID == "<nil>" {
+			messageID = strings.TrimSpace(fmt.Sprint(firstMessageDecryptValue(message, "openMessageId", "messageId", "msgId")))
+		}
+		conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+		if conversationID == "<nil>" {
+			conversationID = ""
+		}
+		content := firstMessageDecryptString(message, "content", "text")
+		if messageID != "" && chatmsg.IsEncrypted(content) {
+			items = append(items, messagecrypto.BatchDecryptItem{
+				MessageID:      messageID,
+				ConversationID: conversationID,
+				Ciphertext:     content,
+			})
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return items
+}
+
+func indexMessageMapsByID(messages []map[string]any) map[string][]map[string]any {
+	index := map[string][]map[string]any{}
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID != "" && messageID != "<nil>" {
+			index[messageID] = append(index[messageID], message)
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return index
+}
+
+func markMessageDecryptFailures(messages []map[string]any, failures []map[string]any) {
+	if len(failures) == 0 {
+		return
+	}
+	index := indexMessageMapsByID(messages)
+	for _, failure := range failures {
+		messageID := strings.TrimSpace(fmt.Sprint(failure["messageId"]))
+		if messageID == "" {
+			continue
+		}
+		for _, message := range index[messageID] {
+			content := firstMessageDecryptString(message, "content", "text")
+			if chatmsg.IsEncrypted(content) {
+				message[messageDecryptFailedOriginalContentKey] = content
+			}
+		}
+	}
+}
+
+func applyMessageDecryptLedger(payload map[string]any, ledger messageDecryptLedger) {
+	if ledger.candidateCount == 0 && ledger.decryptedCount == 0 && len(ledger.failures) == 0 {
+		return
+	}
+	payload["decryptCandidateCount"] = ledger.candidateCount
+	payload["decryptedCount"] = ledger.decryptedCount
+	payload["decryptFailedCount"] = len(ledger.failures)
+	if len(ledger.failures) > 0 {
+		payload["decryptFailures"] = ledger.failures
+		payload["partial"] = true
+	}
+}
+
+func messageDecryptFailure(messageID, conversationID, reason string) map[string]any {
+	failure := map[string]any{
+		"stage":     "message-decrypt",
+		"messageId": messageID,
+		"reason":    firstNonEmptyShortcutString(reason, "decrypt_failed"),
+	}
+	if strings.TrimSpace(conversationID) != "" {
+		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func firstNonEmptyShortcutString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstMessageDecryptString(message map[string]any, keys ...string) string {
+	value := firstMessageDecryptValue(message, keys...)
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func firstMessageDecryptValue(message map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := message[key]; ok {
+			return value
+		}
+	}
+	return nil
 }
 
 // MessagesListDirect pulls messages of a single chat (list_individual_chat_message, chat server).
@@ -523,8 +786,11 @@ func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+	rawMessages := listMessagesResolveMaps(data)
+	decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+	messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 	payload := map[string]any{"count": len(messages), "messages": messages}
+	applyMessageDecryptLedger(payload, decryptLedger)
 	direction := "older"
 	if rt.Bool("forward") {
 		direction = "newer"
@@ -633,11 +899,10 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 		stopReason = "page_limit"
 	}
 
-	messages := make([]map[string]any, 0, len(allItems))
-	for _, item := range allItems {
-		messages = append(messages, listMessageProjectOneWithReactions(item, !rt.Bool("no-reactions")))
-	}
+	decryptLedger := decryptMessageItemsIfRequested(rt, allItems)
+	messages := projectMessageMapsWithReactions(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(messages)
+	applyMessageDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = true
 	payload["complete"] = complete && len(failures) == 0
@@ -832,13 +1097,18 @@ var MessagesMget = shortcut.Shortcut{
 	Command:     "+messages-mget",
 	Product:     "im",
 	Description: "根据消息 ID 批量查询消息（最多 50 条）",
-	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
+	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条；ID 参数错误会有界拆分隔离，其他错误停止拆分；默认主动补查 Reaction 和每个 Thread 最多 10 条回复，使用 complete、messagesComplete、enrichment 披露完整性。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
 	},
 	Contract: corecmd.ContractDecl{
+		Parameters: []contract.ParamDecl{
+			{Name: "msg-ids", Property: "msgIds"},
+			{Name: "no-reactions", Property: "noReactions"},
+			{Name: "no-threads", Property: "noThreads"},
+		},
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "chat",
 			Name:           "shortcut_messages_mget",
@@ -854,14 +1124,15 @@ var MessagesMget = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "根据消息 ID 批量查询消息（最多 50 条）",
-			UseWhen:      []string{"当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。"},
+			UseWhen:      []string{"当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条；ID 参数错误会有界拆分隔离，其他错误停止拆分；默认主动补查 Reaction 和每个 Thread 最多 10 条回复，使用 complete、messagesComplete、enrichment 披露完整性。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +messages-mget --msg-ids msgId1,msgId2"},
 		},
 	},
 	Flags: append([]shortcut.Flag{
-		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true},
-		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
+		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表，兼容 --message-ids / --message-id；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true, Aliases: []string{"message-ids", "message-id"}},
+		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "跳过主动 Reaction 补查并不输出 Reaction（默认补查，每批最多 20 条）"},
+		{Name: "no-threads", Type: shortcut.FlagBool, Desc: "跳过 Thread 回复补查（默认每个 Thread 最多 10 条、总计最多 500 条；需要完整回复请用 +thread-replies）"},
 	}, MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
 		{
@@ -872,38 +1143,35 @@ var MessagesMget = shortcut.Shortcut{
 	}, MessageResourceDownloadConstraints()...),
 	Tips: []string{`dws chat +messages-mget --msg-ids msgId1,msgId2`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		ids := mgetRequestedIDs(rt)
 		if len(ids) < 1 || len(ids) > 50 {
 			return fmt.Errorf("--msg-ids 去重后必须包含 1-50 条消息 ID，当前 %d 条", len(ids))
 		}
 		return ValidateMessageResourceDownload(rt)
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
-		data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": ids})
+		ids := mgetRequestedIDs(rt)
+		batch, err := readMessagesMget(rt, ids)
 		if err != nil {
 			return err
 		}
-		rawMessages := listMessagesResolveMaps(data)
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
-		found := map[string]bool{}
-		for _, message := range rawMessages {
-			if id := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message))); id != "" && id != "<nil>" {
-				found[id] = true
+		rawMessages := batch.messages
+		var decryptLedger messageDecryptLedger
+		enrichment := map[string]any{"complete": false, "enrichedCount": 0, "stopReason": "query_aborted"}
+		threadViews := map[string]map[string]any{}
+		resourceMessages := rawMessages
+		if !batch.aborted {
+			decryptLedger = decryptMessageItemsIfRequested(rt, rawMessages)
+			enrichment, threadViews, resourceMessages = enrichMessagesMget(rt, rawMessages)
+		}
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
+		for i, raw := range rawMessages {
+			if view, ok := threadViews[mgetID(chatmsg.MessageID(raw))]; ok {
+				messages[i]["thread"] = view
 			}
 		}
-		notFound := make([]string, 0)
-		failures := make([]map[string]any, 0)
-		for _, id := range ids {
-			if !found[id] {
-				notFound = append(notFound, id)
-				failures = append(failures, map[string]any{
-					"stage":     "mget",
-					"messageId": id,
-					"error":     "下层未返回该消息",
-				})
-			}
-		}
+		notFound := batch.missing
+		failures := batch.failures
 		payload := map[string]any{
 			"contractVersion":    chatmsg.MessageListContractVersion,
 			"requestedCount":     len(ids),
@@ -911,17 +1179,24 @@ var MessagesMget = shortcut.Shortcut{
 			"notFoundCount":      len(notFound),
 			"notFoundMessageIds": notFound,
 			"messages":           messages,
-			"complete":           len(notFound) == 0,
+			"complete":           len(notFound) == 0 && enrichment["complete"] == true,
+			"messagesComplete":   len(notFound) == 0,
+			"enrichment":         enrichment,
+			"batchRequests":      batch.requests,
 			"hasMore":            false,
 			"nextCursor":         "",
 			"paginationKnown":    true,
 			"pagesFetched":       1,
-			"enrichedCount":      0,
+			"enrichedCount":      enrichment["enrichedCount"],
 			"failedCount":        len(failures),
 			"failures":           failures,
 		}
-		if rt.Bool("download-resources") {
-			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, rawMessages, ""))
+		applyMessageDecryptLedger(payload, decryptLedger)
+		if len(decryptLedger.failures) > 0 {
+			payload["complete"] = false
+		}
+		if rt.Bool("download-resources") && !batch.aborted {
+			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, resourceMessages, ""))
 		}
 		return rt.Output(payload)
 	},
@@ -964,6 +1239,18 @@ func DownloadMessageResources(
 	messages []map[string]any,
 	fallbackConversationID string,
 ) map[string]any {
+	ledger, _ := DownloadMessageResourcesWithCause(rt, messages, fallbackConversationID)
+	return ledger
+}
+
+// DownloadMessageResourcesWithCause returns the public ledger together with
+// the first concrete failure that produced it. The cause stays out of business
+// data and is used only by the typed incomplete-result wrapper.
+func DownloadMessageResourcesWithCause(
+	rt *shortcut.RuntimeContext,
+	messages []map[string]any,
+	fallbackConversationID string,
+) (map[string]any, error) {
 	resources := make([]map[string]any, 0)
 	for _, message := range messages {
 		resources = append(resources, chatmsg.ResourcesDeep(message)...)
@@ -1004,7 +1291,7 @@ func DownloadMessageResources(
 			"requestedCount":    len(resources),
 			"deduplicatedCount": discoveredCount - len(resources),
 			"resources":         resources,
-		}
+		}, nil
 	}
 	if len(resources) == 0 {
 		return map[string]any{
@@ -1017,11 +1304,15 @@ func DownloadMessageResources(
 			"failedCount":       0,
 			"downloads":         []map[string]any{},
 			"failures":          []map[string]any{},
-		}
+		}, nil
 	}
 
 	cwd, err := resourceGetwd()
 	if err != nil {
+		failureCause := apperrors.NewInternal(
+			fmt.Sprintf("读取工作目录失败: %v", err),
+			apperrors.WithCause(err),
+		)
 		return map[string]any{
 			"ok":                false,
 			"partial":           false,
@@ -1036,11 +1327,12 @@ func DownloadMessageResources(
 				"affectedCount": len(resources),
 				"error":         fmt.Sprintf("读取工作目录失败: %v", err),
 			}},
-		}
+		}, failureCause
 	}
 	outputDir := strings.TrimRight(rt.Str("output-dir"), `/\`)
 	downloads := make([]map[string]any, 0, len(resources))
 	failures := make([]map[string]any, 0)
+	var firstCause error
 	downloadedNames := map[string]bool{}
 	for _, resource := range resources {
 		resourceType := strings.TrimSpace(fmt.Sprint(resource["type"]))
@@ -1062,6 +1354,10 @@ func DownloadMessageResources(
 			(messageID == "" || messageID == "<nil>" ||
 				conversationID == "" || conversationID == "<nil>")
 		if resourceID == "" || resourceID == "<nil>" || missingMediaContext {
+			failureCause := apperrors.NewValidation("资源引用缺少 resource-id，或 mediaId 缺少 message-id/open-conversation-id")
+			if firstCause == nil {
+				firstCause = failureCause
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1074,6 +1370,9 @@ func DownloadMessageResources(
 		data, callErr := resolveMessageResourceDownloadData(
 			rt, resourceType, resourceID, messageID, conversationID)
 		if callErr != nil {
+			if firstCause == nil {
+				firstCause = callErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1084,6 +1383,9 @@ func DownloadMessageResources(
 		}
 		resourceURL, headers, infoErr := resourceDownloadInfo(data)
 		if infoErr != nil {
+			if firstCause == nil {
+				firstCause = infoErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1108,6 +1410,9 @@ func DownloadMessageResources(
 			preferredName,
 		)
 		if pathErr != nil {
+			if firstCause == nil {
+				firstCause = pathErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1119,6 +1424,9 @@ func DownloadMessageResources(
 		size, downloadErr := resourceDownload(
 			rt.Command().Context(), nil, resourceURL, headers, destPath, rt.Bool("overwrite"))
 		if downloadErr != nil {
+			if firstCause == nil {
+				firstCause = downloadErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1146,7 +1454,7 @@ func DownloadMessageResources(
 		"failedCount":       len(failures),
 		"downloads":         downloads,
 		"failures":          failures,
-	}
+	}, firstCause
 }
 
 // AttachMessageResourceDownloads publishes the download ledger and folds any
@@ -1159,18 +1467,28 @@ func AttachMessageResourceDownloads(payload, ledger map[string]any) {
 		return
 	}
 	payload["complete"] = false
-	payload["failedCount"] = messageLedgerInt(payload["failedCount"]) + failed
 	taskFailures, _ := payload["failures"].([]map[string]any)
 	resourceFailures, _ := ledger["failures"].([]map[string]any)
 	for _, failure := range resourceFailures {
-		row := make(map[string]any, len(failure)+1)
-		row["stage"] = "resource-download"
+		row := make(map[string]any, len(failure)+2)
 		for key, value := range failure {
 			row[key] = value
 		}
+		if stage, ok := row["stage"]; ok {
+			row["resourceStage"] = stage
+		}
+		row["stage"] = "resource-download"
 		taskFailures = append(taskFailures, row)
 	}
+	if len(resourceFailures) == 0 {
+		taskFailures = append(taskFailures, map[string]any{
+			"stage":         "resource-download",
+			"affectedCount": failed,
+			"error":         "资源下载账本报告失败，但未返回逐项失败详情",
+		})
+	}
 	payload["failures"] = taskFailures
+	payload["failedCount"] = len(taskFailures)
 }
 
 func messageLedgerInt(value any) int {
@@ -1268,9 +1586,10 @@ var MessagesQuerySendStatus = shortcut.Shortcut{
 var MessagesReadStatus = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-read-status",
+	Aliases:     []string{"+message-read-users"},
 	Product:     "im",
 	Description: "查询消息的已读/未读状态",
-	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
+	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，按消息 ID 自动解析会话，显式会话必须与消息匹配，可指定目标成员列表。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1283,6 +1602,7 @@ var MessagesReadStatus = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_messages_read_status",
 			CLIPath:        "chat +messages-read-status",
 			PrimaryCLIPath: "chat +messages-read-status",
+			Aliases:        []string{"chat +message-read-users"},
 		},
 		Description: "查询消息的已读/未读状态",
 		Interface: &contract.InterfaceSpec{
@@ -1292,7 +1612,7 @@ var MessagesReadStatus = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询消息的已读/未读状态",
-			UseWhen:      []string{"当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"},
+			UseWhen:      []string{"当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，按消息 ID 自动解析会话，显式会话必须与消息匹配，可指定目标成员列表。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>"},
 		},
@@ -1305,25 +1625,10 @@ var MessagesReadStatus = shortcut.Shortcut{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标 userId 或 openDingTalkId 列表（不传返回全部接收者）"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"conversation-id", "group", "id"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"conversation-id", "group", "id"}},
 	},
-	Tips: []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"openConversationId": rt.StrFirst("conversation-id", "group", "id"),
-			"openMessageId":      rt.Str("message-id"),
-		}
-		if v := rt.StrSlice("users"); len(v) > 0 {
-			userIDs, openIDs := splitIDs(v)
-			if len(userIDs) > 0 {
-				params["targetUserIds"] = userIDs
-			}
-			if len(openIDs) > 0 {
-				params["targetOpenDingTalkIds"] = openIDs
-			}
-		}
-		return rt.CallMCP("query_msg_read_status", params)
-	},
+	Tips:    []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
+	Execute: executeOptimizedReadStatus,
 }
 
 // MessagesAddEmoji adds an emoji reaction (add_emoji_reaction, im).
@@ -1854,12 +2159,41 @@ func cardUpdateVerificationError(bizID string, verifyErr error) error {
 
 // MessagesResourceURL gets a message resource download url (get_resource_download_url, im).
 var MessagesResourceURL = shortcut.Shortcut{
-	Service:     "chat",
-	Command:     "+messages-resource-url",
-	Product:     "im",
-	Description: "获取消息资源（图片/视频/语音）下载链接",
-	Intent:      "当你想下载消息里的图片/视频/语音等资源时使用；只读换取临时下载链接，需传资源 mediaId、消息 openMessageId 和会话 openConversationId。",
-	Risk:        shortcut.RiskRead,
+	// Preserve the established legacy URL payload while the sensitive Result
+	// declaration is exercised in the mandatory dual-validation rollout step.
+	OutputRollout: output.RolloutDualValidate,
+	Service:       "chat",
+	Command:       "+messages-resource-url",
+	Product:       "im",
+	Description:   "获取消息资源（图片/视频/语音）下载链接",
+	Intent:        "仅当调用方明确需要短时下载凭据、而不是资源文件本身时使用；返回地址及请求头可能包含签名，视为敏感信息，不复制到脚本、日志或最终答复。实际下载图片/视频/语音时使用 +messages-resource-download，由 CLI 在内部消费临时地址。",
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_resource_url",
+			CanonicalPath:  "chat.shortcut_messages_resource_url",
+			CLIPath:        "chat +messages-resource-url",
+			PrimaryCLIPath: "chat +messages-resource-url",
+		},
+		Description: "获取短时有效的消息资源下载凭据",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       reviewedChatShortcutInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取短时有效的消息资源下载凭据",
+			UseWhen:      []string{"调用方明确要求取得临时下载 URL 或请求头，并会按敏感凭据处理时"},
+			AvoidWhen:    []string{"需要实际下载资源时使用 chat +messages-resource-download；不要把临时签名 URL 复制到 shell、脚本、日志或最终答复"},
+			Examples:     []string{"dws chat +messages-resource-url --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId>"},
+		},
+		Result: messageResourceURLResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型", Enum: []string{"mediaId"}},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "资源 ID（消息中的 mediaId）", Required: true},
@@ -2100,6 +2434,9 @@ func listPinProject(data map[string]any) []map[string]any {
 		}
 		if threadID := chatmsg.ThreadID(m); threadID != nil {
 			row["threadId"] = threadID
+		}
+		if aiSendFlag := chatmsg.MessageAISendFlag(m); aiSendFlag != nil {
+			row["messageAiSendFlag"] = aiSendFlag
 		}
 		if len(row) > 0 {
 			out = append(out, row)

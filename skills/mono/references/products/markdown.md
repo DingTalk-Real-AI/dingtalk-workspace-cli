@@ -6,7 +6,7 @@
 
 | 命令 | 用途 |
 |------|------|
-| `markdown fetch` | 下载并读取远程 `.md` 原文 |
+| `markdown fetch` | 读取远程 `.md` 文件内容（默认输出正文，可选 `--output` 保存本地） |
 | `markdown create` | 创建原生 `.md` 文件 |
 | `markdown diff` | 比较远程历史版本，或远程版本与本地草稿 |
 | `markdown overwrite` | 全量覆盖已有 `.md` 文件 |
@@ -44,7 +44,7 @@ Flags:
 Usage:
   dws markdown create [flags]
 Example:
-  dws markdown create --name README.md --content "# Hello"
+  dws markdown create --name README.md --content "# Hello" --theme qingya
   dws markdown create --name notes.md --content @./draft.md
   printf '# Title\n\nbody\n' | dws markdown create --name doc.md --content -
   dws markdown create --file ./README.md --space-id <spaceId>
@@ -54,11 +54,29 @@ Flags:
       --content string     字面内容、@file 或 -（stdin）；与 --file 互斥
       --file string        本地 .md 文件；与 --content 互斥
       --folder string      父文件夹 ID；未指定空间参数时自动识别所在域
+      --theme string       Markdown 主题：default / songyan / taiying / sujian / juxia / qingya
       --workspace string   文档空间/知识库 ID（与 --space-id 互斥）
       --space-id string    钉盘空间 ID（与 --workspace 互斥）
 ```
 
 `--content` 与 `--file` 必须且只能指定一个。`--workspace` 显式指定文档空间/知识库，`--space-id` 显式指定钉盘空间；两者优先于自动探测。仅传 `--folder` 时，命令会先只读探测文件夹属于 Drive 还是 Doc，再选择对应上传链路；两域均不可访问、探测超时或无权限时停止，不会尝试上传。不传 `--folder`、`--workspace`、`--space-id` 时仍默认创建到“我的文档”根目录。
+
+### 主题选择（仅 create / overwrite）
+
+Agent 不手写或手改 Front Matter；需要主题时只传 `--theme`，由 DWS 在上传副本中保真写入 `x-we-markdown-theme`。用户通常不必主动选择主题：Agent 创作完整新文档或执行完整重写时，可根据整篇用途推断；原样搬运已有文件（`--file` 或 `--content @file`）时不传 `--theme`，保持源内容字节不变。用户明确选择始终优先；没有明显倾向时使用 `default`。单个颜色词、emoji、代码块或表格不能单独决定主题。
+
+| 主题 | 整体特点与适用内容 |
+|------|------------------|
+| `default` | 混合用途或意图不明确的场景 |
+| `songyan` | 冷静克制、留白多，适合人文与长文 |
+| `taiying` | 暖色亲和、有书卷感，适合经验与温和知识分享 |
+| `sujian` | 简洁中性、信息效率高，适合需求、纪要、计划、报告与清单 |
+| `juxia` | 实际视觉偏红、表达强，适合发布、活动、里程碑与强结论 |
+| `qingya` | 清新现代、结构化，适合教程、知识、产品分析、评审与案例 |
+
+对 `juxia` 和 `qingya`，创作新稿时建议整篇恰好一个 H1 作为大标题，章节从 H2 开始，子章节使用 H3/H4。H2 标题不得手写章节编号或序号前缀（例如 `1.`、`1.1`、`一、`、`（一）`）；这两个主题会为 H2 自动添加编号元素，手写编号会造成重复。纯覆盖用户现稿时不得为适配主题而未经授权重排标题。
+
+`--theme` 的合法值严格是上表六个 ID；显式 `--theme default` 会写入 `default`，不传则完全不处理主题。该参数不属于 `fetch`、`diff` 或 `patch`，也没有独立的 set-theme 命令。主题模式只改 0600 临时上传副本并在结束后清理，不修改 `--file` 或 `--content @file` 指向的用户文件。
 
 ## 比较 Markdown 差异
 
@@ -86,7 +104,7 @@ Flags:
 Usage:
   dws markdown overwrite [flags]
 Example:
-  dws markdown overwrite --node <fileId> --content "# 新标题" --dry-run
+  dws markdown overwrite --node <fileId> --content "# 新标题" --theme qingya --dry-run
   dws markdown overwrite --node <fileId> --file ./updated.md
 Flags:
       --node string       目标文件 ID (必填)
@@ -94,12 +112,15 @@ Flags:
       --content string    字面内容、@file 或 -（stdin）；与 --file 互斥
       --file string       本地 .md 文件；与 --content 互斥
       --space-id string   钉盘空间 ID（与 --workspace 互斥）
+      --theme string      Markdown 主题：default / songyan / taiying / sujian / juxia / qingya
       --workspace string  文档空间/知识库 ID（与 --space-id 互斥）
       --dry-run           下载当前内容并预览覆盖差异，不写入
       --yes               用户确认后跳过交互提示
 ```
 
-`--content` 与 `--file` 必须二选一。命令级 `--dry-run` 会读取远程内容并显示 before/after 差异；根命令的全局 dry-run 只做无网络参数预览。覆盖使用文件上传链路，不等同于 `doc update` 的富文本块更新。
+`--content` 与 `--file` 必须二选一。命令级 `--dry-run` 会读取远程内容，并在 after 中显示主题处理后的最终完整内容；根命令的全局 dry-run 只做无网络参数预览，同时校验并展示所选主题。覆盖使用文件上传链路，不等同于 `doc update` 的富文本块更新，也不会把远程旧 Front Matter 合并进新内容。
+
+命令级 dry-run 与用户确认后的 `--yes` 正式命令必须保持完全相同的 `--theme`。主题有任何变化都要重新 dry-run、展示新的 after 并重新确认。
 
 ## 局部修改 Markdown
 

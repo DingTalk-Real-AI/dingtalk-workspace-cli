@@ -1,5 +1,15 @@
 # 文档 (doc) 命令参考
 
+
+## Shortcut边界与代价
+
+- `doc +search` 用于按关键词或属性定位待阅读编辑的在线文档；文字文档可加 `--extensions adoc`。`--folder` 是搜索后的直接成员过滤，不递归，必须配 `--page-all`，需要分别完整读取搜索候选和目录成员；触及上限不能宣称完整。只浏览文档文件夹用 `doc +list`，钉盘目录用 `drive +list`，普通钉盘文件搜索用 `drive +search`。不要为目录浏览重复走搜索与列表。
+- `doc +script --command init-draft` 是在线文字文档编辑前的本地准备步骤：生成Markdown/JSONML草稿，编辑后用 `doc +create/+update --content @相对路径`；不会上传或创建远端文档。`parse`只检查结构和字数。现有统一入口保留，整条命令因包含本地建文件而声明write；这不表示parse会写入。通用本地文件用编辑器或本地工具；`markdown create`创建远端原生.md，不能替代本地建文件。
+- `doc +download-overwrite`仅覆盖下载在线文字文档的正文媒体或封面，要求确认。普通钉盘文件用 `drive +download`，该入口仍不覆盖已有文件；不借用Doc覆盖入口绕过这个限制。
+- `doc +media-upload`只上传同一文字文档的资源并校验字节，不插入正文；正文插入用 `doc +media-insert`，电子表格用 `sheet media-upload`，普通文件入库用 `drive +upload`。
+- 封面写入优先 `doc +resource-update/+resource-delete`，原子 `doc style cover set`保留既有兼容用途；不串行重复调用两个入口。
+
+
 ## 路由与帮助预算
 
 已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 只执行一次 `dws shortcut list --service doc --format json`，禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。
@@ -276,10 +286,13 @@ Usage:
   dws doc block delete [flags]
 Example:
   dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+  dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --block-id string    目标块 ID (必填)
+      --block-id string    目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个
 ```
+
+> **批量删除**：需要删多个块时用逗号一次传入，定位基于 blockId。
 
 ### 查询文档评论列表
 ```
@@ -370,12 +383,13 @@ Usage:
 
 | contentType | extension | 操作 | 命令 |
 |-------------|-----------|------|------|
+| 任意 | dlink | 解析快捷方式目标后重新路由 | 从 `linkSourceInfo` 取目标；目标仍为 dlink 时再次执行 `dws doc info --node <目标nodeId>` |
 | ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
 | ALIDOC | axls | 在线读取表格数据 | `dws sheet list --node <ID>` → `dws sheet range read --node <ID>` |
 | ALIDOC | able | 在线查询多维表格记录 | `dws aitable table get --base-id <BASE_ID>` → `dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>` |
 | 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
 
-**关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
+**关键规则**：先处理 `extension=dlink`，再判断目标是否为 ALIDOC。`linkSourceInfo` 实际表示快捷方式目标：内容读取、编辑、导出和类型路由使用其 `nodeId`；目标仍为 dlink 时逐跳 `doc info` 并记录已访问 ID，解析失败、字段缺失或 ID 重复即停。只有明确移动、重命名或删除快捷方式入口本身时才使用顶层 nodeId。非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
 
 ### 格式保留度声明（adoc ↔ markdown lossy projection）
 
@@ -934,6 +948,9 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后�
 # 5. 删除块
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
 
+# 5b. 一次删多个块（逗号分隔，单次最多 50 个；不要循环调用，返回后检查 notFoundBlockIds）
+dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
+
 # ── 工作流 8: 复制/移动/重命名文档 ──
 
 # 获取 nodeId 的三种方式（按场景选择，无需全部执行）:
@@ -1016,6 +1033,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `drive list`（原 `doc list`，已弃用） | `nodes[].nodeId` / folder 类型 `nodeId` | read / info / update / block 的 --node；folder 用作 `--folder` |
 | `drive search`（原 `doc search`，已弃用） | 文档 `nodeId` / URL / `createTime` / `creatorUid` | read / info / update 的 --node；创建时间与创建者信息 |
 | `create` | `nodeId` | update / block 操作的 --node |
+| `info`（`extension=dlink`） | `linkSourceInfo.nodeId` + 目标类型字段；保留顶层 `nodeId` | 内容读写/导出/类型路由走目标；明确移动/重命名/删除快捷方式入口走顶层节点 |
 | `import` | `nodeId` / `documentUrl` / `documentName` / `documentType`；中断时提取 `taskId` | 后续 read / info / sheet 操作；中断后用 `doc import get --task-id` |
 | `drive mkdir`（原 `doc folder create`，已弃用） | `nodeId` | create 的 --folder |
 | `block list` | `blockId` | block insert 的 --ref-block, block update/delete 的 --block-id |

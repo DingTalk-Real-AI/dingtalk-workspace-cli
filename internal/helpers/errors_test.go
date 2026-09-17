@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,9 +10,14 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
+type helperExitCoderError struct{}
+
+func (*helperExitCoderError) Error() string { return "explicit exit" }
+func (*helperExitCoderError) ExitCode() int { return 42 }
+
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	cause := errors.New("root cause")
-	err := &CLIError{Code: CodeInvalidParam, Message: "bad input", Suggestion: "fix it", Operation: "doc/read", Cause: cause}
+	err := &CLIError{Code: CodeInvalidParam, Message: "bad input", Suggestion: "fix it", Operation: "doc/read", ServerCode: "server.bad", Details: map[string]any{"stage": "read"}, Cause: cause}
 	if got := err.Error(); !strings.Contains(got, "doc/read") || !strings.Contains(got, "fix it") {
 		t.Fatalf("Error() = %q", got)
 	}
@@ -19,7 +25,7 @@ func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 		t.Fatalf("Unwrap/ExitCode = %v/%d", err.Unwrap(), err.ExitCode())
 	}
 	encoded := err.ToJSON()["error"].(map[string]any)
-	for _, key := range []string{"code", "message", "exit_code", "operation", "suggestion", "cause"} {
+	for _, key := range []string{"code", "message", "exit_code", "operation", "server_error_code", "details", "suggestion", "cause"} {
 		if _, ok := encoded[key]; !ok {
 			t.Errorf("ToJSON() missing %q: %#v", key, encoded)
 		}
@@ -51,6 +57,27 @@ func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	pat := &PATError{RawJSON: `{"code":"PAT_NO_PERMISSION"}`}
 	if pat.Error() != pat.RawJSON || pat.RawStderr() != pat.RawJSON || pat.ExitCode() != ExitPermission {
 		t.Fatalf("PATError methods changed: %#v", pat)
+	}
+}
+
+func TestCrossPlatformCoverageBusinessErrorProjectionBoundaries(t *testing.T) {
+	if got := suggestForBusinessError(map[string]any{"error": map[string]any{"code": "COMMENT_RECORD_UNAVAILABLE"}}); !strings.Contains(got, "打开该 Base") {
+		t.Fatalf("comment unavailable suggestion = %q", got)
+	}
+	if got := businessErrorMetaSuggestion(map[string]any{"meta": map[string]any{"suggestions": "bad"}}); got != "" {
+		t.Fatalf("malformed suggestions = %q", got)
+	}
+	if got := businessErrorMetaSuggestion(map[string]any{"meta": map[string]any{"suggestions": []any{"bad", map[string]any{"reason": "  "}}}}); got != "" {
+		t.Fatalf("invalid suggestion items = %q", got)
+	}
+	if got := businessErrorDetails(map[string]any{"error": map[string]any{"details": "bad"}}); got != nil {
+		t.Fatalf("malformed details = %#v", got)
+	}
+	if got := businessErrorDetails(map[string]any{"error": map[string]any{"details": map[string]any{"capability": " ", "stage": 1}}}); got != nil {
+		t.Fatalf("empty projected details = %#v", got)
+	}
+	if got := businessErrorMessage(map[string]any{"summary": " summary "}); got != " summary " {
+		t.Fatalf("summary fallback = %q", got)
 	}
 }
 
@@ -129,6 +156,62 @@ func TestCrossPlatformCoverageWrapErrorPreservesFrameworkClassification(t *testi
 
 	if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
 		t.Fatalf("WrapErrorWithOperation() = %v, want typed framework error passed through unchanged", got)
+	}
+
+	// Only errors that state their own contract are passed through. Cancellation
+	// and deadline sentinels are not: they declare no category, so this boundary
+	// owns classifying them.
+	for _, authoritative := range []error{
+		&helperExitCoderError{},
+		fmt.Errorf("shortcut call: %w", &helperExitCoderError{}),
+	} {
+		if got := WrapErrorWithOperation(authoritative, "contact/get_current_user_profile"); got != authoritative {
+			t.Fatalf("WrapErrorWithOperation() = %v, want authoritative error %v unchanged", got, authoritative)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWrapErrorClassifiesDeadlineSentinel(t *testing.T) {
+	// The real sentinel, not an error whose text merely mentions a deadline:
+	// errors.Is matches only the former, which is why the message-shaped case in
+	// the table above never exercised this path. Preserving the sentinel here
+	// would skip the network-timeout branch and leave ExitCode reporting
+	// internal/5 without the retry hint.
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"bare", context.DeadlineExceeded},
+		{"wrapped", fmt.Errorf("resolveFileDomain: %w", context.DeadlineExceeded)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := WrapErrorWithOperation(tc.err, "drive/resolve_file_domain")
+			if got == tc.err {
+				t.Fatal("deadline sentinel was passed through instead of classified")
+			}
+			cli, ok := got.(*CLIError)
+			if !ok || cli.Code != CodeNetworkTimeout {
+				t.Fatalf("WrapErrorWithOperation() = %#v (%v), want NETWORK_TIMEOUT", got, got)
+			}
+			if cli.Operation != "drive/resolve_file_domain" {
+				t.Fatalf("operation = %q", cli.Operation)
+			}
+			if !strings.Contains(cli.Error(), "timed out") {
+				t.Fatalf("message = %q, want the timeout hint", cli.Error())
+			}
+			if cli.ExitCode() != ExitAPI || apperrors.ExitCode(got) != ExitAPI {
+				t.Fatalf("exit code = %d/%d, want ExitAPI (%d)", cli.ExitCode(), apperrors.ExitCode(got), ExitAPI)
+			}
+		})
+	}
+
+	// Cancellation has no dedicated branch, so it lands on the unclassified
+	// fallback rather than being mistaken for a timeout. Pinning that keeps the
+	// two sentinels from being conflated again.
+	got := WrapErrorWithOperation(fmt.Errorf("shortcut call: %w", context.Canceled), "chat/send")
+	cli, ok := got.(*CLIError)
+	if !ok || cli.Code != CodeUnclassified {
+		t.Fatalf("WrapErrorWithOperation() = %#v (%v), want UNCLASSIFIED", got, got)
 	}
 }
 
@@ -271,6 +354,26 @@ func TestCrossPlatformCoverageBusinessSuggestionsAndResponseClassification(t *te
 				t.Errorf("ClassifyMCPResponseText(%s) = %#v", tc.text, err)
 			}
 		}
+	}
+}
+
+func TestCrossPlatformCoverageAITableCommentVisibilityErrorKeepsActionableMCPGuidance(t *testing.T) {
+	text := `{"status":"error","error":{"type":"SYSTEM_ERROR","code":"COMMENT_RECORD_UNAVAILABLE","message":"Record visibility could not be verified","retryable":false,"details":{"capability":"record_comment","stage":"record_visibility","operationExecuted":false}},"summary":"评论操作尚未执行","meta":{"suggestions":[{"action":"open_base","reason":"Open the Base in DingTalk, then retry.","priority":"high"},{"action":"copy_base","reason":"Copy it to a new Base if the issue persists.","priority":"medium"}]}}`
+	err := ClassifyMCPResponseText(text)
+	cli, ok := err.(*CLIError)
+	if !ok {
+		t.Fatalf("error = %#v, want CLIError", err)
+	}
+	if cli.Code != CodeMCPToolError || !strings.Contains(cli.Message, "Record visibility could not be verified") ||
+		!strings.Contains(cli.Message, "COMMENT_RECORD_UNAVAILABLE") {
+		t.Fatalf("message = %q, code = %q", cli.Message, cli.Code)
+	}
+	if cli.ServerCode != "COMMENT_RECORD_UNAVAILABLE" || cli.Details["capability"] != "record_comment" ||
+		cli.Details["stage"] != "record_visibility" || cli.Details["operation_executed"] != false {
+		t.Fatalf("server code/details = %q / %#v", cli.ServerCode, cli.Details)
+	}
+	if !strings.Contains(cli.Suggestion, "Open the Base") || !strings.Contains(cli.Suggestion, "Copy it") {
+		t.Fatalf("suggestion = %q, want both server recovery actions", cli.Suggestion)
 	}
 }
 

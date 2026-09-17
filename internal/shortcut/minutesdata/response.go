@@ -120,11 +120,7 @@ func ValidateArtifact(name, taskUUID string, data map[string]any) error {
 			return fmt.Errorf("minutes keywords response: %w", err)
 		}
 	case "todos":
-		if _, actionsErr := mapSliceField(result, "actions"); actionsErr != nil {
-			if _, todosErr := mapSliceField(result, "dingtalkTodoList"); todosErr != nil {
-				return fmt.Errorf("minutes todos response has neither actions nor dingtalkTodoList array")
-			}
-		}
+		return InspectTodos(taskUUID, data).Err()
 	default:
 		if len(result) == 0 {
 			return fmt.Errorf("minutes %s response result is empty", name)
@@ -221,6 +217,14 @@ func ProjectList(page Page) ([]map[string]any, error) {
 		row := map[string]any{"taskUuid": uuid}
 		copyFirst(row, "title", item, "title", "name")
 		copyFirst(row, "creator", item, "creator", "creatorName", "createUserName", "creatorNick")
+		if name, ok := item["orgName"].(string); ok && name != "" {
+			row["orgName"] = name
+		}
+		if info, ok := item["flashUserInfo"].(map[string]any); ok {
+			if name, ok := info["name"].(string); ok && name != "" {
+				row["flashUserInfo"] = map[string]any{"name": name}
+			}
+		}
 		copyFirst(row, "startTime", item, "startTime", "gmtStart", "beginTime", "createTime")
 		copyFirst(row, "endTime", item, "endTime", "gmtEnd", "deadline")
 		copyFirst(row, "url", item, "url", "shareUrl", "link")

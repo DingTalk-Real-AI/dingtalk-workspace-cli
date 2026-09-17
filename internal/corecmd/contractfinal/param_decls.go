@@ -14,7 +14,9 @@
 package contractfinal
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -39,6 +41,22 @@ func ApplyParamDecls(cmd *cobra.Command, decls []contract.ParamDecl) error {
 		if runtimeannotate.CommandFlag(cmd, name) == nil {
 			return fmt.Errorf("ParamDecl %q references unknown flag on %q", name, cmd.CommandPath())
 		}
+		if len(p.AnyOf) > 0 {
+			flag := runtimeannotate.CommandFlag(cmd, name)
+			if flag.Value.Type() != "string" || len(p.AnyOf) < 2 {
+				return fmt.Errorf("ParamDecl %q anyOf requires a string flag and at least two formats", name)
+			}
+			if len(flag.Annotations[runtimeannotate.AnnotationFlagFormat]) > 0 {
+				return fmt.Errorf("ParamDecl %q cannot combine format and anyOf", name)
+			}
+			seen := map[string]bool{}
+			for _, branch := range p.AnyOf {
+				if branch.Format == "" || strings.TrimSpace(branch.Format) != branch.Format || seen[branch.Format] {
+					return fmt.Errorf("ParamDecl %q anyOf formats must be nonempty, trimmed and unique", name)
+				}
+				seen[branch.Format] = true
+			}
+		}
 	}
 	for _, p := range decls {
 		name := strings.TrimSpace(p.Name)
@@ -59,6 +77,12 @@ func ApplyParamDecls(cmd *cobra.Command, decls []contract.ParamDecl) error {
 		}
 		if rw := strings.TrimSpace(p.RequiredWhen); rw != "" {
 			runtimeannotate.AnnotateRuntimeFlagRequiredWhen(cmd, name, rw)
+		}
+		if len(p.AnyOf) > 0 {
+			branches := append([]contract.FormatAlternative(nil), p.AnyOf...)
+			sort.Slice(branches, func(i, j int) bool { return branches[i].Format < branches[j].Format })
+			data, _ := json.Marshal(branches)
+			runtimeannotate.SetFlagAnnotation(runtimeannotate.CommandFlag(cmd, name), runtimeannotate.AnnotationFlagAnyOf, string(data))
 		}
 		if len(p.Enum) > 0 {
 			runtimeannotate.AnnotateRuntimeFlagEnum(cmd, name, p.Enum...)

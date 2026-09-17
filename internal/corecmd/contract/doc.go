@@ -19,7 +19,7 @@
 //   - ContractFinalPayload (DTO only — store lives in corecmd/contractfinal)
 //   - ProductDecl (+ string-keyed registry; not Cobra-keyed)
 //   - SafetySpec / SelectionSpec / InterfaceSpec / DryRunSpec / identity /
-//     positionals / ParamDecl
+//     positionals / RuntimeSchemaConstraints / ParamDecl
 //   - FieldProvenance / FieldCandidateProvenance
 //
 // Package boundary:

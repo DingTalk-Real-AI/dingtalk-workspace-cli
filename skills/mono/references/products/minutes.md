@@ -1,5 +1,9 @@
 # AI听记 (minutes) 命令参考
 
+### 导出包签名清理
+
+`dws minutes +export-pack --id <taskUuid> --output <新相对目录>` 会递归清理 basic/summary/keywords/transcript/todos 文本中的已识别 OSS/AWS 签名 URL 和独立凭据字段，分别替换为 `[signed-url-removed]`、`[credential-removed]`；普通链接保留。发布前扫描发现残留则不发布目录。manifest/返回值提供 `sanitized/redactionCount/redactionKinds/sanitizationScope`，文本文件提供逐项清理次数。`complete=true` 只指所选产物和发布流程，当前 `offlineImagesComplete=false`，不得声称摘要图片已下载；二进制媒体不属于文本扫描范围，本阶段不提供文件 hash/内容读回验证。
+
 ## 命令层级结构（防混淆，必须先读）
 
 minutes 模块的命令是**两级或三级结构**，不同层级之间不能混用、跳级或遗漏：

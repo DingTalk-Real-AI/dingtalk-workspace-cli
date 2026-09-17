@@ -80,19 +80,20 @@ func TestWriteEnvelopePreservesDeclaredBusinessDataAndRedactsFrameworkChannels(t
 	}
 }
 
-func TestEmitResultRedactsEveryErrorInfoCanary(t *testing.T) {
+func TestCrossPlatformCoverageEmitResultRedactsEveryErrorInfoCanary(t *testing.T) {
 	info := &ErrorInfo{
-		Type:            "api",
-		Message:         "Authorization: Bearer message-auth-canary",
-		Hint:            "use https://hint-user:hint-pass-canary@example.test/help?access_token=hint-query-canary&doc=usable",
-		Details:         map[string]any{"PASSWORD": "details-password-canary"},
-		RPCData:         map[string]any{"client_secret": "rpc-secret-canary", "task_id": "rpc-task-id-canary"},
-		TechnicalDetail: `upstream {"refresh_token":"technical-token-canary"}`,
-		FriendlyHint:    "cookie=friendly-cookie-canary",
-		ActionURL:       "https://example.test/retry?signature=action-signature-canary&step=2",
-		Cause:           "token:cause-token-canary",
-		Actions:         []string{"dws retry --url 'https://example.test/run?x-oss-signature=actions-signature-canary&mode=safe'"},
-		RequestID:       "error-request-id-canary",
+		Type:    "api",
+		Message: "Authorization: Bearer message-auth-canary",
+		Hint:    "use https://hint-user:hint-pass-canary@example.test/help?access_token=hint-query-canary&doc=usable",
+		Details: map[string]any{"PASSWORD": "details-password-canary"},
+		RPCData: map[string]any{"client_secret": "rpc-secret-canary", "task_id": "rpc-task-id-canary"},
+		TechnicalDetail: "upstream x-dingtalk-ext: {\"umid\":\"runtime-header-canary\"}\n" +
+			`payload {"refresh_token":"technical-token-canary","umid":"runtime-json-canary"}`,
+		FriendlyHint: "cookie=friendly-cookie-canary",
+		ActionURL:    "https://example.test/retry?signature=action-signature-canary&step=2",
+		Cause:        "token:cause-token-canary",
+		Actions:      []string{"dws retry --url 'https://example.test/run?x-oss-signature=actions-signature-canary&mode=safe'"},
+		RequestID:    "error-request-id-canary",
 	}
 	original := cloneErrorInfo(info)
 	result := Failure(info)
@@ -115,6 +116,7 @@ func TestEmitResultRedactsEveryErrorInfoCanary(t *testing.T) {
 	for _, secret := range []string{
 		"message-auth-canary", "hint-pass-canary", "hint-query-canary",
 		"details-password-canary", "rpc-secret-canary", "technical-token-canary",
+		"runtime-header-canary", "runtime-json-canary",
 		"friendly-cookie-canary", "action-signature-canary", "cause-token-canary",
 		"actions-signature-canary",
 	} {
@@ -222,10 +224,10 @@ func TestWriteEnvelopeRedactsNoticeSensitiveKeys(t *testing.T) {
 // logging.IsSensitiveKey variants (snake/kebab/camel and secret/token/
 // credential/password substrings) are sensitive, the header-only set-cookie
 // stays covered, and the pagination cursor next_token stays visible.
-func TestIsSensitiveOutputKeyBoundary(t *testing.T) {
+func TestCrossPlatformCoverageIsSensitiveOutputKeyBoundary(t *testing.T) {
 	for _, key := range []string{
 		"api_key", "api-key", "client-secret", "clientSecret", "credential_id",
-		"set-cookie", "Authorization", "password", "x-user-access-token",
+		"set-cookie", "Authorization", "password", "x-user-access-token", "x-dingtalk-ext", "umid",
 	} {
 		if !isSensitiveOutputKey(key) {
 			t.Errorf("isSensitiveOutputKey(%q) = false, want true", key)

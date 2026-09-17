@@ -668,6 +668,20 @@ func TestCrossPlatformCoveragePublishedSpaceWorkspaceAliasesRemainExecutable(t *
 		}
 	}
 
+	driveUpload, ok := LookupParamAlias("drive +upload")
+	if !ok {
+		t.Fatal("drive +upload has no generated parameter-alias entry")
+	}
+	for _, emitted := range []string{"knowledge-base-id", "wiki-workspace-id", "workspace-id"} {
+		target, active := driveUpload.ResolveAlias(emitted)
+		if !active || target != "workspace" {
+			t.Errorf("drive +upload --%s resolution = active:%v target:%q, want --workspace", emitted, active, target)
+		}
+		if driveUpload.IsBlocked(emitted) || driveUpload.IsAmbiguous(emitted) {
+			t.Errorf("drive +upload --%s remains protected after adding the workspace route", emitted)
+		}
+	}
+
 	// Compatibility remains exact-path scoped. Strong type spellings introduced
 	// after the split continue to guard the two value domains elsewhere.
 	for _, test := range []struct {
@@ -675,7 +689,6 @@ func TestCrossPlatformCoveragePublishedSpaceWorkspaceAliasesRemainExecutable(t *
 		emitted string
 	}{
 		{command: "doc create", emitted: "storage-space-id"},
-		{command: "drive +upload", emitted: "workspace-id"},
 		{command: "drive info", emitted: "knowledge-base-id"},
 	} {
 		entry, ok := LookupParamAlias(test.command)
