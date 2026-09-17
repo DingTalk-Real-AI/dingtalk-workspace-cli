@@ -218,11 +218,28 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 	}
 
 	root := newContractCommand()
+	reviewParent, remaining, err := root.Find([]string{"review"})
+	if err != nil || reviewParent == nil || len(remaining) != 0 || !reviewParent.Hidden {
+		t.Fatalf("review parent hidden contract: cmd=%v remaining=%v hidden=%v err=%v", reviewParent, remaining, reviewParent != nil && reviewParent.Hidden, err)
+	}
 	for _, name := range []string{"benefit", "create", "analysis", "result"} {
 		cmd, _, err := root.Find([]string{"review", name})
 		if err != nil || cmd == nil || !cmd.Hidden || !cmd.Runnable() {
 			t.Fatalf("review %s hidden runnable contract: cmd=%v hidden=%v runnable=%v err=%v", name, cmd, cmd != nil && cmd.Hidden, cmd != nil && cmd.Runnable(), err)
 		}
+	}
+
+	var help bytes.Buffer
+	helpRoot := newContractCommand()
+	helpRoot.SetOut(&help)
+	helpRoot.SetErr(&help)
+	helpRoot.SetArgs([]string{"--help"})
+	if err := helpRoot.Execute(); err != nil {
+		t.Fatalf("contract --help: %v", err)
+	}
+	helpText := help.String()
+	if strings.Contains(helpText, "\n  review ") || strings.Contains(helpText, "合同审查（已下线）") {
+		t.Fatalf("contract --help still exposes review:\n%s", helpText)
 	}
 }
 
