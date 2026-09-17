@@ -30,6 +30,9 @@ func TestEmployeeStreamBoundaryFixture(t *testing.T) {
 		signal.Ignore(syscall.SIGTERM)
 	}
 	if mode == "cancel-start" {
+		if err := os.WriteFile(filepath.Join(os.Getenv("DWS_STREAM_BOUNDARY_DIR"), "consumer-started"), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		os.Exit(0)
 	}
@@ -137,7 +140,10 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 					defer close(done)
 					for ctx.Err() == nil {
 						s, e := readDigitalEmployeeState(dir)
-						if e == nil && ((scenario == "cancel-start" && s.ExecutorReady) || s.Status == "running") {
+						// ExecutorReady precedes proc.Start. Wait for the child itself
+						// before cancelling the readiness wait, including on Windows.
+						_, startedErr := os.Stat(filepath.Join(dir, "consumer-started"))
+						if e == nil && ((scenario == "cancel-start" && startedErr == nil) || s.Status == "running") {
 							time.Sleep(30 * time.Millisecond)
 							cancel()
 							return
