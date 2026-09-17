@@ -1705,6 +1705,38 @@ shared_schema_levels_locked() {
   done
 }
 
+# Lock the ancestry ABOVE the shared root: every existing parent, up to /,
+# must satisfy shared_schema_ancestry_level_safe for root or the invoking
+# user (group/world write requires sticky, so platform conventions such as
+# 1777 /tmp and /Library/Caches stay usable). levels_locked only covers the
+# root and dws levels themselves; without a parent lock, an untrusted
+# principal with rename rights on a non-sticky group/world-writable parent
+# can swap the freshly validated root for a symlink in the window before
+# chmod a+rX, and chmod then follows the link and widens the target's
+# permissions. With every existing parent locked, the filesystem itself
+# denies that rename for the whole install run — the same stability-by-
+# ownership argument levels_locked makes for the mutated levels. Missing
+# parents are skipped: create_missing_levels builds them under umask 077
+# below a locked anchor, so they are invoker-only by construction, and the
+# pre-chmod re-run of this predicate sees them and re-verifies. Relative
+# roots are rejected outright.
+shared_schema_root_ancestry_locked() {
+  _sra_root="$1"
+  case "$_sra_root" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  _sra_invoker="$(id -u)"
+  _sra_walk="$(dirname "$_sra_root")"
+  while [ "$_sra_walk" != "/" ]; do
+    if [ -e "$_sra_walk" ]; then
+      shared_schema_ancestry_level_safe "$_sra_walk" 0 "$_sra_invoker" || return 1
+    fi
+    _sra_walk="$(dirname "$_sra_walk")"
+  done
+  return 0
+}
+
 # Create the missing levels of an absolute directory path one component at
 # a time with plain mkdir under umask 077. mkdir without -p is an atomic
 # create-or-EEXIST on the leaf and never resolves a symlink there, so a
@@ -1835,19 +1867,22 @@ build_shared_schema_cache() {
   # Path safety precedes every mutation: a touch-based probe follows symlinked
   # path entries, so an existing shared_dir/dws/schema level that is a symlink
   # must be rejected before the write probe can mutate whatever it points at.
-  # Arbitrary-depth ancestor rejection stays out of scope:
-  # platform-conventional symlinked ancestors (e.g. /var on macOS) are
-  # legitimate locations and are excluded from the runtime's ancestry rules
-  # for the same reason. The ownership lock additionally binds every later
-  # pathname-based mutation (find -delete, chmod, chmod -R) to levels no
-  # other principal can swap: validation and mutation can no longer be
-  # separated by a replacement race. Missing levels are created by
-  # shared_schema_create_missing_levels — plain mkdir per level under
-  # umask 077 — so a level replaced between validation and creation fails
-  # creation instead of being written through, and the full gate re-runs
-  # over all three levels before the first write probe.
+  # Platform-conventional symlinked ancestors (e.g. /var on macOS) are not
+  # rejected as objects; they are governed instead by the ancestry lock below.
+  # The ownership lock additionally binds every later pathname-based mutation
+  # (find -delete, chmod, chmod -R) to levels no other principal can swap:
+  # validation and mutation can no longer be separated by a replacement race.
+  # Missing levels are created by shared_schema_create_missing_levels — plain
+  # mkdir per level under umask 077 — so a level replaced between validation
+  # and creation fails creation instead of being written through, and the full
+  # gate re-runs over all three levels before the first write probe. The
+  # ancestry lock additionally covers every parent above the root, so a root
+  # reachable through a non-sticky group/world-writable level — where an
+  # untrusted rename could still swap it for a symlink ahead of the chmod —
+  # fails closed here, before the first creation or write.
   if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
-    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate"; then
+    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" ||
+    ! shared_schema_root_ancestry_locked "$shared_dir"; then
     say "⚠️  Shared schema cache skipped: unsafe cache path."
     return 0
   fi
@@ -1902,8 +1937,13 @@ build_shared_schema_cache() {
     # one — including an upgrade replacing artifacts inside an existing edition,
     # whose atomic staging files and identity.json land as 0600.
     shared_chmod_ok=1
+    # Re-run the whole gate including the parent ancestry lock right before
+    # the first chmod: the warm-up ran an external binary and time has passed,
+    # so this re-establishes that no level above or inside the root became
+    # swappable before a+rX follows the pathnames.
     if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
       ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+      ! shared_schema_root_ancestry_locked "$shared_dir" ||
       ! shared_schema_tree_objects_safe "$schema_tree"; then
       shared_chmod_ok=0
     fi

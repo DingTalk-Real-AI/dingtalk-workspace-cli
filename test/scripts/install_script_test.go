@@ -1674,6 +1674,260 @@ build_shared_schema_cache
 	})
 }
 
+// TestInstallScriptSharedSchemaCacheRootAncestryLocked pins the parent
+// ancestry lock from review 5230137690: a custom shared root reachable
+// through a non-sticky group/world-writable level can be renamed to a
+// symlink after the final validation, and the following chmod a+rX then
+// follows the link and widens an arbitrary target directory. The installer
+// must reject such ancestry before the first creation or write, and
+// re-check it immediately before the chmod block.
+func TestInstallScriptSharedSchemaCacheRootAncestryLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+	text := string(scriptData)
+
+	t.Run("static contract", func(t *testing.T) {
+		buildStart := strings.Index(text, "build_shared_schema_cache() {")
+		helperAt := strings.Index(text, "shared_schema_root_ancestry_locked() {")
+		if buildStart < 0 || helperAt < 0 {
+			t.Fatal("build_shared_schema_cache or ancestry lock helper not found")
+		}
+		if helperAt > buildStart {
+			t.Fatal("shared_schema_root_ancestry_locked must be defined before build_shared_schema_cache")
+		}
+		helperBody := text[helperAt:buildStart]
+		for _, want := range []string{
+			`shared_schema_ancestry_level_safe "$_sra_walk" 0 "$_sra_invoker"`,
+			"dirname",
+		} {
+			if !strings.Contains(helperBody, want) {
+				t.Fatalf("shared_schema_root_ancestry_locked missing %q", want)
+			}
+		}
+		// Relative roots have no well-defined ancestor walk; they must fail closed.
+		if !strings.Contains(helperBody, "*)\n      return 1") &&
+			!strings.Contains(helperBody, "*) return 1") {
+			t.Fatalf("shared_schema_root_ancestry_locked must reject relative roots")
+		}
+		buildBody := text[buildStart:]
+		lockAt := strings.Index(buildBody, `shared_schema_root_ancestry_locked "$shared_dir"`)
+		createAt := strings.Index(buildBody, `shared_schema_create_missing_levels "$shared_dir"`)
+		chmodAt := strings.Index(buildBody, `chmod a+rX "$shared_dir" "$dws_intermediate"`)
+		if lockAt < 0 || createAt < 0 || chmodAt < 0 || !(lockAt < createAt) {
+			t.Fatalf("ancestry lock must run before root creation, got lock=%d create=%d chmod=%d", lockAt, createAt, chmodAt)
+		}
+		// The pre-chmod re-check must re-run the lock after the warm-up and
+		// before the first a+rX on the root pathname.
+		relockRel := strings.Index(buildBody[lockAt+1:], `shared_schema_root_ancestry_locked "$shared_dir"`)
+		if relockRel < 0 || lockAt+1+relockRel > chmodAt {
+			t.Fatalf("pre-chmod ancestry re-check missing or after chmod: relock=%d chmod=%d", lockAt+1+relockRel, chmodAt)
+		}
+	})
+
+	runPredicate := func(t *testing.T, target string) string {
+		t.Helper()
+		root := t.TempDir()
+		harness := string(scriptData[:cut]) + `
+if shared_schema_root_ancestry_locked "` + target + `"; then
+  printf 'rc=0\n'
+else
+  printf 'rc=1\n'
+fi
+`
+		harnessPath := filepath.Join(root, "ancestry-predicate.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		out, err := exec.Command("sh", harnessPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("predicate harness: %v\n%s", err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	t.Run("predicate mirrors runtime ancestry rule", func(t *testing.T) {
+		base := t.TempDir()
+		for _, tc := range []struct {
+			name string
+			mode os.FileMode
+			want string
+		}{
+			{"owner-only parent", 0o700, "rc=0"},
+			{"other-traversable parent", 0o755, "rc=0"},
+			// Go's os.Chmod drops setuid/setgid/sticky from plain octal
+			// modes; os.ModeSticky is the only way to plant the bit.
+			{"sticky world-writable parent", 0o777 | os.ModeSticky, "rc=0"},
+			{"non-sticky world-writable parent", 0o777, "rc=1"},
+			{"non-sticky group-writable parent", 0o770, "rc=1"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				parent := filepath.Join(base, strings.ReplaceAll(tc.name, " ", "-"))
+				if err := os.Mkdir(parent, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+				// os.Mkdir modes are masked by the process umask; re-apply.
+				if err := os.Chmod(parent, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+				target := filepath.Join(parent, "shared")
+				if err := os.Mkdir(target, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if got := runPredicate(t, target); got != tc.want {
+					t.Fatalf("shared_schema_root_ancestry_locked %s = %s, want %s", target, got, tc.want)
+				}
+			})
+		}
+		if got := runPredicate(t, "relative/shared"); got != "rc=1" {
+			t.Fatalf("relative root accepted: %s", got)
+		}
+	})
+
+	t.Run("non-sticky writable parent rejects before any mutation", func(t *testing.T) {
+		root := t.TempDir()
+		loose := filepath.Join(root, "loose")
+		shared := filepath.Join(loose, "shared")
+		outside := filepath.Join(root, "outside-victim")
+		if err := os.Mkdir(loose, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(loose, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(outside, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		// PATH-shimmed chmod performs the review's exact attack on first use
+		// against the root: rename the freshly validated shared root away and
+		// replace it with a symlink to the outside victim, then delegate.
+		shimDir := filepath.Join(root, "shim")
+		if err := os.Mkdir(shimDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(shimDir, "chmod"), []byte(`#!/bin/sh
+real=/bin/chmod
+for arg do
+  case "$arg" in
+    "$SWAP_TARGET")
+      if [ ! -f "$SWAP_MARKER" ]; then
+        : >"$SWAP_MARKER"
+        mv "$SWAP_TARGET" "$SWAP_TARGET.orig"
+        ln -s "$SWAP_VICTIM" "$SWAP_TARGET"
+      fi
+      ;;
+  esac
+done
+exec "$real" "$@"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "swap-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+			sharedSchemaCacheOwnerEnv(),
+			"PATH="+shimDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"SWAP_TARGET="+shared,
+			"SWAP_VICTIM="+outside,
+			"SWAP_MARKER="+filepath.Join(root, "swap-marker"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("swap harness: %v\n%s", err, output)
+		}
+		if strings.Contains(string(output), "Building shared schema cache") {
+			t.Fatalf("warm-up ran under a non-sticky writable parent, output:\n%s", output)
+		}
+		if _, err := os.Lstat(shared); !os.IsNotExist(err) {
+			t.Fatalf("shared root was created despite unsafe ancestry: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "swap-marker")); !os.IsNotExist(err) {
+			t.Fatal("chmod was reached against the shared root; the swap attack window is open")
+		}
+		if _, err := os.Stat(shared + ".orig"); !os.IsNotExist(err) {
+			t.Fatal("shared root was renamed by the shim despite the gate")
+		}
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("outside victim permissions widened: %v", info.Mode().Perm())
+		}
+	})
+
+	t.Run("sticky writable parent still builds", func(t *testing.T) {
+		root := t.TempDir()
+		sticky := filepath.Join(root, "sticky")
+		shared := filepath.Join(sticky, "shared")
+		if err := os.Mkdir(sticky, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(sticky, 0o777|os.ModeSticky); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "sticky-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("sticky harness: %v\n%s", err, output)
+		}
+		if !strings.Contains(string(output), "Building shared schema cache") {
+			t.Fatalf("sticky writable parent must stay usable, output:\n%s", output)
+		}
+		if _, err := os.Stat(filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")); err != nil {
+			t.Fatalf("warm-up artifacts missing: %v", err)
+		}
+	})
+}
+
 func TestInstallScriptSharedSchemaCacheUmaskAncestorsTraversable(t *testing.T) {
 	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
 	// 1777, so a root under it is other-traversable all the way up.
