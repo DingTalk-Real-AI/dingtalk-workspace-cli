@@ -91,6 +91,12 @@ type reviewedCompatibilityException struct {
 // confirmation drift into a compatible change. Each tool may have multiple
 // field transitions (e.g. confirmation + risk + effect tightened together).
 var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
+	// PR #1384: require explicit user confirmation before creating a whiteboard
+	// from authored content after render preview. Land this exact, one-way
+	// authorization in main before the feature consumes the stronger gate.
+	"whiteboard/whiteboard.create_with_content": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
 	// PR #1357: align the published Drive/Wiki contract with verified runtime
 	// behavior. Publish status is read-only; unsupported publish enablement is
 	// unavailable to Agents; upload and member removal cross existing runtime
