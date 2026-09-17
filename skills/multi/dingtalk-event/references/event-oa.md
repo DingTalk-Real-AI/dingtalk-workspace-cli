@@ -112,6 +112,8 @@ dws event consume \
 - `create_time`、`finish_time` 和 `event_time` 都是毫秒时间戳。`event_time` 是审批业务事件时间，`timestamp` 是 transport 事件时间。
 - 七类 OA 事件的 `staff_id` 来自原始 `payload.body.staffId`，保留字符串值；服务端未提供或为空时省略，不用外层 `uid` 替代。
 - 七类 OA 事件的 `activity_id` 来自原始 `payload.body.activityId`，保留字符串值；服务端未提供或为空时省略。
+- 七类 OA 事件的 `corp_id`、`business_id` 分别来自原始 `payload.body.corpId`、`payload.body.businessId`，保留字符串值；未提供或为空时省略，不用外层 `corpid`、`bizid` 替代。
+- 抄送事件的 `cc_time` 来自原始 `payload.body.ccTime`，是毫秒时间戳；未提供或为 `null` 时省略，不用 `event_time` 替代。
 - 七类事件的额外字段如下；具体事件始终以 `dws event schema <event_key> --flatten` 为准。
 
 | 事件 | 额外顶层字段 |
@@ -120,7 +122,7 @@ dws event consume \
 | `user_oa_approval_task_finished` | `task_id`、`result`、`finish_time` |
 | `user_oa_approval_task_redirected` | `task_id`、`result`、`finish_time` |
 | `user_oa_approval_instance_started` | 无 |
-| `user_oa_approval_instance_cc` | 无 |
+| `user_oa_approval_instance_cc` | `cc_time`（服务端提供时） |
 | `user_oa_approval_instance_terminated` | `finish_time` |
 | `user_oa_approval_instance_finished` | `result`、`finish_time` |
 

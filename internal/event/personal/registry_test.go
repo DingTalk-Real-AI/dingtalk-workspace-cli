@@ -486,14 +486,14 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalTaskCreated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalTaskFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -501,7 +501,7 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalTaskRedirected,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -509,28 +509,28 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalInstanceStarted,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceCC,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "cc_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "result", "create_time", "finish_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "result", "create_time", "finish_time",
 				"event_time",
 			},
 		},
@@ -561,7 +561,7 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			if _, ok := props["payload"]; ok {
 				t.Fatalf("schema.properties exposed generic payload: %#v", props)
 			}
-			for _, name := range []string{"timestamp", "create_time", "finish_time", "event_time"} {
+			for _, name := range []string{"timestamp", "create_time", "finish_time", "cc_time", "event_time"} {
 				property, exists := props[name].(map[string]any)
 				if !exists {
 					continue

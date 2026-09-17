@@ -36,14 +36,14 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskCreated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalTaskFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -51,7 +51,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskRedirected,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -59,28 +59,28 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalInstanceStarted,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceCC,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "cc_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"staff_id", "activity_id", "process_code", "title", "status", "result", "create_time", "finish_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "result", "create_time", "finish_time",
 				"event_time",
 			},
 		},
@@ -123,10 +123,18 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 		for name, source := range map[string]string{
 			"staff_id":    "payload.body.staffId",
 			"activity_id": "payload.body.activityId",
+			"corp_id":     "payload.body.corpId",
+			"business_id": "payload.body.businessId",
 		} {
 			property := properties[name].(map[string]any)
 			if property["type"] != "string" || !strings.Contains(property["description"].(string), source) {
 				t.Fatalf("%s schema for %s = %#v, want string sourced from %s", name, eventKey, property, source)
+			}
+		}
+		if eventKey == personal.EventOAApprovalInstanceCC {
+			cc := properties["cc_time"].(map[string]any)
+			if cc["type"] != "integer" || cc["format"] != "timestamp_ms" {
+				t.Fatalf("cc_time schema = %#v, want timestamp_ms integer", cc)
 			}
 		}
 		if _, ok := properties["payload"]; ok {
@@ -138,12 +146,14 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoveragePersonalOAOptionalIDsOutput(t *testing.T) {
+func TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput(t *testing.T) {
 	// Match the reported wire nesting, using synthetic identifiers only.
 	const data = `{"eventKey":"EVENT_KEY","eventId":"oa-event",
-		"payload":{"uid":100001,"staffId":"outer-staff-must-not-be-used","activityId":"outer-activity-must-not-be-used","body":{
+		"payload":{"uid":100001,"staffId":"outer-staff-must-not-be-used","activityId":"outer-activity-must-not-be-used",
+        "corpid":"outer-corp","corpId":"outer-corp","bizid":"outer-biz","businessId":"outer-business","ccTime":123,"body":{
 			"processInstanceId":"instance-1","taskId":"task-1","title":"测试审批",
 			"status":"RUNNING",OPTIONAL_FIELDS"createTime":1789616921000},"event_time":1789616921000}}`
+	ccTime, zeroTime := int64(1789629013805), int64(0)
 	for _, eventKey := range []string{
 		personal.EventOAApprovalTaskCreated,
 		personal.EventOAApprovalTaskFinished,
@@ -158,19 +168,29 @@ func TestCrossPlatformCoveragePersonalOAOptionalIDsOutput(t *testing.T) {
 			field    string
 			staff    string
 			activity string
+			corp     string
+			business string
+			ccTime   *int64
 		}{
-			{name: "present", field: `"staffId":"00012345","activityId":"0012_abcd",`, staff: "00012345", activity: "0012_abcd"},
+			{name: "present", field: `"staffId":"00012345","activityId":"0012_abcd","corpId":"ding-test-corp","businessId":"000202609170001","ccTime":1789629013805,`, staff: "00012345", activity: "0012_abcd", corp: "ding-test-corp", business: "000202609170001", ccTime: &ccTime},
 			{name: "staff only", field: `"staffId":"00012345",`, staff: "00012345"},
 			{name: "activity only", field: `"activityId":"0012_abcd",`, activity: "0012_abcd"},
+			{name: "corp only", field: `"corpId":"ding-test-corp",`, corp: "ding-test-corp"},
+			{name: "business only", field: `"businessId":"000202609170001",`, business: "000202609170001"},
+			{name: "cc time only", field: `"ccTime":1789629013805,`, ccTime: &ccTime},
+			{name: "zero cc time", field: `"ccTime":0,`, ccTime: &zeroTime},
 			{name: "missing"},
-			{name: "empty", field: `"staffId":"","activityId":"",`},
-			{name: "null", field: `"staffId":null,"activityId":null,`},
+			{name: "empty", field: `"staffId":"","activityId":"","corpId":"","businessId":"",`},
+			{name: "null", field: `"staffId":null,"activityId":null,"corpId":null,"businessId":null,"ccTime":null,`},
 		} {
 			t.Run(eventKey+"/"+tt.name, func(t *testing.T) {
 				ev := transport.Event{
 					Type:      transport.FrameTypeEvent,
 					EventType: eventKey,
 					Data:      strings.NewReplacer("EVENT_KEY", eventKey, "OPTIONAL_FIELDS", tt.field).Replace(data),
+				}
+				if eventKey == personal.EventOAApprovalInstanceCC {
+					ev.Data = strings.Replace(ev.Data, `"status":"RUNNING",`, "", 1)
 				}
 				for _, flatten := range []bool{true, false} {
 					var out bytes.Buffer
@@ -196,11 +216,19 @@ func TestCrossPlatformCoveragePersonalOAOptionalIDsOutput(t *testing.T) {
 						}
 						continue
 					}
-					for name, want := range map[string]string{"staff_id": tt.staff, "activity_id": tt.activity} {
+					for name, want := range map[string]string{"staff_id": tt.staff, "activity_id": tt.activity, "corp_id": tt.corp, "business_id": tt.business} {
 						value, exists := got[name]
 						if want == "" && exists || want != "" && value != want {
 							t.Fatalf("%s = %#v (present=%v), want %q (omitted when empty)", name, value, exists, want)
 						}
+					}
+					value, exists := got["cc_time"]
+					if eventKey == personal.EventOAApprovalInstanceCC && tt.ccTime != nil {
+						if value != float64(*tt.ccTime) {
+							t.Fatalf("cc_time = %#v, want %d from body rather than event_time", value, *tt.ccTime)
+						}
+					} else if exists {
+						t.Fatalf("unexpected cc_time for %s without a CC body value: %#v", eventKey, value)
 					}
 					if got["type"] != eventKey || got["process_instance_id"] != "instance-1" || got["title"] != "测试审批" {
 						t.Fatalf("flattened business fields changed: %#v", got)
