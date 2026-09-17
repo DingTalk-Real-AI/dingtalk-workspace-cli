@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -31,6 +32,16 @@ const (
 	todoPageSize = 20
 	todoMaxPages = 40
 )
+
+func todoStatefulPreviewExampleDispositions() []contract.ExampleDisposition {
+	index := 0
+	return []contract.ExampleDisposition{{
+		Index: &index, Mode: contract.ExampleDispositionModeContractOnly,
+		ReasonCode: contract.ExampleDispositionReasonStatefulPreflight,
+		Reason:     "dry-run must resolve the current remote todo or user identity before preview; the isolated Agent example runner has no remote fixture",
+		Reviewed:   true,
+	}}
+}
 
 // shortcutListAllTodoCards pages through get_user_todos_in_current_org, merging
 // every page's todoCards into one slice so callers match/filter across the FULL

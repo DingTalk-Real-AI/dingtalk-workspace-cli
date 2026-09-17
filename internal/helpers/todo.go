@@ -59,6 +59,12 @@ func newTodoCommand() *cobra.Command {
 	// products.todo). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "todo",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-todo"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("待办深度指南", "dingtalk-todo", "references/todo.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理待办任务、标签、子任务、执行人、参与人、评论、附件与提醒",
 			UseWhen: []string{

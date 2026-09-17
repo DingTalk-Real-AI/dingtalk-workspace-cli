@@ -18,6 +18,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -257,6 +259,13 @@ func TestCrossPlatformCoverageDocDelegationAuthExtractNodeID(t *testing.T) {
 		{"overwriteFileId beats overwriteNodeId", map[string]any{"overwriteNodeId": "on1", "overwriteFileId": "of1"}, "of1"},
 		{"overwriteFileId beats space keys", map[string]any{"spaceId": "s1", "overwriteFileId": "of1"}, "of1"},
 		{"overwriteNodeId beats workspace keys", map[string]any{"workspaceId": "w1", "overwriteNodeId": "on1"}, "on1"},
+		// targetFolderId: import --folder 场景承载目标文件夹，优先级在 folderId
+		// 之后、workspaceId 之前；copy/move args 同时含 nodeId+targetFolderId 时
+		// nodeId 优先（源节点作为被校验对象），targetFolderId 仅进 options。
+		{"targetFolderId only", map[string]any{"targetFolderId": "tf1"}, "tf1"},
+		{"targetFolderId beats workspaceId", map[string]any{"workspaceId": "w1", "targetFolderId": "tf1"}, "tf1"},
+		{"nodeId beats targetFolderId (copy/move)", map[string]any{"nodeId": "n1", "targetFolderId": "tf1"}, "n1"},
+		{"folderId beats targetFolderId", map[string]any{"folderId": "f1", "targetFolderId": "tf1"}, "f1"},
 		{"empty string skipped", map[string]any{"nodeId": "", "spaceId": "s1"}, "s1"},
 		{"non-string skipped", map[string]any{"nodeId": 42, "spaceId": "s1"}, "s1"},
 		{"none found", map[string]any{"other": "x"}, ""},
@@ -1214,5 +1223,1312 @@ func TestCrossPlatformCoverageDocDelegationAuthDryRunHelpersPreCheckResolvesProd
 	}
 	if !strings.Contains(out.String(), "dry_run") {
 		t.Fatalf("output = %q, want dry-run JSON preview", out.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 (options 补全) delegation-side coverage — merged from the former
+// doc_delegation_auth_options_test.go (kept in this file per single-file rule).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Phase 2 (options 补全) delegation-side coverage. These tests pin the pure
+// builders (buildDelegationOptions and its sub-builders), the $corpId runtime
+// default read path (resolveCurrentCorpID), the options injection into the
+// check_capability call, backward compatibility (no options key when empty),
+// and import dry-run delegation parity.
+// ---------------------------------------------------------------------------
+
+// setRuntimeCorpID installs a temporary $corpId runtime default resolver and
+// restores the previous registry on cleanup, avoiding RegisterRuntimeDefault's
+// duplicate-id panic across tests.
+func setRuntimeCorpID(t *testing.T, corpID string, present bool) {
+	t.Helper()
+	runtimeDefaultsMu.Lock()
+	previous := runtimeDefaults
+	runtimeDefaults = make(map[string]edition.RuntimeDefaultFn, len(previous)+1)
+	for k, v := range previous {
+		runtimeDefaults[k] = v
+	}
+	runtimeDefaults[RuntimeDefaultCorpID] = func(context.Context) (string, bool) {
+		return corpID, present
+	}
+	runtimeDefaultsMu.Unlock()
+	t.Cleanup(func() {
+		runtimeDefaultsMu.Lock()
+		runtimeDefaults = previous
+		runtimeDefaultsMu.Unlock()
+	})
+}
+
+func TestCrossPlatformCoverageDelegationOptionsCreateActionParam(t *testing.T) {
+	cases := []struct {
+		name     string
+		toolKey  string
+		args     map[string]any
+		wantNil  bool
+		wantName any // string wanted, or nil for absent
+		wantDir  bool
+	}{
+		{
+			name:     "create_document rebuilds .adoc",
+			toolKey:  "doc.create_document",
+			args:     map[string]any{"name": "周报"},
+			wantName: "周报.adoc",
+			wantDir:  false,
+		},
+		{
+			name:    "create_document missing name yields nil",
+			toolKey: "doc.create_document",
+			args:    map[string]any{},
+			wantNil: true,
+		},
+		{
+			name:     "create_file typed rebuilds extension",
+			toolKey:  "drive.create_file",
+			args:     map[string]any{"name": "data", "type": "axls"},
+			wantName: "data.axls",
+			wantDir:  false,
+		},
+		{
+			name:     "create_file folder type is createFolder without name",
+			toolKey:  "drive.create_file",
+			args:     map[string]any{"name": "ignored", "type": "folder"},
+			wantName: nil,
+			wantDir:  true,
+		},
+		{
+			name:     "create_folder is createFolder without name",
+			toolKey:  "drive.create_folder",
+			args:     map[string]any{},
+			wantName: nil,
+			wantDir:  true,
+		},
+		{
+			name:     "create_workspace_sheet rebuilds .axls",
+			toolKey:  "sheet.create_workspace_sheet",
+			args:     map[string]any{"name": "预算"},
+			wantName: "预算.axls",
+			wantDir:  false,
+		},
+		{
+			name:     "apply_sheet_template with name rebuilds .axls",
+			toolKey:  "sheet.apply_sheet_template",
+			args:     map[string]any{"name": "模板"},
+			wantName: "模板.axls",
+			wantDir:  false,
+		},
+		{
+			name:    "apply_sheet_template without name yields nil (optional)",
+			toolKey: "sheet.apply_sheet_template",
+			args:    map[string]any{},
+			wantNil: true,
+		},
+		{
+			name:    "create_file typed without name yields nil",
+			toolKey: "drive.create_file",
+			args:    map[string]any{"type": "axls"},
+			wantNil: true,
+		},
+		{
+			name:     "create_file without type keeps bare name (no extension rebuild)",
+			toolKey:  "drive.create_file",
+			args:     map[string]any{"name": "raw"},
+			wantName: "raw",
+			wantDir:  false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := buildDelegationOptions(tc.toolKey, tc.args, "")
+			if tc.wantNil {
+				if opts != nil {
+					t.Fatalf("options = %#v, want nil", opts)
+				}
+				return
+			}
+			if opts == nil {
+				t.Fatal("options = nil, want createActionParam")
+			}
+			if _, hasAction := opts["action"]; hasAction {
+				t.Fatalf("options must not carry an action field: %#v", opts)
+			}
+			if len(opts) != 1 {
+				t.Fatalf("options = %#v, want exactly one sub-object", opts)
+			}
+			param, ok := opts["createActionParam"].(map[string]any)
+			if !ok {
+				t.Fatalf("options = %#v, want createActionParam", opts)
+			}
+			if param["createFolder"] != tc.wantDir {
+				t.Fatalf("createFolder = %v, want %v", param["createFolder"], tc.wantDir)
+			}
+			got, hasName := param["name"]
+			if tc.wantName == nil {
+				if hasName {
+					t.Fatalf("name = %v, want absent", got)
+				}
+				return
+			}
+			if got != tc.wantName {
+				t.Fatalf("name = %v, want %v", got, tc.wantName)
+			}
+		})
+	}
+
+	// buildDelegationOptions only dispatches the five create_* tool names to
+	// buildCreateActionParam, so its default return nil (unmatched toolName) is
+	// unreachable through dispatch; exercise it directly.
+	t.Run("unmatched toolName yields nil (direct)", func(t *testing.T) {
+		if p := buildCreateActionParam("not_a_create_tool", map[string]any{"name": "x"}); p != nil {
+			t.Fatalf("buildCreateActionParam(unmatched) = %#v, want nil", p)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageDelegationOptionsUploadAndImport(t *testing.T) {
+	cases := []struct {
+		name     string
+		toolKey  string
+		args     map[string]any
+		wantKey  string // options sub-object key
+		wantNil  bool
+		wantFile string
+		wantSize any // int64 wanted, or nil for absent
+	}{
+		{
+			name:     "drive get_upload_info uses fileName + fileSize",
+			toolKey:  "drive.get_upload_info",
+			args:     map[string]any{"fileName": "a.pdf", "fileSize": float64(1024)},
+			wantKey:  "uploadActionParam",
+			wantFile: "a.pdf",
+			wantSize: int64(1024),
+		},
+		{
+			name:     "drive get_upload_info fileSize as int normalizes to int64",
+			toolKey:  "drive.get_upload_info",
+			args:     map[string]any{"fileName": "int.pdf", "fileSize": int(2048)},
+			wantKey:  "uploadActionParam",
+			wantFile: "int.pdf",
+			wantSize: int64(2048),
+		},
+		{
+			name:     "drive commit_upload without size omits fileSize",
+			toolKey:  "drive.commit_upload",
+			args:     map[string]any{"fileName": "b.pdf"},
+			wantKey:  "uploadActionParam",
+			wantFile: "b.pdf",
+			wantSize: nil,
+		},
+		{
+			name:     "doc get_file_upload_info reads name, emits fileName",
+			toolKey:  "doc.get_file_upload_info",
+			args:     map[string]any{"name": "c.docx", "fileSize": float64(2048)},
+			wantKey:  "uploadActionParam",
+			wantFile: "c.docx",
+			wantSize: int64(2048),
+		},
+		{
+			name:     "doc commit_uploaded_file reads name",
+			toolKey:  "doc.commit_uploaded_file",
+			args:     map[string]any{"name": "d.docx"},
+			wantKey:  "uploadActionParam",
+			wantFile: "d.docx",
+			wantSize: nil,
+		},
+		{
+			name:     "create_import_session emits importActionParam",
+			toolKey:  "doc.create_import_session",
+			args:     map[string]any{"fileName": "e.md", "fileSize": int64(64)},
+			wantKey:  "importActionParam",
+			wantFile: "e.md",
+			wantSize: int64(64),
+		},
+		{
+			name:     "create_import_session joins suffix into base fileName",
+			toolKey:  "doc.create_import_session",
+			args:     map[string]any{"fileName": "imp", "suffix": "md", "fileSize": int64(12)},
+			wantKey:  "importActionParam",
+			wantFile: "imp.md",
+			wantSize: int64(12),
+		},
+		{
+			name:     "create_import_session keeps fileName that already has extension",
+			toolKey:  "doc.create_import_session",
+			args:     map[string]any{"fileName": "report.docx", "suffix": "pdf"},
+			wantKey:  "importActionParam",
+			wantFile: "report.docx",
+			wantSize: nil,
+		},
+		{
+			name:     "create_import_session without suffix keeps base fileName (degrade)",
+			toolKey:  "doc.create_import_session",
+			args:     map[string]any{"fileName": "imp"},
+			wantKey:  "importActionParam",
+			wantFile: "imp",
+			wantSize: nil,
+		},
+		{
+			name:    "create_import_session without fileName yields nil",
+			toolKey: "doc.create_import_session",
+			args:    map[string]any{"suffix": "md", "fileSize": int64(12)},
+			wantNil: true,
+		},
+		{
+			name:    "upload without file name yields nil",
+			toolKey: "drive.get_upload_info",
+			args:    map[string]any{"fileSize": float64(1)},
+			wantNil: true,
+		},
+		{
+			name:    "doc upload folder step without name yields nil",
+			toolKey: "doc.get_file_upload_info",
+			args:    map[string]any{"folderId": "f-1"},
+			wantNil: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := buildDelegationOptions(tc.toolKey, tc.args, "")
+			if tc.wantNil {
+				if opts != nil {
+					t.Fatalf("options = %#v, want nil", opts)
+				}
+				return
+			}
+			param, ok := opts[tc.wantKey].(map[string]any)
+			if !ok || len(opts) != 1 {
+				t.Fatalf("options = %#v, want single %s", opts, tc.wantKey)
+			}
+			if param["fileName"] != tc.wantFile {
+				t.Fatalf("fileName = %v, want %v", param["fileName"], tc.wantFile)
+			}
+			got, hasSize := param["fileSize"]
+			if tc.wantSize == nil {
+				if hasSize {
+					t.Fatalf("fileSize = %v, want absent", got)
+				}
+				return
+			}
+			if got != tc.wantSize {
+				t.Fatalf("fileSize = %v (%T), want %v", got, got, tc.wantSize)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDelegationOptionsCopyMove(t *testing.T) {
+	t.Run("copy prefers targetFolderId", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.copy_document", map[string]any{
+			"targetFolderId": "folder-9", "workspaceId": "ws-1",
+		}, "")
+		param, ok := opts["copyActionParam"].(map[string]any)
+		if !ok || len(opts) != 1 || param["targetNodeId"] != "folder-9" {
+			t.Fatalf("options = %#v, want copyActionParam.targetNodeId=folder-9", opts)
+		}
+	})
+	t.Run("move falls back to workspaceId", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.move_document", map[string]any{
+			"workspaceId": "ws-2",
+		}, "")
+		param, ok := opts["moveActionParam"].(map[string]any)
+		if !ok || param["targetNodeId"] != "ws-2" {
+			t.Fatalf("options = %#v, want moveActionParam.targetNodeId=ws-2", opts)
+		}
+	})
+	t.Run("copy without any target yields nil", func(t *testing.T) {
+		if opts := buildDelegationOptions("doc.copy_document", map[string]any{}, ""); opts != nil {
+			t.Fatalf("options = %#v, want nil", opts)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageDelegationOptionsSetFilePublish(t *testing.T) {
+	t.Run("published true injects shareScopeSetParam WEB(9)", func(t *testing.T) {
+		opts := buildDelegationOptions("drive.set_file_publish", map[string]any{"published": true}, "")
+		param, ok := opts["shareScopeSetParam"].(map[string]any)
+		if !ok || len(opts) != 1 {
+			t.Fatalf("options = %#v, want single shareScopeSetParam", opts)
+		}
+		if param["targetScope"] != 9 {
+			t.Fatalf("targetScope = %#v (%T), want int(9)", param["targetScope"], param["targetScope"])
+		}
+	})
+	t.Run("published false yields nil", func(t *testing.T) {
+		if opts := buildDelegationOptions("drive.set_file_publish", map[string]any{"published": false}, ""); opts != nil {
+			t.Fatalf("options = %#v, want nil", opts)
+		}
+	})
+	t.Run("missing published yields nil", func(t *testing.T) {
+		if opts := buildDelegationOptions("drive.set_file_publish", map[string]any{"fileId": "f-1"}, ""); opts != nil {
+			t.Fatalf("options = %#v, want nil", opts)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageDelegationOptionsPermissionFormats(t *testing.T) {
+	t.Run("new members format maps directly", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.add_permission", map[string]any{
+			"members": []map[string]any{
+				{"type": "USER", "id": "u1", "corpId": "corp-x", "roleId": "r1"},
+				{"type": "DEPARTMENT", "id": "d1"},
+			},
+		}, "corp-current")
+		members := permissionMembers(t, opts)
+		if len(members) != 2 {
+			t.Fatalf("members = %#v, want 2", members)
+		}
+		want0 := map[string]any{"memberType": "USER", "id": "u1", "corpId": "corp-x", "roleId": "r1"}
+		if !reflect.DeepEqual(members[0], want0) {
+			t.Fatalf("members[0] = %#v, want %#v", members[0], want0)
+		}
+		want1 := map[string]any{"memberType": "DEPARTMENT", "id": "d1"}
+		if !reflect.DeepEqual(members[1], want1) {
+			t.Fatalf("members[1] = %#v, want %#v", members[1], want1)
+		}
+	})
+
+	t.Run("legacy userIds map to USER members with current corpID", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.update_permission", map[string]any{
+			"userIds": []string{"u1", "u2"},
+			"roleId":  "editor",
+		}, "corp-current")
+		members := permissionMembers(t, opts)
+		if len(members) != 2 {
+			t.Fatalf("members = %#v, want 2", members)
+		}
+		want := map[string]any{"memberType": "USER", "id": "u1", "corpId": "corp-current", "roleId": "editor"}
+		if !reflect.DeepEqual(members[0], want) {
+			t.Fatalf("members[0] = %#v, want %#v", members[0], want)
+		}
+	})
+
+	t.Run("legacy remove omits roleId", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.remove_permission", map[string]any{
+			"userIds": []string{"u1"},
+		}, "corp-current")
+		members := permissionMembers(t, opts)
+		if _, has := members[0]["roleId"]; has {
+			t.Fatalf("members[0] = %#v, want no roleId for remove", members[0])
+		}
+		if members[0]["corpId"] != "corp-current" || members[0]["memberType"] != "USER" {
+			t.Fatalf("members[0] = %#v", members[0])
+		}
+	})
+
+	t.Run("legacy with empty corpID yields nil options", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.add_permission", map[string]any{
+			"userIds": []string{"u1"},
+		}, "")
+		if opts != nil {
+			t.Fatalf("options = %#v, want nil when corpID empty", opts)
+		}
+	})
+
+	t.Run("legacy userIds skip empty ids", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.add_permission", map[string]any{
+			"userIds": []string{"", "u1"},
+		}, "corp-current")
+		members := permissionMembers(t, opts)
+		if len(members) != 1 || members[0]["id"] != "u1" {
+			t.Fatalf("members = %#v, want single member id=u1 (empty id skipped)", members)
+		}
+	})
+
+	t.Run("legacy userIds all empty yields nil options", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.add_permission", map[string]any{
+			"userIds": []string{"", ""},
+		}, "corp-current")
+		if opts != nil {
+			t.Fatalf("options = %#v, want nil when all userIds empty", opts)
+		}
+	})
+
+	t.Run("neither members nor userIds yields nil options", func(t *testing.T) {
+		opts := buildDelegationOptions("doc.add_permission", map[string]any{
+			"roleId": "editor",
+		}, "corp-current")
+		if opts != nil {
+			t.Fatalf("options = %#v, want nil when no members/userIds", opts)
+		}
+	})
+}
+
+// permissionMembers unwraps options.permissionManageParam.targetMembers.
+func permissionMembers(t *testing.T, opts map[string]any) []map[string]any {
+	t.Helper()
+	if opts == nil {
+		t.Fatal("options = nil, want permissionManageParam")
+	}
+	if len(opts) != 1 {
+		t.Fatalf("options = %#v, want single permissionManageParam", opts)
+	}
+	param, ok := opts["permissionManageParam"].(map[string]any)
+	if !ok {
+		t.Fatalf("options = %#v, want permissionManageParam", opts)
+	}
+	members, ok := param["targetMembers"].([]map[string]any)
+	if !ok {
+		t.Fatalf("permissionManageParam = %#v, want targetMembers slice", param)
+	}
+	return members
+}
+
+func TestCrossPlatformCoverageDelegationOptionsUnmappedToolYieldsNil(t *testing.T) {
+	for _, toolKey := range []string{"doc.update_document", "drive.list_files", "sheet.read_range", "doc"} {
+		if opts := buildDelegationOptions(toolKey, map[string]any{"name": "x", "fileName": "y"}, "corp"); opts != nil {
+			t.Fatalf("buildDelegationOptions(%q) = %#v, want nil", toolKey, opts)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageResolveCurrentCorpID(t *testing.T) {
+	t.Run("registered resolver returns trimmed corpID", func(t *testing.T) {
+		setRuntimeCorpID(t, "  corp-42 ", true)
+		if got := resolveCurrentCorpID(context.Background()); got != "corp-42" {
+			t.Fatalf("resolveCurrentCorpID() = %q, want corp-42", got)
+		}
+	})
+	t.Run("resolver reporting not-ok returns empty", func(t *testing.T) {
+		setRuntimeCorpID(t, "corp-x", false)
+		if got := resolveCurrentCorpID(context.Background()); got != "" {
+			t.Fatalf("resolveCurrentCorpID() = %q, want empty", got)
+		}
+	})
+	t.Run("unregistered returns empty", func(t *testing.T) {
+		runtimeDefaultsMu.Lock()
+		previous := runtimeDefaults
+		runtimeDefaults = make(map[string]edition.RuntimeDefaultFn)
+		runtimeDefaultsMu.Unlock()
+		t.Cleanup(func() {
+			runtimeDefaultsMu.Lock()
+			runtimeDefaults = previous
+			runtimeDefaultsMu.Unlock()
+		})
+		if got := resolveCurrentCorpID(context.Background()); got != "" {
+			t.Fatalf("resolveCurrentCorpID() = %q, want empty", got)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageDelegationOptionsInjectedIntoCheckArgs(t *testing.T) {
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	_, err := d.CallTool(context.Background(), "doc", "create_document", map[string]any{
+		"nodeId": "node-1", "name": "季度总结",
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	check := inner.calls[0]
+	opts, ok := check.args["options"].(map[string]any)
+	if !ok {
+		t.Fatalf("check args = %#v, want options key", check.args)
+	}
+	param, ok := opts["createActionParam"].(map[string]any)
+	if !ok || param["name"] != "季度总结.adoc" {
+		t.Fatalf("options = %#v, want createActionParam.name=季度总结.adoc", opts)
+	}
+}
+
+func TestCrossPlatformCoverageDelegationUnmappedToolOmitsOptionsKey(t *testing.T) {
+	// Backward compatibility: a tool key that yields no options must not add
+	// the options key at all, keeping the check_capability payload byte-for-byte
+	// identical to phase 1.
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	_, err := d.CallTool(context.Background(), "doc", "update_document", map[string]any{
+		"nodeId": "node-1", "content": "x",
+	})
+	if err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if _, has := inner.calls[0].args["options"]; has {
+		t.Fatalf("check args = %#v, want no options key", inner.calls[0].args)
+	}
+}
+
+func TestCrossPlatformCoverageDelegationCachePersistsAcrossOptionsBuild(t *testing.T) {
+	// The per-node dedup cache must be unaffected by options enrichment: a
+	// second identical call for the same tool key + node skips the check.
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	args := map[string]any{"nodeId": "node-1", "name": "文档"}
+	if _, err := d.CallTool(context.Background(), "doc", "create_document", args); err != nil {
+		t.Fatalf("first CallTool() error = %v", err)
+	}
+	if _, err := d.CallTool(context.Background(), "doc", "create_document", args); err != nil {
+		t.Fatalf("second CallTool() error = %v", err)
+	}
+	checks := 0
+	for _, c := range inner.calls {
+		if c.tool == checkCapTool {
+			checks++
+		}
+	}
+	if checks != 1 {
+		t.Fatalf("check_capability calls = %d, want 1 (cache dedup)", checks)
+	}
+}
+
+// optionsImportDryRunCaller is a dry-run ToolCaller with empty JQ()/Fields()
+// so the import preview renders through deps.Out.PrintJSON without applying a
+// sentinel jq/fields filter. It records every call and scripts the
+// check_capability response.
+type optionsImportDryRunCaller struct {
+	calls    []docDelegationCall
+	checkRes *edition.ToolResult
+}
+
+func (c *optionsImportDryRunCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	copied := map[string]any{}
+	for k, v := range args {
+		copied[k] = v
+	}
+	c.calls = append(c.calls, docDelegationCall{server: serverID, tool: toolName, args: copied})
+	if toolName == checkCapTool {
+		return c.checkRes, nil
+	}
+	return textToolResult(`{}`), nil
+}
+
+func (*optionsImportDryRunCaller) Format() string { return "json" }
+func (*optionsImportDryRunCaller) DryRun() bool   { return true }
+func (*optionsImportDryRunCaller) Fields() string { return "" }
+func (*optionsImportDryRunCaller) JQ() string     { return "" }
+
+// importDryRunCommand builds a cobra command mirroring `doc import` flags for
+// the dry-run delegation parity tests.
+func importDryRunCommand(t *testing.T, filePath, workspace, principal string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "import"}
+	cmd.Flags().String("file", "", "")
+	cmd.Flags().String("name", "", "")
+	cmd.Flags().String("folder", "", "")
+	cmd.Flags().String("folder-id", "", "")
+	cmd.Flags().String("workspace", "", "")
+	cmd.Flags().String("workspace-id", "", "")
+	cmd.Flags().String(FlagPrincipalUserID, "", "")
+	mustSet(t, cmd, "file", filePath)
+	if workspace != "" {
+		mustSet(t, cmd, "workspace", workspace)
+	}
+	if principal != "" {
+		mustSet(t, cmd, FlagPrincipalUserID, principal)
+	}
+	return cmd
+}
+
+func mustSet(t *testing.T, cmd *cobra.Command, name, value string) {
+	t.Helper()
+	if err := cmd.Flags().Set(name, value); err != nil {
+		t.Fatalf("set --%s: %v", name, err)
+	}
+}
+
+func TestCrossPlatformCoverageImportDryRunDelegationParity(t *testing.T) {
+	t.Run("allowed principal previews after delegation check", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommand(t, writeImportFixture(t, "docx"), "ws-1", "u-principal")
+		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+			t.Fatalf("runImportCommand() error = %v", err)
+		}
+		check := inner.calls[0]
+		if check.tool != checkCapTool || check.args["mcpToolKey"] != "doc.create_import_session" {
+			t.Fatalf("check call = %#v, want doc.create_import_session gate", check.args)
+		}
+		if check.args["nodeId"] != "ws-1" {
+			t.Fatalf("check nodeId = %v, want ws-1", check.args["nodeId"])
+		}
+		opts, ok := check.args["options"].(map[string]any)
+		if !ok {
+			t.Fatalf("check args = %#v, want importActionParam options", check.args)
+		}
+		if _, ok := opts["importActionParam"].(map[string]any); !ok {
+			t.Fatalf("options = %#v, want importActionParam", opts)
+		}
+		if !strings.Contains(out.String(), `"dry_run": true`) {
+			t.Fatalf("preview = %q, want dry-run preview after allowed check", out.String())
+		}
+	})
+
+	t.Run("denied principal blocks preview", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		inner.checkRes = textToolResult(`{"allowed":false,"denialMessage":"未授权"}`)
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommand(t, writeImportFixture(t, "docx"), "ws-1", "u-principal")
+		err := runImportCommand(cmd, nil, docImportFlowConfig())
+		if err == nil || !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+			t.Fatalf("runImportCommand() error = %v, want DELEGATION_AUTH_DENIED", err)
+		}
+		if strings.Contains(out.String(), "dry_run") {
+			t.Fatalf("preview = %q, want no preview when denied", out.String())
+		}
+	})
+
+	t.Run("no principal keeps preview without any check", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommand(t, writeImportFixture(t, "docx"), "ws-1", "")
+		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+			t.Fatalf("runImportCommand() error = %v", err)
+		}
+		for _, c := range inner.calls {
+			if c.tool == checkCapTool {
+				t.Fatalf("unexpected check_capability call without principal: %#v", c)
+			}
+		}
+		if !strings.Contains(out.String(), `"dry_run": true`) {
+			t.Fatalf("preview = %q, want dry-run preview", out.String())
+		}
+	})
+}
+
+// importDryRunCommandWithFolder builds a cobra command with --folder set
+// (targeting a specific folder rather than workspace).
+func importDryRunCommandWithFolder(t *testing.T, filePath, folder, principal string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "import"}
+	cmd.Flags().String("file", "", "")
+	cmd.Flags().String("name", "", "")
+	cmd.Flags().String("folder", "", "")
+	cmd.Flags().String("folder-id", "", "")
+	cmd.Flags().String("workspace", "", "")
+	cmd.Flags().String("workspace-id", "", "")
+	cmd.Flags().String(FlagPrincipalUserID, "", "")
+	mustSet(t, cmd, "file", filePath)
+	if folder != "" {
+		mustSet(t, cmd, "folder", folder)
+	}
+	if principal != "" {
+		mustSet(t, cmd, FlagPrincipalUserID, principal)
+	}
+	return cmd
+}
+
+func TestCrossPlatformCoverageImportDryRunDelegationFolderTarget(t *testing.T) {
+	t.Run("folder target triggers check with targetFolderId as nodeId", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommandWithFolder(t, writeImportFixture(t, "docx"), "folder-abc", "u-principal")
+		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+			t.Fatalf("runImportCommand() error = %v", err)
+		}
+		check := inner.calls[0]
+		if check.tool != checkCapTool || check.args["mcpToolKey"] != "doc.create_import_session" {
+			t.Fatalf("check call = %#v, want doc.create_import_session gate", check.args)
+		}
+		// The nodeId for check must be the targetFolderId (folder-abc), proving
+		// extractNodeId correctly resolves it.
+		if check.args["nodeId"] != "folder-abc" {
+			t.Fatalf("check nodeId = %v, want folder-abc (targetFolderId)", check.args["nodeId"])
+		}
+		opts, ok := check.args["options"].(map[string]any)
+		if !ok {
+			t.Fatalf("check args = %#v, want importActionParam options", check.args)
+		}
+		if _, ok := opts["importActionParam"].(map[string]any); !ok {
+			t.Fatalf("options = %#v, want importActionParam", opts)
+		}
+		if !strings.Contains(out.String(), `"dry_run": true`) {
+			t.Fatalf("preview = %q, want dry-run preview after allowed check", out.String())
+		}
+	})
+
+	t.Run("folder denied blocks preview", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":false,"denialMessage":"no access"}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		_, _ = installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommandWithFolder(t, writeImportFixture(t, "docx"), "folder-abc", "u-principal")
+		err := runImportCommand(cmd, nil, docImportFlowConfig())
+		if err == nil || !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+			t.Fatalf("runImportCommand() error = %v, want DELEGATION_AUTH_DENIED", err)
+		}
+	})
+
+	t.Run("copy/move nodeId still wins over targetFolderId", func(t *testing.T) {
+		// When both nodeId and targetFolderId are present (copy/move scenario),
+		// nodeId (source node) must be the check target, not targetFolderId.
+		inner := newDocDelegationTestCaller()
+		d := newDocDelegationAuthDecorator(inner)
+		_, err := d.CallTool(context.Background(), "doc", "copy_document", map[string]any{
+			"nodeId": "source-node", "targetFolderId": "dest-folder",
+		})
+		if err != nil {
+			t.Fatalf("CallTool() error = %v", err)
+		}
+		check := inner.calls[0]
+		if check.args["nodeId"] != "source-node" {
+			t.Fatalf("check nodeId = %v, want source-node (nodeId beats targetFolderId)", check.args["nodeId"])
+		}
+	})
+}
+
+// docUploadParityInner scripts the doc-space three-step upload backend
+// (check_capability -> get_file_upload_info -> commit_uploaded_file) and
+// records every call in order so tests can assert the FIRST delegated call
+// carries the operation-level options built from the shared step1Args.
+type docUploadParityInner struct {
+	calls        []docDelegationCall
+	checkResText string
+}
+
+func (c *docUploadParityInner) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	copied := map[string]any{}
+	for k, v := range args {
+		copied[k] = v
+	}
+	c.calls = append(c.calls, docDelegationCall{server: server, tool: tool, args: copied})
+	switch tool {
+	case checkCapTool:
+		return textToolResult(c.checkResText), nil
+	case "get_file_upload_info":
+		return textToolResult(`{"resourceUrl":"https://upload.example.test/object","uploadKey":"key-1"}`), nil
+	case "commit_uploaded_file":
+		return textToolResult(`{"dentryUuid":"node-1","name":"x.md"}`), nil
+	}
+	return textToolResult(`{"ok":true}`), nil
+}
+
+func (*docUploadParityInner) Format() string { return "json" }
+func (*docUploadParityInner) DryRun() bool   { return false }
+func (*docUploadParityInner) Fields() string { return "" }
+func (*docUploadParityInner) JQ() string     { return "" }
+
+// runDocUploadRealPath drives the non-dry `doc upload` command against the
+// supplied caller and reports whether the HTTP PUT was reached. The real
+// execution path is exercised end to end (get_file_upload_info -> PUT ->
+// commit_uploaded_file) so the FIRST get_file_upload_info args can be asserted.
+func runDocUploadRealPath(t *testing.T, caller edition.ToolCaller, folder, name string) (putReached bool, err error) {
+	t.Helper()
+	prevDeps := deps
+	prevArgs := os.Args
+	t.Cleanup(func() {
+		deps = prevDeps
+		os.Args = prevArgs
+		SetHTTPPutFile(nil)
+	})
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	deps.Out.errW = io.Discard
+	os.Args = []string{"dws", "doc"}
+	SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error {
+		putReached = true
+		return nil
+	})
+
+	file := filepath.Join(t.TempDir(), "src.md")
+	if writeErr := os.WriteFile(file, []byte("hello-body"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	root := newDocCommand()
+	cmd, _, findErr := root.Find([]string{"upload"})
+	if findErr != nil {
+		t.Fatalf("find upload command: %v", findErr)
+	}
+	_ = cmd.Flags().Set("file", file)
+	if folder != "" {
+		_ = cmd.Flags().Set("folder", folder)
+	}
+	if name != "" {
+		_ = cmd.Flags().Set("name", name)
+	}
+	return putReached, cmd.RunE(cmd, nil)
+}
+
+// TestCrossPlatformCoverageDocUploadStep1ArgsSharedConstructor pins the single
+// source of truth docFileUploadInfoArgs: fileSize is unconditional, name is set
+// when non-empty, and overwriteNodeId (when present) supersedes folderId. Both
+// the folder and overwrite shapes carry name+fileSize so the first capability
+// check always has an operation-level uploadActionParam.
+func TestCrossPlatformCoverageDocUploadStep1ArgsSharedConstructor(t *testing.T) {
+	folder := docFileUploadInfoArgs("x.md", 12, "f1", "w1", "")
+	if folder["name"] != "x.md" {
+		t.Fatalf("folder mode name = %v, want x.md", folder["name"])
+	}
+	if folder["fileSize"] != float64(12) {
+		t.Fatalf("folder mode fileSize = %v (%T), want float64(12)", folder["fileSize"], folder["fileSize"])
+	}
+	if folder["folderId"] != "f1" || folder["workspaceId"] != "w1" {
+		t.Fatalf("folder mode target = %#v, want folderId=f1 workspaceId=w1", folder)
+	}
+	if _, has := folder["overwriteNodeId"]; has {
+		t.Fatalf("folder mode must not carry overwriteNodeId: %#v", folder)
+	}
+
+	overwrite := docFileUploadInfoArgs("x.md", 34, "f1", "w1", "node-9")
+	if overwrite["name"] != "x.md" || overwrite["fileSize"] != float64(34) {
+		t.Fatalf("overwrite mode name/size = %#v, want name=x.md fileSize=34", overwrite)
+	}
+	if overwrite["overwriteNodeId"] != "node-9" {
+		t.Fatalf("overwrite mode overwriteNodeId = %v, want node-9", overwrite["overwriteNodeId"])
+	}
+	if _, has := overwrite["folderId"]; has {
+		t.Fatalf("overwrite mode must exclude folderId (mutually exclusive): %#v", overwrite)
+	}
+
+	if _, has := docFileUploadInfoArgs("", 0, "", "", "")["name"]; has {
+		t.Fatal("empty name must be omitted")
+	}
+}
+
+// TestCrossPlatformCoverageDocUploadRealFirstCallCarriesNameSize proves the
+// standard `doc upload` real execution issues get_file_upload_info as its first
+// call already carrying name+fileSize (previously only folderId/workspaceId).
+func TestCrossPlatformCoverageDocUploadRealFirstCallCarriesNameSize(t *testing.T) {
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"resourceUrl":"https://upload.example.test/object","uploadKey":"key-1"}`},
+		{text: `{"ok":true}`},
+	}}
+	putReached, err := runDocUploadRealPath(t, caller, "f1", "renamed.md")
+	if err != nil {
+		t.Fatalf("doc upload real path error = %v", err)
+	}
+	if !putReached {
+		t.Fatal("expected HTTP PUT to be reached on the allow/no-delegation path")
+	}
+	if len(caller.toolLog) == 0 || caller.toolLog[0] != "get_file_upload_info" {
+		t.Fatalf("first tool = %#v, want get_file_upload_info", caller.toolLog)
+	}
+	first := caller.argsLog[0]
+	if first["name"] != "renamed.md" {
+		t.Fatalf("first get_file_upload_info name = %v, want renamed.md (regression: name dropped)", first["name"])
+	}
+	if first["fileSize"] != float64(len("hello-body")) {
+		t.Fatalf("first get_file_upload_info fileSize = %v, want %d", first["fileSize"], len("hello-body"))
+	}
+	if first["folderId"] != "f1" {
+		t.Fatalf("first get_file_upload_info folderId = %v, want f1", first["folderId"])
+	}
+}
+
+// TestCrossPlatformCoverageDocImportUploadFallbackFirstCallCarriesNameSize
+// covers the import upload fallback (docSpaceUploadCommitText): its first real
+// get_file_upload_info must also carry name+fileSize so the fallback authorizes
+// precisely before streaming bytes.
+func TestCrossPlatformCoverageDocImportUploadFallbackFirstCallCarriesNameSize(t *testing.T) {
+	caller := &docImportTargetCaller{responses: map[string][]scriptedToolStep{
+		"get_file_upload_info": {{text: `{"resourceUrl":"https://upload.example.test/object","uploadKey":"key-1"}`}},
+		"commit_uploaded_file": {{text: `{"dentryUuid":"node-1","name":"page.html"}`}},
+	}}
+	if _, err := runDocImportTargetFlow(t, caller, "html", "folder-1", ""); err != nil {
+		t.Fatalf("import upload fallback error = %v", err)
+	}
+	if len(caller.calls) == 0 || caller.calls[0].tool != "get_file_upload_info" {
+		t.Fatalf("first fallback call = %#v, want get_file_upload_info", caller.calls)
+	}
+	first := caller.calls[0].args
+	if name, ok := first["name"].(string); !ok || name == "" {
+		t.Fatalf("fallback get_file_upload_info name = %#v, want non-empty (regression: name dropped)", first["name"])
+	}
+	if size, ok := first["fileSize"].(float64); !ok || size <= 0 {
+		t.Fatalf("fallback get_file_upload_info fileSize = %#v, want positive float64", first["fileSize"])
+	}
+}
+
+// TestCrossPlatformCoverageDocUploadDelegationDeniedBeforePut is the core
+// auto-CR guard: when the principal is denied, the very first delegated call
+// (check_capability for get_file_upload_info) already carries the
+// uploadActionParam operation options and the command fails BEFORE any HTTP PUT
+// or commit_uploaded_file — no orphaned object is left behind.
+func TestCrossPlatformCoverageDocUploadDelegationDeniedBeforePut(t *testing.T) {
+	inner := &docUploadParityInner{checkResText: `{"allowed":false,"denialReason":"NO_PERM","denialMessage":"没有该文档的委托权限"}`}
+	decorator := newDocDelegationAuthDecorator(inner)
+
+	putReached, err := runDocUploadRealPath(t, decorator, "f1", "x.md")
+	if err == nil {
+		t.Fatal("expected delegation denial error, got nil")
+	}
+	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_DENIED] prefix", err.Error())
+	}
+	if putReached {
+		t.Fatal("HTTP PUT reached before authorization: rejection must happen before uploading bytes")
+	}
+	if len(inner.calls) != 1 {
+		t.Fatalf("inner calls = %#v, want only the check_capability call (no upload/commit passthrough)", inner.calls)
+	}
+	check := inner.calls[0]
+	if check.tool != checkCapTool || check.args["mcpToolKey"] != "doc.get_file_upload_info" {
+		t.Fatalf("first call = %#v, want check_capability for doc.get_file_upload_info", check)
+	}
+	assertUploadActionParam(t, check.args, "x.md")
+}
+
+// TestCrossPlatformCoverageDocUploadDelegationAllowedFirstCallMatches verifies
+// the allow path: the first precise tool call is exactly the shared step1Args
+// (name+fileSize+folderId) and its capability check carried the matching
+// uploadActionParam, i.e. precheck options == real first-call options.
+func TestCrossPlatformCoverageDocUploadDelegationAllowedFirstCallMatches(t *testing.T) {
+	inner := &docUploadParityInner{checkResText: `{"allowed":true}`}
+	decorator := newDocDelegationAuthDecorator(inner)
+
+	putReached, err := runDocUploadRealPath(t, decorator, "f1", "x.md")
+	if err != nil {
+		t.Fatalf("doc upload allow path error = %v", err)
+	}
+	if !putReached {
+		t.Fatal("expected HTTP PUT to run after the capability check allowed the principal")
+	}
+	if len(inner.calls) < 2 {
+		t.Fatalf("inner calls = %#v, want check followed by get_file_upload_info passthrough", inner.calls)
+	}
+	check := inner.calls[0]
+	if check.tool != checkCapTool || check.args["mcpToolKey"] != "doc.get_file_upload_info" {
+		t.Fatalf("call[0] = %#v, want check_capability for doc.get_file_upload_info", check)
+	}
+	assertUploadActionParam(t, check.args, "x.md")
+
+	first := inner.calls[1]
+	if first.tool != "get_file_upload_info" {
+		t.Fatalf("call[1] = %#v, want get_file_upload_info passthrough", first)
+	}
+	if first.args["name"] != "x.md" || first.args["fileSize"] != float64(len("hello-body")) || first.args["folderId"] != "f1" {
+		t.Fatalf("first precise call args = %#v, want name=x.md fileSize=%d folderId=f1", first.args, len("hello-body"))
+	}
+}
+
+// assertUploadActionParam checks the capability check options carry the
+// operation-level uploadActionParam with the given fileName and a fileSize.
+func assertUploadActionParam(t *testing.T, checkArgs map[string]any, wantFileName string) {
+	t.Helper()
+	opts, ok := checkArgs["options"].(map[string]any)
+	if !ok {
+		t.Fatalf("check options = %#v, want operation-level options map", checkArgs["options"])
+	}
+	param, ok := opts["uploadActionParam"].(map[string]any)
+	if !ok {
+		t.Fatalf("options = %#v, want uploadActionParam", opts)
+	}
+	if param["fileName"] != wantFileName {
+		t.Fatalf("uploadActionParam.fileName = %v, want %s", param["fileName"], wantFileName)
+	}
+	if _, has := param["fileSize"]; !has {
+		t.Fatalf("uploadActionParam = %#v, want fileSize present", param)
+	}
+}
+
+// countCheckCapabilityCalls 统计脚本化 caller 中 check_capability 的调用次数，
+// 供续调放行测试断言「续调未触发额外远程鉴权」。
+func countCheckCapabilityCalls(calls []docDelegationCall) int {
+	n := 0
+	for _, c := range calls {
+		if c.tool == checkCapTool {
+			n++
+		}
+	}
+	return n
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthImportContinuationAllowed drives the
+// real (non-dry-run) import chain: create_import_session carries the target
+// node and is gated by check_capability; the follow-up confirm_import and
+// query_import_task continuations carry only sessionId/taskId (no node) yet must
+// be allowed to pass through instead of being rejected as NOT_SUPPORTED.
+func TestCrossPlatformCoverageDocDelegationAuthImportContinuationAllowed(t *testing.T) {
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	ctx := context.Background()
+
+	// Step 1: create_import_session — carries targetFolderId, gated by check.
+	if _, err := d.CallTool(ctx, "doc", "create_import_session", map[string]any{
+		"targetFolderId": "folder-1", "fileName": "f", "suffix": "md", "fileSize": int64(3),
+	}); err != nil {
+		t.Fatalf("create_import_session error = %v", err)
+	}
+	if got := countCheckCapabilityCalls(inner.calls); got != 1 {
+		t.Fatalf("check_capability calls after session = %d, want 1", got)
+	}
+
+	// Step 2: confirm_import — only sessionId, no node. Must be allowed.
+	res2, err := d.CallTool(ctx, "doc", "confirm_import", map[string]any{"sessionId": "s1"})
+	if err != nil {
+		t.Fatalf("confirm_import continuation error = %v, want allowed", err)
+	}
+	if res2 != inner.passRes {
+		t.Fatalf("confirm_import result = %#v, want passthrough", res2)
+	}
+
+	// Step 3: query_import_task — only taskId, no node. Must be allowed.
+	res3, err := d.CallTool(ctx, "doc", "query_import_task", map[string]any{"taskId": "t1"})
+	if err != nil {
+		t.Fatalf("query_import_task continuation error = %v, want allowed", err)
+	}
+	if res3 != inner.passRes {
+		t.Fatalf("query_import_task result = %#v, want passthrough", res3)
+	}
+
+	// Continuations must NOT trigger any extra check_capability round-trip.
+	if got := countCheckCapabilityCalls(inner.calls); got != 1 {
+		t.Fatalf("total check_capability calls = %d, want 1 (only the session)", got)
+	}
+	// calls: check + create_import_session + confirm_import + query_import_task.
+	if len(inner.calls) != 4 {
+		t.Fatalf("inner calls = %d, want 4", len(inner.calls))
+	}
+	if inner.calls[2].tool != "confirm_import" || inner.calls[3].tool != "query_import_task" {
+		t.Fatalf("continuation passthrough order = %q,%q", inner.calls[2].tool, inner.calls[3].tool)
+	}
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthUploadCommitContinuationAllowed
+// drives the real upload chain: the first credential call carries the node and
+// is gated by check_capability; the commit continuation carrying no node must be
+// allowed. Covers both drive (get_upload_info→commit_upload) and doc
+// (commit_uploaded_file) commit tools.
+func TestCrossPlatformCoverageDocDelegationAuthUploadCommitContinuationAllowed(t *testing.T) {
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	ctx := context.Background()
+
+	// drive get_upload_info — carries parentId, gated by check.
+	if _, err := d.CallTool(ctx, "drive", "get_upload_info", map[string]any{
+		"parentId": "p1", "fileName": "f.txt", "fileSize": int64(5),
+	}); err != nil {
+		t.Fatalf("get_upload_info error = %v", err)
+	}
+	if got := countCheckCapabilityCalls(inner.calls); got != 1 {
+		t.Fatalf("check_capability calls after get_upload_info = %d, want 1", got)
+	}
+
+	// drive commit_upload — no node (only uploadId). Must be allowed.
+	if res, err := d.CallTool(ctx, "drive", "commit_upload", map[string]any{
+		"uploadId": "u1", "fileName": "f.txt", "fileSize": int64(5),
+	}); err != nil {
+		t.Fatalf("commit_upload continuation error = %v, want allowed", err)
+	} else if res != inner.passRes {
+		t.Fatalf("commit_upload result = %#v, want passthrough", res)
+	}
+
+	// doc commit_uploaded_file — no node (only uploadKey/name). Must be allowed.
+	if res, err := d.CallTool(ctx, "doc", "commit_uploaded_file", map[string]any{
+		"uploadKey": "k1", "name": "f.txt",
+	}); err != nil {
+		t.Fatalf("commit_uploaded_file continuation error = %v, want allowed", err)
+	} else if res != inner.passRes {
+		t.Fatalf("commit_uploaded_file result = %#v, want passthrough", res)
+	}
+
+	// No commit continuation should trigger an extra check_capability round-trip.
+	if got := countCheckCapabilityCalls(inner.calls); got != 1 {
+		t.Fatalf("total check_capability calls = %d, want 1 (only get_upload_info)", got)
+	}
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthContinuationExemptionKeepsIndependentBlocked
+// guards the exemption boundary: node-less INDEPENDENT commands (search / create)
+// that are NOT flow continuations must still be rejected as NOT_SUPPORTED, so the
+// exemption set never leaks blanket bypass to real independent write commands.
+func TestCrossPlatformCoverageDocDelegationAuthContinuationExemptionKeepsIndependentBlocked(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		server string
+		tool   string
+		args   map[string]any
+	}{
+		{"doc", "search_documents", map[string]any{"query": "x"}},
+		{"wiki", "search_nodes", map[string]any{"keyword": "y"}},
+		{"doc", "create_document", map[string]any{"name": "no-parent"}},
+	}
+	for _, tc := range cases {
+		inner := newDocDelegationTestCaller()
+		d := newDocDelegationAuthDecorator(inner)
+		_, err := d.CallTool(ctx, tc.server, tc.tool, tc.args)
+		if err == nil {
+			t.Fatalf("%s/%s error = nil, want DELEGATION_AUTH_NOT_SUPPORTED", tc.server, tc.tool)
+		}
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != codeDelegationNotSupported {
+			t.Fatalf("%s/%s error = %v, want CLIError code %q", tc.server, tc.tool, err, codeDelegationNotSupported)
+		}
+		if len(inner.calls) != 0 {
+			t.Fatalf("%s/%s inner calls = %d, want 0 (blocked before any remote call)", tc.server, tc.tool, len(inner.calls))
+		}
+	}
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthIndependentContinuationToolBlocked
+// guards the P2-3 security fix: the flow-continuation tool NAMES
+// (confirm_import / query_import_task / commit_upload / commit_uploaded_file)
+// can also be issued by INDEPENDENT commands with no preceding node-bearing
+// check (e.g. `doc import get` / `sheet import get` fire query_import_task with
+// only a taskId; a manual `drive commit` fires commit_upload). Without a prior
+// sessionAuthorized first step, these node-less calls must fall back to
+// DELEGATION_AUTH_NOT_SUPPORTED rather than be blanket-exempted — otherwise the
+// delegation check is entirely bypassed and the tool runs as the current login
+// identity (delegation bypass).
+func TestCrossPlatformCoverageDocDelegationAuthIndependentContinuationToolBlocked(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name   string
+		server string
+		tool   string
+		args   map[string]any
+	}{
+		{"independent import get (query_import_task, taskId only)", "doc", "query_import_task", map[string]any{"taskId": "t1"}},
+		{"independent sheet import get (query_import_task, taskId only)", "doc", "query_import_task", map[string]any{"taskId": "t2"}},
+		{"manual confirm_import (sessionId only)", "doc", "confirm_import", map[string]any{"sessionId": "s1"}},
+		{"manual drive commit (commit_upload, uploadId only)", "drive", "commit_upload", map[string]any{"uploadId": "u1", "fileName": "f.txt", "fileSize": int64(5)}},
+		{"manual commit_uploaded_file (uploadKey only)", "doc", "commit_uploaded_file", map[string]any{"uploadKey": "k1", "name": "f.txt"}},
+	}
+	for _, tc := range cases {
+		inner := newDocDelegationTestCaller()
+		d := newDocDelegationAuthDecorator(inner)
+		// No preceding node-bearing check → sessionAuthorized stays false.
+		_, err := d.CallTool(ctx, tc.server, tc.tool, tc.args)
+		if err == nil {
+			t.Fatalf("%s: error = nil, want DELEGATION_AUTH_NOT_SUPPORTED (must not bypass)", tc.name)
+		}
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != codeDelegationNotSupported {
+			t.Fatalf("%s: error = %v, want CLIError code %q", tc.name, err, codeDelegationNotSupported)
+		}
+		if len(inner.calls) != 0 {
+			t.Fatalf("%s: inner calls = %d, want 0 (blocked before any remote call)", tc.name, len(inner.calls))
+		}
+	}
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthSessionAuthorizedIsPerDecorator
+// verifies sessionAuthorized is scoped to a single decorator instance: a
+// node-bearing allowed check on one decorator must NOT authorize node-less
+// continuations on a DIFFERENT decorator (no cross-session leakage).
+func TestCrossPlatformCoverageDocDelegationAuthSessionAuthorizedIsPerDecorator(t *testing.T) {
+	ctx := context.Background()
+
+	// Decorator A performs a node-bearing allowed check → sessionAuthorized.
+	innerA := newDocDelegationTestCaller()
+	dA := newDocDelegationAuthDecorator(innerA)
+	if _, err := dA.CallTool(ctx, "doc", "create_import_session", map[string]any{
+		"targetFolderId": "folder-1", "fileName": "f", "suffix": "md", "fileSize": int64(3),
+	}); err != nil {
+		t.Fatalf("decorator A create_import_session error = %v", err)
+	}
+
+	// Decorator B (fresh session) sees a node-less continuation. Must be blocked.
+	innerB := newDocDelegationTestCaller()
+	dB := newDocDelegationAuthDecorator(innerB)
+	_, err := dB.CallTool(ctx, "doc", "query_import_task", map[string]any{"taskId": "t1"})
+	if err == nil {
+		t.Fatal("decorator B query_import_task error = nil, want NOT_SUPPORTED (no cross-session leakage)")
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != codeDelegationNotSupported {
+		t.Fatalf("decorator B error = %v, want CLIError code %q", err, codeDelegationNotSupported)
+	}
+	if len(innerB.calls) != 0 {
+		t.Fatalf("decorator B inner calls = %d, want 0", len(innerB.calls))
+	}
+}
+
+// TestCrossPlatformCoverageImportUploadFallbackDryRunDelegationParity guards the
+// P2-1 fix: when the input format falls outside the import whitelist, doc import
+// falls back to the doc-space file-upload链路 whose first real call is
+// doc.get_file_upload_info. The dry-run branch of runImportUploadFallback must
+// run markdownDryRunDelegationPrecheck on that first call BEFORE rendering any
+// warning/preview, so a --principal-user-id run that would be rejected at the
+// real get_file_upload_info is intercepted rather than falsely previewed as
+// executable.
+func TestCrossPlatformCoverageImportUploadFallbackDryRunDelegationParity(t *testing.T) {
+	t.Run("allowed principal previews upload fallback after delegation check", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		// pdf is outside the import whitelist → uploadFallback path.
+		cmd := importDryRunCommand(t, writeImportFixture(t, "pdf"), "ws-1", "u-principal")
+		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+			t.Fatalf("runImportCommand() error = %v", err)
+		}
+		check := inner.calls[0]
+		if check.tool != checkCapTool || check.args["mcpToolKey"] != "doc.get_file_upload_info" {
+			t.Fatalf("check call = %#v, want doc.get_file_upload_info gate", check.args)
+		}
+		if check.args["nodeId"] != "ws-1" {
+			t.Fatalf("check nodeId = %v, want ws-1 (workspaceId)", check.args["nodeId"])
+		}
+		opts, ok := check.args["options"].(map[string]any)
+		if !ok {
+			t.Fatalf("check args = %#v, want uploadActionParam options", check.args)
+		}
+		if _, ok := opts["uploadActionParam"].(map[string]any); !ok {
+			t.Fatalf("options = %#v, want uploadActionParam", opts)
+		}
+		if !strings.Contains(out.String(), `"dry_run": true`) || !strings.Contains(out.String(), `"fallback": "upload"`) {
+			t.Fatalf("preview = %q, want upload-fallback dry-run preview after allowed check", out.String())
+		}
+	})
+
+	t.Run("denied principal blocks upload fallback preview", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":false,"denialMessage":"未授权"}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommand(t, writeImportFixture(t, "pdf"), "ws-1", "u-principal")
+		err := runImportCommand(cmd, nil, docImportFlowConfig())
+		if err == nil || !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+			t.Fatalf("runImportCommand() error = %v, want DELEGATION_AUTH_DENIED", err)
+		}
+		if strings.Contains(out.String(), "dry_run") || strings.Contains(out.String(), "fallback") {
+			t.Fatalf("preview = %q, want no preview when upload fallback denied", out.String())
+		}
+	})
+
+	t.Run("no principal keeps upload fallback preview without any check", func(t *testing.T) {
+		inner := &optionsImportDryRunCaller{checkRes: textToolResult(`{"allowed":true}`)}
+		d := newDocDelegationAuthDecorator(inner)
+		out, _ := installHelpersCoreDeps(t, d)
+
+		cmd := importDryRunCommand(t, writeImportFixture(t, "pdf"), "ws-1", "")
+		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+			t.Fatalf("runImportCommand() error = %v", err)
+		}
+		for _, c := range inner.calls {
+			if c.tool == checkCapTool {
+				t.Fatalf("unexpected check_capability call without principal: %#v", c)
+			}
+		}
+		if !strings.Contains(out.String(), `"dry_run": true`) || !strings.Contains(out.String(), `"fallback": "upload"`) {
+			t.Fatalf("preview = %q, want upload-fallback dry-run preview", out.String())
+		}
+	})
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthDefaultTargetListSpacesBlocked
+// documents the P2-2 finding: resolving the default import target on the REAL
+// execution path calls drive.list_spaces with only {spaceType}, i.e. no node
+// identifier. Under delegation (--principal-user-id) that node-less call is
+// rejected as DELEGATION_AUTH_NOT_SUPPORTED by the same decorator, BEFORE the
+// import ever starts. Hence a delegated import without an explicit
+// --folder/--workspace is blocked at list_spaces on the real path exactly as
+// the dry-run precheck blocks it at create_import_session — the dry-run
+// rejection is faithful parity, not an over-strict dry-run limitation. Letting
+// dry-run "resolve then allow" would require exempting node-less list_spaces,
+// which would reopen the very delegation bypass the continuation-exemption
+// hardening closes; therefore P2-2 is intentionally NOT changed.
+func TestCrossPlatformCoverageDocDelegationAuthDefaultTargetListSpacesBlocked(t *testing.T) {
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	// Mirror resolveDefaultDocImportTarget's real call: node-less list_spaces.
+	_, err := d.CallTool(context.Background(), "drive", "list_spaces", map[string]any{"spaceType": "orgSpace"})
+	if err == nil {
+		t.Fatal("list_spaces error = nil, want DELEGATION_AUTH_NOT_SUPPORTED (default-target resolution is node-less under delegation)")
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != codeDelegationNotSupported {
+		t.Fatalf("list_spaces error = %v, want CLIError code %q", err, codeDelegationNotSupported)
+	}
+	if len(inner.calls) != 0 {
+		t.Fatalf("inner calls = %d, want 0 (blocked before any remote call)", len(inner.calls))
 	}
 }

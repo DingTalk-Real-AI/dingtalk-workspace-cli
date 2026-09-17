@@ -64,8 +64,9 @@ func newChatMediaUploadCommand() *cobra.Command {
 
 func chatMediaUploadDownlineError() error {
 	return apperrors.NewValidation(
-		"chat media upload 已下线，当前 CLI 不提供本地文件到 mediaId 的上传能力。" +
+		"chat media upload 已下线，当前 CLI 不提供通用的本地文件到 mediaId 的上传能力。" +
 			" 本地图片或文件请改用: " + chatMediaUploadReplacement +
-			"；已有 mediaId 时可使用 dws chat message send --msg-type image --media-id <mediaId>。",
+			"；已有 mediaId 时可使用 dws chat message send --msg-type image --media-id <mediaId>" +
+			"；本地图片收藏个人表情可直接使用 dws chat emotion favorite --file-path <本地图片路径>。",
 	)
 }

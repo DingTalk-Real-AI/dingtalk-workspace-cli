@@ -127,6 +127,34 @@ func TestCrossPlatformCoverageMailWriteHappyPathsUseReceiptThenExactReadback(t *
 					t.Fatalf("call[%d]=%s want=%s", index, caller.calls[index].tool, tool)
 				}
 			}
+			if tc.name == "template create core fields" {
+				if isDraft, present := caller.calls[0].args["isDraft"].(bool); !present || isDraft {
+					t.Fatalf("template create default isDraft=%#v, want explicit false", caller.calls[0].args["isDraft"])
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMailTemplateCreateDraftFlagControlsExactPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		flag string
+	}{
+		{name: "canonical", flag: "--is-draft"},
+		{name: "compatibility alias", flag: "--draft"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &mailWriteContractCaller{responses: map[string][]string{
+				"create_user_message_template": {`{"success":true,"id":"template-1"}`},
+				"get_user_message_template":    {`{"success":true,"id":"template-1","name":"name","isDraft":true,"message":{"subject":"subject","markdownBody":"body"}}`},
+			}, errors: map[string]error{}}
+			if err := runConfirmedMailWriteContract(t, caller, "mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body", tc.flag); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 2 || caller.calls[0].args["isDraft"] != true {
+				t.Fatalf("template create calls=%#v", caller.calls)
+			}
 		})
 	}
 }
@@ -183,7 +211,6 @@ func TestCrossPlatformCoverageMailEditAndTemplateNegativeCallHistory(t *testing.
 		{name: "template create missing id", args: []string{"mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body"}, responses: map[string][]string{"create_user_message_template": {`{"success":true}`}}, wantCalls: 1},
 		{name: "template create wrong readback id", args: []string{"mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body"}, responses: map[string][]string{"create_user_message_template": {`{"success":true,"id":"template-1"}`}, "get_user_message_template": {`{"success":true,"id":"other","name":"name","message":{"subject":"subject","markdownBody":"body"}}`}}, wantCalls: 2},
 		{name: "template create unverifiable from", args: []string{"mail", "+template-create", "--email", "sender@example.invalid", "--from", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body"}, responses: map[string][]string{}, wantCalls: 0},
-		{name: "template create unverifiable draft", args: []string{"mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body", "--draft"}, responses: map[string][]string{}, wantCalls: 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -442,6 +469,7 @@ func TestCrossPlatformCoverageMailTemplateCreateOwnNegativeBranches(t *testing.T
 		{name: "name mismatch", createBody: `{"success":true,"id":"template-1"}`, readBody: `{"success":true,"id":"template-1","name":"other","message":{"subject":"subject","markdownBody":"body"}}`, wantCalls: 2},
 		{name: "subject mismatch", createBody: `{"success":true,"id":"template-1"}`, readBody: `{"success":true,"id":"template-1","name":"name","message":{"subject":"other","markdownBody":"body"}}`, wantCalls: 2},
 		{name: "body mismatch", createBody: `{"success":true,"id":"template-1"}`, readBody: `{"success":true,"id":"template-1","name":"name","message":{"subject":"subject","markdownBody":"other"}}`, wantCalls: 2},
+		{name: "draft malformed", createBody: `{"success":true,"id":"template-1"}`, readBody: `{"success":true,"id":"template-1","name":"name","isDraft":"true","message":{"subject":"subject","markdownBody":"body"}}`, wantCalls: 2},
 		{name: "happy control", createBody: `{"success":true,"id":"template-1"}`, readBody: goodReadback, wantCalls: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -459,6 +487,30 @@ func TestCrossPlatformCoverageMailTemplateCreateOwnNegativeBranches(t *testing.T
 			}
 			if len(caller.calls) != tc.wantCalls {
 				t.Fatalf("calls=%d want=%d", len(caller.calls), tc.wantCalls)
+			}
+		})
+	}
+
+	t.Run("draft mismatch", func(t *testing.T) {
+		caller := &mailWriteContractCaller{responses: map[string][]string{
+			"create_user_message_template": {`{"success":true,"id":"template-1"}`},
+			"get_user_message_template":    {`{"success":true,"id":"template-1","name":"name","isDraft":false,"message":{"subject":"subject","markdownBody":"body"}}`},
+		}, errors: map[string]error{}}
+		err := runConfirmedMailWriteContract(t, caller, "mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body", "--is-draft")
+		if err == nil || len(caller.calls) != 2 {
+			t.Fatalf("draft mismatch error=%v calls=%d", err, len(caller.calls))
+		}
+	})
+
+	for _, flag := range []string{"--is-draft", "--draft"} {
+		t.Run("explicit draft missing readback "+flag, func(t *testing.T) {
+			caller := &mailWriteContractCaller{responses: map[string][]string{
+				"create_user_message_template": {`{"success":true,"id":"template-1"}`},
+				"get_user_message_template":    {goodReadback},
+			}, errors: map[string]error{}}
+			err := runConfirmedMailWriteContract(t, caller, "mail", "+template-create", "--email", "sender@example.invalid", "--name", "name", "--subject", "subject", "--body", "body", flag)
+			if err == nil || len(caller.calls) != 2 {
+				t.Fatalf("missing draft readback error=%v calls=%d", err, len(caller.calls))
 			}
 		})
 	}

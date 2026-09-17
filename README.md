@@ -57,6 +57,8 @@
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
 ```
 
+> Linux binaries are linked against glibc (baseline 2.17). musl-based distributions such as Alpine are not supported; the installer detects them and stops instead of installing a binary that cannot start.
+
 **Windows (PowerShell):**
 
 ```powershell
@@ -137,7 +139,11 @@ Static endpoint data is generated from the Wukong baseline and committed in this
 repository under `internal/syncdata`, so source builds do not require a sibling
 data checkout.
 
-> Requires Go 1.25+. Use `make package` to cross-compile for all platforms (macOS / Linux / Windows x amd64 / arm64).
+> Requires Go 1.25+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
+> the default CGO build includes the SafeChat backend without a build tag and
+> therefore requires a working C compiler. Set `CGO_ENABLED=0` only when a stub
+> build is intentional. Use `make package` with Docker to build all six release
+> targets through the repository's pinned cross-compilation toolchain.
 
 </details>
 
@@ -341,6 +347,7 @@ values, and the current file-DEK bundle has no safe DPAPI-to-portable conversion
 dws contact user search --query "engineering"      # search contacts
 dws calendar event list                            # list today's calendar events
 dws doc search --query "quarterly"                 # search DingTalk Docs
+dws whiteboard +query --node "<whiteboard-node-id>" --view summary --format json  # inspect a whiteboard
 dws minutes list mine                              # list AI meeting notes I created
 dws drive list                                     # list DingTalk drive files
 dws todo task create --title "Quarterly report" --executors "<your-userId>"   # create a todo (replace <your-userId>)
@@ -349,9 +356,31 @@ dws todo task list --dry-run                       # preview without executing
 
 > **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all commands with descriptions and when-to-use guidance.
 
+### Whiteboards
+
+Use `dws whiteboard` for standalone whiteboards and whiteboards embedded in documents: query content, create / update with OpenNodes, preview changes with `+diff`, render local SVG previews, and manage personal / team templates.
+
+```bash
+dws whiteboard --help
+dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.svg --format json
+dws whiteboard +diff --help
+dws whiteboard template personal list --format json
+dws whiteboard template team list --template-workspace "<workspace-id>" --page-all --format json
+```
+
+`whiteboard.json` is an OpenNodes source file. SVG rendering is a local preview; review its fidelity and warnings, then confirm the current preview before creating the whiteboard. Use `+diff` to inspect the proposed update before `+update`. For template `save` / `create` commands, `--dry-run` performs an optional server-side preflight without saving a template or creating a whiteboard.
+
+See the [whiteboard reference](./skills/mono/references/products/whiteboard.md), [Diff guide](./skills/mono/references/products/whiteboard/diff.md), and [SVG preview guide](./skills/mono/references/products/whiteboard/render.md).
+
 ## Using with Agents
 
-dws is designed as an AI-native CLI. Complete [Installation](#installation) and [Getting Started](#getting-started) first, then configure your agent:
+dws is designed as an AI-native CLI. Complete [Installation](#installation) and [Getting Started](#getting-started) first, then install Agent Skills:
+
+```bash
+npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g
+```
+
+The installer first shows the plan — which skills, which target directories, and how existing same-named skills will be handled — and asks for confirmation before writing anything. `dws skill setup` remains the power-user / China / upgrade path. See [Agent Skills](#agent-skills).
 
 ### Agent Invocation Patterns
 
@@ -391,25 +420,30 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 ### Agent Skills
 
-The repo ships a complete Agent Skill system under `skills/`, organized into two layouts:
+```bash
+npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g
+```
 
-- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), legacy.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ...), each with its own `SKILL.md`. Default layout.
+This discovers `skills/multi/dingtalk-*/SKILL.md` (catalog layout, three levels under `skills/`, the depth `npx skills add` already walks) and installs `dingtalk-calendar`, `dingtalk-chat`, … into the agent directories [vercel-labs/skills](https://github.com/vercel-labs/skills) already knows: project `.agents/skills/` by default, user-global `.agents/skills` with `-g`, plus links into `~/.cursor/skills`, `~/.claude/skills`, and the other registered homes.
+
+Without `-y`, the installer lists the skills, target directories, and existing same-named content handling for confirmation before it writes. Keep that prompt for interactive and first-time global installs. `-y` exists for automation only: add it after the user has explicitly confirmed the install targets and overwrite behavior — this path does not maintain `dws skill setup`'s ownership, backup, or mono↔multi mutual-exclusion cleanup state, so a skipped prompt can replace user files without consent.
+
+The all-in-one mono skill (`skills/mono`, frontmatter name `dws`) is marked `metadata.internal: true`, so it is **not** a default installable skill. Agents therefore do not double-route between `dws` and the per-product skills.
+
+`dws skill setup` remains the power-user / China / upgrade path. It still owns Gitee fallback, upgrade-time skill refresh, ownership in `~/.dws/skills-state.json`, and mono↔multi mutual-exclusion cleanup.
+
+The repo ships two source trees:
+
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ...), each with its own `SKILL.md`. Default for both `npx skills add` and `dws skill setup`.
+- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), legacy. Hidden from `npx skills add`. Still installed by `dws skill setup --mode mono` and the curl / zip installers.
 
 Leaf safety/parameters/selection prose for Schema generation come from ProductDecl / ContractFinal declarations in Go. The former `internal/cli/schema_hints/` HintFile tree is fully retired and must not reappear.
 
-After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
+After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language.
 
-```bash
-# Install skills into current project (defaults to multi; DWS_SKILL_MODE=mono switches back)
-curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
-```
+> China users: `npx skills add` clones from GitHub. Prefer `dws skill setup` or prefix `DWS_GITEE_REPO` on `install-skills.sh` — see [China mirror](#china-mirror).
 
-> Installers use `$HOME/.agents/skills/` as the canonical global store, following the universal `.agents/skills` convention. Agents classified by the pinned compatibility registry as universal read that root directly; detected non-universal Agents receive links to it (or copies when links are unavailable). Multi layout is per-product siblings, while mono uses the `dws/` subdirectory.
->
-> China users: prefix `DWS_GITEE_REPO` to use the Gitee mirror — see [China mirror](#china-mirror).
-
-**Switching or re-installing with `dws skill setup`:**
+**Power-user / China / upgrade: `dws skill setup`**
 
 ```bash
 # Interactive: prompts for mode + target agents
@@ -425,16 +459,16 @@ dws skill setup --mode mono --target all
 dws skill setup --mode multi --target cursor --dry-run
 dws skill setup --mode multi --target cursor
 
-# Point at a local source tree (e.g. a fork or work-in-progress), preview first
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi --dry-run
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+# Point at a local source (an extracted dws-skills.zip root, its multi/ directory, or a source checkout), preview first
+DWS_SKILL_SOURCE=/absolute/path/to/extracted-dws-skills dws skill setup --mode multi --dry-run
+DWS_SKILL_SOURCE=/absolute/path/to/extracted-dws-skills dws skill setup --mode multi
 ```
 
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
 | `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home, including ZCode at `~/.zcode/skills` |
-| `--source` | path | Local source directory (overrides bundled skills) |
+| `--source` | path | Local source directory (overrides bundled skills); accepts a mode directory, an extracted `dws-skills.zip` root, or a source checkout containing `skills/` |
 | `--yes` | — | Scripting-only: skip the confirmation prompt. Removals are still backed up to `~/.dws/skill-backups/` first |
 
 > The setup command can remove the opposite-mode layout (`dws/` for multi, DWS-managed multi Skills for mono) and stale managed Skills not in the bundle. DWS records ownership, installer version, source, and content digest centrally in `~/.dws/skills-state.json` (or `$DWS_CONFIG_DIR/skills-state.json`). Exact official names shipped before the centralized state remain a frozen migration list. A `dingtalk-*` prefix alone never authorizes cleanup, so other same-prefix market/user Skills are preserved. Every removal is previewed before confirmation and preserved under `~/.dws/skill-backups/<timestamp>/`; a directory that cannot be backed up is never removed. In a non-interactive shell, first run `--dry-run` and inspect its output; only then may the caller explicitly choose the scripting-only confirmation bypass.
@@ -482,7 +516,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, and seven OA approval task/instance events.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The 28-event public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, one VoIP invitation event, three Todo task lifecycle events, and the interactive-card callback event.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -503,6 +537,10 @@ dws event list
 dws event schema user_im_message_receive_o2o --flatten
 dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
+dws event list --category card
+dws event schema user_card_action_triggered --flatten
+dws event list --category todo
+dws event schema user_todo_task_create --flatten
 
 # Listen for messages that mention the current user
 dws event +listen-im --kind at-me -f ndjson
@@ -541,10 +579,23 @@ dws event consume \
   user_oa_approval_instance_finished \
   --flatten -f ndjson
 
+# Listen for Todo create/update/delete events where the current user is an executor
+dws event consume \
+  user_todo_task_create \
+  user_todo_task_update \
+  user_todo_task_delete \
+  --role-types executor \
+  --flatten -f ndjson
+
+# Listen for interactive-card callbacks; the schema documents reviewed fields while preserving extensions
+dws event consume user_card_action_triggered --flatten -f ndjson
+
 # Inspect local consumers and cancel a subscription
 dws event status
 dws event stop <subscribe_id>
 ```
+
+The structured interactive-card context is at `payload.body.actionData.context`. Join `questions[].id` to `answers[question_id]`, then resolve IDs in `selected` through the same question's `options[].id`; an empty `selected` is a valid no-selection state. JSON strings in `body.context` are compatibility fallbacks, and every payload level continues to preserve unknown fields.
 
 For one-to-one and specified-sender events, use exactly one target identity: `--user` for an internal `userId`, or `--open-dingtalk-id` for an `openDingtalkId`. The CLI does not infer or convert between these identity types.
 
@@ -739,6 +790,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 | Report | `report` | Create / submit logs, inbox & outbox, templates, statistics |
 | AI Tables | `aitable` | Bases / tables / records / fields / views, permissions & roles, automation, charts & dashboards, import / export |
 | Doc | `doc` | Search / read / write docs, block-level editing, comments, permissions, media, up / download |
+| Whiteboard | `whiteboard` | Standalone / embedded whiteboards: query, create / update, Diff, local SVG previews, personal / team templates |
 | Drive | `drive` | List / search / download, folders, upload, copy / move / rename, permissions |
 | Minutes | `minutes` | AI meeting notes: list, summary / keywords / transcription / todos, mind map, speakers, tags |
 | Mail | `mail` | Mailboxes, KQL search, read / send, drafts, folders, templates, contacts |

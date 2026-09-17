@@ -1,15 +1,20 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -20,8 +25,11 @@ type chatFilePathCall struct {
 }
 
 type chatFilePathCaller struct {
-	sequence []string
-	calls    []chatFilePathCall
+	sequence      []string
+	calls         []chatFilePathCall
+	dryRun        bool
+	failTool      string
+	commitPayload string
 }
 
 func (c *chatFilePathCaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -31,11 +39,17 @@ func (c *chatFilePathCaller) CallTool(_ context.Context, server, tool string, ar
 		copied[key] = value
 	}
 	c.calls = append(c.calls, chatFilePathCall{server: server, tool: tool, args: copied})
+	if tool == c.failTool {
+		return nil, fmt.Errorf("forced %s failure", tool)
+	}
 
 	switch tool {
 	case "init_conversation_file_upload":
 		return textToolResult(`{"resourceUrl":"https://upload.example/file","uploadKey":"upload-key","headers":{"x-upload":"yes"}}`), nil
 	case "commit_conversation_file_upload":
+		if c.commitPayload != "" {
+			return textToolResult(c.commitPayload), nil
+		}
 		return textToolResult(`{"result":{"dentryId":123,"spaceId":456}}`), nil
 	case "send_personal_message":
 		return textToolResult(`{"success":true}`), nil
@@ -45,9 +59,192 @@ func (c *chatFilePathCaller) CallTool(_ context.Context, server, tool string, ar
 }
 
 func (*chatFilePathCaller) Format() string { return "json" }
-func (*chatFilePathCaller) DryRun() bool   { return false }
+func (c *chatFilePathCaller) DryRun() bool { return c.dryRun }
 func (*chatFilePathCaller) Fields() string { return "" }
 func (*chatFilePathCaller) JQ() string     { return "" }
+
+func executeChatFilePathCommand(t *testing.T, caller *chatFilePathCaller, args ...string) (string, error) {
+	t.Helper()
+	testseam.Protect(t, &deps)
+	InitDeps(caller)
+	var stdout bytes.Buffer
+	deps.Out.w = &stdout
+	deps.Out.errW = io.Discard
+	root := newChatCommand()
+	installExampleGlobalFlags(root)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return stdout.String(), err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return stdout.String(), err
+}
+
+func TestCrossPlatformCoverageChatConversationFileUploadUsesCurrentUploadSequence(t *testing.T) {
+	t.Chdir(t.TempDir())
+	payload := []byte("pdf payload")
+	if err := os.WriteFile("report.pdf", payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	caller := &chatFilePathCaller{}
+	testseam.Swap(t, &httpPutFile, func(_ context.Context, resourceURL string, headers map[string]string, localPath string, fileSize int64) error {
+		caller.sequence = append(caller.sequence, "HTTP PUT")
+		if resourceURL != "https://upload.example/file" || headers["x-upload"] != "yes" {
+			t.Fatalf("upload credentials = %q, %#v", resourceURL, headers)
+		}
+		if filepath.Base(localPath) != "report.pdf" || fileSize != int64(len(payload)) {
+			t.Fatalf("upload file = %q (%d)", localPath, fileSize)
+		}
+		return nil
+	})
+
+	got, err := executeChatFilePathCommand(t, caller,
+		"conversation-file", "upload", "--conversation-id=cid", "--file=report.pdf", "--format=json")
+	if err != nil {
+		t.Fatalf("chat file upload: %v\n%s", err, got)
+	}
+	wantSequence := []string{"init_conversation_file_upload", "HTTP PUT", "commit_conversation_file_upload"}
+	if !reflect.DeepEqual(caller.sequence, wantSequence) {
+		t.Fatalf("call sequence = %#v, want %#v", caller.sequence, wantSequence)
+	}
+	for _, call := range caller.calls {
+		if call.tool == "send_personal_message" {
+			t.Fatalf("upload-only command sent a message: %#v", caller.calls)
+		}
+	}
+	if len(caller.calls) != 2 || caller.calls[0].args["openConversationId"] != "cid" || caller.calls[1].args["openConversationId"] != "cid" {
+		t.Fatalf("upload calls = %#v", caller.calls)
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(got), &envelope); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, got)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if data["dentryId"] != float64(123) || data["spaceId"] != float64(456) ||
+		data["fileName"] != "report.pdf" || data["fileType"] != "pdf" || data["fileSize"] != float64(len(payload)) {
+		t.Fatalf("upload data = %#v", data)
+	}
+}
+
+func TestCrossPlatformCoverageChatConversationFileUploadPreservesNonNumericUserID(t *testing.T) {
+	t.Chdir(t.TempDir())
+	payload := []byte("user file")
+	if err := os.WriteFile("user.txt", payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	caller := &chatFilePathCaller{}
+	testseam.Swap(t, &httpPutFile, func(_ context.Context, _ string, _ map[string]string, _ string, _ int64) error {
+		return nil
+	})
+
+	got, err := executeChatFilePathCommand(t, caller,
+		"conversation-file", "upload", "--user=user_alpha", "--file=user.txt", "--format=json")
+	if err != nil {
+		t.Fatalf("chat file upload by userId: %v\n%s", err, got)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("upload calls = %#v, want init and commit", caller.calls)
+	}
+
+	fileMD5 := fmt.Sprintf("%x", md5.Sum(payload))
+	wantInit := chatFilePathCall{
+		server: "im",
+		tool:   "init_conversation_file_upload",
+		args: map[string]any{
+			"userId":   "user_alpha",
+			"fileName": "user.txt",
+			"fileSize": int64(len(payload)),
+			"md5":      fileMD5,
+		},
+	}
+	if !reflect.DeepEqual(caller.calls[0], wantInit) {
+		t.Fatalf("init call = %#v, want %#v", caller.calls[0], wantInit)
+	}
+	wantCommit := chatFilePathCall{
+		server: "im",
+		tool:   "commit_conversation_file_upload",
+		args: map[string]any{
+			"userId":    "user_alpha",
+			"uploadKey": "upload-key",
+			"fileName":  "user.txt",
+			"fileSize":  int64(len(payload)),
+			"md5":       fileMD5,
+		},
+	}
+	if !reflect.DeepEqual(caller.calls[1], wantCommit) {
+		t.Fatalf("commit call = %#v, want %#v", caller.calls[1], wantCommit)
+	}
+}
+
+func TestCrossPlatformCoverageChatConversationFileUploadReturnsUploadErrors(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("error.txt", []byte("error file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &httpPutFile, func(_ context.Context, _ string, _ map[string]string, _ string, _ int64) error {
+		return nil
+	})
+
+	tests := []struct {
+		name   string
+		caller *chatFilePathCaller
+		want   string
+	}{
+		{
+			name:   "init failure",
+			caller: &chatFilePathCaller{failTool: "init_conversation_file_upload"},
+			want:   "forced init_conversation_file_upload failure",
+		},
+		{
+			name:   "invalid commit result",
+			caller: &chatFilePathCaller{commitPayload: `{"result":{}}`},
+			want:   "missing dentryId or spaceId",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := executeChatFilePathCommand(t, tt.caller,
+				"conversation-file", "upload", "--conversation-id=cid", "--file=error.txt", "--format=json")
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q\n%s", err, tt.want, got)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatConversationFileUploadDryRunSkipsRemoteCalls(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("report.pdf", []byte("pdf payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	caller := &chatFilePathCaller{dryRun: true}
+	got, err := executeChatFilePathCommand(t, caller,
+		"conversation-file", "upload", "--open-dingtalk-id="+helperCurrentDOpenID, "--file=report.pdf", "--format=json")
+	if err != nil {
+		t.Fatalf("chat file upload dry-run: %v\n%s", err, got)
+	}
+	if len(caller.calls) != 0 || len(caller.sequence) != 0 {
+		t.Fatalf("dry-run made remote calls: %#v / %#v", caller.calls, caller.sequence)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(got), &envelope); err != nil {
+		t.Fatalf("decode dry-run output: %v\n%s", err, got)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	target, _ := data["target"].(map[string]any)
+	if envelope["dry_run"] != true || data["executed"] != false || target["openDingTalkId"] != helperCurrentDOpenID {
+		t.Fatalf("dry-run envelope = %#v", envelope)
+	}
+}
 
 func TestChatMessageSendFilePathUsesWukongUploadSequence(t *testing.T) {
 	previousDeps, previousPut, previousArgs := deps, httpPutFile, os.Args

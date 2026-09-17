@@ -351,6 +351,8 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 			} else {
 				replacement = files.binary
 			}
+		case "media-files":
+			replacement = files.binary
 		case "content-file":
 			replacement = files.markdown
 		case "contents-file":
@@ -364,10 +366,16 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 				replacement = files.batch
 			}
 		case "output":
+			// Execution already runs in files.root. Keep relative output examples
+			// relative so materialization cannot violate their path contract.
+			outputRoot := files.root
+			if !filepath.IsAbs(value) {
+				outputRoot = "."
+			}
 			if value == "." || value == "" {
-				replacement = files.root
+				replacement = outputRoot
 			} else {
-				replacement = filepath.Join(files.root, filepath.Base(value))
+				replacement = filepath.Join(outputRoot, filepath.Base(value))
 			}
 		}
 		if replacement == "" {
@@ -381,6 +389,24 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 		}
 	}
 	return result
+}
+
+func TestAgentExampleMaterializationPreservesOutputPathKind(t *testing.T) {
+	files := agentExampleFiles{root: t.TempDir(), binary: "./fixture.bin"}
+	for _, tc := range []struct{ input, want string }{
+		{".", "."},
+		{"./cover.png", "cover.png"},
+		{filepath.Join(t.TempDir(), "absolute.png"), filepath.Join(files.root, "absolute.png")},
+	} {
+		got := materializeAgentExampleArgv([]string{"doc", "+download-overwrite", "--output", tc.input}, files)
+		if got[3] != tc.want {
+			t.Fatalf("output %q => %q, want %q", tc.input, got[3], tc.want)
+		}
+	}
+	got := materializeAgentExampleArgv([]string{"doc", "+create-with-media", "--media-files", "./report.pdf", "--output=./cover.png"}, files)
+	if got[3] != files.binary || got[4] != "--output=cover.png" {
+		t.Fatalf("media/output fixtures = %q", got)
+	}
 }
 
 func agentExampleLongFlag(argument string) (name, inline string, ok bool) {

@@ -127,6 +127,8 @@ Flags:
 **权限**：查询共享日历下的日程时，至少要有reader权限。
 **分页**：单次最多返回 `--limit` 指定的条数（默认/最大 100）；当结果超过 limit 时，返回体包含 `nextCursor` 字段。首次查询无需传 `--cursor`，仅在翻页时将上一次返回的 `nextCursor` 作为 `--cursor` 传入。
 
+**完整汇总**：用户要求“完整”“不要漏掉后面的记录”或跨月计数时，必须持续使用 `nextCursor` 取完每个时间窗，再按月/日聚合。最终答复优先给“月份 → 数量”的完整总表；只有用户明确要求逐条明细时才展开，且应分段或压缩展示，不能让长表截断后续月份和计数。
+
 
 ### 获取日程详情
 ```
@@ -201,9 +203,11 @@ Example:
     --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
     --remind-minutes 5,10     # 开始前5分钟和10分钟各提醒一次
 Flags:
+      --is-all-day                      全天日程；true 时起止时间为 yyyy-MM-dd，不传则不发送此字段
+      --add-online-meeting              添加视频会议（默认 true；不传沿用服务端默认添加，false 不添加）
       --title string                    日程标题 (必填，最大2048字符)
-      --start string                    开始时间 ISO-8601 (必填，例如 2026-03-10T14:00:00+08:00)
-      --end string                      结束时间 ISO-8601 (必填，例如 2026-03-10T15:00:00+08:00)
+      --start string                    开始时间 (必填；全天为 yyyy-MM-dd，否则为 ISO-8601)
+      --end string                      结束时间 (必填；全天为 yyyy-MM-dd 且不包含当天，否则为 ISO-8601)
       --calendar-id string              日历 ID (可选，默认 primary 主日历；仅在共享/订阅日历本下创建时填写，通过 `book list` 获取)
       --timezone string                 时区 IANA 格式 (例如 Asia/Shanghai，默认 Asia/Shanghai)
       --desc string                     日程描述 (最大5000字符)
@@ -229,6 +233,24 @@ Flags:
 
 > **说明**：个人日程也走 `event create`。如果只是给自己安排时间，不传 `--attendees` / `--open-dingtalk-ids` 即可。
 
+### 全天日程与视频会议
+
+`event create` / `event update` 支持 `--is-all-day` 和 `--add-online-meeting`。
+全天日程的 `--start` / `--end` 使用真实有效的 `yyyy-MM-dd` 日期，结束日期不包含当天（1 月 1 日至 1 月 2 日表示 1 月 1 日全天），无需设置时区；CLI 保留日期字符串，不转换为午夜时间戳。普通日程继续使用 ISO-8601 时间。
+
+```bash
+dws calendar event create --title "全天安排" --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false
+dws calendar event update --id <EVENT_ID> --is-all-day=false --start "2030-01-01T09:00:00+08:00" --end "2030-01-01T10:00:00+08:00"
+dws calendar event update --id <EVENT_ID> --add-online-meeting=true
+```
+
+创建时默认由服务端添加视频会议，无需添加时使用 `--add-online-meeting=false`。单人会议或全天日程通常不需要视频会议，建议设置 `--add-online-meeting=false`。
+更新时显式 `true` 表示创建新的视频会议并覆盖已有会议；`false` 不创建且保留已有视频会议。
+两个布尔参数均仅在显式传入时发送，更新标题等其他字段不会自动补发它们。
+更新时显式设置 `--is-all-day`（true 或 false），必须同时重新提供 `--start` 和 `--end`；true 使用日期，false 使用带时区的 ISO-8601 时间。只修改起止时间、不设置全天状态时，仍支持单独更新一个时间字段。
+需要新增能力时使用上述原子命令；`+create` 等快捷指令未暴露这些参数。
+修改已有日程时沿用其 eventId，不要重新创建日程。
+
 ### 修改日程
 ```
 Usage:
@@ -242,9 +264,11 @@ Example:
 Flags:
       --id string                       日程 ID (必填)
       --calendar-id string              日历 ID (可选，默认 primary 主日历；指定其他日历本时填写，可通过 `book list` 获取)
+      --is-all-day                      全天状态；显式设置时必须重传 --start/--end，true 使用 yyyy-MM-dd，false 使用带时区 ISO-8601
+      --add-online-meeting              添加视频会议（true 重新添加并覆盖已有会议，false 保留已有会议；不传沿用原有更新逻辑）
       --title string                    新标题
-      --start string                    新开始时间 ISO-8601
-      --end string                      新结束时间 ISO-8601
+      --start string                    新开始时间 (全天为 yyyy-MM-dd，否则为 ISO-8601)
+      --end string                      新结束时间 (全天为 yyyy-MM-dd 且不包含当天，否则为 ISO-8601)
       --desc string                     新描述 (最大5000字符)
       --timezone string                 时区 IANA 格式 (例如 Asia/Shanghai)
       # 以下 --recurrence-* 在 修改周期日程的循环规则时必须**整体**传入：MCP 不合并部分字段，只改其中一项（例如只传 --recurrence-count）会把规则覆盖成不完整状态
@@ -267,6 +291,8 @@ Flags:
 ### 删除日程
 
 > **CAUTION:** 不可逆操作 — 所有参会人同步取消，必须先向用户确认。
+
+删除后的 `event get` 可能仍返回历史对象，不可仅凭“还能 get 到”断言删除失败，也不可在返回未含 `status=cancelled` 时编造该状态。可靠口径是：保留删除前的 `eventId`、标题、日历本和起止时间；删除成功后用完全相同的日历本/时间窗查询活跃列表，按 `eventId` 和标题确认目标不再出现。若目标仍在活跃列表中，明确报告终态未确认。
 
 ```
 Usage:
@@ -597,8 +623,8 @@ Flags:
 用户说"日程/会议/约会/日历":
 - 查看 → `event list`
 - 详情 → `event get`
-- 创建/约/给自己留时间块/个人日程 → `event create`（带参会人时加 `--attendees`，循环日程加 `--recurrence-*`，自定义提醒加 `--remind-minutes`）
-- 修改/改时间/改描述 → `event update`（支持修改标题、时间、描述、时区、循环规则）
+- 创建/约/给自己留时间块/个人日程/全天日程 → `event create`（带参会人时加 `--attendees`，循环日程加 `--recurrence-*`，自定义提醒加 `--remind-minutes`）
+- 修改/改时间/改描述/切换全天状态/重新添加视频会议 → `event update`（支持修改标题、时间、描述、时区、循环规则、全天状态和视频会议）
 - 取消/删除 → `event delete`
 - 推荐时间/什么时候有空/协调时间 → `event suggest`
 - 接受/拒绝/暂定日程 → `event respond`

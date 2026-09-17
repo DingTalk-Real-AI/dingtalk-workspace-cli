@@ -13,9 +13,22 @@
 | `form field update` | 更新字段必填/描述 |
 | `form field hide` | 在表单中隐藏/显示字段（不影响底层数据表字段） |
 | `form share get` | 获取分享配置 |
-| `form share update` | 开启/关闭分享 |
+| `form share update` | 部分更新分享开关、授权、有效期和通知等配置 |
 | `form questions create` | 添加题目（等价于 `field create`，命令位置上的别名） |
 | `form questions delete` | 删除题目（等价于 `field delete`，命令位置上的别名） |
+
+## 仅询问分享更新用法时
+
+收到仅询问用法的请求后，第一步必须立即实际执行且仅执行对应命令：原子入口用 `dws aitable form share update --help`；Shortcut 入口用 `dws schema --cli-path "aitable +form-share-update" --compact --format json`。Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
+
+发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。上述只读查询是唯一允许的命令。
+
+查询成功后，最终回答只能包含两行纯文本：不要 Markdown 代码围栏、标题、表格、回读命令或其他内容。第一行放用户所问入口的完整命令；已有的必填值必须原样使用，缺少的值必须保留为 `<BASE_ID>`、`<TABLE_ID>`、`<VIEW_ID>` 等明确占位符。第二行先列出需要替换的占位符（没有则省略替换说明），再给出固定的未执行说明，然后立即结束：
+
+```text
+dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --enabled true
+请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
 
 ## 建议操作顺序
 
@@ -37,7 +50,7 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 ```bash
 dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name "表单名" --format json
-dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --format json
+dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "表单名" --format json
 dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 ```
 
@@ -88,7 +101,7 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
 | `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回 enabled/status/shareFormUuid |
-| `form share update` | 开启/关闭分享 | `--base-id` `--table-id` `--view-id` `--enabled` | `--enabled true` 开启 / `--enabled false` 关闭。注意：UI 上"发布并分享"按钮是另一概念，本命令只切换内部 enabled 标志，开启后需在 UI 刷新页面才会看到分享面板 |
+| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 开关用 `--enabled`；访问范围用 `--auth-type-code/--auth-data`；还可更新提交次数、有效期、名称描述、匿名提交、回填和通知配置；未传字段保持原值 |
 
 ## 完整工作流示例
 
@@ -118,13 +131,20 @@ dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --field-id FIELD_ID --hidden true --format json
 
-# 6) 开启分享（注意：开启后需 UI 刷新页面才会看到分享面板）
+# 6) 开启分享；把已知表单标题同时传给分享配置
 dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
-  --enabled true --format json
+  --enabled true --form-name "员工信息收集" --format json
 ```
 
 ## 返回结构补充
 
-- `form list` 返回 `data.formViews[]`，**每条仅含** `viewId/name/title/createdAt`；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
-- `form get` 返回结构与 `form list` 完全一致（`data.formViews[]`），仅含一条记录（与请求 viewId 一致）。Agent 提取时仍走 `data.formViews[0]`。
+- `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（以及服务端当前可用的 `title/createdAt`）；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
+- `form get` 的 `data` 是客户端按 `viewId` 精确筛出的单个表单对象，不是 `formViews` 数组。Agent 直接读取 `data.viewId` / `data.name`；不存在的 `viewId` 会明确失败。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。
+
+## MCP 交互注意事项
+
+- `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
+- 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
+- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`，再通过 `form share get` 回读确认。
+- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。

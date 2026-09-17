@@ -376,9 +376,12 @@ func TestCrossPlatformCoverageCLISmokeCommandTypoGuidance(t *testing.T) {
 	}
 
 	t.Run("legitimate positional commands remain executable", func(t *testing.T) {
-		const positionalCommandTimeout = 30 * time.Second
+		// Schema and positional help build the complete command tree in a fresh
+		// race-instrumented subprocess. These checks verify routing, not assembly
+		// latency; hosted runners can exceed 30 seconds on a cold run.
+		const registryCommandTimeout = 2 * time.Minute
 
-		stdout, stderr, err := runCLIWithTimeout(t, env, positionalCommandTimeout, "schema", "chat message send", "--compact", "--format", "json")
+		stdout, stderr, err := runCLIWithTimeout(t, env, registryCommandTimeout, "schema", "chat message send", "--compact", "--format", "json")
 		if err != nil || strings.TrimSpace(stdout) == "" {
 			t.Fatalf("dws schema positional path failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 		}
@@ -386,7 +389,7 @@ func TestCrossPlatformCoverageCLISmokeCommandTypoGuidance(t *testing.T) {
 		if err != nil || strings.TrimSpace(stdout) == "" {
 			t.Fatalf("dws completion positional shell failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 		}
-		stdout, stderr, err = runCLIWithTimeout(t, env, positionalCommandTimeout, "help", "auth")
+		stdout, stderr, err = runCLIWithTimeout(t, env, registryCommandTimeout, "help", "auth")
 		if err != nil || !strings.Contains(stdout, "dws auth") {
 			t.Fatalf("dws help auth failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 		}
@@ -467,11 +470,17 @@ func runCLIWithTimeout(t *testing.T, env []string, timeout time.Duration, args .
 	defer cancel()
 	processArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
 	cmd := exec.CommandContext(ctx, os.Args[0], processArgs...)
-	cmd.Env = env
+	// When this package is run with -cover, the helper process is itself a
+	// coverage-instrumented test binary. Give it a writable output directory so
+	// the Go runtime does not append a GOCOVERDIR warning to the CLI's JSON
+	// stderr and make otherwise valid structured errors fail to decode.
+	cmd.Env = append(append([]string(nil), env...), "GOCOVERDIR="+t.TempDir())
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	started := time.Now()
 	err := cmd.Run()
+	t.Logf("dws %s finished in %s (timeout %s)", strings.Join(args, " "), time.Since(started).Round(time.Millisecond), timeout)
 	if ctx.Err() != nil {
 		t.Fatalf("dws %s timed out: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), ctx.Err(), stdout.String(), stderr.String())
 	}

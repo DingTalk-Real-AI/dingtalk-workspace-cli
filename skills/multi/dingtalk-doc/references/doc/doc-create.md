@@ -31,6 +31,7 @@ dws doc +create --name "<文档名>" --content @body.json --doc-format jsonml --
 ## 结果处理
 
 - `status=success` 且 `verified=true`：可以报告创建完成，并保留真实 `nodeId`/URL。
+- `status=success` 且 `verified=false` 带 `unverified=["mention_targets"]`（verify 步骤为 `partial`）：正文已写入并通过回读，只有 @人 指向的人员本地无法核对；照常报告创建完成，不要重读或重写，把待核对项转述给用户。
 - `status=partial_success`：文档或部分分片已经创建；按 `steps` 回读现状，禁止重跑整条创建。
 - `status=unknown`：服务端可能已经提交；先定位并读取文档，禁止自动重试。
 - 没有真实 `nodeId` 或写回执时，禁止声称“已创建”。
@@ -46,6 +47,10 @@ dws doc +create --name "<文档名>" --content @body.json --doc-format jsonml --
 5. **Iterate**：后续修正复用同一 `nodeId`，按 [`doc-update.md`](doc-update.md) 做最小 block/文本修改，禁止重新创建整篇。
 
 交付前检查标题是否重复、段落是否连贯、编号是否统一；只有真实行列数据才使用表格，富组件服务于理解而不是装饰。明确字数要求时应在写入前完成本地统计，不能凭模型估算宣称达标。
+
+## @人（markdown mention）
+
+markdown 里可写 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)`，服务端会改写为该用户的钉钉个人资料链接；`openDingTalkId` 取自 `dws aisearch +search-person` 的 `openDingTalkId`。仅 markdown 生效，`--doc-format jsonml` 不改写。完整说明见 doc-update.md 的「@人」小节。
 
 ## 高级通道
 

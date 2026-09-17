@@ -1,302 +1,141 @@
 # Agoal（目标管理）
 
-## 产品说明
+Agoal 覆盖战略解码、经营合约、计分卡、用户目标、目标模板和周月报规则跟催。CLI 前缀为 `dws agoal`。
 
-Agoal 是钉钉目标管理工具，支持战略解码、经营合约、计分卡、用户目标、目标模板、周月报六大模块，帮助组织将战略目标从顶层分解到个人并持续跟踪。
+所有结构化查询都带 `--format json`。已知路径直接执行；只有当前二进制的叶子命令或参数不确定时才读一次精确 `--help`，不要用 Profile、Auth、搜索其它产品或本地脚本猜命令和业务字段。
 
-**CLI 前缀**: `dws agoal`
+## 产品边界
 
-## 命令总览
+- 日报、周报、月报正文的填写、提交、收件箱和已发送记录走 Report。
+- 周月报规则级按时、迟交、未提交统计，人员清单和跟催走 Agoal。
+- 普通待办走 Todo；Agoal 目标、规则、周期、战略解码和经营合约不转成待办查询。
 
-### strategy (战略解码管理)
+## Golden Route 优先级
 
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `strategy list` | 获取战略解码列表 | `--scope-type` `--scope-id` | scopeType: DEPT/PERSONAL；scope-id 为 scope-type 对应的部门 id 或用户 id |
-| `strategy detail` | 获取战略解码详情 | `--profile-id` | 根据战略解码 id 查询 |
-| `strategy update` | 更新战略解码 | `--profile-id` `--content` | **覆盖逻辑，必须基于查询返回的老数据修改后再传入**；`--content` 为 JSON 数组 |
+当前公开且经过稳定返回校验的 Agoal Shortcut 只有以下 5 条。意图能够满足时优先使用，不要手写等价的原子调用或解析脚本。
 
-> **`strategy update` 是覆盖式更新**：一定要先 `strategy detail` 获取完整数据，在原数据基础上修改后再传入，会根据战略解码id进行对应的修改。
+| 意图 | 首选命令 | 稳定输出 |
+|---|---|---|
+| 经营合约字段配置 | `dws agoal +contract-fields --format json` | `count`、`fields` |
+| 规则及周期列表 | `dws agoal +user-rules --format json` | `count`、`rules` |
+| 周月报规则统计 | `dws agoal +report-statistics-list --format json` | `count`、`statistics` |
+| 周月报人员详情 | `dws agoal +report-submit-detail ... --format json` | `count`、`submissions`、`page`、`pageSize`、`totalCount` |
+| 目标模板分页 | `dws agoal +obj-template-list ... --format json` | `count`、`templates`、`page`、`pageSize`、`totalCount` |
 
-#### strategy update --content 实体字段说明
+以下带 `+` 的 Shortcut 当前明确 `unavailable`，不要尝试：`+strategy-list`、`+strategy-get`、`+strategy-update`、`+contract-list`、`+contract-get`、`+contract-update`、`+scorecard-get`、`+scorecard-entity-get`、`+scorecard-update`、`+user-objectives`、`+obj-template-upsert`。这不表示同名原子能力一定不可用；例如当前叶子 Help 存在时仍可执行 `dws agoal strategy list ...`。确需对应能力时，只使用当前叶子 Help 存在的原子命令，并按本文件的安全规则解释结果。
 
-| 字段 | 说明 |
-|------|------|
-| `id` | 实体 id |
-| `title` | 标题对象，如 `{"title":"标题文本"}` |
-| `linkEntityId` | 所属实体 ID（查询接口中有值时必须回传） |
-| `entityType` | 类型枚举：`OGSM_OBJECTIVE`(目的)、`OGSM_GOAL`(目标)、`OGSM_STRATEGY`(策略)、`OGSM_MEASUREMENT`(衡量标准)、`OGSM_TACTICS`(行动方案) |
-| `status` | 状态枚举：`NORMAL`(正常)、`PRE_PUBLISH_THEN_UPDATE`(预发布更新)、`PRE_PUBLISH_THEN_CREATE`(预发布新增)、`PRE_PUBLISH_THEN_DELETE`(预发布删除) |
-| `supporters` | 承接人数组 `[{type, dingId, staffId}]`；type: `USER`/`DEPARTMENT`；staffId 在 type=USER 时必填 |
-| `indicators` | 关键指标 id 字符串数组 |
-| `linkSources` | 资源关联数组 `[{id, linkType, linkId, source, objectId, keyResultId}]`；linkType: project/task/campaign/product/doc/standard；source: teambition |
-| `executors` | 人员 dingId 字符串数组 |
-| `teams` | 部门 dingId 字符串数组 |
+## 意图路由
 
-### contract (经营合约管理)
+| 用户意图 | 路由 |
+|---|---|
+| 战略解码 / 战略目标 / OGSM 列表 | `strategy list` |
+| 战略解码详情或更新 | `strategy detail` → 必要时 `strategy update` |
+| 经营合约列表或详情 | `contract list` / `contract detail` |
+| 经营合约字段、必填或强制字段 | `+contract-fields` |
+| 计分卡详情、实体或搜索 | `scorecard detail` / `scorecard entity-detail` / `scorecard search-entities` |
+| 目标规则、周期 | `+user-rules`；需要默认偏好时见下方 SOP |
+| 个人目标正文 | `user rules` → `user objectives` |
+| 周月报规则统计、迟交、未提交、跟催 | `+report-statistics-list` → 按需 `+report-submit-detail` |
+| 目标模板查询 | `+obj-template-list` |
+| 新增或更新目标模板 | `obj-template create-or-update`，按覆盖写安全流程 |
 
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `contract list` | 获取经营合约列表 | `--scope-type` `--scope-id` | scopeType: DEPT/PERSONAL；scope-id 为 scope-type 对应的部门 id 或用户 id |
-| `contract fields` | 获取经营合约字段列表 | — | 获取组织下经营合约的字段配置 |
-| `contract detail` | 获取经营合约详情 | `--contract-id` | 根据合约 id 查询 |
-| `contract update` | 更新经营合约 | `--contract-id` `--dimensions` | **覆盖逻辑**；可选 `--audit-config`、`--objective-template` |
+## 高频只读 SOP
 
-> **`contract update` 同样是覆盖式更新**：必须基于 `contract detail` 返回的数据修改后再传入。
+### 本人与主部门范围
 
-#### contract update --dimensions 维度字段说明
-
-| 字段 | 说明 |
-|------|------|
-| `id` | 维度 id |
-| `title` | 维度名称 |
-| `description` | 维度描述 |
-| `weight` | 维度权重 |
-| `objectives` | 目标列表 |
-| `dimensionConfig` | 维度配置 |
-| `children` | 子维度列表 |
-
-#### contract update 可选参数
-
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `--audit-config` | 审批配置 JSON | `{"needAudit":true,"processTemplateId":"TPL_ID"}` |
-| `--objective-template` | 合约模板 JSON | `{"id":"TPL_ID","title":"模板名称"}` |
-
-### scorecard (计分卡管理)
-
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `scorecard detail` | 获取计分卡详情 | `--selected-time` `--dept-id` | selectedTime 为 ISO-8601 字符串，如 `"2026-01-01T00:00:00+08:00"` |
-| `scorecard entity-detail` | 获取计分卡实体详情 | `--sc-id` `--entity-id` | 根据计分卡 id 和实体 id 查询 |
-| `scorecard update` | 更新计分卡 | `--dept-id` `--selected-time` `--id` `--tracking-period-type` `--content` | trackingPeriodType: MONTHLY/QUARTERLY |
-| `scorecard search-entities` | 搜索计分卡指标与关键事项 | `--keyword` | 可选 `--page`、`--page-size`；keyword 为标题模糊匹配关键词 |
-
-#### selectedTime 时间说明
-
-`--selected-time` 接受 ISO-8601 字符串，传入对应周期起始时刻：
-
-- **2026年** → `"2026-01-01T00:00:00+08:00"`
-- **2026年5月** → `"2026-05-01T00:00:00+08:00"`
-
-#### scorecard update --content 维度字段说明
-
-| 字段 | 说明 |
-|------|------|
-| `id` | 维度 id |
-| `title` | 维度名称 |
-| `items` | 指标或关键事项列表 |
-
-items 每项包含：
-
-| 字段 | 说明 |
-|------|------|
-| `id` | 实体 id |
-| `title` | 名称 |
-| `reference` | 参考信息 |
-| `start` | 起始值 |
-| `target` | 目标值 |
-| `executors` | 负责人列表，每项包含 `openId` |
-
-#### trackingPeriodType 枚举
-
-| 值 | 说明 |
-|------|------|
-| `MONTHLY` | 月度追踪 |
-| `QUARTERLY` | 季度追踪 |
-
-### user (用户目标管理)
-
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `user rules` | 获取用户规则周期列表 | — | 可选 `--user-id`，不传则默认取操作人自己 |
-| `user objectives` | 查询用户目标列表 | `--user-id` `--rule-id` `--period-ids` | `--period-ids` 为逗号分隔的周期 id 列表 |
-
-### obj-template (目标模板管理)
-
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `obj-template list` | 获取目标模板列表 | — | 可选 `--keyword` 搜索关键词、`--page` 页码、`--page-size` 每页数量 |
-| `obj-template create-or-update` | 新增或更新目标模板 | `--dimensions` | **覆盖逻辑**；新增时 `--title` 必填；更新时 `--template-id` 必填，dimensions 必须基于老数据修改 |
-
-> **`obj-template create-or-update` 同样是覆盖式更新**：更新时必须基于 `obj-template list` 返回的数据修改后再传入。新增时建议先参考已存在的模板数据再构建 dimensions。
-
-#### obj-template create-or-update 参数说明
-
-| 参数 | 说明 | 类型 |
-|------|------|------|
-| `--template-id` | 模板 id（更新时必填） | string |
-| `--title` | 模板标题（新增时必填） | string |
-| `--objective-weight` | 是否启用目标权重 | bool |
-| `--dimension-weight` | 是否启用维度权重 | bool |
-| `--compute-by-weight` | 维度是否参与计算 | bool |
-| `--dimensions` | 模板关联的维度 JSON 字符串 | string |
-
-### report (周月报管理)
-
-| 命令 | 用途 | 必填参数 | 备注 |
-|------|------|----------|------|
-| `report list-statistics` | 获取周月报数据跟催列表 | — | 返回各规则的人员提交情况统计（按时/迟交/未提交人数）；可选 `--keyword` 搜索规则名称 |
-| `report submit-detail` | 获取周月报规则提交详情 | `--template-id` `--submit-state` | submitState: `ON_TIME`(按时)/`LATE`(迟交)/`NOT_SUBMITTED`(未提交)；可选 `--query-date`(ISO-8601)、`--page`、`--page-size`、`--keyword`(搜索员工名称) |
-
-#### report submit-detail --submit-state 枚举
-
-| 值 | 说明 |
-|------|------|
-| `ON_TIME` | 按时提交 |
-| `LATE` | 迟交 |
-| `NOT_SUBMITTED` | 未提交 |
-
-## 意图判断
-
-用户说"战略解码/战略目标/OGSM":
-- 查看/列表 → `strategy list`
-- 详情 → `strategy detail`
-- 修改/更新 → `strategy update`（先查后改）
-
-用户说"经营合约/合约/KPI合约":
-- 查看/列表 → `contract list`
-- 字段配置 → `contract fields`
-- 详情 → `contract detail`
-- 修改/更新 → `contract update`（先查后改）
-
-用户说"计分卡/scorecard/绩效看板":
-- 查看详情 → `scorecard detail`
-- 实体详情 → `scorecard entity-detail`
-- 修改/更新 → `scorecard update`
-- 搜索计分卡指标与关键事项 → `scorecard search-entities --keyword "关键词"`
-
-用户说"目标/OKR/我的目标/个人目标":
-- 规则周期 → `user rules`
-- 目标列表 → `user objectives`
-
-用户说"目标模板/模板管理":
-- 查看模板列表 → `obj-template list`
-- 新增模板 → `obj-template create-or-update --title "模板名称"`
-- 更新模板 → `obj-template create-or-update --template-id TPL_ID`
-
-用户说"周月报/周报统计/提交情况/跟催/迟交/未提交":
-- 查看提交统计列表 → `report list-statistics`
-- 查看某规则的提交详情（按时/迟交/未提交人员明细） → `report submit-detail`
-
-## 核心工作流
+涉及“我本人”“个人与主部门分别查询”时，切换到 Contact skill 解析稳定身份并执行：
 
 ```bash
-# 1. 查看战略解码列表（按部门）
-dws agoal strategy list --scope-type DEPT --scope-id DEPT_ID
-
-# 1.1 查看战略解码列表（按个人）
-dws agoal strategy list --scope-type PERSONAL --scope-id USER_ID
-
-# 2. 查看战略解码详情
-dws agoal strategy detail --profile-id PROFILE_ID
-
-# 3. 更新战略解码（基于详情返回的数据修改后传入）
-dws agoal strategy update --profile-id PROFILE_ID \
-  --content '[{"id":"entity1","title":{"title":"新目标"},"entityType":"OGSM_OBJECTIVE","status":"NORMAL","executors":["dingId1"]}]'
-
-# 4. 查看经营合约列表（按个人）
-dws agoal contract list --scope-type PERSONAL --scope-id USER_ID
-
-# 4.1 查看经营合约列表（按部门）
-dws agoal contract list --scope-type DEPT --scope-id DEPT_ID
-
-# 5. 查看经营合约字段列表
-dws agoal contract fields
-
-# 6. 查看经营合约详情
-dws agoal contract detail --contract-id CONTRACT_ID
-
-# 7 更新经营合约（基于详情返回的数据修改后传入）
-dws agoal contract update --contract-id CONTRACT_ID \
-  --dimensions '[{"id":"dim1","title":"维度名称","objectives":[...]}]'
-
-# 8. 查看计分卡详情
-dws agoal scorecard detail --selected-time "2025-01-01T00:00:00+08:00" --dept-id DEPT_ID
-
-# 9. 查看计分卡实体详情
-dws agoal scorecard entity-detail --sc-id SC_ID --entity-id ENTITY_ID
-
-# 10. 更新计分卡
-dws agoal scorecard update --dept-id DEPT_ID --selected-time "2025-01-01T00:00:00+08:00" --id SC_ID --tracking-period-type MONTHLY --content '[{"id":"dim1","title":"业绩","items":[{"id":"item1","title":"收入","target":"100"}]}]'
-
-# 10.1 搜索计分卡指标与关键事项
-dws agoal scorecard search-entities --keyword "业绩"
-dws agoal scorecard search-entities --keyword "业绩" --page 1 --page-size 20
-
-# 11. 查看用户规则 → 提取 ruleId 和 periodId
-dws agoal user rules --user-id USER_ID
-
-# 12. 查看用户目标
-dws agoal user objectives --user-id USER_ID --rule-id RULE_ID --period-ids "period1,period2"
-
-# 13. 查看周月报提交统计列表
-dws agoal report list-statistics
-
-# 13.1 按关键词搜索规则
-dws agoal report list-statistics --keyword "周报规则"
-
-# 14. 查看某规则的按时提交详情
-dws agoal report submit-detail --template-id TPL_ID --submit-state ON_TIME
-
-# 14.1 查看迟交详情（带分页和日期）
-dws agoal report submit-detail --template-id TPL_ID --submit-state LATE --query-date "2026-06-18T00:00:00+08:00" --page 1 --page-size 20
-
-# 15. 获取目标模板列表
-dws agoal obj-template list
-
-# 15.1 搜索目标模板
-dws agoal obj-template list --keyword "业绩"
-
-# 16. 新增目标模板
-dws agoal obj-template create-or-update --title "业绩模板" --objective-weight --dimension-weight --dimensions '[...]'
-
-# 16.1 更新目标模板
-dws agoal obj-template create-or-update --template-id TPL_ID --title "业绩模板" --dimensions '[...]'
+dws contact user get-self --format json
 ```
 
-## 上下文传递表
+从真实返回提取 `orgEmployeeModel.userId` 和主部门 ID。禁止把 `me`、`self`、空字符串、用户名或 Profile 当作 `--scope-id` / `--user-id`。如果返回多个部门但没有唯一主部门标记，先让用户选择，不默认取第一项。
 
-| 操作 | 从返回中提取 | 用于 |
-|------|-------------|------|
-| `strategy list` | `profileId` | `strategy detail` / `strategy update` 的 `--profile-id` |
-| `strategy detail` | 完整实体数据 | `strategy update` 的 `--content`（基于此修改） |
-| `contract list` | `contractId` | `contract detail` / `contract update` 的 `--contract-id` |
-| `contract detail` | 完整维度数据 | `contract update` 的 `--dimensions`（基于此修改） |
-| `scorecard detail` | `scId`、`entityId` | `scorecard entity-detail` / `scorecard update` 的 `--id` |
-| `user rules` | `ruleId`、`periodIds` | `user objectives` 的 `--rule-id` `--period-ids` |
-| `report list-statistics` | `templateId`（列表项中） | `report submit-detail` 的 `--template-id` |
-| `obj-template list` | `templateId` | `obj-template create-or-update` 的 `--template-id`(更新时) |
+分别查询个人和部门范围，不用另一范围补空结果：
 
-## 注意事项
+```bash
+dws agoal strategy list --scope-type PERSONAL --scope-id <USER_ID> --format json
+dws agoal strategy list --scope-type DEPT --scope-id <DEPT_ID> --format json
+dws agoal contract list --scope-type PERSONAL --scope-id <USER_ID> --format json
+dws agoal contract list --scope-type DEPT --scope-id <DEPT_ID> --format json
+```
 
-- **所有 update 命令都是覆盖逻辑**：必须先用对应的 detail/list 查询到完整数据，在原数据基础上修改后再传入，否则未传入的数据会被删除
-- 所有命令支持可选参数 `--request-id`
-- `--scope-type` 仅支持 `DEPT`（按部门）和 `PERSONAL`（按个人）两种
-- `--selected-time` 接受 ISO-8601 字符串（如 `"2026-01-01T00:00:00+08:00"`）
-- `--period-ids` 为逗号分隔的字符串，如 `"period1,period2"`
-- `report submit-detail` 的 `--query-date` 接受 ISO-8601 字符串（如 `"2026-06-18T00:00:00+08:00"`），不传则默认当天
-- `report submit-detail` 的 `--page` 和 `--page-size` 默认为 1 和 10，不传时由服务端使用默认值
+原子查询返回 `success=true` 且 `content=[]` 时，结论是该精确范围为空；不要换上级部门、其它人员或搜索结果补数。
 
----
+### 经营合约字段
 
-## SKILL 摘要（原 dingtalk-agoal/SKILL.md 正文）
+```bash
+dws agoal +contract-fields --format json
+dws agoal +contract-fields --keyword <KEYWORD> --format json
+```
 
-## 意图表
+按返回字段解释，不互相推断：`required` 决定必填/可选分组，`active` 表示是否启用，`forceActive` 和 `forceRequired` 只在其真实为 `true` 时标为强制。若 `required=false` 与 `forceRequired=true`，或 `active=false` 与 `forceActive=true` 同时出现，保留原值并标记服务端字段冲突，不自行改组或选择优先级。字段编码取 `code`，类型取 `type`，格式补充可取 `scheme.format`。
 
-| 用户说 | 命令 |
-|--------|------|
-| "查战略解码 / 战略列表" | `dws agoal strategy list` |
-| "查战略详情" | `dws agoal strategy detail --profile-id <id>` |
-| "更新战略解码" | 先 `strategy detail` 获取完整内容，再 `strategy update` 覆盖更新 |
-| "查经营合约" | `dws agoal contract list` / `contract detail` |
-| "更新经营合约" | 先 `contract detail` 获取完整内容，再 `contract update` 覆盖更新 |
-| "查计分卡" | `dws agoal scorecard detail` / `scorecard entity-detail` |
-| "搜索计分卡指标与关键事项" | `dws agoal scorecard search-entities --keyword <KW>` |
-| "更新计分卡" | 先查详情，再按 [agoal.md](./agoal.md) 覆盖更新 |
-| "查周月报统计/提交情况/跟催" | `dws agoal report list-statistics` / `report submit-detail` |
+### 默认规则、周期与个人目标
 
-## 硬约束
+只需规则和周期列表时使用 `+user-rules`。当前 Shortcut 不投影顶层 `preference`；用户问“默认/偏好规则或周期”时，改用原子读取：
 
-- `strategy update`、`contract update`、`scorecard update` 都是覆盖式更新，必须先查询详情，在返回数据基础上修改后再提交。
-- 所有命令带 `--format json`；涉及写操作时回查确认。
+```bash
+dws agoal user rules --format json
+```
+
+从 `content.preference.ruleId` 和 `content.preference.periodId` 精确定位默认规则与周期，不把第一条规则、`defaultPeriodIds` 或最近开始的周期冒充偏好。
+
+查询本人目标前，用 `contact user get-self` 取得真实用户 ID。比较“当前偏好周期与前一期”时：
+
+1. 以 `preference.periodId` 对应周期为当前期。
+2. 用 `nameEN` / `nameCn` 中的季度 `Q1`～`Q4`、半年 `S1`～`S2`、`Annual` / `年度` 识别粒度。在 `currentPeriods + historyPeriods` 的同粒度候选中，选择 `endDate < 当前期 startDate` 且 `endDate` 最大的一项；没有唯一候选时先让用户选择。
+3. 每个周期单独查询以保留空周期，不为回答两期而扩展查询其它粒度。
+
+```bash
+dws agoal user objectives --user-id <USER_ID> --rule-id <RULE_ID> --period-ids <PERIOD_ID> --format json
+```
+
+秒或毫秒时间戳统一转换为 `Asia/Shanghai` 的可读时间；不要根据 FY 名称猜日期。
+
+### 周月报统计与人员明细
+
+```bash
+dws agoal +report-statistics-list --keyword <RULE_KEYWORD> --format json
+dws agoal +report-submit-detail --template-id <TEMPLATE_ID> --submit-state <ON_TIME|LATE|NOT_SUBMITTED> --query-date <ISO_DATE> --page 1 --page-size 10 --format json
+```
+
+- `enableStatistic=false` 时，列表里的 `onTime` / `late` / `notSubmitted` 零值不能证明无人提交；明确标为“统计未启用/列表值不可据此判断”。使用 `--keyword` 后仍按真实返回规则名核对匹配结果，不仅凭请求参数声称全部名称匹配。
+- 用户要求找人数最多的规则，而候选统计关闭或并列时，对所有候选用同一 `query-date` 查询目标状态的第一页，以 `totalCount` 排名；并列再按用户指定规则处理，未指定时可按真实 `lastModified` 最近者展开并说明。
+- 选中规则后，再分别查询 `ON_TIME`、`LATE`、`NOT_SUBMITTED`。把列表统计值和明细 `totalCount` 并排展示，差异单列。
+- “今天”必须先按当前会话时区确定一个日期，并在同一任务的所有明细调用中显式传入同一个 `--query-date`，避免跨午夜漂移。
+- 人员详情属于敏感数据，只返回用户要求的最小字段，不把原始人员结果写入无关文档或日志。
+
+### 目标模板分页与去重
+
+```bash
+dws agoal +obj-template-list --keyword <KEYWORD> --page 1 --page-size 10 --format json
+dws agoal +obj-template-list --keyword <KEYWORD> --page 2 --page-size 10 --format json
+```
+
+用户明确要求前两页时必须真实查询两页，不因第一页 `totalCount` 较小就声称第二页为空。逐页报告 `count`，用服务端 `totalCount` 表示系统总数；合并时优先用稳定 `id`，缺失时用 `templateId` 去重，标题相同但 ID 不同仍是不同模板。Golden Route 会在两者都缺失时失败；不要回退为按标题去重。权重只按 `objectiveWeight`、`dimensionWeight`、`computeByWeight` 的真实布尔值解释。
+
+## 其它原子命令
+
+仅在上述 Golden Route 不覆盖且当前叶子 Help 存在时使用：
+
+```bash
+dws agoal strategy detail --profile-id <PROFILE_ID> --format json
+dws agoal contract detail --contract-id <CONTRACT_ID> --format json
+dws agoal scorecard detail --selected-time <ISO_TIME> --dept-id <DEPT_ID> --format json
+dws agoal scorecard entity-detail --sc-id <SC_ID> --entity-id <ENTITY_ID> --format json
+dws agoal scorecard search-entities --keyword <KEYWORD> --page 1 --page-size 20 --format json
+```
+
+后续命令使用的 `profileId`、`contractId`、`scId`、`entityId`、`ruleId`、`periodId` 和 `templateId` 必须来自前一步真实返回。
+
+## 写操作硬约束
+
+当前没有可用的 Agoal 写 Golden Route。`strategy update`、`contract update`、`scorecard update` 和 `obj-template create-or-update` 都是覆盖写：
+
+1. 先读取目标对象的完整详情；模板更新先读取稳定模板 ID 对应的完整数据。
+2. 只在完整旧数据上修改用户指定字段，保留其余字段；禁止构造局部 JSON 覆盖。
+3. 执行前展示对象、变更字段、覆盖范围和最终参数摘要，等待用户明确确认；确认后才允许追加 `--yes`。
+4. 执行后回读同一稳定 ID，逐字段验证终态；读回不一致或不可用时不得宣称成功。
+
+新增模板同样属于写操作。没有删除或恢复闭环时，不把试写当作验证手段。

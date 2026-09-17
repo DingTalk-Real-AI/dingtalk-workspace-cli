@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
 VERSION="${1:-${DWS_PACKAGE_VERSION:-}}"
 
@@ -98,6 +98,70 @@ verify_binary_version() {
     printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }
+  build_info="$(go version -m "$binary")" || {
+    printf '%s does not expose readable Go build information\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'build	CGO_ENABLED=1' || {
+    printf '%s was not built with CGO enabled\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'dep	safechat-go-sdk	' || {
+    printf '%s does not link the SafeChat backend\n' "$asset" >&2
+    return 1
+  }
+
+  case "$asset" in
+    dws-darwin-amd64*) target_os=darwin; target_arch=amd64 ;;
+    dws-darwin-arm64*) target_os=darwin; target_arch=arm64 ;;
+    dws-linux-amd64*) target_os=linux; target_arch=amd64 ;;
+    dws-linux-arm64*) target_os=linux; target_arch=arm64 ;;
+    dws-windows-amd64*) target_os=windows; target_arch=amd64 ;;
+    dws-windows-arm64*) target_os=windows; target_arch=arm64 ;;
+  esac
+  if [ -e "$extract_dir/.dws-runtime" ]; then
+    printf '%s contains a legacy sidecar runtime payload\n' "$asset" >&2
+    return 1
+  fi
+  library="$(cd "$ROOT" && go run ./scripts/build/runtime-payload materialize \
+    "$binary" "$extract_dir/cache" "$target_os" "$target_arch")" || return 1
+  runtime_root="$(dirname "$library")"
+  [ -f "$runtime_root/manifest.json" ] || {
+    printf '%s does not contain an embedded runtime manifest\n' "$asset" >&2
+    return 1
+  }
+  if [ -e "$runtime_root/ps" ] || [ -L "$runtime_root/ps" ]; then
+    printf '%s contains retired ps data files\n' "$asset" >&2
+    return 1
+  fi
+  target="$target_os/$target_arch"
+  [ -f "$library" ] || {
+    printf '%s does not contain its target runtime library\n' "$asset" >&2
+    return 1
+  }
+  if [ "$target_os" = linux ]; then
+    (cd "$ROOT" && go run ./scripts/build/linux-abi "$binary" "$library") || return 1
+  fi
+  manifest_library_sha="$(sed -n 's/.*"library_sha256": "\([0-9a-f]*\)".*/\1/p' "$runtime_root/manifest.json")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual_library_sha="$(sha256sum "$library" | awk '{print $1}')"
+  else
+    actual_library_sha="$(shasum -a 256 "$library" | awk '{print $1}')"
+  fi
+  [ "$manifest_library_sha" = "$actual_library_sha" ] || {
+    printf '%s runtime library checksum does not match its manifest\n' "$asset" >&2
+    return 1
+  }
+  grep -Fq "\"target\": \"$target\"" "$runtime_root/manifest.json" || {
+    printf '%s runtime target does not match its manifest\n' "$asset" >&2
+    return 1
+  }
+  library_count="$(find "$runtime_root" -maxdepth 1 -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) | wc -l | tr -d ' ')"
+  [ "$library_count" = 1 ] || {
+    printf '%s contains %s runtime libraries; expected exactly one\n' "$asset" "$library_count" >&2
+    return 1
+  }
+
 }
 
 for asset in $EXPECTED_PLATFORM_ASSETS; do

@@ -40,8 +40,11 @@ func TestCrossPlatformCoverageHRbrainSemanticCatalogExactlyCoversRegisteredSurfa
 			missing = append(missing, command)
 			continue
 		}
-		if record.Public || record.Availability != "" || !record.Reviewed || !item.SemanticReviewed || item.Availability != shortcut.AvailabilityUnavailable || !item.Hidden {
+		if record.Public || record.Availability != "" || item.Availability != shortcut.AvailabilityUnavailable || !item.Hidden {
 			t.Errorf("%s availability/review drift", command)
+		}
+		if !record.Reviewed || !item.SemanticReviewed {
+			t.Errorf("%s review drift", command)
 		}
 		if strings.TrimSpace(item.SemanticDelta) == "" || item.SemanticDelta != record.SemanticDelta {
 			t.Errorf("%s semantic delta drift", command)
@@ -69,7 +72,7 @@ func TestCrossPlatformCoverageHRbrainSemanticCatalogExactlyCoversRegisteredSurfa
 	if len(missing) > 0 || len(stale) > 0 {
 		t.Fatalf("catalog mismatch: missing=%v stale=%v", missing, stale)
 	}
-	if blockerCounts["adapter_business_service"] != 9 || blockerCounts["tenant_fixture"] != 2 {
+	if blockerCounts["adapter_business_service"] != 8 || blockerCounts["tenant_fixture"] != 3 {
 		t.Fatalf("blocker counts = %#v", blockerCounts)
 	}
 }

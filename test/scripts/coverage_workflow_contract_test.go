@@ -173,6 +173,17 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	}
 
 	fullJob := admission[fullStart:supportingStart]
+	const exactCoverageMatrix = `      matrix:
+        shard:
+          - app
+          - cli
+          - generators
+          - helpers
+          - remaining
+    steps:`
+	if !strings.Contains(fullJob, exactCoverageMatrix) {
+		t.Error("coverage-current-full must retain exactly five hosted-runner shards")
+	}
 	for _, want := range []string{
 		"needs.lint.outputs.full_suite == 'true'",
 		"fail-fast: false",
@@ -181,15 +192,16 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"          - generators",
 		"          - helpers",
 		"          - remaining",
-		`./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD"`,
-		"go test -count=1 -p 1",
-		`-coverprofile="coverage-shard-$COVERAGE_SHARD.txt"`,
-		"-covermode=atomic",
+		`./scripts/ci/run-coverage-shard.sh run \`,
+		`"$COVERAGE_SHARD" "coverage-shard-$COVERAGE_SHARD.txt"`,
 		"name: coverage-current-shard-${{ matrix.shard }}",
 	} {
 		if !strings.Contains(fullJob, want) {
 			t.Errorf("coverage-current-full missing shard contract %q", want)
 		}
+	}
+	if strings.Contains(fullJob, "go test -count=1 -p 1") {
+		t.Error("coverage-current-full must delegate app partition balancing to the shared shard runner")
 	}
 
 	baselineJob := admission[baselineStart:metadataStart]
@@ -220,6 +232,13 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	if strings.Contains(baselineJob, "restore-keys") {
 		t.Error("coverage baseline cache must stay exact-key; prefix restore-keys can resurrect a wrong-commit baseline")
 	}
+	if !strings.Contains(baselineJob, `"$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh"`) ||
+		!strings.Contains(baselineJob, `"$GITHUB_WORKSPACE/coverage-base.txt"`) {
+		t.Error("coverage-baseline cold fallback must reuse the bounded in-job partition runner")
+	}
+	if strings.Contains(baselineJob, "./ ./cmd/... ./internal/... ./skills/...") {
+		t.Error("coverage-baseline must not retain one long-lived full-suite go test process")
+	}
 
 	metadataJob := admission[metadataStart:gateStart]
 	for _, want := range []string{
@@ -239,8 +258,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"id: metadata-current-cache",
 		"id: metadata-source-cache",
 		"key: dws-coverage-full-v2-${{ env.COVERAGE_SOURCE_REF }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
 		"id: metadata-target-cache-verification",
 		"lookup-only: true",
@@ -270,6 +288,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"for shard in app cli generators helpers remaining; do",
 		"test ! -f coverage.txt",
 		`test "$(head -n 1 "$profile")" = "mode: atomic"`,
+		`./scripts/ci/merge-coverage-profiles.sh coverage.txt "${profiles[@]}"`,
 		"github.event_name == 'push'",
 		"cp coverage.txt coverage-cache.txt",
 		"path: " + cachePath,
@@ -289,6 +308,217 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 
 	if strings.Count(gateJob, "path: "+cachePath) != 2 {
 		t.Error("green main push must save and verify the candidate profile through the same cache path/version as baseline restore")
+	}
+}
+
+func TestCoverageWorkflowReusesExactAdmittedMergeEvidence(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile(ci.yml) error = %v", err)
+	}
+	admission := string(data)
+
+	lintStart := strings.Index(admission, "\n  lint:\n")
+	runtimeStart := strings.Index(admission, "\n  runtime-payload:\n")
+	if lintStart < 0 || runtimeStart <= lintStart {
+		t.Fatal("CI workflow missing Lint job boundaries")
+	}
+	lintJob := admission[lintStart:runtimeStart]
+	for _, want := range []string{
+		"actions: read",
+		"statuses: read",
+		"admitted_merge: ${{ steps.classify.outputs.admitted_merge }}",
+		"admitted_merge_head_sha: ${{ steps.classify.outputs.admitted_merge_head_sha }}",
+		"admitted_merge_run_id: ${{ steps.classify.outputs.admitted_merge_run_id }}",
+		"admitted_merge_artifact_id: ${{ steps.classify.outputs.admitted_merge_artifact_id }}",
+		"admitted_merge_artifact_digest: ${{ steps.classify.outputs.admitted_merge_artifact_digest }}",
+		"let admittedMerge = false;",
+		"github.rest.repos.getCommit",
+		"targetCommit.parents.length !== 2",
+		"targetCommit.parents[0]?.sha !== expectedBefore",
+		"github.rest.pulls.listPullRequestsAssociatedWithCommit",
+		"pull.merge_commit_sha === expectedAfter",
+		"pull.base?.sha === expectedBefore",
+		"pull.base?.repo?.full_name ===",
+		"pull.head?.sha === admittedHeadSha",
+		"targetCommit.commit?.tree?.sha !== headCommit.commit?.tree?.sha",
+		"github.rest.repos.getContent",
+		"'.github/workflows/ci.yml'",
+		"'.github/workflows/ai-behavior-check.yml'",
+		"await readProtectedWorkflowBlob(protectedWorkflow, expectedBefore)",
+		"await readProtectedWorkflowBlob(protectedWorkflow, admittedHeadSha)",
+		"baseWorkflowBlob !== headWorkflowBlob",
+		"PR changed protected workflow",
+		"github.rest.checks.listForRef",
+		"const requiredContexts = [",
+		"const fullSuiteEvidenceContexts = [",
+		"'Coverage (current: app)'",
+		"'Coverage (current: remaining)'",
+		"'Coverage (supporting)'",
+		"PR head did not execute the complete coverage suite",
+		"github.rest.repos.listCommitStatusesForRef",
+		"status.target_url === expectedAIStatusTarget",
+		"github.rest.actions.getWorkflowRun",
+		"aiWorkflowRun.event !== 'pull_request_target'",
+		"aiWorkflowRun.head_sha !== admittedHeadSha",
+		"AI Behavior workflow run is not bound to the admitted PR head",
+		"github.rest.actions.getWorkflow",
+		"github.rest.actions.listWorkflowRuns",
+		"run.event === 'pull_request'",
+		"run.head_sha === admittedHeadSha",
+		"run.head_repository?.full_name === admittedPull.head?.repo?.full_name",
+		"run.status === 'completed'",
+		"run.conclusion === 'success'",
+		"completedByMerge(run.updated_at)",
+		"github.rest.actions.listWorkflowRunArtifacts",
+		"artifact.name === 'coverage-report'",
+		"artifact.size_in_bytes <= 134217728",
+		"artifact.workflow_run?.head_sha === admittedHeadSha",
+		"/^sha256:[0-9a-f]{64}$/.test(artifact.digest || '')",
+		"core.setOutput('admitted_merge', String(admittedMerge))",
+		"core.setOutput('admitted_merge_head_sha', admittedMergeHeadSha)",
+		"core.setOutput('admitted_merge_run_id', admittedMergeRunId)",
+		"core.setOutput('admitted_merge_artifact_id', admittedMergeArtifactId)",
+		"core.setOutput('admitted_merge_artifact_digest', admittedMergeArtifactDigest)",
+		"fullSuite = false;",
+		"releaseSensitive = false;",
+		"interfaceSensitive = false;",
+		"mcpSensitive = false;",
+		"editionSensitive = false;",
+		"platformSensitive = false;",
+		"name: Record admitted-merge reuse",
+	} {
+		if !strings.Contains(lintJob, want) {
+			t.Errorf("Lint admitted-merge classifier missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"restore-keys",
+		"targetCommit.parents.length === 1",
+		"comparison.files.every",
+	} {
+		if strings.Contains(lintJob, forbidden) {
+			t.Errorf("Lint admitted-merge classifier contains unsafe shortcut %q", forbidden)
+		}
+	}
+	for _, forbiddenJob := range []string{
+		"\n  admitted-merge:\n",
+		"\n  coverage-admitted-merge:\n",
+	} {
+		if strings.Contains(admission, forbiddenJob) {
+			t.Errorf("admitted-merge reuse must not add a new job %q", forbiddenJob)
+		}
+	}
+
+	focusedStart := strings.Index(admission, "\n  test-focused:\n")
+	if focusedStart <= runtimeStart {
+		t.Fatal("CI workflow missing Runtime Payload job boundaries")
+	}
+	runtimeJob := admission[runtimeStart:focusedStart]
+	if !strings.Contains(runtimeJob, "needs.lint.outputs.admitted_merge == 'true'") {
+		t.Error("main-only Runtime Payload validation must still run for admitted merges")
+	}
+
+	testStart := strings.Index(admission, "\n  test:\n")
+	coverageCurrentStart := strings.Index(admission, "\n  coverage-current:\n")
+	if testStart < 0 || coverageCurrentStart <= testStart {
+		t.Fatal("CI workflow missing Test and coverage job boundaries")
+	}
+	testJob := admission[testStart:coverageCurrentStart]
+	for _, want := range []string{
+		"ADMITTED_MERGE: ${{ needs.lint.outputs.admitted_merge }}",
+		`[ "$ADMITTED_MERGE" = true ]`,
+		"focused shards:$FOCUSED_RESULT",
+		"race shards:$RACE_RESULT",
+	} {
+		if !strings.Contains(testJob, want) {
+			t.Errorf("Test aggregate missing admitted-merge contract %q", want)
+		}
+	}
+
+	metadataStart := strings.Index(admission, "\n  coverage-main-metadata:\n")
+	coverageStart := strings.Index(admission, "\n  coverage:\n")
+	policyStart := strings.Index(admission, "\n  policy:\n")
+	if metadataStart < 0 || coverageStart <= metadataStart || policyStart <= coverageStart {
+		t.Fatal("CI workflow missing main-cache, Coverage, or Policy boundaries")
+	}
+	mainCacheJob := admission[metadataStart:coverageStart]
+	for _, want := range []string{
+		"needs.lint.outputs.admitted_merge == 'true'",
+		"actions: read",
+		"name: Download admitted PR coverage profile",
+		"id: admitted-coverage",
+		"ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}",
+		"ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}",
+		"ADMITTED_ARTIFACT_ID: ${{ needs.lint.outputs.admitted_merge_artifact_id }}",
+		"ADMITTED_ARTIFACT_DIGEST: ${{ needs.lint.outputs.admitted_merge_artifact_digest }}",
+		"gh api \"repos/$GITHUB_REPOSITORY/actions/artifacts/$ADMITTED_ARTIFACT_ID\"",
+		".size_in_bytes <= 134217728",
+		".workflow_run.head_sha == $head",
+		"gh api \"repos/$GITHUB_REPOSITORY/actions/artifacts/$ADMITTED_ARTIFACT_ID/zip\"",
+		`test "sha256:$actual_digest" = "$ADMITTED_ARTIFACT_DIGEST"`,
+		"unzip -q admitted-coverage.zip",
+		"coverage-admission.json",
+		".schema_version == 1",
+		".workflow_run_id == $run",
+		".head_sha == $head",
+		`.coverage_kind == "full"`,
+		`test "$(wc -c < admitted-coverage/coverage-admission.json)" -le 4096`,
+		`test "$(wc -c < admitted-coverage/coverage.txt)" -le 67108864`,
+		`echo "valid=true" >> "$GITHUB_OUTPUT"`,
+		`echo "valid=false" >> "$GITHUB_OUTPUT"`,
+		"cp admitted-coverage/coverage.txt coverage-cache.txt",
+		"name: Recompute admitted merge coverage profile",
+		"steps.admitted-coverage.outputs.valid != 'true'",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
+		"lookup-only: true",
+		"fail-on-cache-miss: true",
+	} {
+		if !strings.Contains(mainCacheJob, want) {
+			t.Errorf("main cache producer missing admitted-merge contract %q", want)
+		}
+	}
+	if strings.Contains(mainCacheJob, "restore-keys") {
+		t.Error("admitted-merge cache producer must retain exact keys")
+	}
+	if strings.Contains(mainCacheJob, "name: Install archive tooling for admitted merge") {
+		t.Error("archive tooling failure must be handled by artifact fallback, not block full recomputation")
+	}
+
+	coverageJob := admission[coverageStart:policyStart]
+	for _, want := range []string{
+		"ADMITTED_MERGE: ${{ needs.lint.outputs.admitted_merge }}",
+		`if [ "$ADMITTED_MERGE" = true ]; then`,
+		"main_metadata_expected=success",
+		"needs.lint.outputs.admitted_merge != 'true'",
+		"name: Record coverage admission metadata",
+		"COVERAGE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+		"COVERAGE_RUN_ID: ${{ github.run_id }}",
+		"coverage_kind",
+		"coverage-admission.json",
+	} {
+		if !strings.Contains(coverageJob, want) {
+			t.Errorf("Coverage aggregate missing admitted-merge contract %q", want)
+		}
+	}
+
+	policyJob := admission[policyStart:]
+	for _, want := range []string{
+		"name: Record admitted-merge reuse",
+		"needs.lint.outputs.admitted_merge == 'true'",
+		"Policy reuses successful Code Admission",
+		"Interface Integrity reuses successful Code Admission",
+		"CLI Smoke reuses successful Code Admission",
+		"Mock MCP reuses successful Code Admission",
+		"Edition reuses successful Code Admission",
+	} {
+		if !strings.Contains(policyJob, want) {
+			t.Errorf("Policy required context missing admitted-merge contract %q", want)
+		}
 	}
 }
 
@@ -342,8 +572,7 @@ func TestFormulaCoverageBaselinePromotionContract(t *testing.T) {
 		"id: target-cache",
 		"id: parent-cache",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.parent_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
 		"lookup-only: true",
 		"fail-on-cache-miss: true",
@@ -693,8 +922,7 @@ func TestCoverageBaselineRepairContract(t *testing.T) {
 		"id: target-cache",
 		"actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"id: target-cache-verification",
 		"lookup-only: true",

@@ -4,9 +4,13 @@
 package app
 
 import (
+	"bytes"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +25,17 @@ func TestCrossPlatformCoverageSheetWhiteboardMarkdownRoutes(t *testing.T) {
 
 func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *cobra.Command, tools map[string]map[string]any) {
 	t.Helper()
+	product, ok := contract.LookupProductDecl("markdown")
+	if !ok {
+		t.Fatal("markdown ProductDecl is not registered")
+	}
+	productSelection := product.Selection.AgentSummary + " " + strings.Join(product.Selection.UseWhen, " ")
+	for _, phrase := range []string{"对比", "本地草稿"} {
+		if !strings.Contains(productSelection, phrase) {
+			t.Errorf("markdown ProductDecl selection does not route %q intent: %q", phrase, productSelection)
+		}
+	}
+
 	registered := 0
 	for _, item := range shortcut.All() {
 		if item.Service == "markdown" {
@@ -39,7 +54,7 @@ func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *c
 	routes := map[string]route{
 		"create": {
 			canonical: "markdown.create", confirmation: "not_required",
-			flags: []string{"content", "file", "folder", "name", "space-id", "workspace"},
+			flags: []string{"content", "file", "folder", "name", "space-id", "theme", "workspace"},
 		},
 		"fetch": {
 			canonical: "markdown.fetch", confirmation: "not_required",
@@ -47,7 +62,7 @@ func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *c
 		},
 		"overwrite": {
 			canonical: "markdown.overwrite", confirmation: "user_required",
-			flags: []string{"content", "dry-run", "file", "name", "node", "space-id", "workspace"},
+			flags: []string{"content", "dry-run", "file", "name", "node", "space-id", "theme", "workspace"},
 		},
 		"patch": {
 			canonical: "markdown.patch", confirmation: "user_required",
@@ -116,6 +131,77 @@ func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *c
 		}
 		if got := schemaContractString(tool["interface_reason"]); got == "" {
 			t.Errorf("markdown %s is missing the reviewed composite routing reason", name)
+		}
+		if name == "diff" {
+			parameters := schemaContractMap(tool["parameters"])
+			for parameter, phrase := range map[string]string{
+				"version":  "正整数",
+				"version2": "正整数",
+				"context":  "非负整数",
+			} {
+				if description := schemaContractString(parameters[parameter]["description"]); !strings.Contains(description, phrase) {
+					t.Errorf("markdown diff --%s description=%q, want range contract containing %q", parameter, description, phrase)
+				}
+			}
+		}
+	}
+}
+
+func TestMarkdownThemeHelpAndFinalSchemaStayHomologous(t *testing.T) {
+	root := NewRootCommand()
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, root)
+	wantThemes := []string{"default", "songyan", "taiying", "sujian", "juxia", "qingya"}
+
+	for _, name := range []string{"create", "overwrite"} {
+		t.Run(name, func(t *testing.T) {
+			leaf := mustFindCommand(t, root, "markdown", name)
+			themeFlag := leaf.Flags().Lookup("theme")
+			if themeFlag == nil {
+				t.Fatalf("markdown %s Help is missing --theme", name)
+			}
+			for _, themeID := range wantThemes {
+				if !strings.Contains(themeFlag.Usage, themeID) {
+					t.Errorf("markdown %s --theme Help is missing %q: %q", name, themeID, themeFlag.Usage)
+				}
+			}
+			if !strings.Contains(leaf.Example, "--theme qingya") {
+				t.Errorf("markdown %s Example does not demonstrate --theme: %q", name, leaf.Example)
+			}
+
+			var help bytes.Buffer
+			leaf.SetOut(&help)
+			leaf.SetErr(&help)
+			if err := leaf.Help(); err != nil {
+				t.Fatal(err)
+			}
+			if rendered := help.String(); !strings.Contains(rendered, "--theme string") || !strings.Contains(rendered, "x-we-markdown-theme") {
+				t.Errorf("markdown %s rendered Help does not publish the theme contract:\n%s", name, rendered)
+			}
+
+			tool := tools["markdown."+name]
+			if tool == nil {
+				t.Fatalf("markdown.%s missing from final Runtime Schema", name)
+			}
+			theme := schemaContractMap(tool["parameters"])["theme"]
+			if theme["property"] != "theme" || theme["required"] != false {
+				t.Errorf("markdown.%s --theme Schema = %#v", name, theme)
+			}
+			if got := schemaContractStringSlice(theme["enum"]); !reflect.DeepEqual(got, wantThemes) {
+				t.Errorf("markdown.%s --theme enum = %#v, want %#v", name, got, wantThemes)
+			}
+		})
+	}
+
+	for _, path := range [][]string{{"markdown", "fetch"}, {"markdown", "diff"}, {"markdown", "patch"}, {"markdown", "comment", "list"}} {
+		leaf := mustFindCommand(t, root, path...)
+		if leaf.Flags().Lookup("theme") != nil {
+			t.Errorf("%s unexpectedly exposes --theme", strings.Join(path, " "))
+		}
+	}
+	markdown := mustFindCommand(t, root, "markdown")
+	for _, child := range markdown.Commands() {
+		if child.Name() == "set-theme" {
+			t.Fatal("markdown set-theme must not be added")
 		}
 	}
 }

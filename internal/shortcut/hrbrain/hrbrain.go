@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0
 
 // Package hrbrain registers fail-closed Shortcut adapters for DingTalk
-// Organization Brain reads. Every declaration remains unavailable until the
-// lower service supplies a verifiable non-null result and safe live fixtures.
+// Organization Brain reads. A declaration becomes available only after the
+// lower service supplies a reviewed, verifiable business response.
 package hrbrain
 
 import (
@@ -24,13 +24,16 @@ import (
 const (
 	hrbrainBlockerAdapterBusiness = "adapter_business_service"
 	hrbrainBlockerTenantFixture   = "tenant_fixture"
+	hrbrainListPoolsReason        = "classified=" + hrbrainBlockerTenantFixture + "; exact and raw calls now accept the explicit content.pools business page and prove a legitimate empty result, but no safe nonempty pool fixture exists to prove stable pool identity and pagination."
 )
 
 func hrbrainUnavailableReason(command string) string {
 	switch command {
+	case "+list-pools":
+		return hrbrainListPoolsReason
 	case "+get-pool", "+list-pool-employees":
 		return "classified=" + hrbrainBlockerTenantFixture + "; exact Shortcut and raw atomic calls reach the same remote operation and upstream error, but no safe nonempty pool fixture exists to prove identity and pagination."
-	case "+list-pools", "+profile-labels":
+	case "+profile-labels":
 		return "classified=" + hrbrainBlockerAdapterBusiness + "; raw atomic calls return success=true with result=null and the exact Shortcut rejects the response, so the business response contract cannot prove a collection or legitimate empty result."
 	case "+profile-metadata", "+query-profile", "+profile-career", "+profile-performance", "+search-employees", "+search-employees-structured", "+search-fields":
 		return "classified=" + hrbrainBlockerAdapterBusiness + "; exact Shortcut and raw atomic calls reach the same remote server, operation, and upstream error, so no Shortcut-layer defect can be repaired without downstream capability or business-service recovery."
@@ -135,7 +138,7 @@ func hrbrainBase(command, description, intent string, result *contract.ResultSpe
 
 var ListPools = func() shortcut.Shortcut {
 	declaration := hrbrainBase(
-		"+list-pools", "查询组织大脑人才池列表", "需要按名称、类型、创建人或标签发现人才池时使用；当前必须保持 unavailable，直到下游返回可验证分页数组。",
+		"+list-pools", "查询组织大脑人才池列表", "需要按名称、类型、创建人或标签发现人才池时使用；严格验证 content.pools 与分页字段，但在获得安全非空人才池 fixture 前保持 unavailable。",
 		hrbrainPageResult("严格校验的人才池搜索页"), hrbrainPagination(),
 		[]shortcut.Flag{
 			{Name: "keyword", Type: shortcut.FlagString, Desc: "人才池名称关键词"},
@@ -162,7 +165,7 @@ var ListPools = func() shortcut.Shortcut {
 		if rt.Changed("labels") {
 			params["labels"] = hrbrainCleanValues(rt.StrSlice("labels"))
 		}
-		return hrbrainCallPage(rt, "list_talent_pools", params, "poolCode")
+		return hrbrainCallPoolsPage(rt, params)
 	}
 	return declaration
 }()
@@ -444,6 +447,23 @@ func hrbrainCallPage(rt *shortcut.RuntimeContext, tool string, params map[string
 	if err != nil {
 		return err
 	}
+	return hrbrainOutputPage(rt, items, evidence)
+}
+
+func hrbrainCallPoolsPage(rt *shortcut.RuntimeContext, params map[string]any) error {
+	page, size := rt.Int("page"), rt.Int("page-size")
+	data, err := rt.CallMCPData("hrbrain", "list_talent_pools", params)
+	if err != nil {
+		return err
+	}
+	items, evidence, err := hrbrainProjectPoolsPage(data, "hrbrain/list_talent_pools", page, size)
+	if err != nil {
+		return err
+	}
+	return hrbrainOutputPage(rt, items, evidence)
+}
+
+func hrbrainOutputPage(rt *shortcut.RuntimeContext, items []map[string]any, evidence hrbrainPage) error {
 	payload := map[string]any{
 		"count": len(items), "items": items, "currentPage": evidence.CurrentPage,
 		"pageSize": evidence.PageSize, "totalCount": evidence.TotalCount, "complete": !evidence.HasMore,
@@ -458,6 +478,49 @@ func hrbrainCallPage(rt *shortcut.RuntimeContext, tool string, params map[string
 	return output.StoreResult(rt.Command().Context(), output.Success(payload, output.WithMeta(&output.Meta{
 		Count: output.NewCount(len(items)), Pagination: pagination,
 	})))
+}
+
+func hrbrainProjectPoolsPage(data map[string]any, operation string, requestedPage, requestedSize int) ([]map[string]any, hrbrainPage, error) {
+	if result, present := data["result"]; present && result != nil {
+		return hrbrainProjectPage(data, operation, requestedPage, requestedSize, "poolCode")
+	}
+	success, ok := data["success"].(bool)
+	if !ok {
+		return nil, hrbrainPage{}, responsecheck.Error(operation, "missing_success", "响应缺少布尔型 success 业务状态")
+	}
+	if !success {
+		return nil, hrbrainPage{}, responsecheck.Error(operation, "remote_failure", "服务明确返回 success=false")
+	}
+	content, ok := data["content"].(map[string]any)
+	if !ok {
+		return nil, hrbrainPage{}, responsecheck.Error(operation, "missing_result", "成功响应既没有非空 result，也没有 content 业务页")
+	}
+	raw, ok := content["pools"].([]any)
+	if !ok {
+		if _, present := content["pools"]; !present {
+			return nil, hrbrainPage{}, responsecheck.Error(operation, "missing_collection", "成功响应缺少 content.pools 数组")
+		}
+		return nil, hrbrainPage{}, responsecheck.Error(operation, "malformed_collection", fmt.Sprintf("响应 content.pools 应为数组，实际为 %T", content["pools"]))
+	}
+	items, err := hrbrainValidateItems(raw, operation, "poolCode")
+	if err != nil {
+		return nil, hrbrainPage{}, err
+	}
+	totalCount, ok := hrbrainInteger(content["totalCount"])
+	if !ok || totalCount < 0 {
+		return nil, hrbrainPage{}, responsecheck.Error(operation, "invalid_total_count", "content.totalCount 缺失、错型或为负数")
+	}
+	canonical := map[string]any{
+		"currentPage": content["currentPage"],
+		"pageSize":    content["pageSize"],
+		"totalCount":  content["totalCount"],
+		"hasMore":     requestedPage*requestedSize < totalCount,
+	}
+	evidence, err := hrbrainParsePage(canonical, operation, requestedPage, requestedSize, len(items))
+	if err != nil {
+		return nil, hrbrainPage{}, err
+	}
+	return items, evidence, nil
 }
 
 func hrbrainRequireCollectionResult(data map[string]any, operation string, identityKeys ...string) ([]map[string]any, error) {

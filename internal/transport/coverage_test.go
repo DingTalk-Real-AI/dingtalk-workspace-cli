@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 // ─── MCP JSON-RPC mock server ──────────────────────────────────────────
@@ -257,10 +259,13 @@ func TestReasonForMethod(t *testing.T) {
 
 // ─── doWithRetry (via CallTool) ────────────────────────────────────────
 
-func TestCallTool_RetriesOn502(t *testing.T) {
+func TestCrossPlatformCoverageCallToolRetriesOn502(t *testing.T) {
 	attempts := 0
 	srv := newMockMCPServer(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts++
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != `{"umid":"retry-value"}` {
+			t.Fatalf("attempt %d runtime extension = %q", attempts, got)
+		}
 		if attempts <= 2 {
 			w.WriteHeader(http.StatusBadGateway)
 			return
@@ -271,6 +276,7 @@ func TestCallTool_RetriesOn502(t *testing.T) {
 		w.Write(jsonRPCResponse(3, result))
 	})
 	c := NewClient(srv.Client())
+	c = c.WithAuth("", map[string]string{requestmeta.DingTalkExtHeader: `{"umid":"retry-value"}`})
 	c.TrustedDomains = []string{"*"}
 	c.MaxRetries = 3
 	c.RetryDelay = time.Millisecond

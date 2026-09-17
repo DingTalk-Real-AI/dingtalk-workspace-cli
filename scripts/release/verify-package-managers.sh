@@ -300,6 +300,8 @@ verify_npm_install() {
     npm install -g "$tarball_path" >/dev/null
 
   [ -x "$npm_prefix/bin/dws" ] || err "npm install did not expose dws in $npm_prefix/bin"
+  [ ! -e "$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/.dws-runtime" ] || \
+    err "npm install retained a legacy sidecar runtime payload"
   with_isolated_agent_env "$npm_home" "$npm_prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
     vendor_bin="$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/dws"
@@ -369,6 +371,7 @@ verify_brew() {
       brew --prefix dingtalk-workspace-cli-local
   )"
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
+  [ ! -e "$prefix/libexec/.dws-runtime" ] || err "Homebrew retained a legacy sidecar runtime payload"
   "$prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
     LC_ALL=C grep -aFq "v$EXPECTED_VERSION" "$prefix/bin/dws" || \

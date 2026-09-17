@@ -41,3 +41,8 @@ func BuildConversationFileContent(
 ) (string, error) {
 	return buildConversationFileContent(dentryID, spaceID, meta)
 }
+
+// ParseConversationFileDownloadURL reuses the native robot file-message link parser.
+func ParseConversationFileDownloadURL(text string) (string, error) {
+	return parseConversationFileDownloadURL(text)
+}

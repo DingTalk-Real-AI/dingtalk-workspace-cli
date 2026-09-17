@@ -18,6 +18,8 @@ dws aitable +section-list-nodes --base-id <B> --format json
 dws aitable +section-move-node --base-id <B> --node-id <N> --new-parent-section-id '' --format json
 ```
 
+后续操作只使用本次创建真实返回的 sectionId。若列表、移动或重命名对同一 sectionId 返回不存在或父节点无效，保留创建返回与后续错误并停止；不要创建替代 Section、更换 ID、重读本文或查询 Help/Catalog，也不要修改无关节点。
+
 ## 删除空 Section
 
 1. 用 `+section-list-nodes` 核对目标 Section 内节点；需要移出的节点逐个 `+section-move-node`。

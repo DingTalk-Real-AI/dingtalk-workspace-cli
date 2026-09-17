@@ -33,7 +33,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
 - [`dws attendance` — Attendance](#dws-attendance) · 4 commands
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 38 commands
+- [`dws chat` — Group Chat / IM](#dws-chat) · 39 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
 - [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
@@ -134,15 +134,16 @@ _Calendar events, participants, meeting rooms, and busy-status queries._
 
 _Group chats, conversations, messages, and robot/webhook integrations._
 
-**38 commands**
+**39 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws chat bot search` | Search robots (bots) created by the current user by keyword. | When the agent needs to resolve one of its own bots by name to a robot code before sending bot messages. |
 | `dws chat conversation-info` | Retrieve basic metadata for a conversation (single chat or group chat) by conversation ID. | When the agent needs context about a conversation (name, type, member count) before operating on it. |
-| `dws chat emotion favorite` | Add a media ID to the current user's personal favorite emotions. | When the agent needs to save an available mediaId as a reusable personal emotion, optionally preserving source message context. |
+| `dws chat emotion favorite` | Add a media ID or a local image (jpg/jpeg/png/gif/webp/bmp, ≤10MB) to the current user's personal favorite emotions. | When the agent needs to save an available mediaId or a local image file as a reusable personal emotion; local images are uploaded through dingtalk-file/upload_media (bizType=chat_emoticon) first, optionally preserving source message context. |
 | `dws chat emotion list` | List the current user's personal favorite emotions. | When the agent needs to inspect available personal emotions or resolve an emotionId/mediaId before sending. |
 | `dws chat emotion send` | Send a personal favorite emotion to a group or direct chat as the authenticated user. | When the agent needs to send a known personal emotion mediaId to exactly one group, userId, or openDingTalkId target. |
+| `dws chat conversation-file upload` | Upload a local file to a conversation file space without sending a message, returning reusable file identifiers. | When the agent explicitly needs conversation-file identifiers without posting a chat message. |
 | `dws chat group create` | Create a new internal group chat with a set of initial members. | When the agent needs to spin up a dedicated group for a new project, incident, or discussion thread. |
 | `dws chat group members` | List members of a group chat; can also be used against the current user to enumerate their groups' members. | When the agent needs the roster of a group before mentioning, removing, or auditing members. |
 | `dws chat group members add` | Add one or more users to an existing group chat. | When the agent expands a group to include additional participants. |
@@ -181,14 +182,26 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 
 _Users, departments, directory lookups, and enterprise onboarding._
 
-**9 commands**
+**21 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws contact account create` | Create a dedicated login account in the current enterprise. | When the user explicitly asks for an enterprise account or login account, rather than a new enterprise organization. |
+| `dws contact dept invite-audit` | Set whether joining a specific department requires admin review (department-level auto-approval). | When the user explicitly asks to enable or disable per-department join-request auditing. |
 | `dws contact dept list-members` | List members of a specific department by department ID. | When the agent needs the roster of a department to target communication or build a team overview. |
 | `dws contact dept search` | Search departments in the organization's contact directory by keyword. | When the agent needs to resolve a department name to a department ID. |
+| `dws contact exclusive-account disable` | Disable a dedicated enterprise login account so it can no longer sign in. | When the user explicitly asks to suspend an enterprise account and has confirmed the staff user ID. |
+| `dws contact exclusive-account enable` | Re-enable a previously disabled dedicated enterprise login account. | When the user explicitly asks to restore an enterprise account's ability to sign in. |
+| `dws contact org apply-approve` | Approve a pending join-enterprise application by application ID. | When the user explicitly asks to accept an application after confirming it via `dws contact org apply-list`. |
+| `dws contact org apply-block` | Block (blacklist) a join-enterprise application and its applicant with a reason. | When the user explicitly asks to blacklist an applicant, understanding later applications are also rejected. |
+| `dws contact org apply-list` | List user-submitted applications to join the enterprise, filterable by status. | When the user asks to review pending or processed join requests, or needs application IDs for approval commands. |
+| `dws contact org apply-reject` | Reject a join-enterprise application by application ID with a reason. | When the user explicitly asks to decline an application and provide the rejection reason. |
+| `dws contact org apply-remove` | Delete a join-enterprise application record permanently. | When the user explicitly asks to remove an application record and accepts it cannot be recovered. |
 | `dws contact org create` | Create a new DingTalk enterprise organization. | When the user explicitly asks to create or initialize an enterprise and provides its name and creator display name. |
+| `dws contact org invite-audit` | Set whether joining the enterprise requires admin review (enterprise-level auto-approval). | When the user explicitly asks to enable or disable join-request auditing for the whole enterprise. |
+| `dws contact org invite-info` | Fetch the enterprise invite link, invite code, join switches, and audit type. | When the user asks for the invite link/QR code or wants to inspect current join settings. |
+| `dws contact org invite-list` | List join-enterprise invitations the administrators have sent, filterable by status. | When the user asks which invited members have not yet accepted. |
+| `dws contact org invite-switch` | Toggle who can apply to join the enterprise (master switch plus search/code/link channels). | When the user explicitly asks to open or close join-application channels. |
 | `dws contact user get` | Batch-fetch detailed profile information for one or more users by user ID. | When the agent needs names, titles, emails, or departments for a known set of user IDs. |
 | `dws contact user get-self` | Retrieve the profile of the currently authenticated user. | When the agent needs to identify who it is acting on behalf of (user ID, name, org). |
 | `dws contact user invite` | Invite one employee by mobile number into the current enterprise. | When the user explicitly asks to add an employee and has supplied the employee name and mobile number. |
@@ -309,7 +322,7 @@ _OA approval workflows: inspect forms, forecast routes, create instances, approv
 | `dws oa approval form-schema` | Retrieve the form Schema for an approval template by processCode. | Before collecting or validating values for a new approval instance. |
 | `dws oa approval forecast-process` | Forecast the approval route for a template and its proposed form values. | Before creating an instance, especially when the route contains user-selectable approver or notifier nodes. |
 | `dws oa approval list-forms` | List approval process templates (forms) the current user is allowed to initiate. | When the agent needs to pick the right approval form before submitting a new request. |
-| `dws oa approval list-initiated` | List approval process instances the current user has initiated. | When the agent reviews the status of approvals the user submitted. |
+| `dws oa approval list-initiated` | List approval instances the current user has initiated under a specified approval template (processCode). | When the agent reviews the status of approvals the user submitted. |
 | `dws oa approval list-pending` | List approval process instances currently awaiting action from the current user. | When the agent surfaces "needs your approval" items in the user's inbox. |
 | `dws oa approval records` | Retrieve the operation history (who approved/commented/transferred, when) of an approval instance. | When the agent explains an approval's progression or audits who handled it. |
 | `dws oa approval reject` | Reject a pending approval process instance as the current user. | When the agent declines an approval on behalf of the user, optionally with a reason. |

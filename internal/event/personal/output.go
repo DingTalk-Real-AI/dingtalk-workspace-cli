@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -121,6 +122,117 @@ type GroupLifecycleEventOutput struct {
 	Payload     map[string]any `json:"payload" description:"群生命周期事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
 }
 
+// CardActionEventOutput preserves the interactive-card callback payload at
+// runtime so reviewed fields and future business extensions survive unchanged.
+// Its schema is described separately by cardActionSchemaOutput.
+type CardActionEventOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"互动卡片回调业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
+// cardActionSchemaOutput describes the reviewed shape observed in real card
+// callbacks. Runtime projection deliberately continues to use
+// CardActionEventOutput so fields added by the card business are preserved.
+type cardActionSchemaOutput struct {
+	Type        string                  `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string                  `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64                   `json:"timestamp" description:"事件中心事件时间戳" format:"timestamp_ms"`
+	SubscribeID string                  `json:"subscribe_id" description:"订阅 ID"`
+	Payload     cardActionPayloadSchema `json:"payload" description:"互动卡片回调业务数据；保留未声明的扩展字段" additional_properties:"true"`
+}
+
+type openCardSchemaObject struct{}
+
+type cardActionPayloadSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Body             cardActionBodySchema `json:"body" description:"互动卡片操作回调正文" additional_properties:"true"`
+	EventTime        int64                `json:"event_time" description:"卡片回调业务事件时间戳" format:"timestamp_ms"`
+}
+
+type cardActionBodySchema struct {
+	SchemaExtensions       openCardSchemaObject                `json:"-" additional_properties:"true"`
+	ActionData             cardActionDataSchema                `json:"actionData" description:"结构化卡片操作数据" additional_properties:"true"`
+	BizInfoDTO             cardActionBizInfoSchema             `json:"bizInfoDTO" description:"卡片业务标识" additional_properties:"true"`
+	Context                cardActionStringContextSchema       `json:"context" description:"字符串化兼容上下文；结构化读取优先使用 actionData.context" additional_properties:"true"`
+	ConversationContextDTO cardActionConversationContextSchema `json:"conversationContextDTO" description:"卡片所在会话上下文" additional_properties:"true"`
+	Extension              map[string]string                   `json:"extension" description:"卡片扩展字段；值可能是 JSON 字符串，应按需解析"`
+	OperatorDTO            cardActionOperatorSchema            `json:"operatorDTO" description:"触发卡片操作的用户信息" additional_properties:"true"`
+	SpaceID                string                              `json:"spaceId" description:"卡片所在空间标识；保持原值，不拆解"`
+	SpaceType              string                              `json:"spaceType" description:"卡片所在空间类型，例如 im_single"`
+	TriggerTimestamp       int64                               `json:"triggerTimestamp" description:"客户端触发卡片操作的时间戳" format:"timestamp_ms"`
+}
+
+type cardActionDataSchema struct {
+	SchemaExtensions openCardSchemaObject    `json:"-" additional_properties:"true"`
+	Context          cardActionContextSchema `json:"context" description:"首选的结构化卡片业务上下文" additional_properties:"true"`
+}
+
+type cardActionContextSchema struct {
+	SchemaExtensions        openCardSchemaObject              `json:"-" additional_properties:"true"`
+	Answers                 map[string]cardActionAnswerSchema `json:"answers" description:"按问题 ID 索引的回答"`
+	CreateUID               string                            `json:"createUid" description:"上下文创建用户 UID；按服务端原始字符串保留"`
+	OrgID                   string                            `json:"orgId" description:"上下文组织 ID；按服务端原始字符串保留"`
+	Outcome                 string                            `json:"outcome" description:"卡片交互结果，例如 answered；不限定枚举"`
+	Questions               []cardActionQuestionSchema        `json:"questions" description:"卡片问题定义；通过 id 与 answers 的键关联"`
+	SourceProjectionVersion string                            `json:"sourceProjectionVersion" description:"来源投影协议版本"`
+	SourceTurnID            string                            `json:"sourceTurnId" description:"触发该卡片的来源回合 ID"`
+}
+
+type cardActionAnswerSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Custom           string               `json:"custom,omitempty" description:"用户填写的自定义答案；空字符串表示未填写"`
+	Selected         []string             `json:"selected" description:"用户选择的选项 ID；空数组是合法的未选择状态"`
+}
+
+type cardActionQuestionSchema struct {
+	SchemaExtensions openCardSchemaObject     `json:"-" additional_properties:"true"`
+	AllowCustom      bool                     `json:"allowCustom" description:"是否允许输入自定义答案"`
+	Header           string                   `json:"header" description:"问题标题"`
+	ID               string                   `json:"id" description:"问题 ID；用于索引 answers"`
+	InputKind        string                   `json:"inputKind,omitempty" description:"特殊输入类型，例如 person；不限定枚举"`
+	Options          []cardActionOptionSchema `json:"options" description:"问题选项"`
+	Prompt           string                   `json:"prompt" description:"问题提示文案"`
+	Selection        string                   `json:"selection" description:"选择模式，例如 single 或 multiple；不限定枚举"`
+}
+
+type cardActionOptionSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Description      string               `json:"description,omitempty" description:"选项说明"`
+	ID               string               `json:"id" description:"选项 ID；与 answers.selected 中的值关联"`
+	Label            string               `json:"label" description:"选项展示文本"`
+}
+
+type cardActionBizInfoSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	AppKey           string               `json:"appKey" description:"产生卡片回调的业务应用标识"`
+	BizID            string               `json:"bizId" description:"卡片业务 ID"`
+}
+
+type cardActionStringContextSchema struct {
+	SchemaExtensions        openCardSchemaObject `json:"-" additional_properties:"true"`
+	Answers                 string               `json:"answers" description:"answers 的 JSON 字符串兼容副本"`
+	CreateUID               string               `json:"createUid" description:"上下文创建用户 UID 字符串"`
+	OrgID                   string               `json:"orgId" description:"上下文组织 ID 字符串"`
+	Outcome                 string               `json:"outcome" description:"卡片交互结果字符串"`
+	Questions               string               `json:"questions" description:"questions 的 JSON 字符串兼容副本"`
+	SourceProjectionVersion string               `json:"sourceProjectionVersion" description:"来源投影协议版本"`
+	SourceTurnID            string               `json:"sourceTurnId" description:"触发该卡片的来源回合 ID"`
+}
+
+type cardActionConversationContextSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	CID              string               `json:"cid" description:"卡片所在会话标识；保持原值，不拆解"`
+}
+
+type cardActionOperatorSchema struct {
+	SchemaExtensions  openCardSchemaObject `json:"-" additional_properties:"true"`
+	OperatorUserAgent string               `json:"operatorUserAgent" description:"触发操作的客户端 User-Agent，仅用于必要诊断"`
+	UID               int64                `json:"uid" description:"触发卡片操作的用户 UID"`
+}
+
 type OAApprovalTaskCreatedOutput struct {
 	Type              string `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID           string `json:"event_id" description:"事件 ID，可用于去重"`
@@ -222,6 +334,95 @@ type OAApprovalInstanceFinishedOutput struct {
 	EventTime         int64  `json:"event_time" description:"审批实例事件业务时间" format:"timestamp_ms"`
 }
 
+// VoIPCallReceiveInviteOutput is the stable business-facing output emitted
+// when the current user receives a VoIP call invitation. BizID is preserved
+// because it is the business event's retry-stable deduplication key.
+type VoIPCallReceiveInviteOutput struct {
+	Type         string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID      string `json:"event_id" description:"transport 事件 ID，可用于传输层去重"`
+	Timestamp    int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID  string `json:"subscribe_id" description:"订阅 ID"`
+	BizID        string `json:"biz_id" description:"业务事件唯一 ID；同一事件重试时保持不变，可用于业务去重"`
+	CorpID       string `json:"corp_id" description:"事件所属组织的 corpId"`
+	OrgID        int64  `json:"org_id" description:"事件所属组织 ID"`
+	TargetUID    int64  `json:"target_uid" description:"订阅并接收邀请的目标用户 UID"`
+	CallID       string `json:"call_id" description:"通话会话 ID"`
+	CallerUID    string `json:"caller_uid" description:"主叫用户标识，按上游协议保留字符串原值"`
+	CallerCorpID string `json:"caller_corp_id" description:"主叫用户所属组织 corpId"`
+	CalleeUID    string `json:"callee_uid" description:"被叫用户标识，按上游协议保留字符串原值"`
+	CalleeCorpID string `json:"callee_corp_id" description:"被叫用户所属组织 corpId"`
+	CallType     string `json:"call_type" description:"通话类型；值以服务端实际推送为准"`
+	RoomID       string `json:"room_id" description:"会议房间 ID"`
+	CreateTime   int64  `json:"create_time" description:"通话邀请创建时间" format:"timestamp_ms"`
+	EventTime    int64  `json:"event_time" description:"通话邀请事件业务时间" format:"timestamp_ms"`
+}
+
+type TodoTaskCreatedOutput struct {
+	Type            string   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID         string   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp       int64    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID     string   `json:"subscribe_id" description:"订阅 ID"`
+	TaskID          string   `json:"task_id" description:"待办任务 ID"`
+	Subject         string   `json:"subject" description:"待办标题"`
+	CreatorID       string   `json:"creator_id" description:"创建者 staffId"`
+	ExecutorIDs     []string `json:"executor_ids" description:"执行者 staffId 列表"`
+	ParticipantIDs  []string `json:"participant_ids" description:"参与者 staffId 列表"`
+	Priority        int64    `json:"priority" description:"待办优先级"`
+	StatusStage     int64    `json:"status_stage" description:"状态阶段：0 未开始、1 进行中、2 正常完成、3 异常完成"`
+	PlanStartDate   *int64   `json:"plan_start_date,omitempty" description:"计划开始时间" format:"timestamp_ms"`
+	PlanFinishDate  *int64   `json:"plan_finish_date,omitempty" description:"计划结束时间" format:"timestamp_ms"`
+	StartDate       *int64   `json:"start_date,omitempty" description:"实际开始时间" format:"timestamp_ms"`
+	FinishDate      *int64   `json:"finish_date,omitempty" description:"实际结束时间" format:"timestamp_ms"`
+	Description     string   `json:"description" description:"待办描述"`
+	Source          string   `json:"source" description:"待办来源"`
+	SourceID        string   `json:"source_id" description:"来源业务 ID"`
+	BizTag          string   `json:"biz_tag" description:"业务标识"`
+	ParentID        *string  `json:"parent_id,omitempty" description:"父任务 ID"`
+	IsMultiExecutor bool     `json:"is_multi_executor" description:"是否多执行者待办"`
+	SceneType       string   `json:"scene_type" description:"待办场景类型"`
+	CreateTime      int64    `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+}
+
+type TodoTaskUpdatedOutput struct {
+	Type            string   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID         string   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp       int64    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID     string   `json:"subscribe_id" description:"订阅 ID"`
+	TaskID          string   `json:"task_id" description:"待办任务 ID"`
+	Subject         string   `json:"subject" description:"待办标题"`
+	CreatorID       string   `json:"creator_id" description:"创建者 staffId"`
+	ExecutorIDs     []string `json:"executor_ids" description:"执行者 staffId 列表"`
+	ParticipantIDs  []string `json:"participant_ids" description:"参与者 staffId 列表"`
+	Priority        int64    `json:"priority" description:"待办优先级"`
+	StatusStage     int64    `json:"status_stage" description:"新状态阶段：0 未开始、1 进行中、2 正常完成、3 异常完成"`
+	OldStatusStage  int64    `json:"old_status_stage" description:"更新前状态阶段"`
+	PlanStartDate   *int64   `json:"plan_start_date,omitempty" description:"计划开始时间" format:"timestamp_ms"`
+	PlanFinishDate  *int64   `json:"plan_finish_date,omitempty" description:"计划结束时间" format:"timestamp_ms"`
+	StartDate       *int64   `json:"start_date,omitempty" description:"实际开始时间" format:"timestamp_ms"`
+	FinishDate      *int64   `json:"finish_date,omitempty" description:"实际结束时间" format:"timestamp_ms"`
+	Description     string   `json:"description" description:"待办描述"`
+	Source          string   `json:"source" description:"待办来源"`
+	SourceID        string   `json:"source_id" description:"来源业务 ID"`
+	BizTag          string   `json:"biz_tag" description:"业务标识"`
+	ParentID        *string  `json:"parent_id,omitempty" description:"父任务 ID"`
+	IsMultiExecutor bool     `json:"is_multi_executor" description:"是否多执行者待办"`
+	SceneType       string   `json:"scene_type" description:"待办场景类型"`
+	CreateTime      int64    `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+	UpdateTime      int64    `json:"update_time" description:"待办更新时间" format:"timestamp_ms"`
+}
+
+type TodoTaskDeletedOutput struct {
+	Type        string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
+	TaskID      string `json:"task_id" description:"待办任务 ID"`
+	Subject     string `json:"subject" description:"被删除的待办标题"`
+	CreatorID   string `json:"creator_id" description:"创建者 staffId"`
+	CreateTime  int64  `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+	DeleteTime  int64  `json:"delete_time" description:"待办删除时间" format:"timestamp_ms"`
+}
+
 type GroupMemberEventOutput struct {
 	Type                   string                   `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID                string                   `json:"event_id" description:"事件 ID，可用于去重"`
@@ -245,6 +446,109 @@ type personalEventData struct {
 	OccurredAtMS int64           `json:"occurredAtMs"`
 	SubID        string          `json:"subId"`
 	Payload      json.RawMessage `json:"payload"`
+}
+
+var marshalPersonalTransportData = json.Marshal
+
+// ProjectTransportOutput preserves the transport envelope used by the default
+// non-flatten output mode while removing sensitive VoIP invitation fields.
+// Callers that explicitly opt into raw debugging bypass this projector.
+func ProjectTransportOutput(ev transport.Event) (any, error) {
+	data, err := decodePersonalEventData(ev.Data)
+	if err != nil {
+		if isVoIPEvent(ev.EventType) {
+			return baseEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data for safe transport output: %w", err)
+		}
+		return ev, nil
+	}
+
+	if !isVoIPEvent(ev.EventType) && !isVoIPEvent(data.EventKey) {
+		return ev, nil
+	}
+
+	sanitizedPayload, err := redactVoIPRoomCode(data.Payload)
+	if err != nil {
+		return baseEventOutput{
+			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
+			EventID:     firstNonEmptyOutput(data.EventID, ev.EventID),
+			Timestamp:   firstNonZeroOutput(data.OccurredAtMS, ev.EventBornTime),
+			SubscribeID: firstNonEmptyOutput(ev.SubscribeID, data.SubID),
+		}, fmt.Errorf("redact personal VoIP payload for safe transport output: %w", err)
+	}
+	data.Payload = sanitizedPayload
+	encoded, err := marshalPersonalTransportData(data)
+	if err != nil {
+		return baseEventOutput{
+			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
+			EventID:     firstNonEmptyOutput(data.EventID, ev.EventID),
+			Timestamp:   firstNonZeroOutput(data.OccurredAtMS, ev.EventBornTime),
+			SubscribeID: firstNonEmptyOutput(ev.SubscribeID, data.SubID),
+		}, fmt.Errorf("encode redacted personal VoIP transport data: %w", err)
+	}
+
+	safe := ev
+	safe.Data = string(encoded)
+	return safe, nil
+}
+
+func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, fmt.Errorf("payload is missing")
+	}
+
+	switch trimmed[0] {
+	case '{':
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &object); err != nil {
+			return nil, err
+		}
+		for key, value := range object {
+			normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
+			if normalized == "roomcode" {
+				delete(object, key)
+				continue
+			}
+			redacted, err := redactVoIPRoomCode(value)
+			if err != nil {
+				return nil, err
+			}
+			object[key] = redacted
+		}
+		return json.Marshal(object)
+	case '[':
+		var values []json.RawMessage
+		if err := json.Unmarshal(trimmed, &values); err != nil {
+			return nil, err
+		}
+		for i, value := range values {
+			redacted, err := redactVoIPRoomCode(value)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = redacted
+		}
+		return json.Marshal(values)
+	default:
+		if !json.Valid(trimmed) {
+			return nil, fmt.Errorf("invalid JSON value")
+		}
+		return append(json.RawMessage(nil), trimmed...), nil
+	}
+}
+
+func firstNonZeroOutput(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 type personalMessagePayload struct {
@@ -347,6 +651,75 @@ type personalOAApprovalBody struct {
 	FinishTime        int64  `json:"finishTime"`
 }
 
+type personalVoIPCallReceiveInvitePayload struct {
+	BizID     string                            `json:"bizid"`
+	EventTime int64                             `json:"event_time"`
+	CorpID    string                            `json:"corpid"`
+	OrgID     int64                             `json:"orgId"`
+	UID       int64                             `json:"uid"`
+	Body      personalVoIPCallReceiveInviteBody `json:"body"`
+}
+
+type personalVoIPCallReceiveInviteBody struct {
+	CallID       string             `json:"callId"`
+	CallerUID    voIPUserIdentifier `json:"callerUid"`
+	CallerCorpID string             `json:"callerCorpId"`
+	CalleeUID    voIPUserIdentifier `json:"calleeUid"`
+	CalleeCorpID string             `json:"calleeCorpId"`
+	CallType     string             `json:"callType"`
+	RoomID       string             `json:"roomId"`
+	CreateTime   int64              `json:"createTime"`
+}
+
+// voIPUserIdentifier preserves the String contract introduced by the VoIP
+// provider while accepting legacy Long payloads during a rolling deployment.
+// The stable flattened output is always a string.
+type voIPUserIdentifier string
+
+func (id *voIPUserIdentifier) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err == nil {
+		*id = voIPUserIdentifier(value)
+		return nil
+	}
+
+	var legacy int64
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return fmt.Errorf("VoIP user identifier must be a string or legacy integer: %w", err)
+	}
+	*id = voIPUserIdentifier(strconv.FormatInt(legacy, 10))
+	return nil
+}
+
+type personalTodoPayload struct {
+	Body personalTodoBody `json:"body"`
+}
+
+type personalTodoBody struct {
+	TaskID          string   `json:"taskId"`
+	Subject         string   `json:"subject"`
+	CreatorID       string   `json:"creatorId"`
+	ExecutorIDs     []string `json:"executorIds"`
+	ParticipantIDs  []string `json:"participantIds"`
+	Priority        int64    `json:"priority"`
+	StatusStage     int64    `json:"statusStage"`
+	OldStatusStage  int64    `json:"oldStatusStage"`
+	PlanStartDate   *int64   `json:"planStartDate"`
+	PlanFinishDate  *int64   `json:"planFinishDate"`
+	StartDate       *int64   `json:"startDate"`
+	FinishDate      *int64   `json:"finishDate"`
+	Description     string   `json:"description"`
+	Source          string   `json:"source"`
+	SourceID        string   `json:"sourceId"`
+	BizTag          string   `json:"bizTag"`
+	ParentID        *string  `json:"parentId"`
+	IsMultiExecutor bool     `json:"isMultiExecutor"`
+	SceneType       string   `json:"sceneType"`
+	CreateTime      int64    `json:"createTime"`
+	UpdateTime      int64    `json:"updateTime"`
+	DeleteTime      int64    `json:"deleteTime"`
+}
+
 func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
 	// encoding/json otherwise falls back to case-insensitive field matching.
 	// Read this protocol field from a map so only operOpenDingtalkId is accepted.
@@ -394,11 +767,29 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed Data it returns the original envelope together
-// with an error; the formatter logs the warning and still emits that envelope.
+// event output. On malformed VoIP or card data it returns a safe typed output
+// so sensitive transport fields cannot leak through the projection fallback;
+// legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
+		if isVoIPEvent(ev.EventType) {
+			return baseEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data: %w", err)
+		}
+		if isCardActionEvent(ev.EventType) {
+			return CardActionEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+				Payload:     map[string]any{},
+			}, fmt.Errorf("decode personal event data: %w", err)
+		}
 		return ev, fmt.Errorf("decode personal event data: %w", err)
 	}
 
@@ -471,10 +862,143 @@ func ProjectOutput(ev transport.Event) (any, error) {
 			SubscribeID: base.SubscribeID,
 			Payload:     payload,
 		}, nil
+	case isCardActionEvent(eventType):
+		payload, err := decodeConservativePayload(data.Payload)
+		if err != nil {
+			return CardActionEventOutput{
+				Type:        base.Type,
+				EventID:     base.EventID,
+				Timestamp:   base.Timestamp,
+				SubscribeID: base.SubscribeID,
+				Payload:     map[string]any{},
+			}, fmt.Errorf("decode personal card action payload: %w", err)
+		}
+		return CardActionEventOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
 	case isOAEvent(eventType):
 		return projectOAApprovalEvent(ev, base, data.Payload)
+	case isVoIPEvent(eventType):
+		return projectVoIPCallReceiveInviteEvent(base, data.Payload)
+	case isTodoEvent(eventType):
+		return projectTodoEvent(ev, base, data.Payload)
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
+	}
+}
+
+func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalVoIPCallReceiveInvitePayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return base, fmt.Errorf("decode personal VoIP payload: %w", err)
+	}
+	if strings.TrimSpace(payload.BizID) == "" {
+		return base, fmt.Errorf("decode personal VoIP payload: bizid is required")
+	}
+
+	return VoIPCallReceiveInviteOutput{
+		Type:         base.Type,
+		EventID:      base.EventID,
+		Timestamp:    base.Timestamp,
+		SubscribeID:  base.SubscribeID,
+		BizID:        payload.BizID,
+		CorpID:       payload.CorpID,
+		OrgID:        payload.OrgID,
+		TargetUID:    payload.UID,
+		CallID:       payload.Body.CallID,
+		CallerUID:    string(payload.Body.CallerUID),
+		CallerCorpID: payload.Body.CallerCorpID,
+		CalleeUID:    string(payload.Body.CalleeUID),
+		CalleeCorpID: payload.Body.CalleeCorpID,
+		CallType:     payload.Body.CallType,
+		RoomID:       payload.Body.RoomID,
+		CreateTime:   payload.Body.CreateTime,
+		EventTime:    payload.EventTime,
+	}, nil
+}
+
+func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalTodoPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal Todo payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Body.TaskID) == "" {
+		return ev, fmt.Errorf("decode personal Todo payload: taskId is required")
+	}
+
+	switch base.Type {
+	case EventTodoTaskCreated:
+		return TodoTaskCreatedOutput{
+			Type:            base.Type,
+			EventID:         base.EventID,
+			Timestamp:       base.Timestamp,
+			SubscribeID:     base.SubscribeID,
+			TaskID:          payload.Body.TaskID,
+			Subject:         payload.Body.Subject,
+			CreatorID:       payload.Body.CreatorID,
+			ExecutorIDs:     payload.Body.ExecutorIDs,
+			ParticipantIDs:  payload.Body.ParticipantIDs,
+			Priority:        payload.Body.Priority,
+			StatusStage:     payload.Body.StatusStage,
+			PlanStartDate:   payload.Body.PlanStartDate,
+			PlanFinishDate:  payload.Body.PlanFinishDate,
+			StartDate:       payload.Body.StartDate,
+			FinishDate:      payload.Body.FinishDate,
+			Description:     payload.Body.Description,
+			Source:          payload.Body.Source,
+			SourceID:        payload.Body.SourceID,
+			BizTag:          payload.Body.BizTag,
+			ParentID:        payload.Body.ParentID,
+			IsMultiExecutor: payload.Body.IsMultiExecutor,
+			SceneType:       payload.Body.SceneType,
+			CreateTime:      payload.Body.CreateTime,
+		}, nil
+	case EventTodoTaskUpdated:
+		return TodoTaskUpdatedOutput{
+			Type:            base.Type,
+			EventID:         base.EventID,
+			Timestamp:       base.Timestamp,
+			SubscribeID:     base.SubscribeID,
+			TaskID:          payload.Body.TaskID,
+			Subject:         payload.Body.Subject,
+			CreatorID:       payload.Body.CreatorID,
+			ExecutorIDs:     payload.Body.ExecutorIDs,
+			ParticipantIDs:  payload.Body.ParticipantIDs,
+			Priority:        payload.Body.Priority,
+			StatusStage:     payload.Body.StatusStage,
+			OldStatusStage:  payload.Body.OldStatusStage,
+			PlanStartDate:   payload.Body.PlanStartDate,
+			PlanFinishDate:  payload.Body.PlanFinishDate,
+			StartDate:       payload.Body.StartDate,
+			FinishDate:      payload.Body.FinishDate,
+			Description:     payload.Body.Description,
+			Source:          payload.Body.Source,
+			SourceID:        payload.Body.SourceID,
+			BizTag:          payload.Body.BizTag,
+			ParentID:        payload.Body.ParentID,
+			IsMultiExecutor: payload.Body.IsMultiExecutor,
+			SceneType:       payload.Body.SceneType,
+			CreateTime:      payload.Body.CreateTime,
+			UpdateTime:      payload.Body.UpdateTime,
+		}, nil
+	case EventTodoTaskDeleted:
+		return TodoTaskDeletedOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			TaskID:      payload.Body.TaskID,
+			Subject:     payload.Body.Subject,
+			CreatorID:   payload.Body.CreatorID,
+			CreateTime:  payload.Body.CreateTime,
+			DeleteTime:  payload.Body.DeleteTime,
+		}, nil
+	default:
+		return ev, fmt.Errorf("unsupported personal Todo event type %q", base.Type)
 	}
 }
 
@@ -495,7 +1019,9 @@ func decodeConservativePayload(raw json.RawMessage) (map[string]any, error) {
 		return nil, fmt.Errorf("payload is missing")
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(trimmed, &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, err
 	}
 	if len(payload) == 0 {
@@ -801,10 +1327,14 @@ func schemaForStruct(t reflect.Type) map[string]any {
 		t = t.Elem()
 	}
 	properties := make(map[string]any, t.NumField())
+	additionalProperties := false
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "" || name == "-" {
+			if field.Tag.Get("additional_properties") == "true" {
+				additionalProperties = true
+			}
 			continue
 		}
 		property := schemaForType(field.Type)
@@ -819,10 +1349,14 @@ func schemaForStruct(t reflect.Type) map[string]any {
 		}
 		properties[name] = property
 	}
-	return map[string]any{
+	schema := map[string]any{
 		"type":       "object",
 		"properties": properties,
 	}
+	if additionalProperties {
+		schema["additionalProperties"] = true
+	}
+	return schema
 }
 
 func schemaForType(t reflect.Type) map[string]any {
@@ -837,6 +1371,14 @@ func schemaForType(t reflect.Type) map[string]any {
 			"type":  "array",
 			"items": schemaForType(t.Elem()),
 		}
+	case reflect.Map:
+		schema := map[string]any{"type": "object"}
+		if t.Key().Kind() != reflect.String || t.Elem().Kind() == reflect.Interface {
+			schema["additionalProperties"] = true
+		} else {
+			schema["additionalProperties"] = schemaForType(t.Elem())
+		}
+		return schema
 	default:
 		return map[string]any{"type": schemaType(t)}
 	}
@@ -889,6 +1431,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(GroupMemberEventOutput{})
 	case isGroupLifecycleEvent(eventKey):
 		return reflect.TypeOf(GroupLifecycleEventOutput{})
+	case isCardActionEvent(eventKey):
+		return reflect.TypeOf(cardActionSchemaOutput{})
 	case eventKey == EventOAApprovalTaskCreated:
 		return reflect.TypeOf(OAApprovalTaskCreatedOutput{})
 	case eventKey == EventOAApprovalTaskFinished:
@@ -903,6 +1447,14 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(OAApprovalInstanceTerminatedOutput{})
 	case eventKey == EventOAApprovalInstanceFinished:
 		return reflect.TypeOf(OAApprovalInstanceFinishedOutput{})
+	case isVoIPEvent(eventKey):
+		return reflect.TypeOf(VoIPCallReceiveInviteOutput{})
+	case eventKey == EventTodoTaskCreated:
+		return reflect.TypeOf(TodoTaskCreatedOutput{})
+	case eventKey == EventTodoTaskUpdated:
+		return reflect.TypeOf(TodoTaskUpdatedOutput{})
+	case eventKey == EventTodoTaskDeleted:
+		return reflect.TypeOf(TodoTaskDeletedOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -929,6 +1481,10 @@ func isGroupLifecycleEvent(eventKey string) bool {
 		eventKey == EventGroupDisbanded
 }
 
+func isCardActionEvent(eventKey string) bool {
+	return eventKey == EventCardAction
+}
+
 func isOAEvent(eventKey string) bool {
 	return eventKey == EventOAApprovalTaskCreated ||
 		eventKey == EventOAApprovalTaskFinished ||
@@ -937,6 +1493,16 @@ func isOAEvent(eventKey string) bool {
 		eventKey == EventOAApprovalInstanceCC ||
 		eventKey == EventOAApprovalInstanceTerminated ||
 		eventKey == EventOAApprovalInstanceFinished
+}
+
+func isVoIPEvent(eventKey string) bool {
+	return eventKey == EventVoIPCallReceiveInvite
+}
+
+func isTodoEvent(eventKey string) bool {
+	return eventKey == EventTodoTaskCreated ||
+		eventKey == EventTodoTaskUpdated ||
+		eventKey == EventTodoTaskDeleted
 }
 
 func isOAApprovalTaskEvent(eventKey string) bool {

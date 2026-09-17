@@ -18,20 +18,18 @@ import (
 	"strings"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clitelemetry"
 )
 
 // TelemetryIdentity is the privacy-reviewed subset of the local authentication
 // record that may be attached to a CLI execution event.
-type TelemetryIdentity struct {
-	UserID   string
-	UserName string
-	CorpID   string
-}
+type TelemetryIdentity = clitelemetry.Identity
 
 var telemetryResolveProfileMetadata = authpkg.ResolveProfileMetadataReadOnly
 
-// ResolveTelemetryIdentity returns a pre-execution snapshot of the identity
-// selected by args. Multi-profile executions are attributed to the current
+// ResolveTelemetryIdentity reads the identity selected by args. An asynchronous
+// caller may omit a late result; concurrent login/logout can change the metadata
+// observed during the read. Multi-profile executions use the current
 // default profile. Resolution is deliberately best-effort: telemetry must not
 // refresh credentials or change command behavior when local auth data is
 // missing, invalid, or unreadable.
@@ -50,11 +48,7 @@ func ResolveTelemetryIdentity(args []string) (identity TelemetryIdentity) {
 	if err != nil || profile == nil {
 		return TelemetryIdentity{}
 	}
-	return TelemetryIdentity{
-		UserID:   strings.TrimSpace(profile.UserID),
-		UserName: strings.TrimSpace(profile.UserName),
-		CorpID:   strings.TrimSpace(profile.CorpID),
-	}
+	return clitelemetry.IdentityFromProfile(profile)
 }
 
 func resolveTelemetryProfileMetadata(configDir, selector string) (*authpkg.ProfileMetadata, error) {

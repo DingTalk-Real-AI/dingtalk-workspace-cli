@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -246,20 +247,20 @@ func TestCrossPlatformCoverageAuditRuntimeCoverage(t *testing.T) {
 	}
 
 	invocation := executor.Invocation{CanonicalProduct: "calendar", Tool: "list", Params: map[string]any{"token": "secret"}}
-	emitAudit(nil, "nil", time.Now(), invocation, "https://example.com?token=secret", nil, "test")
-	emitAudit(audit.NopSink{}, "nop", time.Now(), invocation, "", nil, "test")
+	emitAudit(context.Background(), nil, "nil", time.Now(), invocation, "https://example.com?token=secret", nil, "test")
+	emitAudit(context.Background(), audit.NopSink{}, "nop", time.Now(), invocation, "", nil, "test")
 	recording := &auditCoverageSink{}
-	emitAudit(recording, "ok", time.Now(), invocation, "https://example.com?token=secret", nil, "test")
+	emitAudit(context.Background(), recording, "ok", time.Now(), invocation, "https://example.com?token=secret", nil, "test")
 	if len(recording.events) != 1 || recording.events[0].Result != "success" {
 		t.Fatalf("successful audit events = %#v", recording.events)
 	}
 	typed := &apperrors.Error{Category: apperrors.CategoryAuth, Reason: "expired"}
-	emitAudit(recording, "typed", time.Now(), invocation, "", typed, "test")
+	emitAudit(context.Background(), recording, "typed", time.Now(), invocation, "", typed, "test")
 	if recording.events[1].ErrReason != "expired" {
 		t.Fatalf("typed audit event = %#v", recording.events[1])
 	}
 	recording.emitErr = errors.New("emit")
-	emitAudit(recording, "failed", time.Now(), invocation, "", errors.New("plain"), "test")
+	emitAudit(context.Background(), recording, "failed", time.Now(), invocation, "", errors.New("plain"), "test")
 	if category, reason := classifyAuditError(nil); category != "" || reason != "" {
 		t.Fatalf("classifyAuditError(nil) = %q, %q", category, reason)
 	}

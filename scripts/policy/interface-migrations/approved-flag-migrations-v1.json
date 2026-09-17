@@ -168,6 +168,39 @@
       },
       "state": "consumed",
       "reason": "废弃别名 dws report create（含 dws log create 拼写）与 dws report entry submit 共用 addReportCreateFlags，required 提升必须两侧一致；openAPI create_report 保持可选（bug 85724185）"
+    },
+    {
+      "command": "dws chat group members add-bot",
+      "legacy": {
+        "name": "id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     }
   ]
 }

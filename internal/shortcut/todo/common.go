@@ -5,6 +5,7 @@ package todo
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -66,13 +67,19 @@ func requireTodoResponse(data map[string]any, operation string) (map[string]any,
 }
 
 func requireTodoWriteReceipt(data map[string]any, operation string) error {
-	data, err := requireTodoResponse(data, operation)
-	if err != nil {
-		return err
+	if len(data) == 0 {
+		return todoWriteResponseError(operation, "empty_tool_response", "写响应为空，远端效果未知")
 	}
-	success, ok := data["success"].(bool)
-	if !ok || !success {
-		return todoResponseError(operation, "missing_success_receipt", "写响应没有明确的 success=true 回执")
+	raw, ok := data["success"]
+	if !ok {
+		return todoWriteResponseError(operation, "missing_success_receipt", "写响应没有明确的 success=true 回执")
+	}
+	success, valid := raw.(bool)
+	if !valid {
+		return todoWriteResponseError(operation, "malformed_success", "写响应 success 字段不是布尔值")
+	}
+	if !success {
+		return todoWriteResponseError(operation, "remote_failure", "服务明确返回 success=false")
 	}
 	return nil
 }
@@ -307,14 +314,14 @@ func VerifyCreatedTodo(rt *shortcut.RuntimeContext, data map[string]any, operati
 	}
 	taskID := todoCreatedTaskID(data)
 	if taskID == "" {
-		return "", nil, todoResponseError(operation, "missing_stable_id", "创建响应缺少稳定 taskId；远端效果未知")
+		return "", nil, todoWriteResponseError(operation, "missing_stable_id", "创建响应缺少稳定 taskId；远端效果未知")
 	}
 	detail, err := readTodoDetail(rt, taskID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, todoWriteVerificationError(operation, err)
 	}
 	if subject, _ := detail["subject"].(string); expectedSubject != "" && subject != expectedSubject {
-		return "", nil, todoResponseError(operation, "verification_mismatch", "创建后读回的标题不一致")
+		return "", nil, todoWriteResponseError(operation, "verification_mismatch", "创建后读回的标题不一致")
 	}
 	return taskID, detail, nil
 }
@@ -327,11 +334,11 @@ func VerifyDoneStatus(rt *shortcut.RuntimeContext, data map[string]any, taskID s
 	}
 	detail, err := readTodoDetail(rt, taskID)
 	if err != nil {
-		return err
+		return todoWriteVerificationError("todo/update_todo_done_status", err)
 	}
 	actual, ok := detail["isDone"].(bool)
 	if !ok || actual != expected {
-		return todoResponseError("todo/update_todo_done_status", "verification_mismatch", "写后读回 isDone 不一致或缺失")
+		return todoWriteResponseError("todo/update_todo_done_status", "verification_mismatch", "写后读回 isDone 不一致或缺失")
 	}
 	return nil
 }
@@ -344,4 +351,49 @@ func todoResponseError(operation, reason, message string) error {
 		apperrors.WithRetryable(false),
 		apperrors.WithReason(reason),
 	)
+}
+
+// todoWriteResponseError marks failures found only after a write request was
+// submitted. Callers must reconcile the returned resource or receipt before
+// retrying, especially for non-idempotent create/comment operations.
+func todoWriteResponseError(operation, reason, message string) error {
+	return apperrors.NewAPI(message,
+		apperrors.WithOperation(operation),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("response_validation"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(reason),
+	)
+}
+
+// todoWriteVerificationError upgrades a read-back failure after a confirmed
+// write receipt. It preserves the original reason and cause while making the
+// unsafe retry boundary explicit to callers.
+func todoWriteVerificationError(operation string, cause error) error {
+	reason := "write_verification_failed"
+	origin := "mcp"
+	var typed *apperrors.Error
+	if stderrors.As(cause, &typed) {
+		if strings.TrimSpace(typed.Reason) != "" {
+			reason = typed.Reason
+		}
+		if strings.TrimSpace(typed.Origin) != "" {
+			origin = typed.Origin
+		}
+	}
+	options := []apperrors.Option{
+		apperrors.WithOperation(operation),
+		apperrors.WithOrigin(origin),
+		apperrors.WithFailureStage("write_verification"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(reason),
+		apperrors.WithCause(cause),
+	}
+	message := "写操作已提交，但读回核验失败；请先查询对账，禁止直接重试"
+	if typed != nil && typed.Category == apperrors.CategoryAuth {
+		return apperrors.NewAuth(message, options...)
+	}
+	return apperrors.NewAPI(message, options...)
 }

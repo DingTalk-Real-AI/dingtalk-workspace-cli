@@ -5,11 +5,15 @@
 package helpers
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 )
 
 func runContactUpdateCommand(t *testing.T, input string, args ...string) (*contactEnterpriseCaller, error) {
@@ -50,6 +54,16 @@ func TestCrossPlatformCoverageContactUpdateCommandsExposeExpectedFlags(t *testin
 		{[]string{"user", "update-self"}, []string{"nick", "avatar-file-id"}},
 		{[]string{"user", "update-ownness"}, []string{"user-id", "ownness-text"}},
 		{[]string{"account", "update"}, []string{"user-id", "org-user-name", "depts", "master-user-id", "nick", "avatar-file-id"}},
+		{[]string{"label", "create"}, []string{"name", "type", "parent-id"}},
+		{[]string{"label", "update"}, []string{"id", "name"}},
+		{[]string{"label", "delete"}, []string{"id"}},
+		{[]string{"label", "add-members"}, []string{"id", "users"}},
+		{[]string{"label", "remove-members"}, []string{"id", "users"}},
+		{[]string{"label", "update-member-scope"}, []string{"user", "id", "depts"}},
+		{[]string{"ext-field", "list"}, []string{}},
+		{[]string{"ext-field", "create"}, []string{"name"}},
+		{[]string{"ext-field", "update"}, []string{"code", "org-self-tag", "client-display", "is-search"}},
+		{[]string{"ext-field", "delete"}, []string{"code", "org-self-tag"}},
 	}
 	for _, tc := range cases {
 		cmd := requireWukongSyncCommand(t, root, tc.path...)
@@ -124,6 +138,102 @@ func TestCrossPlatformCoverageContactUpdateCommandsMapMCPArguments(t *testing.T)
 				"avatarFileId": "file-2",
 			},
 		},
+		{
+			name:     "create label role under group",
+			args:     []string{"label", "create", "--name", "管理员", "--type", "role", "--parent-id", "12345", "--yes"},
+			toolName: "add_label",
+			wantArgs: map[string]any{"parentId": int64(12345), "labelModel": map[string]any{"name": "管理员"}},
+		},
+		{
+			name:     "create label group at root",
+			args:     []string{"label", "create", "--name", "管理层", "--type", "group", "--yes"},
+			toolName: "add_label",
+			wantArgs: map[string]any{"parentId": int64(-1), "labelModel": map[string]any{"name": "管理层"}},
+		},
+		{
+			name:     "create label with camel aliases",
+			args:     []string{"label", "create", "--labelName", "财务", "--labelType", "role", "--parentId", "42", "--yes"},
+			toolName: "add_label",
+			wantArgs: map[string]any{"parentId": int64(42), "labelModel": map[string]any{"name": "财务"}},
+		},
+		{
+			name:     "update label",
+			args:     []string{"label", "update", "--id", "12345", "--name", "新名称", "--yes"},
+			toolName: "update_label",
+			wantArgs: map[string]any{"labelId": int64(12345), "label": map[string]any{"name": "新名称"}},
+		},
+		{
+			name:     "update label with camel aliases",
+			args:     []string{"label", "update", "--labelId", "12345", "--labelName", "新名称", "--yes"},
+			toolName: "update_label",
+			wantArgs: map[string]any{"labelId": int64(12345), "label": map[string]any{"name": "新名称"}},
+		},
+		{
+			name:     "delete label",
+			args:     []string{"label", "delete", "--id", "12345", "--yes"},
+			toolName: "delete_label",
+			wantArgs: map[string]any{"id": int64(12345)},
+		},
+		{
+			name:     "add label members",
+			args:     []string{"label", "add-members", "--id", "1,2", "--users", "u1,u2", "--yes"},
+			toolName: "add_label_members",
+			wantArgs: map[string]any{"labelIds": []int64{1, 2}, "staffIds": []string{"u1", "u2"}},
+		},
+		{
+			name:     "remove label members",
+			args:     []string{"label", "remove-members", "--id", "1,2", "--users", "u1,u2", "--yes"},
+			toolName: "remove_label_members",
+			wantArgs: map[string]any{"labelIds": []int64{1, 2}, "staffIds": []string{"u1", "u2"}},
+		},
+		{
+			name:     "update label member scope",
+			args:     []string{"label", "update-member-scope", "--user", "u1", "--id", "12345", "--depts", "1,2,3", "--yes"},
+			toolName: "update_label_member_scope",
+			wantArgs: map[string]any{"staffId": "u1", "labelId": int64(12345), "deptIds": []int64{1, 2, 3}},
+		},
+		{
+			name:     "list ext fields",
+			args:     []string{"ext-field", "list"},
+			toolName: "get_org_ext_fields",
+			wantArgs: map[string]any{},
+		},
+		{
+			name:     "create ext field",
+			args:     []string{"ext-field", "create", "--name", "职级", "--yes"},
+			toolName: "add_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"name": "职级", "orgSelfTag": int64(1), "newAdd": true}}},
+		},
+		{
+			name:     "update ext field",
+			args:     []string{"ext-field", "update", "--code", "rank", "--client-display", "true", "--is-search", "false", "--yes"},
+			toolName: "update_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"code": "rank", "orgSelfTag": int64(1), "clientDisplay": true, "isSearch": false}}},
+		},
+		{
+			name:     "update ext field with org self tag",
+			args:     []string{"ext-field", "update", "--code", "rank", "--org-self-tag", "0", "--client-display", "true", "--is-search", "true", "--yes"},
+			toolName: "update_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"code": "rank", "orgSelfTag": int64(0), "clientDisplay": true, "isSearch": true}}},
+		},
+		{
+			name:     "update ext field with blank org self tag",
+			args:     []string{"ext-field", "update", "--code", "rank", "--org-self-tag", " ", "--client-display", "true", "--is-search", "true", "--yes"},
+			toolName: "update_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"code": "rank", "orgSelfTag": int64(1), "clientDisplay": true, "isSearch": true}}},
+		},
+		{
+			name:     "delete ext field",
+			args:     []string{"ext-field", "delete", "--code", "rank", "--yes"},
+			toolName: "remove_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"code": "rank", "orgSelfTag": int64(1), "toDelete": true}}},
+		},
+		{
+			name:     "delete ext field with blank org self tag",
+			args:     []string{"ext-field", "delete", "--code", "rank", "--org-self-tag", " ", "--yes"},
+			toolName: "remove_org_ext_attrs",
+			wantArgs: map[string]any{"orgEmpAttrModels": []map[string]any{{"code": "rank", "orgSelfTag": int64(1), "toDelete": true}}},
+		},
 	}
 
 	for _, tt := range tests {
@@ -154,6 +264,15 @@ func TestCrossPlatformCoverageContactUpdateCommandsRequireConfirmation(t *testin
 		{"user", "update-self", "--nick", "新昵称"},
 		{"user", "update-ownness", "--user-id", "user-1", "--ownness-text", "居家办公中"},
 		{"account", "update", "--user-id", "user-2", "--nick", "小李"},
+		{"label", "create", "--name", "管理员", "--type", "group"},
+		{"label", "update", "--id", "12345", "--name", "新名称"},
+		{"label", "delete", "--id", "12345"},
+		{"label", "add-members", "--id", "12345", "--users", "u1"},
+		{"label", "remove-members", "--id", "12345", "--users", "u1"},
+		{"label", "update-member-scope", "--user", "u1", "--id", "12345", "--depts", "1"},
+		{"ext-field", "create", "--name", "职级"},
+		{"ext-field", "update", "--code", "rank", "--client-display", "true", "--is-search", "false"},
+		{"ext-field", "delete", "--code", "rank"},
 	}
 	for _, args := range tests {
 		t.Run(strings.Join(args[:2], "-"), func(t *testing.T) {
@@ -196,6 +315,44 @@ func TestCrossPlatformCoverageContactUpdateCommandsValidateInput(t *testing.T) {
 		{"account blank id", []string{"account", "update", "--user-id", " ", "--nick", "小李", "--yes"}, "不能为空"},
 		{"account no changes", []string{"account", "update", "--user-id", "user-2", "--nick", " ", "--yes"}, "至少需要一个修改项"},
 		{"account invalid departments", []string{"account", "update", "--user-id", "user-2", "--depts", "bad", "--yes"}, "--depts JSON 解析失败"},
+		{"label create missing name", []string{"label", "create", "--type", "role", "--parent-id", "123", "--yes"}, "required"},
+		{"label create blank name", []string{"label", "create", "--name", " ", "--type", "role", "--parent-id", "123", "--yes"}, "不能为空"},
+		{"label create missing type", []string{"label", "create", "--name", "管理员", "--yes"}, "required"},
+		{"label create invalid type", []string{"label", "create", "--name", "管理员", "--type", "team", "--yes"}, "仅支持 role"},
+		{"label create role missing parent", []string{"label", "create", "--name", "管理员", "--type", "role", "--yes"}, "必须通过 --parent-id"},
+		{"label create role zero parent", []string{"label", "create", "--name", "管理员", "--type", "role", "--parent-id", "0", "--yes"}, "有效的角色组 ID"},
+		{"label create invalid parent", []string{"label", "create", "--name", "管理员", "--type", "role", "--parent-id", "bad", "--yes"}, "must be an integer"},
+		{"label create group with parent", []string{"label", "create", "--name", "管理员", "--type", "group", "--parent-id", "42", "--yes"}, "无需 --parent-id"},
+		{"label update missing id", []string{"label", "update", "--name", "新名称", "--yes"}, "required"},
+		{"label update blank id", []string{"label", "update", "--id", " ", "--name", "新名称", "--yes"}, "must be an integer"},
+		{"label update missing name", []string{"label", "update", "--id", "123", "--yes"}, "required"},
+		{"label update blank name", []string{"label", "update", "--id", "123", "--name", " ", "--yes"}, "不能为空"},
+		{"label delete missing id", []string{"label", "delete", "--yes"}, "required"},
+		{"label delete blank id", []string{"label", "delete", "--id", " ", "--yes"}, "must be an integer"},
+		{"label add-members missing id", []string{"label", "add-members", "--users", "u1", "--yes"}, "required"},
+		{"label add-members missing users", []string{"label", "add-members", "--id", "123", "--yes"}, "required"},
+		{"label add-members invalid id", []string{"label", "add-members", "--id", "bad", "--users", "u1", "--yes"}, "不是有效整数"},
+		{"label add-members blank id", []string{"label", "add-members", "--id", " ", "--users", "u1", "--yes"}, "至少需要一个有效整数值"},
+		{"label add-members blank users", []string{"label", "add-members", "--id", "123", "--users", " ", "--yes"}, "至少需要一个成员 ID"},
+		{"label remove-members missing id", []string{"label", "remove-members", "--users", "u1", "--yes"}, "required"},
+		{"label remove-members blank users", []string{"label", "remove-members", "--id", "123", "--users", " ", "--yes"}, "至少需要一个成员 ID"},
+		{"label remove-members blank id", []string{"label", "remove-members", "--id", " ", "--users", "u1", "--yes"}, "至少需要一个有效整数值"},
+		{"label update-member-scope missing user", []string{"label", "update-member-scope", "--id", "123", "--depts", "1", "--yes"}, "required"},
+		{"label update-member-scope missing id", []string{"label", "update-member-scope", "--user", "u1", "--depts", "1", "--yes"}, "required"},
+		{"label update-member-scope missing depts", []string{"label", "update-member-scope", "--user", "u1", "--id", "123", "--yes"}, "required"},
+		{"label update-member-scope blank user", []string{"label", "update-member-scope", "--user", " ", "--id", "123", "--depts", "1", "--yes"}, "不能为空"},
+		{"label update-member-scope blank depts", []string{"label", "update-member-scope", "--user", "u1", "--id", "123", "--depts", " ", "--yes"}, "至少需要一个有效整数值"},
+		{"ext-field create missing name", []string{"ext-field", "create", "--yes"}, "required"},
+		{"ext-field create blank name", []string{"ext-field", "create", "--name", " ", "--yes"}, "不能为空"},
+		{"ext-field update missing code", []string{"ext-field", "update", "--client-display", "true", "--is-search", "false", "--yes"}, "required"},
+		{"ext-field update blank code", []string{"ext-field", "update", "--code", " ", "--client-display", "true", "--is-search", "false", "--yes"}, "不能为空"},
+		{"ext-field update missing client-display", []string{"ext-field", "update", "--code", "rank", "--is-search", "false", "--yes"}, "required"},
+		{"ext-field update invalid bool", []string{"ext-field", "update", "--code", "rank", "--client-display", "yes", "--is-search", "false", "--yes"}, "boolean"},
+		{"ext-field update missing is-search", []string{"ext-field", "update", "--code", "rank", "--client-display", "true", "--yes"}, "required"},
+		{"ext-field update invalid org self tag", []string{"ext-field", "update", "--code", "rank", "--org-self-tag", "bad", "--client-display", "true", "--is-search", "false", "--yes"}, "必须是整数"},
+		{"ext-field delete missing code", []string{"ext-field", "delete", "--yes"}, "required"},
+		{"ext-field delete blank code", []string{"ext-field", "delete", "--code", " ", "--yes"}, "不能为空"},
+		{"ext-field delete invalid org self tag", []string{"ext-field", "delete", "--code", "rank", "--org-self-tag", "bad", "--yes"}, "必须是整数"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -208,4 +365,89 @@ func TestCrossPlatformCoverageContactUpdateCommandsValidateInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContactExtFieldListRejectsPositionalArgs(t *testing.T) {
+	caller, err := runContactUpdateCommand(t, "", "ext-field", "list", "extra")
+	if err == nil {
+		t.Fatal("expected error for positional args, got nil")
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("expected no tool calls for positional args, got %d", len(caller.calls))
+	}
+}
+
+func TestContactExtFieldListResultContract(t *testing.T) {
+	root := newContactCommand()
+	leaf, _, err := root.Find([]string{"ext-field", "list"})
+	if err != nil || leaf == nil {
+		t.Fatalf("find contact ext-field list: leaf=%v err=%v", leaf, err)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(leaf)
+	if !ok || final.Identity == nil || final.Identity.CanonicalPath != "contact.get_org_ext_fields" {
+		t.Fatalf("contract final identity = %#v", final.Identity)
+	}
+	if final.Result == nil {
+		t.Fatal("expected result spec")
+	}
+	wantOutcomes := []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}
+	if !reflect.DeepEqual(final.Result.Outcomes, wantOutcomes) {
+		t.Fatalf("result outcomes = %#v, want %#v", final.Result.Outcomes, wantOutcomes)
+	}
+
+	properties, err := schemaPropertiesFromRaw(final.Result.DataSchema)
+	if err != nil {
+		t.Fatalf("parse data schema: %v", err)
+	}
+
+	// Top-level response shape.
+	for _, key := range []string{"result", "success", "errorCode", "errorMsg"} {
+		if _, ok := properties[key]; !ok {
+			t.Fatalf("top-level schema missing %q", key)
+		}
+	}
+
+	resultProp, ok := properties["result"].(map[string]any)
+	if !ok || resultProp["type"] != "array" {
+		t.Fatalf("result property = %#v, want array", properties["result"])
+	}
+	items, ok := resultProp["items"].(map[string]any)
+	if !ok || items["type"] != "object" {
+		t.Fatalf("result items = %#v, want object", resultProp["items"])
+	}
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("result items properties = %#v", items["properties"])
+	}
+
+	// Cover the actual list response shape.
+	wantItemFields := []string{"orgSelfTag", "isSearch", "modifiable", "required", "name", "code", "clientDisplay", "attrType", "desensitizeShow"}
+	for _, key := range wantItemFields {
+		if _, ok := itemProps[key]; !ok {
+			t.Fatalf("result item schema missing %q", key)
+		}
+	}
+
+	orgSelfTag, ok := itemProps["orgSelfTag"].(map[string]any)
+	if !ok {
+		t.Fatalf("orgSelfTag property = %#v", itemProps["orgSelfTag"])
+	}
+	// Runtime evidence: get_org_ext_fields returns orgSelfTag as boolean (false for system
+	// preset fields, true for org custom fields), unlike the integer 0/1 used in
+	// create/update/delete request payloads.
+	if got := orgSelfTag["type"]; got != "boolean" {
+		t.Fatalf("orgSelfTag type = %v, want boolean", got)
+	}
+}
+
+func schemaPropertiesFromRaw(raw json.RawMessage) (map[string]any, error) {
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, err
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	return properties, nil
 }

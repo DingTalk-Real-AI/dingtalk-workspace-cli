@@ -178,16 +178,20 @@ func TestLogErrorClassified(t *testing.T) {
 	}
 }
 
-func TestRedactEndpoint(t *testing.T) {
+func TestCrossPlatformCoverageRedactEndpoint(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		input string
 		want  string
 	}{
-		{"https://mcp.dingtalk.com/api", "https://mcp.dingtalk.com/api"},
-		{"https://mcp.dingtalk.com/api?token=abc", "https://mcp.dingtalk.com/api"},
-		{"https://mcp.dingtalk.com/api#section", "https://mcp.dingtalk.com/api"},
+		{"https://mcp.dingtalk.com/api", "https://mcp.dingtalk.com"},
+		{"https://mcp.dingtalk.com/api?token=abc", "https://mcp.dingtalk.com"},
+		{"https://mcp.dingtalk.com/api#section", "https://mcp.dingtalk.com"},
+		{"https://user:password@mcp.dingtalk.com/api?token=abc#section", "https://mcp.dingtalk.com"},
+		{"https://mcp.dingtalk.com/api?", "https://mcp.dingtalk.com"},
+		{"https://mcp.dingtalk.com/%zz", "<invalid-endpoint>"},
+		{" \t\n", ""},
 		{"", ""},
 	}
 

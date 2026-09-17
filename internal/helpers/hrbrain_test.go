@@ -3,10 +3,33 @@ package helpers
 import (
 	"io"
 	"os"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+// executeHrbrainWriteCommand runs a write command tree that requires
+// confirmation. It registers the root-level persistent --yes / --dry-run flags
+// (injected by the app root in production) and feeds a scripted stdin so the
+// deferred ConfirmSafety gate behaves deterministically (empty input → EOF →
+// confirmation_required unless --yes is passed).
+func executeHrbrainWriteCommand(t *testing.T, root *cobra.Command, input string, args ...string) error {
+	t.Helper()
+	oldArgs := os.Args
+	os.Args = append([]string{"dws", "hrbrain"}, args...)
+	t.Cleanup(func() { os.Args = oldArgs })
+	root.PersistentFlags().Bool("yes", false, "skip confirmation")
+	root.PersistentFlags().Bool("dry-run", false, "preview only")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetIn(strings.NewReader(input))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(append([]string{}, args...))
+	return root.Execute()
+}
 
 // executeHrbrainCommand runs the given hrbrain command tree with args, discarding
 // output, and returns the error (if any) from RunE.
@@ -75,6 +98,196 @@ func TestHrbrainTalentPoolEmployees(t *testing.T) {
 		"talent-pool", "employees",
 	); err == nil {
 		t.Fatal("employees without pool-code should error")
+	}
+}
+
+func TestHrbrainTalentPoolSave(t *testing.T) {
+	// Missing required --pool-name errors before any MCP call.
+	missingNameCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, missingNameCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "save",
+	); err == nil {
+		t.Fatal("save without pool-name should error")
+	}
+	if missingNameCaller.calls != 0 {
+		t.Fatalf("save without pool-name must not call MCP, got %d call(s)", missingNameCaller.calls)
+	}
+
+	// Invalid --rule-json (not valid JSON) is rejected before dispatch.
+	invalidRuleCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, invalidRuleCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "save", "--pool-name", "储备干部池", "--rule-json", "not-json",
+	); err == nil {
+		t.Fatal("save with invalid rule-json should error")
+	}
+	if invalidRuleCaller.calls != 0 {
+		t.Fatalf("save with invalid rule-json must not call MCP, got %d call(s)", invalidRuleCaller.calls)
+	}
+
+	// A bare JSON scalar is valid JSON but not an object, so --rule-json must
+	// still reject it (json.Valid cannot distinguish object from non-object).
+	nonObjectRuleCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, nonObjectRuleCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "save", "--pool-name", "储备干部池", "--rule-json", "111",
+	); err == nil {
+		t.Fatal("save with non-object rule-json should error")
+	}
+	if nonObjectRuleCaller.calls != 0 {
+		t.Fatalf("save with non-object rule-json must not call MCP, got %d call(s)", nonObjectRuleCaller.calls)
+	}
+
+	// Invalid --pool-tags JSON is rejected before dispatch.
+	invalidTagsCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, invalidTagsCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "save", "--pool-name", "储备干部池", "--pool-tags", "not-json",
+	); err == nil {
+		t.Fatal("save with invalid pool-tags should error")
+	}
+	if invalidTagsCaller.calls != 0 {
+		t.Fatalf("save with invalid pool-tags must not call MCP, got %d call(s)", invalidTagsCaller.calls)
+	}
+
+	// An empty --pool-tags array is syntactically valid but carries no tag, so
+	// it must be rejected before dispatch.
+	emptyTagsCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, emptyTagsCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "save", "--pool-name", "储备干部池", "--pool-tags", "[]",
+	); err == nil {
+		t.Fatal("save with empty pool-tags array should error")
+	}
+	if emptyTagsCaller.calls != 0 {
+		t.Fatalf("save with empty pool-tags must not call MCP, got %d call(s)", emptyTagsCaller.calls)
+	}
+
+	// user_required write without --yes must fail closed with
+	// confirmation_required and never dispatch the MCP call.
+	confirmCaller := &scriptedToolCaller{}
+	installScriptedCaller(t, confirmCaller)
+	if err := executeHrbrainWriteCommand(t, newHrbrainCommand(), "",
+		"talent-pool", "save", "--pool-name", "储备干部池",
+	); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		t.Fatalf("save without --yes error = %v, want confirmation_required", err)
+	}
+	if confirmCaller.calls != 0 {
+		t.Fatalf("save without --yes must not call MCP, got %d call(s)", confirmCaller.calls)
+	}
+
+	// Happy path with --yes dispatches create_or_update_pool carrying every
+	// provided field (rule-json passed through as the raw string, pool-tags as
+	// a parsed array).
+	okCaller := &scriptedToolCaller{}
+	installScriptedCaller(t, okCaller)
+	if err := executeHrbrainWriteCommand(t, newHrbrainCommand(), "",
+		"talent-pool", "save",
+		"--pool-code", "POOL_CODE",
+		"--pool-name", "储备干部池",
+		"--pool-desc", "描述",
+		"--rule-json", `{"auto":true}`,
+		"--pool-tags", `[{"label":"共享人才池","setting":{"color":"#fff","backgroundColor":"#000"}}]`,
+		"--yes",
+	); err != nil {
+		t.Fatalf("save happy path: %v", err)
+	}
+	if okCaller.calls != 1 {
+		t.Fatalf("save happy path calls = %d, want 1", okCaller.calls)
+	}
+	if okCaller.tool != "create_or_update_pool" {
+		t.Fatalf("save happy path tool = %q, want create_or_update_pool", okCaller.tool)
+	}
+	if okCaller.args["poolName"] != "储备干部池" || okCaller.args["poolCode"] != "POOL_CODE" ||
+		okCaller.args["poolDesc"] != "描述" || okCaller.args["ruleJson"] != `{"auto":true}` {
+		t.Fatalf("save happy path args = %#v", okCaller.args)
+	}
+	if tags, ok := okCaller.args["poolTags"].([]any); !ok || len(tags) != 1 {
+		t.Fatalf("save happy path poolTags = %#v, want 1-element array", okCaller.args["poolTags"])
+	}
+}
+
+func TestHrbrainTalentPoolMoveMembers(t *testing.T) {
+	// Each required flag missing errors before any MCP call.
+	missingCases := []struct {
+		name string
+		args []string
+	}{
+		{"missing pool-code", []string{"talent-pool", "move-members", "--opt-type", "ENTERING", "--staff-ids", "W1"}},
+		{"missing opt-type", []string{"talent-pool", "move-members", "--pool-code", "P", "--staff-ids", "W1"}},
+		{"missing staff-ids", []string{"talent-pool", "move-members", "--pool-code", "P", "--opt-type", "ENTERING"}},
+	}
+	for _, tc := range missingCases {
+		caller := &scriptedToolCaller{dry: true}
+		installScriptedCaller(t, caller)
+		if err := executeHrbrainCommand(t, newHrbrainCommand(), tc.args...); err == nil {
+			t.Fatalf("move-members %s should error", tc.name)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("move-members %s must not call MCP, got %d call(s)", tc.name, caller.calls)
+		}
+	}
+
+	// An unsupported --opt-type value is rejected before dispatch.
+	invalidOptCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, invalidOptCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "move-members", "--pool-code", "P", "--opt-type", "MOVE", "--staff-ids", "W1",
+	); err == nil {
+		t.Fatal("move-members with invalid opt-type should error")
+	}
+	if invalidOptCaller.calls != 0 {
+		t.Fatalf("move-members invalid opt-type must not call MCP, got %d call(s)", invalidOptCaller.calls)
+	}
+
+	// A --staff-ids value that resolves to no work numbers is rejected.
+	emptyStaffCaller := &scriptedToolCaller{dry: true}
+	installScriptedCaller(t, emptyStaffCaller)
+	if err := executeHrbrainCommand(t, newHrbrainCommand(),
+		"talent-pool", "move-members", "--pool-code", "P", "--opt-type", "ENTERING", "--staff-ids", " , ",
+	); err == nil {
+		t.Fatal("move-members with blank staff-ids should error")
+	}
+	if emptyStaffCaller.calls != 0 {
+		t.Fatalf("move-members blank staff-ids must not call MCP, got %d call(s)", emptyStaffCaller.calls)
+	}
+
+	// user_required write without --yes fails closed and never dispatches.
+	confirmCaller := &scriptedToolCaller{}
+	installScriptedCaller(t, confirmCaller)
+	if err := executeHrbrainWriteCommand(t, newHrbrainCommand(), "",
+		"talent-pool", "move-members", "--pool-code", "P", "--opt-type", "ENTERING", "--staff-ids", "W1",
+	); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		t.Fatalf("move-members without --yes error = %v, want confirmation_required", err)
+	}
+	if confirmCaller.calls != 0 {
+		t.Fatalf("move-members without --yes must not call MCP, got %d call(s)", confirmCaller.calls)
+	}
+
+	// Happy path with --yes dispatches entering_or_leaving_pool with the parsed
+	// staff list and optional remark.
+	okCaller := &scriptedToolCaller{}
+	installScriptedCaller(t, okCaller)
+	if err := executeHrbrainWriteCommand(t, newHrbrainCommand(), "",
+		"talent-pool", "move-members",
+		"--pool-code", "POOL_CODE",
+		"--opt-type", "LEAVING",
+		"--staff-ids", "W1,W2",
+		"--remark", "转岗",
+		"--yes",
+	); err != nil {
+		t.Fatalf("move-members happy path: %v", err)
+	}
+	if okCaller.calls != 1 || okCaller.tool != "entering_or_leaving_pool" {
+		t.Fatalf("move-members happy path calls=%d tool=%q", okCaller.calls, okCaller.tool)
+	}
+	if okCaller.args["poolCode"] != "POOL_CODE" || okCaller.args["optType"] != "LEAVING" ||
+		okCaller.args["remark"] != "转岗" {
+		t.Fatalf("move-members happy path args = %#v", okCaller.args)
+	}
+	if staff, ok := okCaller.args["staffIds"].([]string); !ok || !reflect.DeepEqual(staff, []string{"W1", "W2"}) {
+		t.Fatalf("move-members happy path staffIds = %#v, want [W1 W2]", okCaller.args["staffIds"])
 	}
 }
 

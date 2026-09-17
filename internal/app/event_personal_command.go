@@ -80,6 +80,7 @@ type personalConsumeOptions struct {
 	UserID           string
 	OpenDingTalkID   string
 	GroupID          string
+	RoleTypes        []string
 	ControlBaseURL   string
 	StreamTicketMode string
 	StreamTicketURL  string
@@ -154,6 +155,7 @@ var (
 	personalLoadTokenData               = authpkg.LoadTokenData
 	personalLoadProfiles                = authpkg.LoadProfiles
 	personalClientID                    = authpkg.ClientID
+	personalClientIDMetadata            = authpkg.ClientIDMetadata
 	personalRuntimeEventClientID        = runtimePersonalEventClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
 )
@@ -170,8 +172,15 @@ func newEventSchemaCommand() *cobra.Command {
 	var formatRaw string
 	var flatten bool
 	cmd := &cobra.Command{
-		Use:               "schema <event_key>",
-		Short:             "显示事件 schema",
+		Use:   "schema <event_key>",
+		Short: "显示事件 schema",
+		Long: `显示指定个人事件的输出字段 Schema。
+
+默认描述兼容 transport envelope；Agent 或脚本使用 --flatten 时，应同时查询
+--flatten Schema。互动卡片回调的回答、问题、操作者、业务与会话上下文位于
+payload.body，结构化业务上下文优先读取 payload.body.actionData.context。`,
+		Example: `  dws event schema user_card_action_triggered --flatten -f json
+  dws event schema user_im_message_receive_at --flatten -f json`,
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -221,14 +230,14 @@ func newEventSchemaCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM 或 OA event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				UseWhen:      []string{"已知任一公开个人 IM、OA、VoIP、Todo 或互动卡片 event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
 				},
 				Examples: []string{
 					"dws event schema user_im_message_receive_at --flatten --format json",
-					"dws event schema user_oa_approval_task_created --flatten --format json",
+					"dws event schema user_card_action_triggered --flatten --format json",
 				},
 			},
 		},
@@ -285,7 +294,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	rawFormat := ""
@@ -296,13 +305,13 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode([]string{opts.EventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -337,6 +346,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			_, eventKey, _, err := personalEnsureSubscription(ctx, client, identity, opts)
 			if err != nil {
 				return fmt.Errorf("event consume --as user: %w", err)
+			}
+			if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
 			opts.EventKey = eventKey
 		}
@@ -468,6 +480,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
+	if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
+	}
 	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
 	ownsSubscription := selfCreated || opts.Ephemeral
 	var cleanupOnce sync.Once
@@ -558,14 +573,14 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode(opts.EventKeys, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(false, opts.Flatten)
 
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -756,7 +771,7 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, err
 		}
 		switch def.RuleType {
@@ -833,10 +848,16 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 	consume.PrintDryRun(w, preview)
 	for i, plan := range plans {
 		ruleType, ruleParam, _ := personal.BuildRuleParam(plan.EventKey, personal.RuleOptions{
-			UserID: plan.UserID, OpenDingTalkID: plan.OpenDingTalkID, GroupID: plan.GroupID,
+			UserID:         plan.UserID,
+			OpenDingTalkID: plan.OpenDingTalkID,
+			GroupID:        plan.GroupID,
+			RoleTypes:      plan.RoleTypes,
 		})
 		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
-		ruleJSON, _ := personal.CanonicalJSON(ruleParam)
+		ruleJSON := ""
+		if ruleParam != nil {
+			ruleJSON, _ = personal.CanonicalJSON(ruleParam)
+		}
 		fmt.Fprintf(w, "  subscription[%d]  : event_key=%s rule_type=%s rule_param=%s",
 			i, plan.EventKey, ruleType, ruleJSON)
 		if filter != "" {
@@ -853,18 +874,22 @@ func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
 	if flatten {
 		return personal.ProjectOutput
 	}
-	return nil
+	return personal.ProjectTransportOutput
 }
 
-func validatePersonalEventOutputMode(flatten, debugRawEvents bool, format consume.Format) error {
-	if !flatten {
-		return nil
-	}
-	if debugRawEvents {
+func validatePersonalEventOutputMode(eventKeys []string, flatten, debugRawEvents bool, format consume.Format) error {
+	if flatten && debugRawEvents {
 		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
 	}
-	if format == consume.FormatRaw {
+	if flatten && format == consume.FormatRaw {
 		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	if format == consume.FormatRaw && !debugRawEvents {
+		for _, eventKey := range eventKeys {
+			if strings.TrimSpace(eventKey) == personal.EventVoIPCallReceiveInvite {
+				return fmt.Errorf("--format raw for VoIP events requires explicit --debug-raw-events")
+			}
+		}
 	}
 	return nil
 }
@@ -885,7 +910,7 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 }
 
 func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return err
 	}
 	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -893,6 +918,7 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
 	}); err != nil {
 		return err
 	}
@@ -900,19 +926,68 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 	return err
 }
 
-func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
-	changed := personalOAOptionNames(opts)
+func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
+	if err := validatePersonalUnfilteredEventOptions(eventKey, opts); err != nil {
+		return err
+	}
+	return validatePersonalTodoOptions(eventKey, opts)
+}
+
+func validatePersonalUnfilteredEventOptions(eventKey string, opts personalConsumeOptions) error {
+	changed := personalUnsupportedOptionNames(opts)
 	if len(changed) == 0 {
 		return nil
 	}
 	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
-	if !ok || def.Category != "oa" {
+	if !ok {
 		return nil
 	}
-	return fmt.Errorf("%s not supported for OA event %s", strings.Join(changed, ", "), eventKey)
+	categoryName := map[string]string{
+		"oa":   "OA",
+		"voip": "VoIP",
+		"card": "card",
+	}[def.Category]
+	if categoryName == "" {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for %s event %s", strings.Join(changed, ", "), categoryName, eventKey)
 }
 
-func personalOAOptionNames(opts personalConsumeOptions) []string {
+func personalUnsupportedOptionNames(opts personalConsumeOptions) []string {
+	var changed []string
+	for _, item := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--user", value: opts.UserID},
+		{name: "--open-dingtalk-id", value: opts.OpenDingTalkID},
+		{name: "--group", value: opts.GroupID},
+		{name: "--query", value: opts.QueryCSV},
+		{name: "--filter-json", value: opts.FilterJSON},
+	} {
+		if strings.TrimSpace(item.value) != "" {
+			changed = append(changed, item.name)
+		}
+	}
+	if len(opts.RoleTypes) > 0 {
+		changed = append(changed, "--role-types")
+	}
+	return changed
+}
+
+func validatePersonalTodoOptions(eventKey string, opts personalConsumeOptions) error {
+	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	if !ok || def.Category != "todo" {
+		return nil
+	}
+	changed := personalTodoUnsupportedOptionNames(opts)
+	if len(changed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for Todo event %s", strings.Join(changed, ", "), eventKey)
+}
+
+func personalTodoUnsupportedOptionNames(opts personalConsumeOptions) []string {
 	var changed []string
 	for _, item := range []struct {
 		name  string
@@ -944,7 +1019,7 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalPreparedSubscription{}, err
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return personalPreparedSubscription{}, err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -952,6 +1027,7 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
 	})
 	if err != nil {
 		return personalPreparedSubscription{}, err
@@ -1016,7 +1092,10 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err := ensurePublicPersonalEvent(eventKey); err != nil {
 			return nil, "", "", err
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if len(opts.RoleTypes) > 0 {
+			return nil, "", "", fmt.Errorf("--role-types is not supported when reusing --subscribe-id")
+		}
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, "", "", err
 		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
@@ -1041,7 +1120,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 		return err
 	}
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event status --as user: %w", err)
 	}
@@ -1185,7 +1264,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -1324,16 +1403,16 @@ func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, bu
 	fmt.Fprintf(w, "cancelled %d personal subscription(s); %s\n", len(subscribeIDs), busState)
 }
 
-func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, options ...personalIdentityOptions) (personal.Identity, error) {
+	opts := personalIdentityOption(options)
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride)
+		// Preserve the stored-token path's profile identity precedence. Only the
+		// internal bus supplies a parent-resolved override directly to the resolver.
+		opts.ClientID = ""
+		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
-	clientIDOverride := ""
-	if len(clientIDOverrides) > 0 {
-		clientIDOverride = strings.TrimSpace(clientIDOverrides[0])
-	}
-	return resolvePersonalEventIdentityWithToken(ctx, configDir, sourceIDOverride, explicitToken, clientIDOverride)
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
 }
 
 // resolvePersonalEventIdentityWithToken resolves only non-sensitive identity
@@ -1342,9 +1421,17 @@ func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, source
 // --token must never be replaced with, persisted into, or used to refresh a
 // local OAuth profile.
 func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+	opts := personalIdentityOptions{}
+	if len(clientIDOverrides) > 0 {
+		opts.ClientID = clientIDOverrides[0]
+	}
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
+}
+
+func resolvePersonalEventIdentityWithTokenOptions(ctx context.Context, configDir, sourceIDOverride, explicitToken string, opts personalIdentityOptions) (personal.Identity, error) {
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
 	if strings.Contains(strings.TrimSpace(authpkg.RuntimeProfile()), ",") {
 		return personal.Identity{}, fmt.Errorf("personal events require exactly one --profile")
@@ -1352,10 +1439,7 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 
 	corpID := resolveRuntimeDefault(ctx, "$corpId")
 	userID := resolveRuntimeDefault(ctx, "$currentUserId")
-	clientID := ""
-	if len(clientIDOverrides) > 0 {
-		clientID = strings.TrimSpace(clientIDOverrides[0])
-	}
+	clientID := strings.TrimSpace(opts.ClientID)
 	if clientID == "" {
 		// An edition hook or explicit environment value is runtime identity,
 		// not persisted app state. Resolve it before profiles.json so a complete
@@ -1388,18 +1472,10 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 			}
 		}
 	}
-	if clientID == "" {
-		// Persisted/global app credentials are only a fallback after the
-		// selected profile, so an old app config cannot override profile.ClientID.
-		clientID = strings.TrimSpace(personalClientID())
-	}
-	if clientID == "" {
-		if id, _, _, _, resolveErr := personalResolveAppCredentialsStrict(configDir); resolveErr == nil {
-			clientID = strings.TrimSpace(id)
-		}
-	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
+	var err error
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
 
 	sourceID := strings.TrimSpace(sourceIDOverride)
@@ -1456,7 +1532,7 @@ func selectPersonalEventProfileMetadata(cfg *authpkg.ProfilesConfig, selector st
 	return authpkg.ResolveProfileMetadata(cfg, strings.TrimSpace(selector))
 }
 
-func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string) (personal.Identity, error) {
+func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string, options ...personalIdentityOptions) (personal.Identity, error) {
 	accessToken, err := personalResolveAuxiliaryAccessToken(ctx, configDir, "")
 	if err != nil {
 		return personal.Identity{}, err
@@ -1478,17 +1554,15 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if userID == "" {
 		userID = resolveRuntimeDefault(ctx, "$currentUserId")
 	}
-	if clientID == "" {
-		clientID = personalClientID()
+	opts := personalIdentityOption(options)
+	if id := strings.TrimSpace(opts.ClientID); id != "" {
+		clientID = id
 	}
-	if clientID == "" {
-		if id, _, _, _, err := personalResolveAppCredentialsStrict(configDir); err == nil {
-			clientID = id
-		}
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
-	}
+
 	sourceID := strings.TrimSpace(sourceIDOverride)
 	if sourceID == "" {
 		sourceID = personalEventStreamSourceID("")

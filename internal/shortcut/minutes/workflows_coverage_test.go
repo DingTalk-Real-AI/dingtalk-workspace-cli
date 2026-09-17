@@ -34,6 +34,7 @@ func TestCrossPlatformCoverageMinutesWorkflowValidationAndDefaults(t *testing.T)
 		{"minutes", "+speaker-insights", "--id", "u1", "--interval", "0"},
 		{"minutes", "+export-pack", "--id", "u1", "--output", "pack", "--page-limit", "0"},
 		{"minutes", "+share", "--id", "u1", "--member-uids", strings.Repeat("m,", 51), "--permission", "view"},
+		{"minutes", "+share", "--id", "u1", "--member-staff-ids", strings.Repeat("0m,", 51), "--permission", "view"},
 	}
 	for _, args := range invalid {
 		if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, args...); err == nil || payload != nil || output != "" {
@@ -91,7 +92,7 @@ func TestCrossPlatformCoverageMinutesUploadAndAnalyzeBranchesE2E(t *testing.T) {
 		"minutes/create_mind_graph":       {`{"success":true,"result":{}}`},
 		"minutes/query_mind_graph_status": {`{"success":true,"result":{"taskStatus":1,"mindGraph":"ready"}}`},
 		"minutes/create_speaker_summary":  {`{"success":true,"result":{"taskId":"job","status":"processing"}}`},
-		"minutes/get_speaker_summary":     {`{"success":true,"result":{"summaries":[{"speaker":"a","summary":"b"}]}}`},
+		"minutes/get_speaker_summary":     {speakerReadyFixture},
 	}}
 	payload, _, err := runMinutesAlignmentCLI(t, resume, "minutes", "+upload-and-analyze", "--resume-id", "u1", "--artifacts", "basic", "--mindmap", "--speaker-insights", "--yes")
 	if err != nil || payload["complete"] != true || payload["taskUuid"] != "u1" {
@@ -199,7 +200,7 @@ func TestCrossPlatformCoverageMinutesSpeakerInsightsBranchesE2E(t *testing.T) {
 		{name: "poll nonpending", responses: map[string][]string{"minutes/create_speaker_summary": {`{"success":true,"result":{"taskId":"job","status":"processing"}}`}, "minutes/get_speaker_summary": {`{"success":false,"errorMsg":"denied"}`}}},
 		{name: "poll parse", responses: map[string][]string{"minutes/create_speaker_summary": {`{"success":true,"result":{"taskId":"job","status":"processing"}}`}, "minutes/get_speaker_summary": {`{"success":true,"result":{}}`}}},
 		{name: "timeout", responses: map[string][]string{"minutes/create_speaker_summary": {`{"success":true,"result":{"taskId":"job","status":"processing"}}`}, "minutes/get_speaker_summary": {`{"success":false,"errorMsg":"processing"}`}}},
-		{name: "resume", responses: map[string][]string{"minutes/get_speaker_summary": {`{"success":true,"result":{"summaries":[{"speaker":"a","summary":"b"}]}}`}}, args: []string{"--resume", "--task-id", "job"}},
+		{name: "resume", responses: map[string][]string{"minutes/get_speaker_summary": {speakerReadyFixture}}, args: []string{"--resume", "--task-id", "job"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -215,21 +216,21 @@ func TestCrossPlatformCoverageMinutesSpeakerInsightsBranchesE2E(t *testing.T) {
 			}
 		})
 	}
-	outputFail := &minutesE2ECaller{responses: map[string][]string{"minutes/get_speaker_summary": {`{"success":true,"result":{"summaries":[{"speaker":"a","summary":"b"}]}}`}}}
+	outputFail := &minutesE2ECaller{responses: map[string][]string{"minutes/get_speaker_summary": {speakerReadyFixture}}}
 	if err := runMinutesAlignmentCLIWithWriter(t, outputFail, minutesFailWriter{}, "minutes", "+speaker-insights", "--id", "u1", "--resume", "--yes"); err == nil {
 		t.Fatal("speaker output failure accepted")
 	}
 
 	for _, message := range []string{"query empty", "processing", "not ready", "result is empty", "business error: code 000", "暂无"} {
-		if !speakerSummaryPending(errors.New(message)) {
-			t.Fatalf("pending message rejected: %q", message)
+		if speakerSummaryPending(errors.New(message)) {
+			t.Fatalf("untyped pending message accepted: %q", message)
 		}
 	}
 	if speakerSummaryPending(nil) || speakerSummaryPending(errors.New("denied")) {
 		t.Fatal("non-pending speaker error accepted")
 	}
 
-	caller := &minutesE2ECaller{responses: map[string][]string{"minutes/get_speaker_summary": {`{"success":false,"errorMsg":"processing"}`}}}
+	caller := &minutesE2ECaller{responses: map[string][]string{"minutes/get_speaker_summary": {`{"success":true,"result":{"status":"processing","taskId":"job"}}`}}}
 	helpers.InitDepsForTest(t, caller)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -341,8 +342,30 @@ func TestCrossPlatformCoverageMinutesPermissionLedgerBranchesE2E(t *testing.T) {
 		t.Fatalf("share payload=%#v err=%v", payload, err)
 	}
 	args := share.arguments["minutes/add_member_permission"][0]
-	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 {
+	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 || args["memberUids"].([]string)[0] != "m1" {
 		t.Fatalf("share args=%#v", args)
+	}
+	if _, exists := args["memberStaffIds"]; exists {
+		t.Fatalf("UID share unexpectedly sent memberStaffIds: %#v", args)
+	}
+	staffShare := &minutesE2ECaller{responses: map[string][]string{"minutes/add_member_permission": {`{"success":true,"result":{}}`}}}
+	payload, _, err = runMinutesAlignmentCLI(t, staffShare, "minutes", "+share", "--id", "u1", "--member-staff-ids", "074360", "--permission", "view", "--yes")
+	if err != nil || payload["complete"] != true {
+		t.Fatalf("staffId share payload=%#v err=%v", payload, err)
+	}
+	staffArgs := staffShare.arguments["minutes/add_member_permission"][0]
+	staffIDs, ok := staffArgs["memberStaffIds"].([]string)
+	if !ok || len(staffIDs) != 1 || staffIDs[0] != "074360" {
+		t.Fatalf("staffId share lost leading zero: %#v", staffArgs)
+	}
+	if _, exists := staffArgs["memberUids"]; exists {
+		t.Fatalf("staffId share unexpectedly sent memberUids: %#v", staffArgs)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--member-uids", "m1", "--member-staff-ids", "074360", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted both member identifier types payload=%#v output=%q err=%v", payload, output, err)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted no member identifier payload=%#v output=%q err=%v", payload, output, err)
 	}
 	continueFailure := &minutesE2ECaller{responses: map[string][]string{
 		"minutes/get_minutes_basic_info": {`{"success":true,"result":{"taskUuid":"u1"}}`},
@@ -385,6 +408,10 @@ func TestCrossPlatformCoverageMinutesArtifactCollectorBranches(t *testing.T) {
 	if len(bundle) != 5 || len(failures) != 1 {
 		t.Fatalf("collector bundle=%#v failures=%#v", bundle, failures)
 	}
+	todos := bundle["todos"].(map[string]any)
+	if todos["state"] != "known_empty" || todos["complete"] != true || todos["itemCount"] != 0 {
+		t.Fatalf("collector todos=%#v", todos)
+	}
 
 	for _, artifact := range []string{"basic", "summary", "keywords", "transcript", "todos"} {
 		t.Run("call "+artifact, func(t *testing.T) {
@@ -399,6 +426,9 @@ func TestCrossPlatformCoverageMinutesArtifactCollectorBranches(t *testing.T) {
 			if len(got) != 0 || len(failed) != 1 {
 				t.Fatalf("got=%#v failed=%#v", got, failed)
 			}
+			if artifact == "todos" && failed[0]["state"] != "failed" {
+				t.Fatalf("todo call state=%#v", failed[0])
+			}
 		})
 		t.Run("parse "+artifact, func(t *testing.T) {
 			tool := map[string]string{
@@ -411,6 +441,9 @@ func TestCrossPlatformCoverageMinutesArtifactCollectorBranches(t *testing.T) {
 			got, failed := collectMinutesArtifactsOnce(rt, "u1", []string{artifact}, 1)
 			if len(got) != 0 || len(failed) != 1 {
 				t.Fatalf("got=%#v failed=%#v", got, failed)
+			}
+			if artifact == "todos" && failed[0]["state"] != "unsupported_shape" {
+				t.Fatalf("todo parse state=%#v", failed[0])
 			}
 		})
 	}
@@ -434,6 +467,12 @@ func TestCrossPlatformCoverageMinutesArtifactWaitAndOutput(t *testing.T) {
 	rt = shortcut.RuntimeContextForTest(&cobra.Command{Use: "wait"}, ExportPack)
 	if _, failures, attempts := waitMinutesArtifacts(rt, "u1", []string{"basic"}, 1, 0, 0); len(failures) != 1 || attempts != 1 {
 		t.Fatalf("timeout failures=%#v attempts=%d", failures, attempts)
+	}
+	unsupported := &minutesE2ECaller{responses: map[string][]string{"minutes/list_minutes_todos": {`{"success":true,"result":{}}`}}}
+	helpers.InitDepsForTest(t, unsupported)
+	rt = shortcut.RuntimeContextForTest(&cobra.Command{Use: "wait"}, ExportPack)
+	if _, failures, attempts := waitMinutesArtifacts(rt, "u1", []string{"todos"}, 1, 2*time.Hour, time.Hour); len(failures) != 1 || attempts != 1 || failures[0]["state"] != "unsupported_shape" {
+		t.Fatalf("terminal todos failures=%#v attempts=%d", failures, attempts)
 	}
 	cancelled := &minutesE2ECaller{responses: map[string][]string{"minutes/get_minutes_basic_info": {`{"success":true,"result":{}}`}}}
 	helpers.InitDepsForTest(t, cancelled)

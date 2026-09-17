@@ -118,6 +118,12 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 	// products.devapp). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "devapp",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("开放平台应用深度指南", "dingtalk-misc", "references/devapp.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
 			UseWhen: []string{

@@ -731,6 +731,12 @@ var unavailableAgoalSpecs = []unavailableAgoalSpec{
 func init() {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: productAgoal,
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("Agoal 深度指南", "dingtalk-misc", "references/agoal.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询钉钉 Agoal 的周月报统计、人员提交详情、合约字段、用户规则与目标模板；其余能力按安全证据逐步开放",
 			UseWhen:      []string{"用户明确处理钉钉 Agoal、战略解码、经营合约、计分卡、周月报统计或目标模板时使用"},

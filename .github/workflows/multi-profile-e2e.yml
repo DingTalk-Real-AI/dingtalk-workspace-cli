@@ -35,11 +35,12 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p .tmp-bin
-          bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir | tee "$MULTI_PROFILE_E2E_LOG"
+          bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests --keep-workdir | tee "$MULTI_PROFILE_E2E_LOG"
           {
             echo "### Multi-profile E2E"
-            echo "- Command: \`bash scripts/dev/test-multi-profile-e2e.sh --keep-workdir\`"
+            echo "- Command: \`bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests --keep-workdir\`"
             echo "- Scope: isolated auth/profile storage, profile switch/use, one-shot profile override, CSV multi-profile aggregation, legacy migration"
+            echo "- Go regressions: delegated to the protected-main CI test and coverage shards"
             echo "- Result: passed"
           } >> "$GITHUB_STEP_SUMMARY"
 

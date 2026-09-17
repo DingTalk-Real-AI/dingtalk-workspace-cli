@@ -15,16 +15,22 @@ package app
 
 import (
 	"bytes"
+	"context"
 	stderrors "errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -76,6 +82,310 @@ func TestRootHelpShowsFeedbackEntry(t *testing.T) {
 	if !strings.Contains(help, "\n    "+feedbackFormURL+"\n") {
 		t.Fatalf("feedback URL must occupy one unwrapped line:\n%s", help)
 	}
+	if !strings.HasSuffix(strings.TrimSpace(help), feedbackFormURL) {
+		t.Fatalf("Feedback must remain the final root Help section:\n%s", help)
+	}
+}
+
+func TestRootHelpShowsAgentQuickstartAndSafetyModel(t *testing.T) {
+	help := executeHelpOutput(t, "--help")
+	for _, want := range []string{
+		"Agent Quickstart:",
+		"dws <service> --help",
+		"dws <path> --help",
+		`dws schema --cli-path "<path>" --compact -f json`,
+		"Prefer structured output",
+		"Use dry-run only when the leaf explicitly supports it",
+		"Never add --yes without explicit user confirmation",
+		"Safety model:",
+		"effect=read|write|destructive",
+		"risk=low|medium|high",
+		"confirmation=not_required|user_required",
+		"idempotency=idempotent|retryable|non_idempotent|unknown",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("root Help missing %q:\n%s", want, help)
+		}
+	}
+	if strings.Index(help, "Agent Quickstart:") > strings.Index(help, "Feedback:") ||
+		strings.Index(help, "Safety model:") > strings.Index(help, "Feedback:") {
+		t.Fatalf("Agent guidance must render before final Feedback section:\n%s", help)
+	}
+}
+
+func TestLeafHelpRendersSelectionSafetyAndReferences(t *testing.T) {
+	for _, tc := range []struct {
+		path         string
+		wantEffect   string
+		wantConfirm  string
+		wantSkill    string
+		wantDocument string
+	}{
+		{path: "dev app list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
+		{path: "chat message send", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-chat", wantDocument: "references/chat.md"},
+		{path: "dev app delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
+		{path: "contract record list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
+		{path: "contract subject delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
+		{path: "contact org apply-list", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-contact", wantDocument: "references/contact.md"},
+		{path: "contact org apply-remove", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-contact", wantDocument: "references/contact.md"},
+	} {
+		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
+			root := NewRootCommand()
+			meta, ok := cli.ResolveMeta(tc.path)
+			if !ok {
+				t.Fatalf("ResolveMeta(%q) missing", tc.path)
+			}
+			out := executeHelpOutputWithRoot(t, root, append(strings.Fields(tc.path), "--help")...)
+			for _, want := range []string{
+				"When to use:", meta.Selection.UseWhen[0],
+				"Avoid when:", meta.Selection.AvoidWhen[0],
+				"Safety: effect=" + tc.wantEffect,
+				"confirmation=" + tc.wantConfirm,
+				"idempotency=" + meta.Safety.Idempotency,
+				"Related skills:", tc.wantSkill,
+				"Documentation:", tc.wantDocument,
+			} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%s Help missing %q:\n%s", tc.path, want, out)
+				}
+			}
+			for _, once := range []string{"When to use:", "Avoid when:", "Safety:", "Related skills:", "Documentation:"} {
+				if count := strings.Count(out, once); count != 1 {
+					t.Fatalf("%s Help contains %q %d times, want once:\n%s", tc.path, once, count, out)
+				}
+			}
+			if tc.wantConfirm == "user_required" && !strings.Contains(out, "Do not use --yes until the user explicitly confirms") {
+				t.Fatalf("%s Help missing explicit --yes confirmation boundary:\n%s", tc.path, out)
+			}
+		})
+	}
+}
+
+func TestServiceAndHelpCommandRenderReferencesOnce(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "--help"},
+		{"im", "--help"},
+		{"help", "chat"},
+		{"chat", "message", "send", "--help"},
+		{"help", "chat", "message", "send"},
+	} {
+		out := executeHelpOutput(t, args...)
+		for _, heading := range []string{"Related skills:", "Documentation:"} {
+			if count := strings.Count(out, heading); count != 1 {
+				t.Fatalf("dws %s contains %q %d times, want once:\n%s", strings.Join(args, " "), heading, count, out)
+			}
+		}
+		if !strings.Contains(out, "dingtalk-chat") || !strings.Contains(out, "references/chat.md") {
+			t.Fatalf("dws %s missing inherited chat references:\n%s", strings.Join(args, " "), out)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatHelpUsesShortcutFirstTiers(t *testing.T) {
+	help := executeHelpOutput(t, "chat", "--help")
+	for _, want := range []string{
+		"选择顺序：",
+		"优先使用 +shortcut 完成用户任务",
+		"Featured Shortcuts:",
+		"Atomic API Resources:",
+		"More Chat Shortcuts:",
+		"当前有 97 个 canonical Shortcut",
+		"本页展示 27 个高频入口",
+		"另有 70 个低频正式入口",
+		"dws shortcut list --service chat --format json",
+		`dws schema --cli-path "chat +<command>" --compact -f json`,
+		"+dm",
+		"+chat-search",
+		"+chat-update",
+		"+flag-list",
+		"+messages-send",
+		"group",
+		"message",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("chat shortcut-first Help missing %q:\n%s", want, help)
+		}
+	}
+	for _, hiddenFromRoot := range []string{
+		"+conversation-mute ",
+		"+category-create ",
+		"+chat-list-all ",
+		"  mute                    ",
+		"  conversation-info       ",
+	} {
+		if strings.Contains(help, hiddenFromRoot) {
+			t.Fatalf("chat root Help unexpectedly lists non-featured %q:\n%s", hiddenFromRoot, help)
+		}
+	}
+
+	leafHelp := executeHelpOutput(t, "chat", "+conversation-mute", "--help")
+	if !strings.Contains(leafHelp, "dws chat +conversation-mute") ||
+		!strings.Contains(leafHelp, "Safety:") {
+		t.Fatalf("catalog Shortcut exact Help must remain available:\n%s", leafHelp)
+	}
+}
+
+func TestCrossPlatformCoverageAtomicHelpPointsToPreferredShortcut(t *testing.T) {
+	for _, tc := range []struct {
+		path  string
+		owner string
+	}{
+		{path: "chat mute", owner: "chat +conversation-mute"},
+		{path: "chat category create", owner: "chat +category-create"},
+		{path: "chat message send", owner: "chat +messages-send"},
+		{path: "im group rename", owner: "chat +chat-update"},
+	} {
+		out := executeHelpOutput(t, append(strings.Fields(tc.path), "--help")...)
+		for _, want := range []string{
+			"Preferred Shortcut:",
+			"dws " + tc.owner,
+			"默认使用 Shortcut",
+			"只有需要 Shortcut 未公开的底层参数或原始响应",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s atomic Help missing %q:\n%s", tc.path, want, out)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatHelpGuidanceSurvivesAliasAndHelpCommand(t *testing.T) {
+	for _, args := range [][]string{{"im", "--help"}, {"help", "chat"}} {
+		out := executeHelpOutput(t, args...)
+		for _, want := range []string{
+			"优先使用 +shortcut 完成用户任务",
+			"Featured Shortcuts:",
+			"dws shortcut list --service chat --format json",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("dws %s missing Shortcut-first guidance %q:\n%s", strings.Join(args, " "), want, out)
+			}
+		}
+	}
+}
+
+func TestProgrammaticLeafHelpRendersAffordancesOnce(t *testing.T) {
+	root := NewRootCommand()
+	target, remaining, err := root.Find([]string{"chat", "message", "send"})
+	if err != nil || target == nil || len(remaining) != 0 {
+		t.Fatalf("find chat message send: target=%v remaining=%v err=%v", target, remaining, err)
+	}
+	var out bytes.Buffer
+	root.SetOut(&out)
+	target.SetOut(&out)
+	if err := target.Help(); err != nil {
+		t.Fatalf("programmatic leaf Help: %v", err)
+	}
+	for _, heading := range []string{"When to use:", "Avoid when:", "Safety:", "Related skills:", "Documentation:"} {
+		if count := strings.Count(out.String(), heading); count != 1 {
+			t.Fatalf("programmatic Help contains %q %d times, want once:\n%s", heading, count, out.String())
+		}
+	}
+}
+
+func TestLeafAliasUsesPrimarySelectionAndReferences(t *testing.T) {
+	primary, ok := cli.ResolveMeta("report inbox list")
+	if !ok || len(primary.Selection.UseWhen) == 0 {
+		t.Fatalf("primary report metadata incomplete: %#v", primary)
+	}
+	aliased, ok := cli.ResolveMeta("report list")
+	if !ok || aliased.Identity.Canonical != primary.Identity.Canonical {
+		t.Fatalf("alias metadata = %#v, want canonical %q", aliased, primary.Identity.Canonical)
+	}
+	for _, path := range []string{"report inbox list", "report list"} {
+		out := executeHelpOutput(t, append(strings.Fields(path), "--help")...)
+		for _, want := range []string{primary.Selection.UseWhen[0], "Safety:", "dingtalk-misc", "references/report.md"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s Help missing primary affordance %q:\n%s", path, want, out)
+			}
+		}
+	}
+}
+
+func TestPublicServicesDeclareExistingHelpReferences(t *testing.T) {
+	root := NewRootCommand()
+	repositoryRoot := filepath.Clean(filepath.Join("..", ".."))
+	const documentationPrefix = "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/"
+	for _, service := range visibleMCPRootCommands(root) {
+		decl, ok := contract.LookupProductDecl(service.Name())
+		if !ok {
+			t.Errorf("public service %q has no ProductDecl", service.Name())
+			continue
+		}
+		if len(decl.HelpReferences.RelatedSkills) == 0 || len(decl.HelpReferences.Documentation) == 0 {
+			t.Errorf("public service %q HelpReferences = %#v, want skill and documentation", service.Name(), decl.HelpReferences)
+			continue
+		}
+		for _, skill := range decl.HelpReferences.RelatedSkills {
+			skillPath := filepath.Join(repositoryRoot, "skills", "multi", skill, "SKILL.md")
+			if _, err := os.Stat(skillPath); err != nil {
+				t.Errorf("public service %q related Skill %q does not exist: %v", service.Name(), skill, err)
+			}
+		}
+		for _, document := range decl.HelpReferences.Documentation {
+			parsed, err := url.Parse(document.URL)
+			if err != nil || parsed.Scheme != "https" || !strings.HasPrefix(document.URL, documentationPrefix) {
+				t.Errorf("public service %q documentation URL is not a stable HTTPS repository link: %q", service.Name(), document.URL)
+				continue
+			}
+			relativePath := strings.TrimPrefix(document.URL, documentationPrefix)
+			if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath))); err != nil {
+				t.Errorf("public service %q documentation %q does not exist: %v", service.Name(), relativePath, err)
+			}
+		}
+	}
+}
+
+func TestAgentVisibleLeavesHaveCompleteRenderableSafetyAndReferences(t *testing.T) {
+	registry, err := cli.AssembleSchemaRegistry(NewSchemaSourceRootCommand())
+	if err != nil {
+		t.Fatalf("assemble Schema registry: %v", err)
+	}
+	validEffect := map[string]bool{"read": true, "write": true, "destructive": true}
+	validRisk := map[string]bool{"low": true, "medium": true, "high": true}
+	validConfirmation := map[string]bool{"not_required": true, "user_required": true}
+	validIdempotency := map[string]bool{"idempotent": true, "retryable": true, "non_idempotent": true, "unknown": true}
+	leaves := 0
+	for _, product := range registry.Products {
+		decl, ok := contract.LookupProductDecl(product.ID)
+		if !ok || len(decl.HelpReferences.RelatedSkills) == 0 || len(decl.HelpReferences.Documentation) == 0 {
+			t.Errorf("Schema product %q has no complete HelpReferences", product.ID)
+		}
+		for _, tool := range product.Tools {
+			leaves++
+			safety := cli.CommandSafety{
+				Effect: tool.Safety.Effect, Risk: tool.Safety.Risk,
+				Confirmation: tool.Safety.Confirmation, Idempotency: tool.Safety.Idempotency,
+			}
+			if !validEffect[safety.Effect] || !validRisk[safety.Risk] ||
+				!validConfirmation[safety.Confirmation] || !validIdempotency[safety.Idempotency] {
+				t.Errorf("leaf %q has incomplete/invalid Safety: %#v", tool.Identity.CLIPath, safety)
+			}
+			if !safety.ShouldRender() {
+				t.Errorf("leaf %q Safety is hidden: %#v", tool.Identity.CLIPath, safety)
+			}
+		}
+	}
+	if leaves == 0 {
+		t.Fatal("assembled Schema contains no Agent-visible leaves")
+	}
+}
+
+func executeHelpOutput(t *testing.T, args ...string) string {
+	t.Helper()
+	return executeHelpOutputWithRoot(t, NewRootCommand(), args...)
+}
+
+func executeHelpOutputWithRoot(t *testing.T, root *cobra.Command, args ...string) string {
+	t.Helper()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("dws %s: %v\n%s", strings.Join(args, " "), err, out.String())
+	}
+	return out.String()
 }
 
 // The feedback entry is deliberately root-only: this CLI is driven mostly by
@@ -296,6 +606,7 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "label", "get")
 	mustFindCommand(t, root, "contact", "label", "list")
 	mustFindCommand(t, root, "contact", "label", "list-members")
+	mustFindCommand(t, root, "contact", "label", "create")
 	mustFindCommand(t, root, "contact", "label", "find")
 	mustFindCommand(t, root, "contact", "label", "search")
 	mustFindCommand(t, root, "contact", "label", "info")
@@ -328,6 +639,16 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 			name: "label members",
 			args: []string{"--dry-run", "contact", "label", "list-members", "--id", "123"},
 			want: []string{"get_label_members_by_labelId", "labelId", "123"},
+		},
+		{
+			name: "label create role",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理员", "--type", "role", "--parent-id", "12345", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理员"},
+		},
+		{
+			name: "label create group",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理层", "--type", "group", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理层"},
 		},
 		{
 			name: "role shim",
@@ -394,19 +715,372 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	}
 }
 
-func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
+func TestRootKeepsContactOrgInviteApplyAdminCommands(t *testing.T) {
+	root := NewRootCommand()
+
+	// 命令树结构：exclusive-account 新组、org 组 9 个新子命令、dept 组 invite-audit。
+	mustFindCommand(t, root, "contact", "exclusive-account")
+	mustFindCommand(t, root, "contact", "exclusive-account", "disable")
+	mustFindCommand(t, root, "contact", "exclusive-account", "enable")
+	mustFindCommand(t, root, "contact", "org", "invite-switch")
+	mustFindCommand(t, root, "contact", "org", "invite-audit")
+	mustFindCommand(t, root, "contact", "org", "invite-info")
+	mustFindCommand(t, root, "contact", "org", "invite-list")
+	mustFindCommand(t, root, "contact", "org", "apply-list")
+	mustFindCommand(t, root, "contact", "org", "apply-approve")
+	mustFindCommand(t, root, "contact", "org", "apply-reject")
+	mustFindCommand(t, root, "contact", "org", "apply-block")
+	mustFindCommand(t, root, "contact", "org", "apply-remove")
+	mustFindCommand(t, root, "contact", "dept", "invite-audit")
+
+	approve := mustFindCommand(t, root, "contact", "org", "apply-approve")
+	if !containsString(approve.Aliases, "approve") {
+		t.Fatal("contact org apply-approve missing approve alias")
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "exclusive account disable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "disable"},
+		},
+		{
+			name: "exclusive account enable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "enable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "enable"},
+		},
+		{
+			name: "org invite switch",
+			args: []string{"--dry-run", "contact", "org", "invite-switch", "--open", "true", "--search-invite", "false"},
+			want: []string{"set_org_invite_switch", `"open": true`, `"searchInviteSwitch": false`},
+		},
+		{
+			name: "org invite audit open",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit"},
+			want: []string{"set_org_apply_audit", `"auditType": 0`},
+		},
+		{
+			name: "org invite audit close",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit=false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+		{
+			name: "org invite info",
+			args: []string{"--dry-run", "contact", "org", "invite-info"},
+			want: []string{"get_org_invite_info"},
+		},
+		{
+			name: "org invite list defaults",
+			args: []string{"--dry-run", "contact", "org", "invite-list"},
+			want: []string{"list_team_invite", `"status": 1`, `"size": 20`},
+		},
+		{
+			name: "org invite list paging",
+			args: []string{"--dry-run", "contact", "org", "invite-list", "--status", "2", "--cursor", "33", "--size", "50"},
+			want: []string{"list_team_invite", `"status": 2`, `"cursor": 33`, `"size": 50`},
+		},
+		{
+			name: "org apply list all",
+			args: []string{"--dry-run", "contact", "org", "apply-list", "--status", "0"},
+			want: []string{"query_org_apply_list", `"status": 0`},
+		},
+		{
+			name: "org apply approve",
+			args: []string{"--dry-run", "contact", "org", "apply-approve", "--id", "123"},
+			want: []string{"approve_org_apply", `"id": 123`},
+		},
+		{
+			name: "org apply reject",
+			args: []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123", "--reason", "不符合入职条件"},
+			want: []string{"reject_org_apply", `"id": 123`, "reason", "不符合入职条件"},
+		},
+		{
+			name: "org apply block",
+			args: []string{"--dry-run", "contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			want: []string{"block_org_apply", `"id": 123`, "reason", "恶意重复申请"},
+		},
+		{
+			name: "org apply remove",
+			args: []string{"--dry-run", "contact", "org", "apply-remove", "--id", "123"},
+			want: []string{"remove_org_apply", `"id": 123`},
+		},
+		{
+			name: "dept invite audit",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`},
+		},
+		{
+			name: "dept invite audit emp apply join",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit", "--emp-apply-join-dept", "true"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`, `"empApplyJoinDept": true`},
+		},
+		{
+			// pflag 布尔 flag 不吞并后置值：--no-audit true 中的 "true" 是位置参数，
+			// contactNoAuditArgs 需将其归并回 flag 值而不是拒绝。
+			name: "org invite audit positional bool tolerance",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit", "false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := executeRootCaptureStdout(t, tc.args)
+			if err != nil {
+				t.Fatalf("Execute(%v) error = %v\n%s", tc.args, err, got)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("Execute(%v) output missing %q:\n%s", tc.args, want, got)
+				}
+			}
+		})
+	}
+
+	// 负例：--no-audit 必须显式传值（dry-run 已绕过确认 gate，能命中参数校验）。
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-audit"}); err == nil || !strings.Contains(err.Error(), "--no-audit") {
+		t.Fatalf("org invite-audit without --no-audit should fail with a no-audit hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-list", "--status", "9"}); err == nil || !strings.Contains(err.Error(), "--status") {
+		t.Fatalf("org invite-list --status 9 should fail with a status hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123"}); err == nil || !strings.Contains(err.Error(), "--reason") {
+		t.Fatalf("org apply-reject without --reason should fail with a reason hint, got err = %v\n%s", err, got)
+	}
+}
+
+// contactWriteOpsCall 记录一次 MCP 写调用的完整入参。
+type contactWriteOpsCall struct {
+	server string
+	tool   string
+	args   map[string]any
+}
+
+// contactWriteOpsRecorder 是记录型 ToolCaller，供确认门禁测试断言
+// 工具名与参数（区别于只验证参数组装的 --dry-run 用例）。
+type contactWriteOpsRecorder struct {
+	calls []contactWriteOpsCall
+}
+
+func (r *contactWriteOpsRecorder) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	r.calls = append(r.calls, contactWriteOpsCall{server: server, tool: tool, args: args})
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true}`}}}, nil
+}
+
+func (*contactWriteOpsRecorder) Format() string { return "json" }
+func (*contactWriteOpsRecorder) DryRun() bool   { return false }
+func (*contactWriteOpsRecorder) Fields() string { return "" }
+func (*contactWriteOpsRecorder) JQ() string     { return "" }
+
+// executeContactWriteOp 走非 dry-run 真实执行路径：os.Args 需含产品名 contact
+// 供 resolveProductID 路由 MCP Server；stdin 传空 reader 模拟非交互环境
+// （EOF 时 ConfirmSafety 失败关闭）。
+func executeContactWriteOp(t *testing.T, recorder *contactWriteOpsRecorder, args []string) error {
+	t.Helper()
+	testseam.Swap(t, &os.Args, append([]string{"dws"}, args...))
+	root := NewRootCommand()
+	helpers.InitDepsForTest(t, recorder)
+	root.SetIn(strings.NewReader(""))
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+// TestContactWriteOpsConfirmationGate 是 user_required 写操作的端到端回归：
+// 上方成功用例全部传 --dry-run（绕过确认 gate），无法证明真实执行路径上
+// 未确认会在 MCP 调用前被拒绝。这里覆盖三类高风险写操作：
+//   - apply-remove：删除申请记录，不可恢复；
+//   - apply-block：屏蔽会拉黑申请人；
+//   - disable：停用企业账号会阻止其登录钉钉。
+func TestContactWriteOpsConfirmationGate(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:     "apply remove is not recoverable",
+			args:     []string{"contact", "org", "apply-remove", "--id", "123"},
+			tool:     "remove_org_apply",
+			wantArgs: map[string]any{"id": int64(123)},
+		},
+		{
+			name:     "apply block blacklists the applicant",
+			args:     []string{"contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			tool:     "block_org_apply",
+			wantArgs: map[string]any{"id": int64(123), "reason": "恶意重复申请"},
+		},
+		{
+			name: "exclusive account disable blocks sign-in",
+			args: []string{"contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			tool: "exclusive_account_set_status",
+			// uesrId 是 MCP 工具运行时入参的历史字段名（平台 inputMappings 笔误）。
+			wantArgs: map[string]any{"uesrId": "user001", "status": "disable"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("unconfirmed rejects before any MCP call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, tc.args)
+				if err == nil {
+					t.Fatalf("%s without confirmation must be rejected", tc.name)
+				}
+				if !apperrors.IsConfirmationRequired(err) {
+					t.Fatalf("%s error = %v, want reason confirmation_required", tc.name, err)
+				}
+				if len(recorder.calls) != 0 {
+					t.Fatalf("%s must not reach MCP before confirmation, got calls: %+v", tc.name, recorder.calls)
+				}
+			})
+
+			t.Run("explicit yes executes exactly the expected tool call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, append(tc.args, "--yes"))
+				if err != nil {
+					t.Fatalf("%s with --yes failed: %v", tc.name, err)
+				}
+				if len(recorder.calls) != 1 {
+					t.Fatalf("%s with --yes want exactly 1 MCP call, got %d: %+v", tc.name, len(recorder.calls), recorder.calls)
+				}
+				call := recorder.calls[0]
+				if call.server != "contact" || call.tool != tc.tool {
+					t.Fatalf("%s call = %s/%s, want contact/%s", tc.name, call.server, call.tool, tc.tool)
+				}
+				if !reflect.DeepEqual(call.args, tc.wantArgs) {
+					t.Fatalf("%s args = %#v, want %#v", tc.name, call.args, tc.wantArgs)
+				}
+			})
+		})
+	}
+}
+
+// TestContactApplyListSchemaProjectionMatchesRuntimeBehavior 是 apply-list
+// 安全语义的回归：查询会把服务端未读申请标记为已读（Long 帮助明示），
+// 最终 Schema 投影必须声明 Effect=write，不能把有副作用的查询伪装成纯
+// 读取；同时副作用仅清除未读标记，Confirmation 应保持 not_required，
+// 运行时也不得出现确认 gate。投影与运行行为任一侧回归都会被本测试拦截。
+func TestContactApplyListSchemaProjectionMatchesRuntimeBehavior(t *testing.T) {
+	t.Run("schema projection discloses read-marking side effect", func(t *testing.T) {
+		meta, ok := cli.ResolveMeta("contact org apply-list")
+		if !ok {
+			t.Fatal("ResolveMeta(contact org apply-list) missing")
+		}
+		if meta.Safety.Effect != "write" {
+			t.Fatalf("apply-list effect = %q, want write (query marks unread applies as read)", meta.Safety.Effect)
+		}
+		if meta.Safety.Risk != "low" || meta.Safety.Confirmation != "not_required" || meta.Safety.Idempotency != "idempotent" {
+			t.Fatalf("apply-list safety = %+v, want low/not_required/idempotent", meta.Safety)
+		}
+		if !strings.Contains(meta.Selection.AgentSummary, "标记为已读") {
+			t.Fatalf("apply-list agent summary %q must disclose the read-marking side effect", meta.Selection.AgentSummary)
+		}
+	})
+
+	t.Run("not_required projection runs without confirmation gate", func(t *testing.T) {
+		recorder := &contactWriteOpsRecorder{}
+		err := executeContactWriteOp(t, recorder, []string{"contact", "org", "apply-list"})
+		if err != nil {
+			t.Fatalf("apply-list without --yes must not hit the confirmation gate: %v", err)
+		}
+		if len(recorder.calls) != 1 {
+			t.Fatalf("apply-list want exactly 1 MCP call, got %d: %+v", len(recorder.calls), recorder.calls)
+		}
+		call := recorder.calls[0]
+		if call.server != "contact" || call.tool != "query_org_apply_list" {
+			t.Fatalf("apply-list call = %s/%s, want contact/query_org_apply_list", call.server, call.tool)
+		}
+		if want := map[string]any{"status": int64(1), "size": int64(20)}; !reflect.DeepEqual(call.args, want) {
+			t.Fatalf("apply-list args = %#v, want %#v", call.args, want)
+		}
+	})
+}
+
+// TestContactApplyRemoveSchemaProjectionMatchesRuntimeBehavior 是 apply-remove
+// 安全语义的回归：删除申请记录不可恢复，最终 Schema 投影必须声明
+// Effect=destructive；必须保留 user_required 确认门禁，未确认不得调用 MCP，
+// 确认后精确调用 remove_org_apply。投影与运行行为任一侧回归都会被拦截。
+func TestContactApplyRemoveSchemaProjectionMatchesRuntimeBehavior(t *testing.T) {
+	t.Run("schema projection discloses non-recoverable deletion", func(t *testing.T) {
+		meta, ok := cli.ResolveMeta("contact org apply-remove")
+		if !ok {
+			t.Fatal("ResolveMeta(contact org apply-remove) missing")
+		}
+		if meta.Safety.Effect != "destructive" {
+			t.Fatalf("apply-remove effect = %q, want destructive (record deletion is not recoverable)", meta.Safety.Effect)
+		}
+		if meta.Safety.Risk != "high" || meta.Safety.Confirmation != "user_required" || meta.Safety.Idempotency != "non_idempotent" {
+			t.Fatalf("apply-remove safety = %+v, want high/user_required/non_idempotent", meta.Safety)
+		}
+		if !strings.Contains(meta.Selection.AgentSummary, "不可恢复") {
+			t.Fatalf("apply-remove agent summary %q must disclose non-recoverable deletion", meta.Selection.AgentSummary)
+		}
+	})
+
+	t.Run("user_required projection rejects until explicitly confirmed", func(t *testing.T) {
+		recorder := &contactWriteOpsRecorder{}
+		err := executeContactWriteOp(t, recorder, []string{"contact", "org", "apply-remove", "--id", "123"})
+		if err == nil {
+			t.Fatal("apply-remove without --yes must be rejected")
+		}
+		if !apperrors.IsConfirmationRequired(err) {
+			t.Fatalf("apply-remove error = %v, want reason confirmation_required", err)
+		}
+		if len(recorder.calls) != 0 {
+			t.Fatalf("apply-remove must not reach MCP before confirmation, got calls: %+v", recorder.calls)
+		}
+	})
+
+	t.Run("explicit yes executes exactly remove_org_apply", func(t *testing.T) {
+		recorder := &contactWriteOpsRecorder{}
+		err := executeContactWriteOp(t, recorder, []string{"contact", "org", "apply-remove", "--id", "123", "--yes"})
+		if err != nil {
+			t.Fatalf("apply-remove with --yes failed: %v", err)
+		}
+		if len(recorder.calls) != 1 {
+			t.Fatalf("apply-remove with --yes want exactly 1 MCP call, got %d: %+v", len(recorder.calls), recorder.calls)
+		}
+		call := recorder.calls[0]
+		if call.server != "contact" || call.tool != "remove_org_apply" {
+			t.Fatalf("apply-remove call = %s/%s, want contact/remove_org_apply", call.server, call.tool)
+		}
+		if want := map[string]any{"id": int64(123)}; !reflect.DeepEqual(call.args, want) {
+			t.Fatalf("apply-remove args = %#v, want %#v", call.args, want)
+		}
+	})
+}
+
+func TestChatConversationFileUploadUsesANewPath(t *testing.T) {
 	root := NewRootCommand()
 	fileCmd := mustFindCommand(t, root, "chat", "file")
 	if !fileCmd.Hidden {
-		t.Fatal("chat file should be hidden after upload_conversation_file_by_url downline")
+		t.Fatal("historical chat file group should remain hidden")
 	}
-	upload := mustFindCommand(t, root, "chat", "file", "upload")
-	if !upload.Hidden {
-		t.Fatal("chat file upload should be hidden after downline")
+	legacyUpload := mustFindCommand(t, root, "chat", "file", "upload")
+	if !legacyUpload.Hidden {
+		t.Fatal("historical chat file upload should remain hidden")
 	}
-	for _, flag := range []string{"group", "url", "file", "file-name"} {
+
+	conversationFileCmd := mustFindCommand(t, root, "chat", "conversation-file")
+	if conversationFileCmd.Hidden {
+		t.Fatal("chat conversation-file should be visible")
+	}
+	upload := mustFindCommand(t, root, "chat", "conversation-file", "upload")
+	if upload.Hidden {
+		t.Fatal("chat conversation-file upload should be visible")
+	}
+	for _, flag := range []string{"conversation-id", "group", "user", "open-dingtalk-id", "file", "file-path", "file-name", "md5", "idempotency-key"} {
 		if upload.Flags().Lookup(flag) == nil {
-			t.Fatalf("chat file upload missing compatibility flag --%s", flag)
+			t.Fatalf("chat conversation-file upload missing flag --%s", flag)
+		}
+	}
+	for _, flag := range []string{"url", "uuid"} {
+		if upload.Flags().Lookup(flag) != nil {
+			t.Fatalf("new chat conversation-file upload must not inherit historical --%s", flag)
 		}
 	}
 
@@ -438,12 +1112,12 @@ func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
 		"--file-name", "report.pdf",
 	})
 	if err == nil {
-		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
+		t.Fatalf("historical chat file upload error = nil, want downline error\n%s", got)
 	}
 	got = got + "\n" + err.Error()
 	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
+			t.Fatalf("historical chat file upload output missing %q:\n%s", want, got)
 		}
 	}
 }

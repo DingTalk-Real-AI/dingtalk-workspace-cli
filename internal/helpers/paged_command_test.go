@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -179,7 +181,7 @@ func TestPagedMCPCommandRejectsInvalidConfigWhenPageAll(t *testing.T) {
 	}
 }
 
-func TestPagedMCPCommandDryRunPrintsRequestAndSkipsRemote(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandDryRunPrintsRequestAndSkipsRemote(t *testing.T) {
 	caller := &pagedCommandCaller{dry: true}
 
 	got, _, err := runPagedCommandTest(t, caller, pagedCommandMessagesConfig(nil), "--page-all", "--page-limit", "3", "--max-items", "7", "--page-delay", "0")
@@ -282,7 +284,7 @@ func TestPagedMCPCommandValidateConfigRejectsMissingRequiredFields(t *testing.T)
 	}
 }
 
-func TestPagedMCPCommandStringCursorAggregatesAndPageLimit(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandStringCursorAggregatesAndPageLimit(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"messages":[{"id":"m1"}],"hasMore":true,"nextCursor":"c2"}}`},
 		{text: `{"result":{"messages":[{"id":"m2"}],"hasMore":true,"nextCursor":"c3"}}`},
@@ -296,6 +298,9 @@ func TestPagedMCPCommandStringCursorAggregatesAndPageLimit(t *testing.T) {
 	paging := got["paging"].(map[string]any)
 	if len(items) != 2 || paging["truncated"] != true || paging["pages"].(float64) != 2 {
 		t.Fatalf("result = %#v", got)
+	}
+	if paging["requestSatisfied"] != false || paging["sourceExhausted"] != false {
+		t.Fatalf("paging=%#v, want an unsatisfied page-budget stop", paging)
 	}
 	if result["hasMore"] != true || result["nextCursor"] != "c3" {
 		t.Fatalf("result=%#v, want final page-limit cursor state", result)
@@ -324,9 +329,12 @@ func TestPagedMCPCommandStringCursorAggregatesAndSyncsCompletionFields(t *testin
 	if paging["truncated"] != false || paging["hasMore"] != false || paging["lastCursor"] != "" {
 		t.Fatalf("paging=%#v, want complete pagination metadata", paging)
 	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != true {
+		t.Fatalf("paging=%#v, want a satisfied source-exhausted request", paging)
+	}
 }
 
-func TestPagedMCPCommandConversationMessagesMergeSameConversation(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesMergeSameConversation(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","title":"群1","messages":[{"id":"m1"}]}],"hasMore":true,"nextCursor":"c2"}}`},
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","title":"ignored","messages":[{"id":"m2"}]}],"hasMore":false,"nextCursor":""}}`},
@@ -370,7 +378,7 @@ func TestPagedMCPCommandConversationMessagesPreserveFirstConversationOrder(t *te
 	}
 }
 
-func TestPagedMCPCommandConversationMessagesMaxItemsTruncatesMessages(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesMaxItemsTruncatesMessages(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","messages":[{"id":"m1"},{"id":"m2"}]},{"openConversationId":"cid2","messages":[{"id":"m3"},{"id":"m4"}]}],"hasMore":true,"nextCursor":"c2"}}`},
 	}}
@@ -419,7 +427,7 @@ func TestPagedMCPCommandConversationMessagesLaterFailureOutputsPartial(t *testin
 	}
 }
 
-func TestPagedMCPCommandConversationMessagesAddErrorsOutputPartial(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesAddErrorsOutputPartial(t *testing.T) {
 	tests := []struct {
 		name     string
 		response string
@@ -585,7 +593,7 @@ func TestPagedMCPCommandPageDelayControlsSleep(t *testing.T) {
 	}
 }
 
-func TestPagedMCPCommandMaxItemsTruncatesPrecisely(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandMaxItemsTruncatesPrecisely(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"messages":[{"id":"m1"},{"id":"m2"}],"hasMore":true,"nextCursor":"c2"}}`},
 	}}
@@ -600,7 +608,7 @@ func TestPagedMCPCommandMaxItemsTruncatesPrecisely(t *testing.T) {
 	}
 }
 
-func TestPagedMCPCommandMaxItemsStopsWhenPageExactlyReachesLimit(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandMaxItemsStopsWhenPageExactlyReachesLimit(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"messages":[{"id":"m1"},{"id":"m2"}],"hasMore":true,"nextCursor":"c2"}}`},
 		{err: errors.New("second page should not run")},
@@ -624,6 +632,107 @@ func TestPagedMCPCommandMaxItemsStopsWhenPageExactlyReachesLimit(t *testing.T) {
 	}
 	if _, ok := paging["truncatedWithinPage"]; ok {
 		t.Fatalf("paging=%#v, want no within-page truncation marker", paging)
+	}
+}
+
+func TestCrossPlatformCoveragePagedMCPCommandIdentityDedupAndRequestSatisfaction(t *testing.T) {
+	cfg := pagedCommandMessagesConfig(nil)
+	cfg.ItemIdentityPath = "id"
+	caller := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"messages":[{"id":"m1"}],"hasMore":true,"nextCursor":"c2"}}`},
+		{text: `{"result":{"messages":[{"id":"m1"},{"id":"m2"}],"hasMore":true,"nextCursor":"c3"}}`},
+	}}
+
+	got, _, err := runPagedCommandTest(t, caller, cfg, "--page-all", "--max-items", "2", "--page-delay", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := got["result"].(map[string]any)["messages"].([]any)
+	paging := got["paging"].(map[string]any)
+	if len(caller.calls) != 2 || len(items) != 2 || items[0].(map[string]any)["id"] != "m1" || items[1].(map[string]any)["id"] != "m2" {
+		t.Fatalf("calls=%#v items=%#v, want stable two-page dedupe", caller.calls, items)
+	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != false || paging["hasMore"] != true {
+		t.Fatalf("paging=%#v, want satisfied bounded request without source exhaustion", paging)
+	}
+
+	missingIdentity := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"messages":[{"text":"missing id"}],"hasMore":false,"nextCursor":""}}`},
+	}}
+	got, _, err = runPagedCommandTest(t, missingIdentity, cfg, "--page-all", "--page-delay", "0")
+	if err == nil || !strings.Contains(err.Error(), "missing identity path id") {
+		t.Fatalf("result=%#v err=%v, want fail-closed identity error", got, err)
+	}
+	failedPaging := got["paging"].(map[string]any)
+	if failedPaging["requestSatisfied"] != false || failedPaging["itemsFetched"] != float64(0) {
+		t.Fatalf("paging=%#v, want unsatisfied request with no accepted items", failedPaging)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		response string
+		want     string
+	}{
+		{
+			name:     "non-object item",
+			response: `{"result":{"messages":["bad"],"hasMore":false,"nextCursor":""}}`,
+			want:     "item must be object",
+		},
+		{
+			name:     "empty identity",
+			response: `{"result":{"messages":[{"id":"  "}],"hasMore":false,"nextCursor":""}}`,
+			want:     "must be non-empty",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &pagedCommandCaller{steps: []scriptedToolStep{{text: tc.response}}}
+			if _, _, err := runPagedCommandTest(t, caller, cfg, "--page-all", "--page-delay", "0"); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err=%v, want %q", err, tc.want)
+			}
+		})
+	}
+
+	collection := newPagedCollection(cfg)
+	if err := collection.Add([]any{map[string]any{"id": "m1"}, map[string]any{"id": "m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if collection.Truncate(0) || !collection.Truncate(1) || collection.Total() != 1 {
+		t.Fatalf("collection=%#v, want generic truncation to one item", collection.Values())
+	}
+}
+
+func TestCrossPlatformCoverageChatSearchCommonOwnsBoundedPagination(t *testing.T) {
+	caller := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"groups":[{"openConversationId":"cid-1","title":"one"}],"hasMore":true,"nextCursor":"c2"}}`},
+		{text: `{"result":{"groups":[{"openConversationId":"cid-1","title":"duplicate"},{"openConversationId":"cid-2","title":"two"}],"hasMore":true,"nextCursor":"c3"}}`},
+	}}
+	InitDepsForTest(t, caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs([]string{
+		"search-common", "--nicks", "one,two", "--match-mode", "AND",
+		"--limit", "100", "--page-all", "--max-items", "2", "--page-delay", "0",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout=%q err=%v", output.String(), err)
+	}
+	groups := payload["result"].(map[string]any)["groups"].([]any)
+	paging := payload["paging"].(map[string]any)
+	if len(groups) != 2 || len(caller.calls) != 2 || caller.calls[0].args["cursor"] != "0" || caller.calls[1].args["cursor"] != "c2" {
+		t.Fatalf("groups=%#v calls=%#v", groups, caller.calls)
+	}
+	if caller.calls[0].server != "chat" || caller.calls[0].tool != "search_common_groups" {
+		t.Fatalf("first call=%#v", caller.calls[0])
+	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != false || paging["total"].(float64) != 2 {
+		t.Fatalf("paging=%#v", paging)
 	}
 }
 
@@ -735,7 +844,210 @@ func TestPagedMCPCommandPageDelayStopsWhenContextCanceled(t *testing.T) {
 	}
 }
 
-func TestPagedMCPCommandPropagatesAggregatedOutputErrors(t *testing.T) {
+func TestCrossPlatformCoverageUnifiedPagedFailureRetainsPartialBusinessData(t *testing.T) {
+	oldDeps := deps
+	t.Cleanup(func() { deps = oldDeps })
+	caller := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"messages":[{"id":"m1"}],"hasMore":true,"nextCursor":"c2"}}`},
+		{err: errors.New("page two failed")},
+	}}
+	InitDeps(caller)
+	var stdout, stderr bytes.Buffer
+	deps.Out.w = &stdout
+	deps.Out.errW = &stderr
+
+	cmd := &cobra.Command{
+		Use:           "paged",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return RunPagedMCPCommand(cmd, pagedCommandMessagesConfig(nil))
+		},
+	}
+	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.Flags().String("cursor", "0", "")
+	AddPagedMCPFlags(cmd)
+	cmd.SetArgs([]string{"--page-all", "--page-delay", "0"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("unified pagination failure returned nil")
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("unified pagination failure leaked legacy output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_partial_failure" || typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("error = %#v, want typed pagination partial failure", err)
+	}
+	partial, ok := typed.Details["partialResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("partialResult = %#v", typed.Details["partialResult"])
+	}
+	paging := partial["paging"].(map[string]any)
+	messages := partial["result"].(map[string]any)["messages"].([]any)
+	if len(messages) != 1 || paging["partial"] != true || paging["failedPage"] != 2 || paging["lastCursor"] != "c2" {
+		t.Fatalf("partial business data = %#v", partial)
+	}
+}
+
+func TestCrossPlatformCoverageIncompleteResultErrorPreservesTypedCauseContract(t *testing.T) {
+	nextRetry := time.Date(2026, 9, 8, 8, 9, 10, 0, time.UTC)
+	serverRetryable := true
+	cause := apperrors.NewAPI(
+		"upstream throttled",
+		apperrors.WithRetryable(true),
+		apperrors.WithRetryAfterSeconds(17),
+		apperrors.WithNextRetryAt(nextRetry),
+		apperrors.WithServerKey("im"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithRPCCode(-32029),
+		apperrors.WithRPCData(json.RawMessage(`{"request":"safe-fixture"}`)),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+			TraceID:         "trace-fixture",
+			ServerErrorCode: "RATE_LIMITED",
+			TechnicalDetail: "quota exhausted",
+			ServerRetryable: &serverRetryable,
+		}),
+	)
+	err := NewIncompleteResultError(
+		"partial read",
+		cause,
+		false,
+		apperrors.WithReason("pagination_partial_failure"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithDetails(map[string]any{"partialResult": map[string]any{"count": 1}}),
+	)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || !errors.Is(err, cause) {
+		t.Fatalf("wrapped error = %#v, want typed cause chain", err)
+	}
+	if typed.Category != apperrors.CategoryAPI || typed.Reason != "pagination_partial_failure" ||
+		!typed.RetryableSet || !typed.Retryable || typed.RetryAfterSeconds == nil || *typed.RetryAfterSeconds != 17 ||
+		typed.NextRetryAt == nil || !typed.NextRetryAt.Equal(nextRetry) || typed.ServerKey != "im" ||
+		typed.Origin != "mcp_gateway" || typed.RPCCode != -32029 ||
+		string(typed.RPCData) != `{"request":"safe-fixture"}` ||
+		typed.ServerDiag.TraceID != "trace-fixture" || typed.ServerDiag.ServerErrorCode != "RATE_LIMITED" {
+		t.Fatalf("typed contract was not preserved: %#v", typed)
+	}
+	if typed.Details["partialResult"] == nil || typed.FailureStage != "pagination" {
+		t.Fatalf("outer partial contract = %#v", typed)
+	}
+
+	outerOrigin := NewIncompleteResultError(
+		"partial shortcut read",
+		cause,
+		false,
+		apperrors.WithOrigin("shortcut"),
+		apperrors.WithReason("resource_download_partial_failure"),
+	)
+	if !errors.As(outerOrigin, &typed) || typed.Origin != "shortcut" || typed.ServerKey != "im" ||
+		typed.RPCCode != -32029 || typed.ServerDiag.TraceID != "trace-fixture" {
+		t.Fatalf("outer origin did not win while preserving cause diagnostics: %#v", typed)
+	}
+
+	canceled := NewIncompleteResultError("cancelled after page one", context.Canceled, true)
+	if !errors.As(canceled, &typed) || !errors.Is(canceled, context.Canceled) ||
+		!typed.RetryableSet || typed.Retryable {
+		t.Fatalf("cancellation retry contract = %#v", canceled)
+	}
+}
+
+func TestCrossPlatformCoverageUnifiedPagedDryRunStoresPreview(t *testing.T) {
+	oldDeps := deps
+	t.Cleanup(func() { deps = oldDeps })
+	caller := &pagedCommandCaller{dry: true}
+	InitDeps(caller)
+	var stdout bytes.Buffer
+	deps.Out.w = &stdout
+
+	cmd := &cobra.Command{
+		Use:          "paged",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return RunPagedMCPCommand(cmd, pagedCommandMessagesConfig(nil))
+		},
+	}
+	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.SetOut(&stdout)
+	cmd.Flags().String("cursor", "0", "")
+	AddPagedMCPFlags(cmd)
+	cmd.SetArgs([]string{"--page-all", "--page-limit", "3", "--page-delay", "0"})
+
+	executed, err := cmd.ExecuteContextC(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("calls = %#v, want no remote call", caller.calls)
+	}
+	if _, emitted, err := output.EmitStoredResult(executed); err != nil || !emitted {
+		t.Fatalf("emit stored preview: emitted=%t err=%v", emitted, err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode unified preview: %v", err)
+	}
+	if envelope["ok"] != true || envelope["dry_run"] != true {
+		t.Fatalf("envelope = %#v, want successful dry-run", envelope)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if data["dry_run"] != true {
+		t.Fatalf("data = %#v, want paged request preview", data)
+	}
+}
+
+func TestCrossPlatformCoverageUnifiedSinglePageDryRunStoresCommandResult(t *testing.T) {
+	oldDeps := deps
+	t.Cleanup(func() { deps = oldDeps })
+	caller := &pagedCommandCaller{dry: true}
+	InitDeps(caller)
+	var stdout bytes.Buffer
+	deps.Out.w = &stdout
+
+	cmd := &cobra.Command{
+		Use:          "paged",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return RunPagedMCPCommand(cmd, pagedCommandMessagesConfig(nil))
+		},
+	}
+	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.SetOut(&stdout)
+	cmd.Flags().String("cursor", "0", "")
+	AddPagedMCPFlags(cmd)
+
+	executed, err := cmd.ExecuteContextC(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("single-page dry-run made remote calls: %#v", caller.calls)
+	}
+	if _, emitted, err := output.EmitStoredResult(executed); err != nil || !emitted {
+		t.Fatalf("emit stored preview: emitted=%t err=%v", emitted, err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode unified preview: %v", err)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	paging, _ := data["paging"].(map[string]any)
+	if envelope["ok"] != true || envelope["dry_run"] != true ||
+		data["dry_run"] != true || paging["pageAll"] != false {
+		t.Fatalf("single-page dry-run envelope = %#v", envelope)
+	}
+}
+
+func TestCrossPlatformCoveragePagedMCPCommandPropagatesAggregatedOutputErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		steps      []scriptedToolStep
@@ -842,7 +1154,8 @@ func TestPagedMCPCommandInt64CursorRejectsNonNumericNextCursor(t *testing.T) {
 		t.Fatalf("stderr=%q", stderr)
 	}
 	paging := got["paging"].(map[string]any)
-	if paging["partial"] != true || paging["failedCursor"] != "not-a-number" || paging["pagesFetched"].(float64) != 1 {
+	if paging["partial"] != true || paging["failedCursor"] != "" ||
+		paging["resumeCursorReliable"] != false || paging["pagesFetched"].(float64) != 1 {
 		t.Fatalf("paging = %#v", paging)
 	}
 	if len(caller.calls) != 1 {

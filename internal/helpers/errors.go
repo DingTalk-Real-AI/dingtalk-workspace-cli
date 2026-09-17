@@ -36,6 +36,7 @@ const (
 	CodeMissingParam       = "INPUT_MISSING_PARAM"
 	CodeInvalidParam       = "INPUT_INVALID_PARAM"
 	CodeFileNotFound       = "INPUT_FILE_NOT_FOUND"
+	CodeFileAlreadyExists  = "INPUT_FILE_ALREADY_EXISTS"
 	CodeContentTruncated   = "CONTENT_TRUNCATED"
 	CodeMCPServerError     = "MCP_SERVER_ERROR"
 	CodeMCPToolError       = "MCP_TOOL_ERROR"
@@ -49,6 +50,8 @@ type CLIError struct {
 	Message    string
 	Suggestion string
 	Operation  string // the operation that failed (for traceability)
+	ServerCode string
+	Details    map[string]any
 	Cause      error
 }
 
@@ -71,7 +74,7 @@ func (e *CLIError) ExitCode() int {
 		return ExitAuth
 	case CodeAuthPermission:
 		return ExitPermission
-	case CodeMissingParam, CodeInvalidParam, CodeInvalidJSON, CodeInvalidPath, CodeInputTooLarge, CodeFileNotFound:
+	case CodeMissingParam, CodeInvalidParam, CodeInvalidJSON, CodeInvalidPath, CodeInputTooLarge, CodeFileNotFound, CodeFileAlreadyExists:
 		return ExitValidation
 	case CodeContentTruncated:
 		return ExitAPI
@@ -97,6 +100,12 @@ func (e *CLIError) ToJSON() map[string]any {
 	}
 	if e.Operation != "" {
 		errMap["operation"] = e.Operation
+	}
+	if e.ServerCode != "" {
+		errMap["server_error_code"] = e.ServerCode
+	}
+	if len(e.Details) > 0 {
+		errMap["details"] = e.Details
 	}
 	if e.Suggestion != "" {
 		errMap["suggestion"] = e.Suggestion
@@ -609,6 +618,8 @@ func ClassifyMCPResponseText(text string) error {
 			Code:       CodeMCPToolError,
 			Message:    businessErrorDisplayMessage(body, text),
 			Suggestion: suggestForBusinessError(body),
+			ServerCode: businessErrorCode(body),
+			Details:    businessErrorDetails(body),
 		}
 	}
 

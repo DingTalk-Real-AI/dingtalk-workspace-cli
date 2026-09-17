@@ -30,6 +30,12 @@ func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
 	// products.pat). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "pat",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("PAT 行为授权指南", "dingtalk-misc", "references/pat.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理 Agent 的 PAT 行为授权与本地浏览器策略",
 			UseWhen: []string{

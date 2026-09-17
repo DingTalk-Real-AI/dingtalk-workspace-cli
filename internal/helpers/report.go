@@ -54,6 +54,12 @@ func newReportCommand() *cobra.Command {
 	// products.report). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "report",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("日志与日报深度指南", "dingtalk-misc", "references/report.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询日志模板、收发日志、日志正文与统计，并按模板提交日志",
 			UseWhen: []string{

@@ -78,6 +78,30 @@ func TestChangedTestPackagesIgnoresDocumentationOnlyDiff(t *testing.T) {
 	}
 }
 
+func TestChangedTestPackagesRoutesSmokeOnlyChangeToSmokeShard(t *testing.T) {
+	repository := newShardChangedPackagesRepository(t)
+	baseRef := commitChangedTestPackagesFixture(t, repository, "initial fixture")
+
+	writeChangedTestPackagesFixture(t, repository, "test/smoke/smoke.go", `package smoke
+
+func Value() string { return "changed smoke" }
+`)
+	headRef := commitChangedTestPackagesFixture(t, repository, "change smoke test")
+
+	output := runChangedTestPackagesCommand(
+		t,
+		repository,
+		filepath.Join(repository, "scripts", "ci", "changed-test-packages.sh"),
+		"list-shard",
+		"smoke",
+		baseRef,
+		headRef,
+	)
+	if packages := strings.Fields(output); !slices.Equal(packages, []string{"example.com/shardfixture/test/smoke"}) {
+		t.Fatalf("smoke shard packages = %q, want smoke package", packages)
+	}
+}
+
 func TestChangedTestPackagesRejectsMismatchedOrDirtyCheckout(t *testing.T) {
 	t.Run("mismatched head", func(t *testing.T) {
 		repository := newChangedTestPackagesRepository(t)

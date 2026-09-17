@@ -161,6 +161,31 @@ func mailTemplateBody(template map[string]any) string {
 	return mailFirstString(message, "markdownBody", "body")
 }
 
+func mailTemplateDraftMode(template map[string]any) (bool, bool, error) {
+	for _, key := range []string{"isDraft", "draft"} {
+		value, present := template[key]
+		if !present {
+			continue
+		}
+		draft, ok := value.(bool)
+		if !ok {
+			return false, true, mailResponseError("mail/get_user_message_template", "malformed_verification_field", "模板读回 isDraft 应为布尔值")
+		}
+		return draft, true, nil
+	}
+	return false, false, nil
+}
+
+func mailRequestedTemplateDraftMode(rt *shortcut.RuntimeContext) bool {
+	if rt.Changed("is-draft") {
+		return rt.Bool("is-draft")
+	}
+	if rt.Changed("draft") {
+		return rt.Bool("draft")
+	}
+	return false
+}
+
 var DraftCreate = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "mail", Command: "+draft-create", Product: "mail",
@@ -301,19 +326,22 @@ var DraftEdit = shortcut.Shortcut{
 var TemplateCreate = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "mail", Command: "+template-create", Product: "mail",
-	Description: "创建个人邮件模板并按模板 ID 读回", Intent: "保存可复用邮件主题和正文；创建后按稳定模板 ID 读取并核对名称、主题和正文。",
+	Description: "创建个人邮件模板并按模板 ID 读回", Intent: "保存可复用邮件主题和正文；创建后按稳定模板 ID 读取并核对名称、主题、正文和服务端回显的草稿状态。",
 	Risk: shortcut.RiskWrite, Safety: mailWriteSafety("non_idempotent"),
-	Contract: mailWriteContract("+template-create", "创建个人邮件模板并按模板 ID 读回", "保存可复用邮件主题和正文；创建后按稳定模板 ID 读取并核对名称、主题和正文。", []contract.ParamDecl{{Name: "email", Property: "email"}, {Name: "body", Property: "body"}}, `dws mail +template-create --email user@company.com --name "模板" --subject "主题" --body "正文" --format json`),
+	Contract: mailWriteContract("+template-create", "创建个人邮件模板并按模板 ID 读回", "保存可复用邮件主题和正文；创建后按稳定模板 ID 读取并核对名称、主题、正文和服务端回显的草稿状态。", []contract.ParamDecl{{Name: "email", Property: "email"}, {Name: "body", Property: "body"}, {Name: "is-draft", Property: "isDraft", InterfaceType: "boolean"}}, `dws mail +template-create --email user@company.com --name "模板" --subject "主题" --body "正文" --format json`),
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Required: true, Desc: "模板所属邮箱"},
 		{Name: "name", Type: shortcut.FlagString, Required: true, Desc: "模板名称"},
 		{Name: "subject", Type: shortcut.FlagString, Required: true, Desc: "模板主题"},
 		{Name: "body", Type: shortcut.FlagString, Required: true, Desc: "模板正文"},
+		{Name: "is-draft", Type: shortcut.FlagBool, Desc: "是否创建可编辑的草稿模板；默认 false", Aliases: []string{"draft"}},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"email": rt.Str("email"), "name": rt.Str("name"), "subject": rt.Str("subject"), "body": rt.Str("body")}
+		isDraft := mailRequestedTemplateDraftMode(rt)
+		draftModeExplicit := rt.Changed("is-draft") || rt.Changed("draft")
+		params := map[string]any{"email": rt.Str("email"), "name": rt.Str("name"), "subject": rt.Str("subject"), "body": rt.Str("body"), "isDraft": isDraft}
 		if rt.DryRun() {
-			return rt.Output(map[string]any{"value": map[string]any{"dryRun": true, "executed": false, "operation": "mail/create_user_message_template"}})
+			return rt.Output(map[string]any{"value": map[string]any{"dryRun": true, "executed": false, "operation": "mail/create_user_message_template", "isDraft": isDraft}})
 		}
 		written, err := rt.CallMCPWriteDataStrict("mail", "create_user_message_template", params)
 		if err != nil {
@@ -332,6 +360,13 @@ var TemplateCreate = shortcut.Shortcut{
 		}
 		if mailFirstString(verified, "name") != rt.Str("name") || mailTemplateSubject(verified) != rt.Str("subject") || mailTemplateBody(verified) != rt.Str("body") {
 			return mailResponseError("mail/create_user_message_template", "verification_mismatch", "模板读回内容与请求不一致")
+		}
+		if draft, present, err := mailTemplateDraftMode(verified); err != nil {
+			return err
+		} else if draftModeExplicit && !present {
+			return mailResponseError("mail/create_user_message_template", "missing_verification_field", "显式草稿模式请求缺少 isDraft 读回证据")
+		} else if present && draft != isDraft {
+			return mailResponseError("mail/create_user_message_template", "verification_mismatch", "模板读回 isDraft 与请求不一致")
 		}
 		return rt.Output(map[string]any{"value": verified})
 	},

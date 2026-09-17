@@ -76,7 +76,7 @@ var Create = shortcut.Shortcut{
 		contract.ParamDecl{Name: "workspace", Property: "workspaceId"},
 	),
 	Flags: []shortcut.Flag{
-		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称", Required: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称；省略时从Markdown首个一级标题提取，否则使用未命名文档"},
 		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文档文件夹 ID"},
@@ -84,6 +84,10 @@ var Create = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +create --name "项目周报" --content "# 本周进展"`, `dws doc +create --name "模板" --content @body.json --doc-format jsonml`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		mediaFiles, err := validateDocCreateMedia(rt)
+		if err != nil {
+			return err
+		}
 		content, err := readShortcutContent(rt, "content")
 		if err != nil {
 			return err
@@ -95,7 +99,11 @@ var Create = shortcut.Shortcut{
 				return err
 			}
 		}
-		params := map[string]any{"name": rt.Str("name")}
+		name := rt.Str("name")
+		if name == "" {
+			name = docDefaultTitle(content, format)
+		}
+		params := map[string]any{"name": name}
 		if rt.Str("folder") != "" {
 			params["folderId"] = rt.Str("folder")
 		}
@@ -116,13 +124,13 @@ var Create = shortcut.Shortcut{
 			params["markdown"] = contentChunks[0]
 		}
 		if rt.DryRun() {
-			preview := map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}
+			preview := map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content), "mediaFiles": mediaFiles, "mediaPlacement": "append_in_order"}
 			if len(contentChunks) > 1 {
 				// Surfacing the plan in --dry-run lets a caller see "your table
 				// will become three tables" before anything is written.
 				preview["chunkPlan"] = chunkPlan.Summary()
 			}
-			return rt.Output(withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
+			return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
@@ -191,7 +199,17 @@ var Create = shortcut.Shortcut{
 		if len(contentChunks) > 1 {
 			data["chunkPlan"] = chunkPlan.Summary()
 		}
-		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...), chunkPlan.Warnings()))
+		if len(mediaFiles) > 0 {
+			receipts, mediaErr := insertCreatedDocMedia(rt, nodeID, mediaFiles)
+			if mediaErr != nil {
+				return mediaErr
+			}
+			data["media"] = receipts
+			data["mediaPlacement"] = "append_in_order"
+		}
+		annotateMentionVerificationScope(data, steps, content)
+		return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", data, steps...),
+			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }
 
@@ -215,10 +233,13 @@ var Fetch = shortcut.Shortcut{
 		contract.ParamDecl{Name: "version", Property: "historyVersion"},
 	),
 	Flags: []shortcut.Flag{
+		{Name: "include-comments", Type: shortcut.FlagBool, Desc: "同时读取全文评论，自动翻页；评论范围始终是整篇文档，最多1000条，超限报不完整"},
+		{Name: "context-unit", Type: shortcut.FlagString, Default: "characters", Enum: []string{"characters", "blocks"}, Desc: "关键词上下文单位；默认保留字符模式，blocks按相邻顶层块"},
+		{Name: "regex", Type: shortcut.FlagBool, Desc: "keyword+blocks模式使用RE2正则；非法正则在请求前拒绝"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL；" + fetchTargetConstraint},
 		{Name: "query", Type: shortcut.FlagString, Desc: "文档标题或关键词；跨页唯一解析后读取；" + fetchTargetConstraint},
 		{Name: "detail", Type: shortcut.FlagString, Default: "simple", Desc: "输出细节", Enum: []string{"simple", "with-ids", "full"}},
-		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags"}},
+		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags", "chapter"}},
 		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "range/section 起始块 ID"},
 		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "range 结束块 ID"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "keyword 范围搜索词，不能为空，支持 foo|bar"},
@@ -232,11 +253,17 @@ var Fetch = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --query "项目周报" --scope keyword --keyword "结论"`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := validateDocSelection(rt); err != nil {
+			return err
+		}
 		if rt.Changed("revision") {
 			return apperrors.NewValidation("--revision 不支持：revision 是文档编辑版本号（doc read --content-format jsonml 响应返回，供 doc +update --expected-revision 条件写使用），不是历史版本号；读历史版本请用 --version")
 		}
 		if rt.Changed("version") && rt.Int("version") < 0 {
 			return apperrors.NewValidation("--version 必须为非负整数历史版本号（0 表示初始版本，从 doc +version-list 获取）")
+		}
+		if rt.Str("scope") == "tags" && len(stringSliceNonEmpty(rt.StrSlice("tags"))) == 0 {
+			return apperrors.NewValidation("--scope tags 时必须提供非空 --tags")
 		}
 		if rt.Str("scope") == "keyword" && rt.Str("keyword") == "" {
 			return apperrors.NewValidation("--scope keyword 时必须提供 --keyword")
@@ -258,17 +285,21 @@ var Fetch = shortcut.Shortcut{
 		}
 		params := map[string]any{"nodeId": target.Selected.CanonicalID, "format": format}
 		scope := rt.Str("scope")
-		if scope != "keyword" && scope != "full" {
+		if scope != "keyword" && scope != "full" && scope != "chapter" {
 			params["scope"] = scope
 		}
-		if value := rt.Str("start-block-id"); value != "" {
-			params["startBlockId"] = value
-		}
-		if value := rt.Str("end-block-id"); value != "" {
-			params["endBlockId"] = value
-		}
-		if rt.Changed("tags") {
-			params["tags"] = rt.StrSlice("tags")
+		// Chapter boundaries and context are selected locally from the full tree.
+		// Do not let remote range or tag filters truncate that input.
+		if scope != "chapter" {
+			if value := rt.Str("start-block-id"); value != "" {
+				params["startBlockId"] = value
+			}
+			if value := rt.Str("end-block-id"); value != "" {
+				params["endBlockId"] = value
+			}
+			if rt.Changed("tags") {
+				params["tags"] = strings.Join(stringSliceNonEmpty(rt.StrSlice("tags")), ",")
+			}
 		}
 		if rt.Changed("max-depth") {
 			params["maxDepth"] = rt.Int("max-depth")
@@ -284,16 +315,34 @@ var Fetch = shortcut.Shortcut{
 			return err
 		}
 		content := any(data)
-		if scope == "keyword" {
-			content = projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after"))
+		if scope == "chapter" {
+			content, err = selectDocChapter(data, rt.Str("start-block-id"), rt.Int("context-before"), rt.Int("context-after"))
+			if err != nil {
+				return err
+			}
+		} else if scope == "keyword" {
+			if rt.Str("context-unit") == "blocks" {
+				content, err = projectKeywordBlocks(data, rt.Str("keyword"), rt.Bool("regex"), rt.Int("context-before"), rt.Int("context-after"))
+				if err != nil {
+					return err
+				}
+			} else {
+				content = projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after"))
+			}
 		}
-		return rt.Output(map[string]any{
-			"contractVersion": "doc.content.v1",
-			"status":          "success",
-			"complete":        true,
-			"target":          target.Selected,
-			"content":         content,
-		})
+		result := map[string]any{"contractVersion": "doc.content.v1", "status": "success", "complete": true, "target": target.Selected, "content": content}
+		if rt.Bool("include-comments") {
+			comments, err := readCompleteDocComments(rt, target.Selected.CanonicalID)
+			if err != nil {
+				return err
+			}
+			if comments["complete"] != true {
+				return apperrors.NewAPI("评论读取未完整，不能报告全部读取成功", apperrors.WithDetails(map[string]any{"body": result, "comments": comments}))
+			}
+			result["comments"] = comments
+			result["commentScope"] = "document"
+		}
+		return rt.Output(result)
 	},
 }
 
@@ -394,14 +443,20 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "old", Property: "old"},
 		contract.ParamDecl{Name: "new", Property: "new"},
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"},
+		contract.ParamDecl{Name: "start-block-id", Property: "startBlockId"},
+		contract.ParamDecl{Name: "end-block-id", Property: "endBlockId"},
+		contract.ParamDecl{Name: "src-block-ids", Property: "srcBlockIds"},
 		contract.ParamDecl{Name: "doc", Property: "node"},
 		contract.ParamDecl{Name: "text", Property: "content"}),
 	Flags: []shortcut.Flag{
+		{Name: "src-block-ids", Type: shortcut.FlagString, Desc: "仅block_copy_insert_after可用的逗号分隔源ID；与block-id同时提供须相同"},
+		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围起点；与end-block-id成对，0表示第一块"},
+		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围终点（含），-1表示最后块；最多50块"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
 		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
-		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空"},
+		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空；block_delete 支持逗号分隔批量 ID，单次最多 50 个；block_copy_insert_after支持同文档顶层有序多源ID，最多20个，不支持含资源引用的块"},
 		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID；相关动作要求时不能为空"},
 		{Name: "before-block-id", Type: shortcut.FlagString, Desc: "向前插入时的位置参考 block ID；block_insert_before 要求不能为空"},
 		{Name: "heading-level", Type: shortcut.FlagInt, Desc: "将插入内容写为指定级别标题（1-6）；仅支持 Markdown block_insert_before/block_insert_after"},
@@ -411,6 +466,20 @@ var Update = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_insert_before --before-block-id <BLOCK_ID> --content "发布说明" --heading-level 1`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("src-block-ids") {
+			if rt.Str("command") != "block_copy_insert_after" || strings.TrimSpace(rt.Str("src-block-ids")) == "" {
+				return apperrors.NewValidation("src-block-ids仅用于block_copy_insert_after且不能为空")
+			}
+			if rt.Changed("block-id") && rt.Str("block-id") != rt.Str("src-block-ids") {
+				return apperrors.NewValidation("src-block-ids与block-id冲突")
+			}
+			if err := rt.Command().Flags().Set("block-id", rt.Str("src-block-ids")); err != nil {
+				return err
+			}
+		}
+		if err := validateDocBlockRange(rt); err != nil {
+			return err
+		}
 		command := rt.Str("command")
 		if rt.StrFirst("node", "doc") == "" {
 			return apperrors.NewValidation("缺少 --node")
@@ -426,7 +495,7 @@ var Update = shortcut.Shortcut{
 		}
 		switch command {
 		case "block_replace", "block_delete", "block_copy_insert_after":
-			if rt.Str("block-id") == "" {
+			if rt.Str("block-id") == "" && !((command == "block_delete" || command == "block_replace") && rt.Str("start-block-id") != "") {
 				return apperrors.NewValidation("该 block 操作必须提供 --block-id")
 			}
 		}
@@ -462,7 +531,7 @@ var Update = shortcut.Shortcut{
 		}
 		return nil
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "before-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"src-block-ids"}, Description: "仅block_copy_insert_after可用的逗号分隔源ID；与block-id同时提供须相同"}, {Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "before-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
 	Execute:     executeUpdate,
 }
 
@@ -543,7 +612,9 @@ var CheckpointUpdate = shortcut.Shortcut{
 			data["chunksWritten"] = len(chunks)
 			data["chunkPlan"] = chunkPlan.Summary()
 		}
-		return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", data, steps...), chunkPlan.Warnings()))
+		annotateMentionVerificationScope(data, steps, content)
+		return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", data, steps...),
+			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }
 
@@ -622,6 +693,12 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	nodeID := rt.StrFirst("node", "doc")
+	if command == "block_replace" && rt.Str("start-block-id") != "" {
+		return executeDocRangeReplace(rt, nodeID, content)
+	}
+	if command == "block_delete" && rt.Str("start-block-id") != "" {
+		return executeDocRangeDelete(rt, nodeID)
+	}
 	plan := map[string]any{"nodeId": nodeID, "command": command, "blockId": rt.Str("block-id"), "afterBlockId": rt.Str("after-block-id"), "contentBytes": len(content)}
 	if beforeBlockID := rt.Str("before-block-id"); beforeBlockID != "" {
 		plan["beforeBlockId"] = beforeBlockID
@@ -689,13 +766,28 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
 			})
 	case "block_delete":
-		blockID := rt.Str("block-id")
-		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
+		blockIDs, err := helpers.NormalizeBlockIDs(rt.Str("block-id"))
+		if err != nil {
+			return err
+		}
+		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": strings.Join(blockIDs, ",")}, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": "element", "__allBlocks": true},
-			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
+			func(_, data map[string]any) bool {
+				// 尽力而为语义下未找到的块本就不在文档里，逐个断言不存在即可覆盖
+				// 已删除的那些；只要有任一目标块仍在文档中，就说明删除没生效。
+				for _, id := range blockIDs {
+					if findBlock(data, id) != nil {
+						return false
+					}
+				}
+				return true
+			})
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
 	case "block_copy_insert_after":
+		if strings.Contains(rt.Str("block-id"), ",") {
+			return executeDocMultiCopy(rt, node)
+		}
 		return executeBlockCopy(rt, node)
 	default:
 		return apperrors.NewValidation(fmt.Sprintf("不支持的 update command %q", command))
@@ -779,26 +871,7 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 }
 
 func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
-	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
-	if err != nil {
-		return err
-	}
-	block := findBlock(data, rt.Str("block-id"))
-	if block == nil {
-		return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要复制的 block")
-	}
-	if containsResourceReference(block) {
-		return apperrors.NewValidation("UNSUPPORTED_RESOURCE_TYPE: 含资源引用的 block 暂不支持复制")
-	}
-	expectedContent := canonicalBlockContent(block, "markdown")
-	stripBlockIDs(block)
-	referenceBlockID := rt.Str("after-block-id")
-	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
-		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": "after", "element": block}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
-		func(result, data map[string]any) bool {
-			return verifyInsertedCanonicalBlockContent(result, data, referenceBlockID, expectedContent, "markdown")
-		})
+	return executeDocMultiCopy(rt, nodeID)
 }
 
 func executeVerifiedDocMutation(
@@ -809,29 +882,44 @@ func executeVerifiedDocMutation(
 	verifyParams map[string]any,
 	verify func(map[string]any, map[string]any) bool,
 ) error {
+	result, err := runVerifiedDocMutation(rt, operation, tool, params, nodeID, verifyTool, verifyParams, verify)
+	if err != nil {
+		return err
+	}
+	return rt.Output(result)
+}
+
+func runVerifiedDocMutation(
+	rt *shortcut.RuntimeContext,
+	operation, tool string,
+	params map[string]any,
+	nodeID, verifyTool string,
+	verifyParams map[string]any,
+	verify func(map[string]any, map[string]any) bool,
+) (map[string]any, error) {
 	steps := []map[string]any{{"name": tool, "status": "started"}}
 	result, err := rt.CallMCPWriteData(productDoc, tool, params)
 	if err != nil {
-		return docUnknownWriteError(operation, tool, nodeID, err)
+		return nil, docUnknownWriteError(operation, tool, nodeID, err)
 	}
 	steps[0]["status"] = "success"
 	verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
 		return verify == nil || verify(result, data)
 	})
 	if err != nil {
-		return docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	if verify != nil && !verify(result, verification) {
-		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
 	verificationSummary := compactDocVerification(verification, "", "", "", params)
-	return rt.Output(docEnvelope(operation, map[string]any{
+	return docEnvelope(operation, map[string]any{
 		"nodeId":       nodeID,
 		"verified":     true,
 		"result":       result,
 		"verification": verificationSummary,
-	}, steps...))
+	}, steps...), nil
 }
 
 func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams map[string]any, nodeID, content, mode, format string) error {
@@ -891,7 +979,9 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 	if len(chunks) > 1 {
 		data["chunkPlan"] = chunkPlan.Summary()
 	}
-	return rt.Output(withDocWarnings(docEnvelope("doc.update", data, steps...), chunkPlan.Warnings()))
+	annotateMentionVerificationScope(data, steps, content)
+	return rt.Output(withDocWarnings(docEnvelope("doc.update", data, steps...),
+		withMentionTargetWarning(chunkPlan.Warnings(), content)))
 }
 
 const docVerificationExcerptRunes = 160
@@ -906,6 +996,14 @@ func compactDocVerification(value map[string]any, expected, mode, format string,
 		summary["format"] = format
 		summary["mode"] = mode
 		summary["expectedBytes"] = len(expected)
+		if docContentHasMentionLink(expected) {
+			// Readback proves the mention link sits at the authored position with the
+			// authored label, but not which user it resolved to: the service rewrites
+			// openDingTalkId into a profile link and the two identifiers have no local
+			// mapping. The summary says so, and the envelope drops "verified" to false.
+			summary["verified"] = false
+			summary["mentionTargetsVerified"] = false
+		}
 		candidate := matchingDocumentContent(value, expected, mode, format)
 		if candidate != "" {
 			normalized := normalizeDocumentContentForVerification(candidate, format)
@@ -1186,6 +1284,143 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 	return false
 }
 
+// The document service rewrites the private mention protocol into a DingTalk
+// profile link while committing markdown, so the authored destination never
+// survives a readback.
+//
+// Pairing is positional, not shape-based: only a position where the author wrote
+// the mention protocol may hold a profile link on readback. Every other link —
+// including an ordinary profile link the author wrote themselves — keeps its
+// full destination and must match exactly.
+//
+// Known limit: two mentions carrying the same label whose targets are swapped
+// cannot be told apart locally, because openDingTalkId and the rewritten
+// staffId are different values and neither is derivable from the other without
+// another request. Detecting that would require the service to report what it
+// rewrote.
+const (
+	docMentionLinkPrefix = "alidocs-mcp://doc/mention"
+	docProfileLinkPrefix = "dingtalk://dingtalkclient/page/profile"
+
+	docFingerprintLinkTokenPrefix = "open\x00link:"
+)
+
+func docContentHasMentionLink(source string) bool {
+	return strings.Contains(source, docMentionLinkPrefix)
+}
+
+// docMentionTargetUnverifiedWarning states two facts and nothing more: which part
+// the caller has to check itself, and that everything else was verified.
+const docMentionTargetUnverifiedWarning = "@人链接指向的具体人员需用户自行核对；正文其余部分（含该链接的位置与显示文本）均已通过回读校验。"
+
+const (
+	docVerificationScopePartial = "partial"
+	docUnverifiedMentionTargets = "mention_targets"
+	// docStepStatusPartial keeps a consumer that only switches on
+	// steps[].status from reading an unverifiable mention target as a fully
+	// verified readback. Such a consumer does not know the sibling scope
+	// marker, so the status itself has to stop saying "success".
+	docStepStatusPartial = "partial"
+)
+
+// annotateMentionVerificationScope qualifies the claim at the level it is made.
+// "verified" stays a boolean so existing consumers keep working, but a sibling
+// scope marker plus an explicit gap list mean the top level no longer reads as
+// "everything was verified".
+func annotateMentionVerificationScope(data map[string]any, steps []map[string]any, expected string) {
+	if !docContentHasMentionLink(expected) {
+		return
+	}
+	// Readback cannot establish which user a mention resolved to, so this write is
+	// not fully verified and must not say it is. "verified" therefore drops to
+	// false while the operation itself still reports success: the content was
+	// written, only one property of it is unverifiable here.
+	data["verified"] = false
+	data["verificationScope"] = docVerificationScopePartial
+	data["unverified"] = []string{docUnverifiedMentionTargets}
+	// The gap is not "not yet checked" but "not checkable from a readback", so
+	// say so next to the flag. A caller that re-reads the document learns nothing
+	// new about the target.
+	data["unverifiableLocally"] = []string{docUnverifiedMentionTargets}
+	for _, step := range steps {
+		if step["name"] == "verify" {
+			step["status"] = docStepStatusPartial
+			step["scope"] = docVerificationScopePartial
+		}
+	}
+}
+
+func withMentionTargetWarning(warnings []string, expected string) []string {
+	if !docContentHasMentionLink(expected) {
+		return warnings
+	}
+	// Copy rather than append in place: the caller's slice may share a backing
+	// array with the chunk plan's own warnings.
+	combined := make([]string, 0, len(warnings)+1)
+	combined = append(combined, warnings...)
+	return append(combined, docMentionTargetUnverifiedWarning)
+}
+
+func isMentionProtocolLinkToken(token string) bool {
+	return strings.HasPrefix(token, docFingerprintLinkTokenPrefix+docMentionLinkPrefix)
+}
+
+func isProfileLinkToken(token string) bool {
+	return strings.HasPrefix(token, docFingerprintLinkTokenPrefix+docProfileLinkPrefix)
+}
+
+// docFingerprintLinkDestination extracts the link destination from a fingerprint
+// token shaped "open\x00link:<destination>\x00<title>".
+func docFingerprintLinkDestination(token string) string {
+	rest := strings.TrimPrefix(token, docFingerprintLinkTokenPrefix)
+	if idx := strings.IndexByte(rest, 0); idx >= 0 {
+		return rest[:idx]
+	}
+	return rest
+}
+
+// markdownMentionAwareTokensEqual compares two fingerprint token sequences,
+// tolerating exactly one kind of difference: an authored mention protocol link
+// may appear as a profile link in the readback.
+//
+// Pairs are additionally required to form a consistent bijection: one
+// openDingTalkId must resolve to one profile target throughout the document, and
+// two different openDingTalkIds must not resolve to the same target. Both checks
+// are decidable locally and catch a service that mixed identities up.
+//
+// What remains undetectable is a permutation of two *distinct* targets: the
+// authored side never carries the resolved staffId, so (A→X, B→Y) and
+// (A→Y, B→X) are indistinguishable here. That is missing information, not a
+// weaker implementation — closing it needs the service to report what it
+// rewrote, or a reverse openDingTalkId lookup that the CLI surface does not
+// expose.
+func markdownMentionAwareTokensEqual(actual, expected []string) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	resolved := map[string]string{}
+	claimed := map[string]string{}
+	for index := range expected {
+		if actual[index] == expected[index] {
+			continue
+		}
+		if !isMentionProtocolLinkToken(expected[index]) || !isProfileLinkToken(actual[index]) {
+			return false
+		}
+		mention := docFingerprintLinkDestination(expected[index])
+		target := docFingerprintLinkDestination(actual[index])
+		if previous, seen := resolved[mention]; seen && previous != target {
+			return false
+		}
+		if previous, seen := claimed[target]; seen && previous != mention {
+			return false
+		}
+		resolved[mention] = target
+		claimed[target] = mention
+	}
+	return true
+}
+
 func markdownSemanticallyEquivalent(left, right string) bool {
 	leftFingerprint, leftOK := markdownSemanticFingerprint(left)
 	rightFingerprint, rightOK := markdownSemanticFingerprint(right)
@@ -1194,7 +1429,18 @@ func markdownSemanticallyEquivalent(left, right string) bool {
 	}
 	leftFingerprint, leftOK = markdownServiceSemanticFingerprint(left)
 	rightFingerprint, rightOK = markdownServiceSemanticFingerprint(right)
-	return leftOK && rightOK && leftFingerprint == rightFingerprint
+	if leftOK && rightOK && leftFingerprint == rightFingerprint {
+		return true
+	}
+	// Cheap short-circuit: with no authored mention there is nothing to pair, so
+	// the token comparison could only repeat the verdict above.
+	if !docContentHasMentionLink(right) {
+		return false
+	}
+	leftTokens, leftTokensOK := markdownServiceSemanticTokens(left)
+	rightTokens, rightTokensOK := markdownServiceSemanticTokens(right)
+	return leftTokensOK && rightTokensOK &&
+		markdownMentionAwareTokensEqual(leftTokens, rightTokens)
 }
 
 func markdownSemanticallyEndsWith(content, suffix string) bool {
@@ -1205,7 +1451,19 @@ func markdownSemanticallyEndsWith(content, suffix string) bool {
 	}
 	contentFingerprint, contentOK = markdownServiceSemanticFingerprint(content)
 	suffixFingerprint, suffixOK = markdownServiceSemanticFingerprint(suffix)
-	return contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint)
+	if contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint) {
+		return true
+	}
+	if !docContentHasMentionLink(suffix) {
+		return false
+	}
+	contentTokens, contentTokensOK := markdownServiceSemanticTokens(content)
+	suffixTokens, suffixTokensOK := markdownServiceSemanticTokens(suffix)
+	if !contentTokensOK || !suffixTokensOK || len(contentTokens) < len(suffixTokens) {
+		return false
+	}
+	return markdownMentionAwareTokensEqual(
+		contentTokens[len(contentTokens)-len(suffixTokens):], suffixTokens)
 }
 
 func markdownSemanticFingerprint(source string) (string, bool) {
@@ -1224,8 +1482,22 @@ func markdownSemanticFingerprint(source string) (string, bool) {
 // service, such as hard/soft line breaks, list tightness, and insignificant
 // whitespace. Exact rendered HTML remains the first comparison path above.
 func markdownServiceSemanticFingerprint(source string) (string, bool) {
+	value, _, ok := markdownStructuralFingerprint(source)
+	return value, ok
+}
+
+// markdownServiceSemanticTokens exposes the same walk as an ordered token
+// sequence. Positional comparison is what lets mention pairing stay exact: the
+// fingerprint keeps every authored destination, and only the comparison decides
+// which single position may legitimately differ.
+func markdownServiceSemanticTokens(source string) ([]string, bool) {
+	_, tokens, ok := markdownStructuralFingerprint(source)
+	return tokens, ok
+}
+
+func markdownStructuralFingerprint(source string) (string, []string, bool) {
 	if len(source) > docMarkdownVerifyMax {
-		return "", false
+		return "", nil, false
 	}
 	sourceBytes := []byte(normalizeDocInputLineEndings(source))
 	document := docMarkdown.Parser().Parse(goldmarktext.NewReader(sourceBytes))
@@ -1305,11 +1577,12 @@ func markdownServiceSemanticFingerprint(source string) (string, bool) {
 		return goldmarkast.WalkContinue, nil
 	})
 	builder.flushText()
-	return builder.value.String(), true
+	return builder.value.String(), builder.tokens, true
 }
 
 type markdownFingerprintBuilder struct {
 	value       strings.Builder
+	tokens      []string
 	pendingText strings.Builder
 }
 
@@ -1328,6 +1601,7 @@ func (builder *markdownFingerprintBuilder) text(value string) {
 func (builder *markdownFingerprintBuilder) token(kind, value string) {
 	builder.flushText()
 	fmt.Fprintf(&builder.value, "%s:%d:%s;", kind, len(value), value)
+	builder.tokens = append(builder.tokens, kind+"\x00"+value)
 }
 
 func (builder *markdownFingerprintBuilder) flushText() {
@@ -1336,6 +1610,7 @@ func (builder *markdownFingerprintBuilder) flushText() {
 	}
 	value := builder.pendingText.String()
 	fmt.Fprintf(&builder.value, "text:%d:%s;", len(value), value)
+	builder.tokens = append(builder.tokens, "text\x00"+value)
 	builder.pendingText.Reset()
 }
 
@@ -1606,6 +1881,11 @@ func findJSONMLBlock(value any, target string) []any {
 
 func jsonMLBlockIdentity(element []any) string {
 	if len(element) < 2 {
+		return ""
+	}
+	// A blocks array whose second entry happens to contain blockId is not a
+	// JSONML element. Accept only [tag, attributes, ...] before reading identity.
+	if tag, ok := element[0].(string); !ok || strings.TrimSpace(tag) == "" {
 		return ""
 	}
 	attributes, ok := element[1].(map[string]any)
@@ -2168,5 +2448,5 @@ func stripBlockIDs(value any) {
 func init() {
 	_ = json.Valid
 	_ = filepath.Separator
-	shortcut.Register(Create, Fetch, Inspect, Update, CheckpointUpdate, Export, Import)
+	registerDocShortcuts(Create, Fetch, Inspect, Update, CheckpointUpdate, Export, Import)
 }

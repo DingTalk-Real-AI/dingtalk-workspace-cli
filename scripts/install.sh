@@ -789,6 +789,32 @@ detect_arch() {
   esac
 }
 
+# The Linux release binaries are CGO builds linked against glibc, so they need
+# the glibc dynamic loader. musl cannot load them, and the failure would only
+# surface after install as an opaque loader error, so refuse up front.
+#
+# ldd is the authority on which libc the system actually uses. A glibc
+# distribution that has musl or musl-tools installed also carries
+# /lib/ld-musl-*.so.1 while its default loader stays glibc, so the loader file
+# alone must not decide. It remains the fallback for musl distributions whose
+# ldd reports no version, notably Alpine where BusyBox ldd only forwards to the
+# loader.
+require_glibc_on_linux() {
+  [ "$os" = "linux" ] || return 0
+  if command -v ldd >/dev/null 2>&1; then
+    ldd_version="$(ldd --version 2>&1)"
+    if printf '%s' "$ldd_version" | grep -qi musl; then
+      err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+    fi
+    if printf '%s' "$ldd_version" | grep -qiE 'gnu libc|glibc'; then
+      return 0
+    fi
+  fi
+  if ls /lib/ld-musl-*.so.1 >/dev/null 2>&1; then
+    err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+  fi
+}
+
 # Decide the download source. An explicit DWS_GITEE_REPO always wins. Otherwise
 # probe GitHub Releases; if it is unreachable (typical in mainland China), switch
 # GITEE_REPO to the mirror so every subsequent resolve/download uses Gitee.
@@ -905,8 +931,10 @@ install_binary_from_source() {
   fi
 
   mkdir -p "$INSTALL_DIR"
-  cp "$built_bin" "$INSTALL_DIR/$INSTALL_NAME"
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$built_bin" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed:"
   say "   → ${INSTALL_DIR}/${INSTALL_NAME}"
@@ -1544,6 +1572,7 @@ _copy_skill() {
 install_binary() {
   os="$(detect_os)"
   arch="$(detect_arch)"
+  require_glibc_on_linux
   resolve_version
 
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"
@@ -1564,22 +1593,20 @@ install_binary() {
 
   mkdir -p "$INSTALL_DIR"
 
-  # The archive may contain a top-level directory or just the binary
+  # The archive may contain a top-level directory or just the binary.
   if [ -f "$tmpdir/$BIN_NAME" ]; then
-    cp "$tmpdir/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/$BIN_NAME"
   elif [ -f "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" ]; then
-    cp "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME"
   else
-    # Search for the binary
     found="$(find "$tmpdir" -name "$BIN_NAME" -type f | head -1)"
-    if [ -n "$found" ]; then
-      cp "$found" "$INSTALL_DIR/$INSTALL_NAME"
-    else
-      err "Could not find the ${BIN_NAME} binary in the downloaded archive."
-    fi
+    [ -n "$found" ] || err "Could not find the ${BIN_NAME} binary in the downloaded archive."
   fi
 
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$found" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed: ${INSTALL_DIR}/${INSTALL_NAME}"
 
@@ -1594,6 +1621,471 @@ install_binary() {
       say "   Or add this line to your ~/.bashrc / ~/.zshrc"
       ;;
   esac
+}
+
+# ── Build shared schema cache ────────────────────────────────────────────────
+# The schema cache is generated on this machine from the installed binary's
+# live declarations (no compile-time identity seal). Build it once at the
+# system shared location so every user reuses it. Persistent backends are
+# compiled in for darwin/linux/windows on amd64/arm64. This POSIX installer
+# only warms darwin/linux shared locations; Windows uses install.ps1.
+# Other ends skip silently and never claim success. Root-owned sticky ancestry such as
+# macOS /Library/Caches is accepted by the runtime; if the shared base is not
+# writable the installer leaves per-user cache generation to the first schema
+# command.
+# Owner uid a shared cache must carry to be consumable by users other than the
+# installer. The runtime accepts a shared cache only when every path it walks
+# is owned by root or by the reading user (internal/schemacache/platform_unix.go
+# validateOwnedDirectory/validateCacheFile), so a warm-up run by an ordinary
+# user under a writable custom SHARED_DIR produces a cache that user alone can
+# consume. Root ownership is therefore the requirement; installer tests
+# override the value to exercise both decisions without a second account.
+shared_schema_owner_uid="${DWS_SCHEMA_CACHE_SHARED_OWNER_UID:-0}"
+
+# True when every current-generation artifact (each edition holding an
+# identity.json sidecar) carries the owner uid that makes the cache consumable
+# across users.
+shared_schema_artifacts_shared_owner() {
+  [ -d "$1" ] || return 1
+  [ -n "$shared_schema_owner_uid" ] || return 1
+  [ -n "$(find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      owner="$1"
+      shift
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" ! -uid "$owner" -print -quit 2>/dev/null)" ] || exit 1
+      done' sh "$shared_schema_owner_uid" {} + 2>/dev/null
+}
+
+# Mirror of the runtime's per-level ancestry rule
+# (internal/schemacache/platform_unix.go validateAncestryDirectory): a shared
+# cache ancestor must be a directory owned by root or by one of the reader
+# uids, and any group/other write bit requires the sticky bit (root-owned
+# sticky ancestors such as /tmp and /Library/Caches are the platform
+# convention). A level violating this makes every reader's runtime reject the
+# cache with ErrUnsafePath even though the files are other-readable, so the
+# installer must not advertise cross-user success over such ancestry.
+shared_schema_ancestry_level_safe() {
+  [ -d "$1" ] || return 1
+  [ -z "$(find "$1" -maxdepth 0 ! \( -uid "$2" -o -uid "$3" \) -print 2>/dev/null)" ] || return 1
+  if [ -n "$(find "$1" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) -print 2>/dev/null)" ]; then
+    [ -n "$(find "$1" -maxdepth 0 -perm -01000 -print 2>/dev/null)" ] || return 1
+  fi
+  return 0
+}
+
+# Existing cache paths must be real directories before any cleanup or chmod.
+# Missing paths are allowed because this installer creates them below.
+shared_schema_layout_safe() {
+  for path do
+    [ ! -L "$path" ] || return 1
+    if [ -e "$path" ] && [ ! -d "$path" ]; then
+      return 1
+    fi
+  done
+}
+
+# Ownership lock for pre-existing mutated levels. find -delete, chmod, and
+# chmod -R all bind through pathnames, so a level writable by another
+# principal could in principle be swapped between validation and mutation,
+# redirecting the walk outside the verified tree. Requiring every existing
+# ancestor of the mutated tree (shared root and dws) to be owned by root or
+# the invoking user, with no group/world write bits, makes the filesystem
+# itself enforce the stability those checks assume — the swap primitive the
+# race needs no longer exists. Levels missing at gate time are created by
+# this run under umask 077 and are locked by construction; a mutable
+# pre-existing root fails closed to the per-user cache.
+shared_schema_levels_locked() {
+  _sc_invoker="$(id -u)"
+  for level do
+    [ -d "$level" ] || continue
+    [ -n "$(find "$level" -maxdepth 0 \( -uid 0 -o -uid "$_sc_invoker" \) 2>/dev/null)" ] || return 1
+    [ -z "$(find "$level" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ] || return 1
+  done
+}
+
+# Lock the ancestry ABOVE the shared root: every existing parent, up to /,
+# must satisfy shared_schema_ancestry_level_safe for root or the invoking
+# user (group/world write requires sticky, so platform conventions such as
+# 1777 /tmp and /Library/Caches stay usable). levels_locked only covers the
+# root and dws levels themselves; without a parent lock, an untrusted
+# principal with rename rights on a non-sticky group/world-writable parent
+# can swap the freshly validated root for a symlink in the window before
+# chmod a+rX, and chmod then follows the link and widens the target's
+# permissions. With every existing parent locked, the filesystem itself
+# denies that rename for the whole install run — the same stability-by-
+# ownership argument levels_locked makes for the mutated levels. Missing
+# parents are skipped: create_missing_levels builds them under umask 077
+# below a locked anchor, so they are invoker-only by construction, and the
+# pre-chmod re-run of this predicate sees them and re-verifies. Relative
+# roots are rejected outright.
+shared_schema_root_ancestry_locked() {
+  _sra_root="$1"
+  case "$_sra_root" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  _sra_invoker="$(id -u)"
+  _sra_walk="$(dirname "$_sra_root")"
+  while [ "$_sra_walk" != "/" ]; do
+    if [ -e "$_sra_walk" ]; then
+      shared_schema_ancestry_level_safe "$_sra_walk" 0 "$_sra_invoker" || return 1
+    fi
+    _sra_walk="$(dirname "$_sra_walk")"
+  done
+  return 0
+}
+
+# Create the missing levels of an absolute directory path one component at
+# a time with plain mkdir under umask 077. mkdir without -p is an atomic
+# create-or-EEXIST on the leaf and never resolves a symlink there, so a
+# level an attacker swapped in or pre-planted between validation and
+# creation — the missing-root replacement race — fails mkdir instead of
+# letting the later mktemp probe, warm-up, find, and chmod writes follow
+# the link out of the cache tree; each intermediate missing level becomes
+# the leaf exactly once, so the same guarantee holds for every component.
+# A target that already exists as a symlink is rejected outright, and
+# creation under umask 077 makes every level this run creates owned and
+# writable only by the invoking user — the ownership lock by construction.
+# The anchor (nearest pre-existing level) is not lstat-checked:
+# platform-conventional symlinked ancestors stay legitimate, matching the
+# runtime's ancestry rules; DWS-owned levels above were already gated by
+# shared_schema_layout_safe and shared_schema_levels_locked.
+shared_schema_create_missing_levels() {
+  _scm_target="$1"
+  case "$_scm_target" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  [ ! -L "$_scm_target" ] || return 1
+  _scm_anchor="$_scm_target"
+  _scm_tail=""
+  while [ "$_scm_anchor" != "/" ] && [ ! -e "$_scm_anchor" ]; do
+    _scm_tail="/$(basename "$_scm_anchor")$_scm_tail"
+    _scm_anchor="$(dirname "$_scm_anchor")"
+  done
+  [ -d "$_scm_anchor" ] || return 1
+  [ -n "$_scm_tail" ] || return 0
+  _scm_saved_umask="$(umask)"
+  umask 077
+  _scm_failed=0
+  while [ -n "$_scm_tail" ]; do
+    _scm_head="${_scm_tail#/}"
+    _scm_name="${_scm_head%%/*}"
+    _scm_anchor="$_scm_anchor/$_scm_name"
+    _scm_tail="${_scm_head#*"$_scm_name"}"
+    _scm_tail="${_scm_tail#/}"
+    mkdir "$_scm_anchor" 2>/dev/null || {
+      _scm_failed=1
+      break
+    }
+  done
+  umask "$_scm_saved_umask"
+  [ "$_scm_failed" -eq 0 ]
+}
+
+# Cleanup and permission changes only operate on regular files and directories
+# that have one link. Rejecting other objects before walking the tree prevents
+# a symlink, FIFO, or hardlink from redirecting or widening the operation.
+shared_schema_tree_objects_safe() {
+  tree="$1"
+  [ -d "$tree" ] && [ ! -L "$tree" ] || return 1
+  [ -z "$(find "$tree" -type l -print -quit 2>/dev/null)" ] || return 1
+  [ -z "$(find "$tree" ! \( -type f -o -type d \) -print -quit 2>/dev/null)" ] || return 1
+  [ -z "$(find "$tree" -type f ! -links 1 -print -quit 2>/dev/null)" ] || return 1
+}
+
+# Mirror of the runtime's entry rules (validateOwnedDirectory /
+# validateCacheFile) for every current-generation edition (identity.json marks
+# it): no symlinks (secure openat rejects them), every entry owned by root or
+# one of the reader uids, directories without group/other write bits, and
+# single-link regular files without group/other write bits. chmod a+rX only
+# adds bits and never clears write bits, so a stale group-writable shard must
+# downgrade the advertised claim instead of claiming success.
+shared_schema_editions_runtime_safe() {
+  [ -d "$1" ] || return 1
+  [ -n "$(find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      uid_a="$1"
+      uid_b="$2"
+      shift 2
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" -type l -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" ! \( -uid "$uid_a" -o -uid "$uid_b" \) -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type d \( -perm -0020 -o -perm -0002 \) -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type f ! -links 1 -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type f \( -perm -0020 -o -perm -0002 \) -print -quit 2>/dev/null)" ] || exit 1
+      done' sh "$2" "$3" {} + 2>/dev/null
+}
+
+# Share only the current editions after the warm-up has passed the same object
+# checks used before cleanup (no symlinks, hardlinks, or non-regular files),
+# so the recursion can never widen anything outside the verified tree.
+shared_schema_make_artifacts_readable() {
+  tree="$1"
+  find "$tree" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        chmod -R a+rX "$edition_dir" 2>/dev/null || exit 1
+      done' sh {} + 2>/dev/null
+}
+
+build_shared_schema_cache() {
+  os="$(detect_os)"
+  arch="$(detect_arch)"
+  case "$os/$arch" in
+    linux/amd64|linux/arm64) shared_dir="/var/cache/dws" ;;
+    darwin/amd64|darwin/arm64) shared_dir="/Library/Caches/dws" ;;
+    *) return 0 ;;
+  esac
+  custom_shared_root=0
+  if [ -n "${DWS_SCHEMA_CACHE_SHARED_DIR:-}" ]; then
+    shared_dir="$DWS_SCHEMA_CACHE_SHARED_DIR"
+    custom_shared_root=1
+  fi
+  # Distinguish installer-created dedicated roots from pre-existing custom
+  # DWS_SCHEMA_CACHE_SHARED_DIR ancestors. Only the former may be chmod'd at
+  # the root; a private caller-owned base (e.g. 0700) must not be broadened.
+  shared_dir_preexisted=0
+  if [ -d "$shared_dir" ]; then
+    shared_dir_preexisted=1
+  fi
+  # Runtime layout under any base is dws/schema/<edition-sha256>/v1. Only clear
+  # sidecars inside that DWS tree — never recurse a wide custom SHARED_DIR or
+  # other apps' identity.json files.
+  schema_tree="${shared_dir}/dws/schema"
+  dws_intermediate="$(dirname "$schema_tree")"
+  # Pre-existence is captured before mkdir: a custom root may already contain
+  # a caller-owned private dws/ or dws/schema/, and those levels must never be
+  # broadened — only levels this installer run creates may be chmod'd.
+  dws_tree_preexisted=0
+  [ -d "$dws_intermediate" ] && dws_tree_preexisted=1
+  schema_tree_preexisted=0
+  [ -d "$schema_tree" ] && schema_tree_preexisted=1
+  # Path safety precedes every mutation: a touch-based probe follows symlinked
+  # path entries, so an existing shared_dir/dws/schema level that is a symlink
+  # must be rejected before the write probe can mutate whatever it points at.
+  # Platform-conventional symlinked ancestors (e.g. /var on macOS) are not
+  # rejected as objects; they are governed instead by the ancestry lock below.
+  # The ownership lock additionally binds every later pathname-based mutation
+  # (find -delete, chmod, chmod -R) to levels no other principal can swap:
+  # validation and mutation can no longer be separated by a replacement race.
+  # Missing levels are created by shared_schema_create_missing_levels — plain
+  # mkdir per level under umask 077 — so a level replaced between validation
+  # and creation fails creation instead of being written through, and the full
+  # gate re-runs over all three levels before the first write probe. The
+  # ancestry lock additionally covers every parent above the root, so a root
+  # reachable through a non-sticky group/world-writable level — where an
+  # untrusted rename could still swap it for a symlink ahead of the chmod —
+  # fails closed here, before the first creation or write.
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" ||
+    ! shared_schema_root_ancestry_locked "$shared_dir"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache path."
+    return 0
+  fi
+  # Skip silently when we cannot write to the system location (non-root install
+  # or an unusable shared ancestry). The runtime then uses the per-user cache.
+  if ! shared_schema_create_missing_levels "$shared_dir"; then
+    return 0
+  fi
+  if ! shared_schema_create_missing_levels "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache path."
+    return 0
+  fi
+  # Re-run the whole gate over all three levels after creation and before the
+  # first write: layout (no symlink anywhere in the DWS-owned levels), the
+  # ownership lock (pre-existing levels were gated above; levels this run
+  # created are invoker-owned with no group/world write bits), and the tree
+  # object walk. Every later mutation in this function happens inside the
+  # locked tree.
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_tree_objects_safe "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache contents."
+    return 0
+  fi
+  # The write probe uses mktemp (mkstemp: O_CREAT|O_EXCL, unpredictable name)
+  # instead of a fixed-name touch: a fixed probe name can be pre-planted as a
+  # symlink to an outside victim, and shell noclobber checks are stat-based
+  # and would still follow a symlink whose target does not exist. Nothing
+  # outside the freshly created probe file is touched.
+  if ! _probe="$(mktemp "$shared_dir/.dws-schema-cache-write-test.XXXXXX")" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$_probe"
+  say "🔧 Building shared schema cache (local identity, shared across users)..."
+  # Drop the previous per-edition sidecar and leftover fingerprint-suffixed
+  # files so upgrade always generate-then-use from this binary's live
+  # declarations. identity.json is the only success marker. Only single-link
+  # regular files in the verified tree may be removed.
+  find "$schema_tree" -name 'identity.json' -type f -links 1 -delete 2>/dev/null || true
+  find "$schema_tree" -name 'identity.*.json' -type f -links 1 -delete 2>/dev/null || true
+  # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
+  # and populate it. Any schema command triggers generate + publish.
+  if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
+    schema_cache_artifacts_present "$schema_tree"; then
+    # World-readable/traversable on DWS-owned paths only: integrity rests on the
+    # locally generated identity plus shard digests, not on file ownership.
+    # Never chmod a+rX a pre-existing custom SHARED_DIR root, nor pre-existing
+    # caller-owned dws/ / dws/schema/ levels (repro: 0700 → 0755 exposing
+    # unrelated children). Within the DWS-owned schema tree, re-share every
+    # edition this warm-up just wrote: the sidecar cleanup above removed every
+    # identity.json, so only the freshly (re)generated current edition holds
+    # one — including an upgrade replacing artifacts inside an existing edition,
+    # whose atomic staging files and identity.json land as 0600.
+    shared_chmod_ok=1
+    # Re-run the whole gate including the parent ancestry lock right before
+    # the first chmod: the warm-up ran an external binary and time has passed,
+    # so this re-establishes that no level above or inside the root became
+    # swappable before a+rX follows the pathnames.
+    if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+      ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+      ! shared_schema_root_ancestry_locked "$shared_dir" ||
+      ! shared_schema_tree_objects_safe "$schema_tree"; then
+      shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] && [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
+      # Pre-existing custom ancestor: chmod only the levels this run created;
+      # every caller-owned level must already be traversable as-is or we fall
+      # back to the per-user cache instead of broadening it.
+      if [ "$dws_tree_preexisted" -eq 0 ]; then
+        chmod a+rX "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
+      fi
+    elif [ "$shared_chmod_ok" -eq 1 ]; then
+      # Installer-created dedicated root (or default system base): umask 077 would
+      # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
+      # schema tree is 0755 — other users could not reach the cache.
+      chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] &&
+      { [ "$custom_shared_root" -eq 0 ] || [ "$schema_tree_preexisted" -eq 0 ]; }; then
+      chmod a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] &&
+      ! shared_schema_make_artifacts_readable "$schema_tree"; then
+      shared_chmod_ok=0
+    fi
+    # Three claims, mirroring exactly what the reading runtime accepts
+    # (internal/schemacache/platform_unix.go): cross-user success requires
+    # every walked level to be owned by root or the expected reader uid and
+    # satisfy the runtime's mode rules; installer-only requires the same with
+    # the installer's own uid; anything else — a group/world-writable level
+    # without sticky, a foreign-owned ancestor, a writable shard — is a cache
+    # no runtime accepts, so the per-user fallback is reported instead. The
+    # first failing cross-user gate travels with the fallback message so a
+    # rejected warm-up is diagnosable from installer output alone.
+    _sc_reader_a=0
+    _sc_reader_b="$shared_schema_owner_uid"
+    _sc_installer_uid="$(id -u)"
+    _sc_cross_gate=""
+    if [ "$shared_chmod_ok" -ne 1 ]; then
+      _sc_cross_gate="re-share"
+    elif ! shared_schema_root_reachable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir"; then
+      _sc_cross_gate="root-reachable"
+    elif ! shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+      _sc_cross_gate="ancestors-traversable"
+    elif ! shared_schema_artifacts_readable "$schema_tree"; then
+      _sc_cross_gate="artifacts-readable"
+    elif ! shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_reader_b"; then
+      _sc_cross_gate="editions-runtime"
+    elif ! shared_schema_artifacts_shared_owner "$schema_tree"; then
+      _sc_cross_gate="shared-owner"
+    fi
+    if [ -z "$_sc_cross_gate" ]; then
+      say "✅ Shared schema cache built: ${shared_dir}"
+    elif [ "$shared_chmod_ok" -eq 1 ] &&
+      shared_schema_root_reachable "$_sc_reader_a" "$_sc_installer_uid" "$shared_dir" &&
+      shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_installer_uid" "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+      shared_schema_artifacts_readable "$schema_tree" &&
+      shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_installer_uid"; then
+      # The runtime accepts a shared cache only when every artifact is owned
+      # by root or by the reading user, so a warm-up run by an ordinary user
+      # under a writable custom root yields a cache its own user consumes and
+      # every other user rejects. Report that instead of advertising a
+      # shared cache.
+      say "⚠️  Schema cache built for the installing user only (owner uid ${shared_schema_owner_uid} required for cross-user reads); other users fall back to a per-user cache."
+    else
+      say "⚠️  Shared schema cache not shared (cross-user gate: ${_sc_cross_gate}); other users fall back to a per-user cache."
+    fi
+  else
+    say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+  fi
+}
+
+# True when every ancestor of the given directory up to the filesystem root
+# is other-readable and other-executable and satisfies the runtime ancestry
+# rule (shared_schema_ancestry_level_safe) for the given reader uid pair, so a
+# non-owner user can actually reach and accept the shared cache. Check-only:
+# caller-owned ancestors are never widened; an unreachable or unsafe parent
+# must downgrade to the per-user fallback instead of advertising a shared
+# cache nobody else can open.
+shared_schema_root_reachable() {
+  _sc_uid_a="$1"
+  _sc_uid_b="$2"
+  _sc_anc="$(dirname -- "$3")"
+  while [ "$_sc_anc" != "/" ]; do
+    [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
+    shared_schema_ancestry_level_safe "$_sc_anc" "$_sc_uid_a" "$_sc_uid_b" || return 1
+    _sc_anc="$(dirname -- "$_sc_anc")"
+  done
+  return 0
+}
+
+# True when each listed directory is other-readable and other-executable and
+# satisfies the runtime ancestry rule for the given reader uid pair, so
+# non-owner users can traverse into the shared schema cache.
+shared_schema_ancestors_traversable() {
+  _sc_uid_a="$1"
+  _sc_uid_b="$2"
+  shift 2
+  for _sc_anc in "$@"; do
+    [ -d "$_sc_anc" ] || return 1
+    # find -perm -005: other has read+execute (portable across GNU/BSD find).
+    [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
+    shared_schema_ancestry_level_safe "$_sc_anc" "$_sc_uid_a" "$_sc_uid_b" || return 1
+  done
+  return 0
+}
+
+# True when every current-generation artifact (each edition holding an
+# identity.json sidecar) is readable and traversable by other users, so the
+# advertised shared cache is actually consumable by them. Stale caller-owned
+# trees without a sidecar are not part of the advertised generation.
+shared_schema_artifacts_readable() {
+  [ -d "$1" ] || return 1
+  # At least one current-generation sidecar must exist, and every file and
+  # directory under each sidecar's edition must be other-readable and
+  # traversable. Sidecar paths travel as find arguments so spaces in a custom
+  # SHARED_DIR cannot split entries and hollow out the guard.
+  [ -n "$(find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" -type f ! -perm -004 -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type d ! -perm -005 -print -quit 2>/dev/null)" ] || exit 1
+      done' sh {} + 2>/dev/null
+}
+
+schema_cache_artifacts_present() {
+  # Caller must pass the precise DWS schema tree (.../dws/schema), not a wide
+  # base like $HOME or a custom SHARED_DIR root.
+  _sc_dir="$1"
+  [ -d "$_sc_dir" ] || return 1
+  case "$_sc_dir" in
+    */dws/schema|*/dws/schema/) ;;
+    *) return 1 ;;
+  esac
+  _sc_meta="$(find "$_sc_dir" -name 'meta.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_registry="$(find "$_sc_dir" -name 'registry.shards.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_payloads="$(find "$_sc_dir" -name 'payloads.shards.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_identity="$(find "$_sc_dir" -name 'identity.json' -type f 2>/dev/null | head -n 1)"
+  [ -n "$_sc_meta" ] && [ -s "$_sc_meta" ] &&
+    [ -n "$_sc_registry" ] && [ -s "$_sc_registry" ] &&
+    [ -n "$_sc_payloads" ] && [ -s "$_sc_payloads" ] &&
+    [ -n "$_sc_identity" ] && [ -s "$_sc_identity" ]
 }
 
 # ── Install Skills ───────────────────────────────────────────────────────────
@@ -1720,6 +2212,13 @@ main() {
   else
     install_binary
     install_skills
+  fi
+
+  # Generate the local Schema identity and shared cache once so every user
+  # reuses it. Skipped for skills-only installs (no binary), unsupported
+  # os/arch (cache backend compiled out), and non-root installs (no system write).
+  if [ "$SKILLS_ONLY" != "1" ]; then
+    build_shared_schema_cache
   fi
 
   # Every transaction of this run has finished, so old stamped archives can no

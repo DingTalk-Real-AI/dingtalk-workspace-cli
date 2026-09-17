@@ -53,18 +53,22 @@ var (
 var MessagesResourceDownload = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-resource-download",
+	Aliases:     []string{"+messages-resources-download"},
 	Product:     "im",
 	Description: "安全下载消息资源（图片/视频/语音/文件）到本地",
 	Intent: "当你需要拿到消息里的实际图片、视频、语音或钉盘文件，而不只是资源 ID 时使用；" +
 		"mediaId 用消息和会话身份换取下载地址，fileId 复用钉盘下载能力，再安全写入工作目录内的相对路径。" +
-		"默认不覆盖已有文件，只有显式传 --overwrite 才覆盖；下载采用整文件临时落盘后原子发布，不支持 Range 断点续传。按既有安全本地下载约定无需交互确认。",
+		"默认不覆盖已有文件，只有显式传 --overwrite 才覆盖；下载采用整文件临时落盘后原子发布，可选 --part-size 启用进程内分段恢复；不承诺跨进程断点续传。按既有安全本地下载约定无需交互确认。",
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文", Enum: []string{"mediaId", "fileId"}},
-		{Name: "resource-id", Type: shortcut.FlagString, Desc: "消息中的 mediaId 或 fileId", Required: true},
-		{Name: "message-id", Type: shortcut.FlagString, Desc: "mediaId 所属消息的 openMessageId；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文"},
-		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "mediaId 所属会话的 openConversationId；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文"},
+		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型；媒体需message-id，可自动补会话；image/file从消息资源元数据解析ID类型；fileId可独立下载", Enum: []string{"mediaId", "fileId", "image", "file"}},
+		{Name: "resource-id", Type: shortcut.FlagString, Aliases: []string{"file-key"}, Desc: "消息中的 mediaId 或 fileId", Required: true},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "mediaId 所属消息的 openMessageId；媒体需message-id，可自动补会话；image/file从消息资源元数据解析ID类型；fileId可独立下载"},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "mediaId 所属会话的 openConversationId；媒体需message-id，可自动补会话；image/file从消息资源元数据解析ID类型；fileId可独立下载"},
 		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内的相对路径；不允许绝对路径或 .. 逃逸"},
+		{Name: "part-size", Type: shortcut.FlagInt, Default: "0", Desc: "文件分段大小字节；0为整文件，启用范围4096–33554432，分段须有稳定ETag"},
+		{Name: "retries", Type: shortcut.FlagInt, Default: "2", Desc: "分段下载瞬时故障最多重试次数（0–3）；失败片段重新取URL且校验同一版本"},
+		{Name: "retry-delay", Type: shortcut.FlagInt, Default: "200", Desc: "分段下载重试间隔毫秒（0–10000）"},
 		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "允许覆盖工作目录内已存在的目标文件（默认拒绝）"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -76,7 +80,7 @@ var MessagesResourceDownload = shortcut.Shortcut{
 		{
 			Kind:        shortcut.ConstraintCustom,
 			Flags:       []string{"type", "message-id", "open-conversation-id"},
-			Description: "--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文",
+			Description: "媒体需message-id，可自动补会话；image/file从消息资源元数据解析ID类型；fileId可独立下载",
 		},
 	},
 	Tips: []string{
@@ -85,25 +89,37 @@ var MessagesResourceDownload = shortcut.Shortcut{
 		`dws chat +messages-resource-download --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/`,
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("part-size") == 0 && (rt.Changed("retries") || rt.Changed("retry-delay")) {
+			return apperrors.NewValidation("显式重试参数需要非零--part-size")
+		}
+		if n := rt.Int("part-size"); n != 0 && (n < 4096 || n > 33554432) {
+			return apperrors.NewValidation("--part-size 必须为0或4096–33554432")
+		}
+		if n := rt.Int("retries"); n < 0 || n > 3 {
+			return apperrors.NewValidation("--retries 必须为0–3")
+		}
+		if n := rt.Int("retry-delay"); n < 0 || n > 10000 {
+			return apperrors.NewValidation("--retry-delay 必须为0–10000")
+		}
 		if err := validateResourceDownloadOutput(rt.Str("output")); err != nil {
 			return err
 		}
-		resourceType, _ := canonicalMessageResourceType(rt.Str("type"))
-		if resourceType == "mediaId" &&
-			(strings.TrimSpace(rt.Str("message-id")) == "" ||
-				strings.TrimSpace(rt.Str("open-conversation-id")) == "") {
-			return apperrors.NewValidation(
-				"--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id")
+		if rt.Str("message-id") == "" && rt.Str("type") != "fileId" {
+			return apperrors.NewValidation("媒体/内容类型下载需要 --message-id；会话可自动解析；独立文件使用--type fileId")
 		}
 		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		resourceType, _ := canonicalMessageResourceType(rt.Str("type"))
+		resourceType, messageID, conversationID, err := resolveDownloadIdentity(rt)
+		if err != nil {
+			return err
+		}
+
 		plan := map[string]any{
 			"resourceType":       resourceType,
-			"resourceId":         rt.Str("resource-id"),
-			"messageId":          rt.Str("message-id"),
-			"openConversationId": rt.Str("open-conversation-id"),
+			"resourceId":         rt.StrFirst("resource-id", "file-key"),
+			"messageId":          messageID,
+			"openConversationId": conversationID,
 			"output":             rt.Str("output"),
 			"overwrite":          rt.Bool("overwrite"),
 		}
@@ -121,9 +137,9 @@ var MessagesResourceDownload = shortcut.Shortcut{
 		data, err := resolveMessageResourceDownloadData(
 			rt,
 			resourceType,
-			rt.Str("resource-id"),
-			rt.Str("message-id"),
-			rt.Str("open-conversation-id"),
+			rt.StrFirst("resource-id", "file-key"),
+			messageID,
+			conversationID,
 		)
 		if err != nil {
 			return err
@@ -136,9 +152,23 @@ var MessagesResourceDownload = shortcut.Shortcut{
 		if err != nil {
 			return apperrors.NewInternal(fmt.Sprintf("读取工作目录失败: %v", err))
 		}
+		requestedOutput := rt.Str("output")
+		if filepath.Ext(requestedOutput) == "" && requestedOutput != "." && !strings.HasSuffix(requestedOutput, "/") {
+			name := resourceDownloadPreferredName(data)
+			if name == "" {
+				if u, e := url.Parse(resourceURL); e == nil {
+					name = pathpkg.Base(u.Path)
+				}
+			}
+			if ext := filepath.Ext(name); ext != "" {
+				if info, e := os.Stat(requestedOutput); e != nil || !info.IsDir() {
+					requestedOutput += ext
+				}
+			}
+		}
 		destPath, relativePath, err := resolveResourceDownloadPath(
 			cwd,
-			rt.Str("output"),
+			requestedOutput,
 			resourceURL,
 			rt.Bool("overwrite"),
 			resourceDownloadPreferredName(data),
@@ -146,17 +176,25 @@ var MessagesResourceDownload = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		size, err := resourceDownload(
-			rt.Command().Context(), nil, resourceURL, headers, destPath, rt.Bool("overwrite"))
+		resolve := func() (string, map[string]string, error) {
+			data, err := resolveMessageResourceDownloadData(rt, resourceType, rt.StrFirst("resource-id", "file-key"), messageID, conversationID)
+			if err != nil {
+				return "", nil, err
+			}
+			return resourceDownloadInfo(data)
+		}
+		size, err := downloadWithRecovery(rt.Command().Context(), nil, resourceURL, headers, destPath, rt.Bool("overwrite"), int64(rt.Int("part-size")), rt.Int("retries"), rt.Int("retry-delay"), resolve)
+
 		if err != nil {
 			return err
 		}
 		return rt.Output(map[string]any{
-			"messageId":    rt.Str("message-id"),
-			"resourceId":   rt.Str("resource-id"),
-			"resourceType": resourceType,
-			"localPath":    filepath.ToSlash(relativePath),
-			"sizeBytes":    size,
+			"messageId":       messageID,
+			"resourceId":      rt.StrFirst("resource-id", "file-key"),
+			"resourceType":    resourceType,
+			"localPath":       filepath.ToSlash(relativePath),
+			"sizeBytes":       size,
+			"messageVerified": messageID != "",
 		})
 	},
 }
@@ -498,47 +536,9 @@ func downloadResourceAtomically(
 	destPath string,
 	overwrite bool,
 ) (size int64, err error) {
-	if client == nil {
-		client = resourceSecureClient()
-	}
-	parsedResourceURL, err := validateResourceDownloadURL(resourceURL)
+	client, parsedResourceURL, err := scopedResourceHTTPClient(client, resourceURL, headers)
 	if err != nil {
 		return 0, err
-	}
-	// The resource URL and any credential headers are issued together by the
-	// same authenticated MCP response, so the initial request forwards them
-	// as-is even for dedicated-deployment storage hosts. The attack surface
-	// is a redirect leaving the original host, which the header-stripping
-	// CheckRedirect below covers.
-	clientCopy := *client
-	client = &clientCopy
-	originalRedirect := client.CheckRedirect
-	initialHost := strings.ToLower(parsedResourceURL.Hostname())
-	headersConfinedToInitialHost := true
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if _, redirectErr := validateResourceDownloadURL(req.URL.String()); redirectErr != nil {
-			return apperrors.NewValidation(fmt.Sprintf(
-				"资源下载重定向指向了不受信任的地址: %v", redirectErr))
-		}
-		if len(via) >= 10 {
-			return apperrors.NewAPI("资源下载重定向次数过多")
-		}
-		if !strings.EqualFold(req.URL.Hostname(), initialHost) {
-			headersConfinedToInitialHost = false
-		}
-		// net/http rebuilds redirect headers from the initial request on every
-		// hop. Once a chain leaves the original host, strip lower-service
-		// headers on every later hop so a same-host redirect on the new origin
-		// cannot silently restore them.
-		if !headersConfinedToInitialHost {
-			for key := range headers {
-				req.Header.Del(key)
-			}
-		}
-		if originalRedirect != nil {
-			return originalRedirect(req, via)
-		}
-		return nil
 	}
 	request, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, parsedResourceURL.String(), nil)
@@ -602,4 +602,50 @@ func downloadResourceAtomically(
 
 func init() {
 	shortcut.Register(withReviewedChatShortcutContracts(MessagesResourceDownload)...)
+}
+
+func scopedResourceHTTPClient(client *http.Client, resourceURL string, headers map[string]string) (*http.Client, *url.URL, error) {
+	if client == nil {
+		client = resourceSecureClient()
+	}
+	parsedResourceURL, err := validateResourceDownloadURL(resourceURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The resource URL and any credential headers are issued together by the
+	// same authenticated MCP response, so the initial request forwards them
+	// as-is even for dedicated-deployment storage hosts. The attack surface
+	// is a redirect leaving the original host, which the header-stripping
+	// CheckRedirect below covers.
+	clientCopy := *client
+	client = &clientCopy
+	originalRedirect := client.CheckRedirect
+	initialHost := strings.ToLower(parsedResourceURL.Hostname())
+	headersConfinedToInitialHost := true
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if _, redirectErr := validateResourceDownloadURL(req.URL.String()); redirectErr != nil {
+			return apperrors.NewValidation(fmt.Sprintf(
+				"资源下载重定向指向了不受信任的地址: %v", redirectErr))
+		}
+		if len(via) >= 10 {
+			return apperrors.NewAPI("资源下载重定向次数过多")
+		}
+		if !strings.EqualFold(req.URL.Hostname(), initialHost) {
+			headersConfinedToInitialHost = false
+		}
+		// net/http rebuilds redirect headers from the initial request on every
+		// hop. Once a chain leaves the original host, strip lower-service
+		// headers on every later hop so a same-host redirect on the new origin
+		// cannot silently restore them.
+		if !headersConfinedToInitialHost {
+			for key := range headers {
+				req.Header.Del(key)
+			}
+		}
+		if originalRedirect != nil {
+			return originalRedirect(req, via)
+		}
+		return nil
+	}
+	return client, parsedResourceURL, nil
 }

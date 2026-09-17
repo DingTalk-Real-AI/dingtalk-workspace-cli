@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -111,6 +113,29 @@ func runDriveUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
+		// dry-run 委托预检：与真实执行 (uploadToDrive→get_upload_info) 一致，
+		// 被拒/校验失败则直接返回错误、不出预览。principal 为空时 helper
+		// 内部短路返回 nil。precheckArgs 复刻真实 step1Args 形态，使
+		// uploadActionParam{fileName,fileSize} 随预检上送。
+		mimeType, _ := cmd.Flags().GetString("mime-type")
+		precheckArgs := map[string]any{
+			"fileName": fileName,
+			"fileSize": float64(fileSize),
+		}
+		if spaceID != "" {
+			precheckArgs["spaceId"] = spaceID
+		}
+		if mimeType != "" {
+			precheckArgs["mimeType"] = mimeType
+		}
+		if overwriteNodeID != "" {
+			precheckArgs["overwriteFileId"] = overwriteNodeID
+		} else if parentID != "" {
+			precheckArgs["parentId"] = parentID
+		}
+		if err := markdownDryRunDelegationPrecheck(cmd, "drive", "get_upload_info", precheckArgs); err != nil {
+			return err
+		}
 		if deps.Caller.Format() == "json" {
 			return deps.Out.PrintJSON(map[string]any{
 				"dry_run":      true,
@@ -166,6 +191,13 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 	}
 
 	if deps.Caller.DryRun() {
+		// dry-run 委托预检：与真实执行 (uploadToDocSpace→get_file_upload_info)
+		// 一致，被拒/校验失败则直接返回错误、不出预览。precheckArgs 复刻真实
+		// step1Args 形态，使 uploadActionParam{fileName,fileSize} 随预检上送。
+		precheckArgs := docFileUploadInfoArgs(fileName, fileSize, folder, workspaceID, overwriteNodeID)
+		if err := markdownDryRunDelegationPrecheck(cmd, "doc", "get_file_upload_info", precheckArgs); err != nil {
+			return err
+		}
 		if deps.Caller.Format() == "json" {
 			return deps.Out.PrintJSON(map[string]any{
 				"dry_run":      true,
@@ -295,6 +327,33 @@ type DriveUploadRequest struct {
 	MIMEType      string
 }
 
+// DocSpaceUploadRequest describes the document-space upload transaction used
+// by curated shortcuts. The document-space API deliberately uses workspaceId,
+// folderId and overwriteNodeId rather than the similarly named Drive fields.
+type DocSpaceUploadRequest struct {
+	FilePath      string
+	FileName      string
+	FileSize      int64
+	WorkspaceID   string
+	FolderID      string
+	OverwriteNode string
+	Convert       bool
+}
+
+func parseUploadCommitData(operation, text string) (map[string]any, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("%s returned no business result; remote effect is unknown", operation)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		return nil, fmt.Errorf("parse %s response: %w", operation, err)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("%s returned an empty JSON object; remote effect is unknown", operation)
+	}
+	return result, nil
+}
+
 // UploadDriveFileData runs credentials -> OSS PUT -> commit exactly once and
 // returns the parsed commit response without rendering it. Unlike the legacy
 // leaf helper, this path fails when the commit has no non-empty JSON response;
@@ -348,17 +407,55 @@ func UploadDriveFileData(ctx context.Context, request DriveUploadRequest) (map[s
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(commitText) == "" {
-		return nil, fmt.Errorf("commit_upload returned no business result; remote effect is unknown")
+	return parseUploadCommitData("commit_upload", commitText)
+}
+
+// UploadDocSpaceFileData runs credentials -> OSS PUT -> commit exactly once
+// on the doc MCP server and returns the parsed commit response without
+// rendering it. It is intentionally separate from UploadDriveFileData so the
+// two target domains cannot silently exchange similarly named identifiers.
+func UploadDocSpaceFileData(ctx context.Context, request DocSpaceUploadRequest) (map[string]any, error) {
+	if strings.TrimSpace(request.FilePath) == "" || strings.TrimSpace(request.FileName) == "" || request.FileSize <= 0 || strings.TrimSpace(request.WorkspaceID) == "" {
+		return nil, fmt.Errorf("invalid document-space upload request")
 	}
-	var result map[string]any
-	if err := json.Unmarshal([]byte(commitText), &result); err != nil {
-		return nil, fmt.Errorf("parse commit_upload response: %w", err)
+	if request.OverwriteNode != "" && request.FolderID != "" {
+		return nil, fmt.Errorf("document-space overwriteNode and folderId are mutually exclusive")
 	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("commit_upload returned an empty JSON object; remote effect is unknown")
+
+	// Share the native upload metadata so the first capability check receives
+	// the final name and size before any bytes are uploaded to OSS.
+	credentialArgs := docFileUploadInfoArgs(request.FileName, request.FileSize, request.FolderID, request.WorkspaceID, request.OverwriteNode)
+	credentialText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_file_upload_info", credentialArgs)
+	if err != nil {
+		return nil, err
 	}
-	return result, nil
+	resourceURL, uploadKey, headers, err := parseUploadInfo(credentialText)
+	if err != nil {
+		return nil, err
+	}
+	if err := httpPutFile(ctx, resourceURL, headers, request.FilePath, request.FileSize); err != nil {
+		return nil, err
+	}
+
+	commitArgs := map[string]any{
+		"uploadKey":   uploadKey,
+		"name":        request.FileName,
+		"fileSize":    float64(request.FileSize),
+		"workspaceId": request.WorkspaceID,
+	}
+	if request.OverwriteNode != "" {
+		commitArgs["overwriteNodeId"] = request.OverwriteNode
+	} else if request.FolderID != "" {
+		commitArgs["folderId"] = request.FolderID
+	}
+	if request.Convert {
+		commitArgs["convertToOnlineDoc"] = true
+	}
+	commitText, err := callMCPToolReturnTextOnServer(ctx, "doc", "commit_uploaded_file", commitArgs)
+	if err != nil {
+		return nil, err
+	}
+	return parseUploadCommitData("commit_uploaded_file", commitText)
 }
 
 func newDriveCommand() *cobra.Command {
@@ -366,6 +463,12 @@ func newDriveCommand() *cobra.Command {
 	// products.drive). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "drive",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-drive"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("钉盘深度指南", "dingtalk-drive", "references/drive.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉盘及文档空间中的文件、目录、上传下载、回收站与公开发布",
 			UseWhen: []string{
@@ -630,7 +733,12 @@ func newDriveCommand() *cobra.Command {
 		Long: `获取钉盘文件/文件夹的元数据信息。
 
 如果目标文件属于钉钉文档（在线文档/表格/脑图等），会自动跟进调用
-钉钉文档接口获取更准确的文档信息（如真实文档名称），并合并输出。`,
+钉钉文档接口获取更准确的文档信息（如真实文档名称），并合并输出。
+
+返回 extension=dlink 时，result.fileId 是快捷方式入口 ID（语义为 dentryUuid）。
+内容读取、编辑、导出或类型路由需用该 ID 调用 dws doc info，再按
+linkSourceInfo.nodeId 逐跳解析目标；移动、重命名或删除入口本身仍使用最初的
+result.fileId。`,
 		Example: `  dws drive info --node <dentryUuid>  # 查询 fileId: dws drive list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fileID := flagOrFallback(cmd, "node", "file-id")
@@ -657,17 +765,19 @@ func newDriveCommand() *cobra.Command {
 				CLIPath:        "drive info",
 				PrimaryCLIPath: "drive info",
 			},
-			Description: "获取文件元数据信息",
+			Description: "获取文件元数据信息；dlink 使用 result.fileId 解析目标",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "get_file_info"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取文件元数据信息",
+				AgentSummary: "获取文件元数据信息；dlink 使用 result.fileId 调用 doc info 解析真实目标",
 				UseWhen: []string{
 					"用户要查看钉盘文件/文件夹元信息（名称、类型、大小、路径、时间）时",
 					"准备读内容前需先判断 extension/是否在线文档，再路由到 doc read / sheet / download 时",
+					"extension=dlink 时，取返回的 result.fileId 作为快捷方式入口 ID 调用 dws doc info，并按 linkSourceInfo.nodeId 逐跳解析目标",
+					"明确移动、重命名或删除快捷方式入口本身时，保留最初 drive info 的 result.fileId；内容操作不得使用入口 ID",
 				},
 				AvoidWhen: []string{
 					"要读在线文档正文改用 dws doc read（先本命令或 doc info 确认类型）",
@@ -691,11 +801,17 @@ func newDriveCommand() *cobra.Command {
   1. 获取下载 URL 和签名请求头 (download_file)
   2. HTTP GET 下载文件二进制内容到本地
 
---output 指定本地保存路径，可以是文件路径或目录。
-如果指定目录，文件名从下载 URL 中自动推断。`,
-		Example: `  dws drive download --node <dentryUuid> --output ./report.pdf
+--output 指定本地保存路径，可以是文件路径或目录，不指定时默认当前目录。
+路径为目录（或未指定）时，文件名优先取返回的 fileName，其次从下载 URL 推断。
+
+--url-only 切换为非落盘模式：只获取并输出带签名的下载地址与请求头，不下载
+文件内容；下载由调用方自行执行，地址为临时授权应尽快使用。与
+--output/--overwrite/--part-size/--parallel/--no-resume 互斥。`,
+		Example: `  dws drive download --node <dentryUuid>
+  dws drive download --node <dentryUuid> --output ./report.pdf
   dws drive download --node <dentryUuid> --output ~/downloads/
-  dws drive download --node <dentryUuid> --output ./big.zip --part-size 32MB --parallel 8`,
+  dws drive download --node <dentryUuid> --output ./big.zip --part-size 32MB --parallel 8
+  dws drive download --node <dentryUuid> --url-only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fileID := flagOrFallback(cmd, "node", "file-id")
 			if fileID == "" {
@@ -703,12 +819,20 @@ func newDriveCommand() *cobra.Command {
 			}
 			outputPath, _ := cmd.Flags().GetString("output")
 			if outputPath == "" {
-				return fmt.Errorf("flag --output is required")
+				outputPath = "." // 未指定保存路径时默认当前目录，文件名自动推断
 			}
+			overwrite, _ := cmd.Flags().GetBool("overwrite")
 
 			argsMap := map[string]any{"fileId": fileID}
 			if v, _ := cmd.Flags().GetString("space-id"); v != "" {
 				argsMap["spaceId"] = v
+			}
+
+			// --url-only：非落盘模式，只取下载地址与请求头，不走分片下载。
+			if urlOnly, _ := cmd.Flags().GetBool("url-only"); urlOnly {
+				return runDriveDownloadURLOnly(cmd, "drive_download", fileID, 0, func(ctx context.Context) (string, error) {
+					return callMCPToolReturnText(ctx, "download_file", argsMap)
+				})
 			}
 
 			// fail-fast：分片下载参数校验
@@ -733,7 +857,11 @@ func newDriveCommand() *cobra.Command {
 				}
 				deps.Out.PrintKeyValue("操作", "下载钉盘文件")
 				deps.Out.PrintKeyValue("文件ID", fileID)
-				deps.Out.PrintKeyValue("输出", outputPath)
+				if rawOutput, _ := cmd.Flags().GetString("output"); rawOutput != "" {
+					deps.Out.PrintKeyValue("输出", rawOutput)
+				} else {
+					deps.Out.PrintKeyValue("输出", "当前目录（自动推断文件名）")
+				}
 				return nil
 			}
 
@@ -761,11 +889,18 @@ func newDriveCommand() *cobra.Command {
 				outputPath = filepath.Join(outputPath, filename)
 			}
 
+			// 冲突检测：目标文件已存在时，无 --overwrite 一律拒绝（含缺省 cwd 场景）。
+			// 断点续传的 .dwspart/.dwspart.meta 产物不算冲突——只 stat 最终目标。
+			if err := checkDownloadConflict(outputPath, overwrite, "drive download"); err != nil {
+				return err
+			}
+
 			// Step 2: 分片下载（自动分派 + 401/403 凭证刷新重试）
 			printJSONSafeInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
 			dlOpts.knownSize = parseDownloadFileSize(text)
 			dlOpts.nodeID = fileID
 			dlOpts.version = parseDownloadFileVersion(text)
+			dlOpts.overwrite = overwrite
 			fetchCred := func(fctx context.Context) (string, map[string]string, int, error) {
 				t, ferr := callMCPToolReturnText(fctx, "download_file", argsMap)
 				if ferr != nil {
@@ -778,6 +913,10 @@ func newDriveCommand() *cobra.Command {
 				return u, h, parseDownloadFileVersion(t), nil
 			}
 			if err := driveTransferDownload(ctx, fetchCred, resourceURL, dlHeaders, outputPath, dlOpts); err != nil {
+				if errors.Is(err, errDriveDownloadTargetExists) {
+					// 发布阶段兜底：检查后新出现的目标同样拒绝，不静默覆盖。
+					return newDownloadTargetExistsError(outputPath, "drive download")
+				}
 				if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
 					partSize, _ := cmd.Flags().GetString("part-size")
 					noResume, _ := cmd.Flags().GetBool("no-resume")
@@ -822,7 +961,7 @@ func newDriveCommand() *cobra.Command {
 				CLIPath:        "drive download",
 				PrimaryCLIPath: "drive download",
 			},
-			Description: "下载钉盘或文档空间文件到本地",
+			Description: "下载钉盘或文档空间文件到本地，或 --url-only 仅返回带签名的下载地址（不落盘）",
 			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
@@ -830,19 +969,22 @@ func newDriveCommand() *cobra.Command {
 				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "download_file"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "下载钉盘或文档空间文件到本地",
+				AgentSummary: "下载钉盘或文档空间文件到本地；--url-only 时只返回带签名的下载地址与请求头（非落盘模式）",
 				UseWhen: []string{
 					"用户要把钉盘普通文件（PDF/图片/Office 等非在线文档）下载到本地路径时",
 					"已确认 contentType 非 ALIDOC，需要落盘本地查看时",
+					"Agent runtime / 外部系统与 CLI 不共享文件系统，只要带签名的临时下载地址与请求头自行下载时（--url-only）",
 				},
 				AvoidWhen: []string{
 					"在线文档(adoc)要导出为 Word/docx 改用 dws doc export，不要用 download 代替导出",
 					"只要临时下载链接语义且走文档附件块时用 dws doc media download",
-					"未指定 --output 不要调用（CLI 必填）",
+					"需要确定的输出路径时显式传 --output；缺省会落到当前目录",
+					"目标文件已存在且用户未明确允许覆盖时不要直接重跑；默认拒绝，需 --overwrite",
+					"--url-only 与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥；只要下载地址时去掉这些参数",
 				},
 				Examples: []string{
 					"dws drive download --node <dentryUuid> --output ./report.pdf --format json",
-					"dws drive download --node <dentryUuid> --output ~/downloads/ --format json",
+					"dws drive download --node <dentryUuid> --url-only --format json",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -853,6 +995,9 @@ func newDriveCommand() *cobra.Command {
 				{Name: "no-resume", Description: "关闭断点续传"},
 				// Wukong compat alias: routes to download-version; not a download_file property.
 				{Name: "version", Description: "下载指定历史版本号（兼容别名，等价 download-version）"},
+				{Name: "overwrite", Description: "目标文件已存在时允许覆盖（默认拒绝并报错）"},
+				// CLI-local delivery-mode switch; never sent to download_file.
+				{Name: "url-only", Description: "非落盘模式：只返回带签名的下载地址与请求头，不下载文件内容"},
 			},
 		},
 	})
@@ -870,9 +1015,15 @@ func newDriveCommand() *cobra.Command {
   1. 获取历史版本下载 URL 和签名请求头 (download_file_version)
   2. HTTP GET 下载文件二进制内容到本地
 
-版本号从 dws drive list --node <dentryUuid> --versions 获取。`,
+版本号从 dws drive list --node <dentryUuid> --versions 获取。
+--output 指定本地保存路径，不指定时默认当前目录，文件名自动推断。
+
+--url-only 切换为非落盘模式：只获取并输出历史版本的带签名下载地址与请求头，
+不下载文件内容；下载由调用方自行执行。与
+--output/--overwrite/--part-size/--parallel/--no-resume 互斥。`,
 		Example: `  dws drive download-version --node <dentryUuid> --version 3 --output ./report_v3.pdf
-  dws drive download-version --node <dentryUuid> --version 3 --output ~/downloads/`,
+  dws drive download-version --node <dentryUuid> --version 3 --output ~/downloads/
+  dws drive download-version --node <dentryUuid> --version 3 --url-only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fileID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -884,7 +1035,18 @@ func newDriveCommand() *cobra.Command {
 			}
 			outputPath, _ := cmd.Flags().GetString("output")
 			if outputPath == "" {
-				return fmt.Errorf("flag --output is required")
+				outputPath = "." // 未指定保存路径时默认当前目录，文件名自动推断
+			}
+			overwrite, _ := cmd.Flags().GetBool("overwrite")
+
+			// --url-only：非落盘模式，只取历史版本下载地址与请求头，不走分片下载。
+			if urlOnly, _ := cmd.Flags().GetBool("url-only"); urlOnly {
+				return runDriveDownloadURLOnly(cmd, "drive_download_version", fileID, versionNum, func(ctx context.Context) (string, error) {
+					return callMCPToolReturnTextOnServer(ctx, "drive", "download_file_version", map[string]any{
+						"nodeId":  fileID,
+						"version": versionNum,
+					})
+				})
 			}
 
 			// fail-fast：分片下载参数校验
@@ -911,7 +1073,11 @@ func newDriveCommand() *cobra.Command {
 				deps.Out.PrintKeyValue("操作", "下载文件历史版本")
 				deps.Out.PrintKeyValue("节点ID", fileID)
 				deps.Out.PrintKeyValue("版本号", fmt.Sprintf("%d", versionNum))
-				deps.Out.PrintKeyValue("输出", outputPath)
+				if rawOutput, _ := cmd.Flags().GetString("output"); rawOutput != "" {
+					deps.Out.PrintKeyValue("输出", rawOutput)
+				} else {
+					deps.Out.PrintKeyValue("输出", "当前目录（自动推断文件名）")
+				}
 				return nil
 			}
 
@@ -936,10 +1102,17 @@ func newDriveCommand() *cobra.Command {
 				}
 				outputPath = filepath.Join(outputPath, filename)
 			}
+
+			// 冲突检测：目标文件已存在时，无 --overwrite 一律拒绝（含缺省 cwd 场景）。
+			// 断点续传的 .dwspart/.dwspart.meta 产物不算冲突——只 stat 最终目标。
+			if err := checkDownloadConflict(outputPath, overwrite, "drive download-version"); err != nil {
+				return err
+			}
 			printJSONSafeInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
 			dlOpts.knownSize = parseDownloadFileSize(text)
 			dlOpts.nodeID = fileID
 			dlOpts.version = versionNum
+			dlOpts.overwrite = overwrite
 			fetchCred := func(fctx context.Context) (string, map[string]string, int, error) {
 				t, ferr := callMCPToolReturnTextOnServer(fctx, "drive", "download_file_version", dlArgsMap)
 				if ferr != nil {
@@ -952,6 +1125,10 @@ func newDriveCommand() *cobra.Command {
 				return u, h, parseDownloadFileVersion(t), nil
 			}
 			if err := driveTransferDownload(ctx, fetchCred, resourceURL, dlHeaders, outputPath, dlOpts); err != nil {
+				if errors.Is(err, errDriveDownloadTargetExists) {
+					// 发布阶段兜底：检查后新出现的目标同样拒绝，不静默覆盖。
+					return newDownloadTargetExistsError(outputPath, "drive download-version")
+				}
 				if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
 					partSize, _ := cmd.Flags().GetString("part-size")
 					noResume, _ := cmd.Flags().GetBool("no-resume")
@@ -995,30 +1172,38 @@ func newDriveCommand() *cobra.Command {
 				CLIPath:        "drive download-version",
 				PrimaryCLIPath: "drive download-version",
 			},
-			Description: "下载钉盘普通文件的指定历史版本到本地（两步下载：取签名 URL 后 HTTP GET）",
+			Description: "下载钉盘普通文件的指定历史版本到本地，或 --url-only 仅返回该版本的下载地址（不落盘）",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "下载钉盘普通文件的指定历史版本到本地（两步下载：取签名 URL 后 HTTP GET）",
+				AgentSummary: "下载钉盘普通文件的指定历史版本到本地；--url-only 时只返回该版本的下载地址与请求头（非落盘模式）",
 				UseWhen: []string{
 					"用户要下载文件的历史版本/旧版本",
 					"版本号已通过 drive list --versions 获取",
+					"只要历史版本的带签名下载地址不落盘时加 --url-only（Agent runtime / 外部系统自行下载）",
 				},
 				AvoidWhen: []string{
 					"下载最新版本用 drive download",
 					"在线文档（adoc）历史版本用 doc version 系列命令",
 					"在线表格（axls）历史版本用 sheet version 系列命令",
+					"--url-only 与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥；只要下载地址时去掉这些参数",
 				},
-				Examples: []string{"dws drive download-version --node <dentryUuid> --version 3 --output ./report_v3.pdf"},
+				Examples: []string{
+					"dws drive download-version --node <dentryUuid> --version 3 --output ./report_v3.pdf",
+					"dws drive download-version --node <dentryUuid> --version 3 --url-only --format json",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				// CLI-local multipart transfer knobs (not interface properties; see mapping exclusions).
 				{Name: "part-size", Description: "分片下载的分片大小（如 8MB/16MB/1GB）"},
 				{Name: "parallel", Description: "分片下载并发数（1-8）"},
 				{Name: "no-resume", Description: "关闭断点续传"},
+				{Name: "overwrite", Description: "目标文件已存在时允许覆盖（默认拒绝并报错）"},
+				// CLI-local delivery-mode switch; never sent to download_file_version.
+				{Name: "url-only", Description: "非落盘模式：只返回该版本的下载地址与请求头，不下载文件内容"},
 			},
 		},
 	})
@@ -1239,7 +1424,9 @@ func newDriveCommand() *cobra.Command {
 
 	driveDownloadCmd.Flags().String("node", "", "文件 ID (dentryUuid) (必填)")
 	driveDownloadCmd.Flags().String("space-id", "", "文件所属空间 ID (可选)")
-	driveDownloadCmd.Flags().String("output", "", "本地保存路径 (文件路径或目录，必填)")
+	driveDownloadCmd.Flags().String("output", "", "本地保存路径 (文件路径或目录，可选，默认当前目录)")
+	driveDownloadCmd.Flags().Bool("overwrite", false, "目标文件已存在时允许覆盖 (默认 false 时拒绝并报错)")
+	driveDownloadCmd.Flags().Bool("url-only", false, "只返回带签名的下载地址与请求头，不落盘 (与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥)")
 	driveDownloadCmd.Flags().Int("version", 0, "下载指定历史版本号（兼容别名，等价 download-version）")
 	driveDownloadCmd.Flags().String("part-size", "16MB", "分片下载的分片大小，如 8MB/16MB/1GB，范围 1MB-1GB (可选)")
 	driveDownloadCmd.Flags().Int("parallel", 4, "分片下载并发数，范围 1-8 (可选)")
@@ -1247,7 +1434,9 @@ func newDriveCommand() *cobra.Command {
 
 	driveDownloadVersionCmd.Flags().String("node", "", "文件 ID (dentryUuid) 或 URL (必填)")
 	driveDownloadVersionCmd.Flags().Int("version", 0, "历史版本号 (必填，正整数，从 drive list --versions 获取)")
-	driveDownloadVersionCmd.Flags().String("output", "", "本地保存路径 (文件路径或目录，必填)")
+	driveDownloadVersionCmd.Flags().String("output", "", "本地保存路径 (文件路径或目录，可选，默认当前目录)")
+	driveDownloadVersionCmd.Flags().Bool("overwrite", false, "目标文件已存在时允许覆盖 (默认 false 时拒绝并报错)")
+	driveDownloadVersionCmd.Flags().Bool("url-only", false, "只返回带签名的下载地址与请求头，不落盘 (与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥)")
 	driveDownloadVersionCmd.Flags().String("part-size", "16MB", "分片下载的分片大小，如 8MB/16MB/1GB，范围 1MB-1GB (可选)")
 	driveDownloadVersionCmd.Flags().Int("parallel", 4, "分片下载并发数，范围 1-8 (可选)")
 	driveDownloadVersionCmd.Flags().Bool("no-resume", false, "关闭断点续传 (可选)")
@@ -1449,12 +1638,14 @@ func newDriveCommand() *cobra.Command {
 
 如果需要在某个知识库内搜索，请使用 dws wiki node search --workspace <workspaceId>。
 
+默认/all 仅支持首页聚合；续页请分别使用 drive search --target file 和 doc search，并传入各自返回的游标。
+
 结果中 source 字段区分来源：drive / doc。
 提示：结果按相关性排序，首页未命中时优先调整关键词 / 过滤条件，而非反复翻页。`,
 		Example: `  dws drive search --query "季度汇报"
   dws drive search --query "合同" --target file --extensions pdf,docx
   dws drive search --query "项目" --target space
-  dws drive search --query "报告" --limit 30 --cursor <pageToken>`,
+  dws drive search --query "报告" --target file --limit 30 --cursor <pageToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			keyword := flagOrFallback(cmd, "query", "keyword")
 			if keyword == "" {
@@ -1464,6 +1655,10 @@ func newDriveCommand() *cobra.Command {
 			target, _ := cmd.Flags().GetString("target")
 
 			// 构建钉盘搜索参数
+			cursor := flagOrFallback(cmd, "cursor", "page-token")
+			if cursor != "" && (target == "" || target == "all") {
+				return fmt.Errorf("聚合搜索不支持续页；请分别使用 drive search --target file 和 doc search，并传入各自返回的游标")
+			}
 			argsMap := map[string]any{"keyword": keyword}
 			if target != "" && target != "all" {
 				argsMap["searchTarget"] = target
@@ -1506,8 +1701,8 @@ func newDriveCommand() *cobra.Command {
 			if pageSize > 0 {
 				argsMap["pageSize"] = float64(pageSize)
 			}
-			if v := flagOrFallback(cmd, "cursor", "page-token"); v != "" {
-				argsMap["pageToken"] = v
+			if cursor != "" {
+				argsMap["pageToken"] = cursor
 			}
 
 			// --target file/space: 仅搜钉盘
@@ -1571,14 +1766,14 @@ func newDriveCommand() *cobra.Command {
 				CLIPath:        "drive search",
 				PrimaryCLIPath: "drive search",
 			},
-			Description: "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果",
+			Description: "全局搜索文件，默认同时搜索钉盘和文档空间，仅支持首页聚合；续页需分开查询并使用各自游标",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "search_files"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果",
+				AgentSummary: "全局搜索文件，默认聚合钉盘和文档空间首页；续页需分开查询并使用各自游标",
 				UseWhen: []string{
 					"用户要在钉盘/我的文件里按关键词找文件、文件夹或团队空间，且不知道具体路径时",
 					"需要按扩展名/文件类型/创建者/时间缩小范围的全局搜索（默认 target=all 聚合钉盘+文档空间）",
@@ -1588,6 +1783,7 @@ func newDriveCommand() *cobra.Command {
 					"已明确知识库 workspaceId、只在该库内搜时改用 dws wiki node search --workspace <id>",
 					"已知目录、只需浏览子项时改用 dws drive list，不要用搜索代替目录遍历",
 					"首页未命中时优先改关键词/过滤条件，而不是反复翻页",
+					"需要聚合续页时，分别使用 drive search --target file 和 doc search，并传入各自返回的游标",
 				},
 				Examples: []string{
 					"dws drive search --query \"季度汇报\" --format json",
@@ -1621,7 +1817,7 @@ func newDriveCommand() *cobra.Command {
 	driveSearchCmd.Flags().Int("limit", 0, "每页返回数量（默认 10，最大 30）")
 	driveSearchCmd.Flags().Int("page-size", 0, "--limit 的别名（向后兼容）")
 	_ = driveSearchCmd.Flags().MarkHidden("page-size")
-	driveSearchCmd.Flags().String("cursor", "", "分页游标，从上次返回的 nextCursor 获取 (可选)")
+	driveSearchCmd.Flags().String("cursor", "", "分页游标，仅适用于 --target file/space；使用对应搜索返回的游标 (可选)")
 	driveSearchCmd.Flags().String("page-token", "", "--cursor 的别名（向后兼容）")
 	_ = driveSearchCmd.Flags().MarkHidden("page-token")
 
@@ -2174,14 +2370,17 @@ func newDriveCommand() *cobra.Command {
 			switch taskType {
 			case "export", "import", "copy", "move":
 			default:
-				return fmt.Errorf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType)
+				return apperrors.NewValidation(
+					fmt.Sprintf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType),
+					apperrors.WithReason("invalid_enum"),
+				)
 			}
 
 			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询异步任务")
-				deps.Out.PrintKeyValue("类型", taskType)
-				deps.Out.PrintKeyValue("ID", taskID)
-				return nil
+				return output.StoreResult(cmd.Context(), output.Success(map[string]any{
+					"id":   taskID,
+					"type": taskType,
+				}, output.WithDryRun()))
 			}
 
 			// query_task 工具注册在 drive (dingpan) MCP server 上，需显式路由。
@@ -2189,12 +2388,13 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return deps.Out.PrintJSON(result)
+			return output.StoreResult(cmd.Context(), output.Success(result))
 		},
 	}
 	taskGetCmd.Flags().String("type", "", "任务类型: export|import|copy|move (必填)")
 	taskGetCmd.Flags().String("id", "", "任务 ID (必填)")
 	DeclareLeafMetadata(taskGetCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -2231,6 +2431,27 @@ func newDriveCommand() *cobra.Command {
 			Parameters: []contract.ParamDecl{
 				{Name: "id", Property: "taskId", Required: boolPtr(true)},
 				{Name: "type", Property: "taskType", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"归一化后的异步任务状态和结果",
+					"properties":{
+						"id":{"type":"string","description":"任务 ID"},
+						"type":{"type":"string","description":"任务类型","enum":["export","import","copy","move"]},
+						"status":{"type":"string","description":"归一化任务状态","enum":["PENDING","PROCESSING","SUCCESS","FAILED","PARTIAL_FAILED","TIMEOUT"]},
+						"resultUrl":{"type":"string","description":"任务产出的下载地址"},
+						"resultName":{"type":"string","description":"任务产出的文件名称"},
+						"message":{"type":"string","description":"任务状态说明或失败原因"},
+						"createTime":{"type":"string","description":"任务创建时间"}
+					},
+					"required":["id","type"],
+					"additionalProperties":false
+				}`),
 			},
 		},
 	})
@@ -3336,8 +3557,8 @@ func newDriveCommand() *cobra.Command {
 			Description: "开启文件的互联网公开发布",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
-				Availability: "available",
-				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+				Availability: "unavailable",
+				Reason:       "Current ordinary-file and online-document fixtures return operation.notSupported; keep CLI compatibility but exclude Agent selection until a reviewed eligible-node set→get→unset canary passes.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "开启文件的互联网公开发布",
@@ -3433,8 +3654,8 @@ func newDriveCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(drivePublishGetCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -4286,6 +4507,129 @@ func sanitizeFileName(name string) string {
 
 // extractFileNameFromResponse extracts the fileName field from MCP download_file response JSON.
 // Returns empty string if not found.
+// checkDownloadConflict 在下载引擎启动前检查目标文件是否已存在：默认拒绝
+// 覆盖并返回结构化错误；--overwrite 显式放行（仅 stderr 告警）。断点续传的
+// .dwspart/.dwspart.meta 中间产物不视为冲突——只 stat 最终目标路径。该检查只是
+// 提前失败优化；发布阶段的原子 no-replace 兜底由 drivePublishFile 保证。
+func checkDownloadConflict(outputPath string, overwrite bool, operation string) error {
+	if _, statErr := os.Stat(outputPath); statErr == nil {
+		if !overwrite {
+			return newDownloadTargetExistsError(outputPath, operation)
+		}
+		deps.Out.PrintWarning(fmt.Sprintf("目标文件已存在，将覆盖: %s", outputPath))
+	}
+	return nil
+}
+
+// newDownloadTargetExistsError 构造目标文件已存在结构化错误（检查点与发布
+// 点共用的同一契约：文案与建议保持一致，便于调用方无差别处理）。
+func newDownloadTargetExistsError(outputPath, operation string) *CLIError {
+	return &CLIError{
+		Code:       CodeFileAlreadyExists,
+		Message:    fmt.Sprintf("output file already exists: %s", outputPath),
+		Suggestion: "请先确认用户是否允许覆盖该文件，再决定是否添加 --overwrite 参数",
+		Operation:  operation,
+	}
+}
+
+// driveRejectURLOnlyConflicts 仲裁 --url-only 与落盘/分片传输参数的互斥：URL
+// 模式不写本地文件，这些参数无意义；显式提供即拒绝（fail-closed，不静默
+// 忽略），一次性列出全部冲突 flag。version/space-id 是 RPC 输入，不参与互斥。
+func driveRejectURLOnlyConflicts(cmd *cobra.Command) error {
+	var conflicts []string
+	for _, name := range []string{"output", "overwrite", "part-size", "parallel", "no-resume"} {
+		if cmd.Flags().Changed(name) {
+			conflicts = append(conflicts, "--"+name)
+		}
+	}
+	if len(conflicts) == 0 {
+		return nil
+	}
+	return fmt.Errorf("--url-only 与 %s 互斥：--url-only 只返回下载地址不落盘，请去掉冲突参数（下载由调用方自行执行）", strings.Join(conflicts, "/"))
+}
+
+// runDriveDownloadURLOnly 执行 --url-only 非落盘模式：调用下载凭证 RPC 换取
+// 带签名的下载 URL 与请求头并直接输出，不触发任何本地写入；下载由调用方
+// （Agent runtime / 外部系统）自行执行。URL 解析复用 parseDriveDownloadInfo
+// 的历史字段 fallback；version <= 0 时从响应透出（download-version 恒传
+// 显式版本号）。落盘/分片参数已由 driveRejectURLOnlyConflicts 拒绝。
+func runDriveDownloadURLOnly(cmd *cobra.Command, operation, nodeID string, version int, fetch func(ctx context.Context) (string, error)) error {
+	if err := driveRejectURLOnlyConflicts(cmd); err != nil {
+		return err
+	}
+	if deps.Caller.DryRun() {
+		if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":      true,
+				"executed":     false,
+				"preview_kind": "plan",
+				"operation":    operation,
+				"nodeId":       nodeID,
+				"urlOnly":      true,
+			})
+		}
+		deps.Out.PrintKeyValue("操作", "获取下载地址（--url-only，不落盘）")
+		deps.Out.PrintKeyValue("文件ID", nodeID)
+		if version > 0 {
+			deps.Out.PrintKeyValue("版本号", fmt.Sprintf("%d", version))
+		}
+		return nil
+	}
+
+	text, err := fetch(cmd.Context())
+	if err != nil {
+		return err
+	}
+	resourceURL, headers, err := parseDriveDownloadInfo(text)
+	if err != nil {
+		return err
+	}
+	if version <= 0 {
+		version = parseDownloadFileVersion(text)
+	}
+
+	if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+		payload := map[string]any{
+			"success":     true,
+			"urlOnly":     true,
+			"nodeId":      nodeID,
+			"downloadUrl": resourceURL,
+			"headers":     headers,
+		}
+		if version > 0 {
+			payload["version"] = version
+		}
+		if name := extractFileNameFromResponse(text); name != "" {
+			payload["fileName"] = name
+		}
+		if size := parseDownloadFileSize(text); size > 0 {
+			payload["fileSize"] = size
+		}
+		// 签名 URL 的查询参数分隔符 & 不能被 HTML 转义，否则地址无法直接使用。
+		return deps.Out.PrintJSONUnescaped(payload)
+	}
+
+	deps.Out.PrintInfo("已获取下载地址（未落盘，下载由调用方自行执行）:")
+	deps.Out.PrintKeyValue("下载地址", resourceURL)
+	if len(headers) > 0 {
+		headersJSON, _ := json.Marshal(headers)
+		deps.Out.PrintKeyValue("请求头", string(headersJSON))
+	} else {
+		deps.Out.PrintKeyValue("请求头", "（无：签名已内含在下载地址）")
+	}
+	if version > 0 {
+		deps.Out.PrintKeyValue("版本号", fmt.Sprintf("%d", version))
+	}
+	if name := extractFileNameFromResponse(text); name != "" {
+		deps.Out.PrintKeyValue("文件名", name)
+	}
+	if size := parseDownloadFileSize(text); size > 0 {
+		deps.Out.PrintKeyValue("文件大小", fmt.Sprintf("%d 字节", size))
+	}
+	deps.Out.PrintWarning("下载地址为临时授权，应尽快使用")
+	return nil
+}
+
 func extractFileNameFromResponse(text string) string {
 	var data map[string]any
 	if err := json.Unmarshal([]byte(text), &data); err != nil {
@@ -4363,16 +4707,10 @@ func uploadToDrive(ctx context.Context, filePath, fileName string, fileSize int6
 // explicit server routing. overwriteNodeID changes both MCP steps to overwrite
 // mode and deliberately excludes folderId.
 func uploadToDocSpace(ctx context.Context, filePath, fileName string, fileSize int64, workspaceID, folderID, overwriteNodeID string, convert bool) error {
-	step1Args := map[string]any{}
-	if workspaceID != "" {
-		step1Args["workspaceId"] = workspaceID
-	}
-	if overwriteNodeID != "" {
-		step1Args["overwriteNodeId"] = overwriteNodeID
-		step1Args["name"] = fileName
-	} else if folderID != "" {
-		step1Args["folderId"] = folderID
-	}
+	// 与 dry-run 预检 (runDriveUpload) 共用 docFileUploadInfoArgs，保证首个
+	// get_file_upload_info 调用即携带 name+fileSize，使 uploadActionParam 在
+	// PUT 之前的首个 capability 检查生效（预检参数 == 真实首个调用参数）。
+	step1Args := docFileUploadInfoArgs(fileName, fileSize, folderID, workspaceID, overwriteNodeID)
 
 	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_file_upload_info", step1Args)
 	if err != nil {

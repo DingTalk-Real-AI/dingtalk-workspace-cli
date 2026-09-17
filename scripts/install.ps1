@@ -20,6 +20,12 @@
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else multi)
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
+#   DWS_SCHEMA_CACHE_SHARED_DIR — optional shared schema-cache base (default:
+#                       %ProgramData%\dws). Installer initializes a created root
+#                       and protects only the dws\schema subtree (Admins/SYSTEM
+#                       write, Users read); falls back to %LOCALAPPDATA% when the
+#                       shared root is untrusted. Runtime selection honors the
+#                       same variable when set.
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -1316,7 +1322,9 @@ function Install-Binary {
         }
 
         $destBin = Join-Path $InstallDir "${BinName}.exe"
-        Copy-Item -Path $binFile.FullName -Destination $destBin -Force
+        $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
+        Copy-Item -Path $binFile.FullName -Destination $stagedBin -Force
+        Move-Item -Path $stagedBin -Destination $destBin -Force
 
         Write-Say "✅ Binary installed:"
         Write-Say "   → $destBin"
@@ -1704,14 +1712,47 @@ function Install-BinaryFromSource {
     }
 
     $tmpBin = Join-Path ([System.IO.Path]::GetTempPath()) "dws-build-$PID.exe"
+    $tmpPayloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dws-runtime-build-$PID"
     try {
         & go build -ldflags="-s -w" -o $tmpBin "$Root/cmd"
+        if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+
+        $targetArch = Get-Arch
+        $payloadSource = Join-Path $Root "third_party\runtimepayload\20260909\windows\$targetArch\x7k2m9p4q1w864.dll"
+        $preparedPayload = Join-Path $tmpPayloadRoot "20260909"
+        New-Item -ItemType Directory -Path $preparedPayload -Force | Out-Null
+        $preparedLibrary = Join-Path $preparedPayload "x7k2m9p4q1w864.dll"
+        Copy-Item -LiteralPath $payloadSource -Destination $preparedLibrary -Force
+        $manifest = [ordered]@{
+            format_version = 2
+            payload_version = "20260909"
+            target = "windows/$targetArch"
+            library = "x7k2m9p4q1w864.dll"
+            library_sha256 = (Get-FileHash -LiteralPath $preparedLibrary -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        $manifestJson = $manifest | ConvertTo-Json
+        [System.IO.File]::WriteAllText(
+            (Join-Path $preparedPayload "manifest.json"),
+            $manifestJson,
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+        Push-Location $Root
+        try {
+            & go run ./scripts/build/runtime-payload inject $tmpBin $preparedPayload
+            if ($LASTEXITCODE -ne 0) { throw "runtime payload attachment failed with exit code $LASTEXITCODE" }
+        } finally {
+            Pop-Location
+        }
+
         $destBin = Join-Path $InstallDir "${BinName}.exe"
-        Copy-Item -Path $tmpBin -Destination $destBin -Force
+        $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
+        Copy-Item -LiteralPath $tmpBin -Destination $stagedBin -Force
+        Move-Item -LiteralPath $stagedBin -Destination $destBin -Force
         Write-Say "✅ Binary installed:"
         Write-Say "   → $destBin"
     } finally {
         Remove-Item -Path $tmpBin -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmpPayloadRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -1796,6 +1837,696 @@ function Install-Skills {
     }
 }
 
+# ── Build schema cache ───────────────────────────────────────────────────────
+# Persistent backends are compiled in for windows amd64/arm64. Identity is
+# generated on this machine from the installed binary (no compile-time seal).
+# Non-elevated installs prefer a hardened shared location (%ProgramData%\dws) with
+# Admins/SYSTEM write and Builtin Users read+traverse; otherwise warm the per-user
+# cache under %LOCALAPPDATA%. Elevated Windows installs skip all Schema cache
+# mutation because PowerShell path operations cannot bind validation to one object.
+# Never claim success without artifacts.
+
+function Get-SchemaCacheTree {
+    param([string]$Base)
+    if (-not $Base) { return $null }
+    return (Join-Path $Base "dws\schema")
+}
+
+function Test-SchemaCacheArtifactsPresent {
+    param([string]$Dir)
+    # Require the precise DWS schema tree (...\dws\schema), never a wide base
+    # such as %LOCALAPPDATA% or an arbitrary SHARED_DIR root.
+    if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) {
+        return $false
+    }
+    $leaf = Split-Path -Leaf $Dir
+    $parentLeaf = Split-Path -Leaf (Split-Path -Parent $Dir)
+    if ($leaf -ne 'schema' -or $parentLeaf -ne 'dws') {
+        return $false
+    }
+    $meta = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "meta.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $registry = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "registry.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $payloads = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "payloads.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $identity = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    return (
+        $null -ne $meta -and $meta.Length -gt 0 -and
+        $null -ne $registry -and $registry.Length -gt 0 -and
+        $null -ne $payloads -and $payloads.Length -gt 0 -and
+        $null -ne $identity -and $identity.Length -gt 0
+    )
+}
+
+function Test-IsWindowsHost {
+    if ($PSVersionTable.PSEdition -eq 'Desktop') { return $true }
+    if ($null -ne (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and $IsWindows) { return $true }
+    return ($env:OS -eq 'Windows_NT')
+}
+
+function Get-WindowsElevationState {
+    if (-not (Test-IsWindowsHost)) {
+        return $false
+    }
+    try {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        if (-not $identity -or -not $identity.User) {
+            return $null
+        }
+        if ($identity.User.Value -eq 'S-1-5-18') {
+            return $true
+        }
+        $principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
+        return [bool]$principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $null
+    }
+}
+
+function Test-IsWindowsElevated {
+    $state = Get-WindowsElevationState
+    if ($null -eq $state) {
+        return $true
+    }
+    return [bool]$state
+}
+
+function Test-SharedSchemaCachePathTrusted {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        try {
+            $probe = Join-Path $Path ".dws-schema-cache-trust-probe"
+            [System.IO.File]::WriteAllText($probe, "ok")
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            return $true
+        } catch {
+            return $false
+        }
+    }
+    try {
+        $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+        $owner = $acl.Owner
+        $ownerSid = $null
+        try {
+            $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+        } catch {
+            $ownerSid = $null
+        }
+        $trustedOwners = @(
+            'BUILTIN\Administrators',
+            'NT AUTHORITY\SYSTEM',
+            ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
+        )
+        $ownerTrusted = $false
+        foreach ($candidate in $trustedOwners) {
+            if ($owner -and ($owner -ieq $candidate)) {
+                $ownerTrusted = $true
+                break
+            }
+        }
+        # Account for localized BUILTIN\Administrators via SID when possible.
+        if (-not $ownerTrusted -and $ownerSid) {
+            if ($ownerSid -eq 'S-1-5-32-544' -or $ownerSid -eq 'S-1-5-18') {
+                $ownerTrusted = $true
+            }
+        }
+        if (-not $ownerTrusted) {
+            return $false
+        }
+
+        # Every granting ACE is checked, not just well-known group SIDs: any
+        # Allow ACE carrying write/delete/ACL-owner bits must belong to an
+        # identity this reader trusts (Administrators, SYSTEM, the current
+        # user, or the owner). A write ACE we cannot attribute fails closed.
+        # Check only real write/delete/ACL-owner bits — do NOT OR Modify or
+        # FullControl, those composites include ReadAndExecute, so the Builtin
+        # Users ReadAndExecute ACE we grant would always look writable.
+        # Inherit-only ACEs grant nothing on this object itself, but this
+        # installer creates dws\schema below the accepted root and such ACEs
+        # become effective on those children — an untrusted inheritable write
+        # ACE (e.g. ProgramData's Users (IO)(CI)(WD,AD) or CREATOR OWNER
+        # (IO)(CI)(F)) therefore rejects the root; the shared warm-up falls
+        # back to the per-user cache instead of mutating under it.
+        $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
+            [System.Security.AccessControl.FileSystemRights]::Delete -bor `
+            [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
+            [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
+            [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+        $trustedSids = @('S-1-5-32-544', 'S-1-5-18')
+        try {
+            $trustedSids = @($trustedSids + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+        } catch {
+            $trustedSids = @($trustedSids)
+        }
+        if ($ownerSid) {
+            $trustedSids = @($trustedSids + $ownerSid)
+        }
+        foreach ($rule in $acl.Access) {
+            if ($rule.AccessControlType -ne 'Allow') {
+                continue
+            }
+            if (($rule.FileSystemRights -band $writeRights) -eq 0) {
+                continue
+            }
+            $sid = $null
+            try {
+                $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            } catch {
+                return $false
+            }
+            if ($trustedSids -notcontains $sid) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# The shared root's DACL says nothing about a pre-existing dws\schema subtree:
+# descendant directories may carry explicit (non-inherited) write ACEs granted
+# to untrusted principals. Before any privileged recursion over a tree that
+# already existed, every existing entry — the tree itself included — must pass
+# the same per-path trust rule. Windows-only semantics: DACL inheritance has
+# no POSIX counterpart (install.sh enforces the POSIX gates with owner/sticky
+# rules), and the Unix write-probe inside Test-SharedSchemaCachePathTrusted
+# cannot adjudicate a file path, so non-Windows hosts report nothing to check.
+function Test-SharedSchemaCacheTreeTrusted {
+    param([string]$Tree)
+    if (-not $Tree) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    if (-not (Test-Path -LiteralPath $Tree)) {
+        return $false
+    }
+    if (-not (Test-SharedSchemaCachePathTrusted -Path $Tree)) {
+        return $false
+    }
+    try {
+        foreach ($entry in (Get-ChildItem -LiteralPath $Tree -Recurse -Force -ErrorAction Stop)) {
+            if (-not (Test-SharedSchemaCachePathTrusted -Path $entry.FullName)) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Mirror of install.sh shared_schema_layout_safe: every existing level of the
+# cache layout (shared base, dws intermediate, schema tree) must be a real
+# directory, never a reparse point/symlink. Missing levels are allowed because
+# Build-SharedSchemaCache creates them below. An arbitrary-depth ancestor walk
+# would wrongly reject platform conventions such as /var and /tmp on macOS,
+# which the runtime accepts via ownership/sticky rules instead.
+function Test-SharedSchemaCacheLayoutSafe {
+    param([string[]]$Paths)
+    foreach ($path in $Paths) {
+        if (-not $path) {
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+        try {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+        } catch {
+            return $false
+        }
+        if (-not $item.PSIsContainer) {
+            return $false
+        }
+        if ($item.LinkType) {
+            return $false
+        }
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            return $false
+        }
+    }
+    return $true
+}
+
+# nlink==1 gate for the Windows walk (mirror of find -type f ! -links 1). A
+# hardlinked file would widen the recursive ACL rewrite to an inode shared
+# outside this tree. fsutil unavailable or failing fails closed: the warm-up
+# is abandoned rather than recursing over an unverified inode shape.
+function Test-SharedSchemaCacheFileSingleLink {
+    param([string]$Path)
+    try {
+        $fsutil = Join-Path $env:SystemRoot "System32\fsutil.exe"
+        if (-not (Test-Path -LiteralPath $fsutil)) {
+            return $false
+        }
+        $out = & $fsutil hardlink list $Path 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        $links = @($out | Where-Object { $_ -and $_.Trim() })
+        return ($links.Count -le 1)
+    } catch {
+        return $false
+    }
+}
+
+# Mirror of install.sh shared_schema_tree_objects_safe: cleanup and ACL
+# recursion only operate on plain directories and single-link regular files.
+# Reparse points (symlinks/junctions) redirect the walk outside the tree;
+# hardlinks widen any permission change to a shared inode. On Unix hosts the
+# same rules are enforced with find(1) exactly like install.sh.
+function Test-SharedSchemaCacheTreeObjectsSafe {
+    param([string]$Tree)
+    if (-not $Tree) {
+        return $false
+    }
+    if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($Tree))) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        $find = Get-Command find -ErrorAction SilentlyContinue
+        if (-not $find) {
+            return $false
+        }
+        try {
+            $bad = & $find.Source $Tree -type l -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            $bad = & $find.Source $Tree ! -type f ! -type d -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            $bad = & $find.Source $Tree -type f ! -links 1 -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            return $true
+        } catch {
+            return $false
+        }
+    }
+    try {
+        $items = @()
+        $items += Get-Item -LiteralPath $Tree -Force -ErrorAction Stop
+        $items += Get-ChildItem -LiteralPath $Tree -Recurse -Force -ErrorAction Stop
+        foreach ($item in $items) {
+            if ($item.LinkType) {
+                return $false
+            }
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                return $false
+            }
+            if ($item.PSIsContainer) {
+                continue
+            }
+            if (-not (Test-SharedSchemaCacheFileSingleLink -Path $item.FullName)) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Delete identity sidecars only on the non-elevated path. The checks below are
+# static/path-based defenses; PowerShell cmdlets cannot bind the deletion to a
+# stable Windows object. Elevated Windows installs return before this helper.
+function Clear-SharedSchemaCacheIdentitySidecars {
+    param([string]$Tree)
+    if (-not $Tree) {
+        throw "schema cache tree path is empty"
+    }
+    if (-not (Test-Path -LiteralPath $Tree)) {
+        return
+    }
+    $windowsHost = Test-IsWindowsHost
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Tree)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
+            # Recheck the path immediately before mutation. This narrows the
+            # window but is not an object-identity guarantee; elevated Windows
+            # installs never enter this path.
+            $entry = Get-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            if ($entry.LinkType) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.PSIsContainer) {
+                $stack.Push($entry.FullName)
+                continue
+            }
+            if ($windowsHost -and -not (Test-SharedSchemaCacheFileSingleLink -Path $entry.FullName)) {
+                throw "unsafe schema cache entry (multi-link): $($child.FullName)"
+            }
+            if ($child.Name -eq 'identity.json' -or $child.Name -like 'identity.*.json') {
+                Remove-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            }
+        }
+    }
+}
+
+function Set-SharedSchemaCacheItemAcl {
+    param(
+        [string]$Path,
+        # Provisional keeps a narrowly scoped creation right for the current
+        # identity so a freshly created shared root can still be populated by
+        # this same non-elevated installer; the strict DACL (without the
+        # creator write ACE) is re-applied after the warm-up completes.
+        [switch]$Provisional
+    )
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache path missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    $isContainer = (Get-Item -LiteralPath $Path -Force).PSIsContainer
+    if ($isContainer) {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
+            [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    } else {
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    }
+    $acl.SetAccessRuleProtection($true, $false)
+    $full = [System.Security.AccessControl.FileSystemRights]::FullControl
+    $readExec = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute -bor `
+        [System.Security.AccessControl.FileSystemRights]::Synchronize
+    $allow = [System.Security.AccessControl.AccessControlType]::Allow
+    $admins = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $users = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-545')
+    # Writable only by identities every reader trusts (Admins/SYSTEM). Do not
+    # grant the installer/current user GENERIC_ALL — a later reader trusts only
+    # its own SID + Admins + SYSTEM and would reject a foreign write ACE.
+    foreach ($sid in @($admins, $system)) {
+        if ($isContainer) {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, $propagation, $allow)))
+        } else {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $allow)))
+        }
+    }
+    if ($Provisional) {
+        # The creator's write right is trusted by every gate in this installer
+        # (Test-SharedSchemaCachePathTrusted includes the current identity),
+        # and it is dropped by the final strict re-apply after populate.
+        try {
+            $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+            if ($isContainer) {
+                $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($currentSid, $full, $inheritance, $propagation, $allow)))
+            } else {
+                $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($currentSid, $full, $allow)))
+            }
+        } catch {
+            throw "failed to resolve current identity for provisional ACL: $Path"
+        }
+    }
+    if ($isContainer) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $inheritance, $propagation, $allow)))
+    } else {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $allow)))
+    }
+    try {
+        $acl.SetOwner($admins)
+    } catch {
+        # Non-elevated hosts may lack SeTakeOwnershipPrivilege; DACL alone still
+        # omits the creator write ACE. Owner trust is re-checked by the runtime.
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+}
+
+function Set-SharedSchemaCacheAcl {
+    param(
+        [string]$Path,
+        [switch]$Provisional
+    )
+    Set-SharedSchemaCacheItemAcl -Path $Path -Provisional:$Provisional
+}
+
+function Protect-SharedSchemaCacheTree {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache tree missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    # Recheck each path immediately before mutation. This is a static/path-based
+    # defense, not a stable-object guarantee; elevated Windows installs return
+    # before this helper because Set-Acl resolves paths independently.
+    # No recursive enumeration: the manual stack walk limits the scope of the
+    # non-elevated ACL rewrite to the intended schema subtree.
+    Set-SharedSchemaCacheItemAcl -Path $Path
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Path)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
+            $entry = Get-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            if ($entry.LinkType) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.PSIsContainer) {
+                Set-SharedSchemaCacheItemAcl -Path $entry.FullName
+                $stack.Push($entry.FullName)
+                continue
+            }
+            if (-not (Test-SharedSchemaCacheFileSingleLink -Path $entry.FullName)) {
+                throw "unsafe schema cache entry (multi-link): $($entry.FullName)"
+            }
+            Set-SharedSchemaCacheItemAcl -Path $entry.FullName
+        }
+    }
+}
+
+function Initialize-SharedSchemaCacheRoot {
+    param([string]$Path)
+    if (-not $Path) {
+        throw "shared schema cache path is empty"
+    }
+    if (Test-Path -LiteralPath $Path) {
+        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($Path))) {
+            throw "shared schema cache root is not a plain directory: $Path"
+        }
+        if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+            throw "shared schema cache root is untrusted (owner/DACL): $Path"
+        }
+        # Pre-existing base (including custom DWS_SCHEMA_CACHE_SHARED_DIR): trust
+        # check only. Do not replace DACL/owner on a caller-owned tree that may
+        # hold unrelated files; recursive harden is limited to dws\schema.
+        return $Path
+    }
+    $parent = Split-Path -Parent $Path
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
+    }
+    New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+    # Harden only the dedicated root this installer just created. The strict
+    # DACL grants no creator write right, so applying it now would make the
+    # subsequent dws\schema creation and warm-up fail as the same standard
+    # user; the provisional ACL keeps a current-identity creation right that
+    # every gate here still trusts, and Build-SharedSchemaCache re-applies
+    # the strict DACL after the tree is populated.
+    Set-SharedSchemaCacheAcl -Path $Path -Provisional
+    if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+        throw "shared schema cache root remained untrusted after initialize: $Path"
+    }
+    $script:SharedSchemaRootCreatedThisRun = $true
+    return $Path
+}
+
+function Build-SharedSchemaCache {
+    if (Test-IsWindowsElevated) {
+        Write-Say "⚠️  Elevated Windows install: shared Schema cache warm-up skipped; the first schema command will build a per-user cache."
+        return
+    }
+    $arch = Get-Arch
+    if ($arch -ne "amd64" -and $arch -ne "arm64") {
+        return
+    }
+
+    $sharedDir = $env:DWS_SCHEMA_CACHE_SHARED_DIR
+    if (-not $sharedDir) {
+        if ($env:ProgramData) {
+            $sharedDir = Join-Path $env:ProgramData "dws"
+        }
+    }
+
+    $cacheDir = $null
+    $shared = $false
+    $script:SharedSchemaRootCreatedThisRun = $false
+    if ($sharedDir) {
+        try {
+            Initialize-SharedSchemaCacheRoot -Path $sharedDir | Out-Null
+            $cacheDir = $sharedDir
+            $shared = $true
+        } catch {
+            Write-Say "⚠️  Shared schema cache root unsafe or unusable ($sharedDir); falling back to per-user cache."
+            $cacheDir = $null
+        }
+    }
+
+    $userCacheBase = $null
+    if (-not $cacheDir) {
+        $userCacheBase = [Environment]::GetFolderPath("LocalApplicationData")
+        if (-not $userCacheBase) { $userCacheBase = $env:LOCALAPPDATA }
+        if ($userCacheBase) {
+            try {
+                New-Item -ItemType Directory -Path $userCacheBase -Force -ErrorAction Stop | Out-Null
+                $cacheDir = $userCacheBase
+            } catch {
+                $cacheDir = $null
+            }
+        }
+    }
+
+    if (-not $cacheDir) {
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+        return
+    }
+
+    Write-Say "🔧 Building schema cache (local identity)..."
+    # Runtime layout under any base is dws\schema\<edition>\v1. Only clear
+    # sidecars inside that tree — never recurse %LOCALAPPDATA% or a wide
+    # DWS_SCHEMA_CACHE_SHARED_DIR root (could delete other apps' identity.json).
+    $schemaTree = Get-SchemaCacheTree -Base $cacheDir
+    $dwsIntermediate = $null
+    if ($schemaTree) {
+        $dwsIntermediate = Split-Path -Parent $schemaTree
+        # Mirror install.sh: existing levels must be plain directories before
+        # anything is created inside them, and the tree must hold only plain
+        # single-link objects before any cleanup or ACL recursion touches it.
+        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree))) {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache path."
+            return
+        }
+        $schemaTreePreExisting = Test-Path -LiteralPath $schemaTree
+        New-Item -ItemType Directory -Path $schemaTree -Force -ErrorAction SilentlyContinue | Out-Null
+        $contentsUnsafe = -not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -or
+            -not (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)
+        if (-not $contentsUnsafe -and $schemaTreePreExisting) {
+            # A pre-existing subtree may carry explicit untrusted write ACEs the
+            # shared-root DACL check never sees; descendant security must be
+            # established before any privileged recursion over it.
+            $contentsUnsafe = -not (Test-SharedSchemaCacheTreeTrusted -Tree $schemaTree)
+        }
+        if (-not $contentsUnsafe -and -not $schemaTreePreExisting -and (Test-Path -LiteralPath $dwsIntermediate)) {
+            # When dws exists but schema does not, the freshly created schema
+            # tree inherits DACLs from the dws level; that level's ACEs must
+            # be trusted too or the warm-up falls back to the per-user cache.
+            $contentsUnsafe = -not (Test-SharedSchemaCachePathTrusted -Path $dwsIntermediate)
+        }
+        if ($contentsUnsafe) {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache contents."
+            return
+        }
+        try {
+            Clear-SharedSchemaCacheIdentitySidecars -Tree $schemaTree
+        } catch {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache contents."
+            return
+        }
+    }
+    $exe = Join-Path $InstallDir "$BinName.exe"
+    $previous = $env:DWS_SCHEMA_CACHE_DIR
+    if ($shared) {
+        $env:DWS_SCHEMA_CACHE_DIR = $cacheDir
+    } else {
+        $env:DWS_SCHEMA_CACHE_DIR = $null
+    }
+    $ok = $false
+    try {
+        if (Test-Path -LiteralPath $exe) {
+            & $exe schema --all --format json | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-SchemaCacheArtifactsPresent -Dir $schemaTree)) {
+                $ok = $true
+            }
+        }
+    } catch {
+        $ok = $false
+    } finally {
+        if ($null -ne $previous) {
+            $env:DWS_SCHEMA_CACHE_DIR = $previous
+        } else {
+            Remove-Item Env:DWS_SCHEMA_CACHE_DIR -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($ok) {
+        if ($shared) {
+            # Re-verify the same object rules before the recursive ACL rewrite
+            # (mirror of install.sh's second shared_schema_tree_objects_safe):
+            # the warm-up binary just wrote the tree, and the recursion must
+            # never widen permissions over reparse or multi-link objects.
+            $protectSafe = $false
+            if ((Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -and
+                (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)) {
+                try {
+                    # Recursively protect only the DWS-owned dws\schema subtree —
+                    # never the wide shared base (custom SHARED_DIR may hold other apps).
+                    Protect-SharedSchemaCacheTree -Path $schemaTree
+                    $protectSafe = $true
+                } catch {
+                    $protectSafe = $false
+                }
+            }
+            if (-not $protectSafe) {
+                Write-Say "⚠️  Shared schema cache built but tree unsafe or ACL protect failed; falling back warning."
+                Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                return
+            }
+            if ($script:SharedSchemaRootCreatedThisRun) {
+                # Finalize the fresh root only after population: re-apply the
+                # strict DACL so the creator's provisional write right is
+                # dropped, then re-verify. A failure falls back to per-user.
+                try {
+                    Set-SharedSchemaCacheAcl -Path $cacheDir
+                } catch {
+                    Write-Say "⚠️  Shared schema cache root could not be finalized; falling back to per-user cache."
+                    Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                    return
+                }
+                if (-not (Test-SharedSchemaCachePathTrusted -Path $cacheDir)) {
+                    Write-Say "⚠️  Shared schema cache root could not be finalized; falling back to per-user cache."
+                    Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                    return
+                }
+            }
+            Write-Say "✅ Shared schema cache built: $cacheDir"
+        } else {
+            Write-Say "✅ Schema cache built: $cacheDir"
+        }
+    } else {
+        if ($shared -and $script:SharedSchemaRootCreatedThisRun) {
+            # Populate failed on a fresh root: still drop the provisional
+            # creator write right so nothing is left mutable beyond the
+            # installer identity, Admins, and SYSTEM.
+            try {
+                Set-SharedSchemaCacheAcl -Path $cacheDir
+            } catch {
+                Write-Say "⚠️  Shared schema cache root could not be finalized after a failed warm-up."
+            }
+        }
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+    }
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 $SourceRoot = Resolve-SourceRoot
@@ -1815,13 +2546,16 @@ if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     if (!$NoSkills) {
         Install-SkillsLocal -Root $SourceRoot
     }
+    Build-SharedSchemaCache
 } elseif ($SkillsOnly) {
     Install-Skills
 } elseif ($NoSkills) {
     Install-Binary
+    Build-SharedSchemaCache
 } else {
     Install-Binary
     Install-Skills
+    Build-SharedSchemaCache
 }
 
 Write-Host ""
