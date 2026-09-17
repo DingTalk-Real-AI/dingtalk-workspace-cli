@@ -109,7 +109,7 @@ dws event consume \
 
 | 事件 | 额外顶层字段 |
 |---|---|
-| `user_oa_approval_task_created` | `task_id` |
+| `user_oa_approval_task_created` | `task_id`、`staff_id`（服务端提供非空值时） |
 | `user_oa_approval_task_finished` | `task_id`、`result`、`finish_time` |
 | `user_oa_approval_task_redirected` | `task_id`、`result`、`finish_time` |
 | `user_oa_approval_instance_started` | 无 |
@@ -137,6 +137,7 @@ dws event consume \
 ```
 
 - `task_id` 是当前审批任务 ID，可传给接受任务 ID 的 OA 审批命令。
+- 任务创建事件的 `staff_id` 来自原始 `payload.body.staffId`，保留字符串值；服务端未提供或为空时省略，不用外层 `uid` 替代。
 - `status` 和 `result` 是服务端字符串；不要只根据当前样本把 `RUNNING/FINISHED/TERMINATED` 或 `agree/redirect` 写成封闭枚举。
 - payload 缺失、为空、缺少对应事件的稳定 ID 或无法解析时，consume 会在 stderr 记录 warning，并把原始 transport envelope 写到 stdout，保证事件不被静默丢弃。
 - 不传 `--flatten` 时保持兼容 transport envelope，业务 payload 位于 `.data | fromjson`。需要联调完整原始协议时使用不带 `--flatten` 的 `-f raw` 或 `--debug-raw-events`。

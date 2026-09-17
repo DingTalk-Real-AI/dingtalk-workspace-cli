@@ -129,6 +129,7 @@ type OAApprovalTaskCreatedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	TaskID            string `json:"task_id" description:"审批任务 ID"`
+	StaffID           string `json:"staff_id,omitempty" description:"审批任务的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批任务状态"`
 	CreateTime        int64  `json:"create_time" description:"审批任务创建时间" format:"timestamp_ms"`
@@ -327,6 +328,7 @@ type personalOAApprovalBody struct {
 	ProcessInstanceID string `json:"processInstanceId"`
 	ProcessCode       string `json:"processCode"`
 	TaskID            string `json:"taskId"`
+	StaffID           string `json:"staffId"`
 	Title             string `json:"title"`
 	Status            string `json:"status"`
 	Result            string `json:"result"`
@@ -617,6 +619,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			TaskID:            payload.Body.TaskID,
+			StaffID:           payload.Body.StaffID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			CreateTime:        payload.Body.CreateTime,
