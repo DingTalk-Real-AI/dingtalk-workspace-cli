@@ -1201,7 +1201,14 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
 		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
 		if len(pluginCmds) > 0 {
-			cli.MarkSchemaCacheRuntimeUncertain()
+			// Plugin commands mount only into this runtime command tree; the
+			// persisted schema cache is assembled from the declaration-only
+			// schema source root, which never contains plugin commands (a
+			// plugin-present and a plugin-free process produce byte-identical
+			// schema surfaces). A plugin shadowing a built-in command is the
+			// same documented discrepancy with or without a cache, so plugin
+			// discovery must not disable cache publication — otherwise every
+			// plugin user pays full live assembly forever.
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}

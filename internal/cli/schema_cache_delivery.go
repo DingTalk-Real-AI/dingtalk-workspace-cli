@@ -112,7 +112,11 @@ func RegisterSchemaCacheOptions(options SchemaCacheOptions) error {
 }
 
 // MarkSchemaCacheRuntimeUncertain disables persistent I/O for a process whose
-// runtime surface was changed after registration (for example by a plugin).
+// schema assembly source changed after registration. Plugin command discovery
+// is deliberately NOT such a change: plugins mount only into the runtime
+// command tree, never into the declaration-only schema source root, so a
+// plugin-present process still assembles a byte-identical builtin schema
+// surface and may publish and consume the persisted cache like any other.
 func MarkSchemaCacheRuntimeUncertain() { schemaCacheRuntimeUncertain.Store(true) }
 
 // SchemaCacheFastPathIdentity returns only the currently registered, eligible
