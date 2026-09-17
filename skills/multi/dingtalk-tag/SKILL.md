@@ -32,13 +32,14 @@ metadata:
 ## 自然语言编排硬约束
 
 - `mainProgramType` 仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。创建或更新没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；用户明确要求时可以显式传 `open_code`；只有明确接入本地 Agent/DSH 时才传 `--main-program-type local_agent`。
-- 发布前一次性收集名称、描述、头像、部门、岗位、响应模式、Prompt 等缺失信息，避免边执行边追问。
-- `save-draft` 是全量覆写。修改前必须读取完整 draft，并保留未修改的 Skill、MCP 和其它字段；`mainProgramType` 按上一条规则处理，已有 `local_agent` 需要保持本地模式时显式保留 `local_agent`。
+- 创建只要求名称和描述；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
+- `save-draft` 是按字段更新；只传用户明确修改的基础字段。Skill 与 MCP 必须分别用 `--skills-file` / `--mcps-file` 表达，不传保持原关联，显式 `[]` 只清空对应类别。
+- `local_agent` 发布只要求名称和描述，不向用户追问平台 Prompt、模型、Skill 或 MCP；`open_code` 才按平台运行所需信息补齐。
 - 同一自然语言请求里的连续写操作只做一次汇总确认；确认后才加 `--yes`。先用 `--dry-run --format json` 展示计划。
 - 创建成功后若保存或发布失败，必须返回已创建的 `agentUuid` 和恢复命令；重试禁止再次执行 create。
 - “创建并落盘 Profile”可顺序执行创建/发布与 `manage login`；“创建并接入 DSH”则使用 `connect --channel dsh`。创建/发布与 connect 是独立事务，connect 绝不创建、修改或发布数字员工。
 - 用户可以只创建/管理数字员工、只把已有员工转换为本地 Profile，或继续接入 DSH；三种操作互不强绑定。
-- 所有 ID 统一使用 `agentUuid` / `--agent-uuid`，不得猜测。
+- 数字员工 ID 统一使用 `agentUuid` / `--agent-uuid`；人员标识统一使用 `userId`，不得要求或展示 uid、robotUid、staffId。
 - 普通本地 Agent 接入使用 Event Consume，默认仅主管可触发；白名单中的用户必须先在员工身份下精确解析。支持 Codex、Qoder/QoderWork、Claude Code、CodeBuddy/WorkBuddy、Gemini、OpenCode 和 custom。OpenClaw/Hermes 暂未适配，不要回退到机器人创建流程。
 - 自然语言“创建发布并接入本机”在发布后显式使用 `--daemon --alwayson`；命令行默认前台。DSH 不加这两个参数，由运行中的宿主员工级启动；宿主不可用时按 restartRequired 提示启动宿主。connect 不提供开机自启，也不能在电脑休眠期间处理消息。
 - connect 失败后保留员工 ID 和已落盘 Profile，检查 `connect status` 再恢复；不要重复 create、不要清除事件重试预算、不要隐式覆盖另一个 Adapter 的绑定。

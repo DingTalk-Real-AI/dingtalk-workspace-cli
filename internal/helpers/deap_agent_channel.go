@@ -203,7 +203,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	publishedIdentity, ok := publishedDigitalEmployeeIdentity(published)
 	if !ok {
-		return apperrors.NewInternal("数字员工发布详情缺少 profile.corpId、profile.robotUid 或 profile.staffId，无法校验身份")
+		return apperrors.NewInternal("数字员工发布详情缺少登录所需的内部身份信息")
 	}
 	profile := auth.ProfileSelector(auth.Profile{CorpID: publishedIdentity.CorpID, UserID: publishedIdentity.StaffID})
 	// 同一员工的检查、换票、binding 和 Adapter 提交必须在同一注册事务内。

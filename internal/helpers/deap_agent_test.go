@@ -32,6 +32,112 @@ type deapAgentSkillUploaderStub struct {
 	err          error
 }
 
+type deapAgentAvatarUploaderStub struct {
+	gotPath      string
+	gotAgentUUID string
+	fileURL      string
+	err          error
+}
+
+func (s *deapAgentAvatarUploaderStub) Upload(
+	_ context.Context, agentUUID, filePath string,
+) (string, error) {
+	s.gotPath = filePath
+	s.gotAgentUUID = agentUUID
+	return s.fileURL, s.err
+}
+
+func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	avatarInput := "./avatar.png"
+	avatarPath := filepath.Join(tempDir, "avatar.png")
+	if err := os.WriteFile(avatarInput, []byte("png"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uploader := &deapAgentAvatarUploaderStub{fileURL: "https://oss.example/avatar.png"}
+	testseam.Swap(t, &deapAgentAvatarFileUploader, deapAgentAvatarUploader(uploader))
+	caller.resultText = `{"success":true,"data":{"agentUuid":"agent-created"}}`
+
+	root := deapHandler{}.Command(&captureRunner{})
+	create := deapFindLeaf(t, root, "create")
+	for name, value := range map[string]string{
+		"name": "头像助手", "description": "测试本地头像", "icon": avatarInput,
+	} {
+		if err := create.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := create.RunE(create, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+	if uploader.gotAgentUUID != "agent-created" || !deapAgentSameFile(t, uploader.gotPath, avatarPath) {
+		t.Fatalf("avatar upload = agent %q path %q", uploader.gotAgentUUID, uploader.gotPath)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("MCP calls = %d, want create + save-draft", len(caller.calls))
+	}
+	if caller.calls[0].toolName != deapAgentCreateTool || caller.calls[1].toolName != deapAgentSaveDraftTool {
+		t.Fatalf("tool order = %s, %s", caller.calls[0].toolName, caller.calls[1].toolName)
+	}
+	if _, exists := caller.calls[0].args["icon"]; exists {
+		t.Fatal("local path leaked into create MCP call")
+	}
+	if caller.calls[1].args["agentUuid"] != "agent-created" ||
+		caller.calls[1].args["icon"] != "https://oss.example/avatar.png" {
+		t.Fatalf("save args = %#v", caller.calls[1].args)
+	}
+}
+
+func TestDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+	if err := os.WriteFile("avatar.webp", []byte("webp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uploader := &deapAgentAvatarUploaderStub{fileURL: "https://oss.example/avatar.webp"}
+	testseam.Swap(t, &deapAgentAvatarFileUploader, deapAgentAvatarUploader(uploader))
+
+	root := deapHandler{}.Command(&captureRunner{})
+	save := deapFindLeaf(t, root, "save-draft")
+	save.Flags().Bool("yes", false, "test confirmation")
+	for name, value := range map[string]string{
+		"agent-uuid": "agent-existing", "icon": "./avatar.webp", "yes": "true",
+	} {
+		if err := save.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := save.RunE(save, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+	if uploader.gotAgentUUID != "agent-existing" ||
+		!deapAgentSameFile(t, uploader.gotPath, filepath.Join(tempDir, "avatar.webp")) {
+		t.Fatalf("avatar upload = agent %q path %q", uploader.gotAgentUUID, uploader.gotPath)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentSaveDraftTool {
+		t.Fatalf("MCP calls = %#v, want one save-draft", caller.calls)
+	}
+	if caller.calls[0].args["icon"] != "https://oss.example/avatar.webp" {
+		t.Fatalf("save args = %#v", caller.calls[0].args)
+	}
+}
+
+func deapAgentSameFile(t *testing.T, left, right string) bool {
+	t.Helper()
+	leftInfo, err := os.Stat(left)
+	if err != nil {
+		t.Fatalf("stat %q: %v", left, err)
+	}
+	rightInfo, err := os.Stat(right)
+	if err != nil {
+		t.Fatalf("stat %q: %v", right, err)
+	}
+	return os.SameFile(leftInfo, rightInfo)
+}
+
 func (s *deapAgentSkillUploaderStub) Upload(_ context.Context, agentUUID, filePath string) (string, error) {
 	s.gotPath = filePath
 	s.gotAgentUUID = agentUUID
@@ -788,18 +894,15 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			leaf: "create", tool: "create_digital_employee",
 			flags: map[string]string{
 				"name": "值班助手", "description": "处理值班问题",
-				"dept-id": "dept-1", "dept-name": "值班组",
-				"profile-json":      `{"employeeNo":"JSON-001","positionName":"值班员","mainProgramType":"open_code"}`,
-				"employee-no":       "E001",
-				"supervisor-uid":    "supervisor-1",
-				"main-program-type": "local_agent",
-				"response-mode":     "targeted_proactive, mention_only",
+				"dept-id":            "dept-1",
+				"supervisor-user-id": "supervisor-1",
+				"main-program-type":  "local_agent",
+				"response-mode":      "targeted_proactive, mention_only",
 			},
 			wantArgs: map[string]any{
 				"name": "值班助手", "description": "处理值班问题",
-				"deptId": "dept-1", "deptName": "值班组",
+				"deptId": "dept-1",
 				"digitalTagEmployeeProfile": map[string]any{
-					"employeeNo": "E001", "positionName": "值班员",
 					"directSupervisorUid": "supervisor-1", "mainProgramType": "local_agent",
 					"responseMode": "mention_only,targeted_proactive",
 				},
@@ -823,15 +926,14 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			leaf: "save-draft", tool: "update_digital_employee_draft", confirmed: true,
 			flags: map[string]string{
 				"agent-uuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
-				"profile-json":      `{"employeeNo":"E001","positionName":"旧岗位","mainProgramType":"open_code","responseMode":"mention_only,targeted_proactive"}`,
-				"position-name":     "值班员",
-				"main-program-type": "local_agent",
-				"response-mode":     "targeted_proactive",
+				"supervisor-user-id": "supervisor-1",
+				"main-program-type":  "local_agent",
+				"response-mode":      "targeted_proactive",
 			},
 			wantArgs: map[string]any{
 				"agentUuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
 				"digitalTagEmployeeProfile": map[string]any{
-					"employeeNo": "E001", "positionName": "值班员", "mainProgramType": "local_agent",
+					"directSupervisorUid": "supervisor-1", "mainProgramType": "local_agent",
 					"responseMode": "targeted_proactive",
 				},
 			},
@@ -967,47 +1069,20 @@ func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "merged"}, wantErr: "--type"},
 		{leaf: "login", flags: map[string]string{}, wantErr: "agent-uuid"},
 		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"tag":"forbidden"}`,
-		}, wantErr: "不接受字段"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
+			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
 			"response-mode": "always_reply",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
+			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
 			"response-mode": "mention_only,always_reply",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"responseMode":"mention_only,mention_only"}`,
-		}, wantErr: "响应模式只允许"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"responseMode":["mention_only","targeted_proactive"]}`,
-		}, wantErr: "必须是字符串"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"mainProgramType":123}`,
-		}, wantErr: "mainProgramType 必须是字符串"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"mainProgramType":"  "}`,
-		}, wantErr: "mainProgramType 不能为空"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
+			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
 			"main-program-type": "a2a",
 		}, wantErr: "--main-program-type"},
 		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
-			"profile-json": `{"mainProgramType":"a2a"}`,
-		}, wantErr: "a2a 暂不支持"},
-		{leaf: "save-draft", flags: map[string]string{
-			"agent-uuid": "agent-1", "employee-no": strings.Repeat("E", 65),
-		}, wantErr: "最多允许 64"},
-		{leaf: "save-draft", flags: map[string]string{
-			"agent-uuid": "agent-1", "position-name": strings.Repeat("岗", 129),
-		}, wantErr: "最多允许 128"},
+			"name": "值班助手", "description": "处理值班问题", "icon": "avatar.bmp",
+		}, wantErr: "本地文件只支持"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),
 		}, wantErr: "最多允许 5000"},
@@ -1037,7 +1112,10 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	create := deapFindLeaf(t, root, "create")
-	for _, forbidden := range []string{"org-id", "user-id", "agent-type", "developers-json"} {
+	for _, forbidden := range []string{
+		"org-id", "user-id", "agent-type", "developers-json", "dept-name",
+		"employee-no", "position-name", "supervisor-uid", "profile-json",
+	} {
 		if flag := create.Flags().Lookup(forbidden); flag != nil {
 			t.Fatalf("forbidden identity/retired flag --%s is exposed", forbidden)
 		}
@@ -1065,7 +1143,8 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 	for _, forbidden := range []string{
 		"developers-json", "prompt-config-json", "model-config-json", "knowledge-config-json",
 		"memory-config-json", "selected-skills-json", "deleted-skills-json", "scopes-json",
-		"shortcuts-json", "scheduled-task-json",
+		"shortcuts-json", "scheduled-task-json", "dept-name", "employee-no", "position-name",
+		"supervisor-uid", "profile-json",
 	} {
 		if flag := save.Flags().Lookup(forbidden); flag != nil {
 			t.Fatalf("retired save-draft flag --%s is exposed", forbidden)
@@ -1074,7 +1153,7 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 
 	for name, value := range map[string]string{
 		"name": "值班助手", "description": "处理值班问题",
-		"dept-id": "dept-1", "dept-name": "值班组",
+		"dept-id": "dept-1",
 	} {
 		if setErr := create.Flags().Set(name, value); setErr != nil {
 			t.Fatal(setErr)
@@ -1092,7 +1171,7 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 	}
 	want := map[string]any{
 		"name": "值班助手", "description": "处理值班问题",
-		"deptId": "dept-1", "deptName": "值班组",
+		"deptId": "dept-1",
 	}
 	if !reflect.DeepEqual(call.args, want) {
 		t.Fatalf("create args = %#v, want %#v", call.args, want)
@@ -1151,7 +1230,7 @@ func TestDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentHelpExplainsFullReplacementAndTraceAuthorization(t *testing.T) {
+func TestDevDeapAgentHelpExplainsPatchAndTraceAuthorization(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	save := deapFindLeaf(t, root, "save-draft")
@@ -1159,8 +1238,9 @@ func TestDevDeapAgentHelpExplainsFullReplacementAndTraceAuthorization(t *testing
 	if helpErr := save.Help(); helpErr != nil {
 		t.Fatal(helpErr)
 	}
-	if !strings.Contains(save.Long, "全量覆写") || !strings.Contains(save.Long, "detail") || strings.Contains(save.Long, "export-draft") {
-		t.Fatalf("save-draft help does not explain read-before-write full replacement: %q", save.Long)
+	if !strings.Contains(save.Long, "未传字段保持不变") || !strings.Contains(save.Long, "skills-file") ||
+		!strings.Contains(save.Long, "mcps-file") || !strings.Contains(save.Long, "detail 一致") {
+		t.Fatalf("save-draft help does not explain patch and complete response semantics: %q", save.Long)
 	}
 	trace := deapFindLeaf(t, root, "trace")
 	final, ok := contractfinal.RuntimeContractFinal(trace)

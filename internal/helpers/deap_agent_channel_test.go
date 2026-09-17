@@ -426,7 +426,7 @@ func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.
 				`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 				`{"success":true,"data":{"status":"online"}}`,
 			},
-			want: "缺少 profile.corpId",
+			want: "缺少登录所需的内部身份信息",
 		},
 	}
 	for _, tc := range tests {
@@ -560,12 +560,12 @@ func TestDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t 
 		{
 			name:          "robot uid mismatch",
 			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "uid 与发布详情 profile.robotUid 不一致",
+			want:          "机器人身份与已发布配置不一致",
 		},
 		{
 			name:          "staff id mismatch",
 			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "staffId 与发布详情 profile.staffId 不一致",
+			want:          "userId 与已发布配置不一致",
 		},
 	}
 	for _, tc := range tests {
