@@ -56,8 +56,8 @@ func TestAssembledSchemaContractReviewToolsAreRetired(t *testing.T) {
 
 	root := NewRootCommand()
 	parent, remaining, err := root.Find([]string{"contract", "review"})
-	if err != nil || parent == nil || len(remaining) != 0 || !parent.Hidden {
-		t.Fatalf("contract review parent must stay hidden and findable: cmd=%v remaining=%v hidden=%v err=%v", parent, remaining, parent != nil && parent.Hidden, err)
+	if err != nil || parent == nil || len(remaining) != 0 || parent.Hidden {
+		t.Fatalf("contract review parent must stay visible and findable: cmd=%v remaining=%v hidden=%v err=%v", parent, remaining, parent != nil && parent.Hidden, err)
 	}
 	for _, path := range [][]string{
 		{"contract", "review", "benefit"},
@@ -76,18 +76,20 @@ func TestAssembledSchemaContractReviewToolsAreRetired(t *testing.T) {
 
 	var help bytes.Buffer
 	helpRoot := NewRootCommand()
-	contractCmd, _, err := helpRoot.Find([]string{"contract"})
-	if err != nil || contractCmd == nil {
-		t.Fatalf("find contract: %v", err)
+	reviewCmd, _, err := helpRoot.Find([]string{"contract", "review"})
+	if err != nil || reviewCmd == nil {
+		t.Fatalf("find contract review: %v", err)
 	}
-	contractCmd.SetOut(&help)
-	contractCmd.SetErr(&help)
-	contractCmd.SetArgs([]string{"--help"})
-	if err := contractCmd.Execute(); err != nil {
-		t.Fatalf("dws contract --help: %v", err)
+	reviewCmd.SetOut(&help)
+	reviewCmd.SetErr(&help)
+	reviewCmd.SetArgs([]string{"--help"})
+	if err := reviewCmd.Execute(); err != nil {
+		t.Fatalf("dws contract review --help: %v", err)
 	}
 	helpText := help.String()
-	if strings.Contains(helpText, "\n  review ") || strings.Contains(helpText, "合同审查（已下线）") {
-		t.Fatalf("dws contract --help still exposes review:\n%s", helpText)
+	for _, leaf := range []string{"benefit", "create", "analysis", "result"} {
+		if strings.Contains(helpText, "\n  "+leaf+" ") {
+			t.Fatalf("dws contract review --help still exposes %s:\n%s", leaf, helpText)
+		}
 	}
 }

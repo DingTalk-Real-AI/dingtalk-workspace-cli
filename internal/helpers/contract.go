@@ -307,11 +307,10 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	// ── review（历史 argv 兼容；Help / Schema 已下线）──────────
 
 	reviewCmd := newGroupCommand(&cobra.Command{
-		Use:    "review",
-		Short:  "合同审查（已下线）",
-		Long:   `历史 argv 兼容入口。旧版审查 MCP 已下线；父命令与叶子均 Hidden，完整历史路径仍可解析，执行立即以 command_retired 失败关闭。`,
-		Hidden: true,
-		RunE:   groupRunE,
+		Use:   "review",
+		Short: "合同审查（已下线）",
+		Long:  `历史 argv 兼容入口。旧版审查 MCP 已下线；叶子 Hidden 且可解析，执行立即以 command_retired 失败关闭。`,
+		RunE:  groupRunE,
 	})
 
 	reviewBenefitCmd := &cobra.Command{

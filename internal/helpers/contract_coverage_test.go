@@ -219,8 +219,8 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 
 	root := newContractCommand()
 	reviewParent, remaining, err := root.Find([]string{"review"})
-	if err != nil || reviewParent == nil || len(remaining) != 0 || !reviewParent.Hidden {
-		t.Fatalf("review parent hidden contract: cmd=%v remaining=%v hidden=%v err=%v", reviewParent, remaining, reviewParent != nil && reviewParent.Hidden, err)
+	if err != nil || reviewParent == nil || len(remaining) != 0 || reviewParent.Hidden {
+		t.Fatalf("review parent must stay visible: cmd=%v remaining=%v hidden=%v err=%v", reviewParent, remaining, reviewParent != nil && reviewParent.Hidden, err)
 	}
 	for _, name := range []string{"benefit", "create", "analysis", "result"} {
 		cmd, _, err := root.Find([]string{"review", name})
@@ -231,15 +231,21 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 
 	var help bytes.Buffer
 	helpRoot := newContractCommand()
-	helpRoot.SetOut(&help)
-	helpRoot.SetErr(&help)
-	helpRoot.SetArgs([]string{"--help"})
-	if err := helpRoot.Execute(); err != nil {
-		t.Fatalf("contract --help: %v", err)
+	reviewHelp, _, err := helpRoot.Find([]string{"review"})
+	if err != nil || reviewHelp == nil {
+		t.Fatalf("find review: %v", err)
+	}
+	reviewHelp.SetOut(&help)
+	reviewHelp.SetErr(&help)
+	reviewHelp.SetArgs([]string{"--help"})
+	if err := reviewHelp.Execute(); err != nil {
+		t.Fatalf("contract review --help: %v", err)
 	}
 	helpText := help.String()
-	if strings.Contains(helpText, "\n  review ") || strings.Contains(helpText, "合同审查（已下线）") {
-		t.Fatalf("contract --help still exposes review:\n%s", helpText)
+	for _, leaf := range []string{"benefit", "create", "analysis", "result"} {
+		if strings.Contains(helpText, "\n  "+leaf+" ") {
+			t.Fatalf("contract review --help still exposes %s:\n%s", leaf, helpText)
+		}
 	}
 }
 
