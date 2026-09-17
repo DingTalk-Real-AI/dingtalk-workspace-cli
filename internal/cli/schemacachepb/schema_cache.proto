@@ -240,7 +240,26 @@ message ToolSpec {
   Interface interface = 13;
   Selection selection = 14;
   ProvenanceList field_provenance = 15;
+  WaitSpec wait = 16;
 }
+
+message WaitSpec {
+  string mode = 1;
+  string poll_command = 2;
+  string status_query = 3;
+  WaitTerminalList terminal = 4;
+  repeated string pending_values = 5;
+  string event_key = 6;
+  string match_field = 7;
+  string resource_query = 8;
+  int32 default_timeout_secs = 9;
+}
+
+message WaitTerminalEntry {
+  string status = 1;
+  ResultOutcome outcome = 2;
+}
+message WaitTerminalList { repeated WaitTerminalEntry items = 1; }
 
 message ParameterList { repeated ParameterSpec items = 1; }
 message ParameterSpec {

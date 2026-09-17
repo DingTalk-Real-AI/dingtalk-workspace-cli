@@ -24,7 +24,7 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeFieldInventory(t *testing.T) {
 	}{
 		{SchemaRegistry{}, []string{"Kind:string", "Level:string", "Source:string", "Products:[]schemaruntime.ProductSpec", "AgentMetadata:json.RawMessage"}},
 		{ProductSpec{}, []string{"ID:string", "Name:string", "Description:string", "Runtime:bool", "Tools:[]schemaruntime.ToolSpec", "Selection:contract.SelectionSpec", "FieldProvenance:map[string]contract.FieldProvenance"}},
-		{ToolSpec{}, []string{"Identity:contract.ToolIdentitySpec", "Display:string", "Title:string", "Description:string", "MetadataSource:string", "Parameters:[]schemaruntime.ParameterSpec", "Constraints:contract.RuntimeSchemaConstraints", "Positionals:[]contract.RuntimeSchemaPositional", "DryRun:*contract.DryRunSpec", "Result:*contract.ResultSpec", "Pagination:*contract.PaginationSpec", "Safety:contract.SafetySpec", "Interface:contract.InterfaceSpec", "Selection:contract.SelectionSpec", "FieldProvenance:map[string]contract.FieldProvenance"}},
+		{ToolSpec{}, []string{"Identity:contract.ToolIdentitySpec", "Display:string", "Title:string", "Description:string", "MetadataSource:string", "Parameters:[]schemaruntime.ParameterSpec", "Constraints:contract.RuntimeSchemaConstraints", "Positionals:[]contract.RuntimeSchemaPositional", "DryRun:*contract.DryRunSpec", "Wait:*contract.WaitSpec", "Result:*contract.ResultSpec", "Pagination:*contract.PaginationSpec", "Safety:contract.SafetySpec", "Interface:contract.InterfaceSpec", "Selection:contract.SelectionSpec", "FieldProvenance:map[string]contract.FieldProvenance"}},
 		{ParameterSpec{}, []string{"Name:string", "Type:string", "Description:string", "Property:string", "Required:bool", "CLIRequired:bool", "RequiredWhen:string", "Default:json.RawMessage", "InterfaceDefault:json.RawMessage", "Example:json.RawMessage", "AnyOf:[]contract.FormatAlternative", "Format:string", "Enum:[]string", "InterfaceDescription:string", "InterfaceType:string", "FieldProvenance:map[string]contract.FieldProvenance"}},
 		{CommandMeta{}, []string{"Identity:schemaruntime.CommandIdentity", "Safety:schemaruntime.CommandSafety", "Selection:schemaruntime.CommandSelection"}},
 		{CommandIdentity{}, []string{"CLIPath:string", "Canonical:string", "Aliases:[]string", "ProductID:string", "Title:string"}},
@@ -58,7 +58,7 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "c6eb56ba5e25e40c2b3a9d9d07bc8b91a2fcb747f37fb21c99c601949343a54c"
+	const expectedProtoSHA256 = "cd5115522e35946b02fdea2c443533c671b35175703284fedd55425ec9fab3f3"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)

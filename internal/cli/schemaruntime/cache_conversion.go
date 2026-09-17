@@ -308,6 +308,10 @@ func toolsToProto(in []ToolSpec) (*schemacachepb.ToolList, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tool %q result: %w", tool.Identity.CanonicalPath, err)
 		}
+		wait, err := waitToProto(tool.Wait)
+		if err != nil {
+			return nil, fmt.Errorf("tool %q wait: %w", tool.Identity.CanonicalPath, err)
+		}
 		selection, err := selectionToProtoExact(tool.Selection)
 		if err != nil {
 			return nil, fmt.Errorf("tool %q selection: %w", tool.Identity.CanonicalPath, err)
@@ -317,7 +321,7 @@ func toolsToProto(in []ToolSpec) (*schemacachepb.ToolList, error) {
 			MetadataSource: tool.MetadataSource, Parameters: parametersToProto(tool.Parameters), Constraints: constraintsToProto(tool.Constraints),
 			Positionals: positionalsToProto(tool.Positionals), DryRun: dryRunToProto(tool.DryRun), Result: result,
 			Pagination: paginationToProto(tool.Pagination), Safety: safetyToProto(tool.Safety), Interface: interfaceToProto(tool.Interface),
-			Selection: selection, FieldProvenance: provenanceToProto(tool.FieldProvenance),
+			Selection: selection, FieldProvenance: provenanceToProto(tool.FieldProvenance), Wait: wait,
 		}
 	}
 	return out, nil
@@ -334,7 +338,7 @@ func toolsFromProto(in *schemacachepb.ToolList) []ToolSpec {
 			MetadataSource: tool.GetMetadataSource(), Parameters: parametersFromProto(tool.GetParameters()), Constraints: constraintsFromProto(tool.GetConstraints()),
 			Positionals: positionalsFromProto(tool.GetPositionals()), DryRun: dryRunFromProto(tool.GetDryRun()), Result: resultFromProto(tool.GetResult()),
 			Pagination: paginationFromProto(tool.GetPagination()), Safety: safetyFromProto(tool.GetSafety()), Interface: interfaceFromProto(tool.GetInterface()),
-			Selection: selectionFromProto(tool.GetSelection()), FieldProvenance: provenanceFromProto(tool.GetFieldProvenance()),
+			Selection: selectionFromProto(tool.GetSelection()), FieldProvenance: provenanceFromProto(tool.GetFieldProvenance()), Wait: waitFromProto(tool.GetWait()),
 		}
 	}
 	return out
@@ -463,6 +467,47 @@ func dryRunFromProto(in *schemacachepb.DryRun) *contract.DryRunSpec {
 		return nil
 	}
 	return &contract.DryRunSpec{PreviewKind: in.GetPreviewKind(), RemoteReads: in.GetRemoteReads()}
+}
+
+func waitToProto(in *contract.WaitSpec) (*schemacachepb.WaitSpec, error) {
+	if in == nil {
+		return nil, nil
+	}
+	var terminal *schemacachepb.WaitTerminalList
+	if in.Terminal != nil {
+		terminal = &schemacachepb.WaitTerminalList{Items: make([]*schemacachepb.WaitTerminalEntry, 0, len(in.Terminal))}
+		for status, outcome := range in.Terminal {
+			mapped, ok := resultOutcomeToProto(outcome)
+			if !ok {
+				return nil, fmt.Errorf("unsupported wait terminal outcome %q for status %q", outcome, status)
+			}
+			terminal.Items = append(terminal.Items, &schemacachepb.WaitTerminalEntry{Status: status, Outcome: mapped})
+		}
+		sort.Slice(terminal.Items, func(i, j int) bool { return terminal.Items[i].Status < terminal.Items[j].Status })
+	}
+	return &schemacachepb.WaitSpec{
+		Mode: in.Mode, PollCommand: in.PollCommand, StatusQuery: in.StatusQuery,
+		Terminal: terminal, PendingValues: in.PendingValues, EventKey: in.EventKey,
+		MatchField: in.MatchField, ResourceQuery: in.ResourceQuery,
+		DefaultTimeoutSecs: int32(in.DefaultTimeoutSecs),
+	}, nil
+}
+
+func waitFromProto(in *schemacachepb.WaitSpec) *contract.WaitSpec {
+	if in == nil {
+		return nil
+	}
+	out := &contract.WaitSpec{
+		Mode: in.GetMode(), PollCommand: in.GetPollCommand(), StatusQuery: in.GetStatusQuery(),
+		Terminal:      make(map[string]contract.ResultOutcome, len(in.GetTerminal().GetItems())),
+		PendingValues: in.GetPendingValues(), EventKey: in.GetEventKey(),
+		MatchField: in.GetMatchField(), ResourceQuery: in.GetResourceQuery(),
+		DefaultTimeoutSecs: int(in.GetDefaultTimeoutSecs()),
+	}
+	for _, entry := range in.GetTerminal().GetItems() {
+		out.Terminal[entry.GetStatus()] = resultOutcomeFromProto(entry.GetOutcome())
+	}
+	return out
 }
 
 func resultToProto(in *contract.ResultSpec) (*schemacachepb.Result, error) {
