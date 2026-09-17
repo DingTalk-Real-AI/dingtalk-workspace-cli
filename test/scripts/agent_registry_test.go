@@ -19,7 +19,7 @@ type packagedAgent struct {
 var upstreamAgentIDs = strings.Fields(`
 aider-desk amp antigravity antigravity-cli astrbot autohand-code augment bob
 claude-code openclaw cline codearts-agent codebuddy codemaker codestudio codex
-command-code continue cortex crush cursor deepagents devin dexto droid eve
+command-code continue cortex crush cursor deepagents devin dexto dsh droid eve
 firebender forgecode gemini-cli github-copilot goose grok hermes-agent inference-sh
 jazz junie iflow-cli kilo kimchi kimi-code-cli kiro-cli kode lingma loaf mcpjam
 minimax-code mistral-vibe moxby mux opencode openhands ona pi qoder qoder-cn
@@ -56,8 +56,8 @@ func TestAgentRegistriesMatchUpstream76(t *testing.T) {
 		if strings.Join(gotIDs, "\n") != strings.Join(wantIDs, "\n") {
 			t.Fatalf("%s agent IDs differ from upstream 76\ngot:  %v\nwant: %v", name, gotIDs, wantIDs)
 		}
-		if universal != 19 || len(registry)-universal != 57 {
-			t.Fatalf("%s classification = %d universal/%d non-universal, want 19/57", name, universal, len(registry)-universal)
+		if universal != 19 || len(registry)-universal != 58 {
+			t.Fatalf("%s classification = %d universal/%d non-universal, want 19/58", name, universal, len(registry)-universal)
 		}
 	}
 
