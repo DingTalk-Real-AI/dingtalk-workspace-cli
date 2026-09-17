@@ -14,6 +14,10 @@
 package app
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -21,7 +25,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
 )
 
@@ -39,15 +47,13 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 	t.Setenv(schemaCacheTestEnv, "1")
 	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
 
-	previousLoader := rootLoadPlugins
-	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		return []*cobra.Command{{
 			Use:   "sample-plugin",
 			Short: "plugin command mounted at runtime",
 			RunE:  func(*cobra.Command, []string) error { return nil },
 		}}
-	}
-	t.Cleanup(func() { rootLoadPlugins = previousLoader })
+	})
 
 	// Sibling tests may leave an assembled live catalog registered in-process;
 	// ResolveMeta serves that catalog without touching the cache. Reset and
@@ -104,5 +110,86 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 	}
 	if factoryCalls.Load() != 0 {
 		t.Fatalf("plugin-present cache-hit ResolveMeta invoked Cobra factory %d times", factoryCalls.Load())
+	}
+}
+
+// The safety argument for publishing the Schema cache from a plugin-present
+// process is that schema assembly observes none of the process-global state a
+// real plugin loader mutates before returning its commands. This test performs
+// those real registration side effects — dynamic endpoint descriptors, a
+// registered stdio client, and a plugin auth record — and proves the assembled
+// artifacts' identity (a digest over the full schema surface) is unchanged.
+func TestCrossPlatformCoverageSchemaAssemblyIgnoresPluginRegistrationSideEffects(t *testing.T) {
+	isolatePluginRuntime(t)
+
+	assembleIdentity := func() (buildID [32]byte) {
+		resolved, err := cli.ResolveSchemaBuild(NewSchemaSourceRootCommand())
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity, err := cli.IdentityFromArtifacts("open", artifacts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return identity.BuildID
+	}
+
+	clean := assembleIdentity()
+
+	// Replicate what loadPlugins completes before returning plugin commands:
+	// an HTTP plugin server descriptor, a stdio overlay server (registered
+	// with an unstarted client), and a plugin auth ownership record.
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	registerPluginHTTPServer(mcptypes.ServerDescriptor{
+		Key:      "side-effect-http",
+		Endpoint: server.URL,
+		CLI:      mcptypes.CLIOverlay{ID: "side-effect-http", Command: "side-effect-http"},
+	})
+
+	pluginRoot := t.TempDir()
+	overlay := []byte(`{
+		"id":"local",
+		"command":"side-effect-plugin",
+		"groups":{"health":{"description":"health checks"}},
+		"toolOverrides":{"ping":{"cliName":"ping","group":"health"}}
+	}`)
+	if err := os.WriteFile(filepath.Join(pluginRoot, "overlay.json"), overlay, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := &plugin.Plugin{
+		Manifest: plugin.Manifest{
+			Name:        "side-effect-plugin",
+			Description: "side effect fixture",
+			MCPServers: map[string]*plugin.MCPServer{
+				"local": {Type: "stdio", Command: "unused", CLI: []byte(`"overlay.json"`)},
+			},
+		},
+		Root: pluginRoot,
+	}
+	client := transport.NewStdioClient("/bin/sh", []string{"-c", ":"}, nil)
+	descriptor := registerStdioServerFromManifest(p, plugin.StdioServerClient{Key: "local", Client: client})
+	if descriptor.Endpoint == "" {
+		t.Fatal("stdio side-effect server was not registered")
+	}
+	RegisterPluginAuth("side-effect-plugin", &PluginAuth{Token: "opaque"})
+
+	if _, ok := directRuntimeEndpoint("side-effect-http", ""); !ok {
+		t.Fatal("HTTP side-effect endpoint missing before reassembly")
+	}
+	if _, ok := LookupStdioClient("side-effect-plugin/local"); !ok {
+		t.Fatal("stdio side-effect client missing before reassembly")
+	}
+	if _, ok := LookupPluginAuth("side-effect-plugin"); !ok {
+		t.Fatal("plugin auth side-effect record missing before reassembly")
+	}
+
+	withPlugins := assembleIdentity()
+	if clean != withPlugins {
+		t.Fatalf("schema assembly identity changed after real plugin registration side effects: clean=%x with-plugins=%x", clean, withPlugins)
 	}
 }
