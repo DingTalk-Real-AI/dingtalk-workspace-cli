@@ -44,21 +44,15 @@ func ExecuteCForTest(cmd *cobra.Command) (*cobra.Command, error) {
 	}
 	// Production installs a result store at the root execution boundary
 	// (internal/app/root.go); mirror it so ResultInvoke commands under test
-	// can StoreResult and have the envelope emitted once execution succeeds.
+	// can StoreResult. Emission stays with the caller: tests capture output
+	// by setting the writer after execution and calling EmitStoredResult.
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	ctx, _ = output.WithResultStore(ctx)
 	cmd.SetContext(ctx)
-	executed, err := cmd.ExecuteC()
-	if err != nil {
-		return executed, err
-	}
-	if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
-		return executed, emitErr
-	}
-	return executed, nil
+	return cmd.ExecuteC()
 }
 
 // ExecuteContextForTest prepares and executes with the supplied Cobra context.
