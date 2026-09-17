@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -65,7 +66,7 @@ func runContactEnterpriseCommand(t *testing.T, args ...string) (*contactEnterpri
 	// 补注册以等价用户显式确认，使 user_required 命令的确认路径可被覆盖。
 	cmd.PersistentFlags().Bool("yes", false, "")
 	cmd.SetArgs(args)
-	return caller, cmd.Execute()
+	return caller, corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageContactEnterpriseCommandsExposeExpectedFlags(t *testing.T) {

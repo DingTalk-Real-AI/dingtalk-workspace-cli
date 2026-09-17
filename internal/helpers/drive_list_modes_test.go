@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +43,7 @@ func executeDriveCommand(t *testing.T, caller edition.ToolCaller, args ...string
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDriveListVersionsMode(t *testing.T) {

@@ -162,7 +162,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire legacy contract review benefit from Agent Schema and public help while keeping a hidden historical argv compatibility command."
     },
     {
@@ -178,7 +178,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire legacy contract review create from Agent Schema and public help while keeping a hidden historical argv compatibility command."
     },
     {
@@ -194,7 +194,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire legacy contract review analysis from Agent Schema and public help while keeping a hidden historical argv compatibility command."
     },
     {
@@ -210,7 +210,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire legacy contract review result from Agent Schema and public help while keeping a hidden historical argv compatibility command."
     }
   ]

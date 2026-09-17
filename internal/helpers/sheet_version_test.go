@@ -18,6 +18,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestSheetVersionRevertHelpDocumentsConfirmedRevisionTargets(t *testing.T) {
@@ -27,7 +29,7 @@ func TestSheetVersionRevertHelpDocumentsConfirmedRevisionTargets(t *testing.T) {
 	command.SetErr(&output)
 	command.SetArgs([]string{"revert", "--help"})
 
-	if err := command.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(command); err != nil {
 		t.Fatalf("sheet version revert --help returned error: %v", err)
 	}
 	help := output.String()

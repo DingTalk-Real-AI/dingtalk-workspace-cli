@@ -23,6 +23,8 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func runNativeCardUpdate(t *testing.T, caller *scriptedToolCaller, args ...string) error {
@@ -38,7 +40,7 @@ func runNativeCardUpdate(t *testing.T, caller *scriptedToolCaller, args ...strin
 		root.PersistentFlags().Bool("yes", false, "skip confirmation")
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageNativeMessageUpdateCardVerifiesWrite(t *testing.T) {
