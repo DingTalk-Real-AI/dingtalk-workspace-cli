@@ -29,19 +29,20 @@
    · 加班固定 --biz-type 1 --new-overtime；--duration-mode 由有效单位决定（day→1；halfDay→2 必须同传 --half-start/--half-end；hour→3，--start/--end 传 "yyyy-MM-dd HH:mm:00"）
    · 一阶段（起止确定后调用）：无歧义窗口服务端自算成功（durationInHour/detailList/compressedValue 齐备）；歧义窗口（班中起始/跨天）不带 --detail-list 时服务端返回 durationInHour=0 + 逐日骨架（detailList 给出 workDate/班次段/逐日起止窗），不报错——判歧义依据为「durationInHour=0 且窗口跨天/班中起始」→ 进入多日确认
    · **时长必须经用户手动确认（硬约束）**：一阶段结果（自算时长或逐日骨架）必须向用户完整展示（数值 + 单位中文口径，多日含逐日明细），经用户显式确认或输入逐日时长后方可进入二阶段与组装；禁止静默采信服务端结果直接组装提交；用户有异议 → 回步骤 5 重新收集时间并重新计算
-   · 多日确认：一阶段判定跨天 → 向用户展示逐日骨架并由用户**手动输入每天加班时长**（选择权在用户）→ 二阶段调用（--duration-in-hour/--duration-in-day=用户确认总时长（按有效单位选）+ --detail-list=逐日明细 JSON，逐项 workDate 为 yyyy-MM-dd HH:mm:ss 字符串或毫秒时间戳，CLI 归一化为毫秒透传）由服务端确认——服务端采信逐日提议值、不裁决截断
+   · **时长确认的交互形态**：遵循 [oa-create.md](../oa-create.md)「交互优化原则」第 5 条选择澄清优先（宿主有组件时用选择澄清，禁止退化为纯文本填空）。
+   · 多日确认：一阶段判定跨天 → 向用户展示逐日骨架并由用户**手动确认/输入每天加班时长**（选择权在用户，交互形态见上条）→ 二阶段调用（--duration-in-hour/--duration-in-day=用户确认总时长（按有效单位选）+ --detail-list=逐日明细 JSON，逐项 workDate 为 yyyy-MM-dd HH:mm:ss 字符串或毫秒时间戳，CLI 归一化为毫秒透传）由服务端确认——服务端采信逐日提议值、不裁决截断
    · 单日确认：一阶段判定单日 → 向用户展示服务端计算时长并由用户**手动确认/修改** → 二阶段调用（duration=确认值）确认
    · --principal-users 不传时服务端默认按发起人计算（本人发起不传）；代提交/批量必传全量加班人；响应 excludePrincipalUserIds 非空 → 转告被排除人员，用户确认后以剩余人员继续
    · 响应外层 overtimeDurationStatus≠0 → 原样转告 message 并终止；userMessage 非空 → 并入汇总确认展示
    · 响应 approveAlertInfo（班次冲突 title/content/detailKey）非空 → 原样转告；明细级 detailList[].approveInfo.overtimeDurationStatus：0=回填 / 1=回填并提示 message / 2=该日禁止加班 → 终止并转告
    → durationInHour / durationInDay / detailList / compressedValue / featureMap（服务端权威，禁止本地估算或手造）
-7.【补偿方式】步骤 6 响应 overtimeRedressBy=="manual" → 请用户选转调休 / 加班费；否则跳过；manual 但用户弃选 → 终止（required）
+7.【补偿方式】步骤 6 响应 overtimeRedressBy=="manual" → 请用户选转调休 / 加班费；否则跳过；manual 但用户弃选 → 终止（required）。发起前汇总仅在 manual 选值时展示补偿方式；空条目（服务端自动配置）不展示该字段
 8.【组装条目】容器包裹形态（与补卡/外出展平相反；字段级规范见 [oa-form-components.md](oa-form-components.md) 加班套件章节）：
    · 容器条目：{"id":套件 props.id,"name":套件 props.label,"value":<JSON.stringify(children 条目数组)>,"extValue":""}
    · children 按字段规范组装：partner / startTime / finishTime / duration（value=总时长字符串，hour → durationInHour，否则 durationInDay）/ compensation 按步骤 7
    · 套件外控件（如加班原因）按通用规则组装
 9.【流程预演（必选）】forecast-process --request（必选自选审批人节点 required=true 时缺 targetSelectActioners 会被服务端拒绝；组装字段为 actionerKey + actionerStaffIds）
-10.【选人 + 确认 + 发起】复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」 → 汇总确认（加班人 + 起止时间 + 时长 + 补偿方式 + 事由 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
+10.【选人 + 确认 + 发起】复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」 → 汇总确认（加班人 + 起止时间 + 时长 + 事由 + 流程路径 + 审批人；补偿方式仅在 manual 选值时列入）→ create-instance --request '<组装后的完整 JSON>'
 ```
 
 有效单位与命令参数对照：
