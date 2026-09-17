@@ -668,7 +668,7 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"biz-type"}, Description: "--biz-type 必须在 1 到 8 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-mode", "half-start", "half-end"}, Description: "--duration-mode 必须在 1 到 5 之间；半天模式必须同时提供 --half-start 和 --half-end"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "起止时间格式必须正确，且 --end 不得早于 --start"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-in-hour", "duration-in-day", "detail-list", "modified-date"}, Description: "--duration-in-hour/--duration-in-day 互斥、必须为大于 0 的数字且与 --duration-mode 单位匹配；--detail-list 必须为 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss）与大于 0 的 durationInHour 或 durationInDay（互斥且与单位匹配）；--modified-date 格式为 yyyy-MM-dd HH:mm:ss"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-in-hour", "duration-in-day", "detail-list", "modified-date"}, Description: "--duration-in-hour/--duration-in-day 互斥、必须为大于 0 的数字且与 --duration-mode 单位匹配；--detail-list 必须为 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss 或 13 位毫秒时间戳整数）与大于 0 的 durationInHour 或 durationInDay（互斥且与单位匹配）；--modified-date 格式为 yyyy-MM-dd HH:mm:ss"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Int("biz-type") < 1 || rt.Int("biz-type") > 8 {
@@ -746,8 +746,11 @@ var CalculateApproveDuration = shortcut.Shortcut{
 						return fmt.Errorf("--detail-list 第 %d 项 workDate 格式必须为 yyyy-MM-dd HH:mm:ss", i+1)
 					}
 				case float64:
-					if wd <= 0 {
-						return fmt.Errorf("--detail-list 第 %d 项 workDate 毫秒时间戳必须大于 0", i+1)
+					// 13 位毫秒时间戳：有限、整数且在 [1e12, 1e13) 内（2001-2286 年）。
+					// 字符串输入经 UnixMilli() 归一化必然落在此形态；小数、秒级 10 位或超限值
+					// 会被服务端错误解释或只在下游失败，必须在 MCP 调用前拒绝。
+					if math.IsNaN(wd) || math.IsInf(wd, 0) || wd != math.Trunc(wd) || wd < 1e12 || wd >= 1e13 {
+						return fmt.Errorf("--detail-list 第 %d 项 workDate 必须为 13 位毫秒时间戳整数", i+1)
 					}
 				default:
 					return fmt.Errorf("--detail-list 第 %d 项 workDate 必须为 yyyy-MM-dd HH:mm:ss 字符串或毫秒时间戳", i+1)
