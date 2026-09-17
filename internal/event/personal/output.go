@@ -130,6 +130,7 @@ type OAApprovalTaskCreatedOutput struct {
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	TaskID            string `json:"task_id" description:"审批任务 ID"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批任务状态"`
 	CreateTime        int64  `json:"create_time" description:"审批任务创建时间" format:"timestamp_ms"`
@@ -144,6 +145,7 @@ type OAApprovalTaskFinishedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	TaskID            string `json:"task_id" description:"审批任务 ID"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批任务状态"`
@@ -161,6 +163,7 @@ type OAApprovalTaskRedirectedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	TaskID            string `json:"task_id" description:"原审批任务 ID"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"原审批任务状态"`
@@ -178,6 +181,7 @@ type OAApprovalInstanceStartedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批实例状态"`
 	CreateTime        int64  `json:"create_time" description:"审批实例创建时间" format:"timestamp_ms"`
@@ -192,6 +196,7 @@ type OAApprovalInstanceCCOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批实例到达抄送节点时的状态"`
 	CreateTime        int64  `json:"create_time" description:"审批实例创建时间" format:"timestamp_ms"`
@@ -206,6 +211,7 @@ type OAApprovalInstanceTerminatedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批实例状态"`
 	CreateTime        int64  `json:"create_time" description:"审批实例创建时间" format:"timestamp_ms"`
@@ -221,6 +227,7 @@ type OAApprovalInstanceFinishedOutput struct {
 	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
 	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
 	StaffID           string `json:"staff_id,omitempty" description:"审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出"`
+	ActivityID        string `json:"activity_id,omitempty" description:"审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出"`
 	Title             string `json:"title" description:"审批标题"`
 	Status            string `json:"status" description:"审批实例状态"`
 	Result            string `json:"result" description:"审批实例处理结果，值以服务端实际推送为准"`
@@ -348,6 +355,7 @@ type personalOAApprovalBody struct {
 	ProcessCode       string `json:"processCode"`
 	TaskID            string `json:"taskId"`
 	StaffID           string `json:"staffId"`
+	ActivityID        string `json:"activityId"`
 	Title             string `json:"title"`
 	Status            string `json:"status"`
 	Result            string `json:"result"`
@@ -639,6 +647,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessCode:       payload.Body.ProcessCode,
 			TaskID:            payload.Body.TaskID,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			CreateTime:        payload.Body.CreateTime,
@@ -653,6 +662,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			TaskID:            payload.Body.TaskID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
@@ -670,6 +680,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			TaskID:            payload.Body.TaskID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
@@ -687,6 +698,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			CreateTime:        payload.Body.CreateTime,
@@ -701,6 +713,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			CreateTime:        payload.Body.CreateTime,
@@ -715,6 +728,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			CreateTime:        payload.Body.CreateTime,
@@ -730,6 +744,7 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			ProcessInstanceID: payload.Body.ProcessInstanceID,
 			ProcessCode:       payload.Body.ProcessCode,
 			StaffID:           payload.Body.StaffID,
+			ActivityID:        payload.Body.ActivityID,
 			Title:             payload.Body.Title,
 			Status:            payload.Body.Status,
 			Result:            payload.Body.Result,
