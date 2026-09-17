@@ -10422,8 +10422,8 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	datasourceUpdateCmd.Flags().String("auto-sync-setting", "", "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
 
 	datasourceSyncCmd := &cobra.Command{
-		Use:     "sync",
-		Short:   "触发数据源表手动同步",
+		Use:   "sync",
+		Short: "触发数据源表手动同步",
 		Long: `对已有数据源表触发一次手动同步（单次最多 5 张），仅触发任务即返回，不等待同步完成。
 每张表独立提交，单表失败不影响其他表，整体仍返回 success；调用方需遍历 tasks[] 按单条 status 判断。
 同步运行中的表返回 failed 状态（errorCode=SYNC_RUNNING），属幂等冲突，应视为稍后重试而非最终失败。
