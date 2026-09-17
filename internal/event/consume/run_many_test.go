@@ -477,7 +477,7 @@ func TestRunManyDurationAndStdinEOFStopTheWholeGroup(t *testing.T) {
 	})
 }
 
-func TestRunManySourceStateAndBusShutdown(t *testing.T) {
+func TestCrossPlatformCoverageRunManySourceStateAndBusShutdown(t *testing.T) {
 	busA := newManyFakeBus(401, nil)
 	busB := newManyFakeBus(401, nil)
 	installManyDiscover(t, busA, busB)

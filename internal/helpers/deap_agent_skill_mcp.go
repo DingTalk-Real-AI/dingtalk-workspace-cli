@@ -46,6 +46,11 @@ const (
 
 var deapAgentSnapshots = []string{"draft", "published"}
 
+// Keep file/ZIP I/O injectable so read races and decompressor failures can be
+// verified without platform-specific permission tricks or huge archives.
+var deapAgentReadFile = os.ReadFile
+var deapAgentOpenZIPEntry = func(entry *zip.File) (io.ReadCloser, error) { return entry.Open() }
+
 type deapAgentSkillPackage struct {
 	path string
 	size int64
@@ -354,7 +359,7 @@ func deapAgentValidateSkillPackage(rawPath string) (deapAgentSkillPackage, error
 		if entry.FileInfo().IsDir() {
 			continue
 		}
-		body, openErr := entry.Open()
+		body, openErr := deapAgentOpenZIPEntry(entry)
 		if openErr != nil {
 			return deapAgentSkillPackage{}, apperrors.NewValidation("Skill ZIP 文件内容损坏")
 		}
@@ -493,9 +498,7 @@ func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any)
 	if err != nil {
 		return &deapAgentSkillStageError{Stage: "query", Err: err}
 	}
-	if strings.TrimSpace(result.SkillID) == "" {
-		return &deapAgentSkillStageError{Stage: "query", Err: fmt.Errorf("创建响应缺少 skillId")}
-	}
+	// deapAgentParseSkillCreated already requires a non-empty skillId.
 	return deps.Out.PrintJSON(result)
 }
 
@@ -713,7 +716,7 @@ func deapAgentReadJSONFile(rawPath, flagName string) (any, error) {
 	if info.Size() > deapAgentConfigFileMaxSize {
 		return nil, apperrors.NewValidation(fmt.Sprintf("参数 --%s 文件不能超过 1 MiB", flagName))
 	}
-	data, err := os.ReadFile(path)
+	data, err := deapAgentReadFile(path)
 	if err != nil {
 		return nil, apperrors.NewValidation(fmt.Sprintf("参数 --%s 文件不可读", flagName))
 	}

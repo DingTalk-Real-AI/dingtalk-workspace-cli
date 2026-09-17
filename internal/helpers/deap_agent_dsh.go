@@ -54,10 +54,11 @@ func resolveExactOperatorOpenDingTalkID(ctx context.Context, accessToken, userID
 	if len(candidates) != 1 {
 		return "", apperrors.NewValidation("主管 userId 未能精确解析出唯一 operatorOpenDingTalkId；禁止按姓名猜测或手工覆盖")
 	}
-	for candidate := range candidates {
-		return candidate, nil
+	// Cardinality was checked above; select the only exact match.
+	var candidate string
+	for candidate = range candidates {
 	}
-	return "", apperrors.NewValidation("主管 operatorOpenDingTalkId 缺失")
+	return candidate, nil
 }
 
 func collectExactOpenDingTalkIDs(value any, targetUserID string, candidates map[string]struct{}) {

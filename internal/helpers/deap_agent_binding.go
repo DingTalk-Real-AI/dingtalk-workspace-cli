@@ -17,6 +17,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Filesystem boundaries shared by employee lifecycle operations. Tests inject
+// failures here instead of depending on Unix permissions or filesystem races.
+var employeeReadFile = os.ReadFile
+var employeeStat = os.Stat
+var employeeReadDir = os.ReadDir
+var employeeOpenFile = os.OpenFile
+var employeeMarshalJSON = json.Marshal
+var employeeMarshalIndent = json.MarshalIndent
+var employeeAbsPath = filepath.Abs
+
 // digitalEmployeeBindingPath 使用 Profile 摘要隔离多员工配置；文件内容仍保留
 // 精确 Profile 用于读回校验，但不保存任何 Token 或授权码。
 func digitalEmployeeBindingPath(configDir, profile string) string {
@@ -37,7 +47,7 @@ func saveDigitalEmployeeBinding(configDir string, binding digitalEmployeeBinding
 		!validMachineString(binding.OperatorOpenDingTalkID) {
 		return fmt.Errorf("invalid digital employee binding")
 	}
-	data, err := json.MarshalIndent(binding, "", "  ")
+	data, err := employeeMarshalIndent(binding, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode digital employee binding: %w", err)
 	}
@@ -58,7 +68,7 @@ func validateEmployeeMachineBinding(cmd *cobra.Command, agentUUID string) error 
 
 func loadDigitalEmployeeBinding(configDir, profile string) (digitalEmployeeBinding, error) {
 	var binding digitalEmployeeBinding
-	data, err := os.ReadFile(digitalEmployeeBindingPath(configDir, profile))
+	data, err := employeeReadFile(digitalEmployeeBindingPath(configDir, profile))
 	if err != nil {
 		return binding, err
 	}

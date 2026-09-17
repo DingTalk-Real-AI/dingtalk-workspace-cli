@@ -23,6 +23,10 @@ func TestCrossPlatformCoverageMultipartValidationAndFailures(t *testing.T) {
 		t.Fatal("nil client accepted")
 	}
 	client := NewClient("fixture-token", "https://api-deap.dingtalk.com")
+	client.TargetValidator = nil
+	if err := client.validateTarget("https://api-deap.dingtalk.com/upload"); err != nil {
+		t.Fatal(err)
+	}
 	client.HTTPClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		t.Error("invalid request reached HTTP transport")
 		return nil, errors.New("unexpected request")
@@ -42,6 +46,7 @@ func TestCrossPlatformCoverageMultipartValidationAndFailures(t *testing.T) {
 		t.Fatal("target rejection lost")
 	}
 	client.TargetValidator = func(string) error { return nil }
+	client.DingTalkExt = "fixture-extension"
 	t.Run("request construction", func(t *testing.T) {
 		old := newHTTPRequest
 		t.Cleanup(func() { newHTTPRequest = old })

@@ -87,7 +87,7 @@ var employeeExecCommand = exec.CommandContext
 
 func readDigitalEmployeeState(dir string) (digitalEmployeeRunState, error) {
 	var s digitalEmployeeRunState
-	b, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	b, err := employeeReadFile(filepath.Join(dir, "state.json"))
 	if err == nil {
 		err = json.Unmarshal(b, &s)
 	}
@@ -95,7 +95,7 @@ func readDigitalEmployeeState(dir string) (digitalEmployeeRunState, error) {
 }
 
 func employeeCommand(ctx context.Context, profile string, args ...string) (*exec.Cmd, error) {
-	bin, err := os.Executable()
+	bin, err := daemonExecutable()
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,11 @@ type employeeRuntime struct {
 }
 
 func (r *employeeRuntime) audit(record employeeTaskRecord) error {
-	data, err := json.Marshal(record)
+	data, err := employeeMarshalJSON(record)
 	if err != nil {
 		return employeeTerminal("audit_unavailable")
 	}
-	file, err := os.OpenFile(filepath.Join(r.dir, "audit.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	file, err := employeeOpenFile(filepath.Join(r.dir, "audit.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return employeeTerminal("audit_unavailable")
 	}
@@ -233,7 +233,7 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	path := r.recordPath(e)
-	if _, err := os.Stat(path); err == nil {
+	if _, err := employeeStat(path); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return employeeTerminal("ledger_unavailable")
@@ -619,12 +619,12 @@ func persistEmployeeState(dir string, state digitalEmployeeRunState) error {
 	if err := writeEmployeeJSON(filepath.Join(dir, "state.json"), state); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(filepath.Join(dir, "runtime.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	file, err := employeeOpenFile(filepath.Join(dir, "runtime.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	data, err := json.Marshal(state)
+	data, err := employeeMarshalJSON(state)
 	if err != nil {
 		return err
 	}
@@ -636,7 +636,7 @@ func persistEmployeeState(dir string, state digitalEmployeeRunState) error {
 
 func (r *employeeRuntime) recoverInterruptedTasks() error {
 	taskDir := filepath.Join(r.dir, "tasks")
-	info, err := os.Stat(taskDir)
+	info, err := employeeStat(taskDir)
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -645,7 +645,7 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 	if err != nil || !info.IsDir() {
 		return employeeTerminal("ledger_unavailable")
 	}
-	entries, err := os.ReadDir(taskDir)
+	entries, err := employeeReadDir(taskDir)
 	if err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
@@ -654,7 +654,7 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 			continue
 		}
 		path := filepath.Join(r.dir, "tasks", entry.Name())
-		data, e := os.ReadFile(path)
+		data, e := employeeReadFile(path)
 		if e != nil {
 			return employeeTerminal("ledger_unavailable")
 		}

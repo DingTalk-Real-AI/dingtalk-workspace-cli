@@ -5,6 +5,7 @@ package bus
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"sync"
@@ -14,6 +15,41 @@ import (
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
+
+type sourceStateFailConn struct {
+	net.Conn
+	writes int
+}
+
+func (c *sourceStateFailConn) Write(p []byte) (int, error) {
+	c.writes++
+	// Complete HelloAck, then fail the next source-state frame.
+	if c.writes > 1 {
+		return 0, errors.New("state push unavailable")
+	}
+	return c.Conn.Write(p)
+}
+
+func TestCrossPlatformCoverageBusSourceUpdateWriteFailureClosesConnection(t *testing.T) {
+	src := &observedSource{status: transport.StatusSource{State: "connecting", Source: "inferred", Observed: true}}
+	d := eventCoreDaemon(nil)
+	d.cfg.Source = src
+	client, w, r, done := eventCoreConnection(d, func(c net.Conn) net.Conn { return &sourceStateFailConn{Conn: c} })
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := w.WriteJSON(transport.Hello{Type: transport.FrameTypeHello}); err != nil {
+		t.Fatal(err)
+	}
+	var ack transport.HelloAck
+	if err := r.ReadJSON(&ack); err != nil {
+		t.Fatal(err)
+	}
+	src.set(transport.StatusSource{State: "connected", Source: "inferred", Observed: true})
+	if _, err := r.Read(); err == nil {
+		t.Fatal("failed source update reported success")
+	}
+	eventCoreWaitDone(t, done)
+}
 
 type unobservedSource struct{}
 

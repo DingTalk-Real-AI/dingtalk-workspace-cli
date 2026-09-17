@@ -14,7 +14,47 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func TestCrossPlatformCoverageExchangePersistenceFailsClosed(t *testing.T) {
+	t.Run("nil-exchange-result", func(t *testing.T) {
+		dir := externalExchangeTestConfig(t)
+		testseam.Swap(t, &managedExchangeMCPCode, func(*OAuthProvider, context.Context, string, string) (*TokenData, error) { return nil, nil })
+		_, err := exchangeVerifiedAuthCode(context.Background(), dir, ManagedExchangeRequest{ClientID: "client", AuthCode: "code"}, "", func(*TokenData) error { t.Fatal("nil exchange persisted"); return nil })
+		if err == nil || !strings.Contains(err.Error(), "no token data") {
+			t.Fatal(err)
+		}
+	})
+	for _, scenario := range []string{"incomplete", "edition-hook", "preflight", "locked-read", "restore-secret"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := externalExchangeTestConfig(t)
+			data := &TokenData{ClientID: "client", CorpID: "corp", UserID: "employee"}
+			var err error
+			switch scenario {
+			case "incomplete":
+				err = saveTokenDataLockedForSelectorAndSecret(dir, nil, "", "secret")
+			case "edition-hook":
+				old := edition.Get()
+				t.Cleanup(func() { edition.Override(old) })
+				edition.Override(&edition.Hooks{SaveToken: func(string, []byte) error { return nil }})
+				err = saveTokenDataLockedForSelectorAndSecret(dir, data, "", "secret")
+			case "preflight":
+				testseam.Swap(t, &authKeychainGet, func(string, string) (string, error) { return "", errors.New("unavailable") })
+				err = persistExternalExchangeTokenWithSecret(dir, data, "")
+			case "locked-read":
+				testseam.Swap(t, &profilesLoad, func(string) (*ProfilesConfig, error) { return nil, errors.New("unreadable") })
+				err = persistExternalExchangeTokenWithSecret(dir, data, "")
+			case "restore-secret":
+				testseam.Swap(t, &authKeychainRemove, func(string, string) error { return errors.New("unavailable") })
+				err = restoreTokenPersistence(dir, tokenPersistenceSnapshot{clientID: "client", profiles: &ProfilesConfig{}})
+			}
+			if err == nil {
+				t.Fatal("persistence failure ignored")
+			}
+		})
+	}
+}
 
 func TestCrossPlatformCoverageExchangeValidationBeforePersistence(t *testing.T) {
 	dir := externalExchangeTestConfig(t)

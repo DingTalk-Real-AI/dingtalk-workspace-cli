@@ -39,6 +39,8 @@ type ManagedIdentityResolver func(ctx context.Context, accessToken, expectedCorp
 var (
 	managedExchangePreparePersistence = prepareLoginPersistence
 	managedExchangePersistToken       = persistManagedExchangeToken
+	managedExchangeMCPCode            = (*OAuthProvider).exchangeCodeViaMCPClientID
+	managedExchangeClientCode         = (*OAuthProvider).exchangeCodeWithClient
 )
 
 // ExchangeManagedAuthCode 使用显式 ClientID 直接走 MCP Exchange，并把结果写入
@@ -79,9 +81,9 @@ func exchangeVerifiedAuthCode(ctx context.Context, configDir string, request Man
 	var data *TokenData
 	var err error
 	if clientSecret == "" {
-		data, err = provider.exchangeCodeViaMCPClientID(ctx, authCode, clientID)
+		data, err = managedExchangeMCPCode(provider, ctx, authCode, clientID)
 	} else {
-		data, err = provider.exchangeCodeWithClient(ctx, authCode, clientID, clientSecret)
+		data, err = managedExchangeClientCode(provider, ctx, authCode, clientID, clientSecret)
 	}
 	if err != nil {
 		// 授权码、Token 和服务端原始正文都不得进入错误链或调试输出。

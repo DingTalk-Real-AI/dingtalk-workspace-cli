@@ -21,7 +21,7 @@ import (
 )
 
 func startDigitalEmployeeDaemon(cmd *cobra.Command, cfg digitalEmployeeAdapterConfig) error {
-	if !daemonDetachSupported {
+	if !daemonDetachEnabled {
 		return fmt.Errorf("当前平台不支持后台运行")
 	}
 	dir := digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile)
@@ -209,7 +209,7 @@ func employeeWatchStop(ctx context.Context, cancel context.CancelFunc, dir, runI
 
 func employeeFindBindings(agentUUID string) ([]digitalEmployeeBinding, error) {
 	root := filepath.Join(deapConnectConfigDir(), "digital-employees")
-	info, err := os.Stat(root)
+	info, err := employeeStat(root)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -219,7 +219,7 @@ func employeeFindBindings(agentUUID string) ([]digitalEmployeeBinding, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("employee binding root is not a directory")
 	}
-	entries, err := os.ReadDir(root)
+	entries, err := employeeReadDir(root)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func employeeFindBindings(agentUUID string) ([]digitalEmployeeBinding, error) {
 			continue
 		}
 		var b digitalEmployeeBinding
-		raw, e := os.ReadFile(filepath.Join(root, entry.Name()))
+		raw, e := employeeReadFile(filepath.Join(root, entry.Name()))
 		if e != nil {
 			return nil, e
 		}

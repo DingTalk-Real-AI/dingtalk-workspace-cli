@@ -157,7 +157,7 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 	if commandBoolFlag(cmd, "alwayson") && !commandBoolFlag(cmd, "daemon") {
 		return fmt.Errorf("--alwayson 必须与 --daemon 同时使用")
 	}
-	if commandBoolFlag(cmd, "daemon") && !daemonDetachSupported {
+	if commandBoolFlag(cmd, "daemon") && !daemonDetachEnabled {
 		return fmt.Errorf("当前平台不支持 --daemon")
 	}
 	_, err = digitalEmployeeOptions(cmd)
@@ -189,7 +189,7 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 		return opts, fmt.Errorf("agent-timeout 不能为负数")
 	}
 	if opts.WorkDir != "" {
-		opts.WorkDir, err = filepath.Abs(opts.WorkDir)
+		opts.WorkDir, err = employeeAbsPath(opts.WorkDir)
 		if err != nil {
 			return opts, err
 		}

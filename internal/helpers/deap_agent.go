@@ -68,7 +68,7 @@ var deapAgentPlanDryRun = &contract.DryRunSpec{
 var deapAgentSourceTypes = []string{"im_message", "trigger_rule"}
 
 func init() {
-	RegisterPublic(func() Handler {
+	RegisterPublicNamed("dingtalk-tag", func() Handler {
 		return deapHandler{}
 	})
 }
