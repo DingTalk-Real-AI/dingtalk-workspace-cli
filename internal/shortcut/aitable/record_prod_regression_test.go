@@ -127,18 +127,21 @@ func TestCrossPlatformCoverageRecordRejectPreservesCompletedBatch(t *testing.T) 
 	for i := range records {
 		records[i] = map[string]any{"recordId": "r" + strconv.Itoa(i), "cells": map[string]any{"f": "x"}}
 	}
-	readback, _ := json.Marshal(map[string]any{"records": records[:recordBatchSize]})
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: `{"updatedCount":100}`}, {text: string(readback)},
-		{err: &helpers.CLIError{Code: helpers.CodeMCPToolError, Message: `{"status":"error","error":{"type":"INPUT_ERROR","retryable":false}}`}},
-	}}
+	steps := []upsertByKeyStep{{text: `{"updatedCount":100}`}}
+	for offset := 0; offset < 100; offset += 20 {
+		readback, _ := json.Marshal(map[string]any{"records": records[offset : offset+20]})
+		steps = append(steps, upsertByKeyStep{text: string(readback)})
+	}
+	steps = append(steps, upsertByKeyStep{err: &helpers.CLIError{Code: helpers.CodeMCPToolError, Message: `{"status":"error","error":{"type":"INPUT_ERROR","retryable":false}}`}})
+	caller := &upsertByKeyCaller{steps: steps}
+
 	_, err := runRecordBatchCLI(t, caller, "+record-update", records)
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Retryable || typed.Reason != "aitable_composite_partial_success" {
 		t.Fatalf("error=%#v", err)
 	}
 	result := typed.Details["result"].(compositeResult)
-	if result.CompletedCount != 100 || result.FailedCount != 1 || len(result.KnownEffects) != 1 || len(caller.calls) != 3 {
+	if result.CompletedCount != 100 || result.FailedCount != 1 || len(result.KnownEffects) != 1 || len(caller.calls) != 7 {
 		t.Fatalf("result=%#v calls=%v", result, caller.calls)
 	}
 }

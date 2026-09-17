@@ -5,10 +5,13 @@ package app
 
 import (
 	"context"
+	"os"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
@@ -25,6 +28,36 @@ func (schemaSourceRootMarkerCaller) Format() string { return "json" }
 func (schemaSourceRootMarkerCaller) DryRun() bool   { return false }
 func (schemaSourceRootMarkerCaller) Fields() string { return "" }
 func (schemaSourceRootMarkerCaller) JQ() string     { return "" }
+
+func TestCrossPlatformCoverageSchemaSourceRootPreservesRuntimeProfile(t *testing.T) {
+	previous := authpkg.RuntimeProfile()
+	t.Cleanup(func() { authpkg.SetRuntimeProfile(previous) })
+	for _, args := range [][]string{
+		{"dws", "schema"},
+		{"dws", "--profile", "argv-profile", "schema"},
+		{"dws", "--profile=argv-profile", "schema"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			testseam.Swap(t, &os.Args, args)
+			const activeProfile = "active-invocation-profile"
+			authpkg.SetRuntimeProfile(activeProfile)
+			root := NewSchemaSourceRootCommand()
+			if got := authpkg.RuntimeProfile(); got != activeProfile {
+				t.Fatalf("Schema source construction changed runtime profile to %q, want %q", got, activeProfile)
+			}
+			resolved, err := cli.ResolveSchemaBuild(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.CommandCount() == 0 {
+				t.Fatal("empty Schema assembly")
+			}
+			if got := authpkg.RuntimeProfile(); got != activeProfile {
+				t.Fatalf("Schema assembly changed runtime profile to %q, want %q", got, activeProfile)
+			}
+		})
+	}
+}
 
 // TestSchemaSourceRootPreservesRuntimeDepsAndPluginEndpoints ensures Schema
 // assembly (NewSchemaSourceRootCommand / ResolveMeta delivery) does not call

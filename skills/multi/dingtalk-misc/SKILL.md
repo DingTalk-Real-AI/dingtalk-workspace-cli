@@ -34,7 +34,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 电子表格 / 工作表 / 单元格读写 / 公式 / 超链接 / 浮动图片 | 电子表格创建/读写/公式/超链接/浮动图片/导出 | `dws sheet` | [sheet.md](references/sheet.md) |
 | 开放平台文档 / API文档 / 接口文档 / 接口报错 | 开放平台开发文档搜索 | `dws devdoc` | [devdoc.md](references/devdoc.md) |
 | 未封装 OpenAPI / llms.txt / dws api / Raw API / API 逃生舱 | 官方 llms.txt 分层发现，仅对企业内部应用 App Token 服务端 API 生成并确认 Raw 调用 | `dws api` | [openapi-explorer.md](references/openapi-explorer.md) |
-| 白板 / 独立白板 / 文档内嵌白板 / 画布 / OpenNodes / 白板节点 | 带内容创建、读取和更新独立或文档内嵌白板；没有 `partId` 时默认独立白板 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
+| 白板 / 独立白板 / 文档内嵌白板 / 画布 / OpenNodes / 白板节点 / SVG 预渲染 | 带内容创建、本地 SVG 预渲染、读取、写前 diff 预览和更新独立或文档内嵌白板；没有 `partId` 时默认独立白板 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
 | 招聘 / 职位 / JD / 在招职位 / 创建职位 / 职位详情 | 钉钉招聘职位的查询、详情与创建 | `dws recruit` | [recruit.md](references/recruit.md) |
 | 搜索技能 / 找技能 / 安装技能 / 技能市场 / 安装 DWS mono 或 multi skill | DWS 技能市场搜索、下载、安装与内置技能部署 | `dws skill` | [skill.md](references/skill.md) |
 | 人才池 / 储备干部池 / 员工档案 / 职业历程 / 绩效记录 / 员工标签 / 组织大脑 / 人才搜索 | 组织大脑：人才池、员工档案专项模块与结构化人才搜索 | `dws hrbrain` | [hrbrain.md](references/hrbrain.md) |
@@ -62,3 +62,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 - OA 任务先读核心 [oa.md](references/oa.md)。只有进入真实提单阶段才增量读取 [oa-create.md](references/oa-create.md)，只有处理审批附件才增量读取 [oa-attachments.md](references/oa-attachments.md)；不要为普通查询预读创建、控件、节点和附件全集。要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
 - 原生 `.md` 与在线富文本 `adoc`、通用文件存储的边界见 [markdown.md](references/markdown.md)；原生 `.html`/`.htm` 文件读写见 [html.md](references/html.md)；跨组织 / profile 规则见 [profile.md](references/profile.md)。
 - PAT 行为授权不是开放平台应用权限；后者见 [dev/permission.md](references/dev/permission.md)。
+
+Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
+
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。

@@ -121,7 +121,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 	oldLoadProfiles := personalLoadProfiles
 	oldLoadToken := personalLoadTokenData
 	oldAux := personalResolveAuxiliaryAccessToken
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	oldCredentials := personalResolveAppCredentialsStrict
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
@@ -129,7 +129,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 		personalLoadProfiles = oldLoadProfiles
 		personalLoadTokenData = oldLoadToken
 		personalResolveAuxiliaryAccessToken = oldAux
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		personalResolveAppCredentialsStrict = oldCredentials
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
@@ -142,7 +142,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 		t.Fatal("explicit token identity resolved local OAuth")
 		return "", nil
 	}
-	personalClientID = func() string {
+	personalClientIDMetadata = func(string) string {
 		t.Fatal("explicit root client ID was not preferred")
 		return ""
 	}
@@ -265,18 +265,18 @@ func TestCrossPlatformCoverageSelectedProfileClientPrecedesPersistedGlobalClient
 	oldEdition := edition.Get()
 	oldLoadProfiles := personalLoadProfiles
 	oldRuntimeClientID := personalRuntimeEventClientID
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		personalLoadProfiles = oldLoadProfiles
 		personalRuntimeEventClientID = oldRuntimeClientID
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
 	edition.Override(&edition.Hooks{})
 	personalRuntimeEventClientID = func() string { return "" }
-	personalClientID = func() string { return "stale-global-client" }
+	personalClientIDMetadata = func(string) string { return "stale-global-client" }
 	personalLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
 		return &authpkg.ProfilesConfig{
 			Version:        3,
@@ -300,18 +300,18 @@ func TestCrossPlatformCoverageMalformedPersistedProfilesDoNotBlockRuntimeDefault
 	oldEdition := edition.Get()
 	oldLoadProfiles := personalLoadProfiles
 	oldRuntimeClientID := personalRuntimeEventClientID
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		personalLoadProfiles = oldLoadProfiles
 		personalRuntimeEventClientID = oldRuntimeClientID
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
 	authpkg.SetRuntimeProfile("")
 	personalRuntimeEventClientID = func() string { return "" }
-	personalClientID = func() string { return "global-client" }
+	personalClientIDMetadata = func(string) string { return "global-client" }
 	personalLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
 		return nil, errors.New("malformed persisted profiles")
 	}
@@ -673,7 +673,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusModeSkipsLocalOAuthIdentity(t *test
 	})
 
 	resolvedLocal := false
-	eventResolvePersonal = func(context.Context, string, string) (personal.Identity, error) {
+	eventResolvePersonal = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		resolvedLocal = true
 		return personal.Identity{}, nil
 	}

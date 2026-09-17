@@ -117,6 +117,56 @@ func TestCrossPlatformCoverageRegisterFlagsAllKinds(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageStringSliceMatchesPflagSemantics(t *testing.T) {
+	cmd := newTestCommand()
+	RegisterFlags(cmd, []FlagSpec{{Name: "items", Shorthand: "i", Kind: KindStringSlice, Default: "default,values"}})
+	flag := cmd.Flags().Lookup("items")
+	if flag == nil || flag.DefValue != "[default,values]" || flag.Value.Type() != "stringSlice" {
+		t.Fatalf("string-slice flag = %#v", flag)
+	}
+	if err := cmd.Flags().Parse([]string{`--items=a,"b,c"`, "-i", "d"}); err != nil {
+		t.Fatalf("Parse string-slice: %v", err)
+	}
+	got, err := cmd.Flags().GetStringSlice("items")
+	if err != nil || !reflect.DeepEqual(got, []string{"a", "b,c", "d"}) {
+		t.Fatalf("GetStringSlice = %#v, %v", got, err)
+	}
+	sliceValue, ok := flag.Value.(interface {
+		Append(string) error
+		Replace([]string) error
+		GetSlice() []string
+	})
+	if !ok {
+		t.Fatalf("string-slice value does not implement pflag SliceValue: %T", flag.Value)
+	}
+	if err := sliceValue.Replace([]string{"replacement"}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if err := sliceValue.Append("tail"); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if got := sliceValue.GetSlice(); !reflect.DeepEqual(got, []string{"replacement", "tail"}) {
+		t.Fatalf("GetSlice after Replace/Append = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
+	var value commandStringSliceValue
+	if err := value.Set(""); err != nil {
+		t.Fatalf("empty set: %v", err)
+	}
+	if got := value.GetSlice(); got == nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v", got)
+	}
+	if err := value.Set(`"`); err == nil {
+		t.Fatal("unbalanced quote accepted")
+	}
+	got, err := readCommandStringSlice("")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v %v", got, err)
+	}
+}
+
 func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {
 	AnnotateFlagAlias(nil, "alias", "canonical")
 
@@ -2157,6 +2207,45 @@ func TestCrossPlatformCoverageAttachContractOverwritesLegacySelectionSources(t *
 		len(sel.SourceRefs) != 1 || sel.SourceRefs[0] != "corecmd.ContractDecl" ||
 		sel.MetadataSource != "corecmd.contract" || sel.Reviewed != nil {
 		t.Fatalf("selection sources = %#v", sel)
+	}
+}
+
+func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T) {
+	required := true
+	enum := []string{"safe"}
+	anyOf := []contract.FormatAlternative{{Format: "json"}}
+	parameters := []contract.ParamDecl{{Name: "mode", Required: &required, Enum: enum, AnyOf: anyOf}}
+	cmd := newTestCommand()
+	AttachContract(cmd, testWriteSafety(), ContractDecl{
+		Description: "description",
+		Parameters:  parameters,
+		Interface: &contract.InterfaceSpec{
+			Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "summary", UseWhen: []string{"use"}, AvoidWhen: []string{"avoid"}, Examples: []string{"dws t"},
+		},
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "test", Name: "command", CanonicalPath: "test.command", CLIPath: "t",
+		},
+	}, "short", "long")
+
+	required = false
+	enum[0] = "mutated"
+	anyOf[0].Format = "mutated"
+	parameters[0].Name = "changed"
+
+	got, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || len(got.Parameters) != 1 {
+		t.Fatalf("RuntimeContractFinal = %#v, %v", got, ok)
+	}
+	parameter := got.Parameters[0]
+	if parameter.Name != "mode" || len(parameter.Enum) != 1 || parameter.Enum[0] != "safe" ||
+		parameter.Required == nil || !*parameter.Required {
+		t.Fatalf("caller mutation reached owned contract payload: %#v", parameter)
+	}
+	if len(parameter.AnyOf) != 1 || parameter.AnyOf[0].Format != "json" {
+		t.Fatalf("caller AnyOf mutation reached owned contract payload: %#v", parameter.AnyOf)
 	}
 }
 

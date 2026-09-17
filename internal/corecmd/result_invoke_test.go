@@ -67,7 +67,17 @@ func TestFrameworkResultInvokeErrorLegacyAndStoreEdges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := New(Spec{Use: "result", OutputRollout: tc.rollout, Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}, ResultInvoke: tc.invoke})
 			cmd.SetArgs(nil)
-			err := ExecuteForTest(cmd)
+			var err error
+			if tc.name == "missing store" {
+				// ExecuteForTest installs the production root result-store
+				// boundary; run raw Cobra to exercise the absent-store edge.
+				if prepareErr := PrepareCommandTree(cmd); prepareErr != nil {
+					t.Fatalf("prepare: %v", prepareErr)
+				}
+				err = cmd.Execute()
+			} else {
+				err = ExecuteForTest(cmd)
+			}
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute error=%v, want %q", err, tc.want)
 			}

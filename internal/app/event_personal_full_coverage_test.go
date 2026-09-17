@@ -109,12 +109,16 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 
 	wantErr := errors.New("consume")
 	cmd := newPersonalCoverageCommand()
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return personal.Identity{}, wantErr }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return personal.Identity{}, wantErr
+	}
 	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention}); !errors.Is(err, wantErr) {
 		t.Fatalf("identity error = %v", err)
 	}
 	identity := personal.Identity{AccessToken: "token", CorpID: "corp", UserID: "user", ClientID: "client", SourceID: "source"}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return identity, nil }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return identity, nil
+	}
 	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Common: commonConsumeOptions{RoutesRaw: []string{"bad-route"}}}); err == nil {
 		t.Fatal("invalid route succeeded")
 	}
@@ -209,7 +213,9 @@ func TestCrossPlatformCoveragePersonalEventRemainingStatusStopAndInterruptCovera
 
 	wantErr := errors.New("status-stop")
 	cmd := newPersonalCoverageCommand()
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return personal.Identity{}, wantErr }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return personal.Identity{}, wantErr
+	}
 	if err := runPersonalEventStatus(cmd, personalStatusOptions{}); !errors.Is(err, wantErr) {
 		t.Fatalf("status identity error = %v", err)
 	}
@@ -217,7 +223,9 @@ func TestCrossPlatformCoveragePersonalEventRemainingStatusStopAndInterruptCovera
 		t.Fatalf("stop identity error = %v", err)
 	}
 	identity := personal.Identity{ClientID: "client", SourceID: "source"}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return identity, nil }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return identity, nil
+	}
 	entry := &busctl.BusEntry{State: busctl.BusStateRunning}
 	personalFindBusByIdentity = func(string, string, dwsevent.SourceKind, string) *busctl.BusEntry { return entry }
 	personalQueryEntry = func(busctl.BusEntry) busctl.EntryStatus { return busctl.EntryStatus{Entry: *entry} }
@@ -308,13 +316,13 @@ func TestCrossPlatformCoveragePersonalEventRemainingStatusStopAndInterruptCovera
 func TestCrossPlatformCoveragePersonalEventRemainingIdentityAndSourceCoverage(t *testing.T) {
 	oldAux := personalResolveAuxiliaryAccessToken
 	oldLoad := personalLoadTokenData
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	oldCredentials := personalResolveAppCredentialsStrict
 	oldEdition := edition.Get()
 	t.Cleanup(func() {
 		personalResolveAuxiliaryAccessToken = oldAux
 		personalLoadTokenData = oldLoad
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		personalResolveAppCredentialsStrict = oldCredentials
 		edition.Override(oldEdition)
 	})
@@ -325,7 +333,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingIdentityAndSourceCoverage(t 
 	}
 	personalResolveAuxiliaryAccessToken = func(context.Context, string, string) (string, error) { return "access", nil }
 	personalLoadTokenData = func(string) (*authpkg.TokenData, error) { return nil, nil }
-	personalClientID = func() string { return "" }
+	personalClientIDMetadata = func(string) string { return "resolved" }
 	personalResolveAppCredentialsStrict = func(string) (string, string, authpkg.CredentialSource, authpkg.CredentialSource, error) {
 		return "resolved", "secret", "", "", nil
 	}
@@ -341,7 +349,8 @@ func TestCrossPlatformCoveragePersonalEventRemainingIdentityAndSourceCoverage(t 
 	personalResolveAppCredentialsStrict = func(string) (string, string, authpkg.CredentialSource, authpkg.CredentialSource, error) {
 		return "", "", "", "", wantErr
 	}
-	edition.Override(&edition.Hooks{})
+	personalClientIDMetadata = func(string) string { return "" }
+	edition.Override(&edition.Hooks{Name: "test"})
 	if _, err := resolvePersonalEventIdentity(context.Background(), "", ""); err == nil {
 		t.Fatal("missing client ID succeeded")
 	}
@@ -358,6 +367,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingIdentityAndSourceCoverage(t 
 	if src, err := newPersonalStreamSource(context.Background(), personalStreamSourceOptions{Identity: personal.Identity{AccessToken: "token", SourceID: "source"}, TicketMode: "custom"}); err != nil || src == nil {
 		t.Fatalf("custom resolved source = %#v, %v", src, err)
 	}
+	edition.Override(&edition.Hooks{})
 	if got := personalEventStreamSourceID(""); got != "open" {
 		t.Fatalf("default stream source = %q", got)
 	}

@@ -25,8 +25,9 @@ type recordQueryE2EStep struct {
 }
 
 type recordQueryE2ECaller struct {
-	steps []recordQueryE2EStep
-	calls []aitableTestCall
+	steps  []recordQueryE2EStep
+	calls  []aitableTestCall
+	dryRun bool
 }
 
 func (c *recordQueryE2ECaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -43,7 +44,7 @@ func (c *recordQueryE2ECaller) CallTool(_ context.Context, server, tool string, 
 }
 
 func (*recordQueryE2ECaller) Format() string { return "json" }
-func (*recordQueryE2ECaller) DryRun() bool   { return false }
+func (c *recordQueryE2ECaller) DryRun() bool { return c.dryRun }
 func (*recordQueryE2ECaller) Fields() string { return "" }
 func (*recordQueryE2ECaller) JQ() string     { return "" }
 

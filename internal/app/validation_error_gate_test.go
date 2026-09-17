@@ -106,7 +106,7 @@ func TestCrossPlatformCoverageTypedValidationErrorGateExtensions(t *testing.T) {
 		leaf.MarkFlagsOneRequired("left", "right")
 		root.AddCommand(leaf)
 	}})
-	testseam.Swap(t, &rootLoadPlugins, func(root *cobra.Command, _ *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(root *cobra.Command, _ *pipeline.Engine, runner executor.Runner, _ string) []*cobra.Command {
 		return buildPluginCommands([]mcptypes.ServerDescriptor{conferencePluginDescriptor()}, runner, root)
 	})
 	for _, args := range [][]string{

@@ -189,7 +189,7 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 	})
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			LocalSubject: "subject",

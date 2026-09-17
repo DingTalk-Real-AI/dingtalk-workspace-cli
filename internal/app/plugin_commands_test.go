@@ -408,7 +408,7 @@ func TestConflictingPluginDescriptorCannotReplaceDistributionEndpoint(t *testing
 	})
 	root := &cobra.Command{Use: "dws"}
 	root.AddCommand(&cobra.Command{Use: "drive"})
-	if commands := loadPlugins(root, nil, executor.EchoRunner{}); len(commands) != 0 {
+	if commands := loadPlugins(root, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
 		t.Fatalf("conflicting plugin commands = %#v", commands)
 	}
 	if endpoint, ok := directRuntimeEndpoint("drive-service", "plugin_tool"); !ok ||
@@ -420,7 +420,7 @@ func TestConflictingPluginDescriptorCannotReplaceDistributionEndpoint(t *testing
 func TestSchemaSourceRootDoesNotLoadRuntimePlugins(t *testing.T) {
 	isolatePluginRuntime(t)
 	var calls atomic.Int32
-	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		calls.Add(1)
 		AppendDynamicServer(conferencePluginDescriptor())
 		return buildPluginCommands(
@@ -666,7 +666,7 @@ func TestPluginDescriptorWinnerKeepsRouteAuthAndClientAtomic(t *testing.T) {
 	}`)
 
 	root := pluginTestRoot()
-	commands := loadPlugins(root, nil, executor.EchoRunner{})
+	commands := loadPlugins(root, nil, executor.EchoRunner{}, "")
 	if len(commands) != 1 || commands[0].Name() != "alpha-command" {
 		t.Fatalf("plugin winner commands = %#v", commands)
 	}
@@ -794,7 +794,7 @@ func TestUnsupportedPluginDescriptorsDoNotRegisterRuntimeState(t *testing.T) {
 	}`)
 
 	root := pluginTestRoot()
-	if commands := loadPlugins(root, nil, executor.EchoRunner{}); len(commands) != 0 {
+	if commands := loadPlugins(root, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
 		t.Fatalf("unsupported plugin descriptors produced commands %#v", commands)
 	}
 	if endpoint, ok := directRuntimeEndpoint("unsafe-http-id", "unsafe_tool"); ok {

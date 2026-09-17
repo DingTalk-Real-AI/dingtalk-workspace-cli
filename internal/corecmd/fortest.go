@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,23 @@ func ExecuteCForTest(cmd *cobra.Command) (*cobra.Command, error) {
 			return nil, err
 		}
 	}
-	return cmd.ExecuteC()
+	// Production installs a result store at the root execution boundary
+	// (internal/app/root.go); mirror it so ResultInvoke commands under test
+	// can StoreResult and have the envelope emitted once execution succeeds.
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, _ = output.WithResultStore(ctx)
+	cmd.SetContext(ctx)
+	executed, err := cmd.ExecuteC()
+	if err != nil {
+		return executed, err
+	}
+	if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
+		return executed, emitErr
+	}
+	return executed, nil
 }
 
 // ExecuteContextForTest prepares and executes with the supplied Cobra context.
