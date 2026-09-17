@@ -26,7 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
-func TestAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
+func TestCrossPlatformCoverageAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1.0/assistant/skills/upload" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
@@ -77,7 +77,7 @@ func TestAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
 	}
 }
 
-func TestAPIClientUploadMultipartSupportsScopedBearerCredential(t *testing.T) {
+func TestCrossPlatformCoverageAPIClientUploadMultipartSupportsScopedBearerCredential(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-upload" {
 			t.Errorf("Authorization = %q", got)

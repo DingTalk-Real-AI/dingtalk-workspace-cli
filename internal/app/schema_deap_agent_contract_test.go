@@ -12,7 +12,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
-func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
+func TestCrossPlatformCoverageDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
 	for _, action := range []string{"status", "list", "stop", "restart", "unbind"} {
@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageEmployeeServerBindingFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 	wants := map[string]struct {
 		cliPath      string
 		tool         string
@@ -195,7 +195,7 @@ func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 	wants := map[string]struct {
 		cliPath      string
 		tool         string
@@ -276,7 +276,7 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
 	root := NewRootCommand()
 	cmd, args, err := root.Find([]string{"dingtalk-tag", "capability", "mcp", "create"})
 	if err != nil || len(args) != 0 {
@@ -310,7 +310,7 @@ func TestDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagConnectReachesFinalSchema(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T) {
 	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.connect")
 	tool := payload.Tools["dingtalk-tag.connect"]
 	for field, want := range map[string]string{

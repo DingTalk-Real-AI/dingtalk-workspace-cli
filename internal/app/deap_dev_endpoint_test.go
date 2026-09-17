@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDeapDevEndpointFollowsConfiguredMCPEnvironment(t *testing.T) {
+func TestCrossPlatformCoverageDeapDevEndpointFollowsConfiguredMCPEnvironment(t *testing.T) {
 	t.Setenv("DINGTALK_DEAP_DEV_MCP_URL", "")
 
 	tests := []struct {
@@ -47,7 +47,7 @@ func TestDeapDevEndpointFollowsConfiguredMCPEnvironment(t *testing.T) {
 	}
 }
 
-func TestDeapDevEndpointEnvironmentOverrideStillWins(t *testing.T) {
+func TestCrossPlatformCoverageDeapDevEndpointEnvironmentOverrideStillWins(t *testing.T) {
 	const override = "https://pre-mcp-gw.example.test/server/deap-dev"
 	t.Setenv("DINGTALK_DEAP_DEV_MCP_URL", override)
 
@@ -60,7 +60,7 @@ func TestDeapDevEndpointEnvironmentOverrideStillWins(t *testing.T) {
 	}
 }
 
-func TestDirectRuntimeProductIDsIncludeDeapDev(t *testing.T) {
+func TestCrossPlatformCoverageDirectRuntimeProductIDsIncludeDeapDev(t *testing.T) {
 	if !DirectRuntimeProductIDs()["deap-dev"] {
 		t.Fatal("deap-dev must be reserved as a built-in direct-runtime product")
 	}
