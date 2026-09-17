@@ -244,7 +244,7 @@ func TestCrossPlatformCoverageAiSearchExactShortcutMapping(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"aisearch", "+search-person", "--query", "fixture", "--dimensions", "name,duty"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("exact shortcut execution: %v", err)
 	}
 	if caller.calls != 1 || caller.product != "aisearch" || caller.tool != "enterprise_person_search" {

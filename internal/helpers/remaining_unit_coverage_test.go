@@ -18,6 +18,7 @@ import (
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -321,7 +322,7 @@ func TestSheetMutationGuardRejectsPipedYesEvenWithContractConfirmSafety(t *testi
 
 	// Missing --node must fail before confirmation (RFC §5.1).
 	cmd.SetArgs(nil)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "flag --node is required") {
 		t.Fatalf("missing --node must validate first, got %#v", err)
 	}
@@ -334,7 +335,7 @@ func TestSheetMutationGuardRejectsPipedYesEvenWithContractConfirmSafety(t *testi
 	}
 	cmd.SetIn(strings.NewReader("yes\n"))
 	cmd.SetArgs(nil)
-	err = cmd.Execute()
+	err = corecmd.ExecuteForTest(cmd)
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("piped yes must be confirmation_required, got %#v", err)
@@ -348,7 +349,7 @@ func TestSheetMutationGuardRejectsPipedYesEvenWithContractConfirmSafety(t *testi
 	if err := cmd.Flags().Set("yes", "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("--yes must proceed, got %v", err)
 	}
 	if !ran {
@@ -707,7 +708,7 @@ func TestCrossPlatformCoverageRemainingCommandExecutionBranches(t *testing.T) {
 		InitDeps(caller)
 		cmd := newMailCommand()
 		cmd.SetArgs([]string{"template", "update", "--email", "user@example.com", "--id", "id", "--subject", "updated"})
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		var cliErr *CLIError
 		if !errors.As(err, &cliErr) || !strings.Contains(cliErr.Suggestion, "草稿") {
 			t.Fatalf("mail update error = %#v", err)
@@ -723,7 +724,7 @@ func TestCrossPlatformCoverageRemainingCommandExecutionBranches(t *testing.T) {
 		InitDeps(&coverageErrorCaller{err: errors.New("dry run failed"), dryRun: true})
 		cmd := newRangeBatchSetStyleCmd()
 		cmd.SetArgs([]string{"--node", "node", "--batch", batchPath})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("sheet style error = %v", err)
 		}
 	})
