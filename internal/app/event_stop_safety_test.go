@@ -12,13 +12,15 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestEventStopRequiresTypedConfirmationBeforeMutation(t *testing.T) {
 	root, _ := newEventStopSafetyRoot()
 	root.SetArgs([]string{"event", "stop", "sub-1"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil {
 		t.Fatal("event stop without --yes or --dry-run unexpectedly succeeded")
 	}
@@ -51,7 +53,7 @@ func TestEventStopDryRunPrecedesConfirmationAndReturnsPreview(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			root, stdout := newEventStopSafetyRoot()
 			root.SetArgs(test.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("event stop dry-run error = %v", err)
 			}
 			var preview map[string]any
@@ -83,7 +85,7 @@ func TestCrossPlatformCoverageEventStopDryRunDoesNotBypassTargetValidation(t *te
 		t.Run(test.name, func(t *testing.T) {
 			root, _ := newEventStopSafetyRoot()
 			root.SetArgs(test.args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("event stop dry-run validation error = %v, want %q", err, test.want)
 			}

@@ -150,8 +150,9 @@ func newMarkdownCreateCmd() *cobra.Command {
 		Long: `创建原生 Markdown 文件。--content 支持字面值、@file 和 -（stdin），
 也可通过 --file 直接上传本地 .md 文件。--space-id 显式走钉盘，
 --workspace 显式走文档空间；仅传 --folder 时自动识别文件夹所在域。
-不传目标参数时默认创建到文档空间根目录。`,
-		Example: `  dws markdown create --name README.md --content "# Hello"
+不传目标参数时默认创建到文档空间根目录。可选 --theme 会在上传副本中写入
+x-we-markdown-theme；不传时内容字节保持原样。`,
+		Example: `  dws markdown create --name README.md --content "# Hello" --theme qingya
   dws markdown create --file ./README.md --space-id <spaceId>
   dws markdown create --file ./README.md --workspace <workspaceId>`,
 		RunE: runMarkdownCreate,
@@ -162,6 +163,7 @@ func newMarkdownCreateCmd() *cobra.Command {
 	cmd.Flags().String("folder", "", "父文件夹 ID（未指定空间参数时自动识别所在域）")
 	cmd.Flags().String("workspace", "", "文档空间/知识库 ID (可选，与 --space-id 互斥)")
 	cmd.Flags().String("space-id", "", "钉盘空间 ID (可选，与 --workspace 互斥)")
+	cmd.Flags().String("theme", "", markdownThemeHelp())
 	RegisterCrossProductAliases(cmd)
 	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{
@@ -203,6 +205,7 @@ func newMarkdownCreateCmd() *cobra.Command {
 				{Name: "folder", Property: "folderId", Required: boolPtr(false)},
 				{Name: "name", Property: "fileName", Required: boolPtr(false), RequiredWhen: "--content is used"},
 				{Name: "space-id", Property: "spaceId", Required: boolPtr(false)},
+				{Name: "theme", Property: "theme", Required: boolPtr(false), Enum: markdownThemeIDValues()},
 				{Name: "workspace", Property: "workspaceId", Required: boolPtr(false)},
 			},
 		},
@@ -211,7 +214,11 @@ func newMarkdownCreateCmd() *cobra.Command {
 }
 
 func runMarkdownCreate(cmd *cobra.Command, _ []string) error {
-	return runTextFileCreate(cmd, markdownTextFileSpec)
+	options, err := markdownTextFileUploadOptionsFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	return runTextFileCreateWithOptions(cmd, markdownTextFileSpec, options)
 }
 
 func resolveMarkdownContentSource(cmd *cobra.Command, raw string) (string, error) {
@@ -243,8 +250,9 @@ func newMarkdownOverwriteCmd() *cobra.Command {
 		Short: "覆盖已有 Markdown 文件",
 		Long: `用本地 .md 文件或 --content 覆盖远程原生 Markdown 文件。
 默认需要确认；命令级 --dry-run 会下载当前内容并输出差异。
-根命令的全局 --dry-run 只做无网络参数预览。`,
-		Example: `  dws markdown overwrite --node <id> --content "# New" --name README.md --dry-run
+根命令的全局 --dry-run 只做无网络参数预览。可选 --theme 只处理本次完整覆盖内容并
+写入 x-we-markdown-theme，不会合并远程旧 Front Matter；不传时内容字节保持原样。`,
+		Example: `  dws markdown overwrite --node <id> --content "# New" --name README.md --theme qingya --dry-run
   dws markdown overwrite --node <id> --file ./updated.md`,
 		RunE: runMarkdownOverwrite,
 	}
@@ -254,6 +262,7 @@ func newMarkdownOverwriteCmd() *cobra.Command {
 	cmd.Flags().String("name", "", "文件名；省略时保留远程展示名")
 	cmd.Flags().String("space-id", "", "钉盘空间 ID (可选，与 --workspace 互斥)")
 	cmd.Flags().String("workspace", "", "文档空间/知识库 ID (可选，与 --space-id 互斥)")
+	cmd.Flags().String("theme", "", markdownThemeHelp())
 	cmd.Flags().Bool("dry-run", false, "下载当前内容并预览覆盖差异，不写入")
 	RegisterCrossProductAliases(cmd)
 	cli.AnnotateRuntimeRequiredFlags(cmd, "node")
@@ -297,6 +306,7 @@ func newMarkdownOverwriteCmd() *cobra.Command {
 				{Name: "name", Property: "fileName", Required: boolPtr(false)},
 				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
 				{Name: "space-id", Property: "spaceId", Required: boolPtr(false)},
+				{Name: "theme", Property: "theme", Required: boolPtr(false), Enum: markdownThemeIDValues()},
 				{Name: "workspace", Property: "workspaceId", Required: boolPtr(false)},
 			},
 		},
@@ -305,7 +315,11 @@ func newMarkdownOverwriteCmd() *cobra.Command {
 }
 
 func runMarkdownOverwrite(cmd *cobra.Command, _ []string) error {
-	return runTextFileOverwrite(cmd, markdownTextFileSpec)
+	options, err := markdownTextFileUploadOptionsFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	return runTextFileOverwriteWithOptions(cmd, markdownTextFileSpec, options)
 }
 
 func newMarkdownPatchCmd() *cobra.Command {
@@ -536,6 +550,9 @@ func printMarkdownDryRun(details map[string]any, operation, target string) error
 	deps.Out.PrintKeyValue("操作", operation)
 	if target != "" {
 		deps.Out.PrintKeyValue("目标", target)
+	}
+	if themeID, _ := details["theme"].(string); themeID != "" {
+		deps.Out.PrintKeyValue("主题", themeID)
 	}
 	deps.Out.PrintInfo("（dry-run 模式，未实际执行）")
 	return nil

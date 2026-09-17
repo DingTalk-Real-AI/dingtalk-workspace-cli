@@ -51,6 +51,7 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 	if a != nil && a.DryRun() {
 		inv.DryRun = true
 		result, err := toolCallerDryRun(ctx, inv)
+		traceWhiteboardResponse(inv, "local_dry_run", result.Response, nil, err)
 		if err != nil {
 			return nil, err
 		}
@@ -60,10 +61,29 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 		return nil, fmt.Errorf("ToolCaller runner is not configured")
 	}
 	result, err := a.runner.Run(ctx, inv)
+	traceWhiteboardResponse(inv, "adapter_before_conversion", result.Response, nil, err)
 	if err != nil {
 		return nil, err
 	}
 	return convertResult(result), nil
+}
+
+type toolProductResolver interface {
+	ResolveToolProduct(context.Context, []string, string) (string, error)
+}
+
+// ResolveToolProduct performs read-only capability discovery before dispatch.
+// It never probes availability by issuing tools/call, so a write is sent to at
+// most one selected service.
+func (a *toolCallerAdapter) ResolveToolProduct(ctx context.Context, productIDs []string, toolName string) (string, error) {
+	resolver, ok := a.runner.(toolProductResolver)
+	if !ok {
+		if len(productIDs) == 0 {
+			return "", fmt.Errorf("no MCP product candidates for tool %q", toolName)
+		}
+		return productIDs[0], nil
+	}
+	return resolver.ResolveToolProduct(ctx, productIDs, toolName)
 }
 
 type dryRunReadRunner interface {

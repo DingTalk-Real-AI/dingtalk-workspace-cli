@@ -100,6 +100,7 @@ type schemaParamWire struct {
 	Default              json.RawMessage                     `json:"default"`
 	InterfaceDefault     json.RawMessage                     `json:"interface_default"`
 	Example              json.RawMessage                     `json:"example"`
+	AnyOf                []contract.FormatAlternative        `json:"anyOf"`
 	Format               string                              `json:"format"`
 	Enum                 []string                            `json:"enum"`
 	InterfaceDescription string                              `json:"interface_description"`
@@ -239,6 +240,7 @@ func schemaToolSpecFromWire(wire schemaToolWire) (ToolSpec, error) {
 			Default:              parameter.Default,
 			InterfaceDefault:     parameter.InterfaceDefault,
 			Example:              parameter.Example,
+			AnyOf:                parameter.AnyOf,
 			Format:               parameter.Format,
 			Enum:                 parameter.Enum,
 			InterfaceDescription: parameter.InterfaceDescription,

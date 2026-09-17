@@ -38,7 +38,7 @@ var Search = shortcut.Shortcut{
 	Command:     "+search",
 	Product:     productDoc,
 	Description: "按关键词或过滤条件搜索有权限的文档；默认只读取一页",
-	Intent:      "当你需要按标题、主题词或过滤条件查找文档时使用；默认只读取一页。要求全部匹配、完整候选、判断唯一或不存在时必须使用 --page-all；只要前 N 条匹配结果时使用 --limit N。最近访问或最近编辑列表改用 drive +recent。",
+	Intent:      "按标题、主题词或属性查找待阅读编辑的在线文档时使用，文字文档可指定 --extensions adoc。默认一页；完整候选、唯一或不存在判断使用 --page-all，前N条使用 --limit N。--folder仅在搜索条件之外限制文档文件夹直接成员，需完整读取搜索候选及目录两组分页，受各自上限约束；不是目录浏览入口。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -60,10 +60,11 @@ var Search = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按关键词或过滤条件搜索有权限的文档；默认只读取一页",
-			UseWhen:      []string{"当你需要按标题、主题词或过滤条件查找文档时使用；默认只读取一页。要求全部匹配、完整候选、判断唯一或不存在时必须使用 --page-all；只要前 N 条匹配结果时使用 --limit N。最近访问或最近编辑列表改用 drive +recent。"},
+			UseWhen:      []string{"按标题、主题词或属性查找待阅读编辑的在线文档时使用，文字文档可指定 --extensions adoc。默认一页；完整候选、唯一或不存在判断使用 --page-all，前N条使用 --limit N。--folder仅在搜索条件之外限制文档文件夹直接成员，需完整读取搜索候选及目录两组分页，受各自上限约束；不是目录浏览入口。"},
 			AvoidWhen: []string{
 				"已经取得稳定 nodeId/URL 时直接使用目标读取或写入命令，不要再次按标题搜索",
 				"最近访问或最近编辑列表使用 drive +recent，不要用无关键词搜索替代",
+				"仅浏览文档文件夹直接子项使用 doc +list；钉盘目录使用 drive +list，钉盘文件搜索使用 drive +search；不要重复调用目录列表和带folder的搜索来完成同一次目录浏览",
 				"只读取前 N 条匹配结果时不要为了 Top-N 无条件翻完整个数据源",
 			},
 			Examples: []string{
@@ -73,8 +74,14 @@ var Search = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
+		{Name: "folder", Type: shortcut.FlagString, Desc: "在搜索条件外限制文档文件夹直接成员（不递归）；要求page-all，两组分页分别读取完整搜索候选与目录；仅列目录用doc +list"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词；不传仍兼容返回默认结果页，最近访问/编辑应使用 drive +recent"},
 		{Name: "extensions", Type: shortcut.FlagStringSlice, Desc: "按文件扩展名过滤 (如 adoc,axls,pdf)"},
+		{Name: "created-after", Type: shortcut.FlagString, Desc: "创建起点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-from互斥"},
+		{Name: "created-before", Type: shortcut.FlagString, Desc: "创建终点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-to互斥"},
+		{Name: "visited-after", Type: shortcut.FlagString, Desc: "访问起点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-from互斥"},
+		{Name: "visited-before", Type: shortcut.FlagString, Desc: "访问终点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-to互斥"},
+		{Name: "with-metadata", Type: shortcut.FlagBool, Desc: "在每条结果metadata中保留下游原始字段；不改变默认精简结果"},
 		{Name: "created-from", Type: shortcut.FlagInt, Desc: "创建时间起始 (毫秒时间戳)"},
 		{Name: "created-to", Type: shortcut.FlagInt, Desc: "创建时间截止 (毫秒时间戳)"},
 		{Name: "visited-from", Type: shortcut.FlagInt, Desc: "访问时间起始 (毫秒时间戳)"},
@@ -91,7 +98,7 @@ var Search = shortcut.Shortcut{
 	},
 	Constraints: docAutoPaginationConstraints(),
 	Tips:        []string{`dws doc +search --query "会议纪要" --page-all --max-pages 20`, `dws doc +search --query "周报" --limit 10`},
-	Validate:    validateDocAutoPagination,
+	Validate:    validateDocSearch,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if v := rt.Str("query"); v != "" {
@@ -124,15 +131,25 @@ var Search = shortcut.Shortcut{
 		if rt.Changed("workspace-ids") {
 			params["workspaceIds"] = rt.StrSlice("workspace-ids")
 		}
+		project := searchDocsProject
+		if rt.Bool("with-metadata") {
+			project = searchDocsProjectWithMetadata
+		}
 		pageSize := rt.Int("limit")
 		if pageSize == 0 {
 			pageSize = 10
 		}
-		result, err := collectDocPages(rt, "search_documents", "documents", params, searchDocsProject, docPageOptions{
+		result, err := collectDocPages(rt, "search_documents", "documents", params, project, docPageOptions{
 			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
 			return err
+		}
+		if rt.Changed("folder") {
+			result, err = filterDocSearchFolder(rt, result)
+			if err != nil {
+				return err
+			}
 		}
 		return rt.Output(result)
 	},
@@ -218,7 +235,7 @@ var List = shortcut.Shortcut{
 	Command:     "+list",
 	Product:     productDoc,
 	Description: "列出文件夹或知识库下的直接子节点",
-	Intent:      "当你已知某个文档文件夹或知识库的 ID、想浏览它下面直接包含的文档与子文件夹（不递归深层）以便逐层导航时使用；输入 folder 或 workspace，返回该层级的子节点列表。",
+	Intent:      "已知文档文件夹nodeId或知识库workspaceId，仅需浏览直接子节点时使用；不递归、不执行关键词检索。钉盘spaceId/dentryUuid目录使用 drive +list。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -240,8 +257,8 @@ var List = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "列出文件夹或知识库下的直接子节点",
-			UseWhen:      []string{"当你已知某个文档文件夹或知识库的 ID、想浏览它下面直接包含的文档与子文件夹（不递归深层）以便逐层导航时使用；输入 folder 或 workspace，返回该层级的子节点列表。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			UseWhen:      []string{"已知文档文件夹nodeId或知识库workspaceId，仅需浏览直接子节点时使用；不递归、不执行关键词检索。钉盘spaceId/dentryUuid目录使用 drive +list。"},
+			AvoidWhen:    []string{"已有关键词或属性条件且要限定文档文件夹使用 doc +search --folder；钉盘目录使用 drive +list；知识库层级管理使用 wiki，不重复搜索加列表做目录浏览"},
 			Examples: []string{
 				"dws doc +list --folder DOC_FOLDER_NODE_ID",
 				"dws doc +list --workspace WS_ID --limit 20",
@@ -1048,7 +1065,7 @@ func init() {
 	CommentCreateInline.Contract = corecmd.ContractDecl{}
 	TemplateApply.Contract = corecmd.ContractDecl{}
 	canonicalizeHistoryShortcuts()
-	shortcut.Register(
+	registerDocShortcuts(
 		Search,
 		List,
 		Copy,

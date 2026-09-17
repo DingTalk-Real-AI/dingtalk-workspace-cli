@@ -2,6 +2,27 @@
   "version": 1,
   "migrations": [
     {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat +active-conversations",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat +recent-conversations",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.shortcut_active_conversations",
+        "replacement_tool_id": "chat.shortcut_active_conversations",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Make recent-conversations the public time-window query entry while retaining active-conversations as a hidden executable compatibility command without deprecation warnings; preserve the stable Schema tool identity and do not rename parameters."
+    },
+    {
       "kind": "flag_extraction",
       "legacy": {
         "command": "dws chat group create",
@@ -127,6 +148,70 @@
       },
       "state": "pending",
       "reason": "Fail closed until a safe second-member fixture proves exact removal readback and restoration."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review benefit",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_benefit",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review benefit from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_create",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review create from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review analysis",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_analysis",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review analysis from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review result",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_result",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review result from Agent Schema and public help while keeping a hidden historical argv compatibility command."
     }
   ]
 }

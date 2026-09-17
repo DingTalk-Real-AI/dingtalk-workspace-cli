@@ -9,7 +9,7 @@
 ## 安全与目标
 
 - 群目标统一使用当前 profile 下真实 `openConversationId`；支持自然群名的 Shortcut 由 CLI
-  唯一解析，多候选时停止。
+  唯一解析，多候选时停止；需要先定位真实群聊/聊天群时使用 `+chat-search`，不搜索会话分组名。
 - 解散群、踢人、转让群主、禁言、管理员和外部群升级都是高影响操作；以最终 Runtime gate
   和精确 leaf Schema 为准确认对象、动作与影响。
 - 所有自然成员和群主必须先完成唯一解析并按稳定 ID 去重，再开始任何写入；不得边解析边
@@ -47,9 +47,9 @@ Schema。普通内部/外部群、话题群和显式群主已经由 `+chat-creat
 |---|---|
 | 添加成员 | `group members add --id <cid> --users <userIds>` |
 | 移除成员 | `group members remove --id <cid> --users <userIds>` |
-| 添加已知机器人 | `+chat-add-bot` 或精确原子 `group members add-bot` |
+| 添加已知机器人 | `+chat-add-bot` |
 | 查看群内机器人 | `+chat-bots --group <群名或cid>` |
-| 移除群内机器人 | `+chat-remove-bot` 或精确原子 `group members remove-bot` |
+| 移除群内机器人 | `+chat-remove-bot` |
 
 普通成员增删的 `--users` 只接受组织 `userId`，必须来自真实人员解析结果；不得把
 `+chat-members-list` / `+chat-members-get` 返回的 `openDingTalkId` 直接传入。添加已知机器人
@@ -57,6 +57,7 @@ Schema。普通内部/外部群、话题群和显式群主已经由 `+chat-creat
 缺少 `openBotId` 时在同一流程中先执行 `+chat-bots`，不必额外读取群发现 reference。只有需要
 搜索未知机器人、区分 `bot search` / `bot find`、机器人发送或撤回、Webhook 时，才读取
 [chat-bot.md](chat-bot.md)。
+原子 `group members add-bot/remove-bot` 只作 Shortcut 未公开字段或原始响应 fallback。
 
 ## 邀请卡片、群主、管理员与禁言
 
@@ -71,27 +72,28 @@ dws chat group share-invite --source <sourceCid> --receiver <openDingTalkId> --f
 | 动作 | 入口与关键参数 |
 |---|---|
 | 转让群主 | `+chat-transfer-owner --group <cid> --new-owner <稳定ID>` |
-| 设置/取消管理员 | `group set-admin --group <cid> --users <ids> [--off]` |
-| 全员禁言/解除 | `group-mute --group <cid> [--off]` |
-| 成员禁言/解除 | `+chat-mute-member` 或 `group-mute-member` |
+| 设置/取消管理员 | `+chat-set-admin --group <cid> --users <ids> [--off]` |
+| 全员禁言/解除 | `+chat-mute --group <cid> [--off]` |
+| 成员禁言/解除 | `+chat-mute-member` |
 | 查询禁言配置 | `group get-mute-config --group <cid>` |
 
 原子 `group-mute-member --mute-time` 单位为毫秒。不要用展示名称代替稳定用户 ID，也不要
-在未确认影响时执行转让、踢人或禁言。
+在未确认影响时执行转让、踢人或禁言。`group set-admin`、`group-mute`、
+`group-mute-member` 仅在对应 Shortcut 未公开所需底层字段或原始响应时使用。
 
 ## 群设置与当前用户偏好
 
-管理员级群开关使用 `+chat-update-settings` 或原子 `group update-settings`。常见 settingKey
+管理员级群开关使用 `+chat-update-settings`；原子 `group update-settings` 只作未公开字段或原始响应 fallback。常见 settingKey
 包括 `authority`、`joinValidation`、`onlyAdminCanAtAll`、`searchable`、
 `addFriendForbidden`、`onlyAdminCanDING`、`onlyAdminCanPinMsg` 和
 `onlyAdminCanSendFile`、`groupEmailDisabled`、`groupLiveAuthority`、
 `groupBillAuthority`；只修改用户明确要求的字段。
 
-新成员历史消息可见范围使用 `group set-history --group <cid> --option <值>`；`option` 只取
+新成员历史消息可见范围使用 `+chat-set-history --group <cid> --option <值>`；`option` 只取
 精确 leaf Schema 发布值，不按自然语言猜枚举。
 
-当前登录用户自己的置顶、免打扰、群昵称和群备注使用 `group user-settings query/set`，
-不是管理员群开关。单个群昵称/备注优先 `group update-nick/update-alias`。
+当前登录用户自己的置顶、免打扰批量设置使用 `group user-settings query/set`，不是管理员群开关。
+单个群昵称/备注使用 `+chat-update-nick` / `+chat-update-alias`；对应原子命令只作底层 fallback。
 
 ```bash
 dws chat group user-settings query --groups <cid1>,<cid2> --format json
@@ -114,23 +116,28 @@ dws chat group user-settings set \
 
 ## 入群审批与群身份
 
-先用 `group list-join-validations` 取得真实 `record-id/applicant/inviter`，再执行
-`group audit-join-validation` 或 `+chat-audit-join`。审批状态只使用精确 leaf Schema 发布值。
+先用 `+chat-list-join-requests` 取得真实 `record-id/applicant/inviter`，再执行
+`+chat-audit-join`。对应原子命令只作未公开字段或原始响应 fallback；审批状态只用 leaf Schema 发布值。
 
-群身份使用 `group-role` / `+chat-role-*`：
+群身份生命周期默认使用 Shortcut：
 
-- `list/add/update/remove` 管理身份定义；
-- `set-user/remove-user/query-user` 管理成员身份；
+- `+chat-role-list` / `+chat-role-add` / `+chat-role-update` / `+chat-role-remove` 管理身份定义；
+- `+chat-role-set-user` / `+chat-role-remove-user` / `+chat-role-query-user` 管理成员身份；
 - Shortcut 的 `--group` 可传群名或 `openConversationId`，群名多候选时在业务调用前停止；
-- 删除一个身份定义使用单数 `--role-id`；整体设置或移除成员身份使用复数 `--role-ids`；
-- `set-user --role-ids` 必须至少包含一个真实 `openRoleId`，只撤销指定身份使用 `remove-user`，不传空字符串猜“清空”。
+- Shortcut `+chat-role-set-user` / `+chat-role-remove-user` 使用复数 `--role-ids`；前者必须至少包含一个真实 `openRoleId`；
+- 原子 `group-role set-user` 使用公开主参数 `--role-id` 且一次只接收一个身份；
+- 原子 `group-role remove-user` 使用 `--role-ids`；
+- 删除一个身份定义使用 `group-role remove --role-id`；只撤销成员的指定身份使用 `remove-user`，不传空字符串猜“清空”。
+
+原子 `group-role` 保持可执行，但只在对应 Shortcut 未公开所需底层参数、原始响应或不同执行
+语义时使用；普通列出、创建、改名、删除、分配、撤销和成员身份查询不同时选择两套入口。
 
 整体覆盖或撤销成员身份前确认用户、群和完整角色集合，不能用展示名称猜 `openRoleId`。
 
 ## 退出、解散与外部群升级
 
-- 当前用户退出群：`+chat-quit` 或精确原子 `group quit`。
-- 解散群：`group dismiss`，不可逆。
+- 当前用户退出群：`+chat-quit --group <cid>`；只有需要未公开底层字段或原始响应时才用 `group quit`。
+- 解散群：`+chat-dismiss --group <cid>`，不可逆；原子 `group dismiss` 仅作底层精确 fallback。
 - 普通群升级外部群：`group upgrade-to-external`，不可逆。
 
 这些动作必须以最终 Runtime gate 为准，不把示例中的确认参数当固定事实。

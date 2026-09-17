@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -41,7 +42,7 @@ func executeCSVPutContractCommand(t *testing.T, args ...string) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"csv-put"}, args...))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("execute csv-put: %v", err)
 	}
 }

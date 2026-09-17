@@ -198,6 +198,58 @@ func TestMockMCPSmoke_CLIRoutesSerializedArgumentsAndPrintsJSON(t *testing.T) {
 	}
 }
 
+func TestMockMCPSmoke_DatasourceUpdateDoesNotReplayGatewayFailures(t *testing.T) {
+	for _, status := range []int{http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout} {
+		for _, path := range [][]string{{"datasource", "update"}, {"+datasource-update"}} {
+			t.Run(fmt.Sprintf("%s/%d", strings.Join(path, "_"), status), func(t *testing.T) {
+				var mu sync.Mutex
+				var calls []string
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var request struct {
+						ID     int `json:"id"`
+						Params struct {
+							Name string `json:"name"`
+						} `json:"params"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Errorf("decode MCP request: %v", err)
+						http.Error(w, "invalid request", http.StatusBadRequest)
+						return
+					}
+					mu.Lock()
+					calls = append(calls, request.Params.Name)
+					mu.Unlock()
+					if request.Params.Name == "get_datasource_config" {
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"jsonrpc": "2.0", "id": request.ID,
+							"result": map[string]any{"content": []map[string]any{{
+								"type": "text",
+								"text": `{"status":"success","data":{"datasourceType":"OA","sourceConfig":"{\"processCode\":\"TEST-OA\"}"}}`,
+							}}},
+						})
+						return
+					}
+					http.Error(w, "upstream gateway failed after accepting the request", status)
+				}))
+				defer server.Close()
+				env := isolatedCLIEnv(t, map[string]string{"DINGTALK_AITABLE_MCP_URL": server.URL})
+				args := append([]string{"--token", "ci-smoke-token", "--format", "json", "aitable"}, path...)
+				args = append(args, "--base-id", "mock-base", "--table-id", "mock-table", "--auto=false", "--yes")
+				stdout, stderr, err := runCLI(t, env, args...)
+				if err == nil {
+					t.Fatalf("gateway failure was reported as success: stdout=%s stderr=%s", stdout, stderr)
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if want := []string{"get_datasource_config", "update_datasource_config"}; !reflect.DeepEqual(calls, want) {
+					t.Fatalf("MCP calls = %v, want %v; stdout=%s stderr=%s", calls, want, stdout, stderr)
+				}
+			})
+		}
+	}
+}
+
 func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 	var requestsMu sync.Mutex
 	var requests []recordedToolCall
@@ -377,7 +429,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		workdir := t.TempDir()
 		stdout, stderr, err := runCLIInDir(t, env, workdir,
 			"--token", "ci-smoke-token", "--format", "json",
-			"chat", "+chat-messages", "--chat-query", "资源群",
+			"chat", "+chat-messages", "--no-reactions", "--chat-query", "资源群",
 			"--download-resources", "--output-dir", "./downloads",
 		)
 		if err != nil {
@@ -410,10 +462,10 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		stdout, stderr, err := runCLI(t, env,
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+search-msg", "--query", "分页失败",
-			"--page-all", "--no-enrich",
+			"--page-all", "--no-enrich", "--no-reactions",
 		)
-		if err != nil {
-			t.Fatalf("partial search failed as a command: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+		if err == nil {
+			t.Fatalf("partial search unexpectedly succeeded\nstdout=%s\nstderr=%s", stdout, stderr)
 		}
 		calls := snapshot()
 		if got := recordedToolNames(calls); !reflect.DeepEqual(got, []string{"search_messages", "search_messages"}) {
@@ -421,15 +473,34 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		}
 		var payload map[string]any
 		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
-			t.Fatalf("search output is not JSON: %v\n%s", err, stdout)
+			t.Fatalf("search legacy output is not JSON: %v\n%s", err, stdout)
 		}
-		if payload["complete"] != false || payload["count"] != float64(1) ||
-			payload["pagesFetched"] != float64(1) || payload["failedCount"] != float64(1) {
+		business := payload
+		if business["complete"] != false || business["count"] != float64(1) ||
+			business["pagesFetched"] != float64(1) || business["failedCount"] != float64(1) {
+			t.Fatalf("partial search legacy contract = %#v", business)
+		}
+
+		payload = nil
+		if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
+			t.Fatalf("search error is not JSON: %v\n%s", err, stderr)
+		}
+		errorPayload, _ := payload["error"].(map[string]any)
+		details, _ := errorPayload["details"].(map[string]any)
+		shadow, _ := details["partialResult"].(map[string]any)
+		if errorPayload["reason"] != "search_messages_incomplete" || shadow == nil {
+			t.Fatalf("partial search error envelope = %#v", payload)
+		}
+		if shadow["complete"] != false || shadow["count"] != float64(1) ||
+			shadow["pagesFetched"] != float64(1) || shadow["failedCount"] != float64(1) {
 			t.Fatalf("partial search contract = %#v", payload)
 		}
-		failures, _ := payload["failures"].([]any)
+		failures, _ := shadow["failures"].([]any)
 		if len(failures) != 1 || failures[0].(map[string]any)["stage"] != "search-page" {
 			t.Fatalf("partial search failures = %#v", failures)
+		}
+		if !reflect.DeepEqual(business, shadow) {
+			t.Fatalf("legacy output and structured error partial result diverged:\nlegacy=%#v\nshadow=%#v", business, shadow)
 		}
 	})
 
@@ -465,7 +536,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("natural read failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 2 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" {
+		if len(calls) != 3 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" || calls[2].tool != "list_message_emotion_replies" {
 			t.Fatalf("read calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -519,7 +590,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("reply failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 1 || calls[0].tool != "send_personal_message" {
+		if len(calls) != 2 || calls[0].tool != "list_messages_by_ids" || calls[1].tool != "send_personal_message" {
 			t.Fatalf("reply calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -535,6 +606,16 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 
 func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, resourceURL string) string {
 	switch tool {
+	case "list_message_emotion_replies":
+		rows := []map[string]any{}
+		ids, _ := arguments["openMessageIds"].([]any)
+		for _, id := range ids {
+			rows = append(rows, map[string]any{"openMessageId": id, "emotionReplyList": []any{}})
+		}
+		body, _ := json.Marshal(map[string]any{"result": rows})
+		return string(body)
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"` + mockCurrentDOpenID + `","content":"fixture source"}]}}`
 	case "search_contact_by_key_word":
 		if arguments["keyword"] == "同名用户" {
 			return `{"result":[{"name":"同名用户","userId":"u1","openDingTalkId":"D1"},{"name":"同名用户","userId":"u2","openDingTalkId":"D2"}]}`

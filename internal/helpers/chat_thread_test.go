@@ -83,7 +83,7 @@ func executeAtomicThreadCommandOutput(t *testing.T, caller *chatThreadCaller, ar
 	root.SetErr(&stderr)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return stdout.Bytes(), err
 	}
@@ -105,7 +105,7 @@ func executeAtomicThreadDryRun(t *testing.T, caller *chatThreadCaller, args ...s
 	root.SetErr(&stderr)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return stdout.Bytes(), err
 	}
@@ -1171,6 +1171,28 @@ func TestCrossPlatformCoverageAtomicThreadQuoteGuardAllowsOrdinaryConversationFr
 	}
 }
 
+func TestCrossPlatformCoverageAtomicThreadQuoteGuardAllowsSingleChat(t *testing.T) {
+	for _, flag := range []string{"group", "conversation-id"} {
+		t.Run(flag, func(t *testing.T) {
+			caller := &chatThreadCaller{responses: map[string]string{
+				"im/list_messages_by_ids":    `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"cid"}]}}`,
+				"chat/get_conversation_info": `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","singleChat":true}}}`,
+			}}
+			if err := executeAtomicThreadCommand(t, caller, "message", "reply", "--"+flag, "cid", "--ref-msg-id", "message-1", "--ref-sender", "DAAAAAAAAAAAiE", "--content", "普通引用"); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 3 || caller.calls[2].tool != "send_personal_message" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			for _, call := range caller.calls[1:] {
+				if call.args["openConversationId"] != "cid" {
+					t.Fatalf("call = %#v", call)
+				}
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAtomicThreadQuoteGuardRequiresPositiveChannelForSparseTopicFields(t *testing.T) {
 	for _, test := range []struct {
 		name           string
@@ -1551,6 +1573,11 @@ func TestCrossPlatformCoverageDetectTopicContainerState(t *testing.T) {
 		{name: "false without conversation id", value: conversationInfoEnvelope(map[string]any{"convThreadEnabled": false}), want: topicContainerUnknown},
 		{name: "different conversation id", value: conversationInfoEnvelope(map[string]any{"openConversationId": "other-group", "convThreadEnabled": false}), want: topicContainerUnknown},
 		{name: "missing title", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1"}), want: topicContainerUnknown},
+		{name: "single chat", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "singleChat": true}), want: topicContainerNonTopic},
+		{name: "group without topic flag", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "singleChat": false}), want: topicContainerUnknown},
+		{name: "invalid single chat", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "singleChat": "unknown"}), want: topicContainerUnknown},
+		{name: "single chat with topic flag", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "singleChat": true, "convThreadEnabled": true}), want: topicContainerTopic},
+		{name: "single chat with invalid topic flag", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "singleChat": true, "convThreadEnabled": nil}), want: topicContainerUnknown},
 		{name: "ordinary sparse response", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "title": "ordinary group", "singleChat": false}), want: topicContainerUnknown},
 		{name: "split across objects", value: conversationInfoEnvelope(map[string]any{"openConversationId": "other-group", "metadata": map[string]any{"openConversationId": "group-1", "convThreadEnabled": false}}), want: topicContainerUnknown},
 		{name: "topic group", value: conversationInfoEnvelope(map[string]any{"openConversationId": "group-1", "topicGroup": "1"}), want: topicContainerTopic},

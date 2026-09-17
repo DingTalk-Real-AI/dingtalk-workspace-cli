@@ -122,9 +122,11 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | number | `"fldXXX":123` | `"fldXXX":"123"` |
 | singleSelect | `"fldXXX":"选项名"` | `"fldXXX":{"id":"xxx","name":"选项名"}` |
 | multipleSelect | `"fldXXX":["选项1","选项2"]` | `"fldXXX":[{"id":"xxx","name":"选项1"}]` |
-| date | `"fldXXX":"2026-03-04"` | ISO 日期字符串 |
+| date | 日期字符串（如 `"2026-03-15"`、`"2026-03-15 09:00"`）、含时区的 RFC3339 字符串或整数毫秒时间戳（允许 `0` 和负值） | 固定 `+08:00` 的 RFC3339 字符串 |
 | user | `"fldXXX":[{"userId":"123"}]` | `"fldXXX":[{"corpId":"x","userId":"123"}]` |
 | attachment | `"fldXXX":[{"fileToken":"ft_xxx"}]`需先用脚本上传 | `"fldXXX":[{"url":"...","filename":"..."}]` |
+
+日期的含时区字符串和毫秒时间戳按固定 UTC+8 转为分钟精度写入，秒和毫秒不保留，转换后的年份须在 0001–9999。合法日期读出统一为东八区 RFC3339 字符串，不保留原始输入类型。写入后查询读回示例：`1788883200000` → `"2026-09-09T00:00:00+08:00"`；`0` → `"1970-01-01T08:00:00+08:00"`；`-60000` → `"1970-01-01T07:59:00+08:00"`。
 
 ### 只读字段（不要写入）
 

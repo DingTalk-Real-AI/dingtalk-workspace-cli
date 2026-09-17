@@ -169,6 +169,7 @@ var paramAliasCompleteCommands = map[string][]string{
 	"doc +inspect":                             {"doc", "+inspect", "--node", "node-1", "--include-history"},
 	"doc +list":                                {"doc", "+list", "--folder", "folder-1", "--cursor", "cursor-1"},
 	"doc +move":                                {"doc", "+move", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"doc +resource-update":                     {"doc", "+resource-update", "--node", "node-1", "--image", "https://example.com/cover.png", "--yes"},
 	"doc +search":                              {"doc", "+search", "--query", "fixture", "--limit", "7", "--cursor", "cursor-1"},
 	"doc +template-list":                       {"doc", "+template-list", "--source", "MY", "--limit", "7", "--cursor", "cursor-1"},
 	"doc +template-search":                     {"doc", "+template-search", "--query", "fixture", "--source", "MY", "--limit", "7"},
@@ -1646,6 +1647,15 @@ func TestCrossPlatformCoverageNewParamAliasesCannotBypassConfirmation(t *testing
 func paramAliasExpectedCaptureBoundaryError(command string, err error) bool {
 	if err == nil {
 		return false
+	}
+	var appErr *apperrors.Error
+	if errors.As(err, &appErr) {
+		switch command {
+		case "chat +search-msg":
+			return appErr.Reason == "search_messages_incomplete"
+		case "chat +chat-role-remove-user":
+			return appErr.Reason == "chat_role_assignment_unverified"
+		}
 	}
 	switch command {
 	case "chat +messages-resource-download":

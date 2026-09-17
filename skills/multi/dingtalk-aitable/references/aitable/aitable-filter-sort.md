@@ -8,8 +8,26 @@
 
 1. **根节点必须是逻辑操作符**：`"operator"` 必须是 `"and"` 或 `"or"`，不能是 `"eq"` 等比较操作符
 2. 比较操作必须放在根节点的 `"operands"` 数组内的对象中
-3. `singleSelect` 和 `multipleSelect` 字段，推荐使用 **选项的 exact String 名称 (name)** 作为比较值
-4. fieldId 必须通过 `field get` 获取，不能直接用字段名称
+3. **查询指定数据前必须先读一遍完整表头**：先用 `field get`（不加 `--field-ids`）取回所有字段的 `fieldId`/`name`/`type`/`config`，从表头中确定用户条件对应哪个字段，再按该字段类型解析值并传入查询条件；不能直接用字段名称、凭用户原话猜字段或猜类型
+4. `singleSelect` 和 `multipleSelect` 必须先通过 `field get` 或 `field search-options` 唯一解析选项，filter 优先传稳定 option ID；`record create/update` 才传 option name
+5. 人员、部门、群组必须先调用对应的通讯录/会话查询解析稳定 ID，再传结构化 ID 数组；禁止把姓名、部门名、群名、裸 ID 字符串直接放进 filter
+
+### 按字段类型解析比较值
+
+用户提供的是自然语言展示值时，必须先解析再组装 filter，禁止原值透传：
+
+| 字段类型 | filter 比较值 | 前置解析 |
+|---|---|---|
+| `text` | JSON string | 无；按用户原文本使用 |
+| `number` | JSON number | 将明确数值转换为数字，禁止传字符串数字 |
+| `date` | `YYYY-MM-DD`、RFC3339 或毫秒时间戳 | 使用日期专用操作符；范围拆为 `not_before` + `not_after` |
+| `singleSelect` / `multipleSelect` | singleSelect 通常传 option ID 标量；multipleSelect 或数组型条件传 option ID 数组，如 `["optA"]` | `field get` 或 `field search-options` 唯一匹配；写记录时才使用 option name |
+| 人员 | `[{"userId":"..."}]`（需要时同时带 `corpId`） | `dws aisearch person --keyword "<姓名>" --dimension name --format json`；取唯一 `userId`，重名必须消歧 |
+| 部门 | `[{"departmentId":"..."}]` | `dws contact +resolve-dept --name "<部门名>" --format json`；取唯一 `deptId` 并写入 `departmentId`，零/多命中必须停止 |
+| 群组 | `[{"cid":"..."}]` | `dws chat +chat-search --query "<群名>" --page-all --format json`；取唯一 `openConversationId` 并写入 `cid`，零/多命中必须停止 |
+| 关联记录 | 稳定 `recordId` 或字段协议要求的 recordId 结构 | 先查询关联目标表并唯一定位记录；不得传记录标题 |
+
+`exist` / `un_exist` 不传第二个操作数。数组、对象、布尔值和数字必须保持 JSON 原生类型，不得统一字符串化。人员、部门、群组属于数组型字段，即使只筛一个目标也必须保留数组外层，例如 `"operands":["fldUser",[{"userId":"u1"}]]`，不能传姓名、`"u1"` 或单个对象。当 `eq` / `ne` / `any_of` / `none_of` / `all_of` 等条件涉及 multipleSelect 或其他数组型字段时，第二个操作数必须是 option ID/稳定 ID 数组，例如 `"operands":["fldMulti",["optA"]]`；不要传裸字符串 `"operands":["fldMulti","optA"]`。任何解析出现零命中或多命中时，必须停止并让用户补充或选择，禁止默认取第一项。
 
 ### 精简防呆模板
 
@@ -47,9 +65,9 @@ CLI 同时兼容两种子条件写法（推荐格式 A）：
 |--------|------|--------------|
 | `eq` / `ne` | 等于 / 不等于 | `["fieldId", "value"]` |
 | `contain` / `exclusive` | 包含 / 不包含（文本模糊） | `["fieldId", "value"]` |
-| `gt` / `gte` / `lt` / `lte` | 大于 / ≥ / 小于 / ≤ | `["fieldId", "numStr"]` |
+| `gt` / `gte` / `lt` / `lte` | 大于 / ≥ / 小于 / ≤ | `["fieldId", 123]`（JSON number，禁止字符串数字） |
 | `exist` / `un_exist` | 有值 / 为空 | `["fieldId"]`（无需第二项） |
-| `any_of` / `none_of` / `all_of` | 包含任一 / 不包含任一 / 全包含（多选字段） | `["fieldId", "optionName"]` |
+| `any_of` / `none_of` / `all_of` | 包含任一 / 不包含任一 / 全包含 | `singleSelect` 可传 option ID 标量；涉及 `multipleSelect` / 数组型字段时传 `["fieldId", ["optionId"]]`（第二项必须是数组） |
 | `date_eq` / `before` / `after` | 日期等于 / 早于 / 晚于 | `["fieldId", "dateStr"]` |
 | `not_before` / `not_after` | 不早于（≥） / 不晚于（≤） | `["fieldId", "2026-05-22"]` |
 
@@ -80,6 +98,32 @@ dws aitable record query --base-id X --table-id Y \
   --filters '{"operator":"and","operands":[{"operator":"not_before","operands":["fldDate","2026-05-01"]},{"operator":"not_after","operands":["fldDate","2026-05-31"]}]}'
 ```
 
+### View 日期 Scheme（仅 `view update filter`）
+
+持久化 View 使用经过真实写入、读回和 UI 验证的结构化日期 Scheme，不能与上面的 `record query --filters` 日期字符串协议混用。最外层是数组，内部保留显式 `and/or` 根节点。
+
+| UI 语义 | operator / value | JSON 类型要求 |
+|---|---|---|
+| 今天/本周/本月/今年及前后周期 | `date_eq` + `{"type":"relative","period":"day|week|month|year","offset":N}` | `offset` 必须是 JSON number 整数 |
+| 过去/未来 X 天 | `from_now` + `{"type":"relative","period":"day","offset":"N"}` | `offset` 必须是 JSON string；过去为负、未来为正 |
+| 指定日期 | `date_eq` + `{"type":"exact","timestamp":TIMESTAMP_MS}` | `timestamp` 必须是目标时区当天 00:00 的 Unix 毫秒 JSON number 整数 |
+
+```bash
+# 本月
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]}]}]'
+
+# 过去 30 天；注意 offset 是字符串
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]}]}]'
+
+# 指定日期；timestamp 是毫秒数字，不是字符串
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"exact","timestamp":1786896000000}]}]}]'
+```
+
+写入成功后仍要执行 `view get filter`。`date_eq.offset` 被保存为字符串、`from_now.offset` 被保存为数字、`timestamp` 被字符串化，或页面出现 `[object Object]` / `Invalid Date`，都不能判为成功。明确日期范围不从上述等值 Scheme 推测；在当前 Runtime Schema 没有真实可验证结构时停止。
+
 ### 常见错误拼写（CLI 会自动提示纠正）
 
 | 错误写法 | 正确写法 | 说明 |
@@ -98,23 +142,23 @@ dws aitable record query --base-id X --table-id Y \
 {"operator":"eq","operands":["fldXXX","本科"]}
 ```
 
-❌ **传入选项 ID 而非名称**（可能导致匹配不到 0 记录）：
+❌ **直接透传未确认的选项名称或展示文本**（可能重名、改名或无法转换）：
 ```json
-{"operator":"and","operands":[{"operator":"eq","operands":["fldXXX","CXzrOHK9JI"]}]}
+{"operator":"and","operands":[{"operator":"eq","operands":["fldXXX","进行中"]}]}
 ```
 
 ### 完整示例
 
-单条件：
+单条件（select 字段已先经 `field get`/`field search-options` 唯一解析为 option ID）：
 ```bash
 dws aitable record query --base-id X --table-id Y \
-  --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatusId","进行中"]}]}'
+  --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatusId","optDoing"]}]}'
 ```
 
 多条件 AND：
 ```bash
 dws aitable record query --base-id X --table-id Y \
-  --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatusId","进行中"]},{"operator":"gt","operands":["fldStockId","0"]}]}'
+  --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatusId","optDoing"]},{"operator":"gt","operands":["fldStockId",0]}]}'
 ```
 
 分页时只透传服务端真实 `nextCursor`。出现 `pagination_cursor_cycle`、相同 cursor 或重复页时，保留已取记录并立即停止；不要用相同参数重跑，也不要切换到其他查询命令把不完整结果误报为完整。

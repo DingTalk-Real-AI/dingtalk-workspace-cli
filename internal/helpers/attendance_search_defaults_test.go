@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -48,7 +49,7 @@ func runAttendanceSearchCommand(t *testing.T, args ...string) (*attendanceSearch
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	return caller, cmd.Execute()
+	return caller, corecmd.ExecuteForTest(cmd)
 }
 
 func TestAttendanceSearchPaginationFlagsAreOptionalRuntimeDefaults(t *testing.T) {

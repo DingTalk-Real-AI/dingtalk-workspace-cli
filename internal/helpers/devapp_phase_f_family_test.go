@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
@@ -34,7 +35,7 @@ func runDevAppFamily(t *testing.T, runner executor.Runner, args ...string) (*byt
 	root.SetErr(&errBuf)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return &outBuf, &errBuf, err
 }
 

@@ -216,7 +216,10 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve Contract Schema parameters for %s: %w", canonicalPath, err)
 	}
-
+	positionals := final.Positionals
+	if len(positionals) == 0 {
+		positionals = runtimeCommandPositionals(entry.Command)
+	}
 	identity := contract.ToolIdentitySpec{
 		ProductID:       entry.ProductID,
 		SourceProductID: strings.TrimSpace(entry.SourceProductID),
@@ -295,11 +298,6 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		safety = applyContractGateToSafety(safety, gate)
 	}
 
-	positionals := final.Positionals
-	if len(positionals) == 0 {
-		positionals = runtimeCommandPositionals(entry.Command)
-	}
-
 	var interfaceSpec contract.InterfaceSpec
 	if final.Interface != nil {
 		interfaceSpec = *final.Interface
@@ -363,9 +361,6 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	})
 }
 
-// contractFinalTextProvenance picks delivered title/description text and the
-// provenance that matches the real winner. preferCobra=true implements the
-// Long-over-declared-Description rule; preferCobra=false keeps declared Title
 // over Short.
 func contractFinalTextProvenance(declared, cobra string, preferCobra bool) (string, contract.FieldProvenance) {
 	decl := strings.TrimSpace(declared)
@@ -517,32 +512,6 @@ func marshalSchemaRaw(value any) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(data), nil
-}
-
-func schemaToolForResolvedPath(tool ToolSpec, raw string) ToolSpec {
-	normalized := normalizeSchemaQueryCLIPath(raw)
-	if normalized == "" || normalized == tool.Identity.CLIPath || normalized == tool.Identity.PrimaryCLIPath {
-		return tool
-	}
-	for _, alias := range tool.Identity.Aliases {
-		if normalizeSchemaCLIPath(alias) == normalized {
-			tool.Identity.CLIPath = normalizeSchemaCLIPath(alias)
-			tool.Identity.IsAlias = true
-			return tool
-		}
-	}
-	return tool
-}
-
-func schemaToolUnderGroup(tool ToolSpec, group string) bool {
-	prefix := normalizeSchemaCLIPath(group) + " "
-	paths := append([]string{tool.Identity.CLIPath, tool.Identity.PrimaryCLIPath}, tool.Identity.Aliases...)
-	for _, path := range paths {
-		if strings.HasPrefix(normalizeSchemaCLIPath(path), prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 // validateSchemaRegistryAgainstCommandRegistry compares identities as exact
@@ -738,6 +707,9 @@ func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 				}
 				if parameter.InterfaceType != "" {
 					require(owner, "interface_type", parameter.FieldProvenance)
+				}
+				if len(parameter.AnyOf) > 0 {
+					require(owner, "anyOf", parameter.FieldProvenance)
 				}
 				if parameter.Format != "" {
 					require(owner, "format", parameter.FieldProvenance)

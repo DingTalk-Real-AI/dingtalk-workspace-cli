@@ -13,6 +13,7 @@ func assertWhiteboardPublicShortcutsStayAvailableInSchema(t *testing.T, root *co
 	t.Helper()
 	for canonical, command := range map[string]string{
 		"whiteboard.shortcut_query":  "+query",
+		"whiteboard.shortcut_diff":   "+diff",
 		"whiteboard.shortcut_update": "+update",
 	} {
 		leaf, _, err := root.Find([]string{"whiteboard", command})

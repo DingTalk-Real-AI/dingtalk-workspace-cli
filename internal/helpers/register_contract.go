@@ -5,7 +5,7 @@ package helpers
 
 // 智能合同是显式维护的隐藏 vendor 扩展命令，不依赖生成式产品注册表。
 func init() {
-	RegisterPublic(func() Handler {
+	RegisterPublicNamed("contract", func() Handler {
 		return wukongHandler{name: "contract", buildFn: newContractCommand}
 	})
 }

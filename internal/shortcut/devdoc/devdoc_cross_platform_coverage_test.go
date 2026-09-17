@@ -54,7 +54,7 @@ func runDevdocCoverage(t *testing.T, caller *devdocCoverageCaller, args ...strin
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"devdoc", SearchDocs.Command}, args...))
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil {
 		_, _, err = output.EmitStoredResult(executed)
 	}

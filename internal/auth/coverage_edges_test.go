@@ -286,7 +286,7 @@ func TestCrossPlatformCoverageDeviceFlowRequestAndOutputEdges(t *testing.T) {
 		t.Fatalf("long truncate = %q", got)
 	}
 	dfPrintStep(&buf, 1, "step", 2)
-	dfPrintDeviceCodeBox(&buf, &DeviceAuthResponse{UserCode: "code", VerificationURI: "url", VerificationURIComplete: "complete", ExpiresIn: 1})
+	dfPrintDeviceAuthorization(&buf, &DeviceAuthResponse{UserCode: "code", VerificationURI: "url", VerificationURIComplete: "complete", ExpiresIn: 1})
 	dfPrintBox(&buf, []string{strings.Repeat("x", 55)})
 	dfPrintPollResult(&buf, "authorized", "ok")
 	dfPrintPollResult(&buf, "pending", "wait")

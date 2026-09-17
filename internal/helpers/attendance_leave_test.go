@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // executeAttendanceApproveCommand mirrors executeOACommand but allows capturing stdout
@@ -34,7 +36,7 @@ func executeAttendanceApproveCommand(t *testing.T, caller *scriptedToolCaller, o
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 // query_leave_types_with_balance：不传 --user 时查询当前用户，且响应原样透传。

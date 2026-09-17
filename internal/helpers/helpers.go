@@ -202,8 +202,33 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 }
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return "", err
+	}
+	serverID = resolvedServerID
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
 	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+type compatibleToolRouteResolver interface {
+	ResolveToolProduct(context.Context, []string, string) (string, error)
+}
+
+// resolveCompatibleToolServer preserves the historical aitable-helper route
+// for callers and deployments that do not expose capability discovery. The
+// production caller discovers the tool on the split and unified services
+// before any tools/call request, which is required for writes: an error after a
+// write-shaped tools/call is never used as permission to replay it elsewhere.
+func resolveCompatibleToolServer(ctx context.Context, serverID, toolName string) (string, error) {
+	if serverID != "aitable-helper" || deps == nil || deps.Caller == nil {
+		return serverID, nil
+	}
+	resolver, ok := deps.Caller.(compatibleToolRouteResolver)
+	if !ok {
+		return serverID, nil
+	}
+	return resolver.ResolveToolProduct(ctx, []string{"aitable", "aitable-helper"}, toolName)
 }
 
 // CallMCPReadToolTextOnServer performs a read-only lookup needed to construct a
@@ -242,6 +267,11 @@ func callMCPReadToolReturnTextOnServer(ctx context.Context, serverID, toolName s
 	if !deps.Caller.DryRun() {
 		return callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
 	}
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return "", err
+	}
+	serverID = resolvedServerID
 	readCaller, ok := deps.Caller.(edition.ReadToolCaller)
 	if !ok {
 		return "", &CLIError{
@@ -490,6 +520,11 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 	if serverID == "" {
 		serverID = resolveProductID()
 	}
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return err
+	}
+	serverID = resolvedServerID
 
 	// 调用 MCP Server
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
@@ -542,10 +577,24 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 				}
 				// 业务逻辑错误
 				if isBusinessError(errBody) {
-					return &CLIError{Code: CodeMCPToolError, Message: businessErrorDisplayMessage(errBody, c.Text), Suggestion: suggestForBusinessError(errBody)}
+					message := businessErrorDisplayMessage(errBody, c.Text)
+					if hasOAApprovalListEnvelope(serverID, toolName) {
+						// Preserve classification and diagnostics from the original response.
+						// Unknown/symbolic codes keep their original error rather than being
+						// masked by an integer conversion failure.
+						if body, normalizeErr := normalizeOAApprovalListResponse(c.Text); normalizeErr == nil {
+							if raw, marshalErr := json.Marshal(body); marshalErr == nil {
+								message = string(raw)
+							}
+						}
+					}
+					return &CLIError{Code: CodeMCPToolError, Message: message, Suggestion: suggestForBusinessError(errBody)}
 				}
 			}
 
+			if hasOAApprovalListEnvelope(serverID, toolName) {
+				return renderOAApprovalListResponse(c.Text)
+			}
 			return renderLegacyMCPText(toolName, c.Text, unescapeHTML)
 		}
 	}
@@ -865,7 +914,82 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if body[key] == "WHITEBOARD_TEMPLATE_IDEMPOTENCY_RESULT_UNKNOWN" {
+			return "模板提交结果未知：保留原 requestId 和 logId，先核实服务端最终落库结果；不要自动重试、换新 requestId 或清除幂等记录。模板列表为空也不能单独证明未提交。"
+		}
+	}
+	if suggestion := businessErrorMetaSuggestion(body); suggestion != "" {
+		return suggestion
+	}
+	if businessErrorCode(body) == "COMMENT_RECORD_UNAVAILABLE" {
+		return "请先在钉钉中打开该 Base 完成记录存储初始化或升级后重试；若仍失败，可复制为新 Base 后重试"
+	}
 	return suggestForBusinessErrorText(businessErrorMessage(body))
+}
+
+// businessErrorMetaSuggestion 保留 MCP 服务给出的安全恢复建议，使 CLI 不把可行动错误退化为原始 JSON。
+func businessErrorMetaSuggestion(body map[string]any) string {
+	meta, ok := body["meta"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	raw, ok := meta["suggestions"].([]any)
+	if !ok {
+		return ""
+	}
+	reasons := make([]string, 0, len(raw))
+	for _, item := range raw {
+		suggestion, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if reason, ok := suggestion["reason"].(string); ok && strings.TrimSpace(reason) != "" {
+			reasons = append(reasons, strings.TrimSpace(reason))
+		}
+	}
+	return strings.Join(reasons, "\n  - ")
+}
+
+// businessErrorCode 兼容顶层业务码与统一 MCP error.code。
+func businessErrorCode(body map[string]any) string {
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if code, ok := body[key].(string); ok && strings.TrimSpace(code) != "" {
+			return strings.TrimSpace(code)
+		}
+	}
+	if nested, ok := body["error"].(map[string]any); ok {
+		if code, ok := nested["code"].(string); ok {
+			return strings.TrimSpace(code)
+		}
+	}
+	return ""
+}
+
+// businessErrorDetails 只投影已经约定为安全、可编程的业务诊断字段。
+func businessErrorDetails(body map[string]any) map[string]any {
+	nested, ok := body["error"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := nested["details"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	details := make(map[string]any, 3)
+	if capability, ok := raw["capability"].(string); ok && strings.TrimSpace(capability) != "" {
+		details["capability"] = strings.TrimSpace(capability)
+	}
+	if stage, ok := raw["stage"].(string); ok && strings.TrimSpace(stage) != "" {
+		details["stage"] = strings.TrimSpace(stage)
+	}
+	if executed, ok := raw["operationExecuted"].(bool); ok {
+		details["operation_executed"] = executed
+	}
+	if len(details) == 0 {
+		return nil
+	}
+	return details
 }
 
 // businessErrorMessage extracts the human-readable message from a parsed error
@@ -875,6 +999,16 @@ func businessErrorMessage(body map[string]any) string {
 		if v, ok := body[k].(string); ok && v != "" {
 			return v
 		}
+	}
+	if nested, ok := body["error"].(map[string]any); ok {
+		for _, key := range []string{"message", "errorMsg", "errorMessage"} {
+			if message, ok := nested[key].(string); ok && strings.TrimSpace(message) != "" {
+				return message
+			}
+		}
+	}
+	if summary, ok := body["summary"].(string); ok && strings.TrimSpace(summary) != "" {
+		return summary
 	}
 	return ""
 }
@@ -888,11 +1022,8 @@ func businessErrorDisplayMessage(body map[string]any, rawText string) string {
 		return rawText
 	}
 	var extras []string
-	for _, k := range []string{"errorCode", "error_code", "code"} {
-		if code, ok := body[k].(string); ok && code != "" && !strings.Contains(msg, code) {
-			extras = append(extras, "code: "+code)
-			break
-		}
+	if code := businessErrorCode(body); code != "" && !strings.Contains(msg, code) {
+		extras = append(extras, "code: "+code)
 	}
 	if logId, ok := body["logId"].(string); ok && logId != "" && !strings.Contains(msg, logId) {
 		extras = append(extras, "logId: "+logId)

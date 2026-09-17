@@ -61,13 +61,13 @@ list_shard() {
 
 # Full-suite coverage measurement shards the same authoritative package set the
 # single serial run used: ./ ./cmd/... ./internal/... ./skills/... plus the
-# runtime payload build helper. Other pkg/ and scripts/ packages belong to the
+# runtime payload and Linux ABI build helpers. Other pkg/ and scripts/ packages belong to the
 # supporting profile; test/ suites carry no production statements for the
 # candidate profile. Shards stay disjoint so their merged profile is
 # block-for-block equivalent to one serial invocation.
 list_coverage_scope() {
   cd "$ROOT"
-  go list ./ ./cmd/... ./internal/... ./skills/... ./scripts/build/runtime-payload
+  go list ./ ./cmd/... ./internal/... ./skills/... ./scripts/build/runtime-payload ./scripts/build/linux-abi
 }
 
 list_coverage_shard() {

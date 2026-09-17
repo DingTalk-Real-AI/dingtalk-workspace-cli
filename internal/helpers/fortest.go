@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -31,4 +32,10 @@ func InitDepsForTest(t *testing.T, caller edition.ToolCaller) {
 	t.Helper()
 	testseam.Protect(t, &deps)
 	InitDeps(caller)
+}
+
+// SwapHTTPPutFileForTest injects upload outcomes without contacting a live OSS URL.
+func SwapHTTPPutFileForTest(t *testing.T, fn func(context.Context, string, map[string]string, string, int64) error) {
+	t.Helper()
+	testseam.Swap(t, &httpPutFile, fn)
 }

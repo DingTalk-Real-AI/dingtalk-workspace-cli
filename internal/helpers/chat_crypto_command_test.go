@@ -15,6 +15,8 @@ import (
 
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
@@ -46,7 +48,7 @@ func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetArgs([]string{"--text", "safe-cipher", "--layer", "safechat"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "ding:safe-cipher") {

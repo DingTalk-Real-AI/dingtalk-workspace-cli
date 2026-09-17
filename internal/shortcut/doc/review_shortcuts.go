@@ -375,5 +375,5 @@ func firstString(values map[string]any, keys ...string) string {
 }
 
 func init() {
-	shortcut.Register(Review, CommentUpdate, CommentDelete)
+	registerDocShortcuts(Review, CommentUpdate, CommentDelete)
 }

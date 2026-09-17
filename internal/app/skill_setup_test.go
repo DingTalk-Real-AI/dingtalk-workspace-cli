@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -99,7 +100,7 @@ func TestCrossPlatformCoverageSkillSetupDeclinedConfirmationNeverRemoves(t *test
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetArgs([]string{"--mode", "multi", "--target", "claude", "--source", multiSrc})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("declined setup should succeed as a no-op: %v (%s)", err, errOut.String())
 	}
 	if !strings.Contains(out.String(), "已取消") {
@@ -122,7 +123,7 @@ func TestCrossPlatformCoverageSkillSetupDeclinedConfirmationNeverRemoves(t *test
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetArgs([]string{"--mode", "multi", "--target", "claude", "--source", multiSrc})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("confirmed setup failed: %v (%s)", err, errOut.String())
 	}
 	for _, gone := range []string{filepath.Join(agentHome, "dws"), filepath.Join(agentHome, "dingtalk-stale")} {
@@ -173,7 +174,7 @@ func TestCrossPlatformCoverageSkillSetupNonInteractiveRequiresYes(t *testing.T) 
 		cmd.SetErr(io.Discard)
 		args := []string{"--mode", "multi", "--target", "claude", "--source", multiSrc}
 		cmd.SetArgs(append(args, extra...))
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 
 	if err := run(); err == nil || !strings.Contains(err.Error(), "--yes") {
@@ -805,7 +806,7 @@ func TestRunSkillSetupRejectsSkillFlagInMonoMode(t *testing.T) {
 	cmd.SetArgs([]string{"--mode", "mono", "--yes", "--skill", "aitable"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("expected error for --skill in mono mode")
 	}
@@ -832,6 +833,56 @@ func TestResolveSkillSetupSourceMultiFinds(t *testing.T) {
 	}
 	if got != multiDir {
 		t.Fatalf("expected %s, got %s", multiDir, got)
+	}
+}
+
+func TestCrossPlatformCoverageResolveSkillSetupSourceAcceptsReleaseBundleRoot(t *testing.T) {
+	if candidates := skillSourceOverrideCandidates("  ", skillSetupModeMulti); candidates != nil {
+		t.Fatalf("blank source override candidates = %v, want nil", candidates)
+	}
+	bundleRoot := t.TempDir()
+	writeSkill := func(dir, name string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: " + name + "\ndescription: test\n---\n"
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Mirror the exact public dws-skills.zip shape: backward-compatible mono
+	// content at root, an explicit mono tree, and installable skills in multi.
+	writeSkill(bundleRoot, "dws")
+	monoDir := filepath.Join(bundleRoot, skillSetupModeMono)
+	writeSkill(monoDir, "dws")
+	multiDir := filepath.Join(bundleRoot, skillSetupModeMulti)
+	for _, name := range []string{"dingtalk-doc", "dingtalk-misc"} {
+		writeSkill(filepath.Join(multiDir, name), name)
+	}
+
+	t.Setenv("DWS_SKILL_SOURCE", "")
+	if got, err := resolveSkillSetupSource(bundleRoot, skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("release root multi source = %q, %v; want %q", got, err, multiDir)
+	}
+	if got, err := resolveSkillSetupSource(bundleRoot, skillSetupModeMono); err != nil || got != monoDir {
+		t.Fatalf("release root mono source = %q, %v; want %q", got, err, monoDir)
+	}
+	if got, err := resolveSkillSetupSource(multiDir, skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("direct multi source = %q, %v; want %q", got, err, multiDir)
+	}
+
+	t.Setenv("DWS_SKILL_SOURCE", bundleRoot)
+	if got, err := resolveSkillSetupSource("", skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("environment release root multi source = %q, %v; want %q", got, err, multiDir)
+	}
+
+	if names, err := listMultiSkillNames(bundleRoot); err != nil || len(names) != 0 {
+		t.Fatalf("release root must not expose container dirs as MultiSkills: names=%v err=%v", names, err)
+	}
+	if isSkillSourceRoot(bundleRoot, skillSetupModeMulti) {
+		t.Fatal("release root must resolve through its multi child, not qualify as a raw MultiSkill source")
 	}
 }
 
@@ -979,7 +1030,7 @@ func executeMultiSkillSetupTest(t *testing.T, src string, dests []string, args .
 	cmd.SetErr(&stderr)
 	baseArgs := []string{"--mode", "multi", "--source", src}
 	cmd.SetArgs(append(baseArgs, args...))
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return stdout.String(), stderr.String(), err
 }
 

@@ -196,10 +196,10 @@ func newAisearchCommand() *cobra.Command {
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "企业内智能搜人、搜知识内容与搜行为记录",
 			UseWhen: []string{
-				"语义找人、按主题搜企业知识，或追溯发送/创建/分享等行为",
+				"需要语义找人、跨来源按主题发现企业知识，或查询当前用户参与的发送/接收及创建/分享行为轨迹",
 			},
 			AvoidWhen: []string{
-				"已有明确资源 ID 要读写时改用对应产品；普通 OAuth 登录不用 aisearch",
+				"资源范围仅为 IM、答案形态是逐条消息记录且带结构化消息谓词时使用 chat；已有明确资源 ID 要读写时改用对应产品",
 			},
 		},
 	})
@@ -358,6 +358,7 @@ func newAisearchCommand() *cobra.Command {
 				},
 				AvoidWhen: []string{
 					"问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+					"资源范围仅为 IM、答案要求可枚举消息记录并按发送者/会话/时间/reaction 等结构化谓词筛选时使用 chat +search-msg",
 					"企业找人时用 aisearch person",
 					"已知具体资源 ID 要读写时改用对应产品命令",
 				},
@@ -385,9 +386,9 @@ func newAisearchCommand() *cobra.Command {
 	behaviorCmd := &cobra.Command{
 		Use:   "behavior",
 		Short: "搜索明确的发送/创建/接收等行为记录",
-		Long: `仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。
+		Long: `仅当用户询问当前用户参与的发送/接收，或当前用户创建、分享、编辑过什么等行为动作时，检索企业内部行为记录。
 
-普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的 queries 只放内容关键词；时间放到 --time-range，所有类型词放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。`,
+普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的方向描述行为关系，不定义某个人的完整消息发送集合；当资源范围仅为 IM 且答案必须是可枚举消息记录时，应使用 chat +search-msg。queries 只放内容关键词；时间放到 --time-range，类型放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。`,
 		Example: `  dws aisearch behavior --types mail --behavior-type send --direction "我->汐峰"
   dws aisearch behavior --types im,mail --behavior-type send --direction "我->汐峰"
   dws aisearch behavior --types document --behavior-type receive --direction "汐峰->我"
@@ -416,9 +417,10 @@ func newAisearchCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "搜索发送/创建/分享/编辑/接收等明确行为记录",
-				UseWhen:      []string{"用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"},
+				UseWhen:      []string{"用户询问当前用户参与的发送/接收行为，或当前用户创建、分享、编辑过什么，并接受行为轨迹而非完整消息集合"},
 				AvoidWhen: []string{
 					"只按主题找内容本身时用 aisearch enterprise",
+					"仅限 IM 且答案要求逐条消息、稳定发送者范围或完整分页时用 chat +search-msg；行为方向不能替代消息集合过滤",
 					"没有行为动作词时不要选用本工具",
 				},
 				Examples: []string{

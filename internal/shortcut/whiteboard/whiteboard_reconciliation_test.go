@@ -108,6 +108,42 @@ func TestCrossPlatformCoverageWhiteboardCommittedFailurePreservesCauseWithoutMut
 	}
 }
 
+func TestCrossPlatformCoverageWhiteboardStandaloneCommittedFailurePreservesReceiptAndNoReplay(t *testing.T) {
+	original := apperrors.NewAPI("standalone read unavailable",
+		apperrors.WithOperation(serverWhiteboard+"/"+toolQueryStandalone),
+		apperrors.WithReason("read_unavailable"),
+		apperrors.WithDetails(map[string]any{"diagnostic": "kept"}),
+		apperrors.WithRetryable(true),
+	).(*apperrors.Error)
+	receipt := &standaloneUpdateReceipt{
+		PageID: "page", RequestID: "req", PreviousRevision: 2, CommittedRevision: 3,
+		CreatedNodeIDs: []string{"real"}, IDMap: map[string]string{"n1": "real"},
+		DeletedNodeCount: 0, Message: "done",
+	}
+	failure := standaloneWhiteboardCommittedVerificationError(original, map[string]any{
+		"nodeId": "wb", "mode": "append", "requestId": "req",
+	}, receipt).(*apperrors.Error)
+	if !errors.Is(failure, original) || failure.Reason != "read_unavailable" || failure.Details["diagnostic"] != "kept" {
+		t.Fatalf("lost read-side diagnostics: %#v", failure)
+	}
+	if failure.ExecutionStarted == nil || !*failure.ExecutionStarted || !failure.RetryableSet || failure.Retryable ||
+		failure.Details["commitState"] != "committed" || failure.Details["verified"] != false {
+		t.Fatalf("lost committed no-replay state: %#v", failure)
+	}
+	if failure.Details["nodeId"] != "wb" || failure.Details["pageId"] != "page" ||
+		failure.Details["requestId"] != "req" || failure.Details["previousRevision"] != 2 ||
+		failure.Details["committedRevision"] != 3 || failure.Details["receipt"] == nil {
+		t.Fatalf("lost standalone reconciliation evidence: %#v", failure.Details)
+	}
+	if failure.RetryAfterSeconds != nil || failure.NextRetryAt != nil ||
+		!strings.Contains(failure.Hint, "停止重提") || !strings.Contains(strings.Join(failure.Actions, " "), "不得自动重发") {
+		t.Fatalf("unsafe recovery guidance: %#v", failure)
+	}
+	if !original.Retryable || original.Details["diagnostic"] != "kept" {
+		t.Fatalf("mutated original error: %#v", original)
+	}
+}
+
 func TestCrossPlatformCoverageWhiteboardNoReceiptDoesNotClaimCommitted(t *testing.T) {
 	validSource := `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"group","x":40}]}}`
 	for _, tc := range []struct {

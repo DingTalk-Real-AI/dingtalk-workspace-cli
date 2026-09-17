@@ -46,7 +46,7 @@ var List = shortcut.Shortcut{
 	Contract: driveContract(
 		"+list", "严格分页列出钉盘文件和文件夹",
 		"浏览钉盘根目录或已知文件夹时使用；服务端明确空数组才表示空目录，缺字段、坏元素或空响应都会失败。",
-		[]string{"按关键词定位文件改用 drive +search；查看单个节点详情改用 drive +inspect"},
+		[]string{"按关键词定位钉盘文件用 drive +search；查看单节点用 drive +inspect；文档文件夹nodeId或知识库workspaceId的直接子项用 doc +list，不把两类容器ID混用"},
 		[]string{`dws drive +list --limit 20`, `dws drive +list --folder <dentryUuid> --limit 20`},
 		driveCollectionResult("files", "严格校验并投影的钉盘目录页"), driveCursorPagination(),
 		contract.ParamDecl{Name: "space-id", Property: "spaceId"},
@@ -184,7 +184,7 @@ var Download = shortcut.Shortcut{
 	Contract: driveContract(
 		"+download", "安全下载钉盘文件到工作目录",
 		"下载普通钉盘文件并要求验证本地字节产物时使用；不是只返回临时 URL。",
-		[]string{"在线文档导出为 docx/pdf 使用 doc +export；只查元数据使用 drive +inspect"},
+		[]string{"在线文档导出用 doc +export；正文媒体或封面默认下载用 doc +media-download/+resource-download，明确覆盖此类资源才用 doc +download-overwrite；普通钉盘文件不借用该入口，本入口保持不覆盖；元数据用 drive +inspect"},
 		[]string{`dws drive +download --node <dentryUuid> --output downloads/report.pdf`},
 		driveObjectResult("已验证的本地下载产物"), nil,
 		contract.ParamDecl{Name: "node", Property: "fileId"},

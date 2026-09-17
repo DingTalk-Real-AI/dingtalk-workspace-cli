@@ -19,7 +19,7 @@ func (h openCompatHandler) Command(_ executor.Runner) *cobra.Command {
 }
 
 func init() {
-	RegisterPublic(func() Handler {
+	RegisterPublicNamed("conference", func() Handler {
 		return openCompatHandler{name: "conference", buildFn: newConferenceCommand}
 	})
 }

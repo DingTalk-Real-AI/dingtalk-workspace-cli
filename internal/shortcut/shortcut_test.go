@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageLiveMountAcceptsPipedWriteConfirmation(t *testing.
 	root.SetArgs([]string{s.Command})
 	root.SetIn(strings.NewReader("yes\n"))
 	root.SetErr(&stderr)
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("static write risk was not confirmed: %v", err)
 	}
 	if !called {
@@ -246,7 +246,7 @@ func TestCrossPlatformCoverageValidateFlagsRequiredAndEnum(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 
 	if err := run(); err == nil || err.Error() != "缺少必填参数 --query：" {
@@ -264,7 +264,7 @@ func TestCrossPlatformCoverageValidateFlagsRequiredAndEnum(t *testing.T) {
 	}
 }
 
-func TestLiveMountPreservesRequiredEnumDeclarationOrder(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountPreservesRequiredEnumDeclarationOrder(t *testing.T) {
 	s := Shortcut{
 		Service: "contact",
 		Command: "+validation-order",
@@ -278,7 +278,7 @@ func TestLiveMountPreservesRequiredEnumDeclarationOrder(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--order", "sideways"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), `参数 --order 取值 "sideways" 不合法`) {
 		t.Fatalf("validation order changed: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestCrossPlatformCoverageValidateFlagsRejectsEmptyRequiredValuesAndInvalidS
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 
 	if err := run("--id", "   "); err == nil ||
@@ -315,7 +315,7 @@ func TestCrossPlatformCoverageValidateFlagsRejectsEmptyRequiredValuesAndInvalidS
 	}
 }
 
-func TestLiveMountRequiredDefaultStillRequiresChanged(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountRequiredDefaultStillRequiresChanged(t *testing.T) {
 	s := Shortcut{
 		Service: "contact",
 		Command: "+required-default",
@@ -329,7 +329,7 @@ func TestLiveMountRequiredDefaultStillRequiresChanged(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 	if err := run(); err == nil ||
 		err.Error() != "缺少必填参数 --query：查询词" {
@@ -358,7 +358,7 @@ func TestCrossPlatformCoverageDeclarativeConstraintsRejectEmptyAndConflictingVal
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 
 	if err := run(); err == nil || err.Error() != "请指定 --group、--user 之一" {
@@ -377,7 +377,7 @@ func TestCrossPlatformCoverageDeclarativeConstraintsRejectEmptyAndConflictingVal
 	}
 }
 
-func TestLiveMountCustomConstraintRunsShortcutValidate(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountCustomConstraintRunsShortcutValidate(t *testing.T) {
 	validated := false
 	executed := false
 	s := Shortcut{
@@ -408,7 +408,7 @@ func TestLiveMountCustomConstraintRunsShortcutValidate(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--file-size", "0"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || err.Error() != "--file-size 必须大于 0" {
 		t.Fatalf("custom validation error = %v", err)
 	}
@@ -480,7 +480,7 @@ func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 	}
 }
 
-func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
+func TestCrossPlatformCoverageBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 	testseam.Swap(t, &allShortcuts, []Shortcut(nil))
 	Register(
 		Shortcut{Service: "calendar", Command: "+builtin", Execute: noop},
@@ -500,7 +500,7 @@ func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 
 func noop(_ *RuntimeContext) error { return nil }
 
-func TestLiveMountEOFRequiresConfirmation(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountEOFRequiresConfirmation(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,
@@ -518,7 +518,7 @@ func TestLiveMountEOFRequiresConfirmation(t *testing.T) {
 	root.SetIn(strings.NewReader(""))
 	root.SetErr(&bytes.Buffer{})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("EOF err = %#v, want confirmation_required", err)
@@ -528,7 +528,7 @@ func TestLiveMountEOFRequiresConfirmation(t *testing.T) {
 	}
 }
 
-func TestLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
 	called := false
 	explicit := contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -583,7 +583,7 @@ func TestLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
 	root.SetArgs([]string{s.Command})
 	root.SetIn(strings.NewReader(""))
 	root.SetErr(&bytes.Buffer{})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("explicit Safety must drive runtime confirmation; err = %#v", err)
@@ -593,7 +593,7 @@ func TestLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
 	}
 }
 
-func TestLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,
@@ -611,7 +611,7 @@ func TestLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
 	root.SetIn(strings.NewReader("no\n"))
 	root.SetErr(&bytes.Buffer{})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || err.Error() != "用户取消了操作" {
 		t.Fatalf("interactive decline error = %v", err)
 	}
@@ -620,7 +620,7 @@ func TestLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
 	}
 }
 
-func TestLiveMountYesBypassesPrompt(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountYesBypassesPrompt(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskHighWrite,
@@ -636,7 +636,7 @@ func TestLiveMountYesBypassesPrompt(t *testing.T) {
 	root.AddCommand(cmd)
 	root.SetArgs([]string{s.Command, "--yes"})
 	root.SetIn(strings.NewReader("")) // would be unavailable without --yes
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("--yes must proceed: %v", err)
 	}
 	if !called {
@@ -644,7 +644,7 @@ func TestLiveMountYesBypassesPrompt(t *testing.T) {
 	}
 }
 
-func TestLiveMountDryRunBypassesPrompt(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountDryRunBypassesPrompt(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,
@@ -659,7 +659,7 @@ func TestLiveMountDryRunBypassesPrompt(t *testing.T) {
 	root.AddCommand(mount(s))
 	root.SetArgs([]string{s.Command, "--dry-run"})
 	root.SetIn(strings.NewReader(""))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("--dry-run must proceed without confirmation: %v", err)
 	}
 	if !called {

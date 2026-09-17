@@ -13,8 +13,8 @@
 
 - 用户明确要求“用机器人/机器人身份/robot”发送时，使用
   `dws chat +messages-send --as bot --robot-code <robotCode>`；不得改成当前用户身份。
-- `chat bot search` 只返回我创建的机器人，没有 `openDingTalkId`；给机器人发单聊必须用 `chat bot find`。
-- 机器人发群消息前需确认机器人已在群中；报“机器人不存在”时先 `group members add-bot`。
+- `+bot-search` 只返回我创建的机器人，没有 `openDingTalkId`；给机器人发单聊先用 `+bot-find`。
+- 机器人发群消息前确认机器人已在群中；报“机器人不存在”时先 `+chat-add-bot`。
 - `send-by-bot` 支持 Markdown、图片 URL 和文件，具体参数见下方消息类型路由。
 - 机器人在群聊中引用回复已有消息时，使用原子命令 `send-by-bot --reply --ref-sender`；该能力仅支持 Markdown，不走 `+messages-reply` 的当前用户身份。
 - 公网图片 URL 使用 `--msg-type image --image-url`，按图片消息发送。
@@ -34,16 +34,16 @@
 
 | 命令 | 范围 | 返回 openDingTalkId | 典型触发词 |
 |------|------|---------------------|------------|
-| `chat bot search` | 仅当前用户自己创建的机器人 | 否 | “我的机器人”“我创建的机器人” |
-| `chat bot find` | 当前用户可用的全部机器人（含他人/官方） | 是 | “找机器人”“搜索机器人”“给机器人发单聊” |
+| `+bot-search` | 仅当前用户自己创建的机器人 | 否 | “我的机器人”“我创建的机器人” |
+| `+bot-find` | 当前用户可用的全部机器人（含他人/官方） | 是 | “找机器人”“搜索机器人”“给机器人发单聊” |
 
 ```bash
-dws chat bot search --page 1 --size 10 --name "日报"
-dws chat bot find --query "日报" --limit 20
-dws chat bot find --query "日报" --limit 20 --cursor <nextCursor>
+dws chat +bot-search --page 1 --size 10 --name "日报"
+dws chat +bot-find --query "日报" --limit 20
+dws chat +bot-find --query "日报" --limit 20 --cursor <nextCursor>
 ```
 
-`bot find` 翻页时 `cursor` 必须使用上次返回的 `nextCursor` 字符串原值，不要传 `"0"` 或数字字面量。
+`+bot-find` 翻页时 `cursor` 使用上次返回的 `nextCursor` 字符串原值，不传 `"0"` 或数字字面量。原子 `bot search/find` 仅在 Shortcut 缺少底层字段或原始响应时使用。
 
 ### 机器人发送与撤回
 
@@ -52,7 +52,7 @@ dws chat bot find --query "日报" --limit 20 --cursor <nextCursor>
 ```bash
 dws chat +messages-send --as bot --robot-code <robot-code> \
   --groups <openConversationId1>,<openConversationId2> \
-  --markdown "## 通知\n\n请提交周报" --format json
+  --text "## 通知\n\n请提交周报" --format json
 ```
 
 读取 `requestedCount/succeededCount/failedCount/results/failures`；unknown 或失败目标不自动重发。
@@ -86,7 +86,7 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openConversation
 | Flag | 说明 |
 |------|------|
 | `--robot-code` | 机器人 Code，必填 |
-| `--conversation-id` | 群聊 openConversationId；`--group` 为兼容别名 |
+| `--conversation-id` | 群聊 openConversationId；`--group` 为公开兼容入口 |
 | `--users` | 单聊 userId 列表，逗号分隔，最多 20 个 |
 | `--open-dingtalk-ids` | 单聊 openDingTalkId 列表 |
 | `--msg-type` | `markdown`、`image` 或 `file`；省略时为 Markdown；公网图片使用 `image --image-url`，本地图片和文件使用 `file --file-path` |
@@ -101,14 +101,14 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openConversation
 
 引用回复不会设置 `msgType=reply`；CLI 在普通群消息参数顶层透传 `referenceOpenMessageId` 和 `srcMsgSendOpenDingTalkId`。只传其中一个参数、用于单聊或用于图片/文件消息都会在本地失败。
 
-#### `dws chat message recall-by-bot`
+#### 撤回机器人消息
 
 ```bash
-dws chat message recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey>
-dws chat message recall-by-bot --robot-code <robot-code> --keys key1,key2
+dws chat +messages-recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey>
+dws chat +messages-batch-recall-by-bot --robot-code <robot-code> --keys key1,key2
 ```
 
-群聊撤回传 `--group`；单聊撤回不传 `--group`。`--keys` 来自 `send-by-bot` 返回的 `processQueryKey`。
+群聊撤回用 `+messages-recall-by-bot --group`；单聊批量撤回用 `+messages-batch-recall-by-bot`。`--keys` 来自发送结果的 `processQueryKey`。原子 `message recall-by-bot` 仅作未公开字段/原始响应 fallback。
 
 ### Webhook
 
@@ -135,39 +135,41 @@ dws chat message send-by-webhook --token <webhook-token> --title "test" --conten
 
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
-| `group members add-bot` | 将自定义机器人加入群 | `--id` `--robot-code` |
-| `group members remove-bot` | 从群移除机器人 | `--id` `--bot-id` |
+| `+chat-add-bot` | 将自定义机器人加入群 | `--id` `--robot-code` |
+| `+chat-remove-bot` | 从群移除机器人 | `--id` `--bot-id` |
 | `+chat-bots` | 查看群内机器人列表 | `--group <群名或openConversationId>`；自然群名内部唯一解析 |
 
 ```bash
-dws chat group members add-bot --id <openConversationId> --robot-code <robot-code>
+dws chat +chat-add-bot --id <openConversationId> --robot-code <robot-code>
 dws chat +chat-bots --group "项目群"
-dws chat group members remove-bot --id <openConversationId> --bot-id <openBotId>
+dws chat +chat-remove-bot --id <openConversationId> --bot-id <openBotId>
 ```
+
+对应 `group members add-bot/remove-bot` 原子命令仅作未公开字段或原始响应 fallback。
 
 ## 常见工作流
 
 ### 机器人发消息后撤回
 
 ```bash
-dws chat bot search --name "日报" --format json
-dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversationId> --title "日报" --markdown "## 今日完成\n\n- 事项 A\n\n- 事项 B" --format json
-dws chat message recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey> --format json
+dws chat +bot-search --name "日报" --format json
+dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B" --format json
+dws chat +messages-recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey> --format json
 ```
 
 ### 机器人不在群内时先邀请再发送
 
 ```bash
-dws chat bot search --name "日报" --format json
-dws chat group members add-bot --id <openConversationId> --robot-code <robot-code> --format json
+dws chat +bot-search --name "日报" --format json
+dws chat +chat-add-bot --id <openConversationId> --robot-code <robot-code> --format json
 dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversationId> --title "通知" --text "内容" --format json
 ```
 
 ### 给机器人发单聊
 
 ```bash
-dws chat bot find --query "玉澜" --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --content "你好" --format json
+dws chat +bot-find --query "玉澜" --format json
+dws chat +messages-send --open-dingtalk-id <openDingTalkId> --text "你好" --format json
 ```
 
 ### 机器人 @ 指定人
@@ -179,8 +181,8 @@ dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversa
 
 ## 常见错误与回退
 
-- 机器人单聊没有 openDingTalkId：改用 `chat bot find`，不要用 `bot search`。
-- 机器人发群消息报“机器人不存在”：先 `group members add-bot`。
+- 机器人单聊没有 openDingTalkId：改用 `+bot-find`，不要用 `+bot-search`。
+- 机器人发群消息报“机器人不存在”：先 `+chat-add-bot`。
 - 撤回失败：确认使用 `processQueryKey`，不是 `openMessageId`。
 - 机器人引用回复失败：确认目标是群聊 Markdown，且 `--reply` 来自被引用消息的 `openMessageId`、`--ref-sender` 来自同一消息的发送者 `openDingTalkId`。
 - @ 不生效：检查正文是否包含 `@userId` / `@openDingTalkId` / `@10`。

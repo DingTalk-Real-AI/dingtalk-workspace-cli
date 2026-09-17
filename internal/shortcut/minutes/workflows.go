@@ -6,6 +6,7 @@ package minutes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,17 +24,19 @@ import (
 var minutesWorkflowArtifacts = []string{"basic", "summary", "keywords", "transcript", "todos"}
 
 var (
-	minutesMkdirTemp     = os.MkdirTemp
-	minutesRemoveAll     = os.RemoveAll
-	minutesWriteFile     = os.WriteFile
-	minutesStat          = os.Stat
-	minutesRename        = os.Rename
-	minutesGetwd         = os.Getwd
-	minutesEvalSymlinks  = filepath.EvalSymlinks
-	minutesRel           = filepath.Rel
-	minutesLstat         = os.Lstat
-	minutesMkdir         = os.Mkdir
-	minutesMarshalIndent = json.MarshalIndent
+	minutesMkdirTemp              = os.MkdirTemp
+	minutesRemoveAll              = os.RemoveAll
+	minutesWriteFile              = os.WriteFile
+	minutesStat                   = os.Stat
+	minutesRename                 = os.Rename
+	minutesGetwd                  = os.Getwd
+	minutesEvalSymlinks           = filepath.EvalSymlinks
+	minutesRel                    = filepath.Rel
+	minutesLstat                  = os.Lstat
+	minutesMkdir                  = os.Mkdir
+	minutesMarshalIndent          = json.MarshalIndent
+	minutesReadFile               = os.ReadFile
+	minutesSanitizeExportArtifact = sanitizeExportArtifact
 )
 
 var RecordWrapUp = shortcut.Shortcut{
@@ -123,13 +126,13 @@ var Mindmap = shortcut.Shortcut{
 var SpeakerInsights = shortcut.Shortcut{
 	Service: "minutes", Command: "+speaker-insights", Product: "minutes",
 	Description: "创建发言人段落总结并轮询结果，保留异步任务恢复句柄",
-	Intent:      "需要按发言人汇总听记内容时使用；严格要求 create 返回 taskId，读取未就绪时有界重试，失败或超时返回 taskId/taskUuid。",
+	Intent:      "需要按发言人汇总听记内容时使用；仅明确完成且有总结正文才 complete=true。pending 只 resume，不重复 create；用户给定等待时长时传入 --timeout。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+speaker-insights", "创建发言人段落总结并轮询结果，保留异步任务恢复句柄",
+	Contract: withMinutesSpeakerResult(withMinutesDryRun(minutesContract("+speaker-insights", "创建发言人段落总结并轮询结果，保留异步任务恢复句柄",
 		"逐字稿已有多位发言人，需要触发并读取平台发言人段落总结时使用",
 		[]string{"只改发言人昵称时使用 +speaker-replace；无有效发言内容时平台可能不生成结果"},
-		[]string{`dws minutes +speaker-insights --id <taskUuid>`, `dws minutes +speaker-insights --id <taskUuid> --timeout 180`}), contract.DryRunPreviewPlan, false),
+		[]string{`dws minutes +speaker-insights --id <taskUuid>`, `dws minutes +speaker-insights --id <taskUuid> --timeout 180`}), contract.DryRunPreviewPlan, false)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "timeout", Type: shortcut.FlagInt, Default: "180", Desc: "等待秒数"},
@@ -187,14 +190,14 @@ var SyncASR = shortcut.Shortcut{
 
 var ExportPack = shortcut.Shortcut{
 	Service: "minutes", Command: "+export-pack", Product: "minutes",
-	Description: "把完整听记产物写入受控目录并生成不含签名 URL 的 manifest",
-	Intent:      "需要离线归档 basic/summary/keywords/transcript/todos，可选媒体文件时使用；全部必需产物验证通过后才原子发布目录。",
+	Description: "把听记文本产物清理签名凭据后写入受控目录并生成清理台账",
+	Intent:      "需要归档 basic/summary/keywords/transcript/todos，可选媒体文件时使用；文本签名链接替换为明确占位符并通过凭据扫描后发布。完整性只针对所选产物，不保证摘要图片离线可用。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
-	Contract: minutesContract("+export-pack", "把完整听记产物写入受控目录并生成不含签名 URL 的 manifest",
+	Contract: withMinutesExportResult(minutesContract("+export-pack", "把听记文本产物清理签名凭据后写入受控目录并生成清理台账",
 		"已知 taskUuid，需要把多个已验证产物和完整性 manifest 安全归档到工作目录时使用",
 		[]string{"只下载媒体时使用 +download；目标目录已存在时本命令拒绝覆盖"},
-		[]string{`dws minutes +export-pack --id <taskUuid> --output ./minutes-export`, `dws minutes +export-pack --id <taskUuid> --output ./minutes-export --include-media`}),
+		[]string{`dws minutes +export-pack --id <taskUuid> --output ./minutes-export`, `dws minutes +export-pack --id <taskUuid> --output ./minutes-export --include-media`})),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "output", Type: shortcut.FlagString, Desc: "工作目录内的新归档目录", Required: true},
@@ -219,13 +222,13 @@ var ExportPack = shortcut.Shortcut{
 var Share = shortcut.Shortcut{
 	Service: "minutes", Command: "+share", Product: "minutes",
 	Description: "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
-	Intent:      "所有者已确认成员钉钉 UID 或组织 staffId 和权限，需批量授权时使用；逐成员调用以区分成功/失败，默认首错停止。",
+	Intent:      "所有者已确认成员钉钉 UID 或组织 staffId 和权限，需批量授权时使用；逐成员调用以区分成功/失败，默认首错停止。预览显示目标和失败策略、权限及显式子资源/覆盖设置，不调用远端。写回执不证明成员最终权限。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(withMinutesShareParameters(minutesContract("+share", "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
+	Contract: withMinutesPermissionResult(withMinutesDryRun(withMinutesShareParameters(minutesContract("+share", "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
 		"听记所有者已确认真实 member UID 或组织 staffId，需要授予 view/download/edit 权限并审计每个成员结果时使用",
 		[]string{"当前用户自己申请权限时使用 +apply-permission；只有姓名而无稳定 UID/staffId 时先用 contact 命令消歧"},
-		[]string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-staff-ids "074360" --permission edit --cover`})), contract.DryRunPreviewPlan, false),
+		[]string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-staff-ids "074360" --permission edit --cover`})), contract.DryRunPreviewPlan, false)),
 	Flags: minutesShareFlags(true),
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"id", "ids"}},
@@ -241,13 +244,13 @@ var Share = shortcut.Shortcut{
 var Unshare = shortcut.Shortcut{
 	Service: "minutes", Command: "+unshare", Product: "minutes",
 	Description: "按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger",
-	Intent:      "所有者明确要撤销稳定成员 UID 的听记访问时使用；默认首错停止，任何部分失败都返回非零。",
+	Intent:      "所有者明确要撤销稳定成员 UID 的听记访问时使用；默认首错停止，任何部分失败都返回非零。 预览显示目标和失败策略；分享另显示权限及显式子资源/覆盖设置，不调用远端。写回执不证明成员最终权限。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+unshare", "按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger",
+	Contract: withMinutesPermissionResult(withMinutesDryRun(minutesContract("+unshare", "按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger",
 		"听记所有者已确认稳定 member UID，需要撤销其对一个或多个听记的访问权限时使用",
 		[]string{"要授权时使用 +share；成员或听记 ID 未确认时不要撤销"},
-		[]string{`dws minutes +unshare --ids <uuid1,uuid2> --member-uids <uid1,uid2>`, `dws minutes +unshare --id <uuid> --member-uids <uid> --failure-policy continue`}), contract.DryRunPreviewPlan, false),
+		[]string{`dws minutes +unshare --ids <uuid1,uuid2> --member-uids <uid1,uid2>`, `dws minutes +unshare --id <uuid> --member-uids <uid> --failure-policy continue`}), contract.DryRunPreviewPlan, false)),
 	Flags: minutesShareFlags(false),
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"id", "ids"}},
@@ -410,7 +413,11 @@ func runMinutesMindmap(rt *shortcut.RuntimeContext, id string, timeout, interval
 
 func executeMinutesSpeakerInsights(rt *shortcut.RuntimeContext) error {
 	if rt.DryRun() {
-		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.speaker_insights", map[string]any{"taskUuid": rt.Str("id"), "stages": []string{"create", "poll"}}))
+		stages := []string{"poll"}
+		if !rt.Bool("resume") {
+			stages = []string{"create", "poll"}
+		}
+		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.speaker_insights", map[string]any{"taskUuid": rt.Str("id"), "stages": stages, "taskId": rt.Str("task-id")}))
 	}
 	payload, err := runMinutesSpeakerInsights(rt, rt.Str("id"), time.Duration(rt.Int("timeout"))*time.Second, time.Duration(rt.Int("interval"))*time.Second, !rt.Bool("resume"), rt.Str("task-id"))
 	if outputErr := rt.Output(payload); outputErr != nil {
@@ -421,15 +428,27 @@ func executeMinutesSpeakerInsights(rt *shortcut.RuntimeContext) error {
 
 func runMinutesSpeakerInsights(rt *shortcut.RuntimeContext, id string, timeout, interval time.Duration, create bool, taskID string) (map[string]any, error) {
 	status := "resume"
+	payloadFor := func(attempts int, state, stage string, retryable bool) map[string]any {
+		payload := speakerInsightsPayload(id, taskID, status, attempts, state, stage, retryable)
+		recovery := payload["recovery"].(map[string]any)
+		argv := recovery["nextCommand"].([]string)
+		argv = append(argv, "--timeout", fmt.Sprint(int(timeout/time.Second)), "--interval", fmt.Sprint(int(interval/time.Second)))
+		if profile := rt.Str("profile"); profile != "" {
+			argv = append(argv, "--profile", profile)
+		}
+		recovery["nextCommand"] = argv
+		return payload
+	}
 	if create {
+		status = "unknown"
 		created, err := rt.CallMCPWriteDataStrict("minutes", "create_speaker_summary", map[string]any{"uuids": []string{id}})
 		if err != nil {
-			return map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "stage": "create"}, err
+			return payloadFor(0, "unsupported_shape", "create", false), err
 		}
 		var parseErr error
 		taskID, status, parseErr = minutesdata.SpeakerSummaryTask(created)
 		if parseErr != nil {
-			return map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "stage": "create"}, parseErr
+			return payloadFor(0, "unsupported_shape", "create", false), parseErr
 		}
 	}
 	deadline := time.Now().Add(timeout)
@@ -437,33 +456,62 @@ func runMinutesSpeakerInsights(rt *shortcut.RuntimeContext, id string, timeout, 
 	for {
 		attempts++
 		data, callErr := rt.CallMCPData("minutes", "get_speaker_summary", map[string]any{"uuids": []string{id}})
+		parsed := minutesdata.SpeakerSummary{State: minutesdata.SpeakerUnsupported, Reason: "query_failed"}
 		if callErr == nil {
-			result, resultErr := minutesdata.SpeakerSummaryResult(data)
-			if resultErr == nil {
-				return map[string]any{"operation": "minutes.speaker_insights", "complete": true, "taskUuid": id, "taskId": taskID, "createStatus": status, "attempts": attempts, "result": result}, nil
+			parsed = minutesdata.ParseSpeakerSummary(data)
+			if parsed.TaskID != "" {
+				if taskID != "" && parsed.TaskID != taskID {
+					parsed.State, parsed.Reason = minutesdata.SpeakerUnsupported, "task_id_mismatch"
+				} else {
+					taskID = parsed.TaskID
+				}
 			}
-			callErr = resultErr
+		} else if speakerSummaryPending(callErr) {
+			// This exact observed error permits a bounded read retry; it does
+			// not prove the backend job itself is still processing.
+			parsed.State, parsed.Reason = minutesdata.SpeakerPending, "result_unavailable"
 		}
-		if !speakerSummaryPending(callErr) {
-			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
-			return payload, callErr
+		payload := payloadFor(attempts, string(parsed.State), "poll", parsed.State == minutesdata.SpeakerPending)
+		payload["reason"] = parsed.Reason
+		if parsed.Status != "" {
+			payload["status"] = parsed.Status
+		}
+		if parsed.State == minutesdata.SpeakerReady {
+			payload["result"] = parsed.Result
+			delete(payload, "recovery")
+			return payload, nil
+		}
+		if parsed.State != minutesdata.SpeakerPending {
+			if callErr != nil {
+				return payload, callErr
+			}
+			return payload, minutesCompositeError("minutes_speaker_insights_"+string(parsed.State), "poll", payload)
 		}
 		if minutesPollDeadlineReached(deadline, interval) {
-			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
 			return payload, minutesCompositeError("minutes_speaker_insights_timeout", "poll", payload)
 		}
 		if err := waitMinutesInterval(rt, interval); err != nil {
-			return map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts}, err
+			return payload, err
 		}
 	}
 }
 
 func speakerSummaryPending(err error) bool {
-	if err == nil {
-		return false
+	var apiErr *apperrors.Error
+	return errors.As(err, &apiErr) && apiErr.Category == apperrors.CategoryAPI &&
+		apiErr.Reason == "business_error" && apiErr.ServerDiag.ServerErrorCode == "000" &&
+		apiErr.Message == "downstream query empty"
+}
+
+func speakerInsightsPayload(id, taskID, createStatus string, attempts int, state, stage string, retryable bool) map[string]any {
+	argv := []string{"dws", "minutes", "+speaker-insights", "--id", id, "--resume"}
+	if taskID != "" {
+		argv = append(argv, "--task-id", taskID)
 	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "query empty") || strings.Contains(message, "processing") || strings.Contains(message, "not ready") || strings.Contains(message, "result is empty") || strings.Contains(message, "business error: code 000") || strings.Contains(message, "暂无")
+	return map[string]any{"operation": "minutes.speaker_insights", "complete": state == "ready", "taskUuid": id,
+		"taskId": taskID, "createStatus": createStatus, "attempts": attempts, "state": state, "stage": stage,
+		"retryable": retryable, "recovery": map[string]any{"taskUuid": id, "taskId": taskID,
+			"nextCommand": argv, "nextAction": "Resume reads with the same profile; never repeat create. Confirmation is still required."}}
 }
 
 func executeMinutesPrepareASR(rt *shortcut.RuntimeContext) error {
@@ -570,9 +618,14 @@ func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 		}
 	}()
 	files := map[string]map[string]any{}
+	totalRedactions := 0
 	for _, name := range artifacts {
 		filename := name + ".json"
-		value := bundle[name]
+		value, redactionCount, sanitizeErr := minutesSanitizeExportArtifact(bundle[name])
+		if sanitizeErr != nil {
+			return sanitizeErr
+		}
+		totalRedactions += redactionCount
 		if name == "summary" {
 			filename = "summary.md"
 			if err := minutesWriteFile(filepath.Join(tempDir, filename), []byte(value.(string)), 0o600); err != nil {
@@ -585,7 +638,7 @@ func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 		if err != nil {
 			return err
 		}
-		files[name] = map[string]any{"file": filename, "sizeBytes": info.Size(), "complete": true}
+		files[name] = map[string]any{"file": filename, "sizeBytes": info.Size(), "complete": true, "sanitized": true, "redactionCount": redactionCount}
 	}
 	if rt.Bool("include-media") {
 		mediaData, callErr := rt.CallMCPData("minutes", "query_minutes_audio_url", map[string]any{"taskUuid": id})
@@ -598,19 +651,29 @@ func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 		}
 		download, downloadErr := minutesDownload(rt.Command().Context(), mediaURL, localio.DownloadOptions{BaseDir: tempDir, Output: "media/", PreferredName: id + mediaExtension(mediaURL)})
 		if downloadErr != nil {
-			return downloadErr
+			return fmt.Errorf("听记媒体下载失败；未发布归档")
 		}
 		files["media"] = map[string]any{"file": download.RelativePath, "sizeBytes": download.SizeBytes, "complete": true}
 	}
-	manifest := map[string]any{"version": 1, "operation": "minutes.export_pack", "taskUuid": id, "complete": true, "generatedAt": time.Now().UTC().Format(time.RFC3339), "files": files}
+	manifest := map[string]any{"version": 1, "operation": "minutes.export_pack", "taskUuid": id, "complete": true, "generatedAt": time.Now().UTC().Format(time.RFC3339), "files": files, "sanitized": true, "redactionCount": totalRedactions, "sanitizationScope": "text_artifacts", "redactionKinds": []string{}, "offlineImagesComplete": false}
+	if totalRedactions > 0 {
+		manifest["redactionKinds"] = []string{"signed_url_or_credential"}
+	}
 	if err := writeJSONFile(filepath.Join(tempDir, "manifest.json"), manifest); err != nil {
 		return err
+	}
+	if err := scanExportCredentials(tempDir, artifacts, rt.Bool("include-media")); err != nil {
+		payload := map[string]any{"operation": "minutes.export_pack", "complete": false, "taskUuid": id, "published": false, "sanitized": false}
+		return outputWorkflowResult(rt, payload, true, "minutes_export_sensitive_content", "sanitize")
 	}
 	if err := minutesRename(tempDir, target); err != nil {
 		return fmt.Errorf("发布听记归档目录失败: %w", err)
 	}
 	cleanup = false
-	return rt.Output(map[string]any{"operation": "minutes.export_pack", "complete": true, "taskUuid": id, "published": true, "path": filepath.ToSlash(relative), "manifest": filepath.ToSlash(filepath.Join(relative, "manifest.json")), "files": files})
+	manifest["published"] = true
+	manifest["path"] = filepath.ToSlash(relative)
+	manifest["manifest"] = filepath.ToSlash(filepath.Join(relative, "manifest.json"))
+	return rt.Output(manifest)
 }
 
 func minutesShareFlags(includePermission bool) []shortcut.Flag {
@@ -649,6 +712,17 @@ func validateMinutesUnshare(rt *shortcut.RuntimeContext) error {
 	return nil
 }
 
+func minutesShareOptions(rt *shortcut.RuntimeContext) map[string]any {
+	options := map[string]any{"policyId": map[string]float64{"edit": 2, "download": 3, "view": 4}[rt.Str("permission")]}
+	if rt.Changed("cover") {
+		options["coverPermission"] = fmt.Sprintf("%t", rt.Bool("cover"))
+	}
+	if values := rt.StrSlice("sub-resources"); len(values) > 0 {
+		options["roleSubResourceIds"] = values
+	}
+	return options
+}
+
 func minutesShareMemberFlag(rt *shortcut.RuntimeContext) string {
 	if rt.Changed("member-staff-ids") {
 		return "member-staff-ids"
@@ -657,20 +731,14 @@ func minutesShareMemberFlag(rt *shortcut.RuntimeContext) string {
 }
 
 func executeMinutesShare(rt *shortcut.RuntimeContext) error {
-	policy := map[string]float64{"edit": 2, "download": 3, "view": 4}[rt.Str("permission")]
 	memberFlag := minutesShareMemberFlag(rt)
 	memberProperty, memberResultKey := "memberUids", "memberUid"
 	if memberFlag == "member-staff-ids" {
 		memberProperty, memberResultKey = "memberStaffIds", "memberStaffId"
 	}
 	return executeMinutesPermissionLedger(rt, "share", "add_member_permission", memberFlag, memberResultKey, func(member string) map[string]any {
-		params := map[string]any{"uuids": minutesIDs(rt), memberProperty: []string{member}, "policyId": policy}
-		if rt.Changed("cover") {
-			params["coverPermission"] = fmt.Sprintf("%t", rt.Bool("cover"))
-		}
-		if values := rt.StrSlice("sub-resources"); len(values) > 0 {
-			params["roleSubResourceIds"] = values
-		}
+		params := minutesShareOptions(rt)
+		params["uuids"], params[memberProperty] = minutesIDs(rt), []string{member}
 		return params
 	})
 }
@@ -696,6 +764,11 @@ func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool
 	members := uniqueStrings(rt.StrSlice(memberFlag))
 	plan := map[string]any{"operation": "minutes." + operation, "taskUuids": minutesIDs(rt), "memberCount": len(members), "members": members}
 	if rt.DryRun() {
+		plan["failurePolicy"] = rt.Str("failure-policy")
+		if operation == "share" {
+			plan["permission"] = rt.Str("permission")
+			plan["options"] = minutesShareOptions(rt)
+		}
 		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes."+operation, plan))
 	}
 	results := []map[string]any{}
@@ -730,6 +803,7 @@ func collectMinutesArtifactsOnce(rt *shortcut.RuntimeContext, id string, artifac
 	for _, artifact := range artifacts {
 		var value any
 		var err error
+		var failure map[string]any
 		switch artifact {
 		case "basic":
 			var data map[string]any
@@ -763,15 +837,24 @@ func collectMinutesArtifactsOnce(rt *shortcut.RuntimeContext, id string, artifac
 		case "todos":
 			var data map[string]any
 			data, err = rt.CallMCPData("minutes", "list_minutes_todos", map[string]any{"taskUuid": id})
+			fact := minutesdata.FailedTodos(id, err)
 			if err == nil {
-				err = minutesdata.ValidateArtifact("todos", id, data)
-				value = data["result"]
+				fact = minutesdata.InspectTodos(id, data)
+			}
+			err = fact.Err()
+			if err == nil {
+				value = fact.Payload()
+			} else {
+				failure = fact.Ledger()
 			}
 		default:
 			err = fmt.Errorf("unsupported artifact %q", artifact)
 		}
 		if err != nil {
-			failures = append(failures, map[string]any{"artifact": artifact, "error": err.Error()})
+			if failure == nil {
+				failure = map[string]any{"artifact": artifact, "error": err.Error()}
+			}
+			failures = append(failures, failure)
 			continue
 		}
 		bundle[artifact] = value
@@ -785,13 +868,23 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 	for {
 		attempts++
 		bundle, failures := collectMinutesArtifactsOnce(rt, id, artifacts, pageLimit)
-		if len(failures) == 0 || minutesPollDeadlineReached(deadline, interval) {
+		if len(failures) == 0 || hasTerminalMinutesArtifactFailure(failures) || minutesPollDeadlineReached(deadline, interval) {
 			return bundle, failures, attempts
 		}
 		if err := waitMinutesInterval(rt, interval); err != nil {
 			return bundle, append(failures, map[string]any{"artifact": "wait", "error": err.Error()}), attempts
 		}
 	}
+}
+
+func hasTerminalMinutesArtifactFailure(failures []map[string]any) bool {
+	for _, failure := range failures {
+		state, _ := failure["state"].(string)
+		if state == string(minutesdata.ArtifactUnsupportedShape) {
+			return true
+		}
+	}
+	return false
 }
 
 func waitMinutesInterval(rt *shortcut.RuntimeContext, interval time.Duration) error {

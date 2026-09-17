@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -54,7 +55,7 @@ func executeMCPURLCommand(t *testing.T, caller edition.ToolCaller, args ...strin
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs(args)
-	err := root.ExecuteContext(t.Context())
+	err := corecmd.ExecuteContextForTest(root, t.Context())
 	return out.String(), err
 }
 

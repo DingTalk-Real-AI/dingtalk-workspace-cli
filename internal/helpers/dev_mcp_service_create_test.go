@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // 漏传 --server-name 会让服务缺少稳定的语义标识，service create 必须给出
@@ -38,7 +40,7 @@ func TestDevMCPServiceCreateServerNameWarning(t *testing.T) {
 		root.SetErr(&out)
 		root.SetArgs(baseArgs)
 
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 		}
 		if !strings.Contains(out.String(), warning) {
@@ -54,7 +56,7 @@ func TestDevMCPServiceCreateServerNameWarning(t *testing.T) {
 		root.SetErr(&out)
 		root.SetArgs(append(append([]string{}, baseArgs...), "--server-name", "open-meteo-weather"))
 
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 		}
 		if strings.Contains(out.String(), warning) {

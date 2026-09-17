@@ -119,6 +119,47 @@ func TestCrossPlatformCoverageValidateManifestAcceptsExactReviewedRoute(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageValidateManifestAcceptsCrossProductBoundary(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "skills/multi/dingtalk-aisearch/SKILL.md", "<!-- dws-intent: chat.search.filtered --> 精确 IM 明细走 `dws chat +search-msg`\n")
+	writeTestFile(t, root, "skills/multi/dingtalk-chat/SKILL.md", "<!-- dws-intent: chat.search.filtered --> 精确 IM 明细走 `dws chat +search-msg`\n")
+	writeTypedContractReference(t, root, "skills/multi/dingtalk-chat/references/contracts.md")
+	writeEventHandoffReference(t, root, "skills/multi/dingtalk-event/references/event-im-output.md")
+	manifest := routeManifest{
+		Version:           3,
+		MarkerRoots:       []string{"skills/multi/dingtalk-aisearch", "skills/multi/dingtalk-chat"},
+		RetiredScripts:    []string{"skills/multi/dingtalk-chat/scripts/retired.py"},
+		ContractReference: "skills/multi/dingtalk-chat/references/contracts.md",
+		HandoffReference:  "skills/multi/dingtalk-event/references/event-im-output.md",
+		Intents: []intentRoute{{
+			ID:                    "chat.search.filtered",
+			PreferredTool:         "chat.shortcut_search_msg",
+			ForbiddenDefaultTools: []string{"aisearch.search_enterprise", "aisearch.search_enterprise_behavior"},
+			References: []string{
+				"skills/multi/dingtalk-aisearch/SKILL.md",
+				"skills/multi/dingtalk-chat/SKILL.md",
+			},
+		}},
+	}
+	tools := map[string]toolFact{
+		"chat.shortcut_search_msg": {
+			Canonical: "chat.shortcut_search_msg", PrimaryPath: "chat +search-msg", Confirmation: "not_required",
+			UseWhen: []string{"精确 IM 消息过滤"}, AvoidWhen: []string{"跨来源主题发现"}, HasMeta: true,
+		},
+		"aisearch.search_enterprise": {
+			Canonical: "aisearch.search_enterprise", PrimaryPath: "aisearch enterprise", Confirmation: "not_required",
+			UseWhen: []string{"跨来源主题发现"}, AvoidWhen: []string{"精确 IM 消息过滤"}, HasMeta: true,
+		},
+		"aisearch.search_enterprise_behavior": {
+			Canonical: "aisearch.search_enterprise_behavior", PrimaryPath: "aisearch behavior", Confirmation: "not_required",
+			UseWhen: []string{"以当前用户为端点的行为回溯"}, AvoidWhen: []string{"精确 IM 消息过滤"}, HasMeta: true,
+		},
+	}
+	if failures := validateManifest(root, manifest, tools); len(failures) != 0 {
+		t.Fatalf("cross-product boundary failures = %v", failures)
+	}
+}
+
 func TestCrossPlatformCoverageValidateManifestRejectsWrongMarkerAndSafetyDowngrade(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, root, "skills/multi/dingtalk-chat/SKILL.md", "| 发消息 | `dws chat message send` | <!-- dws-intent: chat.send -->\n")

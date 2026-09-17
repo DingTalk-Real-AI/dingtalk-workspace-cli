@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -68,7 +69,7 @@ func executeDocReadScopeCommand(t *testing.T, caller *docReadScopeCaller, args .
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDocReadScopeFlagsAndValidation(t *testing.T) {
@@ -193,7 +194,7 @@ func TestCrossPlatformCoverageDocReadScopeMapsArgumentsAndWritesOutput(t *testin
 			"read", "--node", "doc-2", "--content-format", "jsonml",
 			"--scope", "tags", "--tags", "h1,h2",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 		want := map[string]any{

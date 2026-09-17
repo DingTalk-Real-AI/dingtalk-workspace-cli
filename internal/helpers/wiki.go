@@ -125,7 +125,10 @@ func proxySubCmd(use, targetProduct, targetPath string, flagRenames map[string]s
 				}
 			} else {
 				if err := targetCmd.ParseFlags(finalArgs); err != nil {
-					return fmt.Errorf("proxy flag parse error for %q: %w", targetCmd.CommandPath(), err)
+					// Manual parsing does not invoke Cobra's error handler. Use the
+					// target's prepared boundary so aliases retain its classification
+					// and suggestions, just as direct execution does.
+					return targetCmd.FlagErrorFunc()(targetCmd, err)
 				}
 				targetArgs := targetCmd.Flags().Args()
 				if targetCmd.RunE != nil {
@@ -827,7 +830,7 @@ ORG 类型授权不会出现在查询结果中。`,
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
-				UseWhen:      []string{"查看知识库成员名单与角色时"},
+				UseWhen:      []string{"查看、翻页或核对知识库成员及角色时"},
 				AvoidWhen: []string{
 					"返回无 userId：要 update/remove 需另用 contact user search 反查",
 					"增删改成员用 add/update/remove",

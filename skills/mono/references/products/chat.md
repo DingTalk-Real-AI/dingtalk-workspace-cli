@@ -11,6 +11,7 @@
 | 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...`；Bot 多群用 `--groups/--groups-file` |
 | 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...`；全量加 `--page-all`，导出加 `--output` |
 | 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
+| 查询最近 24 小时或指定时间以来有新消息的去重会话摘要 | `dws chat +recent-conversations`；可选 `--start/--end`，自动翻页并返回名称、类型和最新消息时间 |
 | 查询 @我的消息 | `dws chat +at-me ...` |
 | 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
 | 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
@@ -21,6 +22,11 @@
 - `+chat-messages --page-all` 连续读取 typed `nextPage.time`，按消息 ID 去重并受 `--page-limit/--max-results` 约束；`--output` 将同一完整性 ledger 原子写入工作目录内 JSON。
 - `+messages-send` 会自动规范化并补齐 @ 占位符。user 使用 `<@id>` / `<@all>`；bot/webhook 使用 `@id` / `@手机号` / `@all`。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
 - `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger。
+- `+active-conversations` 保留为隐藏但可执行的兼容入口；新调用使用 `+recent-conversations`。两者共用参数、校验和查询实现，使用旧名不会额外告警。
+- `+recent-conversations` 的 `--start` 选填，省略时从有效 `--end` 往前推 24 小时；两个时间参数都省略即查询最近 24 小时，仅传 `--end` 即查询该结束时间之前 24 小时，不是当天零点。显式 `--start` 沿用原解析规则，空值或纯空白仍报错。自动翻页并按 `openConversationId` 去重；`--page-delay` 默认 200ms（0–60000ms，等待可取消）。会话总有 `name` 和 `nameKnown`，未知名称为 `""` / `false`。成功及页数上限结果在 `data`，需检查 `complete` 和 `meta.pagination`；`pageSize` 记录 `--limit`。
+- `+recent-conversations` 的 `--start/--end` 仅支持整秒，显式传入非零小数秒会在参数校验时失败。默认 `end` 是本次查询取到的当前时间向下取整秒，不包含当前尚未结束的这一秒，再从有效 `end` 倒推默认 `start`；最终有效区间必须满足 `end > start`。同一 `start/end` 用于所有页请求、结果返回和续查；消息 `latestMessageTime` 仍保留毫秒精度。非首页 `--cursor` 必须显式复用原 `--start/--end`，否则校验失败，不能重新使用默认窗口。
+- `+recent-conversations` 后续页失败返回 `partial_failure`（退出码 7）：已成功页面摘要在 `data.succeeded[0]`（`id=completed-pages`，`complete=false`），失败项在 `data.failed[0]`（`id=page:N`，其 `error.details.failedPage/failedCursor` 保留失败位置），`meta.pagination.next_token` 指向失败页输入游标；首个请求页失败返回普通 `failure`。先排查错误，不自动重试。`--cursor` 用于手工续查，不能跨次校验查询绑定或检测循环，也不恢复旧聚合；必须保持同一 profile，复用摘要中的 `start/end/pageSize` 作为 `--start/--end/--limit`，前后批次按 `conversationId` 合并并保留最大消息时间。续页自身的 `complete` 始终为 false；只有从首页起无遗漏地接续所有批次、处理完失败页且 endpoint 耗尽，才能报告全量结果。分页耗尽不保证上游索引无延迟或一致性快照。
+- `+recent-conversations` 不保存磁盘进度，强制终止后需重新查询；游标过期需从首页重查。`pagesFetched` 仅计本次已验证页面。`--total-timeout` 默认 300 秒（1–3600），每次执行所有页、重试和等待共用预算；全局 `--timeout` 仍约束单次请求。
 - `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 可用 `--download-resources` 下载资源。引用、回复、合并转发中的资源使用结果 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
 - 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
 - 下载器仅接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。新官方域名被拒绝时记录错误中的 host 供审查，不要放宽为任意 HTTPS。
@@ -2127,7 +2133,8 @@ Flags:
 用户说"某人发给我的消息/指定发送者的消息/某人最近的消息" → `chat message list-by-sender --sender-user-id <userId>` 或 `--sender-open-dingtalk-id <openDingTalkId>`（跨单聊+群聊）
 用户说"和某人的单聊聊天记录/拉某人单聊历史" → `chat message list --user <userId>` 或 `--open-dingtalk-id <openDingTalkId>`
 用户说"某个群的聊天记录" → `chat message list --group <openConversationId>`
-用户说"我最近所有消息/我今天的消息" → `chat message list-all --start <ISO> --end <ISO>`
+用户说"最近 24 小时或指定时间以来哪些单聊或群聊有新消息/最近活跃会话" → `chat +recent-conversations`；仅指定时间范围时传 `--start/--end`
+用户说"我最近所有消息正文/我今天的消息正文" → `chat message list-all --start <ISO> --end <ISO>`
 用户说"@我的消息/提及我的" → `chat message list-mentions --start <ISO> --end <ISO>`
 用户说"搜索消息里的关键词/包含XX的消息" → `chat message search-advanced --query "<关键词>"`（首选，严格超集）
 用户说"我和某人的共同群" → `chat search-common --nicks "<昵称1>,<昵称2>"`
@@ -2163,7 +2170,8 @@ Flags:
 用户说"回复话题" → `chat thread reply --conversation-id <openConvThreadId>`
 用户说"把普通群已有消息转成Thread/升级成群内话题" → `chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`
 用户说"查看话题回复/拉取话题回复/列出每条回复内容/核实某条回复是否还在" → `chat thread list-replies`
-用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息" → `chat message list-all`
+用户说"指定时间以来有消息的会话/最近活跃会话/哪些单聊群聊有新消息" → `chat +recent-conversations`
+用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息正文/我的消息正文/我今天的消息正文/查我的钉钉消息正文" → `chat message list-all`
 用户说"特别关注人的消息/关注的人的消息/星标联系人的消息" → `chat message list-focused`
 用户说"消息已读未读/谁看了消息/查读状态/消息读取状态" → `chat message read-status`
 用户说"查看我的机器人" → `chat bot search`
@@ -2472,7 +2480,7 @@ dws chat message send --conversation-id <openConversationId> --msg-type image --
 
 **注意：send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
 
-`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON），例如 `'["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"starting\"}}"]'`。CLI 会解析为 `a2uiMessages`，并用换行拼接为 `summary`，单聊传 userId 时自动解析为 openDingTalkId。创建时默认 `flowStatus=PROCESSING`。
+`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON）。生成内容时可参考 [A2UI 展示卡片指南](chat/a2ui.md)，使用完整的 `createSurface`、组件定义和数据绑定创建卡片。CLI 会解析为 `a2uiMessages`，并用换行拼接为 `summary`，单聊传 userId 时自动解析为 openDingTalkId。创建时默认 `flowStatus=PROCESSING`。可选 `--a2ui-annotations` 接受 JSON 对象数组并透传为 `a2uiAnnotations`，支持 `[]`；省略时创建请求不携带该字段。
 ```
 Usage:
   dws chat message send-card [flags]
@@ -2481,7 +2489,6 @@ Example:
   dws chat message send-card --conversation-id <openConversationId> --at-open-dingtalk-ids <openDingTalkId>
   dws chat message send-card --conversation-id <openConversationId> --at-all
   dws chat message send-card --open-dingtalk-id <openDingTalkId>
-  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"starting\"}}"]'
   # 查询群 ID: dws chat search --query "群名"
   # 查询人员: dws aisearch person --query "姓名" --dimension name
 Flags:
@@ -2494,7 +2501,7 @@ Flags:
 #### 更新卡片内容 — streaming 与 A2UI 独立命令
 
 `update-card` 通过 `im.update_streaming_card` 更新 streaming 卡片。`--flow-status` 的 CLI 类型为 string，仍只接受兼容数字 1-5，并向 RPC 发送 integer。
-`update-a2ui-card` 通过 `im.update_a2ui_card` 更新 A2UI 卡片，`--content` 必须是 JSON 字符串数组并发送为 `a2uiMessages`，固定附带 `a2uiAnnotations: []`。A2UI `--flow-status` 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，也兼容数字 1-9 并映射为对应枚举字符串。
+`update-a2ui-card` 通过 `im.update_a2ui_card` 更新 A2UI 卡片，`--content` 必须是 JSON 字符串数组并发送为 `a2uiMessages`，可通过 `--a2ui-annotations` 传入 JSON 对象数组，省略时发送 `a2uiAnnotations: []`。A2UI `--flow-status` 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，也兼容数字 1-9 并映射为对应枚举字符串。
 
 **最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。**
 更新结果不确定时不要再次执行更新；保留返回结果并告知用户。

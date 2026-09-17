@@ -25,8 +25,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// textLocalReadFile is the injection seam for the overwrite --dry-run local
-// content read; tests use it to force the read failure portably because
+// textLocalReadFile is the injection seam for local upload preparation and
+// overwrite --dry-run reads; tests force read failures portably because
 // chmod-based unreadability does not affect reads on Windows.
 var textLocalReadFile = os.ReadFile
 
@@ -51,6 +51,36 @@ type textFileSpec struct {
 	// Product renders in command echo lines and temp-dir prefixes, e.g.
 	// "markdown" or "html".
 	Product string
+}
+
+// textFileUploadOptions carries product-specific behavior into the shared
+// create/overwrite engine without leaking product-only flags into downstream
+// Drive or Doc-space calls. A nil transform preserves the original upload
+// bytes and, for --file, the original source path.
+type textFileUploadOptions struct {
+	transform     func([]byte) []byte
+	dryRunDetails map[string]any
+}
+
+func mergeTextFileDryRunDetails(details map[string]any, extra map[string]any) map[string]any {
+	for key, value := range extra {
+		details[key] = value
+	}
+	return details
+}
+
+func writeTextFileUploadTempFile(prefix, fileName string, content []byte) (string, func(), error) {
+	tmpDir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		return "", nil, fmt.Errorf("创建临时目录失败: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
+	uploadPath := filepath.Join(tmpDir, sanitizeFileName(fileName))
+	if err := os.WriteFile(uploadPath, content, 0o600); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	return uploadPath, cleanup, nil
 }
 
 func (spec textFileSpec) hasExtension(name string) bool {
@@ -91,6 +121,10 @@ var htmlTextFileSpec = textFileSpec{
 // --workspace to Doc space, a standalone --folder probes its domain, and the
 // default destination is the Doc-space root.
 func runTextFileCreate(cmd *cobra.Command, spec textFileSpec) error {
+	return runTextFileCreateWithOptions(cmd, spec, textFileUploadOptions{})
+}
+
+func runTextFileCreateWithOptions(cmd *cobra.Command, spec textFileSpec, options textFileUploadOptions) error {
 	contentFlag := flagOrFallback(cmd, "content", "markdown")
 	fileFlag := flagOrFallback(cmd, "file", "file-path")
 	nameFlag, _ := cmd.Flags().GetString("name")
@@ -124,6 +158,20 @@ func runTextFileCreate(cmd *cobra.Command, spec textFileSpec) error {
 		if nameFlag == "" {
 			nameFlag = filepath.Base(fileFlag)
 		}
+		if options.transform != nil {
+			source, err := textLocalReadFile(fileFlag)
+			if err != nil {
+				return fmt.Errorf("无法读取文件 %s: %w", fileFlag, err)
+			}
+			uploadPath, cleanup, err = writeTextFileUploadTempFile(
+				spec.tmpPrefix("create")+"*",
+				nameFlag,
+				options.transform(source),
+			)
+			if err != nil {
+				return err
+			}
+		}
 	} else {
 		if nameFlag == "" {
 			return fmt.Errorf("使用 --content 时必须指定 --name")
@@ -133,15 +181,17 @@ func runTextFileCreate(cmd *cobra.Command, spec textFileSpec) error {
 			return err
 		}
 		nameFlag = sanitizeFileName(nameFlag)
-		tmpDir, err := os.MkdirTemp("", spec.tmpPrefix("create")+"*")
-		if err != nil {
-			return fmt.Errorf("创建临时目录失败: %w", err)
+		contentBytes := []byte(content)
+		if options.transform != nil {
+			contentBytes = options.transform(contentBytes)
 		}
-		cleanup = func() { _ = os.RemoveAll(tmpDir) }
-		uploadPath = filepath.Join(tmpDir, nameFlag)
-		if err := os.WriteFile(uploadPath, []byte(content), 0o600); err != nil {
-			cleanup()
-			return fmt.Errorf("写入临时文件失败: %w", err)
+		uploadPath, cleanup, err = writeTextFileUploadTempFile(
+			spec.tmpPrefix("create")+"*",
+			nameFlag,
+			contentBytes,
+		)
+		if err != nil {
+			return err
 		}
 	}
 	if cleanup != nil {
@@ -156,19 +206,19 @@ func runTextFileCreate(cmd *cobra.Command, spec textFileSpec) error {
 	if err != nil {
 		return fmt.Errorf("读取上传文件失败: %w", err)
 	}
-	if deps.Caller.DryRun() {
+	if deps.Caller.DryRun() || markdownGlobalDryRun(cmd) {
 		dServer, dTool, dArgs := textFileCreateDelegationTarget(spec, nameFlag, info.Size(), folderID, spaceID, workspaceID)
 		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
 			return err
 		}
-		return printMarkdownDryRun(map[string]any{
+		return printMarkdownDryRun(mergeTextFileDryRunDetails(map[string]any{
 			"operation":    "create",
 			"file_name":    nameFlag,
 			"file_size":    info.Size(),
 			"folder_id":    folderID,
 			"space_id":     spaceID,
 			"workspace_id": workspaceID,
-		}, fmt.Sprintf("创建 %s 文件", spec.Label), nameFlag)
+		}, options.dryRunDetails), fmt.Sprintf("创建 %s 文件", spec.Label), nameFlag)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -378,6 +428,10 @@ func resolveTextDirectoryOutputPath(outputPath, name string) (string, error) {
 // only renames the upload and must never bypass the target type check, so a
 // wrong nodeId cannot overwrite a non-native file.
 func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
+	return runTextFileOverwriteWithOptions(cmd, spec, textFileUploadOptions{})
+}
+
+func runTextFileOverwriteWithOptions(cmd *cobra.Command, spec textFileSpec, options textFileUploadOptions) error {
 	nodeID := flagOrFallback(cmd, "node", "node-id", "file-id", "doc-id")
 	contentFlag := flagOrFallback(cmd, "content", "markdown")
 	fileFlag := flagOrFallback(cmd, "file", "file-path")
@@ -390,7 +444,7 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
 			return err
 		}
-		return printMarkdownDryRun(map[string]any{
+		return printMarkdownDryRun(mergeTextFileDryRunDetails(map[string]any{
 			"operation":    "overwrite",
 			"node_id":      nodeID,
 			"content_set":  contentFlag != "",
@@ -398,7 +452,7 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 			"file_name":    nameFlag,
 			"space_id":     spaceID,
 			"workspace_id": workspaceID,
-		}, fmt.Sprintf("覆盖更新 %s 文件", spec.Label), nodeID)
+		}, options.dryRunDetails), fmt.Sprintf("覆盖更新 %s 文件", spec.Label), nodeID)
 	}
 	if nodeID == "" {
 		return fmt.Errorf("flag --node is required")
@@ -461,15 +515,30 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 
 	var cleanup func()
 	if fileFlag == "" {
-		tmpDir, err := os.MkdirTemp("", spec.tmpPrefix("overwrite")+"*")
-		if err != nil {
-			return fmt.Errorf("创建临时目录失败: %w", err)
+		contentBytes := []byte(content)
+		if options.transform != nil {
+			contentBytes = options.transform(contentBytes)
 		}
-		cleanup = func() { _ = os.RemoveAll(tmpDir) }
-		uploadPath = filepath.Join(tmpDir, nameFlag)
-		if err := os.WriteFile(uploadPath, []byte(content), 0o600); err != nil {
-			cleanup()
-			return fmt.Errorf("写入临时文件失败: %w", err)
+		uploadPath, cleanup, err = writeTextFileUploadTempFile(
+			spec.tmpPrefix("overwrite")+"*",
+			nameFlag,
+			contentBytes,
+		)
+		if err != nil {
+			return err
+		}
+	} else if options.transform != nil {
+		source, err := textLocalReadFile(fileFlag)
+		if err != nil {
+			return fmt.Errorf("无法读取文件 %s: %w", fileFlag, err)
+		}
+		uploadPath, cleanup, err = writeTextFileUploadTempFile(
+			spec.tmpPrefix("overwrite")+"*",
+			nameFlag,
+			options.transform(source),
+		)
+		if err != nil {
+			return err
 		}
 	}
 	if cleanup != nil {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -133,7 +134,7 @@ func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testi
 
 	edition.Override(&edition.Hooks{IsEmbedded: true})
 	embedded := newUpgradeCommand()
-	if err := embedded.Execute(); err == nil || !strings.Contains(err.Error(), "embedded") {
+	if err := corecmd.ExecuteForTest(embedded); err == nil || !strings.Contains(err.Error(), "embedded") {
 		t.Fatalf("unnamed embedded upgrade error = %v", err)
 	}
 	edition.Override(&edition.Hooks{})
@@ -144,7 +145,7 @@ func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testi
 		}
 		command.SetOut(io.Discard)
 		command.SetArgs(args)
-		if err := command.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(command); err != nil {
 			t.Fatalf("upgrade command %v = %v", args, err)
 		}
 	}
@@ -157,6 +158,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 	oldDownload, oldProgress := downloadUpgradeFile, downloadUpgradeProgress
 	oldExtract, oldFind, oldLocate := extractUpgradeZip, findExtractedBinary, locateUpgradeSkill
 	oldReplace, oldInstall := replaceUpgradeSelf, installUpgradeSkills
+	oldInvalidate := invalidateSchemaCacheAfterUpgrade
 	oldTemp, oldRemove, oldRead, oldMkdir := upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll
 	oldVerify, oldTar, oldValidate := verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary
 	oldStdin := os.Stdin
@@ -167,11 +169,13 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		downloadUpgradeFile, downloadUpgradeProgress = oldDownload, oldProgress
 		extractUpgradeZip, findExtractedBinary, locateUpgradeSkill = oldExtract, oldFind, oldLocate
 		replaceUpgradeSelf, installUpgradeSkills = oldReplace, oldInstall
+		invalidateSchemaCacheAfterUpgrade = oldInvalidate
 		upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll = oldTemp, oldRemove, oldRead, oldMkdir
 		verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary = oldVerify, oldTar, oldValidate
 		os.Stdin = oldStdin
 	})
 	fail := errors.New("stage failure")
+	invalidated := 0
 	binary := upgradepkg.GitHubAsset{Name: "dws.zip", BrowserDownloadURL: "binary"}
 	skills := upgradepkg.GitHubAsset{Name: "dws-skills.zip", BrowserDownloadURL: "skills"}
 	checksums := upgradepkg.GitHubAsset{Name: "checksums.txt", BrowserDownloadURL: "checksums"}
@@ -285,6 +289,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			return nil
 		}
+		invalidateSchemaCacheAfterUpgrade = func() { invalidated++ }
 		installUpgradeSkills = func(string, upgradepkg.SkillUpgradeOptions) (*upgradepkg.SkillUpgradeResult, error) {
 			if stage == "install" {
 				return nil, fail
@@ -346,6 +351,14 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			if (stage == "success" || stage == "success-no-skills" || stage == "install-retire-warning") && !rb.cleaned {
 				t.Fatal("successful upgrade did not clean backups")
 			}
+			if stage == "success" || stage == "success-no-skills" || stage == "install-retire-warning" {
+				if invalidated == 0 {
+					t.Fatal("successful upgrade did not invalidate schema cache identity")
+				}
+			} else if stage == "replace" && invalidated != 0 {
+				t.Fatal("failed replace still invalidated schema cache")
+			}
+			invalidated = 0
 			if stage == "success" {
 				command := newUpgradeCommand()
 				command.Flags().Bool("yes", false, "")

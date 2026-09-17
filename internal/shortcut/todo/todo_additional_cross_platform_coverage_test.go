@@ -69,7 +69,7 @@ func runTodoCoverage(t *testing.T, declaration shortcut.Shortcut, caller *todoCo
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"todo", declaration.Command}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func runTodoUnifiedCoverage(t *testing.T, declaration shortcut.Shortcut, caller *todoCoverageCaller, args ...string) map[string]any {
@@ -88,7 +88,7 @@ func runTodoUnifiedCoverage(t *testing.T, declaration shortcut.Shortcut, caller 
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"todo", declaration.Command}, args...))
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err != nil {
 		t.Fatalf("execute %s: %v", declaration.Command, err)
 	}

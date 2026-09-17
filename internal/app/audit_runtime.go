@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -110,7 +111,7 @@ func auditIdentity() (audit.Actor, string) {
 	return actor, agentID
 }
 
-func emitAudit(sink audit.Sink, execID string, invokeStart time.Time, invocation executor.Invocation, endpoint string, retErr error, cliVersion string) {
+func emitAudit(ctx context.Context, sink audit.Sink, execID string, invokeStart time.Time, invocation executor.Invocation, endpoint string, retErr error, cliVersion string) {
 	if sink == nil {
 		return
 	}
@@ -127,7 +128,17 @@ func emitAudit(sink audit.Sink, execID string, invokeStart time.Time, invocation
 		errCat, errReason = classifyAuditError(retErr)
 	}
 
-	paramsSummary := logging.SanitizeArguments(invocation.Params, 1024)
+	params := invocation.Params
+	if reason := audit.LocalReason(ctx); reason != "" {
+		// Keep CLI-only metadata in its own audit namespace. Never mutate the
+		// invocation: its Params are the actual MCP request arguments.
+		params = make(map[string]any, len(invocation.Params)+1)
+		for key, value := range invocation.Params {
+			params[key] = value
+		}
+		params["_local"] = map[string]any{"reason": reason}
+	}
+	paramsSummary := logging.SanitizeArguments(params, 1024)
 
 	evt := &audit.Event{
 		Timestamp:     invokeStart,

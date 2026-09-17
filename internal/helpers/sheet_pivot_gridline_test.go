@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -62,7 +63,7 @@ func executeSheetPivotGridlineCommand(t *testing.T, caller *sheetPivotGridlineCa
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestSheetPivotAndGridlineCommandsRegistered(t *testing.T) {

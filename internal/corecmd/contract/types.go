@@ -14,10 +14,8 @@
 package contract
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 )
@@ -207,13 +205,11 @@ func canonicalJSONObject(raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("must be one JSON object")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
 	var object map[string]json.RawMessage
-	if err := decoder.Decode(&object); err != nil || object == nil {
-		return nil, fmt.Errorf("must be one JSON object")
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+	// The entire input is already buffered. Unmarshal rejects trailing values
+	// without a streaming decoder and its extra read buffer. RawMessage keeps
+	// nested number tokens and field order unchanged.
+	if err := json.Unmarshal(raw, &object); err != nil || object == nil {
 		return nil, fmt.Errorf("must be one JSON object")
 	}
 	canonical, _ := json.Marshal(object) // decoded RawMessages are always marshalable
@@ -510,6 +506,12 @@ func cloneExampleDispositions(in []ExampleDisposition) []ExampleDisposition {
 	return out
 }
 
+// FormatAlternative is a format-only JSON Schema anyOf branch. The parameter
+// owns its type; branches describe alternative accepted string formats.
+type FormatAlternative struct {
+	Format string `json:"format"`
+}
+
 // ParamDecl is one parameter-level Schema fact declared on a command. It is
 // stored at DeclareLeafMetadata time and applied as annotations at assembly
 // time, when all flags are guaranteed to exist on the fully-built command tree.
@@ -521,6 +523,7 @@ type ParamDecl struct {
 	Description   string
 	RequiredWhen  string
 	Enum          []string
+	AnyOf         []FormatAlternative
 }
 
 func defaultString(value, fallback string) string {

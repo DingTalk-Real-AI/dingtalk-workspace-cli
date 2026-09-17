@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -135,6 +138,15 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 	if writeErr != nil {
 		writeStep.Status = "unknown"
 		writeStep.Error = writeErr.Error()
+	}
+	// Match batch updates: a definite input rejection must not be recovered
+	// from an old row that happens to already contain the requested values.
+	if isRecordWriteInputRejection(writeErr) {
+		writeStep.Status = "failed"
+		result.CompletedSteps = append(result.CompletedSteps, writeStep)
+		result.Status = "failed"
+		result.FailedCount = 1
+		return compositeError(result, writeErr, false)
 	}
 	result.CompletedSteps = append(result.CompletedSteps, writeStep)
 
@@ -319,25 +331,48 @@ func verifyRecordCells(record map[string]any, expected map[string]any, fieldType
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if !exists || !recordCellValueEqual(got, want, fieldTypes[fieldID]) {
+		fieldType := fieldTypes[fieldID]
+		if !exists {
+			if isMultiSelectFieldType(fieldType) && isEmptyJSONList(want) {
+				continue
+			}
+			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
+		}
+		if !recordCellValueEqual(got, want, fieldType) {
 			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
 		}
 	}
 	return nil
 }
 
-// recordCellValueEqual accepts typed projections only for fields proven to be
-// selects. Comparison is intentionally asymmetric: a scalar write may read
-// back as {id,name}, but an object write must never be verified by a scalar
-// response that dropped the requested ID or other identity fields.
+// recordCellValueEqual accepts scalar projections only for proven field types.
+// Comparison is intentionally asymmetric: a scalar write may read
+// back as {id,name}; an ID object may gain a current name. An object write
+// must never be verified by a scalar response that dropped the requested ID
+// or other identity fields. Notable may
+// omit or return null for an empty multi-select, so that projection is accepted
+// only after get_fields proves the field type.
 func recordCellValueEqual(got, want any, fieldType string) bool {
 	if reflect.DeepEqual(got, want) {
 		return true
 	}
-	if strings.EqualFold(fieldType, "singleSelect") {
-		return selectionObjectMatchesScalar(got, want)
+	if isMultiSelectFieldType(fieldType) && got == nil && isEmptyJSONList(want) {
+		return true
 	}
-	if !strings.EqualFold(fieldType, "multipleSelect") && !strings.EqualFold(fieldType, "multiSelect") {
+	switch strings.ToLower(fieldType) {
+	case "number", "currency", "progress", "rating":
+		actual, actualOK := recordNumericValue(got)
+		expected, expectedOK := recordNumericValue(want)
+		return actualOK && expectedOK && actual.Cmp(expected) == 0
+	case "date":
+		return recordDateValueEqual(got, want)
+	case "url":
+		return recordURLValueEqual(got, want)
+	}
+	if strings.EqualFold(fieldType, "singleSelect") {
+		return selectionObjectMatchesValue(got, want)
+	}
+	if !isMultiSelectFieldType(fieldType) {
 		return false
 	}
 	gotList, gotOK := got.([]any)
@@ -349,7 +384,7 @@ func recordCellValueEqual(got, want any, fieldType string) bool {
 	for _, wantItem := range wantList {
 		matched := false
 		for index, gotItem := range gotList {
-			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesScalar(gotItem, wantItem)) {
+			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesValue(gotItem, wantItem)) {
 				continue
 			}
 			used[index] = true
@@ -363,22 +398,89 @@ func recordCellValueEqual(got, want any, fieldType string) bool {
 	return true
 }
 
-func recordCellsMayNeedSelectionTypes(record map[string]any, expected map[string]any) bool {
+// recordNumericValue compares JSON decimal representations without float64
+// rounding. Objects, booleans, NaN and non-JSON numeric strings are not numbers.
+func recordNumericValue(value any) (*big.Rat, bool) {
+	raw, err := json.Marshal(value)
+	if text, ok := value.(string); ok {
+		raw = []byte(text)
+	}
+	if err != nil {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var decoded any
+	if !json.Valid(raw) || decoder.Decode(&decoded) != nil {
+		return nil, false
+	}
+	number, ok := decoded.(json.Number)
+	if !ok {
+		return nil, false
+	}
+	text := string(number)
+	// Verification must not allocate huge integers for an untrusted exponent.
+	// Outside this conservative range, leave the value unverified.
+	if len(text) > 128 {
+		return nil, false
+	}
+	if i := strings.IndexAny(text, "eE"); i >= 0 {
+		exponent, err := strconv.Atoi(text[i+1:])
+		if err != nil || exponent < -1000 || exponent > 1000 {
+			return nil, false
+		}
+	}
+	return new(big.Rat).SetString(text)
+}
+
+func recordCellsMayNeedFieldTypes(record map[string]any, expected map[string]any) bool {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
 		return false
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if exists && !reflect.DeepEqual(got, want) && selectionProjectionShapes(got, want) {
+		if isEmptyJSONList(want) && (!exists || got == nil) {
+			return true
+		}
+		if exists && !reflect.DeepEqual(got, want) && (selectionProjectionShapes(got, want) || scalarProjectionShapes(got, want)) {
 			return true
 		}
 	}
 	return false
 }
 
+func isMultiSelectFieldType(fieldType string) bool {
+	return strings.EqualFold(fieldType, "multipleSelect") || strings.EqualFold(fieldType, "multiSelect")
+}
+
+func isEmptyJSONList(value any) bool {
+	items, ok := value.([]any)
+	return ok && len(items) == 0
+}
+
+// Limit schema reads to scalar pairs that could be number/date projections.
+func scalarProjectionShapes(got, want any) bool {
+	actual, ok := got.(string)
+	if !ok {
+		return false
+	}
+	if _, ok := recordNumericValue(got); ok {
+		_, numeric := recordNumericValue(want)
+		return numeric
+	}
+	_, err := time.Parse(time.RFC3339Nano, actual)
+	_, validDate := recordDateWriteTime(want)
+	return err == nil && validDate
+}
+
 func selectionProjectionShapes(got, want any) bool {
-	if _, gotObject := got.(map[string]any); gotObject {
+	if object, gotObject := got.(map[string]any); gotObject {
+		if expected, wantObject := want.(map[string]any); wantObject {
+			_, gotID := object["id"].(string)
+			_, wantID := expected["id"].(string)
+			return gotID && wantID
+		}
 		_, wantScalar := want.(string)
 		return wantScalar
 	}
@@ -409,12 +511,12 @@ func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeRe
 
 func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
 	exactErr := verifyRecordCells(record, expected, nil)
-	if exactErr == nil || !recordCellsMayNeedSelectionTypes(record, expected) {
+	if exactErr == nil || !recordCellsMayNeedFieldTypes(record, expected) {
 		return exactErr
 	}
 	fieldTypes, err := r.resolve()
 	if err != nil {
-		return fmt.Errorf("%v; cannot load field types for select verification: %w", exactErr, err)
+		return fmt.Errorf("%v; cannot load field types for record verification: %w", exactErr, err)
 	}
 	return verifyRecordCells(record, expected, fieldTypes)
 }
@@ -453,6 +555,40 @@ func recordFieldTypesFromFields(fields []map[string]any) map[string]string {
 		}
 	}
 	return fieldTypes
+}
+
+// selectionObjectMatchesValue accepts the server's current option name only
+// when the requested stable ID survives. Unrecognized requested keys and scalar
+// responses cannot prove an object write.
+func selectionObjectMatchesValue(got, want any) bool {
+	if expected, ok := want.(map[string]any); ok {
+		actual, ok := got.(map[string]any)
+		if !ok {
+			return false
+		}
+		id, ok := expected["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" || actual["id"] != id {
+			return false
+		}
+		for key := range expected {
+			if key != "id" && key != "name" {
+				return false
+			}
+		}
+		return true
+	}
+	return selectionObjectMatchesScalar(got, want)
+}
+
+// recordURLValueEqual recognizes only the documented string-to-{text,link}
+// conversion, after get_fields has established that this is a URL field.
+func recordURLValueEqual(got, want any) bool {
+	expected, ok := want.(string)
+	if !ok {
+		return false
+	}
+	actual, ok := got.(map[string]any)
+	return ok && actual["text"] == expected && actual["link"] == expected
 }
 
 func selectionObjectMatchesScalar(objectValue, scalarValue any) bool {

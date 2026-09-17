@@ -20,6 +20,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // writeExecStub drops a PATH candidate named name into dir so dependency
@@ -294,7 +296,7 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 		"--robot-client-id", "id1", "--robot-client-secret", "sec1",
 		"--agent-model", "claude-sonnet-4-6", "--agent-workdir", "/tmp/kb",
 		"--dry-run"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\n%s", err, out.String())
 	}
 	for _, sub := range []string{"claude-sonnet-4-6", "/tmp/kb", "per-conversation"} {
@@ -312,7 +314,7 @@ func TestRobotConnectAgentFlagsInDryRun(t *testing.T) {
 		"--channel", "claudecode",
 		"--robot-client-id", "id1", "--robot-client-secret", "sec1",
 		"--agent-memory=false", "--dry-run"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\n%s", err, out.String())
 	}
 	if !strings.Contains(out.String(), `"memory": "disabled"`) {
@@ -353,7 +355,7 @@ func TestRobotConnectDryRunShowsCliStatus(t *testing.T) {
 		root.SetErr(&out)
 		root.SetArgs([]string{"dev", "connect", "--channel", channel,
 			"--robot-client-id", "a", "--robot-client-secret", "b", "--dry-run"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("Execute(%s): %v\n%s", channel, err, out.String())
 		}
 		return out.String()

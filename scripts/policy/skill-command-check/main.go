@@ -18,12 +18,14 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
-	inlineCommand = regexp.MustCompile("`(dws\\s+[^`]+)`")
-	lineCommand   = regexp.MustCompile(`^\s*(?:[>$]\s*)?(dws\s+.+?)\s*$`)
-	antiMarkers   = []string{
+	inlineCommand     = regexp.MustCompile("`(dws\\s+[^`]+)`")
+	inlineChatCommand = regexp.MustCompile("`(\\+[^`]+)`")
+	lineCommand       = regexp.MustCompile(`^\s*(?:[>$]\s*)?(dws\s+.+?)\s*$`)
+	antiMarkers       = []string{
 		"禁止", "不存在", "不要使用", "不要用", "错误写法", "错误命令",
 		"反模式", "反例", "错例", "臆造", "虚构", "不支持", "unknown ",
 		"❌", "×", "已下线", "废弃",
@@ -73,7 +75,7 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 	var failures []string
 	checked := map[string]bool{}
 	for _, ref := range refs {
-		path, _, skip := parseReference(ref.Text)
+		path, flags, skip := parseReference(ref.Text)
 		if skip || path == "" || antiCommands[path] {
 			continue
 		}
@@ -82,6 +84,11 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 			continue
 		}
 		if checked[path] {
+			if enforceVisibleFlags(rootPath, ref.File) {
+				if issue := publicFlagIssue(root, path, flags); issue != "" {
+					failures = append(failures, formatFailure(rootPath, ref, issue))
+				}
+			}
 			continue
 		}
 
@@ -92,6 +99,12 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 			failures = append(failures, formatFailure(rootPath, ref, "command path does not exist"))
 			continue
 		case resolutionValid:
+			if enforceVisibleFlags(rootPath, ref.File) {
+				if issue := publicFlagIssue(root, path, flags); issue != "" {
+					failures = append(failures, formatFailure(rootPath, ref, issue))
+					continue
+				}
+			}
 			checked[path] = true
 		}
 	}
@@ -106,6 +119,51 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "skill command integrity check: ok (%d executable command paths)\n", len(checked))
 	return 0
+}
+
+func enforceVisibleFlags(rootPath, path string) bool {
+	relative, _ := filepath.Rel(rootPath, path)
+	skillRoot := filepath.Join("skills", "multi", "dingtalk-chat")
+	return relative == skillRoot || strings.HasPrefix(relative, skillRoot+string(filepath.Separator))
+}
+
+// publicFlagIssue rejects both removed/typoed flags and compatibility flags
+// that still exist on Cobra but are deliberately hidden. Published Chat Skill
+// instructions must be executable through the current public contract; merely
+// finding a similarly named internal flag is not sufficient.
+func publicFlagIssue(root *cobra.Command, path string, flags []string) string {
+	cmd, remaining, err := root.Find(strings.Fields(strings.TrimPrefix(path, "dws ")))
+	if err != nil || cmd == nil || len(remaining) > 0 {
+		return ""
+	}
+	for _, name := range flags {
+		flag := commandFlag(cmd, name)
+		if flag == nil {
+			return fmt.Sprintf("flag --%s does not exist on the command; use the public command contract", name)
+		}
+		if flag.Hidden {
+			return fmt.Sprintf("flag --%s is hidden; use the public command contract", name)
+		}
+	}
+	return ""
+}
+
+func commandFlag(cmd *cobra.Command, name string) *pflag.Flag {
+	if cmd == nil {
+		return nil
+	}
+	if flag := cmd.LocalNonPersistentFlags().Lookup(name); flag != nil {
+		return flag
+	}
+	if flag := cmd.PersistentFlags().Lookup(name); flag != nil {
+		return flag
+	}
+	// Cobra only inherits persistent flags. A parent command's local flags are
+	// not executable on this leaf and must not make a Skill example pass.
+	if flag := cmd.InheritedFlags().Lookup(name); flag != nil {
+		return flag
+	}
+	return nil
 }
 
 // schemaProjectionIssue keeps published Agent instructions on the bounded
@@ -193,6 +251,15 @@ func extractReferences(root string) ([]commandRef, error) {
 				seen[command] = true
 				refs = append(refs, commandRef{File: path, Line: lineNumber, Text: command})
 			}
+			if isMultiChatSkillPath(path) {
+				for _, match := range inlineChatCommand.FindAllStringSubmatch(line, -1) {
+					command := "dws chat " + strings.TrimSpace(match[1])
+					if !seen[command] {
+						seen[command] = true
+						refs = append(refs, commandRef{File: path, Line: lineNumber, Text: command})
+					}
+				}
+			}
 			if inFence {
 				match := lineCommand.FindStringSubmatch(line)
 				if len(match) != 2 {
@@ -207,6 +274,11 @@ func extractReferences(root string) ([]commandRef, error) {
 		return scanner.Err()
 	})
 	return refs, err
+}
+
+func isMultiChatSkillPath(path string) bool {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	return strings.Contains(cleaned, "/skills/multi/dingtalk-chat/")
 }
 
 func isAntiPatternLine(line string) bool {

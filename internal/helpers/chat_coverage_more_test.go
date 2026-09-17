@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -659,7 +660,7 @@ func TestCrossPlatformCoverageChatCommandFinalBranches(t *testing.T) {
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs([]string{"chmod", "chat.message:send", "--conversation-id", "cid"})
-		if err := root.ExecuteContext(context.Background()); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		if err := corecmd.ExecuteContextForTest(root, context.Background()); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
 			t.Fatalf("chmod without yes error = %v", err)
 		}
 	})

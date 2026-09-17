@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -20,7 +21,7 @@ func executeChatPortsCoverageCommand(t *testing.T, caller edition.ToolCaller, ar
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageChatUpdateTextEmotion(t *testing.T) {
@@ -158,7 +159,7 @@ func TestCrossPlatformCoverageChatUpdateTextEmotionRequiredFlags(t *testing.T) {
 		{
 			name:    "missing old-emotion-id",
 			args:    dropFlag("--old-emotion-id"),
-			wantErr: `required flag(s) "old-emotion-id" not set`,
+			wantErr: "missing required flag(s): --old-emotion-id",
 		},
 		{
 			name: "missing message-id and background-id",

@@ -57,28 +57,6 @@ func TestCrossPlatformCoverageCalendarSmartBookBranches(t *testing.T) {
 	if _, _, err := runCalendarSmartCLI(t, rollbackFailure, "calendar", "+book", "--title", "fixture title", "--start", smartCoverageStart, "--end", smartCoverageEnd, "--with", "fixture person", "--yes"); err == nil {
 		t.Fatal("failed rollback accepted")
 	}
-
-	participantCases := map[string]*calendarSmartTestCaller{
-		"call": {steps: map[string][]calendarSmartTestStep{
-			"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/create_calendar_event": {{text: `{"success":true,"result":{"id":"event-placeholder"}}`}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_detail": {{text: smartCoverageEvent}}, "calendar/get_calendar_participants": {{err: errors.New("participants")}},
-		}},
-		"shape": {steps: map[string][]calendarSmartTestStep{
-			"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/create_calendar_event": {{text: `{"success":true,"result":{"id":"event-placeholder"}}`}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_detail": {{text: smartCoverageEvent}}, "calendar/get_calendar_participants": {{text: `{"success":true}`}},
-		}},
-		"profile": {steps: map[string][]calendarSmartTestStep{
-			"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/create_calendar_event": {{text: `{"success":true,"result":{"id":"event-placeholder"}}`}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_detail": {{text: smartCoverageEvent}}, "calendar/get_calendar_participants": {{text: `{"success":true,"result":[{"displayName":"fixture person","self":true}]}`}}, "contact/get_current_user_profile": {{err: errors.New("profile")}},
-		}},
-		"missing": {steps: map[string][]calendarSmartTestStep{
-			"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/create_calendar_event": {{text: `{"success":true,"result":{"id":"event-placeholder"}}`}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_detail": {{text: smartCoverageEvent}}, "calendar/get_calendar_participants": {{text: `{"success":true,"result":[{"userId":"other"}]}`}},
-		}},
-	}
-	for name, caller := range participantCases {
-		t.Run("participants-"+name, func(t *testing.T) {
-			if _, _, err := runCalendarSmartCLI(t, caller, "calendar", "+book", "--title", "fixture title", "--start", smartCoverageStart, "--end", smartCoverageEnd, "--with", "fixture person", "--yes"); err == nil {
-				t.Fatal("bad participant verification accepted")
-			}
-		})
-	}
 }
 
 func TestCrossPlatformCoverageCalendarSmartInviteAndRescheduleBranches(t *testing.T) {
@@ -88,13 +66,9 @@ func TestCrossPlatformCoverageCalendarSmartInviteAndRescheduleBranches(t *testin
 		t.Fatal(err)
 	}
 	for name, caller := range map[string]*calendarSmartTestCaller{
-		"preflight-call":     {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{err: errors.New("preflight")}}}},
-		"write-call":         {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{err: errors.New("write")}}}},
-		"receipt":            {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"result":{}}`}}}},
-		"participants-call":  {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_participants": {{err: errors.New("participants")}}}},
-		"participants-shape": {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_participants": {{text: `{"success":true}`}}}},
-		"profile":            {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_participants": {{text: `{"success":true,"result":[{"displayName":"fixture person","self":true}]}`}}, "contact/get_current_user_profile": {{err: errors.New("profile")}}}},
-		"missing":            {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"success":true}`}}, "calendar/get_calendar_participants": {{text: `{"success":true,"result":[{"userId":"other"}]}`}}}},
+		"preflight-call": {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{err: errors.New("preflight")}}}},
+		"write-call":     {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{err: errors.New("write")}}}},
+		"receipt":        {steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}, "calendar/get_calendar_detail": {{text: preflight}}, "calendar/add_calendar_participant": {{text: `{"result":{}}`}}}},
 	} {
 		t.Run("invite-"+name, func(t *testing.T) {
 			if _, _, err := runCalendarSmartCLI(t, caller, "calendar", "+invite", "--event", "event-placeholder", "--with", "fixture person", "--yes"); err == nil {

@@ -1,0 +1,172 @@
+{
+  "checked_at": "2026-09-17T16:25:10.828433+08:00",
+  "binary_sha256": "a1fbf7686a845ce80fe4fc9be08a1e64ee0ce87bf35f90b61590ffe22e6409af",
+  "checks": [
+    {
+      "command": "./dws event schema user_oa_approval_task_created --flatten -f json",
+      "event_key": "user_oa_approval_task_created",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_task_finished --flatten -f json",
+      "event_key": "user_oa_approval_task_finished",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_task_redirected --flatten -f json",
+      "event_key": "user_oa_approval_task_redirected",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_instance_started --flatten -f json",
+      "event_key": "user_oa_approval_instance_started",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_instance_cc --flatten -f json",
+      "event_key": "user_oa_approval_instance_cc",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "cc_time": {
+          "description": "审批抄送时间，来自 payload.body.ccTime；服务端未提供或为 null 时不输出",
+          "format": "timestamp_ms",
+          "type": "integer"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_instance_terminated --flatten -f json",
+      "event_key": "user_oa_approval_instance_terminated",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "command": "./dws event schema user_oa_approval_instance_finished --flatten -f json",
+      "event_key": "user_oa_approval_instance_finished",
+      "result": "PASS",
+      "fields": {
+        "staff_id": {
+          "description": "审批事件的 staffId，来自 payload.body.staffId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "activity_id": {
+          "description": "审批事件的 activityId，来自 payload.body.activityId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "corp_id": {
+          "description": "审批事件的企业 ID，来自 payload.body.corpId；服务端未提供或为空时不输出",
+          "type": "string"
+        },
+        "business_id": {
+          "description": "审批业务编号，来自 payload.body.businessId；服务端未提供或为空时不输出",
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -89,7 +90,7 @@ func runUpsertByKeyCLI(t *testing.T, caller *upsertByKeyCaller, extra ...string)
 	}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -141,6 +142,22 @@ func TestCrossPlatformCoverageRecordUpsertByKeyLoadsTypesOnlyForSelectProjection
 	}
 	if len(caller.calls) != 4 || caller.calls[3].tool != "get_fields" {
 		t.Fatalf("select projection call flow = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertByKeyVerifiesOmittedEmptyMultiSelectE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"records":[]}`},
+		{text: `{"createdRecords":[{"recordId":"r1"}]}`},
+		{text: `{"records":[{"recordId":"r1","cells":{"fldKey":"TASK-1"}}]}`},
+		{text: `{"fields":[{"fieldId":"fldKey","type":"text"},{"fieldId":"fldTags","type":"multipleSelect"}]}`},
+	}}
+	out, err := runUpsertByKeyCLI(t, caller, "--cells", `{"fldTags":[]}`)
+	if err != nil || !bytes.Contains([]byte(out), []byte(`"status": "verified"`)) {
+		t.Fatalf("empty multi-select upsert = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 4 || caller.calls[3].tool != "get_fields" {
+		t.Fatalf("empty multi-select call flow = %#v", caller.calls)
 	}
 }
 
@@ -254,7 +271,7 @@ func runRecordBatchCLI(t *testing.T, caller *upsertByKeyCaller, command string, 
 	args := []string{"aitable", command, "--base-id", "base", "--table-id", "table", "--records", string(raw), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err = root.Execute()
+	err = corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -326,7 +343,7 @@ func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit in
 	root.SetErr(&bytes.Buffer{})
 	args := []string{"aitable", "+record-query", "--base-id", "base", "--table-id", "table", "--limit", fmt.Sprint(limit)}
 	root.SetArgs(append(args, extra...))
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if stdout.Len() == 0 {
 		return nil, err
 	}
@@ -422,6 +439,12 @@ func TestCrossPlatformCoverageRecordQueryDryRunRejectsInvalidLocalPlanE2E(t *tes
 			limit: 100,
 			extra: []string{"--record-ids", strings.Join(recordIDFixtures(recordBatchSize+1), ","), "--dry-run"},
 			want:  "at most 100 unique IDs",
+		},
+		{
+			name:  "view date Scheme is not a record query filter",
+			limit: 100,
+			extra: []string{"--filters", `{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]}]}`, "--dry-run"},
+			want:  "relative/exact objects belong to view update filter",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -738,7 +761,17 @@ func TestCrossPlatformCoverageRecordWriteReadbackUsesStableServicePagesE2E(t *te
 						raw, _ := json.Marshal(payload)
 						return string(raw), nil
 					}
-					response := pagedRecordQueryResponse(t, records, args)
+					wanted := map[string]bool{}
+					for _, id := range args["recordIds"].([]string) {
+						wanted[id] = true
+					}
+					selected := []map[string]any{}
+					for _, r := range records {
+						if wanted[recordID(r)] {
+							selected = append(selected, r)
+						}
+					}
+					response := pagedRecordQueryResponse(t, selected, args)
 					var payload map[string]any
 					if err := json.Unmarshal([]byte(response), &payload); err != nil {
 						t.Fatal(err)
@@ -782,7 +815,11 @@ func TestCrossPlatformCoverageRecordUpdateAutoChunksAndVerifiesE2E(t *testing.T)
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"updatedCount":100}`},
-		{text: recordListJSON(t, records[:100])},
+		{text: recordListJSON(t, records[0:20])},
+		{text: recordListJSON(t, records[20:40])},
+		{text: recordListJSON(t, records[40:60])},
+		{text: recordListJSON(t, records[60:80])},
+		{text: recordListJSON(t, records[80:100])},
 		{text: `{"updatedCount":1}`},
 		{text: recordListJSON(t, records[100:])},
 	}}
@@ -795,11 +832,11 @@ func TestCrossPlatformCoverageRecordUpdateAutoChunksAndVerifiesE2E(t *testing.T)
 			t.Fatalf("batch output missing %s: %s", want, out)
 		}
 	}
-	if len(caller.calls) != 4 || caller.calls[0].tool != "update_records" || caller.calls[1].tool != "query_records" || caller.calls[2].tool != "update_records" {
+	if len(caller.calls) != 8 || caller.calls[0].tool != "update_records" || caller.calls[1].tool != "query_records" || caller.calls[6].tool != "update_records" {
 		t.Fatalf("batch call sequence = %#v", caller.calls)
 	}
 	firstBatch := caller.calls[0].args["records"].([]any)
-	secondBatch := caller.calls[2].args["records"].([]any)
+	secondBatch := caller.calls[6].args["records"].([]any)
 	if len(firstBatch) != 100 || len(secondBatch) != 1 {
 		t.Fatalf("batch sizes = %d/%d", len(firstBatch), len(secondBatch))
 	}
@@ -809,7 +846,11 @@ func TestCrossPlatformCoverageRecordUpdatePartialStopsWithCheckpointE2E(t *testi
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"updatedCount":100}`},
-		{text: recordListJSON(t, records[:100])},
+		{text: recordListJSON(t, records[0:20])},
+		{text: recordListJSON(t, records[20:40])},
+		{text: recordListJSON(t, records[40:60])},
+		{text: recordListJSON(t, records[60:80])},
+		{text: recordListJSON(t, records[80:100])},
 		{err: errors.New("connection reset after send")},
 		{text: `{"records":[]}`},
 	}}
@@ -865,6 +906,84 @@ func TestCrossPlatformCoverageRecordUpsertRequiresCreatedIDsAndReadBackE2E(t *te
 	}
 }
 
+func TestCrossPlatformCoverageRecordUpsertWaitsForEventuallyConsistentReadBackE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	records := []map[string]any{{"cells": map[string]any{"fldKey": "new"}}}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"createdRecords":[{"recordId":"created"}]}}`},
+		{text: `{"data":{"records":[]}}`},
+		{text: recordListJSON(t, []map[string]any{{"recordId": "created", "cells": map[string]any{"fldKey": "new"}}})},
+	}}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", records)
+	if err != nil || !bytes.Contains([]byte(out), []byte(`"verifiedCount": 1`)) {
+		t.Fatalf("eventually consistent upsert = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 3 || caller.calls[0].tool != "record_upsert" || caller.calls[1].tool != "query_records" || caller.calls[2].tool != "query_records" {
+		t.Fatalf("eventually consistent call sequence = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertPendingReadBackNeverReplaysWriteE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	caller := &upsertByKeyCaller{}
+	caller.callFn = func(_ int, _, tool string, _ map[string]any) (string, error) {
+		if tool == "record_upsert" {
+			return `{"data":{"createdRecords":[{"recordId":"created"}]}}`, nil
+		}
+		return `{"data":{"records":[]}}`, nil
+	}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", []map[string]any{{"cells": map[string]any{"fldKey": "new"}}})
+	if err == nil || out != "" {
+		t.Fatalf("pending read-back = output:%q err:%v", out, err)
+	}
+	writeCalls, readCalls := 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "record_upsert":
+			writeCalls++
+		case "query_records":
+			readCalls++
+		}
+	}
+	if writeCalls != 1 || readCalls != 1+len(recordUpsertReadbackDelays) {
+		t.Fatalf("pending read-back calls = writes:%d reads:%d all:%#v", writeCalls, readCalls, caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Retryable || typed.Reason != "aitable_composite_unknown" {
+		t.Fatalf("pending read-back error = %#v", err)
+	}
+	result := typed.Details["result"].(compositeResult)
+	if result.Verification["status"] != "pending" || result.NextCommand == "" || len(result.KnownEffects) != 1 {
+		t.Fatalf("pending read-back result = %#v", result)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertPermanentReadErrorDoesNotBecomePendingE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"createdRecords":[{"recordId":"created"}]}}`},
+		{err: apperrors.NewAuth("token expired", apperrors.WithReason("token_expired"))},
+	}}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", []map[string]any{{"cells": map[string]any{"fldKey": "new"}}})
+	if err == nil || out != "" {
+		t.Fatalf("permanent read error = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("permanent read error was retried as eventual consistency: %#v", caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("permanent read error lost structured envelope: %#v", err)
+	}
+	result := typed.Details["result"].(compositeResult)
+	if result.Verification["status"] != "failed" {
+		t.Fatalf("permanent read error verification = %#v, want failed", result.Verification)
+	}
+}
+
 func TestCrossPlatformCoverageRecordBatchDryRunPlansWithoutWritesE2E(t *testing.T) {
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{dryRun: true}
@@ -891,7 +1010,7 @@ func runRecordDeleteCLI(t *testing.T, caller *upsertByKeyCaller, ids []string, e
 	args := []string{"aitable", "+record-delete", "--base-id", "base", "--table-id", "table", "--record-ids", strings.Join(ids, ","), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -931,6 +1050,11 @@ func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testi
 	}
 	if len(caller.calls) != 14 || caller.calls[0].tool != "query_records" || caller.calls[6].tool != "delete_records" || caller.calls[12].tool != "delete_records" {
 		t.Fatalf("delete call sequence = %#v", caller.calls)
+	}
+	for _, index := range []int{6, 12} {
+		if confirm, ok := caller.calls[index].args["confirm"].(bool); !ok || !confirm {
+			t.Fatalf("delete batch %d confirm = %#v", index, caller.calls[index].args["confirm"])
+		}
 	}
 }
 

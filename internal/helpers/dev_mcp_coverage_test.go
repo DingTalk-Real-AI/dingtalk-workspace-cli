@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -60,15 +61,6 @@ func runMCPCommandBody(t *testing.T, cmd *cobra.Command) error {
 		t.Fatalf("%s has no RunE", cmd.Name())
 	}
 	return cmd.RunE(cmd, nil)
-}
-
-func runMCPUncheckedBody(t *testing.T, cmd *cobra.Command) error {
-	t.Helper()
-	if runtime, ok := loadContractRuntime(cmd); ok {
-		runtime.validate = nil
-		runtime.confirm = false
-	}
-	return runMCPCommandBody(t, cmd)
 }
 
 func newHTTPUpsertCoverageCommand(t *testing.T, update bool) *cobra.Command {
@@ -128,7 +120,7 @@ func TestCrossPlatformCoverageDevMCPGroupHelp(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(args)
-			if err := root.ExecuteContext(t.Context()); err != nil {
+			if err := corecmd.ExecuteContextForTest(root, t.Context()); err != nil {
 				t.Fatalf("execute help: %v", err)
 			}
 			if out.Len() == 0 {
@@ -152,23 +144,23 @@ func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 		{name: "service create missing name", cmd: func() *cobra.Command { return newDevMCPServiceCreateCommand(&captureRunner{}) }, wantErr: "--name"},
 		{name: "service create missing description", cmd: func() *cobra.Command { return newDevMCPServiceCreateCommand(&captureRunner{}) }, flags: map[string]string{"name": "x"}, wantErr: "--description"},
 		{name: "service create invalid server", cmd: func() *cobra.Command { return newDevMCPServiceCreateCommand(&captureRunner{}) }, flags: map[string]string{"name": "x", "description": "y", "server-name": "bad_name"}, wantErr: "kebab-case"},
-		{name: "service update missing id", cmd: func() *cobra.Command { return newDevMCPServiceUpdateCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
+		{name: "service update missing id", cmd: func() *cobra.Command { return newDevMCPServiceUpdateCommand(&captureRunner{}) }, flags: map[string]string{"name": "x"}, wantErr: "--mcp-id"},
 		{name: "service update invalid server", cmd: func() *cobra.Command { return newDevMCPServiceUpdateCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "server-name": "bad_name"}, wantErr: "kebab-case"},
-		{name: "service update no changes", cmd: func() *cobra.Command { return newDevMCPServiceUpdateCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1"}, wantErr: "至少提供一项"},
+		{name: "service update no changes", cmd: func() *cobra.Command { return newDevMCPServiceUpdateCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1"}, wantErr: "请至少指定"},
 		{name: "service delete missing id", cmd: func() *cobra.Command { return newDevMCPServiceDeleteCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 		{name: "tool create missing id", cmd: func() *cobra.Command { return newDevMCPToolCreateCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 		{name: "tool update missing id", cmd: func() *cobra.Command { return newDevMCPToolUpdateCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
-		{name: "tool debug missing locator", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
-		{name: "tool debug missing value", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "tool-id": "G-ACT-1"}, wantErr: "--value"},
-		{name: "tool debug missing credential choice", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "tool-id": "G-ACT-1", "value": `{}`}, wantErr: "调试需指定"},
+		{name: "tool debug missing locator", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, flags: map[string]string{"no-credential": "true", "value": `{}`}, wantErr: "--mcp-id"},
+		{name: "tool debug missing value", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "tool-id": "G-ACT-1", "no-credential": "true"}, wantErr: "--value"},
+		{name: "tool debug missing credential choice", cmd: func() *cobra.Command { return newDevMCPToolDebugCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "tool-id": "G-ACT-1", "value": `{}`}, wantErr: "请指定 --credential-id、--no-credential 之一"},
 		{name: "tool publish missing locator", cmd: func() *cobra.Command { return newDevMCPToolPublishCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 		{name: "tool delete missing locator", cmd: func() *cobra.Command { return newDevMCPToolDeleteCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 		{name: "auth save missing id", cmd: func() *cobra.Command { return newDevMCPAuthConfigSaveCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 		{name: "auth save missing type", cmd: func() *cobra.Command { return newDevMCPAuthConfigSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1"}, wantErr: "--auth-type"},
 		{name: "auth save invalid type", cmd: func() *cobra.Command { return newDevMCPAuthConfigSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "auth-type": "bad"}, wantErr: "只支持"},
 		{name: "auth save invalid config", cmd: func() *cobra.Command { return newDevMCPAuthConfigSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "auth-type": "TOKEN", "token-auth-config": `[]`}, wantErr: "JSON 对象"},
-		{name: "credential save missing id", cmd: func() *cobra.Command { return newDevMCPCredentialSaveCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
-		{name: "credential save missing name", cmd: func() *cobra.Command { return newDevMCPCredentialSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1"}, wantErr: "--name"},
+		{name: "credential save missing id", cmd: func() *cobra.Command { return newDevMCPCredentialSaveCommand(&captureRunner{}) }, flags: map[string]string{"content": `{}`, "name": "x"}, wantErr: "--mcp-id"},
+		{name: "credential save missing name", cmd: func() *cobra.Command { return newDevMCPCredentialSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "content": `{}`}, wantErr: "--name"},
 		{name: "credential save missing content", cmd: func() *cobra.Command { return newDevMCPCredentialSaveCommand(&captureRunner{}) }, flags: map[string]string{"mcp-id": "1", "name": "x"}, wantErr: "--content"},
 		{name: "member missing id", cmd: func() *cobra.Command {
 			return newDevMCPMemberMutationCommand(&captureRunner{}, "add", "add", devMCPMemberAddTool)
@@ -178,7 +170,7 @@ func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 		}, flags: map[string]string{"mcp-id": "1"}, wantErr: "--user-ids"},
 		{name: "hsf method missing interface", cmd: func() *cobra.Command { return newDevMCPHsfMethodListCommand(&captureRunner{}) }, wantErr: "--interface-name"},
 		{name: "hsf create missing id", cmd: func() *cobra.Command { return newDevMCPToolCreateHsfCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
-		{name: "hsf update missing locator", cmd: func() *cobra.Command { return newDevMCPToolUpdateHsfCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
+		{name: "hsf update missing locator", cmd: func() *cobra.Command { return newDevMCPToolUpdateHsfCommand(&captureRunner{}) }, flags: map[string]string{"name": "x"}, wantErr: "--mcp-id"},
 		{name: "credential unbind missing id", cmd: func() *cobra.Command { return newDevMCPCredentialUnbindCommand(&captureRunner{}) }, wantErr: "--mcp-id"},
 	}
 
@@ -188,7 +180,7 @@ func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 			for name, value := range tt.flags {
 				setMCPFlag(t, cmd, name, value)
 			}
-			requireMCPError(t, runMCPUncheckedBody(t, cmd), tt.wantErr)
+			requireMCPError(t, runMCPCommandBody(t, cmd), tt.wantErr)
 		})
 	}
 
@@ -198,7 +190,7 @@ func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 	} {
 		root := newDevAppTestRoot(failed)
 		root.SetArgs(args)
-		requireMCPError(t, root.ExecuteContext(t.Context()), "runner failed")
+		requireMCPError(t, corecmd.ExecuteContextForTest(root, t.Context()), "runner failed")
 	}
 }
 

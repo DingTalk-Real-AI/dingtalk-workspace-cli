@@ -25,5 +25,11 @@ import "embed"
 // prefix is required so dot/underscore entries — e.g.
 // mono/references/best_practices/_common — are included rather than skipped.
 //
+// Public Agent Skills CLI (`npx skills add`) walks skills/ up to three levels
+// and installs every non-internal SKILL.md. Keep product skills at
+// skills/multi/<name>/SKILL.md and hide the mono mega-skill with
+// metadata.internal: true. `dws skill setup --mode mono` still materializes
+// this embed; do not drop the mono tree.
+//
 //go:embed all:skills/mono all:skills/multi
 var EmbeddedSkills embed.FS

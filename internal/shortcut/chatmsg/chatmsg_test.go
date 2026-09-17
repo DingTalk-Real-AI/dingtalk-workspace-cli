@@ -268,7 +268,7 @@ func TestCrossPlatformCoverageMessagePaginationCursorTypeEdges(t *testing.T) {
 	ApplyMessagePagination(payload, map[string]any{
 		"result": map[string]any{"hasMore": true, "nextCursor": int64(1)},
 	}, nil, "older")
-	if payload["failedCount"] != 1 || payload["complete"] != false {
+	if payload["failedCount"] != 0 || payload["complete"] != false || payload["nextPage"] == nil {
 		t.Fatalf("empty continuing page = %#v", payload)
 	}
 }
@@ -676,5 +676,52 @@ func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *te
 	}
 	if SearchMessageItems(map[string]any{"result": "invalid"}) != nil {
 		t.Fatal("non-map result was accepted")
+	}
+}
+
+func TestCrossPlatformCoverageResourcesKeepContentAndIdentifierTypesSeparate(t *testing.T) {
+	message := map[string]any{
+		"openMessageId": "parent", "openConversationId": "cid-parent",
+		"attachments": []any{
+			map[string]any{"mediaId": "image-a", "resourceId": "image-a", "resourceType": "image"},
+			map[string]any{"fileId": "file-a", "resourceId": "file-a", "resourceType": "file"},
+		},
+		"quotedMessage": map[string]any{"openMessageId": "child", "resourceId": "image-a", "resourceType": "video"},
+	}
+	resources := Resources(message)
+	if len(resources) != 2 {
+		t.Fatalf("resources=%#v", resources)
+	}
+	for _, r := range resources {
+		wantIDType, wantContentType := "mediaId", "image"
+		if r["resourceId"] == "file-a" {
+			wantIDType, wantContentType = "fileId", "file"
+		}
+		if r["resourceIdType"] != wantIDType || r["contentType"] != wantContentType {
+			t.Fatalf("resource types crossed resource/message ownership: %#v", r)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageCleanTextRichLinks(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"label and target", `{"contents":[{"text":{"items":[{"type":"link","data":{"text":"详情","url":"https://example.com/a"}}]}}]}`, "详情（https://example.com/a）"},
+		{"target only", `{"items":[{"type":"link","data":{"url":" https://example.com/a "}}]}`, "https://example.com/a"},
+		{"same label", `{"items":[{"type":"link","data":{"text":" https://example.com/a ","url":"https://example.com/a"}}]}`, "https://example.com/a"},
+		{"empty target", `{"items":[{"type":"link","data":{"text":"详情","url":" "}}]}`, "详情"},
+		{"invalid target", `{"items":[{"type":"link","data":{"text":"详情","url":{}}}]}`, "详情"},
+		{"invalid label", `{"items":[{"type":"link","data":{"text":42,"url":"https://example.com/a"}}]}`, "https://example.com/a"},
+		{"mixed image and link", `{"items":[{"type":"text","data":{"text":"前文"}},{"type":"image","data":{"url":"https://example.com/image"}},{"type":"link","data":{"text":"详情","url":"https://example.com/a"}},{"type":"text","data":{"text":"后文"}}]}`, "前文\n详情（https://example.com/a）\n后文"},
+		{"unknown type", `{"items":[{"type":"unknown","data":{"text":"正文","url":"https://example.com/a","href":"https://example.com/b","link":"https://example.com/c"}}]}`, "正文"},
+		{"ordinary json", `{"url":"https://example.com/a","text":"正文"}`, `{"url":"https://example.com/a","text":"正文"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CleanText(tc.body); got != tc.want {
+				t.Errorf("CleanText() = %q, want %q", got, tc.want)
+			}
+			if got := Text(map[string]any{"content": tc.body}); got != tc.want {
+				t.Errorf("Text() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

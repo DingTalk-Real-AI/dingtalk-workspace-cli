@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -24,8 +25,9 @@ type recordQueryE2EStep struct {
 }
 
 type recordQueryE2ECaller struct {
-	steps []recordQueryE2EStep
-	calls []aitableTestCall
+	steps  []recordQueryE2EStep
+	calls  []aitableTestCall
+	dryRun bool
 }
 
 func (c *recordQueryE2ECaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -42,7 +44,7 @@ func (c *recordQueryE2ECaller) CallTool(_ context.Context, server, tool string, 
 }
 
 func (*recordQueryE2ECaller) Format() string { return "json" }
-func (*recordQueryE2ECaller) DryRun() bool   { return false }
+func (c *recordQueryE2ECaller) DryRun() bool { return c.dryRun }
 func (*recordQueryE2ECaller) Fields() string { return "" }
 func (*recordQueryE2ECaller) JQ() string     { return "" }
 
@@ -64,7 +66,7 @@ func runRecordQueryCLI(t *testing.T, caller *recordQueryE2ECaller, extraArgs ...
 	command.SilenceErrors = true
 	command.SilenceUsage = true
 	command.SetArgs(args)
-	err := command.Execute()
+	err := corecmd.ExecuteForTest(command)
 	return out.String(), err
 }
 
@@ -94,6 +96,25 @@ func TestCrossPlatformCoverageRecordQueryCLICompleteE2E(t *testing.T) {
 	}
 	if got := caller.calls[1].args["cursor"]; got != "cursor-2" {
 		t.Fatalf("second-page cursor = %#v, want cursor-2", got)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryCLICompletesOnSuccessfulEmptyTrailingPage(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{
+		recordQueryTextStep(`{"data":{"records":[{"id":"r1"},{"id":"r2"}],"nextCursor":"after-full-page","totalCount":2}}`),
+		recordQueryTextStep(`{"data":{"records":[],"nextCursor":"","totalCount":2}}`),
+	}}
+	out, err := runRecordQueryCLI(t, caller, "--page-limit", "0")
+	if err != nil {
+		t.Fatalf("record query CLI treated successful empty trailing page as error: %v", err)
+	}
+	for _, want := range []string{`"complete": true`, `"fetchedCount": 2`, `"pages": 2`, `"totalCount": 2`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("record query CLI output missing %s:\n%s", want, out)
+		}
+	}
+	if len(caller.calls) != 2 || caller.calls[1].args["cursor"] != "after-full-page" {
+		t.Fatalf("record query CLI calls = %#v, want one continuation request", caller.calls)
 	}
 }
 
@@ -182,7 +203,7 @@ func TestCrossPlatformCoverageRecordQueryCLIPageLimitHelpE2E(t *testing.T) {
 	command.SetOut(out)
 	command.SetErr(out)
 	command.SetArgs([]string{"record", "query", "--help"})
-	if err := command.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(command); err != nil {
 		t.Fatalf("record query help failed: %v", err)
 	}
 	for _, want := range []string{"返回非零结构化错误", "不完整结果", "错误详情保留已取记录和续传 cursor"} {

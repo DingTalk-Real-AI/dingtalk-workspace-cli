@@ -1,0 +1,319 @@
+=== RUN   TestPersonalOAEventListAndSchemaCommands
+--- PASS: TestPersonalOAEventListAndSchemaCommands (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_created/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_finished/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_task_redirected/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_started/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_cc/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_terminated/null (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/present
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/present (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/staff_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/staff_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/activity_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/activity_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/corp_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/corp_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/business_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/business_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/cc_time_only
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/cc_time_only (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/zero_cc_time
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/zero_cc_time (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/missing
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/missing (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/empty
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/empty (0.00s)
+=== RUN   TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/null
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput/user_oa_approval_instance_finished/null (0.00s)
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_created/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_finished/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_task_redirected/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_started/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_cc/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_terminated/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-role-types
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/user_oa_approval_instance_finished/reject-role-types (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-dry-run
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-dry-run (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/resolves-oa-event
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/resolves-oa-event (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/explicit-event-key/filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-event-key/filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-im-remains-supported
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/reuse-dry-run/implicit-im-remains-supported (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-user
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-user (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-open-dingtalk-id
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-group
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-group (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-query
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-query (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-filter-json
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/multi-reject-filter-json (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/message_query_remains_supported
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/message_query_remains_supported (0.00s)
+=== RUN   TestPersonalOAEventConsumeDryRunAndValidation/single_group_lifecycle_filter_remains_supported
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation/single_group_lifecycle_filter_remains_supported (0.00s)
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation (0.00s)
+=== RUN   TestPersonalOAMultiConsumeCreatesIndependentAllSubscriptionsOnSharedBus
+--- PASS: TestPersonalOAMultiConsumeCreatesIndependentAllSubscriptionsOnSharedBus (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/user
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/user (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/open-dingtalk-id
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/group
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/group (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/query
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/query (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/filter-json
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/explicit-event-key/filter-json (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/user
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/user (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/open-dingtalk-id
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/open-dingtalk-id (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/group
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/group (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/query
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/query (0.00s)
+=== RUN   TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/filter-json
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime/implicit-event-key/filter-json (0.00s)
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime (0.00s)
+=== RUN   TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation
+--- PASS: TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation (0.00s)
+=== RUN   TestPersonalOAStatusAndStopCommandWiring
+--- PASS: TestPersonalOAStatusAndStopCommandWiring (0.00s)
+=== RUN   TestCrossPlatformCoverageEventAgentSelectionBoundaries
+--- PASS: TestCrossPlatformCoverageEventAgentSelectionBoundaries (0.97s)
+=== RUN   TestAgentExamplesContract
+    schema_agent_examples_dry_run_test.go:56: Agent example contract: total=1752 contract=1571 dry_run=168 contract_only=13
+--- PASS: TestAgentExamplesContract (0.13s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	1.838s

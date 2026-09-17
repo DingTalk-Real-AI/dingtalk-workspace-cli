@@ -101,6 +101,7 @@ var schemaCatalogParamRequiredKeys = []string{
 
 // schemaCatalogParamOptionalKeys is the parameter optional whitelist.
 var schemaCatalogParamOptionalKeys = []string{
+	"anyOf",
 	"cli_required",
 	"default",
 	"enum",
@@ -364,6 +365,25 @@ func validateCatalogParam(toolID, paramName string, param map[string]any, violat
 	if raw, present := param["cli_required"]; present {
 		if _, ok := raw.(bool); !ok {
 			report("parameter %q: cli_required must be a boolean", paramName)
+		}
+	}
+	if raw, present := param["anyOf"]; present {
+		if _, hasFormat := param["format"]; hasFormat || typ != "string" {
+			report("parameter %q: anyOf requires string type and no top-level format", paramName)
+		}
+		branches, ok := raw.([]any)
+		if !ok || len(branches) < 2 {
+			report("parameter %q: anyOf must contain at least two format branches", paramName)
+		} else {
+			seen := map[string]bool{}
+			for i, rawBranch := range branches {
+				branch, ok := rawBranch.(map[string]any)
+				format, valid := branch["format"].(string)
+				if !ok || len(branch) != 1 || !valid || format == "" || strings.TrimSpace(format) != format || seen[format] {
+					report("parameter %q: anyOf[%d] must contain only a unique, non-empty format string", paramName, i)
+				}
+				seen[format] = true
+			}
 		}
 	}
 	if raw, present := param["enum"]; present {

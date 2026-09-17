@@ -53,6 +53,7 @@ var TableCopy = shortcut.Shortcut{
 		{Name: "source-table-id", Type: shortcut.FlagString, Desc: "源 Table ID", Required: true},
 		{Name: "target-base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "new-name", Type: shortcut.FlagString, Desc: "目标表名", Required: true},
+		{Name: "strict-fields", Type: shortcut.FlagBool, Desc: "发现公式/关联/查找/系统等无法重建字段时在写入前失败；不代表复制所有视图"},
 		{Name: "include-records", Type: shortcut.FlagBool, Desc: "复制全部记录；默认只复制可安全重建的字段结构"},
 		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "复制记录的写前上限，1-10000"},
 	},
@@ -109,6 +110,10 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 		createFields = append(createFields, declaration)
 		copiedSourceFields = append(copiedSourceFields, field)
 	}
+	if rt.Bool("strict-fields") && len(warnings) > 0 {
+		return apperrors.NewValidation("源表含无法安全重建的字段；strict-fields 模式未创建目标表", apperrors.WithReason("table_copy_unsupported_fields"), apperrors.WithDetails(map[string]any{"warnings": warnings}))
+	}
+
 	var sourceRecords []map[string]any
 	if rt.Bool("include-records") {
 		sourceRecords, err = queryAllRecords(rt, map[string]any{"baseId": sourceBase, "tableId": sourceTable}, maxRecords)

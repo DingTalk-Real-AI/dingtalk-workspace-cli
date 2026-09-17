@@ -3,8 +3,10 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -294,8 +296,8 @@ func runDocStyleCoverSet(cmd *cobra.Command, _ []string) error {
 	cover := map[string]any{"action": "set"}
 	// position 客户端校验：帮助文档承诺 [0,1]，越界直接报错，避免触发上传/请求。
 	if cmd.Flags().Changed("position") {
-		pos, _ := cmd.Flags().GetFloat64("position")
-		if pos < 0 || pos > 1 {
+		pos, parseErr := strconv.ParseFloat(cmd.Flags().Lookup("position").Value.String(), 64)
+		if parseErr != nil || math.IsNaN(pos) || math.IsInf(pos, 0) || pos < 0 || pos > 1 {
 			return fmt.Errorf("--position must be within [0,1], got %v", pos)
 		}
 		cover["position"] = pos

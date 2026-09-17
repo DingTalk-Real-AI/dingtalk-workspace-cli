@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
+func TestCrossPlatformCoverageContractFinalTypedRegistryNoJSON(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
 	result := &contract.ResultSpec{
@@ -246,4 +246,26 @@ func TestFrameworkContractFinalDeepCopyAndSafetyConflicts(t *testing.T) {
 	if got := cloneSlice[string](nil); got != nil {
 		t.Fatalf("cloneSlice(nil)=%v", got)
 	}
+}
+
+func TestCrossPlatformCoverageOwnedRuntimeContractFinalKeepsReadIsolation(t *testing.T) {
+	cmd := &cobra.Command{Use: "owned"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
+	RegisterOwnedRuntimeContractFinal(cmd, contract.ContractFinalPayload{
+		Parameters: []contract.ParamDecl{{Name: "mode", Enum: []string{"safe"}}},
+	})
+
+	first, ok := RuntimeContractFinal(cmd)
+	if !ok {
+		t.Fatal("owned payload was not registered")
+	}
+	first.Parameters[0].Enum[0] = "changed"
+	second, _ := RuntimeContractFinal(cmd)
+	if second.Parameters[0].Enum[0] != "safe" {
+		t.Fatalf("owned payload read aliased store: %#v", second)
+	}
+}
+
+func TestCrossPlatformCoverageRegisterOwnedRuntimeContractFinalNilCommand(t *testing.T) {
+	RegisterOwnedRuntimeContractFinal(nil, contract.ContractFinalPayload{Title: "ignored"})
 }

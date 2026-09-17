@@ -25,6 +25,8 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func fastDocImportConfig() importFlowConfig {
@@ -66,7 +68,7 @@ func executeDocImportCommand(t *testing.T, caller *sheetImportCaller, cfg import
 	command.Flags().String("workspace-id", "", "")
 	command.Flags().String("name", "", "")
 	command.SetArgs(args)
-	err := command.Execute()
+	err := corecmd.ExecuteForTest(command)
 	return output.String(), err
 }
 

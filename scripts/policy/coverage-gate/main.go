@@ -161,6 +161,11 @@ func run(
 	for _, path := range exempted {
 		fmt.Fprintf(stderr, "coverage-gate: exempting %s (no executable statements)\n", path)
 	}
+	var generated []string
+	changed, generated = exemptGeneratedFiles(changed, fileIsGenerated)
+	for _, path := range generated {
+		fmt.Fprintf(stderr, "coverage-gate: exempting %s (generated code)\n", path)
+	}
 	result := evaluate(gateInput{
 		Overall:          overall,
 		Diff:             diff,
@@ -265,6 +270,48 @@ func exemptNonExecutableFiles(changed map[string][]lineRange, hasExecutable func
 	}
 	sort.Strings(exempted)
 	return filtered, exempted
+}
+
+// exemptGeneratedFiles drops changed files that carry the standard Go
+// generated-code marker ("// Code generated ... DO NOT EDIT."). Machine-produced
+// code has no hand-written statements to cover; requiring 100% coverage of
+// generated accessors would fail every PR that regenerates such a file.
+func exemptGeneratedFiles(changed map[string][]lineRange, isGenerated func(string) bool) (map[string][]lineRange, []string) {
+	filtered := map[string][]lineRange{}
+	var exempted []string
+	for path, ranges := range changed {
+		if isGenerated(path) {
+			exempted = append(exempted, path)
+		} else {
+			filtered[path] = ranges
+		}
+	}
+	sort.Strings(exempted)
+	return filtered, exempted
+}
+
+// fileIsGenerated reports whether the file carries the standard generated-code
+// marker before its package clause.
+func fileIsGenerated(path string) bool {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, source, parser.ParseComments)
+	if err != nil {
+		return false
+	}
+	for _, group := range parsed.Comments {
+		if group.End() >= parsed.Package {
+			break
+		}
+		for _, comment := range group.List {
+			if strings.HasPrefix(comment.Text, "// Code generated ") && strings.HasSuffix(comment.Text, " DO NOT EDIT.") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // fileHasExecutableStatements reports whether the Go file declares at least

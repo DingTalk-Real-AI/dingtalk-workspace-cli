@@ -14,10 +14,12 @@
 package helpers
 
 import (
-	"sync"
+	"runtime"
+	"weak"
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
@@ -30,13 +32,17 @@ type contractRuntime struct {
 	confirm  bool
 }
 
-var contractRuntimeByCmd sync.Map // *cobra.Command → *contractRuntime
+// The installed RunE pipeline owns the runtime strongly. Its Validate closure
+// may itself capture a command, so the lookup must keep both key and runtime
+// weak; a strong value would still retain the complete tree through that closure.
+var contractRuntimeByCmd commandstore.Map // live command → weak.Pointer[contractRuntime]
 
 func storeContractRuntime(cmd *cobra.Command, rt *contractRuntime) {
 	if cmd == nil || rt == nil {
 		return
 	}
-	contractRuntimeByCmd.Store(cmd, rt)
+	contractRuntimeByCmd.Store(cmd, weak.Make(rt))
+	runtime.KeepAlive(rt)
 }
 
 func loadContractRuntime(cmd *cobra.Command) (*contractRuntime, bool) {
@@ -47,8 +53,13 @@ func loadContractRuntime(cmd *cobra.Command) (*contractRuntime, bool) {
 	if !ok {
 		return nil, false
 	}
-	rt, ok := v.(*contractRuntime)
-	return rt, ok
+	pointer, ok := v.(weak.Pointer[contractRuntime])
+	if !ok {
+		return nil, false
+	}
+	rt := pointer.Value()
+	runtime.KeepAlive(cmd)
+	return rt, rt != nil
 }
 
 // ContractValidate returns the DeclareLeafMetadata Validate hook when present.

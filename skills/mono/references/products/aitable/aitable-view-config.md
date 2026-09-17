@@ -137,7 +137,18 @@ dws aitable view update sort   --view-id VIEW_ID --json '[{"fieldId":"fldX","dir
 dws aitable view update group  --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 ```
 
-> filter/sort/group 入参格式与 `record query --filters`（根对象格式）**不同**：view config 写入时外层必须是数组。平铺 filter 表示 AND；数组中唯一的 `and`/`or` 根节点表示显式逻辑。当前只支持一层统一 AND 或 OR，拒绝混合嵌套；`[]` 清空筛选。传单个对象时 CLI 会自动 wrap。
+日期筛选使用 View 专用 relative/exact Scheme。例如本月的 `date_eq.relative.offset` 必须是 JSON number `0`，过去 30 天的 `from_now.offset` 必须是 JSON string `"-30"`；指定日期使用 `date_eq.exact.timestamp` 毫秒 JSON number。完整结构见 [aitable-filter-sort.md](./aitable-filter-sort.md#view-日期-scheme仅-view-update-filter)。
+
+人员、部门、群组筛选必须使用稳定身份；只有显示名称时，显式传 `{"entityName":"显示名称"}`，CLI 会先调用 `search_entities`，仅在唯一精确匹配时更新：
+
+```bash
+dws aitable entity search --entity-type DEPARTMENT --keyword "客户成功部" --format json
+dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldDept",{"entityName":"客户成功部"}]}]'
+```
+
+人员使用 `{"userId":"...","corpId":"..."}` 或 `{"userRef":"..."}`，部门使用 `{"departmentId":"..."}`，群组使用 `{"cid":"..."}` 或 `{"openConversationId":"..."}`（二选一）。DWS 原样传递群组标识，MCP 负责转换；若旧服务只回读内部 `cid`，CLI 返回写后状态未知，不会把服务响应回显当作持久化成功证据。
+
+> filter/sort/group 入参格式与 `record query --filters`（根对象格式）**不同**：view config 写入时外层必须是数组。平铺 filter 表示 AND；数组中唯一的 `and`/`or` 根节点表示显式逻辑。当前只支持一层统一 AND 或 OR，拒绝混合嵌套；`[]` 清空筛选。传单个对象时 CLI 会自动 wrap，建议直接使用数组。详见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
 
 ### view update name（重命名）
 

@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterPublic(func() Handler {
+	RegisterPublicNamed("dev", func() Handler {
 		return devHandler{}
 	})
 }

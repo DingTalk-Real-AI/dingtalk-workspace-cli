@@ -34,7 +34,7 @@ func TestCrossPlatformCoverageFinalCommandTreesDeclareGroupPolicy(t *testing.T) 
 	}
 
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-	testseam.Swap(t, &rootLoadPlugins, func(root *cobra.Command, _ *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(root *cobra.Command, _ *pipeline.Engine, runner executor.Runner, _ string) []*cobra.Command {
 		descriptor := conferencePluginDescriptor()
 		return buildPluginCommands([]mcptypes.ServerDescriptor{descriptor}, runner, root)
 	})

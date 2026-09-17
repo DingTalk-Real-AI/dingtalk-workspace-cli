@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -84,7 +86,7 @@ func TestCrossPlatformCoverageConversationListTopRejectsInvalidType(t *testing.T
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list-top", "--type", "bot"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("invalid --type unexpectedly succeeded")
 	}
 	if fake.tool != "" {
@@ -118,7 +120,7 @@ func TestCrossPlatformCoverageConversationListPageAllFollowsTypedCursor(t *testi
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != int64(2) {
@@ -135,7 +137,7 @@ func TestCrossPlatformCoverageConversationListSinglePagePreservesTypedCursor(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 {
@@ -148,6 +150,13 @@ func TestCrossPlatformCoverageConversationListSinglePagePreservesTypedCursor(t *
 	if payload["hasMore"] != true || payload["nextCursor"] != float64(2) {
 		t.Fatalf("pagination payload = %#v", payload)
 	}
+	if payload["discoveryOnly"] != true {
+		t.Fatalf("conversation list must declare discoveryOnly: %#v", payload)
+	}
+	actions, _ := payload["nextActions"].([]any)
+	if len(actions) != 2 {
+		t.Fatalf("conversation list nextActions = %#v", payload["nextActions"])
+	}
 }
 
 func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(t *testing.T) {
@@ -159,7 +168,7 @@ func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1", "--page-delay", "0"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -184,15 +193,31 @@ func TestCrossPlatformCoverageConversationListRejectsOversizedLimitPage(t *testi
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1"})
-	if err := root.Execute(); err == nil {
+	err := corecmd.ExecuteForTest(root)
+	if err == nil {
 		t.Fatal("oversized lower page unexpectedly published a safe continuation")
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatal(err)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "conversation_list_incomplete" {
+		t.Fatalf("error = %#v", err)
 	}
-	if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) || payload["nextCursor"] != float64(0) {
-		t.Fatalf("payload = %#v", payload)
+	partialResult, ok := typed.Details["partialResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("partialResult = %#v", typed.Details["partialResult"])
+	}
+	conversations, ok := partialResult["conversations"].([]map[string]any)
+	if !ok || len(conversations) != 1 || conversations[0]["openConversationId"] != "cid-1" {
+		t.Fatalf("partial conversations = %#v", partialResult["conversations"])
+	}
+	if partialResult["complete"] != false || partialResult["partial"] != true {
+		t.Fatalf("partial completeness = %#v", partialResult)
+	}
+	var legacyPayload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &legacyPayload); err != nil {
+		t.Fatalf("dual_validate partial stdout = %q: %v", output.String(), err)
+	}
+	if legacyPayload["count"] != float64(1) || legacyPayload["complete"] != false || legacyPayload["partial"] != true {
+		t.Fatalf("dual_validate partial stdout = %#v", legacyPayload)
 	}
 }
 
@@ -208,15 +233,62 @@ func TestCrossPlatformCoverageConversationListPropagatesDelayCancellation(t *tes
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--page-delay", "1"})
-	if err := root.Execute(); err == nil || err != context.Canceled {
-		t.Fatalf("delay cancellation error = %v, want context.Canceled", err)
+	err := corecmd.ExecuteForTest(root)
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("delay cancellation error = %v, want wrapped context.Canceled", err)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatal(err)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "conversation_list_incomplete" ||
+		!typed.RetryableSet || typed.Retryable {
+		t.Fatalf("delay cancellation contract = %#v", err)
 	}
-	if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
-		t.Fatalf("payload = %#v", payload)
+	var legacyPayload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &legacyPayload); err != nil {
+		t.Fatalf("dual_validate cancellation stdout = %q: %v", output.String(), err)
+	}
+	if legacyPayload["count"] != float64(1) || legacyPayload["stopReason"] != "delay_interrupted" {
+		t.Fatalf("dual_validate cancellation stdout = %#v", legacyPayload)
+	}
+}
+
+func TestCrossPlatformCoverageConversationListPreservesTypedLaterPageCause(t *testing.T) {
+	cause := apperrors.NewAuth(
+		"session expired",
+		apperrors.WithRetryable(false),
+		apperrors.WithTraceID("trace-conversation-page"),
+	)
+	fake := &larkAlignmentCaller{
+		sequenceResponses: map[string][]string{
+			"im/list_all_conversations": {`{"result":{"conversationList":[{"openConversationId":"cid-1"}],"hasMore":true,"nextCursor":2}}`},
+		},
+		failProductToolAt:  map[string]int{"im/list_all_conversations": 2},
+		failProductAtCause: map[string]error{"im/list_all_conversations": cause},
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--page-delay", "0"})
+	err := corecmd.ExecuteForTest(root)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || !errors.Is(err, cause) ||
+		typed.Category != apperrors.CategoryAuth || typed.Reason != "conversation_list_incomplete" ||
+		!typed.RetryableSet || typed.Retryable || typed.ServerDiag.TraceID != "trace-conversation-page" {
+		t.Fatalf("typed later-page contract = %#v", err)
+	}
+	if _, duplicated := typed.Details["failures"]; duplicated {
+		t.Fatalf("error details duplicated canonical failure ledger: %#v", typed.Details)
+	}
+	partial, _ := typed.Details["partialResult"].(map[string]any)
+	if partial["count"] != 1 || partial["complete"] != false || partial["failedCount"] != 1 {
+		t.Fatalf("partial result = %#v", partial)
+	}
+	var legacyPayload map[string]any
+	if jsonErr := json.Unmarshal(output.Bytes(), &legacyPayload); jsonErr != nil {
+		t.Fatalf("dual_validate later-page stdout = %q: %v", output.String(), jsonErr)
+	}
+	if legacyPayload["count"] != float64(1) || legacyPayload["failedCount"] != float64(1) {
+		t.Fatalf("dual_validate later-page stdout = %#v", legacyPayload)
 	}
 }
 
@@ -224,7 +296,7 @@ func TestCrossPlatformCoverageConversationListAutoPageValidationAndOutputFailure
 	helpers.InitDeps(&larkAlignmentCaller{})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list", "--max-items", "1"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("max-items without page-all unexpectedly succeeded")
 	}
 
@@ -235,7 +307,7 @@ func TestCrossPlatformCoverageConversationListAutoPageValidationAndOutputFailure
 	root = newPlatformCoverageRoot()
 	root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("output error was swallowed")
 	}
 }
@@ -249,7 +321,7 @@ func TestCrossPlatformCoverageConversationListDeduplicatesStableIDs(t *testing.T
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any

@@ -28,6 +28,7 @@ func TestCICoveragePackagePlanRoutesFullSuiteScope(t *testing.T) {
 		"/internal/output",
 		"/skills",
 		"/scripts/build/runtime-payload",
+		"/scripts/build/linux-abi",
 	} {
 		if !containsPackageSuffix(remaining, suffix) {
 			t.Errorf("coverage remaining shard does not contain package ending in %q", suffix)

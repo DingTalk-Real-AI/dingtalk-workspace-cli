@@ -16,6 +16,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -69,7 +70,10 @@ func newAuditTailCommand() *cobra.Command {
 		Short: "查看最近的审计记录",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if n < 1 {
-				return fmt.Errorf("--lines 必须为正整数，收到 %d", n)
+				return apperrors.NewValidation(
+					fmt.Sprintf("--lines 必须为正整数，收到 %d", n),
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			dir := auditDir()
 			file, err := audit.LatestAuditFile(dir)

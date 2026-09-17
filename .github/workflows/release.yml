@@ -1033,12 +1033,14 @@ jobs:
           }
 
       - name: Build release artifacts without publishing
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "v2.16.0"
-          args: release --clean --skip=publish --release-notes=${{ runner.temp }}/release-notes.md
+        run: |
+          ./scripts/release/run-goreleaser-cross.sh \
+            release --clean --skip=publish \
+            --parallelism=2 \
+            --release-notes="${{ runner.temp }}/release-notes.md"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GORELEASER_CURRENT_TAG: ${{ needs.release-contract.outputs.release_version }}
           GORELEASER_PREVIOUS_TAG: ${{ needs.release-contract.outputs.previous_stable }}
 

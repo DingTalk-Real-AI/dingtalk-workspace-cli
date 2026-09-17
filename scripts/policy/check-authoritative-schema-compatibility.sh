@@ -250,6 +250,11 @@ install_authority_const_params_registry() {
 	mkdir -p "$worktree/$(dirname "$CONST_PARAMS_REGISTRY_REL")"
 	rm -f "$worktree/$CONST_PARAMS_REGISTRY_REL"
 	cp "$source_root/$CONST_PARAMS_REGISTRY_REL" "$worktree/$CONST_PARAMS_REGISTRY_REL"
+	if [ -d "$source_root/internal/corecmd/commandstore" ]; then
+		rm -rf "$worktree/internal/corecmd/commandstore"
+		mkdir -p "$worktree/internal/corecmd/commandstore"
+		cp -R "$source_root/internal/corecmd/commandstore/." "$worktree/internal/corecmd/commandstore/"
+	fi
 }
 
 require_complete_candidate_schema_command_governance() {

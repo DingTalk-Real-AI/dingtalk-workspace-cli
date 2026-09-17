@@ -180,12 +180,12 @@ func TestCrossPlatformCoverageUserResolutionFailsClosedOnUnpageableContinuation(
 }
 
 func TestCrossPlatformCoverageOpenConversationIDIsNeverSearchedAsAGroupName(t *testing.T) {
-	for _, value := range []string{"cid-fixture-chat-0001", " CIDO123456789 "} {
+	for _, value := range []string{"cid-fixture-chat-0001", " CIDO123456789 ", "cideWy3UCPNZ4k8Mr4BL/8KRQ=="} {
 		if !LooksLikeOpenConversationID(value) {
 			t.Fatalf("LooksLikeOpenConversationID(%q) = false", value)
 		}
 	}
-	for _, value := range []string{"cid", "项目cid群", "conversation-1"} {
+	for _, value := range []string{"cid", "项目cid群", "conversation-1", "cid项目讨论群", "cid-valid-id!"} {
 		if LooksLikeOpenConversationID(value) {
 			t.Fatalf("LooksLikeOpenConversationID(%q) = true", value)
 		}

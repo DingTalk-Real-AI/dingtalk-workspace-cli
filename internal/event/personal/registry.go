@@ -50,6 +50,7 @@ const (
 	EventTodoTaskCreated              = "user_todo_task_create"
 	EventTodoTaskUpdated              = "user_todo_task_update"
 	EventTodoTaskDeleted              = "user_todo_task_delete"
+	EventCardAction                   = "user_card_action_triggered"
 )
 
 const (
@@ -400,6 +401,17 @@ var definitions = []Definition{
 		DisplayName:    "待办删除",
 		Description:    "当前用户作为创建者、执行者或参与者的待办被删除",
 		Category:       "todo",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventCardAction,
+		DisplayName:    "互动卡片回调",
+		Description:    "当前用户提交或操作互动卡片后收到的回调；结构化上下文位于 payload.body.actionData.context",
+		Category:       "card",
 		RuleType:       "all",
 		Status:         StatusEnabled,
 		RequiredParams: nil,

@@ -1,6 +1,6 @@
 # Schema 渐进查询
 
-`dws schema` 内嵌当前二进制公开命令面的结构化契约。**Agent 选择命令、读取参数映射/约束和安全语义时优先渐进查询 leaf Schema**；真正组装执行参数前，用 `--help` 确认当前 Cobra 接受的 flags。
+`dws schema` 内嵌当前二进制公开命令面的结构化契约。**Agent 选择命令、组装参数、读取约束/安全/结果语义时优先查询 leaf Schema**。它由真实 Cobra leaf 绑定生成，已经包含当前可执行 flags；不要在执行前再用 Help 重复确认。
 
 本节同时适用于基础/原子命令与公开内建 `+` shortcut。用户自定义或未公开 shortcut 不进入发布 Schema；是否可执行仍以当前 Cobra help 为准。
 
@@ -10,7 +10,8 @@
 
 - 不要再查产品级/分组级 Schema，也不要加载完整 Shortcut Catalog
 - 可直接执行；只有参数、约束或安全语义不确定时才读该命令的 leaf Schema
-- 只有当前 Cobra flags 不确定时才补读 leaf Help
+- leaf Schema 不可用时，才补读一次已知 leaf Help
+- 真实执行返回 `unknown flag` 时，用同一 leaf Help 修正一次；返回 `unknown command` 时不查 Help，先采用错误返回的明确 suggestion，没有再沿已加载 Skill/reference 选明确兼容入口，仍无则报告漂移；不枚举全 Catalog
 
 稳定 command identity 已与真实 Cobra tree 绑定。不要读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令。
 
@@ -47,6 +48,23 @@ dws schema --all --format json
 
 若旧二进制报 `unknown_flag: --compact`，去掉 `--compact` 重跑同一查询；不要因此判定 leaf 不存在，也不要用 Schema 查业务数据。
 
+### 任务级窄投影
+
+不要默认把完整 compact leaf 放入上下文。已知路径后按当前决策只取一组字段：
+
+```bash
+# 组装命令：参数、组合约束和确认语义
+dws schema --cli-path "chat +chat-messages" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json
+
+# 仅在 leaf 已发布 Result 且任务需要解释返回时，取 outcomes/pagination
+dws schema --cli-path "chat +recent-conversations" --compact --jq '{cli_path,outcomes:.result.outcomes,pagination}' -f json
+
+# 只有需要字段级返回契约时再取 data_schema
+dws schema --cli-path "chat +recent-conversations" --compact --jq '{cli_path,data_schema:.result.data_schema}' -f json
+```
+
+一次任务对同一 leaf 的同类投影最多读取一次。`result` 缺失表示该 leaf 尚未发布返回值契约，不得改用 Help、样例或既往输出推断。Schema 已提供所需字段时直接执行；低频 reference 不默认触发 Help。Schema 缺失或旧二进制不支持查询时，才读一次已知 leaf Help；执行报 `unknown flag` 时用同 leaf Help 修正一次。`unknown command` 不查 Help：先用错误返回的明确 suggestion，再用已加载 Skill/reference 的明确兼容入口，仍无则报漂移并停；不枚举全 Catalog。不得调用 root/parent Help。
+
 ## 字段速查
 
 ```jsonc
@@ -70,8 +88,10 @@ dws schema --all --format json
 
 | 信息 | 事实源 |
 |---|---|
-| 命令是否存在、Cobra 接受哪些 flags | `dws <cli_path> --help` |
-| Agent 选择、CLI 参数/required/组合约束、risk/confirmation | `dws schema "<cli_path>" --compact` |
+| 命令是否存在、Cobra 接受哪些 flags、required/约束、安全与已发布结果 | `dws schema --cli-path "<cli_path>" --compact` 的窄 `--jq` 投影 |
+| Schema 不可用 | 一次已知 leaf 的 `dws <cli_path> --help` |
+| 执行返回 `unknown flag` | 一次同 leaf Help，最多修正一次 |
+| 执行返回 `unknown command` | 不查 Help；先用错误的明确 suggestion，再用已加载 Skill/reference 的明确兼容入口；否则报告漂移，不枚举全 Catalog |
 | CLI↔RPC 参数映射、接口绑定或 provenance 审计 | full leaf 配合 `--jq` / `--fields` 精确投影；不要把整个 full leaf 注入 Agent 上下文 |
 | shortcut 同上 | 已知路径：`dws schema --cli-path "<service> +<shortcut>" --compact --format json` |
 | 钉钉业务数据 | 真实 `read` / `search` / `list` 等命令 |

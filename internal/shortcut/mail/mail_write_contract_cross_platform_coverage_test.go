@@ -62,7 +62,7 @@ func runConfirmedMailWriteContract(t *testing.T, caller *mailWriteContractCaller
 	root.SetErr(io.Discard)
 	root.AddCommand(shortcut.Commands()...)
 	root.SetArgs(append(args, "--yes", "--format", "json"))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func mailDraftReadback(id, subject, body, sender, to, cc string) string {

@@ -494,11 +494,3 @@ func walkPublicRunnableLeaves(root *cobra.Command, fn func(*cobra.Command)) {
 	}
 	walk(root)
 }
-
-func normalizeSchemaCLIPath(path string) string {
-	parts := strings.Fields(strings.TrimSpace(path))
-	if len(parts) > 0 && parts[0] == "dws" {
-		parts = parts[1:]
-	}
-	return strings.Join(parts, " ")
-}

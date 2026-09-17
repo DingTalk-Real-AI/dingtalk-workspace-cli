@@ -21,14 +21,13 @@ func TestCrossPlatformCoverageRecordBulkPatchPaginatesChunksAndVerifiesE2E(t *te
 	secondPage := map[string]any{"records": records[100:], "hasMore": false}
 	patchedFirst := updateFixtureRecords(0, 100, "新")
 	patchedSecond := updateFixtureRecords(100, 1, "新")
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: mustJSONText(t, firstPage)},
-		{text: mustJSONText(t, secondPage)},
-		{text: `{"updatedCount":100}`},
-		{text: recordListJSON(t, patchedFirst)},
-		{text: `{"updatedCount":1}`},
-		{text: recordListJSON(t, patchedSecond)},
-	}}
+	steps := []upsertByKeyStep{{text: mustJSONText(t, firstPage)}, {text: mustJSONText(t, secondPage)}, {text: `{"updatedCount":100}`}}
+	for offset := 0; offset < 100; offset += 20 {
+		steps = append(steps, upsertByKeyStep{text: recordListJSON(t, patchedFirst[offset:offset+20])})
+	}
+	steps = append(steps, upsertByKeyStep{text: `{"updatedCount":1}`}, upsertByKeyStep{text: recordListJSON(t, patchedSecond)})
+	caller := &upsertByKeyCaller{steps: steps}
+
 	out, err := runAITableCompositeCLI(t, caller, "+record-bulk-patch",
 		"--base-id", "base", "--table-id", "table", "--all", "--patch", `{"fldStatus":"新"}`, "--yes")
 	if err != nil {
@@ -39,7 +38,7 @@ func TestCrossPlatformCoverageRecordBulkPatchPaginatesChunksAndVerifiesE2E(t *te
 			t.Fatalf("bulk patch output missing %s: %s", want, out)
 		}
 	}
-	if len(caller.calls) != 6 || caller.calls[1].args["cursor"] != "next" || caller.calls[2].tool != "update_records" {
+	if len(caller.calls) != 10 || caller.calls[1].args["cursor"] != "next" || caller.calls[2].tool != "update_records" {
 		t.Fatalf("bulk patch calls = %#v", caller.calls)
 	}
 }

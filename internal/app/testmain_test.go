@@ -44,6 +44,9 @@ import (
 // test binary never launches a page on the developer's machine; tests that
 // need to assert the URL can still replace openBrowserFunc locally.
 func TestMain(m *testing.M) {
+	if code, ok := runPersonalAppKeyE2EChild(); ok {
+		os.Exit(code)
+	}
 	if code, ok := runRuntimeTokenDetachedE2EChild(); ok {
 		os.Exit(code)
 	}

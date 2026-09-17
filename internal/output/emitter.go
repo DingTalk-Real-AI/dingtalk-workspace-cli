@@ -21,6 +21,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // WriteEnvelope 是统一信封的出口函数（B0 dev 试点桥接，WS1 改动点2/4）。
@@ -94,7 +95,8 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 	}
 	env := result.envelope()
 	env = redactEnvelope(env)
-	format, warning := resolveFormatWithWarning(cmd, FormatJSON)
+	presentation := resultPresentationFor(result)
+	format, warning := resolveResultFormat(cmd, presentation)
 	fields, jq := ResolveFields(cmd), ResolveJQ(cmd)
 	stdout, stderr := io.Writer(io.Discard), io.Writer(io.Discard)
 	if cmd != nil {
@@ -141,8 +143,14 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 		fields, jq = "", ""
 	}
 	var buf bytes.Buffer
-	if err := renderEnvelope(&buf, stderr, env, format, fields, jq); err != nil {
-		return exitCodeInternal, false, err
+	var renderErr error
+	if presentation != nil && presentation.renderTable != nil && env.Outcome == OutcomeSuccess && format == FormatTable && strings.TrimSpace(fields) == "" && strings.TrimSpace(jq) == "" {
+		renderErr = presentation.renderTable(&buf, env.Data)
+	} else {
+		renderErr = renderEnvelope(&buf, stderr, env, format, fields, jq)
+	}
+	if renderErr != nil {
+		return exitCodeInternal, false, renderErr
 	}
 	n, err := writeAllCount(stdout, buf.Bytes())
 	if err != nil {
@@ -154,6 +162,38 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 		_, _ = fmt.Fprintln(stderr, "[WARN] "+warning)
 	}
 	return result.ExitCode(), n > 0, nil
+}
+
+func resultPresentationFor(result CommandResult) *resultPresentation {
+	concrete, ok := result.(*commandResult)
+	if !ok || concrete.presentation == nil {
+		return nil
+	}
+	copy := *concrete.presentation
+	return &copy
+}
+
+func resolveResultFormat(cmd *cobra.Command, presentation *resultPresentation) (Format, string) {
+	if presentation != nil && !commandPresentationFlagChanged(cmd, "format") {
+		return presentation.defaultFormat, ""
+	}
+	fallback := FormatJSON
+	if presentation != nil {
+		fallback = presentation.defaultFormat
+	}
+	return resolveFormatWithWarning(cmd, fallback)
+}
+
+func commandPresentationFlagChanged(cmd *cobra.Command, name string) bool {
+	if cmd == nil {
+		return false
+	}
+	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags(), cmd.PersistentFlags()} {
+		if flag := flags.Lookup(name); flag != nil && flag.Changed {
+			return true
+		}
+	}
+	return false
 }
 
 // nilFallbackEnvelope 构造 nil 信封的兜底信封（B208，轮6裁决⑨）。保留

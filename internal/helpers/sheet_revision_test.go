@@ -25,6 +25,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -73,7 +74,7 @@ func executeSheetRevisionCommand(t *testing.T, caller *sheetRevisionTestCaller, 
 	command.SilenceErrors = true
 	command.SilenceUsage = true
 	command.SetArgs(args)
-	err := command.Execute()
+	err := corecmd.ExecuteForTest(command)
 	return stdout.String(), err
 }
 

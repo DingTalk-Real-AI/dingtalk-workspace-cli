@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestValidateRolloutTransition(t *testing.T) {
+func TestCrossPlatformCoverageValidateRolloutTransition(t *testing.T) {
 	cases := []struct {
 		from, to RolloutState
 		rollback bool
@@ -33,7 +34,7 @@ func TestValidateRolloutTransition(t *testing.T) {
 	}
 }
 
-func TestAdaptMCPUsesSameEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageAdaptMCPUsesSameEnvelope(t *testing.T) {
 	result := Success(map[string]any{"id": "a"})
 	mcp, err := AdaptMCP(result)
 	if err != nil {
@@ -50,7 +51,7 @@ func TestAdaptMCPUsesSameEnvelope(t *testing.T) {
 	}
 }
 
-func TestCommandResultDetachesMutableFrameworkPayload(t *testing.T) {
+func TestCrossPlatformCoverageCommandResultDetachesMutableFrameworkPayload(t *testing.T) {
 	payload := map[string]any{"nested": map[string]any{"value": "before"}}
 	result := Success(payload)
 	payload["nested"].(map[string]any)["value"] = "after"
@@ -64,7 +65,7 @@ func TestCommandResultDetachesMutableFrameworkPayload(t *testing.T) {
 	}
 }
 
-func TestFailureExitCodeIsFrameworkDerived(t *testing.T) {
+func TestCrossPlatformCoverageFailureExitCodeIsFrameworkDerived(t *testing.T) {
 	result := Failure(&ErrorInfo{Type: "validation", ExitCode: 99, Message: "bad input"})
 	if result.ExitCode() != 3 {
 		t.Fatalf("normal failure exit code=%d, want framework validation rc=3", result.ExitCode())
@@ -78,7 +79,7 @@ func TestFailureExitCodeIsFrameworkDerived(t *testing.T) {
 	}
 }
 
-func TestRootCompatibilityAdapterCanPreserveSignalExitCode(t *testing.T) {
+func TestCrossPlatformCoverageRootCompatibilityAdapterCanPreserveSignalExitCode(t *testing.T) {
 	result := FailureWithExitCode(&ErrorInfo{Type: "internal", Message: "cancelled"}, 130)
 	if err := ValidateResult(result); err != nil {
 		t.Fatalf("ValidateResult: %v", err)
@@ -92,7 +93,7 @@ func TestRootCompatibilityAdapterCanPreserveSignalExitCode(t *testing.T) {
 	}
 }
 
-func TestValidateResultRejectsMalformedPendingPartialAndPagination(t *testing.T) {
+func TestCrossPlatformCoverageValidateResultRejectsMalformedPendingPartialAndPagination(t *testing.T) {
 	cases := []struct {
 		name   string
 		result CommandResult
@@ -112,7 +113,7 @@ func TestValidateResultRejectsMalformedPendingPartialAndPagination(t *testing.T)
 	}
 }
 
-func TestPartialRequiresTypedPerItemError(t *testing.T) {
+func TestCrossPlatformCoveragePartialRequiresTypedPerItemError(t *testing.T) {
 	for _, entry := range []PartialFailedEntry{
 		{ID: "b"},
 		{ID: "b", Error: &ErrorInfo{}},
@@ -123,7 +124,7 @@ func TestPartialRequiresTypedPerItemError(t *testing.T) {
 	}
 }
 
-func TestEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
+func TestCrossPlatformCoverageEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
 	cmd := &cobra.Command{Use: "sample"}
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
 	cmd.SetOut(stdout)
@@ -142,7 +143,61 @@ func TestEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
 	}
 }
 
-func TestPendingWithMetaDoesNotMutateCallerMetadata(t *testing.T) {
+func TestCrossPlatformCoverageTablePresentationKeepsOneResultAcrossHumanAndJSONFormats(t *testing.T) {
+	render := func(out io.Writer, data any) error {
+		_, err := fmt.Fprintf(out, "custom:%v\n", data.(map[string]any)["id"])
+		return err
+	}
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(render))
+
+	defaultCmd := &cobra.Command{Use: "sample"}
+	defaultOut := new(bytes.Buffer)
+	defaultCmd.SetOut(defaultOut)
+	if _, err := EmitResult(defaultCmd, result); err != nil || defaultOut.String() != "custom:a\n" {
+		t.Fatalf("default table output = %q, err = %v", defaultOut.String(), err)
+	}
+
+	jsonCmd := &cobra.Command{Use: "sample"}
+	jsonOut := new(bytes.Buffer)
+	jsonCmd.SetOut(jsonOut)
+	jsonCmd.Flags().String("format", "json", "")
+	if err := jsonCmd.Flags().Set("format", "json"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EmitResult(jsonCmd, result); err != nil {
+		t.Fatalf("explicit json: %v", err)
+	}
+	var envelope Envelope
+	if err := json.Unmarshal(jsonOut.Bytes(), &envelope); err != nil || envelope.Outcome != OutcomeSuccess {
+		t.Fatalf("explicit json output = %q, err = %v", jsonOut.String(), err)
+	}
+}
+
+func TestCrossPlatformCoverageOptionalTablePresentationBoundaries(t *testing.T) {
+	if commandPresentationFlagChanged(nil, "format") {
+		t.Fatal("nil command reported a changed presentation flag")
+	}
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(nil))
+	envelope, err := EnvelopeFromResult(result)
+	if err != nil || envelope.Data.(map[string]any)["id"] != "a" {
+		t.Fatalf("nil table renderer result=%#v err=%v", envelope, err)
+	}
+}
+
+func TestCrossPlatformCoverageTablePresentationRendererIsBufferFirst(t *testing.T) {
+	cmd := &cobra.Command{Use: "sample"}
+	stdout := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(func(out io.Writer, _ any) error {
+		_, _ = io.WriteString(out, "partial")
+		return errors.New("render failed")
+	}))
+	if _, err := EmitResult(cmd, result); err == nil || stdout.Len() != 0 {
+		t.Fatalf("renderer error = %v, leaked output = %q", err, stdout.String())
+	}
+}
+
+func TestCrossPlatformCoveragePendingWithMetaDoesNotMutateCallerMetadata(t *testing.T) {
 	callerOperation := &OperationInfo{ID: "original", State: "waiting", NextCommand: "dws original"}
 	meta := &Meta{Operation: callerOperation}
 	want := &OperationInfo{ID: "new", State: "processing", NextCommand: "dws status"}
@@ -176,7 +231,7 @@ func (w *writeThenError) Write(p []byte) (int, error) {
 	return n, io.ErrClosedPipe
 }
 
-func TestEmitStoredResultRecordsAttemptAndByteRiskOnWriteError(t *testing.T) {
+func TestCrossPlatformCoverageEmitStoredResultRecordsAttemptAndByteRiskOnWriteError(t *testing.T) {
 	for _, full := range []bool{false, true} {
 		t.Run(fmt.Sprintf("full=%t", full), func(t *testing.T) {
 			ctx, store := WithResultStore(context.Background())
@@ -206,7 +261,7 @@ func TestEmitStoredResultRecordsAttemptAndByteRiskOnWriteError(t *testing.T) {
 	}
 }
 
-func TestEmitStoredResultFallsBackToTypedFailureBeforeAnyBytesAreWritten(t *testing.T) {
+func TestCrossPlatformCoverageEmitStoredResultFallsBackToTypedFailureBeforeAnyBytesAreWritten(t *testing.T) {
 	ctx, store := WithResultStore(context.Background())
 	cmd := &cobra.Command{Use: "sample"}
 	SetCommandRollout(cmd, RolloutUnifiedActive)
@@ -235,7 +290,7 @@ func TestEmitStoredResultFallsBackToTypedFailureBeforeAnyBytesAreWritten(t *test
 	}
 }
 
-func TestWithResultStoreIsIdempotent(t *testing.T) {
+func TestCrossPlatformCoverageWithResultStoreIsIdempotent(t *testing.T) {
 	ctx, first := WithResultStore(context.Background())
 	ctxAgain, second := WithResultStore(ctx)
 	if ctxAgain != ctx || second != first {
@@ -243,7 +298,7 @@ func TestWithResultStoreIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestStoreResultWithoutExecutionBoundaryHasActionableDiagnostic(t *testing.T) {
+func TestCrossPlatformCoverageStoreResultWithoutExecutionBoundaryHasActionableDiagnostic(t *testing.T) {
 	err := StoreResult(context.Background(), Success(map[string]any{"id": "a"}))
 	if err == nil || !strings.Contains(err.Error(), "output.WithResultStore") ||
 		!strings.Contains(err.Error(), "root execution boundary") {

@@ -6,6 +6,7 @@ package output
 import (
 	"context"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -26,6 +27,7 @@ type commandResult struct {
 	env              Envelope
 	exitCode         int
 	exitCodeOverride bool
+	presentation     *resultPresentation
 }
 
 func (r *commandResult) Outcome() Outcome { return r.env.Outcome }
@@ -35,8 +37,16 @@ func (r *commandResult) envelope() *Envelope {
 	return &copy
 }
 
+type resultPresentation struct {
+	defaultFormat Format
+	renderTable   func(io.Writer, any) error
+}
+
 // ResultOption enriches a result without exposing mutable framework fields.
-type ResultOption struct{ apply func(*Envelope) }
+type ResultOption struct {
+	apply        func(*Envelope)
+	presentation *resultPresentation
+}
 
 func WithIdentity(identity string) ResultOption {
 	return ResultOption{apply: func(env *Envelope) { env.Identity = identity }}
@@ -48,6 +58,17 @@ func WithDryRun() ResultOption {
 
 func WithMeta(meta *Meta) ResultOption {
 	return ResultOption{apply: func(env *Envelope) { env.Meta = cloneMeta(meta) }}
+}
+
+// WithTablePresentation preserves a command-specific human table view while
+// keeping JSON, jq and alternate formats on the same framework-owned result.
+// The renderer receives only the immutable business data and writes through
+// the emitter's buffer-first path; it must not perform business I/O.
+func WithTablePresentation(renderer func(io.Writer, any) error) ResultOption {
+	if renderer == nil {
+		return ResultOption{}
+	}
+	return ResultOption{presentation: &resultPresentation{defaultFormat: FormatTable, renderTable: renderer}}
 }
 
 // Success constructs an immutable success result.
@@ -101,9 +122,14 @@ func newCommandResult(outcome Outcome, data any, info *ErrorInfo, opts ...Result
 func newCommandResultWithExitCode(outcome Outcome, data any, info *ErrorInfo, override int, hasOverride bool, opts ...ResultOption) CommandResult {
 	env := Envelope{Outcome: outcome, Data: data, Error: info}
 	env.OK = outcome == OutcomeSuccess || outcome == OutcomePending
+	var presentation *resultPresentation
 	for _, opt := range opts {
 		if opt.apply != nil {
 			opt.apply(&env)
+		}
+		if opt.presentation != nil {
+			copy := *opt.presentation
+			presentation = &copy
 		}
 	}
 	exitCode := ExitCodeForEnvelope(&env)
@@ -114,7 +140,7 @@ func newCommandResultWithExitCode(outcome Outcome, data any, info *ErrorInfo, ov
 		env.Error.ExitCode = exitCode
 	}
 	env = cloneEnvelope(env)
-	return &commandResult{env: env, exitCode: exitCode, exitCodeOverride: hasOverride}
+	return &commandResult{env: env, exitCode: exitCode, exitCodeOverride: hasOverride, presentation: presentation}
 }
 
 func cloneEnvelope(source Envelope) Envelope {

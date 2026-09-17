@@ -36,6 +36,16 @@ func minutesDetailResult() *contract.ResultSpec {
 	}
 }
 
+func minutesActionItemsResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(`{"type":"object","description":"带真值状态与兼容字段的听记行动项结果","properties":{"artifact":{"type":"string","description":"固定为 todos 的产物名称"},"taskUuid":{"type":"string","description":"请求的听记稳定 taskUuid"},"state":{"type":"string","description":"行动项真值状态","enum":["ready","known_empty","unsupported_shape","failed"]},"complete":{"type":"boolean","description":"是否已证明得到真实集合或明确空集合"},"sourceField":{"type":"string","description":"用于规范化 items 的已验证服务端集合字段"},"itemCount":{"type":"integer","description":"规范化 items 的条目数量"},"items":{"type":"array","description":"从已验证服务端字段投影的行动项集合","items":{"description":"一条服务端行动项"}},"observedFields":{"type":"array","description":"result 中实际观察到的字段名，不包含字段值","items":{"type":"string","description":"观察到的字段名"}},"observedTypes":{"type":"object","description":"result 字段到 JSON 类型的脱敏映射","additionalProperties":{"type":"string"}},"actions":{"type":"array","description":"兼容保留的原始 actions 集合","items":{"description":"一条原始 action"}},"dingtalkTodoList":{"type":"array","description":"兼容保留的原始钉钉行动项集合","items":{"type":"object","description":"一条原始钉钉行动项","additionalProperties":true}},"error":{"type":"string","description":"非成功状态的稳定诊断消息"},"retryable":{"type":"boolean","description":"当前状态是否允许自动重试"}},"required":["artifact","taskUuid","state","complete","itemCount","observedFields","observedTypes","retryable"],"additionalProperties":true}`),
+	}
+}
+
 func minutesTranscriptPagination() *contract.PaginationSpec {
 	return &contract.PaginationSpec{
 		Kind:                  contract.PaginationKindCursor,
@@ -49,6 +59,11 @@ func minutesTranscriptPagination() *contract.PaginationSpec {
 func withMinutesTranscriptResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
 	decl.Result = minutesTranscriptResult()
 	decl.Pagination = minutesTranscriptPagination()
+	return decl
+}
+
+func withMinutesActionItemsResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
+	decl.Result = minutesActionItemsResult()
 	return decl
 }
 

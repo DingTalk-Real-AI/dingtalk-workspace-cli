@@ -29,7 +29,7 @@ type schemaSourceContextKey struct{}
 
 func TestSchemaSourceRootPropagatesContextWithoutLoadingPlugins(t *testing.T) {
 	pluginLoads := 0
-	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		pluginLoads++
 		return nil
 	})
@@ -84,7 +84,7 @@ func TestCollectPluginServerCandidatesSortsAndSkipsInvalidStdio(t *testing.T) {
 		return mcptypes.ServerDescriptor{Key: stdio.Key}, true
 	}
 
-	candidates := collectPluginServerCandidates([]*plugin.Plugin{first, second}, wantContext)
+	candidates := collectPluginServerCandidates([]*plugin.Plugin{first, second}, func() *plugin.UserContext { return wantContext })
 	if len(candidates) != 5 {
 		t.Fatalf("candidate count = %d, want 5", len(candidates))
 	}

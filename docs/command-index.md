@@ -182,14 +182,26 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 
 _Users, departments, directory lookups, and enterprise onboarding._
 
-**9 commands**
+**21 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws contact account create` | Create a dedicated login account in the current enterprise. | When the user explicitly asks for an enterprise account or login account, rather than a new enterprise organization. |
+| `dws contact dept invite-audit` | Set whether joining a specific department requires admin review (department-level auto-approval). | When the user explicitly asks to enable or disable per-department join-request auditing. |
 | `dws contact dept list-members` | List members of a specific department by department ID. | When the agent needs the roster of a department to target communication or build a team overview. |
 | `dws contact dept search` | Search departments in the organization's contact directory by keyword. | When the agent needs to resolve a department name to a department ID. |
+| `dws contact exclusive-account disable` | Disable a dedicated enterprise login account so it can no longer sign in. | When the user explicitly asks to suspend an enterprise account and has confirmed the staff user ID. |
+| `dws contact exclusive-account enable` | Re-enable a previously disabled dedicated enterprise login account. | When the user explicitly asks to restore an enterprise account's ability to sign in. |
+| `dws contact org apply-approve` | Approve a pending join-enterprise application by application ID. | When the user explicitly asks to accept an application after confirming it via `dws contact org apply-list`. |
+| `dws contact org apply-block` | Block (blacklist) a join-enterprise application and its applicant with a reason. | When the user explicitly asks to blacklist an applicant, understanding later applications are also rejected. |
+| `dws contact org apply-list` | List user-submitted applications to join the enterprise, filterable by status. | When the user asks to review pending or processed join requests, or needs application IDs for approval commands. |
+| `dws contact org apply-reject` | Reject a join-enterprise application by application ID with a reason. | When the user explicitly asks to decline an application and provide the rejection reason. |
+| `dws contact org apply-remove` | Delete a join-enterprise application record permanently. | When the user explicitly asks to remove an application record and accepts it cannot be recovered. |
 | `dws contact org create` | Create a new DingTalk enterprise organization. | When the user explicitly asks to create or initialize an enterprise and provides its name and creator display name. |
+| `dws contact org invite-audit` | Set whether joining the enterprise requires admin review (enterprise-level auto-approval). | When the user explicitly asks to enable or disable join-request auditing for the whole enterprise. |
+| `dws contact org invite-info` | Fetch the enterprise invite link, invite code, join switches, and audit type. | When the user asks for the invite link/QR code or wants to inspect current join settings. |
+| `dws contact org invite-list` | List join-enterprise invitations the administrators have sent, filterable by status. | When the user asks which invited members have not yet accepted. |
+| `dws contact org invite-switch` | Toggle who can apply to join the enterprise (master switch plus search/code/link channels). | When the user explicitly asks to open or close join-application channels. |
 | `dws contact user get` | Batch-fetch detailed profile information for one or more users by user ID. | When the agent needs names, titles, emails, or departments for a known set of user IDs. |
 | `dws contact user get-self` | Retrieve the profile of the currently authenticated user. | When the agent needs to identify who it is acting on behalf of (user ID, name, org). |
 | `dws contact user invite` | Invite one employee by mobile number into the current enterprise. | When the user explicitly asks to add an employee and has supplied the employee name and mobile number. |
