@@ -3,8 +3,10 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -20,7 +22,7 @@ const docStyleGetToolName = "get_document_style"
 
 // newDocStyleCommand 构建 `dws doc style` 命令组：cover set|clear、background set|clear、get。
 func newDocStyleCommand() *cobra.Command {
-	styleCmd := &cobra.Command{
+	styleCmd := newGroupCommand(&cobra.Command{
 		Use:   "style",
 		Short: "文档样式配置 (封面/背景)",
 		Long: `配置钉钉文档的封面与背景（单接口收口 update_document_style）。
@@ -34,13 +36,13 @@ func newDocStyleCommand() *cobra.Command {
 
 封面图片支持 --image 外链 (自动转存) 或 --file 本地文件上传，均会转存为公开读地址；背景仅支持 --color 纯色。`,
 		RunE: groupRunE,
-	}
+	})
 
-	coverCmd := &cobra.Command{
+	coverCmd := newGroupCommand(&cobra.Command{
 		Use:   "cover",
 		Short: "文档封面设置/移除",
 		RunE:  groupRunE,
-	}
+	})
 	coverSetCmd := &cobra.Command{
 		Use:   "set",
 		Short: "设置文档封面",
@@ -110,11 +112,11 @@ func newDocStyleCommand() *cobra.Command {
 		},
 	})
 
-	backgroundCmd := &cobra.Command{
+	backgroundCmd := newGroupCommand(&cobra.Command{
 		Use:   "background",
 		Short: "文档背景设置/清除",
 		RunE:  groupRunE,
-	}
+	})
 	backgroundSetCmd := &cobra.Command{
 		Use:     "set",
 		Short:   "设置文档背景纯色",
@@ -294,8 +296,8 @@ func runDocStyleCoverSet(cmd *cobra.Command, _ []string) error {
 	cover := map[string]any{"action": "set"}
 	// position 客户端校验：帮助文档承诺 [0,1]，越界直接报错，避免触发上传/请求。
 	if cmd.Flags().Changed("position") {
-		pos, _ := cmd.Flags().GetFloat64("position")
-		if pos < 0 || pos > 1 {
+		pos, parseErr := strconv.ParseFloat(cmd.Flags().Lookup("position").Value.String(), 64)
+		if parseErr != nil || math.IsNaN(pos) || math.IsInf(pos, 0) || pos < 0 || pos > 1 {
 			return fmt.Errorf("--position must be within [0,1], got %v", pos)
 		}
 		cover["position"] = pos

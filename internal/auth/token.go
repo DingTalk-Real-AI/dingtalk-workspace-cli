@@ -97,6 +97,7 @@ type TokenData struct {
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
 	UpdatedAt      string    `json:"updated_at,omitempty"`
 	Source         string    `json:"source,omitempty"`
+	LoginRegion    string    `json:"login_region,omitempty"`
 	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
 	// matched historical profile whose userId was never resolved. It is never
 	// persisted as token material.
@@ -106,6 +107,13 @@ type TokenData struct {
 	// transient marker to reject ambiguous UID-less logins without breaking
 	// legitimate refreshes of unresolved accounts.
 	FreshAuthorization bool `json:"-"`
+	// RepairOrganizationMirror marks a fallback refresh that consumed the
+	// organization mirror's refresh_token. The regular write plan can skip the
+	// organization slot under an explicit runtime selector (for example when an
+	// unresolved sibling profile still owns it), which would strand a
+	// refresh_token the server has already rotated; the marker forces the
+	// rotated credential back into that slot.
+	RepairOrganizationMirror bool `json:"-"`
 }
 
 // tokenPersistenceWritePlan is the single source of truth for deciding which
@@ -126,6 +134,7 @@ type tokenPersistenceWritePlan struct {
 	ExistingIdentity               bool
 	UpgradesLegacyProfile          bool
 	PreserveUnresolvedOrganization bool
+	RepairOrganizationMirror       bool
 	WriteIdentity                  bool
 	WriteOrganization              bool
 	WriteGlobal                    bool
@@ -166,6 +175,11 @@ func planTokenPersistenceWrites(
 	plan.PreserveUnresolvedOrganization = plan.UserID != "" &&
 		unresolvedProfileForCorp(cfg, plan.CorpID) != nil &&
 		!plan.UpgradesLegacyProfile
+	// A fallback refresh consumed the organization mirror's refresh_token;
+	// the rotated credential must go back into that slot even when the
+	// selector-driven plan would skip it (for example an explicit --profile
+	// that preserves an unresolved sibling profile's slot).
+	plan.RepairOrganizationMirror = data.RepairOrganizationMirror
 	plan.WriteIdentity = plan.UserID != ""
 	orgCurrentSelector := ""
 	if cfg != nil {
@@ -176,7 +190,8 @@ func planTokenPersistenceWrites(
 	// reauthorization. Its organization slot must move with the newly exact
 	// identity even when an explicit runtime selector keeps it from becoming
 	// process-global current.
-	plan.WriteOrganization = plan.UserID == "" ||
+	plan.WriteOrganization = plan.RepairOrganizationMirror ||
+		plan.UserID == "" ||
 		plan.UpgradesLegacyProfile ||
 		(!plan.PreserveUnresolvedOrganization &&
 			(plan.MakeCurrent ||
@@ -324,10 +339,13 @@ func SaveLoginTokenData(configDir string, data *TokenData) error {
 	if data == nil {
 		return fmt.Errorf("token data is empty")
 	}
+	data.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, data); err != nil {
+		return fmt.Errorf("local login state cannot be safely updated: %w", err)
+	}
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
-	data.FreshAuthorization = true
 	if err := preflightTokenWritePersistence(configDir, data); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
@@ -386,6 +404,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 			"persistence_profile", plan.PersistenceSelector,
 			"write_identity_slot", plan.WriteIdentity,
 			"write_org_mirror", plan.WriteOrganization,
+			"repair_org_mirror", plan.RepairOrganizationMirror,
 			"write_global_mirror", plan.WriteGlobal,
 			"publish_incoming_global", plan.MakeCurrent,
 		)

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 type preflightRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -170,6 +171,414 @@ func TestExactOrgCurrentRefreshRejectsUnreadableOrgMirror(t *testing.T) {
 	if err := preflightTokenRefreshPersistence(configDir, data); err == nil ||
 		!strings.Contains(err.Error(), "profile token slot") {
 		t.Fatalf("preflightTokenRefreshPersistence(exact current) error = %v, want unreadable org mirror", err)
+	}
+}
+
+func TestSaveLoginTokenDataRepairsTargetOrgCiphertextMismatch(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-readable", "corp_login_repair", "Login Repair Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy) error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	staleOrg := testToken("stale-unreadable", legacy.CorpID, legacy.CorpName)
+	if err := SaveTokenDataKeychainForCorpID(staleOrg.CorpID, staleOrg); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID(stale) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+	if _, err := LoadTokenDataKeychainForCorpID(legacy.CorpID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v, want ciphertext mismatch", err)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err != nil {
+		t.Fatalf("SaveLoginTokenData() error = %v", err)
+	}
+	assertOrganizationTokenAccessForTest(t, incoming.CorpID, incoming.AccessToken, "")
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != incoming.AccessToken {
+		t.Fatalf("global token = %q, want %q", global.AccessToken, incoming.AccessToken)
+	}
+}
+
+func TestSaveLoginTokenDataRepairsGlobalAndOrgSlotsOnCiphertextMismatch(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_global_gate", "Global Gate Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	// Seed the keychain storage so the primary DEK exists before it is read,
+	// then remove the seeded slot so both slots below are fresh writes under
+	// the alternate DEK (overwriting an existing slot re-validates its DEK).
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy) error = %v", err)
+	}
+	if err := DeleteTokenDataKeychain(); err != nil {
+		t.Fatalf("DeleteTokenDataKeychain() error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	// Encrypt both the global mirror and the target org slot with an alternate
+	// DEK so neither can be decrypted once the primary DEK is restored.
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy, alternate DEK) error = %v", err)
+	}
+	staleOrg := testToken("stale-unreadable", legacy.CorpID, legacy.CorpName)
+	if err := SaveTokenDataKeychainForCorpID(staleOrg.CorpID, staleOrg); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID(stale) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() error = %v, want ciphertext mismatch", err)
+	}
+	if _, err := LoadTokenDataKeychainForCorpID(legacy.CorpID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v, want ciphertext mismatch", err)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err != nil {
+		t.Fatalf("SaveLoginTokenData() error = %v", err)
+	}
+	// The repair must clear both mismatch slots so the new token lands.
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != incoming.AccessToken {
+		t.Fatalf("global token = %q, want %q", global.AccessToken, incoming.AccessToken)
+	}
+	assertOrganizationTokenAccessForTest(t, incoming.CorpID, incoming.AccessToken, "")
+}
+
+func TestSaveLoginTokenDataRepairAbortsUntouchedOnTransientReadError(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-readable", "corp_transient_guard", "Transient Guard Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	// Seed the keychain storage so the primary DEK exists, then re-encrypt the
+	// global slot under an alternate DEK so the check phase flags it for removal.
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy) error = %v", err)
+	}
+	if err := DeleteTokenDataKeychain(); err != nil {
+		t.Fatalf("DeleteTokenDataKeychain() error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy, alternate DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+
+	// A transient read error on the org slot must abort the repair before the
+	// mismatch global slot is removed.
+	origGet := authKeychainGet
+	defer func() { authKeychainGet = origGet }()
+	transientErr := errors.New("transient keychain I/O failure")
+	authKeychainGet = func(service, account string) (string, error) {
+		if account == TokenAccountForCorpID(legacy.CorpID) {
+			return "", transientErr
+		}
+		return origGet(service, account)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err == nil {
+		t.Fatal("SaveLoginTokenData() error = nil, want transient read failure")
+	}
+	// No removal may have run: the global slot keeps its mismatch ciphertext.
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() after abort error = %v, want preserved ciphertext mismatch", err)
+	}
+}
+
+// seedMismatchedGlobalSlot writes the global mirror under an alternate DEK and
+// then restores the primary DEK, leaving a slot that LoadTokenDataKeychain
+// reports as a ciphertext mismatch until a writer replaces it.
+func seedMismatchedGlobalSlot(t *testing.T, legacy *TokenData) {
+	t.Helper()
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy) error = %v", err)
+	}
+	if err := DeleteTokenDataKeychain(); err != nil {
+		t.Fatalf("DeleteTokenDataKeychain() error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy, alternate DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+}
+
+func TestSaveLoginTokenDataRepairsAllThreeSlotsOnCiphertextMismatch(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_identity_gate", "Identity Gate Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	// Seed the primary DEK, then encrypt the global, org, and identity slots
+	// under an alternate DEK so all three become unreadable once restored.
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy) error = %v", err)
+	}
+	if err := DeleteTokenDataKeychain(); err != nil {
+		t.Fatalf("DeleteTokenDataKeychain() error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(legacy, alternate DEK) error = %v", err)
+	}
+	if err := SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForCorpID(legacy, alternate DEK) error = %v", err)
+	}
+	staleIdentity := testToken("stale-identity", legacy.CorpID, legacy.CorpName)
+	if err := SaveTokenDataKeychainForIdentity(staleIdentity.CorpID, staleIdentity.UserID, staleIdentity); err != nil {
+		t.Fatalf("SaveTokenDataKeychainForIdentity(stale, alternate DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() error = %v, want ciphertext mismatch", err)
+	}
+	if _, err := LoadTokenDataKeychainForCorpID(legacy.CorpID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v, want ciphertext mismatch", err)
+	}
+	if _, err := LoadTokenDataKeychainForIdentity(staleIdentity.CorpID, staleIdentity.UserID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForIdentity() error = %v, want ciphertext mismatch", err)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	if err := SaveLoginTokenData(configDir, incoming); err != nil {
+		t.Fatalf("SaveLoginTokenData() error = %v", err)
+	}
+	// The repair must clear all three mismatch slots so the new token lands.
+	global, err := LoadTokenDataKeychain()
+	if err != nil {
+		t.Fatalf("LoadTokenDataKeychain() error = %v", err)
+	}
+	if global.AccessToken != incoming.AccessToken {
+		t.Fatalf("global token = %q, want %q", global.AccessToken, incoming.AccessToken)
+	}
+	assertOrganizationTokenAccessForTest(t, incoming.CorpID, incoming.AccessToken, incoming.UserID)
+	assertIdentityTokenAccessForTest(t, incoming.CorpID, incoming.UserID, incoming.AccessToken)
+}
+
+func TestSaveLoginTokenDataRepairFailsWhenSlotRemovalFails(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_remove_fail", "Remove Fail Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	seedMismatchedGlobalSlot(t, legacy)
+
+	// A removal I/O failure must surface to the caller instead of silently
+	// continuing: only the removal phase itself can leave a partial repair.
+	origRemove := authKeychainRemove
+	defer func() { authKeychainRemove = origRemove }()
+	removeErr := errors.New("keychain remove I/O failure")
+	authKeychainRemove = func(service, account string) error {
+		if account == keychain.AccountToken {
+			return removeErr
+		}
+		return origRemove(service, account)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err == nil ||
+		!strings.Contains(err.Error(), "remove unreadable legacy token slot") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want remove unreadable legacy token slot", err)
+	}
+}
+
+func TestSaveLoginTokenDataRepairAbortsUntouchedOnGlobalReadError(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_global_read_guard", "Global Read Guard Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	seedMismatchedGlobalSlot(t, legacy)
+
+	// A transient read error on the global slot must abort the repair before
+	// any mismatch slot is removed.
+	origGet := authKeychainGet
+	defer func() { authKeychainGet = origGet }()
+	transientErr := errors.New("transient keychain I/O failure")
+	authKeychainGet = func(service, account string) (string, error) {
+		if account == keychain.AccountToken {
+			return "", transientErr
+		}
+		return origGet(service, account)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err == nil {
+		t.Fatal("SaveLoginTokenData() error = nil, want transient read failure")
+	}
+	// Restore reads so the untouched slot can be verified as still mismatched.
+	authKeychainGet = origGet
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() after abort error = %v, want preserved ciphertext mismatch", err)
+	}
+}
+
+func TestRepairLoginCiphertextMismatchTargetsSkipsUnderEditionSaveTokenHook(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_edition_hook", "Edition Hook Org")
+	seedMismatchedGlobalSlot(t, legacy)
+
+	// Editions that overlay token persistence must not touch the local
+	// keychain slots, so the repair is a no-op when SaveToken is hooked.
+	orig := edition.Get()
+	defer edition.Override(orig)
+	edition.Override(&edition.Hooks{SaveToken: func(configDir string, data []byte) error { return nil }})
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, incoming); err != nil {
+		t.Fatalf("repairLoginCiphertextMismatchTargets() error = %v, want skip under edition SaveToken hook", err)
+	}
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() error = %v, want mismatch slot preserved by edition skip", err)
+	}
+}
+
+func TestRepairLoginCiphertextMismatchTargetsIgnoresNonFreshAuthorization(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_non_fresh", "Non Fresh Org")
+	seedMismatchedGlobalSlot(t, legacy)
+
+	// Only a freshly exchanged login may repair slots; refresh/reuse paths
+	// leave the mismatched ciphertext untouched.
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	if err := repairLoginCiphertextMismatchTargets(configDir, incoming); err != nil {
+		t.Fatalf("repairLoginCiphertextMismatchTargets() error = %v, want no-op for non-fresh data", err)
+	}
+	if _, err := LoadTokenDataKeychain(); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychain() error = %v, want mismatch slot preserved by non-fresh skip", err)
 	}
 }
 
@@ -565,5 +974,224 @@ func TestExchangeAuthCodeExplicitUIDSkipsIdentityOverride(t *testing.T) {
 	}
 	if got := identityCalls.Load(); got != 0 {
 		t.Fatalf("IdentityEnricher calls = %d, want 0", got)
+	}
+}
+
+// seedMismatchedTargetSlot writes one credential slot under an alternate DEK
+// and then restores the primary DEK, leaving a slot that loads as a ciphertext
+// mismatch until a writer replaces it.
+func seedMismatchedTargetSlot(t *testing.T, seed *TokenData, save func() error) {
+	t.Helper()
+	if err := SaveTokenDataKeychain(seed); err != nil {
+		t.Fatalf("SaveTokenDataKeychain(seed) error = %v", err)
+	}
+	if err := DeleteTokenDataKeychain(); err != nil {
+		t.Fatalf("DeleteTokenDataKeychain(seed) error = %v", err)
+	}
+	dekPath := filepath.Join(keychain.StorageDir(keychain.Service), "dek")
+	primaryDEK, err := os.ReadFile(dekPath)
+	if err != nil {
+		t.Fatalf("ReadFile(primary DEK) error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, bytes.Repeat([]byte{0x6d}, 32), 0o600); err != nil {
+		t.Fatalf("WriteFile(alternate DEK) error = %v", err)
+	}
+	if err := save(); err != nil {
+		t.Fatalf("save target slot under alternate DEK error = %v", err)
+	}
+	if err := os.WriteFile(dekPath, primaryDEK, 0o600); err != nil {
+		t.Fatalf("restore primary DEK error = %v", err)
+	}
+}
+
+func identityCiphertextPathForTest(corpID, userID string) string {
+	account := strings.ReplaceAll(TokenAccountForIdentity(corpID, userID), ":", "_")
+	return filepath.Join(keychain.StorageDir(keychain.Service), account+".enc")
+}
+
+func TestRepairLoginCiphertextMismatchTargetsAbortsOnProfilesLoadError(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+
+	// A registry read failure must abort the repair before any slot is touched.
+	origLoad := profilesLoad
+	defer func() { profilesLoad = origLoad }()
+	profilesLoad = func(string) (*ProfilesConfig, error) {
+		return nil, errors.New("profiles registry read failure")
+	}
+
+	incoming := testToken("fresh-login", "corp_load_err", "Load Err Org")
+	incoming.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, incoming); err == nil ||
+		!strings.Contains(err.Error(), "profiles registry read failure") {
+		t.Fatalf("repairLoginCiphertextMismatchTargets() error = %v, want profiles registry read failure", err)
+	}
+}
+
+func TestSaveLoginTokenDataRepairFailsWhenIdentitySlotRemovalFails(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_identity_remove", "Identity Remove Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	const userID = "user_identity_remove"
+	seedMismatchedTargetSlot(t, legacy, func() error {
+		return SaveTokenDataKeychainForIdentity(legacy.CorpID, userID, legacy)
+	})
+	if _, err := LoadTokenDataKeychainForIdentity(legacy.CorpID, userID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForIdentity() error = %v, want ciphertext mismatch", err)
+	}
+
+	// A removal I/O failure on the identity slot must surface to the caller
+	// instead of silently continuing.
+	origRemove := authKeychainRemove
+	defer func() { authKeychainRemove = origRemove }()
+	removeErr := errors.New("keychain remove I/O failure")
+	authKeychainRemove = func(service, account string) error {
+		if account == TokenAccountForIdentity(legacy.CorpID, userID) {
+			return removeErr
+		}
+		return origRemove(service, account)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = userID
+	if err := SaveLoginTokenData(configDir, incoming); err == nil ||
+		!strings.Contains(err.Error(), "remove unreadable identity token slot") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want remove unreadable identity token slot", err)
+	}
+}
+
+func TestSaveLoginTokenDataRepairFailsWhenOrgSlotRemovalFails(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := testToken("legacy-unreadable", "corp_org_remove", "Org Remove Org")
+	legacy.UserID = ""
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	seedMismatchedTargetSlot(t, legacy, func() error {
+		return SaveTokenDataKeychainForCorpID(legacy.CorpID, legacy)
+	})
+	if _, err := LoadTokenDataKeychainForCorpID(legacy.CorpID); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("LoadTokenDataKeychainForCorpID() error = %v, want ciphertext mismatch", err)
+	}
+
+	// A removal I/O failure on the org slot must surface to the caller instead
+	// of silently continuing.
+	origRemove := authKeychainRemove
+	defer func() { authKeychainRemove = origRemove }()
+	removeErr := errors.New("keychain remove I/O failure")
+	authKeychainRemove = func(service, account string) error {
+		if account == TokenAccountForCorpID(legacy.CorpID) {
+			return removeErr
+		}
+		return origRemove(service, account)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err == nil ||
+		!strings.Contains(err.Error(), "remove unreadable profile token slot") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want remove unreadable profile token slot", err)
+	}
+}
+
+func TestPreflightTokenRefreshPersistenceRejectsUnreadableIdentitySlot(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	data := testToken("at_identity_preflight", "corp_identity_preflight", "Identity Preflight Org")
+	if err := SaveTokenData(configDir, data); err != nil {
+		t.Fatalf("SaveTokenData() error = %v", err)
+	}
+	if err := os.WriteFile(identityCiphertextPathForTest(data.CorpID, data.UserID), []byte("corrupt ciphertext"), 0o600); err != nil {
+		t.Fatalf("WriteFile(identity ciphertext) error = %v", err)
+	}
+
+	err := preflightTokenRefreshPersistence(configDir, data)
+	if err == nil || !strings.Contains(err.Error(), "identity token slot") {
+		t.Fatalf("preflightTokenRefreshPersistence() error = %v, want unreadable identity slot", err)
+	}
+}
+
+func TestSaveLoginTokenDataRejectsCredentiallessLegacyGlobalBeforeSave(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+	legacy := &TokenData{CorpID: "corp_credentialless", CorpName: "Credentialless Org"}
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: legacy.CorpID,
+		Profiles: []Profile{{
+			Name:     legacy.CorpName,
+			CorpID:   legacy.CorpID,
+			CorpName: legacy.CorpName,
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	if err := SaveTokenDataKeychain(legacy); err != nil {
+		t.Fatalf("SaveTokenDataKeychain() error = %v", err)
+	}
+
+	incoming := testToken("fresh-login", legacy.CorpID, legacy.CorpName)
+	incoming.UserID = ""
+	if err := SaveLoginTokenData(configDir, incoming); err == nil ||
+		!strings.Contains(err.Error(), "no recoverable credential material") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want credentialless legacy global rejection", err)
+	}
+}
+
+func TestSaveLoginTokenDataWrapsWritePreflightFailureAfterRepairPasses(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+
+	// The repair and prepare phases read the registry through the profilesLoad
+	// seam; the on-disk registry carries a future version so only the write
+	// preflight, which reads LoadProfiles directly, rejects the login.
+	origLoad := profilesLoad
+	defer func() { profilesLoad = origLoad }()
+	profilesLoad = func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion}, nil
+	}
+	raw, err := json.Marshal(&ProfilesConfig{Version: profilesMaxVersion + 1})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(ProfilesPath(configDir), raw, 0o600); err != nil {
+		t.Fatalf("write future profiles: %v", err)
+	}
+
+	incoming := testToken("fresh-login", "corp_preflight_wrap", "Preflight Wrap Org")
+	err = SaveLoginTokenData(configDir, incoming)
+	if err == nil ||
+		!strings.Contains(err.Error(), "local login state cannot be safely updated") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want write preflight failure", err)
+	}
+	if !strings.Contains(err.Error(), "newer than supported") {
+		t.Fatalf("SaveLoginTokenData() error = %v, want future profiles rejection in chain", err)
 	}
 }

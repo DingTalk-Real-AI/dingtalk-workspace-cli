@@ -289,7 +289,9 @@ func TestRunPersonalEventConsumeManyCreatesAndCleansAllSubscriptions(t *testing.
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
 	identity := personal.Identity{AccessToken: "token", CorpID: "corp", UserID: "user", ClientID: "client", SourceID: "open"}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return identity, nil }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return identity, nil
+	}
 	createdKeys := make([]string, 0, 2)
 	personalEnsureSubscription = func(_ context.Context, _ *personal.Client, _ personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
 		createdKeys = append(createdKeys, opts.EventKey)
@@ -340,7 +342,7 @@ func TestRunPersonalEventConsumeManyRollsBackPartialCreation(t *testing.T) {
 	restore := installPersonalManySeams(t)
 	defer restore()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open", LocalSubject: "subject"}, nil
 	}
 	wantErr := errors.New("second subscription failed")
@@ -389,7 +391,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManyPersistsFailureBeforeRo
 	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
 		return &personalOrderingAttemptStore{order: &order}
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			ClientID:     "client",
@@ -438,7 +440,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeSinglePersistsLocalFailureB
 	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
 		return &personalOrderingAttemptStore{order: &order}
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			ClientID:     "client",
@@ -484,7 +486,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManyCancellationReleasesBef
 	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
 		return &personalOrderingAttemptStore{order: &order}
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			ClientID:     "client",
@@ -568,7 +570,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManyRejectsInvalidSubscript
 			restore := installPersonalManySeams(t)
 			defer restore()
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-			personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+			personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 				return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open", LocalSubject: "subject"}, nil
 			}
 			calls := 0
@@ -599,7 +601,7 @@ func TestRunPersonalEventConsumeManyDryRunDoesNotCreateSubscriptions(t *testing.
 	restore := installPersonalManySeams(t)
 	defer restore()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open", LocalSubject: "subject"}, nil
 	}
 	personalEnsureSubscription = func(context.Context, *personal.Client, personal.Identity, personalConsumeOptions) (*personal.Subscription, string, string, error) {
@@ -648,7 +650,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManySetupAndCleanupEdges(t 
 			t.Fatal(err)
 		}
 		wantErr := errors.New("identity")
-		personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 			return personal.Identity{}, wantErr
 		}
 		opts := valid
@@ -677,7 +679,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManySetupAndCleanupEdges(t 
 	t.Run("route validation and output conflict", func(t *testing.T) {
 		restore := installPersonalManySeams(t)
 		defer restore()
-		personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 			return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open", LocalSubject: "subject"}, nil
 		}
 
@@ -707,7 +709,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManySetupAndCleanupEdges(t 
 	t.Run("runtime error reports cleanup failures", func(t *testing.T) {
 		restore := installPersonalManySeams(t)
 		defer restore()
-		personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 			return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open", LocalSubject: "subject"}, nil
 		}
 		personalEnsureSubscription = func(_ context.Context, _ *personal.Client, _ personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
@@ -734,7 +736,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManySetupAndCleanupEdges(t 
 	})
 }
 
-func TestStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
+func TestCrossPlatformCoverageStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
 	oldStop := personalStopConsumers
 	oldQuery := personalQueryStatus
 	oldFind := personalFindProcess
@@ -745,6 +747,18 @@ func TestStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
 		personalFindProcess = oldFind
 		personalSignalProcess = oldSignal
 	}()
+
+	personalStopConsumers = func(string, []string) (transport.ConsumerStopResp, error) {
+		t.Fatal("targeted stop called without a subscribe_id")
+		return transport.ConsumerStopResp{}, nil
+	}
+	personalQueryStatus = func(string) (*transport.StatusResp, error) {
+		t.Fatal("legacy status queried without a subscribe_id")
+		return nil, nil
+	}
+	if err := stopPersonalConsumers(io.Discard, "endpoint", []string{"", "  "}); err != nil {
+		t.Fatalf("empty target stop = %v", err)
+	}
 
 	personalStopConsumers = func(string, []string) (transport.ConsumerStopResp, error) {
 		return transport.ConsumerStopResp{Stopped: []string{"sub-a"}}, nil

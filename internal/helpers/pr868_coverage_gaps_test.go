@@ -611,7 +611,7 @@ func TestCrossPlatformCoverageDriveLatestRemaining(t *testing.T) {
 		{"name": "c", "sortTime": int64(5), "rel_path": "z", "fileId": "3", "type": "file"},
 		{"nodeType": "Folder", "name": "folder"},
 	}
-	got := applyDriveListLatest(items, 10)
+	got := applyDriveListLatest(items, 10, false)
 	if len(got) != 3 {
 		t.Fatalf("len=%d", len(got))
 	}
@@ -674,7 +674,7 @@ func TestCrossPlatformCoverageDriveDepthLatestTruncatedAndSortTime(t *testing.T)
 	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: sb.String()}}}
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 2)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 2, driveListFilter{})
 	if err == nil || !strings.Contains(err.Error(), "LATEST_SCAN_TRUNCATED") {
 		t.Fatalf("err=%v, want LATEST_SCAN_TRUNCATED", err)
 	}

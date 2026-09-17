@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "service": "contact",
+  "default_availability": "available",
+  "shortcuts": {
+    "+list-followings": {"disposition":"semantic_adapter","semantic_delta":"严格要求 success、result.models 数组、对象元素、唯一稳定 openDingTalkId；可用 --open-id 做本地精确筛选，exact live 已证明已知非空与保证零命中。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+search-user": {"disposition":"semantic_adapter","semantic_delta":"按姓名搜索并严格要求 success、显式 result 数组、非空对象和稳定 userId/openDingTalkId；已验证非空与随机零命中。","risk":"read","public":true,"reviewed":true},
+    "+search-mobile": {"disposition":"semantic_adapter","semantic_delta":"使用专用手机号精确查询接口取得稳定 userId，并直接投影该接口返回的受审身份字段，不额外依赖用户详情权限；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，null、空对象、数组或坏身份均失败。","risk":"read","public":true,"reviewed":true},
+    "+list-roles": {"disposition":"semantic_adapter","semantic_delta":"历史 CLI 继续执行严格 get_org_labels 适配：校验角色分组、每个角色元素、正整数 labelId、非空名称与唯一身份，并传播真实下游错误；当前 exact raw 仍含坏元素，整批拒绝，因此保持 Agent/public unavailable。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+list-role-members": {"disposition":"semantic_adapter","semantic_delta":"按角色列成员，严格要求 success、显式 labelUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。","risk":"read","public":true,"reviewed":true},
+    "+list-sub-depts": {"disposition":"semantic_adapter","semantic_delta":"按父部门列直属子部门，严格要求显式 result 数组与有效 deptId；已验证非空与随机零命中。","risk":"read","public":true,"reviewed":true},
+    "+list-dept-members": {"disposition":"semantic_adapter","semantic_delta":"按 deptId 列直属成员，严格要求显式 deptUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。","risk":"read","public":true,"reviewed":true},
+    "+list-roster-fields": {"disposition":"semantic_adapter","semantic_delta":"exact raw 在当前授权/平台层被阻断，未获得可校验的业务字段集合；Agent/public 保持 unavailable，历史 CLI 继续透传原 MCP 调用与真实错误。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+get-roster": {"disposition":"semantic_adapter","semantic_delta":"exact raw 使用随机员工夹具仍在当前授权/平台层被阻断，无法安全获得业务详情合同；Agent/public 保持 unavailable，历史 CLI 继续透传原 MCP 调用与真实错误。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+by-mobile": {"disposition":"primary_smart","semantic_delta":"使用专用手机号精确查询接口解析稳定 userId；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，未命中返回 typed nonzero；命中后读取并精确核对同一用户详情，null、错型、坏身份或详情 ID 不一致均失败。","risk":"read","public":true,"reviewed":true},
+    "+dept-members": {"disposition":"primary_smart","semantic_delta":"按部门名唯一解析 deptId 后列直属成员；搜索候选和成员集合均逐项严格校验，绝不猜测多匹配。","risk":"read","public":true,"reviewed":true},
+    "+lookup": {"disposition":"primary_smart","semantic_delta":"按姓名唯一解析稳定 userId 后读取并核对唯一用户详情；零命中和多命中均错误关闭。","risk":"read","public":true,"reviewed":true},
+    "+org": {"disposition":"primary_smart","semantic_delta":"按姓名解析用户、核对用户详情与主 deptId，再读取并核对部门详情的稳定身份。","risk":"read","public":true,"reviewed":true},
+    "+resolve-dept": {"disposition":"primary_smart","semantic_delta":"按名称返回唯一 deptId 或显式候选；严格要求 deptList 数组、有效且不重复的 deptId 与部门名。","risk":"read","public":true,"reviewed":true},
+    "+team": {"disposition":"primary_smart","semantic_delta":"按姓名解析用户和主部门后列直属成员；每一步校验 success、稳定身份及显式成员集合。","risk":"read","public":true,"reviewed":true},
+    "+me": {"disposition":"primary_smart","semantic_delta":"读取当前用户唯一详情并严格要求 orgEmployeeModel 与稳定 userId，再投影最小自身份字段。","risk":"read","public":true,"reviewed":true}
+  }
+}

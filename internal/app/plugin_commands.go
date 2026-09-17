@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -747,7 +748,11 @@ func pruneEmptyPluginGroups(parent *cobra.Command) {
 	}
 	for _, child := range append([]*cobra.Command(nil), parent.Commands()...) {
 		pruneEmptyPluginGroups(child)
-		if cmdutil.IsGroup(child) && len(child.Commands()) == 0 {
+		_, group, err := corecmd.GroupPolicyFor(child)
+		if err != nil {
+			panic(fmt.Sprintf("prune plugin group %q: %v", child.CommandPath(), err))
+		}
+		if group && len(child.Commands()) == 0 {
 			parent.RemoveCommand(child)
 		}
 	}

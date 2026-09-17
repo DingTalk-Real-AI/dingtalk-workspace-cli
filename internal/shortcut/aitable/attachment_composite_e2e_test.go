@@ -162,7 +162,7 @@ func TestCrossPlatformCoverageAttachmentRemoveClearAndSelectiveE2E(t *testing.T)
 				map[string]any{"fileToken": "keep-token", "filename": "keep.pdf"},
 			})},
 			{text: `{"updatedCount":1}`},
-			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"filename": "keep.pdf", "size": 10}})},
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"fileToken": "keep-token", "filename": "keep.pdf", "size": 10}})},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+attachment-remove",
 			"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--remove-name", "remove.pdf", "--yes")
@@ -183,7 +183,7 @@ func TestCrossPlatformCoverageAttachmentRemoveExplainsTokenBoundaryE2E(t *testin
 	})}}}
 	out, err := runAITableCompositeCLI(t, caller, "+attachment-remove",
 		"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--remove-name", "remove.pdf", "--yes")
-	if err == nil || out != "" || len(caller.calls) != 1 || !strings.Contains(err.Error(), "fileToken") || !strings.Contains(err.Error(), "增量删除") {
+	if err == nil || out != "" || len(caller.calls) != 1 || !strings.Contains(err.Error(), "fileToken") || !strings.Contains(err.Error(), "resourceId") || strings.Contains(err.Error(), "服务端当前不支持") {
 		t.Fatalf("token boundary = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 }
@@ -437,7 +437,7 @@ func TestCrossPlatformCoverageAttachmentReadBackShapesE2E(t *testing.T) {
 		want string
 	}{
 		{name: "query error", step: upsertByKeyStep{err: errors.New("query failed")}, want: "query failed"},
-		{name: "wrong record", step: upsertByKeyStep{text: `{"records":[{"recordId":"other","cells":{}}]}`}, want: "exact records"},
+		{name: "wrong record", step: upsertByKeyStep{text: `{"records":[{"recordId":"other","cells":{}}]}`}, want: "unexpected recordId"},
 		{name: "missing cells", step: upsertByKeyStep{text: `{"records":[{"recordId":"record"}]}`}, want: "missing cells"},
 		{name: "non-array field", step: upsertByKeyStep{text: `{"records":[{"recordId":"record","cells":{"field":"bad"}}]}`}, want: "not an array"},
 		{name: "non-object item", step: upsertByKeyStep{text: `{"records":[{"recordId":"record","cells":{"field":["bad"]}}]}`}, want: "not an object"},
@@ -457,5 +457,100 @@ func TestCrossPlatformCoverageAttachmentReadBackShapesE2E(t *testing.T) {
 		"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--clear-all", "--yes")
 	if err != nil || !strings.Contains(out, `"status": "unchanged"`) {
 		t.Fatalf("missing field = output:%q err:%v", out, err)
+	}
+}
+
+func TestCrossPlatformCoverageAttachmentMultipleFilesReadbackAndPartialFailure(t *testing.T) {
+	for _, bad := range []bool{false, true} {
+		t.Run(map[bool]string{false: "verified", true: "second-file-mismatch"}[bad], func(t *testing.T) {
+			dir := t.TempDir()
+			first, second := filepath.Join(dir, "first.txt"), filepath.Join(dir, "second.txt")
+			if err := os.WriteFile(first, []byte("one"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(second, []byte("second"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			received := []string{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				received = append(received, string(b))
+				w.WriteHeader(200)
+			}))
+			defer srv.Close()
+			finalName := "second.txt"
+			if bad {
+				finalName = "incorrect.txt"
+			}
+			c := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: attachmentRecordJSON(t, "f", []any{})},
+				{text: mustJSONText(t, map[string]any{"uploadUrl": srv.URL, "fileToken": "one"})},
+				{text: mustJSONText(t, map[string]any{"uploadUrl": srv.URL, "fileToken": "two"})},
+				{text: `{"success":true}`},
+				{text: attachmentRecordJSON(t, "f", []any{map[string]any{"resourceId": "a", "filename": "first.txt", "size": 3}, map[string]any{"resourceId": "b", "filename": finalName, "size": 6}})},
+			}}
+			out, err := runAITableCompositeCLI(t, c, "+record-upload-attachment", "--base-id", "b", "--table-id", "t", "--record-id", "record", "--field-id", "f", "--file", first, "--additional-files", second, "--mode", "replace", "--yes")
+			if (err != nil) != bad || len(received) != 2 || received[0] != "one" || received[1] != "second" || len(c.calls) != 5 {
+				t.Fatal(out, err, received, c.calls)
+			}
+			if !bad && !strings.Contains(out, `"completedCount": 2`) {
+				t.Fatal(out)
+			}
+		})
+	}
+}
+func TestCrossPlatformCoverageAttachmentMultipleInputValidationBeforeRemote(t *testing.T) {
+	file := writeAttachmentFixture(t, "bytes")
+	for _, extra := range []string{file, filepath.Join(t.TempDir(), "missing.txt"), strings.Repeat("x,", 9) + "x"} {
+		c := &upsertByKeyCaller{}
+		out, err := runAITableCompositeCLI(t, c, "+attachment-put", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--field-id", "f", "--file", file, "--additional-files", extra, "--yes")
+		if err == nil || out != "" || len(c.calls) != 0 {
+			t.Fatal(out, err, c.calls)
+		}
+	}
+}
+func TestCrossPlatformCoverageAttachmentResourceIDRemoval(t *testing.T) {
+	for _, bad := range []bool{false, true} {
+		wanted := "a"
+		if bad {
+			wanted = "a,missing"
+		}
+		c := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: attachmentRecordJSON(t, "f", []any{map[string]any{"resourceId": "a", "filename": "same"}, map[string]any{"resourceId": "b", "filename": "same"}})},
+			{text: `{"success":true}`},
+			{text: attachmentRecordJSON(t, "f", []any{map[string]any{"resourceId": "b", "filename": "same"}})},
+		}}
+		out, err := runAITableCompositeCLI(t, c, "+record-remove-attachment", "--base-id", "b", "--table-id", "t", "--record-id", "record", "--field-id", "f", "--resource-ids", wanted, "--yes")
+		if (err != nil) != bad {
+			t.Fatal(out, err)
+		}
+		if bad && len(c.calls) != 1 {
+			t.Fatal("partial deletion before selector resolved")
+		}
+	}
+	if _, err := planAttachmentRemovalIDs([]map[string]any{{"resourceId": "a"}, {"resourceId": "a"}}, []string{"a"}); err == nil {
+		t.Fatal("ambiguous deletion")
+	}
+	if _, err := planAttachmentRemovalIDs([]map[string]any{{}}, []string{""}); err == nil {
+		t.Fatal("empty identity deletion")
+	}
+}
+
+func TestCrossPlatformCoverageAttachmentRemoveExplicitFalsePreservesSelection(t *testing.T) {
+	for _, selector := range [][]string{{"--remove-name", "remove.pdf"}, {"--resource-ids", "remove-id"}} {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"resourceId": "remove-id", "filename": "remove.pdf"}, map[string]any{"resourceId": "keep-id", "filename": "keep.pdf"}})},
+			{text: `{"success":true}`},
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"resourceId": "keep-id", "filename": "keep.pdf"}})},
+		}}
+		args := []string{"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--clear-all=false", "--yes"}
+		args = append(args, selector...)
+		out, err := runAITableCompositeCLI(t, caller, "+attachment-remove", args...)
+		if err != nil || !strings.Contains(out, `"removedCount": 1`) || len(caller.calls) != 3 {
+			t.Fatalf("selector=%v out=%s err=%v calls=%v", selector, out, err, caller.calls)
+		}
+		if caller.calls[1].tool != "remove_attachments" || len(caller.calls[1].args["resourceIds"].([]string)) != 1 || caller.calls[1].args["resourceIds"].([]string)[0] != "remove-id" {
+			t.Fatalf("wrong deletion scope: %v", caller.calls[1])
+		}
 	}
 }

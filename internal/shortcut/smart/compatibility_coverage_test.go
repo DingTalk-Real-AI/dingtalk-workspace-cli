@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -65,15 +66,21 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 		}
 	case "contact/get_current_user_profile":
 		text = `{"result":{"userId":"u1"}}`
+	case "todo/create_personal_todo":
+		text = `{"success":true,"result":{"taskId":"todo-created"}}`
+	case "todo/get_todo_detail":
+		text = `{"success":true,"result":{"todoDetailModel":{"taskId":"todo-created","subject":"交周报","isDone":false}}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
-	case "chat/list_conversation_message_v2":
+	case "chat/list_conversation_message_v2", "chat/list_individual_chat_message":
+		text = `{"result":{"messages":[],"hasMore":false}}`
 		if f.chatMessagesResult != "" {
 			text = f.chatMessagesResult
 		}
 	case "im/search_messages":
-		if f.searchMessagesResult != "" {
-			text = f.searchMessagesResult
+		text = f.searchMessagesResult
+		if text == "" {
+			text = `{"result":{"messages":[],"hasMore":false}}`
 		}
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
@@ -110,7 +117,28 @@ func (f *platformCoverageCaller) Fields() string { return "" }
 func (f *platformCoverageCaller) JQ() string     { return "" }
 
 func newPlatformCoverageRoot() *cobra.Command {
-	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{
+		Use:           "dws",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, _ := output.WithResultStore(cmd.Context())
+			cmd.SetContext(ctx)
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Name() != "+chat-messages" && cmd.Name() != "+search-msg" {
+				return nil
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				return err
+			}
+			unwrapPlatformCoverageResult(cmd.OutOrStdout())
+			return nil
+		},
+	}
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.PersistentFlags().Bool("yes", false, "")
@@ -118,6 +146,24 @@ func newPlatformCoverageRoot() *cobra.Command {
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
 	return root
+}
+
+func unwrapPlatformCoverageResult(writer io.Writer) {
+	buffer, ok := writer.(*bytes.Buffer)
+	if !ok || buffer.Len() == 0 {
+		return
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(buffer.Bytes(), &envelope); err != nil {
+		return
+	}
+	data, ok := envelope["data"]
+	if !ok || len(data) == 0 || string(data) == "null" {
+		return
+	}
+	buffer.Reset()
+	buffer.Write(data)
+	buffer.WriteByte('\n')
 }
 
 func TestCrossPlatformCoverageIMObservedCompatibilityAliasesReachCanonicalInvocation(t *testing.T) {
@@ -405,7 +451,8 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			argv:        []string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--no-enrich", "--yes"},
 			wantProduct: "im",
 			wantTool:    "search_messages",
-			wantArgs:    map[string]any{"openConversationIds": []string{"cid-1"}, "keyword": "树莓派"},
+			wantArgs:    map[string]any{"keyword": "树莓派"},
+			wantAbsent:  []string{"openConversationIds"},
 		},
 	}
 

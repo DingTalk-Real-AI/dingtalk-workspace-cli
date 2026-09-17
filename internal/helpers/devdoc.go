@@ -4,9 +4,9 @@ import (
 	"strconv"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/spf13/cobra"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/spf13/cobra"
 )
 
 func newDevdocCommand() *cobra.Command {
@@ -14,6 +14,12 @@ func newDevdocCommand() *cobra.Command {
 	// products.devdoc). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "devdoc",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("开放平台文档搜索指南", "dingtalk-misc", "references/devdoc.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "搜索钉钉开放平台开发文档与错误排查资料",
 			UseWhen: []string{
@@ -24,14 +30,14 @@ func newDevdocCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "devdoc",
 		Short: "开放平台文档搜索",
 		Long:  `搜索钉钉开放平台开发文档。默认以表格格式输出（标题、URL），使用 -f json 获取原始 JSON。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	articleCmd := &cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE}
+	articleCmd := newGroupCommand(&cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE})
 	articleCmd.AddCommand(newDevdocArticleSearchCommand())
 	root.AddCommand(articleCmd)
 	root.AddCommand(hintSubCmd("search", "use: dws devdoc article search --query <关键词>"))
@@ -129,7 +135,7 @@ func newDevdocArticleSearchCommand() *cobra.Command {
 // newDevDocSearchCommand is the `dws dev doc search` surface — same execution
 // body as devdoc article search, but ContractFinal examples must use the
 // reviewed primary path for canonical dev.search_open_platform_docs_rag.
-func newDevDocSearchCommand() *cobra.Command {
+func newDevDocSearchCommand(_ ...executor.Runner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search [keyword]",
 		Short: "搜索开放平台文档",
@@ -191,9 +197,9 @@ func newDevDocSearchCommand() *cobra.Command {
 				Ref:          &contract.InterfaceRefSpec{ProductID: "devdoc", RPCName: "search_open_platform_docs"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "通过 dev 兼容入口搜索开放平台文档",
-				UseWhen:      []string{"明确需要验证或使用 dev doc search 入口时"},
-				AvoidWhen:    []string{"常规开放平台文档检索优先使用可用的 devdoc article search"},
+				AgentSummary: "搜索钉钉开放平台官方文档",
+				UseWhen:      []string{"需要查询开放平台 API、参数、权限点或错误码时"},
+				AvoidWhen:    []string{"已有确定义务命令可直接完成任务时"},
 				Examples:     []string{"dws dev doc search --query \"MCP\" --size 10"},
 			},
 			Parameters: []contract.ParamDecl{

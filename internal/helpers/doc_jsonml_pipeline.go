@@ -251,6 +251,14 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	return cleaned, nil
 }
 
+// PrepareDocJSONMLBody exposes the shared strict JSONML write pipeline to
+// higher-level Doc commands. It validates a complete document body and
+// requires a root node; optional repair remains controlled by the caller's
+// --fix-jsonml flag when that flag exists.
+func PrepareDocJSONMLBody(cmd *cobra.Command, raw string) (string, error) {
+	return prepareJsonMLBody(cmd, raw)
+}
+
 // prepareJsonMLNode processes the JSONML array passed to `doc block
 // insert/update --element` (a single JSONML block node, not a body).
 //
@@ -341,6 +349,13 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 
 	out, _ := json.Marshal(node)
 	return stripInputUnsafeChars(string(out)), nil
+}
+
+// PrepareDocJSONMLNode exposes the shared strict JSONML write pipeline for a
+// single block node. Unlike PrepareDocJSONMLBody, it does not require a root
+// document node.
+func PrepareDocJSONMLNode(cmd *cobra.Command, raw string) (string, error) {
+	return prepareJsonMLNode(cmd, raw)
 }
 
 func emitFixNotes(notes []string) {

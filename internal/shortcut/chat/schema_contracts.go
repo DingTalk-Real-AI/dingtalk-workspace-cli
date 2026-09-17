@@ -87,16 +87,47 @@ func withReviewedChatShortcutContracts(values ...shortcut.Shortcut) []shortcut.S
 	out := make([]shortcut.Shortcut, len(values))
 	for i, value := range values {
 		out[i] = value
-		if !value.Contract.Empty() {
-			continue
+		if value.Contract.Empty() {
+			if _, reviewed := reviewedChatShortcutContractCommands[value.Command]; reviewed {
+				out[i].Safety = reviewedChatShortcutSafety(value.Risk)
+				out[i].Contract = reviewedChatShortcutContract(value)
+			}
 		}
-		if _, reviewed := reviewedChatShortcutContractCommands[value.Command]; !reviewed {
-			continue
-		}
-		out[i].Safety = reviewedChatShortcutSafety(value.Risk)
-		out[i].Contract = reviewedChatShortcutContract(value)
+		out[i].Contract.Parameters = append(
+			out[i].Contract.Parameters,
+			reviewedChatPrimaryParamDecls(value.Command)...,
+		)
 	}
 	return out
+}
+
+func reviewedChatPrimaryParamDecls(command string) []contract.ParamDecl {
+	switch command {
+	case "+messages-send-by-bot", "+messages-batch-send-by-bot", "+messages-send-by-webhook":
+		return []contract.ParamDecl{renamedRequiredChatParam("content", "text")}
+	case "+messages-reply":
+		optional := false
+		return []contract.ParamDecl{
+			{Name: "group", Property: "conversationId", Required: &optional},
+			renamedRequiredChatParam("content", "text"),
+			{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds"},
+			{Name: "at-all", Property: "atAll"},
+		}
+	default:
+		return nil
+	}
+}
+
+// renamedRequiredChatParam preserves the pre-rename Schema property and
+// requiredness. InterfaceType stays unset because these Shortcut parameters
+// historically published only their Cobra string type.
+func renamedRequiredChatParam(name, property string) contract.ParamDecl {
+	required := true
+	return contract.ParamDecl{
+		Name:     name,
+		Property: property,
+		Required: &required,
+	}
 }
 
 func reviewedChatShortcutSafety(risk shortcut.Risk) contract.SafetySpec {

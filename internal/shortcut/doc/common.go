@@ -14,7 +14,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/google/uuid"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -64,10 +67,10 @@ func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, erro
 		if err != nil {
 			return "", apperrors.NewValidation(fmt.Sprintf("--%s: 读取 stdin 失败: %v", flag, err))
 		}
-		return string(data), nil
+		return normalizeDocInputLineEndings(string(data)), nil
 	}
 	if !strings.HasPrefix(raw, "@") {
-		return raw, nil
+		return normalizeDocInputLineEndings(raw), nil
 	}
 	path := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
 	if path == "" || filepath.IsAbs(path) {
@@ -93,7 +96,11 @@ func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, erro
 	if err != nil {
 		return "", apperrors.NewValidation(fmt.Sprintf("--%s: 读取文件 %q 失败: %v", flag, path, err))
 	}
-	return string(data), nil
+	return normalizeDocInputLineEndings(string(data)), nil
+}
+
+func normalizeDocInputLineEndings(content string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\r", "\n")
 }
 
 func validateWorkspaceInputPath(flag, raw string) error {
@@ -120,7 +127,23 @@ func validateWorkspaceInputPath(flag, raw string) error {
 	return nil
 }
 
-func validateJSONML(raw string) (string, error) {
+func validateJSONMLBody(cmd *cobra.Command, raw string) (string, error) {
+	normalized, err := helpers.PrepareDocJSONMLBody(cmd, raw)
+	if err != nil {
+		return "", shortcutJSONMLValidationError(err)
+	}
+	return validateJSONMLElement(normalized)
+}
+
+func validateJSONMLNode(cmd *cobra.Command, raw string) (string, error) {
+	normalized, err := helpers.PrepareDocJSONMLNode(cmd, raw)
+	if err != nil {
+		return "", shortcutJSONMLValidationError(err)
+	}
+	return validateJSONMLElement(normalized)
+}
+
+func validateJSONMLElement(raw string) (string, error) {
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return "", apperrors.NewValidation(fmt.Sprintf("JSONML 解析失败: %v", err))
@@ -138,8 +161,13 @@ func validateJSONML(raw string) (string, error) {
 	if tag, ok := root[0].(string); !ok || strings.TrimSpace(tag) == "" {
 		return "", apperrors.NewValidation("JSONML 第一个元素必须是非空标签名")
 	}
-	normalized, _ := json.Marshal(value) // decoded JSON trees are always marshalable
-	return string(normalized), nil
+	return raw, nil
+}
+
+func shortcutJSONMLValidationError(err error) error {
+	message := strings.ReplaceAll(err.Error(), "--content-format", "--doc-format")
+	message = strings.ReplaceAll(message, "--element", "--content")
+	return apperrors.NewValidation(message)
 }
 
 func docEnvelope(operation string, data any, steps ...map[string]any) map[string]any {
@@ -154,6 +182,16 @@ func docEnvelope(operation string, data any, steps ...map[string]any) map[string
 		"warnings":        []string{},
 		"compensation":    map[string]any{"available": false, "reason": ""},
 	}
+}
+
+// withDocWarnings fills the envelope's warnings slot, which docEnvelope has
+// always emitted empty. Written as a wrapper rather than another docEnvelope
+// parameter so its ~20 existing call sites stay untouched.
+func withDocWarnings(envelope map[string]any, warnings []string) map[string]any {
+	if len(warnings) > 0 {
+		envelope["warnings"] = warnings
+	}
+	return envelope
 }
 
 type docFailureState string
@@ -353,4 +391,15 @@ func blockIdentity(values map[string]any, inherited string) string {
 		}
 	}
 	return inherited
+}
+
+// validateDocResourceID rejects resource IDs that are not UUIDs before any
+// network call, so fabricated values (OSS signature fragments, URL path
+// segments) fail locally with an actionable hint instead of an opaque
+// backend error that invites blind retries.
+func validateDocResourceID(raw string) error {
+	if _, err := uuid.Parse(strings.TrimSpace(raw)); err != nil {
+		return apperrors.NewValidation("--resource-id 应为 UUID 格式（来自 +media-list 返回的 resourceId 字段），不要从 OSS/URL 链接中提取；请先执行 dws doc +media-list --node <DOC_ID> --format json 获取")
+	}
+	return nil
 }

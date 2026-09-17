@@ -26,6 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -113,6 +114,66 @@ func TestCrossPlatformCoverageRegisterFlagsAllKinds(t *testing.T) {
 	}
 	if ann := cmd.Flags().Lookup("req").Annotations[cobra.BashCompOneRequiredFlag]; len(ann) == 0 {
 		t.Fatal("MarkRequired did not reach cobra")
+	}
+}
+
+func TestCrossPlatformCoverageStringSliceMatchesPflagSemantics(t *testing.T) {
+	cmd := newTestCommand()
+	RegisterFlags(cmd, []FlagSpec{{Name: "items", Shorthand: "i", Kind: KindStringSlice, Default: "default,values"}})
+	flag := cmd.Flags().Lookup("items")
+	if flag == nil || flag.DefValue != "[default,values]" || flag.Value.Type() != "stringSlice" {
+		t.Fatalf("string-slice flag = %#v", flag)
+	}
+	if err := cmd.Flags().Parse([]string{`--items=a,"b,c"`, "-i", "d"}); err != nil {
+		t.Fatalf("Parse string-slice: %v", err)
+	}
+	got, err := cmd.Flags().GetStringSlice("items")
+	if err != nil || !reflect.DeepEqual(got, []string{"a", "b,c", "d"}) {
+		t.Fatalf("GetStringSlice = %#v, %v", got, err)
+	}
+	sliceValue, ok := flag.Value.(interface {
+		Append(string) error
+		Replace([]string) error
+		GetSlice() []string
+	})
+	if !ok {
+		t.Fatalf("string-slice value does not implement pflag SliceValue: %T", flag.Value)
+	}
+	if err := sliceValue.Replace([]string{"replacement"}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if err := sliceValue.Append("tail"); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if got := sliceValue.GetSlice(); !reflect.DeepEqual(got, []string{"replacement", "tail"}) {
+		t.Fatalf("GetSlice after Replace/Append = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
+	var value commandStringSliceValue
+	if err := value.Set(""); err != nil {
+		t.Fatalf("empty set: %v", err)
+	}
+	if got := value.GetSlice(); got == nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v", got)
+	}
+	if err := value.Set(`"`); err == nil {
+		t.Fatal("unbalanced quote accepted")
+	}
+	got, err := readCommandStringSlice("")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v %v", got, err)
+	}
+}
+
+func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {
+	AnnotateFlagAlias(nil, "alias", "canonical")
+
+	cmd := newTestCommand()
+	AnnotateFlagAlias(cmd, "missing", "canonical")
+	if flag := cmd.Flags().Lookup("missing"); flag != nil {
+		t.Fatalf("unexpected missing flag registered: %#v", flag)
 	}
 }
 
@@ -283,8 +344,16 @@ func TestCrossPlatformCoverageValidateRequired(t *testing.T) {
 	plain := []FlagSpec{{Name: "content", Usage: "C", Required: true}}
 	cmd := newTestCommand()
 	RegisterFlags(cmd, plain)
-	if err := ValidateRequired(cmd, plain); err == nil || !strings.Contains(err.Error(), "content") {
+	err := ValidateRequired(cmd, plain)
+	if err == nil || !strings.Contains(err.Error(), "content") {
 		t.Fatalf("missing plain required err = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing plain required exit code = %d, want %d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "missing_required_flags" {
+		t.Fatalf("missing plain required error = %#v, want validation/missing_required_flags", err)
 	}
 	_ = cmd.Flags().Set("content", "x")
 	if err := ValidateRequired(cmd, plain); err != nil {
@@ -704,6 +773,26 @@ func TestCrossPlatformCoverageValidateConstraints(t *testing.T) {
 	custom := []Constraint{{Kind: Custom, Flags: []string{"a"}, Description: "由 Validate 执行"}}
 	if err := ValidateConstraints(build("a"), flags, custom); err != nil {
 		t.Fatalf("custom constraint must be a no-op in ValidateConstraints, got %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageConstraintPresenceOnlyIsOptIn(t *testing.T) {
+	flags := []FlagSpec{{Name: "desc", Usage: "Description", Aliases: []string{"description"}}, {Name: "name", Usage: "Name", Default: "default"}}
+	for _, flag := range []string{"", "desc", "description"} {
+		for _, presenceOnly := range []bool{false, true} {
+			cmd := newTestCommand()
+			RegisterFlags(cmd, flags)
+			if flag != "" {
+				if err := cmd.Flags().Set(flag, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := ValidateConstraints(cmd, flags, []Constraint{{Kind: AtLeastOne, Flags: []string{"desc", "name"}, PresenceOnly: presenceOnly}})
+			wantValid := presenceOnly && flag != ""
+			if (err == nil) != wantValid {
+				t.Fatalf("flag=%q presenceOnly=%v err=%v", flag, presenceOnly, err)
+			}
+		}
 	}
 }
 
@@ -1405,17 +1494,23 @@ func TestCrossPlatformCoverageBuildArgsIntArgDefaultFloor(t *testing.T) {
 	}
 }
 
-func TestNewCommandMergesConstParams(t *testing.T) {
+func TestCrossPlatformCoverageNewCommandFreezesAndMergesConstParams(t *testing.T) {
 	var got map[string]any
+	declared := map[string]any{
+		"precheckOnly":      false,
+		"convThreadEnabled": true,
+	}
 	cmd := New(Spec{
 		Use:         "pub",
 		Flags:       []FlagSpec{{Name: "id", Usage: "ID", Bind: "versionId", Trim: true}},
-		ConstParams: map[string]any{"precheckOnly": false},
+		ConstParams: declared,
 		Invoke: func(_ *Ctx, toolArgs map[string]any) error {
 			got = toolArgs
 			return nil
 		},
 	})
+	declared["precheckOnly"] = true
+	declared["forgedAfterNew"] = true
 	_ = cmd.Flags().Set("id", "V1")
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatal(err)
@@ -1425,6 +1520,95 @@ func TestNewCommandMergesConstParams(t *testing.T) {
 	}
 	if got["precheckOnly"] != false {
 		t.Fatalf("precheckOnly = %#v, want false", got["precheckOnly"])
+	}
+	if got["convThreadEnabled"] != true {
+		t.Fatalf("convThreadEnabled = %#v, want true", got["convThreadEnabled"])
+	}
+	if _, exists := got["forgedAfterNew"]; exists {
+		t.Fatalf("caller mutation leaked into dispatch args: %#v", got)
+	}
+	evidence := InterfaceBoolConstParams(cmd)
+	if !reflect.DeepEqual(evidence, map[string]bool{"convThreadEnabled": true, "precheckOnly": false}) {
+		t.Fatalf("bool ConstParams evidence = %#v", evidence)
+	}
+	if got["precheckOnly"] != evidence["precheckOnly"] {
+		t.Fatalf("dispatch/evidence drift: args=%#v evidence=%#v", got, evidence)
+	}
+}
+
+func TestCrossPlatformCoverageNewCommandDoesNotProjectMixedConstParamsEvidence(t *testing.T) {
+	var got map[string]any
+	cmd := New(Spec{
+		Use: "mixed",
+		ConstParams: map[string]any{
+			"convThreadEnabled": true,
+			"retryLimit":        3,
+		},
+		Invoke: func(_ *Ctx, toolArgs map[string]any) error {
+			got = toolArgs
+			return nil
+		},
+	})
+
+	if evidence := InterfaceBoolConstParams(cmd); evidence != nil {
+		t.Fatalf("mixed ConstParams evidence = %#v; want missing evidence", evidence)
+	}
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got["convThreadEnabled"] != true || got["retryLimit"] != 3 {
+		t.Fatalf("mixed ConstParams dispatch args = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageNewCommandRejectsInvalidConstParamsDispatch(t *testing.T) {
+	mustPanic := func(name string, spec Spec, needle string) {
+		t.Helper()
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("%s: expected panic", name)
+			}
+			if msg, _ := r.(string); !strings.Contains(msg, needle) {
+				t.Fatalf("%s: panic=%v, want %q", name, r, needle)
+			}
+		}()
+		New(spec)
+	}
+
+	mustPanic("RunE", Spec{
+		Use:         "run-e",
+		ConstParams: map[string]any{"fixed": true},
+		RunE:        func(*cobra.Command, []string) error { return nil },
+	}, "ConstParams require Invoke or ResultInvoke")
+	mustPanic("Orchestrate", Spec{
+		Use:         "orchestrate",
+		ConstParams: map[string]any{"fixed": true},
+		Orchestrate: func(*Ctx) error { return nil },
+	}, "ConstParams require Invoke or ResultInvoke")
+	mustPanic("explicit bind conflict", Spec{
+		Use:         "bind-conflict",
+		Flags:       []FlagSpec{{Name: "thread", Usage: "T", Bind: "convThreadEnabled"}},
+		ConstParams: map[string]any{"convThreadEnabled": true},
+		Invoke:      func(*Ctx, map[string]any) error { return nil },
+	}, "conflicts with flag --thread")
+	mustPanic("default bind conflict", Spec{
+		Use:         "default-bind-conflict",
+		Flags:       []FlagSpec{{Name: "fixed-value", Usage: "F"}},
+		ConstParams: map[string]any{"fixedValue": true},
+		Invoke:      func(*Ctx, map[string]any) error { return nil },
+	}, "conflicts with flag --fixed-value")
+
+	result := New(Spec{
+		Use:           "result",
+		OutputRollout: output.RolloutUnifiedActive,
+		ConstParams:   map[string]any{"fixed": true},
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Success(nil), nil
+		},
+	})
+	if evidence := InterfaceBoolConstParams(result); !evidence["fixed"] {
+		t.Fatalf("ResultInvoke ConstParams evidence = %#v", evidence)
 	}
 }
 
@@ -2023,6 +2207,45 @@ func TestCrossPlatformCoverageAttachContractOverwritesLegacySelectionSources(t *
 		len(sel.SourceRefs) != 1 || sel.SourceRefs[0] != "corecmd.ContractDecl" ||
 		sel.MetadataSource != "corecmd.contract" || sel.Reviewed != nil {
 		t.Fatalf("selection sources = %#v", sel)
+	}
+}
+
+func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T) {
+	required := true
+	enum := []string{"safe"}
+	anyOf := []contract.FormatAlternative{{Format: "json"}}
+	parameters := []contract.ParamDecl{{Name: "mode", Required: &required, Enum: enum, AnyOf: anyOf}}
+	cmd := newTestCommand()
+	AttachContract(cmd, testWriteSafety(), ContractDecl{
+		Description: "description",
+		Parameters:  parameters,
+		Interface: &contract.InterfaceSpec{
+			Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "summary", UseWhen: []string{"use"}, AvoidWhen: []string{"avoid"}, Examples: []string{"dws t"},
+		},
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "test", Name: "command", CanonicalPath: "test.command", CLIPath: "t",
+		},
+	}, "short", "long")
+
+	required = false
+	enum[0] = "mutated"
+	anyOf[0].Format = "mutated"
+	parameters[0].Name = "changed"
+
+	got, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || len(got.Parameters) != 1 {
+		t.Fatalf("RuntimeContractFinal = %#v, %v", got, ok)
+	}
+	parameter := got.Parameters[0]
+	if parameter.Name != "mode" || len(parameter.Enum) != 1 || parameter.Enum[0] != "safe" ||
+		parameter.Required == nil || !*parameter.Required {
+		t.Fatalf("caller mutation reached owned contract payload: %#v", parameter)
+	}
+	if len(parameter.AnyOf) != 1 || parameter.AnyOf[0].Format != "json" {
+		t.Fatalf("caller AnyOf mutation reached owned contract payload: %#v", parameter.AnyOf)
 	}
 }
 

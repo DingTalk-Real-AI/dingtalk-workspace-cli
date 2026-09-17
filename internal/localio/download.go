@@ -7,12 +7,13 @@ package localio
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	pathpkg "path"
@@ -35,8 +36,7 @@ type downloadTempFile interface {
 
 var (
 	createDownloadTemp = createDownloadTempInRoot
-	lookupDownloadIPs  = net.DefaultResolver.LookupIPAddr
-	dialDownloadIP     = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	secureDialContext  = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	localGetwd         = os.Getwd
 	localAbs           = filepath.Abs
 	localEvalSymlinks  = filepath.EvalSymlinks
@@ -53,6 +53,8 @@ var downloadTempCounter atomic.Uint64
 
 // DownloadOptions controls safe, atomic publication beneath BaseDir.
 type DownloadOptions struct {
+	ExpectedSize  *int64 // When supplied, validate downloaded bytes before publication.
+	Overwrite     bool   // Explicit opt-in; defaults retain no-clobber semantics.
 	BaseDir       string
 	Output        string
 	PreferredName string
@@ -61,6 +63,7 @@ type DownloadOptions struct {
 
 // DownloadResult describes the published local artifact.
 type DownloadResult struct {
+	SHA256       string // Hash of successfully downloaded bytes; empty for local publication.
 	AbsolutePath string
 	RelativePath string
 	SizeBytes    int64
@@ -78,11 +81,14 @@ func downloadWithClient(ctx context.Context, rawURL string, opts DownloadOptions
 }
 
 func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOptions, client *http.Client, maxBytes int64) (DownloadResult, error) {
+	if opts.ExpectedSize != nil && (*opts.ExpectedSize < 0 || *opts.ExpectedSize > maxBytes) {
+		return DownloadResult{}, fmt.Errorf("invalid expected download size")
+	}
 	parsed, err := ValidateDownloadURL(rawURL)
 	if err != nil {
 		return DownloadResult{}, err
 	}
-	target, err := openDownloadTarget(opts.BaseDir, opts.Output, parsed.String(), opts.PreferredName)
+	target, err := openDownloadTargetMode(opts.BaseDir, opts.Output, parsed.String(), opts.PreferredName, opts.Overwrite)
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -117,7 +123,11 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		_ = tmp.Close()
 		_ = target.parentRoot.Remove(tmpName)
 	}
-	size, copyErr := io.Copy(tmp, io.LimitReader(resp.Body, maxBytes+1))
+	digest := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(tmp, digest), io.LimitReader(resp.Body, maxBytes+1))
+	if copyErr == nil && opts.ExpectedSize != nil && size != *opts.ExpectedSize {
+		copyErr = fmt.Errorf("download size mismatch: got %d, want %d", size, *opts.ExpectedSize)
+	}
 	if copyErr == nil && size > maxBytes {
 		copyErr = fmt.Errorf("LOCAL_DOWNLOAD_TOO_LARGE: 下载内容超过上限 %d 字节", maxBytes)
 	}
@@ -135,11 +145,15 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		cleanup()
 		return DownloadResult{}, err
 	}
-	if err := publishTempFile(target.parentRoot, tmpName, target.destinationName); err != nil {
+	publish := publishTempFile
+	if opts.Overwrite {
+		publish = replaceDownloadFile
+	}
+	if err := publish(target.parentRoot, tmpName, target.destinationName); err != nil {
 		cleanup()
 		return DownloadResult{}, err
 	}
-	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size}, nil
+	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size, SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
 }
 
 // ValidateOutput rejects absolute paths and portable `..` escapes.
@@ -194,6 +208,10 @@ func ResolveOutputPath(baseDir, output, rawURL, preferredName string) (string, s
 }
 
 func openDownloadTarget(baseDir, output, rawURL, preferredName string) (*downloadTarget, error) {
+	return openDownloadTargetMode(baseDir, output, rawURL, preferredName, false)
+}
+
+func openDownloadTargetMode(baseDir, output, rawURL, preferredName string, overwrite bool) (*downloadTarget, error) {
 	if err := ValidateOutput(output); err != nil {
 		return nil, err
 	}
@@ -260,8 +278,14 @@ func openDownloadTarget(baseDir, output, rawURL, preferredName string) (*downloa
 			_ = parentRoot.Close()
 			return fail(fmt.Errorf("LOCAL_PATH_UNSAFE: --output 目标是目录"))
 		}
-		_ = parentRoot.Close()
-		return fail(fmt.Errorf("LOCAL_FILE_EXISTS: 目标文件已存在；请选择新的输出路径"))
+		if !info.Mode().IsRegular() {
+			_ = parentRoot.Close()
+			return fail(fmt.Errorf("LOCAL_PATH_UNSAFE: 目标必须是普通文件"))
+		}
+		if !overwrite {
+			_ = parentRoot.Close()
+			return fail(fmt.Errorf("LOCAL_FILE_EXISTS: 目标文件已存在；请选择新的输出路径"))
+		}
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		_ = parentRoot.Close()
 		return fail(fmt.Errorf("检查输出文件失败: %w", statErr))
@@ -292,53 +316,39 @@ func SafeFilename(preferredName, rawURL string) string {
 	return "download"
 }
 
-// ValidateDownloadURL accepts only public DingTalk and Aliyun OSS HTTPS hosts.
+// ValidateDownloadURL accepts HTTPS download URLs on any host and port, IP
+// literals included — mirroring the official GUI client, which applies no
+// client-side SSRF interception to downloads. Only userinfo URLs stay
+// rejected; TLS hostname verification in secureHTTPClient pins the
+// connection to the requested host and redirects are re-validated per hop.
 func ValidateDownloadURL(rawURL string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
-		return nil, fmt.Errorf("下载地址必须是受信任域名上的 HTTPS URL")
-	}
-	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
-	if host == "" || net.ParseIP(host) != nil || !allowedDownloadHost(host) {
-		return nil, fmt.Errorf("下载地址域名 %q 不属于受信任的钉钉或 OSS 域名", host)
-	}
-	if port := parsed.Port(); port != "" && port != "443" {
-		return nil, fmt.Errorf("下载地址只允许 HTTPS 默认端口")
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+		return nil, fmt.Errorf("下载地址必须是合法的 HTTPS URL")
 	}
 	return parsed, nil
 }
 
+// SecureHTTPClient returns a download client enforcing the same URL policy
+// and redirect hygiene as Download. Product shortcuts that own their
+// local-file workflow (e.g. chat message resources) share it so download URL
+// trust decisions stay in one place.
+func SecureHTTPClient() *http.Client {
+	return secureHTTPClient()
+}
+
 func secureHTTPClient() *http.Client {
 	transport := &http.Transport{
-		// Do not use environment proxies here. DialContext must resolve and dial
-		// the validated download host itself; with a proxy it would receive the
-		// proxy address and could not enforce the target host's public-IP policy.
+		// Dial the service-issued host directly, ignoring environment proxies:
+		// dedicated-deployment storage may live on customer intranets that are
+		// only reachable without a proxy, and TLS hostname verification always
+		// runs against the requested host. Download URLs never come from
+		// user input — every command resolves them through an authenticated
+		// MCP response first, mirroring the official GUI client which applies
+		// no client-side SSRF interception to downloads.
 		Proxy: nil,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, err
-			}
-			ips, err := lookupDownloadIPs(ctx, host)
-			if err != nil {
-				return nil, err
-			}
-			for _, resolved := range ips {
-				if !publicIP(resolved.IP) {
-					return nil, fmt.Errorf("下载域名解析到非公网地址 %s", resolved.IP)
-				}
-			}
-			// Dial the already validated address, not the hostname, to avoid a
-			// second DNS lookup opening a rebinding window.
-			var lastErr error
-			for _, resolved := range ips {
-				conn, dialErr := dialDownloadIP(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
-				if dialErr == nil {
-					return conn, nil
-				}
-				lastErr = dialErr
-			}
-			return nil, lastErr
+			return secureDialContext(ctx, network, address)
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: downloadTimeout}
@@ -371,39 +381,6 @@ func downloadOrigin(parsed *url.URL) string {
 	}
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
 	return strings.ToLower(parsed.Scheme) + "://" + net.JoinHostPort(host, port)
-}
-
-func allowedDownloadHost(host string) bool {
-	return host == "dingtalk.com" || strings.HasSuffix(host, ".dingtalk.com") ||
-		(strings.HasSuffix(host, ".aliyuncs.com") && strings.Contains(host, "oss") && !strings.Contains(host, "internal"))
-}
-
-func publicIP(ip net.IP) bool {
-	addr, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return false
-	}
-	addr = addr.Unmap()
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified() {
-		return false
-	}
-	for _, prefix := range nonPublicPrefixes {
-		if prefix.Contains(addr) {
-			return false
-		}
-	}
-	return true
-}
-
-var nonPublicPrefixes = []netip.Prefix{
-	netip.MustParsePrefix("100.64.0.0/10"),   // carrier-grade NAT
-	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
-	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
-	netip.MustParsePrefix("198.18.0.0/15"),   // benchmark networks
-	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
-	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
-	netip.MustParsePrefix("240.0.0.0/4"),     // reserved
-	netip.MustParsePrefix("2001:db8::/32"),   // IPv6 documentation
 }
 
 func ensureSafeParent(root *os.Root, parent string) error {
@@ -472,4 +449,20 @@ func sanitizeFilename(raw string) string {
 		return ""
 	}
 	return name
+}
+
+// replaceDownloadFile publishes only a completed sibling temp file. Rename
+// replaces the directory entry itself; it never follows the destination link.
+func replaceDownloadFile(root *os.Root, tempName, destinationName string) error {
+	if info, err := root.Lstat(destinationName); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("LOCAL_PATH_UNSAFE: 覆盖目标不是普通文件")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := root.Rename(tempName, destinationName); err != nil {
+		return fmt.Errorf("发布覆盖文件失败: %w", err)
+	}
+	return nil
 }

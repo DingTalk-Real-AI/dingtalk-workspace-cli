@@ -38,7 +38,32 @@ type Formatter struct {
 }
 
 func NewFormatter() *Formatter {
-	return &Formatter{w: os.Stdout, errW: os.Stderr}
+	return NewFormatterWithWriters(os.Stdout, os.Stderr)
+}
+
+// NewFormatterWithWriters 是注入式构造函数（B45，WS1 改动点3）：数据流 w 与
+// 诊断流 errW 均由调用方注入。nil 按默认进程流处理（w→os.Stdout、
+// errW→os.Stderr），因此 NewFormatter 的既有行为不变，只是收口到本构造器。
+func NewFormatterWithWriters(w, errW io.Writer) *Formatter {
+	if w == nil {
+		w = os.Stdout
+	}
+	if errW == nil {
+		errW = os.Stderr
+	}
+	return &Formatter{w: w, errW: errW}
+}
+
+// SetWriters 运行期替换两个写入目标（B46，WS1 改动点3）：deps.Out 的 writer
+// 不再是构造期一次性硬编码，而是可注入接缝。nil 侧保留当前值（支持单侧替换）。
+// 既有的 deps.Out.w / deps.Out.errW 直接替换习惯不受影响。
+func (f *Formatter) SetWriters(w, errW io.Writer) {
+	if w != nil {
+		f.w = w
+	}
+	if errW != nil {
+		f.errW = errW
+	}
 }
 
 // PrintJSON serializes data as pretty-printed JSON and writes it to the output stream.
@@ -109,6 +134,9 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", width-rw)
 }
 
+// PrintTable preserves the legacy formatter contract. Unified-result commands
+// bypass this formatter and use internal/output, so rollout does not silently
+// move bytes for commands that have not migrated yet.
 func (f *Formatter) PrintTable(headers []string, rows [][]string) {
 	if len(rows) == 0 {
 		return
@@ -150,6 +178,17 @@ func (f *Formatter) PrintWarning(msg string)  { fmt.Fprintf(f.errW, "[WARN] %s\n
 func (f *Formatter) PrintInfo(msg string)     { fmt.Fprintf(f.w, "[INFO] %s\n", msg) }
 func (f *Formatter) PrintProgress(msg string) { fmt.Fprintf(f.errW, "%s\n", msg) }
 func (f *Formatter) PrintDim(msg string)      { fmt.Fprintf(f.w, "  %s\n", msg) }
+
+// printJSONSafeInfo keeps command progress out of stdout when the caller
+// requested JSON. A successful JSON command must leave stdout parseable; its
+// human-readable progress belongs on stderr instead.
+func printJSONSafeInfo(msg string) {
+	if deps != nil && deps.Caller != nil && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+		deps.Out.PrintProgress("[INFO] " + msg)
+		return
+	}
+	deps.Out.PrintInfo(msg)
+}
 
 func (f *Formatter) PrintKeyValue(key, value string) {
 	fmt.Fprintf(f.w, "%-16s%s\n", key+":", value)

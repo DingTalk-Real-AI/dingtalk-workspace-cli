@@ -47,18 +47,16 @@ func TestCrossPlatformCoverageSkillSetupHighLevelRemainingCoverage(t *testing.T)
 	oldTargets := skillSetupResolveTargets
 	oldList := skillSetupListMulti
 	oldFilter := skillSetupFilterMulti
-	oldConfirm := skillSetupConfirm
-	oldMono := skillSetupInstallMono
-	oldMulti := skillSetupInstallMulti
+	oldConfirm := skillSetupConfirmPlan
+	oldExecute := skillSetupExecutePlan
 	t.Cleanup(func() {
 		skillSetupResolveMode = oldMode
 		skillSetupResolveSource = oldSource
 		skillSetupResolveTargets = oldTargets
 		skillSetupListMulti = oldList
 		skillSetupFilterMulti = oldFilter
-		skillSetupConfirm = oldConfirm
-		skillSetupInstallMono = oldMono
-		skillSetupInstallMulti = oldMulti
+		skillSetupConfirmPlan = oldConfirm
+		skillSetupExecutePlan = oldExecute
 	})
 	fail := errors.New("failure")
 	skillSetupResolveMode = func(mode string, _ bool, _ io.Writer) (string, error) { return mode, nil }
@@ -83,17 +81,17 @@ func TestCrossPlatformCoverageSkillSetupHighLevelRemainingCoverage(t *testing.T)
 	}
 	skillSetupFilterMulti = func(all, _, _ []string) ([]string, error) { return all, nil }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMulti, true)
-	_ = cmd.Root().PersistentFlags().Set("dry-run", "true")
+	cmd.Flags().Bool("dry-run", true, "")
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	skillSetupConfirm = func(io.Writer, string, string, []string, []string) (bool, error) { return false, fail }
+	skillSetupConfirmPlan = func(io.Writer, *skillSetupPlan) (bool, error) { return false, fail }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMono, false)
 	if err := cmd.RunE(cmd, nil); err == nil {
 		t.Fatal("confirmation failure should propagate")
 	}
-	skillSetupConfirm = func(io.Writer, string, string, []string, []string) (bool, error) { return false, nil }
+	skillSetupConfirmPlan = func(io.Writer, *skillSetupPlan) (bool, error) { return false, nil }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMono, false)
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatal(err)
@@ -105,17 +103,17 @@ func TestCrossPlatformCoverageSkillSetupHighLevelRemainingCoverage(t *testing.T)
 		t.Fatal("unknown resolved mode should fail")
 	}
 	skillSetupResolveMode = func(mode string, _ bool, _ io.Writer) (string, error) { return mode, nil }
-	skillSetupInstallMono = func(string, []string, io.Writer, io.Writer) (int, int, error) { return 0, 0, fail }
+	skillSetupExecutePlan = func(*skillSetupPlan, io.Writer, io.Writer) (int, int, error) { return 0, 0, fail }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMono, true)
 	if err := cmd.RunE(cmd, nil); err == nil {
 		t.Fatal("mono install failure should propagate")
 	}
-	skillSetupInstallMono = func(string, []string, io.Writer, io.Writer) (int, int, error) { return 1, 0, nil }
+	skillSetupExecutePlan = func(*skillSetupPlan, io.Writer, io.Writer) (int, int, error) { return 1, 0, nil }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMono, true)
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatal(err)
 	}
-	skillSetupInstallMulti = func(string, []string, []string, io.Writer, io.Writer) (int, int, error) { return 0, 0, fail }
+	skillSetupExecutePlan = func(*skillSetupPlan, io.Writer, io.Writer) (int, int, error) { return 0, 0, fail }
 	cmd = skillSetupCoverageCommand(t, skillSetupModeMulti, true)
 	if err := cmd.RunE(cmd, nil); err == nil {
 		t.Fatal("multi install failure should propagate")
@@ -123,6 +121,7 @@ func TestCrossPlatformCoverageSkillSetupHighLevelRemainingCoverage(t *testing.T)
 }
 
 func TestCrossPlatformCoverageSkillSetupMigratesLegacySharedAfterReplacement(t *testing.T) {
+	setTestHome(t, t.TempDir())
 	src := writeMultiSkillSource(t, []string{multiSharedSkill, "dingtalk-chat"})
 	home := filepath.Join(t.TempDir(), "skills")
 	legacyPath := filepath.Join(home, legacyMultiSharedSkill)
@@ -143,6 +142,7 @@ func TestCrossPlatformCoverageSkillSetupMigratesLegacySharedAfterReplacement(t *
 		[]string{home},
 		&out,
 		&errOut,
+		true,
 	)
 	if err != nil || installed != 2 || skipped != 0 {
 		t.Fatalf("install = %d/%d, err=%v, stderr=%s", installed, skipped, err, errOut.String())
@@ -156,7 +156,7 @@ func TestCrossPlatformCoverageSkillSetupMigratesLegacySharedAfterReplacement(t *
 	if _, err := os.Stat(filepath.Join(customPath, "SKILL.md")); err != nil {
 		t.Fatalf("unrelated custom skill changed: %v", err)
 	}
-	if !strings.Contains(out.String(), "已清理已退役 Skill 残留") {
+	if !strings.Contains(out.String(), "已备份并清理过期 skill") {
 		t.Fatalf("legacy cleanup was not reported: %s", out.String())
 	}
 
@@ -178,12 +178,17 @@ func TestCrossPlatformCoverageSkillSetupMigratesLegacySharedAfterReplacement(t *
 			[]string{failureHome},
 			&failureOut,
 			&failureErr,
+			true,
 		)
 		if err != nil || installed != 0 || skipped != 1 {
 			t.Fatalf("failed replacement = %d/%d, err=%v", installed, skipped, err)
 		}
-		if _, err := os.Stat(filepath.Join(failureLegacy, "SKILL.md")); err != nil {
-			t.Fatalf("failed replacement removed legacy shared skill: %v", err)
+		got, readErr := os.ReadFile(filepath.Join(failureLegacy, "SKILL.md"))
+		if readErr != nil || string(got) != "legacy\n" {
+			t.Fatalf("failed replacement changed the live legacy copy: %q, err=%v", got, readErr)
+		}
+		if !strings.Contains(failureErr.String(), "Skill staging 失败，保留原集合") {
+			t.Fatalf("failed replacement did not report preserved live set: %s", failureErr.String())
 		}
 	})
 }
@@ -226,6 +231,7 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 	oldReadDir, oldStat := skillSetupReadDir, skillSetupStat
 	oldExecutable, oldGetwd, oldHome := skillSetupExecutable, skillSetupGetwd, skillSetupUserHomeDir
 	oldRemove, oldMkdir := skillSetupRemoveAll, skillSetupMkdirAll
+	oldBackup := skillSetupBackupAndRemove
 	oldCopyDir, oldWalk, oldRel := skillSetupCopyDir, skillSetupWalk, skillSetupRel
 	oldMkdirTemp, oldRename := skillSetupMkdirTemp, skillSetupRename
 	oldReadlink, oldOpen, oldOpenFile, oldCopy := skillSetupReadlink, skillSetupOpen, skillSetupOpenFile, skillSetupCopy
@@ -234,6 +240,7 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 		skillSetupReadDir, skillSetupStat = oldReadDir, oldStat
 		skillSetupExecutable, skillSetupGetwd, skillSetupUserHomeDir = oldExecutable, oldGetwd, oldHome
 		skillSetupRemoveAll, skillSetupMkdirAll = oldRemove, oldMkdir
+		skillSetupBackupAndRemove = oldBackup
 		skillSetupCopyDir, skillSetupWalk, skillSetupRel = oldCopyDir, oldWalk, oldRel
 		skillSetupMkdirTemp, skillSetupRename = oldMkdirTemp, oldRename
 		skillSetupReadlink, skillSetupOpen, skillSetupOpenFile, skillSetupCopy = oldReadlink, oldOpen, oldOpenFile, oldCopy
@@ -246,7 +253,7 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 		t.Fatal("interactive mode failure should propagate")
 	}
 	skillSetupRunForm = func(*huh.Form) error { return nil }
-	if got, err := resolveSkillSetupMode("", false, io.Discard); err != nil || got != skillSetupModeMono {
+	if got, err := resolveSkillSetupMode("", false, io.Discard); err != nil || got != skillSetupModeMulti {
 		t.Fatalf("interactive default choice = %q, %v", got, err)
 	}
 
@@ -305,23 +312,24 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 	skillSetupReadDir, skillSetupStat = oldReadDir, oldStat
 	var out, errOut bytes.Buffer
 	skillSetupRunForm = func(*huh.Form) error { return fail }
-	if _, err := confirmSkillSetup(&out, skillSetupModeMulti, "src", []string{monoDest}, []string{"dingtalk-doc"}); err == nil {
+	if _, err := confirmSkillSetup(&out, skillSetupModeMulti, "src", []string{monoDest}, []string{"dingtalk-doc"}, false); err == nil {
 		t.Fatal("confirmation form failure should propagate")
 	}
 	skillSetupRunForm = func(*huh.Form) error { return nil }
-	if ok, err := confirmSkillSetup(&out, skillSetupModeMono, "src", []string{monoDest}, nil); err != nil || ok {
+	if ok, err := confirmSkillSetup(&out, skillSetupModeMono, "src", []string{monoDest}, nil, false); err != nil || ok {
 		t.Fatalf("EOF confirmation = %v, %v", ok, err)
 	}
-	skillSetupRemoveAll = func(string) error { return fail }
+	skillSetupUserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	skillSetupBackupAndRemove = func(string, string) (string, error) { return "", fail }
 	cleanupMutualExclusion(monoDest, skillSetupModeMono, &out, &errOut)
 
 	skillSetupCopyDir = func(string, string) error { return fail }
-	skillSetupRemoveAll = func(string) error { return fail }
+	skillSetupBackupAndRemove = func(string, string) (string, error) { return "", fail }
 	_, skipped, _ := installSkillToHomes("src", []string{"a"}, &out, &errOut)
 	if skipped != 1 {
-		t.Fatal("mono remove failure not skipped")
+		t.Fatal("mono backup failure not skipped")
 	}
-	skillSetupRemoveAll = func(string) error { return nil }
+	skillSetupBackupAndRemove = func(string, string) (string, error) { return "", nil }
 	skillSetupMkdirAll = func(string, os.FileMode) error { return fail }
 	_, skipped, _ = installSkillToHomes("src", []string{"b"}, &out, &errOut)
 	if skipped != 1 {
@@ -334,18 +342,18 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 	}
 
 	skillSetupMkdirAll = func(string, os.FileMode) error { return fail }
-	_, skipped, _ = installMultiSkillToHomes("src", []string{"one", "two"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut)
+	_, skipped, _ = installMultiSkillToHomes("src", []string{"one", "two"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut, true)
 	if skipped != 2 {
 		t.Fatal("multi mkdir failure count mismatch")
 	}
 	skillSetupMkdirAll = func(string, os.FileMode) error { return nil }
-	skillSetupRemoveAll = func(string) error { return fail }
-	_, skipped, _ = installMultiSkillToHomes("src", []string{"one"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut)
+	skillSetupBackupAndRemove = func(string, string) (string, error) { return "", fail }
+	_, skipped, _ = installMultiSkillToHomes("src", []string{"one"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut, true)
 	if skipped != 1 {
-		t.Fatal("multi remove failure count mismatch")
+		t.Fatal("multi backup failure count mismatch")
 	}
-	skillSetupRemoveAll = func(string) error { return nil }
-	_, skipped, _ = installMultiSkillToHomes("src", []string{"one"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut)
+	skillSetupBackupAndRemove = func(string, string) (string, error) { return "", nil }
+	_, skipped, _ = installMultiSkillToHomes("src", []string{"one"}, []string{filepath.Join(t.TempDir(), "dest")}, &out, &errOut, true)
 	if skipped != 1 {
 		t.Fatal("multi copy failure count mismatch")
 	}
@@ -515,16 +523,46 @@ func TestCrossPlatformCoverageSkillSetupEventMigrationFailureBranches(t *testing
 		}
 	})
 
-	t.Run("ordinary and prerequisite install errors", func(t *testing.T) {
-		testseam.Swap(t, &skillSetupInstallMulti, func(string, []string, []string, io.Writer, io.Writer) (int, int, error) {
+	t.Run("ordinary install error", func(t *testing.T) {
+		src := writeMultiSkillSource(t, []string{multiEventSkill, multiMiscSkill})
+		copyCalls := 0
+		testseam.Swap(t, &skillSetupCopyDir, func(string, string) error { copyCalls++; return fail })
+		migration := filepath.Join(t.TempDir(), "migration")
+		ordinary := filepath.Join(t.TempDir(), "ordinary")
+		if _, _, err := installMultiSkillsWithEventMigration(src, []string{multiEventSkill}, []string{migration, ordinary}, []string{migration}, true, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "未执行迁移") {
+			t.Fatalf("ordinary install failure = %v", err)
+		}
+		if copyCalls == 0 {
+			t.Fatal("ordinary staging failure seam was not exercised")
+		}
+	})
+
+	t.Run("canonical ordinary install error", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupInstallMulti, func(string, []string, []string, io.Writer, io.Writer, bool) (int, int, error) {
+			return 0, 0, fail
+		})
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		universalMigration := filepath.Join(home, ".codex", "skills")
+		if _, _, err := installMultiSkillsWithEventMigration(
+			"src",
+			[]string{multiEventSkill},
+			[]string{canonical, universalMigration},
+			[]string{universalMigration},
+			true,
+			io.Discard,
+			io.Discard,
+		); !errors.Is(err, fail) {
+			t.Fatalf("canonical ordinary install failure = %v, want %v", err, fail)
+		}
+	})
+
+	t.Run("prerequisite install error", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupInstallMulti, func(string, []string, []string, io.Writer, io.Writer, bool) (int, int, error) {
 			return 0, 0, fail
 		})
 		migration := filepath.Join(t.TempDir(), "migration")
-		ordinary := filepath.Join(t.TempDir(), "ordinary")
-		if _, _, err := installMultiSkillsWithEventMigration("src", []string{multiEventSkill}, []string{migration, ordinary}, []string{migration}, io.Discard, io.Discard); !errors.Is(err, fail) {
-			t.Fatalf("ordinary install failure = %v", err)
-		}
-		if _, _, err := installMultiSkillsWithEventMigration("src", []string{multiEventSkill, multiMiscSkill, multiSharedSkill}, []string{migration}, []string{migration}, io.Discard, io.Discard); !errors.Is(err, fail) {
+		if _, _, err := installMultiSkillsWithEventMigration("src", []string{multiEventSkill, multiMiscSkill, multiSharedSkill}, []string{migration}, []string{migration}, true, io.Discard, io.Discard); !errors.Is(err, fail) {
 			t.Fatalf("prerequisite install failure = %v", err)
 		}
 	})

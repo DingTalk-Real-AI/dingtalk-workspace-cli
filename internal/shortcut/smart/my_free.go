@@ -33,7 +33,7 @@ import (
 //
 //  2. query_busy_status for [start,end] (defaults to today 00:00→tomorrow 00:00
 //     in local time), then project result[].scheduleItems[] to a flat
-//     {start,end} busy list (reusing freebusySlots).
+//     {start,end} busy list through the shared strict busy-response parser.
 //
 //     dws calendar +my-free
 //     dws calendar +my-free --start 2026-07-10T09:00:00+08:00 --end 2026-07-10T18:00:00+08:00
@@ -118,7 +118,7 @@ var MyFree = shortcut.Shortcut{
 			return apperrors.NewValidation("--end 必须晚于 --start")
 		}
 
-		// Step 3 — query and project busy slots (reuse freebusySlots).
+		// Step 3 — query and strictly project busy slots.
 		data, err := rt.CallMCPData("calendar", "query_busy_status", map[string]any{
 			"startTime": startMillis,
 			"endTime":   endMillis,
@@ -127,7 +127,10 @@ var MyFree = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		busy := freebusySlots(data)
+		busy, err := calendarSmartBusySlots(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{
 			"userId": userID,
 			"busy":   busy,
@@ -137,5 +140,6 @@ var MyFree = shortcut.Shortcut{
 }
 
 func init() {
+	finalizeCalendarSmart(&MyFree, "严格校验的当前用户忙闲时段")
 	shortcut.Register(MyFree)
 }

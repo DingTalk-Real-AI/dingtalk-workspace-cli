@@ -7,13 +7,21 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 const workflowDSLFixture = `{"version":"workflow-dsl/v1","name":"提醒","nodes":[]}`
 
+func disableViewPresetSleep(t *testing.T) {
+	t.Helper()
+	testseam.Swap(t, &viewPresetSleep, func(time.Duration) {})
+}
+
 func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testing.T) {
+	disableViewPresetSleep(t)
 	t.Run("create and verify exact config", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"views":[]}`},
@@ -27,6 +35,46 @@ func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testin
 		}
 		if len(caller.calls) != 3 || caller.calls[1].tool != "create_view" {
 			t.Fatalf("view create calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("normalizes live filter and sort projection", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v-live"}}`},
+			{text: `{"views":[{"viewId":"v-live","viewName":"线上形态","viewType":"Grid","filter":{"operator":"and","operands":[]},"sort":[{"fieldId":"f1","direction":"asc"}]}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "线上形态", "--view-type", "Grid",
+			"--config", `{"filter":[],"sort":[{"fieldId":"f1","direction":"asc"}]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) || !strings.Contains(out, `"viewId": "v-live"`) {
+			t.Fatalf("live view projection = output:%q err:%v", out, err)
+		}
+	})
+
+	t.Run("projected columns and hidden flags verify visible field config", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v1"}}`},
+			{text: `{"views":[{"viewId":"v1","viewName":"投影","viewType":"Grid","columns":["f1","f2","f3"],"custom":{"hiddenFields":[false,true,false]}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "投影", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f1","f3"]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) {
+			t.Fatalf("projected view preset = output:%q err:%v", out, err)
+		}
+	})
+
+	t.Run("projected columns and keyed hidden flags verify visible field config", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v1"}}`},
+			{text: `{"views":[{"viewId":"v1","viewName":"投影对象","viewType":"Grid","columns":["f1","f2","f3"],"custom":{"hiddenFields":{"f1":true,"f2":false,"f3":false}}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "投影对象", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f2","f3"]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) {
+			t.Fatalf("keyed projected view preset = output:%q err:%v", out, err)
 		}
 	})
 
@@ -52,7 +100,26 @@ func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testin
 	})
 }
 
+func TestCrossPlatformCoverageViewPresetRetriesUntilTerminalStateE2E(t *testing.T) {
+	disableViewPresetSleep(t)
+	steps := []upsertByKeyStep{
+		{text: `{"views":[]}`},
+		{text: `{"data":{"viewId":"v1"}}`},
+	}
+	for attempt := 0; attempt < viewPresetReadbackAttempts-1; attempt++ {
+		steps = append(steps, upsertByKeyStep{text: `{"views":[]}`})
+	}
+	steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"v1","viewName":"X","viewType":"Grid","config":{"visibleFieldIds":["f1"]}}]}`})
+	caller := &upsertByKeyCaller{steps: steps}
+	out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+		"--base-id", "base", "--table-id", "table", "--name", "X", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f1"]}`, "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || len(caller.calls) != viewPresetReadbackAttempts+2 {
+		t.Fatalf("eventual view preset = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *testing.T) {
+	disableViewPresetSleep(t)
 	t.Run("duplicate name stops before write", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"views":[{"viewId":"v1","viewName":"X"},{"viewId":"v2","viewName":"X"}]}`}}}
 		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
@@ -62,7 +129,7 @@ func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *
 		}
 	})
 
-	t.Run("read-back config mismatch is unknown", func(t *testing.T) {
+	t.Run("read-back config mismatch is partial when create ID is known", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"views":[]}`}, {text: `{"viewId":"v1"}`},
 			{text: `{"views":[{"viewId":"v1","viewName":"X","viewType":"Grid","config":{"visibleFieldIds":["wrong"]}}]}`},
@@ -73,16 +140,206 @@ func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *
 			t.Fatalf("mismatched view = output:%q err:%v", out, err)
 		}
 		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" || typed.Retryable {
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" || typed.Retryable {
 			t.Fatalf("mismatched view error = %#v", err)
 		}
 	})
 }
 
+func TestCrossPlatformCoverageGanttPresetUsesDedicatedTimebarStepE2E(t *testing.T) {
+	disableViewPresetSleep(t)
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"views":[]}`},
+		{text: `{"viewId":"g1"}`},
+		{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]}}]}`},
+		{text: `{"success":true}`},
+		{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]},"ganttTimebar":{"startField":"date1","timelineScale":"month"}}]}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+		"--base-id", "base", "--table-id", "table", "--name", "计划", "--view-type", "Gantt",
+		"--config", `{"visibleFieldIds":["f1"]}`, "--timebar", `{"startField":"date1","timelineScale":"month"}`, "--yes")
+	if err != nil || !strings.Contains(out, `"timebarVerified": true`) || len(caller.calls) != 5 {
+		t.Fatalf("gantt preset = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+	timebarConfig, _ := caller.calls[3].args["config"].(map[string]any)
+	if _, ok := timebarConfig["ganttTimebar"].(map[string]any); caller.calls[3].tool != "update_view" || !ok {
+		t.Fatalf("timebar call = %#v", caller.calls[3])
+	}
+}
+
+func TestCrossPlatformCoverageGanttPresetWritesOnlyChangedStepE2E(t *testing.T) {
+	disableViewPresetSleep(t)
+	args := []string{
+		"--base-id", "base", "--table-id", "table", "--name", "计划", "--view-type", "Gantt",
+		"--config", `{"visibleFieldIds":["f1"]}`, "--timebar", `{"startField":"date1"}`, "--yes",
+	}
+
+	t.Run("timebar only", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]},"ganttTimebar":{"startField":"old"}}]}`},
+			{text: `{"success":true}`},
+			{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]},"ganttTimebar":{"startField":"date1"}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...)
+		if err != nil || !strings.Contains(out, `"timebarVerified": true`) || len(caller.calls) != 3 {
+			t.Fatalf("timebar-only preset = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		config := caller.calls[1].args["config"].(map[string]any)
+		if caller.calls[1].tool != "update_view" || len(config) != 1 || config["ganttTimebar"] == nil {
+			t.Fatalf("timebar-only write = %#v", caller.calls[1])
+		}
+	})
+
+	t.Run("preset only", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["old"]},"ganttTimebar":{"startField":"date1"}}]}`},
+			{text: `{"success":true}`},
+			{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]},"ganttTimebar":{"startField":"date1"}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...)
+		if err != nil || !strings.Contains(out, `"timebarVerified": true`) || len(caller.calls) != 3 {
+			t.Fatalf("preset-only update = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		config := caller.calls[1].args["config"].(map[string]any)
+		if caller.calls[1].tool != "update_view" || config["ganttTimebar"] != nil {
+			t.Fatalf("preset-only write = %#v", caller.calls[1])
+		}
+	})
+
+	t.Run("preset only rejects lost preverified timebar", func(t *testing.T) {
+		steps := []upsertByKeyStep{
+			{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["old"]},"ganttTimebar":{"startField":"date1"}}]}`},
+			{text: `{"success":true}`},
+		}
+		for range viewPresetReadbackAttempts {
+			steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]}}]}`})
+		}
+		caller := &upsertByKeyCaller{steps: steps}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...)
+		if err == nil || out != "" || len(caller.calls) != 2+viewPresetReadbackAttempts {
+			t.Fatalf("lost preverified timebar = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" || !typed.Retryable {
+			t.Fatalf("lost preverified timebar error = %#v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageGanttPresetTimebarVerificationSafetyE2E(t *testing.T) {
+	disableViewPresetSleep(t)
+	baseSteps := []upsertByKeyStep{
+		{text: `{"views":[]}`},
+		{text: `{"viewId":"g1"}`},
+		{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","config":{"visibleFieldIds":["f1"]}}]}`},
+	}
+	args := []string{
+		"--base-id", "base", "--table-id", "table", "--name", "计划", "--view-type", "Gantt",
+		"--config", `{"visibleFieldIds":["f1"]}`, "--timebar", `{"startField":"date1"}`, "--yes",
+	}
+
+	t.Run("write response error recovered by read-back", func(t *testing.T) {
+		steps := append([]upsertByKeyStep{}, baseSteps...)
+		steps = append(steps,
+			upsertByKeyStep{err: errors.New("timeout")},
+			upsertByKeyStep{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","ganttTimebar":{"startField":"date1"}}]}`},
+		)
+		caller := &upsertByKeyCaller{steps: steps}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...)
+		if err != nil || !strings.Contains(out, `"status": "recovered"`) || len(caller.calls) != 5 {
+			t.Fatalf("recovered timebar = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("persistent mismatch is not retryable", func(t *testing.T) {
+		steps := append([]upsertByKeyStep{}, baseSteps...)
+		steps = append(steps, upsertByKeyStep{text: `{"success":true}`})
+		for range viewPresetReadbackAttempts {
+			steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","ganttTimebar":{"startField":"other"}}]}`})
+		}
+		caller := &upsertByKeyCaller{steps: steps}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...)
+		if err == nil || out != "" || len(caller.calls) != 4+viewPresetReadbackAttempts {
+			t.Fatalf("mismatched timebar = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" || typed.Retryable {
+			t.Fatalf("mismatched timebar error = %#v", err)
+		}
+		result, ok := typed.Details["result"].(compositeResult)
+		if !ok || result.Checkpoint["viewId"] != "g1" || len(result.KnownEffects) != 1 {
+			t.Fatalf("mismatched timebar recovery data = %#v", typed.Details)
+		}
+	})
+
+	t.Run("write error plus persistent mismatch retains warning", func(t *testing.T) {
+		steps := append([]upsertByKeyStep{}, baseSteps...)
+		steps = append(steps, upsertByKeyStep{err: errors.New("timeout")})
+		for range viewPresetReadbackAttempts {
+			steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","ganttTimebar":{"startField":"other"}}]}`})
+		}
+		caller := &upsertByKeyCaller{steps: steps}
+		if _, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...); err == nil {
+			t.Fatal("write error plus mismatch succeeded")
+		}
+	})
+}
+
+func TestCrossPlatformCoverageGanttPresetRejectsEmbeddedOrInvalidTimebarE2E(t *testing.T) {
+	for _, args := range [][]string{
+		{"--base-id", "base", "--table-id", "table", "--name", "计划", "--view-type", "Gantt", "--config", `{"ganttTimebar":{"startField":"date1"}}`, "--yes"},
+		{"--base-id", "base", "--table-id", "table", "--name", "网格", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f1"]}`, "--timebar", `{"startField":"date1"}`, "--yes"},
+		{"--base-id", "base", "--table-id", "table", "--name", "计划", "--view-type", "Gantt", "--config", `{"visibleFieldIds":["f1"]}`, "--timebar", `{}`, "--yes"},
+	} {
+		caller := &upsertByKeyCaller{}
+		if out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...); err == nil || out != "" || len(caller.calls) != 0 {
+			t.Fatalf("invalid Gantt args = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageViewPresetNormalizationHelpers(t *testing.T) {
+	if !presetViewMatches(
+		map[string]any{"viewType": "Grid"},
+		"Grid",
+		map[string]any{"filter": []any{}, "sort": []any{}, "group": []any{}},
+	) {
+		t.Fatal("missing persisted empty filter/sort/group should match requested empties")
+	}
+	normalized := normalizePresetViewConfig(map[string]any{"sort": nil, "group": nil, "other": "value"})
+	if sortItems, ok := normalized["sort"].([]any); !ok || len(sortItems) != 0 {
+		t.Fatalf("normalized nil sort = %#v", normalized["sort"])
+	}
+	if groupItems, ok := normalized["group"].([]any); !ok || len(groupItems) != 0 || normalized["other"] != "value" {
+		t.Fatalf("normalized nil group/default = %#v", normalized)
+	}
+	if filter, ok := normalizePresetViewFilter(nil).(map[string]any); !ok || filter["operator"] != "and" {
+		t.Fatalf("normalized nil filter = %#v", filter)
+	}
+	group := map[string]any{"operator": "and", "operands": []any{map[string]any{"fieldId": "f1"}}}
+	if filter, ok := normalizePresetViewFilter([]any{group}).(map[string]any); !ok || filter["operator"] != "and" {
+		t.Fatalf("normalized single filter group = %#v", filter)
+	}
+	if items, ok := normalizePresetViewFilter([]any{"not-a-group"}).([]any); !ok || len(items) != 1 {
+		t.Fatalf("non-group filter list changed = %#v", items)
+	}
+	if !emptyPresetViewConfigValue("sort", []any{}) || emptyPresetViewConfigValue("sort", "bad") {
+		t.Fatal("sort empty equivalence mismatch")
+	}
+	if !emptyPresetViewConfigValue("filter", map[string]any{"operator": "and", "operands": []any{}}) {
+		t.Fatal("empty filter group was not recognized")
+	}
+	if emptyPresetViewConfigValue("filter", map[string]any{"operator": "or", "operands": []any{}}) ||
+		emptyPresetViewConfigValue("filter", map[string]any{"operator": "and", "operands": "bad"}) ||
+		emptyPresetViewConfigValue("other", nil) {
+		t.Fatal("non-empty preset config was accepted as empty")
+	}
+}
+
 func TestCrossPlatformCoverageWorkflowDeployCreateEnableAndVerifyE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
-		{text: `{"data":{"flowId":"w1","flowSchema":{"name":"提醒"}}}`},
+		{text: `{"data":{"name":"提醒","flowSchema":{"name":"提醒"}}}`},
 		{text: `{"workflowId":"w1","enabled":true}`},
 		{text: `{"data":{"list":[{"flowId":"w1","name":"提醒","status":"RUNNING"}]}}`},
 	}}
@@ -100,16 +357,70 @@ func TestCrossPlatformCoverageWorkflowDeployCreateEnableAndVerifyE2E(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageWorkflowDeployCreateDefaultsToVerifiedSTOP(t *testing.T) {
+	t.Run("already stopped", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w1"}`},
+			{text: `{"flowId":"w1"}`},
+			{text: `{"list":[{"flowId":"w1","status":"STOP"}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+		if err != nil || !strings.Contains(out, `"deliveryStatus": "STOP"`) || len(caller.calls) != 3 {
+			t.Fatalf("stopped create = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("unexpected running is disabled", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w1"}`},
+			{text: `{"flowId":"w1"}`},
+			{text: `{"list":[{"flowId":"w1","status":"RUNNING"}]}`},
+			{text: `{"workflowId":"w1","enabled":false}`},
+			{text: `{"list":[{"flowId":"w1","status":"STOP"}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+		if err != nil || !strings.Contains(out, `"deliveryStatus": "STOP"`) || len(caller.calls) != 5 || caller.calls[3].tool != "disable_workflow" {
+			t.Fatalf("running create = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageWorkflowDeployAcceptsEchoedIDWithoutFlowSchemaE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
+		{text: `{"data":{"flowId":"w1","name":"提醒(1)"}}`},
+		{text: `{"data":{"list":[{"flowId":"w1","status":"STOP"}]}}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || !strings.Contains(out, `"running": false`) {
+		t.Fatalf("workflow echoed-ID detail = output:%q err:%v", out, err)
+	}
+}
+
 func TestCrossPlatformCoverageWorkflowDeployUpdateAndInvalidResponsesE2E(t *testing.T) {
 	t.Run("update preflights and reads back", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"flowId":"w1","flowSchema":{}}`},
+			{text: `{"data":{"name":"旧名称","flowSchema":{}}}`},
 			{text: `{"valid":true,"flowId":"w1"}`},
-			{text: `{"flowId":"w1","flowSchema":{"name":"提醒"}}`},
+			{text: `{"data":{"name":"提醒","flowSchema":{"name":"提醒"}}}`},
+			{text: `{"list":[{"flowId":"w1","status":"RUNNING"}]}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--workflow-id", "w1", "--dsl", workflowDSLFixture, "--yes")
-		if err != nil || !strings.Contains(out, `"action": "update"`) || len(caller.calls) != 3 || caller.calls[1].tool != "update_workflow" {
+		if err != nil || !strings.Contains(out, `"action": "update"`) || !strings.Contains(out, `"running": true`) || len(caller.calls) != 4 || caller.calls[1].tool != "update_workflow" {
 			t.Fatalf("workflow update = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("update accepts echoed ID without flowSchema and normalized name", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"flowId":"w1","name":"旧名称"}}`},
+			{text: `{"valid":true,"flowId":"w1"}`},
+			{text: `{"flowId":"w1","name":"提醒(1)"}`},
+			{text: `{"list":[{"flowId":"w1","status":"RUNNING"}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--workflow-id", "w1", "--dsl", workflowDSLFixture, "--yes")
+		if err != nil || !strings.Contains(out, `"action": "update"`) || !strings.Contains(out, `"running": true`) {
+			t.Fatalf("workflow update echoed-ID detail = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
 
@@ -157,7 +468,7 @@ func TestCrossPlatformCoverageWorkflowDeployUpdateAndInvalidResponsesE2E(t *test
 
 	t.Run("enable reply is not enough when list says STOP", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"valid":true,"flowId":"w1"}`}, {text: `{"flowId":"w1"}`},
+			{text: `{"valid":true,"flowId":"w1"}`}, {text: `{"flowSchema":{}}`},
 			{text: `{"enabled":true,"workflowId":"w1"}`},
 			{text: `{"list":[{"flowId":"w1","status":"STOP"}]}`},
 		}}

@@ -19,6 +19,7 @@ package doc
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -36,8 +37,8 @@ var Search = shortcut.Shortcut{
 	Service:     "doc",
 	Command:     "+search",
 	Product:     productDoc,
-	Description: "按关键词搜索有权限的文档 (不传则返回最近访问)",
-	Intent:      "当你只记得文档的标题或主题词、需要先定位到某篇钉钉文档拿到它的 nodeId/URL 以便后续阅读或编辑时使用；可按关键词、扩展名、创建/访问时间、创建者等条件过滤，不传关键词则返回最近访问的文档，返回匹配的文档列表。",
+	Description: "按关键词或过滤条件搜索有权限的文档；默认只读取一页",
+	Intent:      "按标题、主题词或属性查找待阅读编辑的在线文档时使用，文字文档可指定 --extensions adoc。默认一页；完整候选、唯一或不存在判断使用 --page-all，前N条使用 --limit N。--folder仅在搜索条件之外限制文档文件夹直接成员，需完整读取搜索候选及目录两组分页，受各自上限约束；不是目录浏览入口。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -51,25 +52,36 @@ var Search = shortcut.Shortcut{
 			CLIPath:        "doc +search",
 			PrimaryCLIPath: "doc +search",
 		},
-		Description: "按关键词搜索有权限的文档 (不传则返回最近访问)",
+		Description: "按关键词或过滤条件搜索有权限的文档；默认只读取一页",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按关键词搜索有权限的文档 (不传则返回最近访问)",
-			UseWhen:      []string{"当你只记得文档的标题或主题词、需要先定位到某篇钉钉文档拿到它的 nodeId/URL 以便后续阅读或编辑时使用；可按关键词、扩展名、创建/访问时间、创建者等条件过滤，不传关键词则返回最近访问的文档，返回匹配的文档列表。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			AgentSummary: "按关键词或过滤条件搜索有权限的文档；默认只读取一页",
+			UseWhen:      []string{"按标题、主题词或属性查找待阅读编辑的在线文档时使用，文字文档可指定 --extensions adoc。默认一页；完整候选、唯一或不存在判断使用 --page-all，前N条使用 --limit N。--folder仅在搜索条件之外限制文档文件夹直接成员，需完整读取搜索候选及目录两组分页，受各自上限约束；不是目录浏览入口。"},
+			AvoidWhen: []string{
+				"已经取得稳定 nodeId/URL 时直接使用目标读取或写入命令，不要再次按标题搜索",
+				"最近访问或最近编辑列表使用 drive +recent，不要用无关键词搜索替代",
+				"仅浏览文档文件夹直接子项使用 doc +list；钉盘目录使用 drive +list，钉盘文件搜索使用 drive +search；不要重复调用目录列表和带folder的搜索来完成同一次目录浏览",
+				"只读取前 N 条匹配结果时不要为了 Top-N 无条件翻完整个数据源",
+			},
 			Examples: []string{
-				"dws doc +search --query \"会议纪要\"",
-				"dws doc +search --extensions pdf,docx",
+				"dws doc +search --query \"会议纪要\" --page-all --max-pages 20",
+				"dws doc +search --query \"周报\" --limit 10",
 			},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词，不传返回最近访问的文档"},
+		{Name: "folder", Type: shortcut.FlagString, Desc: "在搜索条件外限制文档文件夹直接成员（不递归）；要求page-all，两组分页分别读取完整搜索候选与目录；仅列目录用doc +list"},
+		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词；不传仍兼容返回默认结果页，最近访问/编辑应使用 drive +recent"},
 		{Name: "extensions", Type: shortcut.FlagStringSlice, Desc: "按文件扩展名过滤 (如 adoc,axls,pdf)"},
+		{Name: "created-after", Type: shortcut.FlagString, Desc: "创建起点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-from互斥"},
+		{Name: "created-before", Type: shortcut.FlagString, Desc: "创建终点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-to互斥"},
+		{Name: "visited-after", Type: shortcut.FlagString, Desc: "访问起点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-from互斥"},
+		{Name: "visited-before", Type: shortcut.FlagString, Desc: "访问终点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-to互斥"},
+		{Name: "with-metadata", Type: shortcut.FlagBool, Desc: "在每条结果metadata中保留下游原始字段；不改变默认精简结果"},
 		{Name: "created-from", Type: shortcut.FlagInt, Desc: "创建时间起始 (毫秒时间戳)"},
 		{Name: "created-to", Type: shortcut.FlagInt, Desc: "创建时间截止 (毫秒时间戳)"},
 		{Name: "visited-from", Type: shortcut.FlagInt, Desc: "访问时间起始 (毫秒时间戳)"},
@@ -80,11 +92,13 @@ var Search = shortcut.Shortcut{
 		{Name: "workspace-ids", Type: shortcut.FlagStringSlice, Desc: "按知识库 ID 过滤"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 10，最大 30)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
-		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
-		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回文档数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页；--max-pages/--max-items 仅在 --page-all 时生效且必须大于 0"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--max-pages 仅在 --page-all 时生效，且必须大于 0"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "--page-all 最多返回文档数，必须大于 0"},
 	},
-	Tips: []string{`dws doc +search --query "会议纪要"`, `dws doc +search --extensions pdf,docx`},
+	Constraints: docAutoPaginationConstraints(),
+	Tips:        []string{`dws doc +search --query "会议纪要" --page-all --max-pages 20`, `dws doc +search --query "周报" --limit 10`},
+	Validate:    validateDocSearch,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if v := rt.Str("query"); v != "" {
@@ -117,15 +131,25 @@ var Search = shortcut.Shortcut{
 		if rt.Changed("workspace-ids") {
 			params["workspaceIds"] = rt.StrSlice("workspace-ids")
 		}
+		project := searchDocsProject
+		if rt.Bool("with-metadata") {
+			project = searchDocsProjectWithMetadata
+		}
 		pageSize := rt.Int("limit")
 		if pageSize == 0 {
 			pageSize = 10
 		}
-		result, err := collectDocPages(rt, "search_documents", "documents", params, searchDocsProject, docPageOptions{
+		result, err := collectDocPages(rt, "search_documents", "documents", params, project, docPageOptions{
 			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
 			return err
+		}
+		if rt.Changed("folder") {
+			result, err = filterDocSearchFolder(rt, result)
+			if err != nil {
+				return err
+			}
 		}
 		return rt.Output(result)
 	},
@@ -211,7 +235,7 @@ var List = shortcut.Shortcut{
 	Command:     "+list",
 	Product:     productDoc,
 	Description: "列出文件夹或知识库下的直接子节点",
-	Intent:      "当你已知某个文档文件夹或知识库的 ID、想浏览它下面直接包含的文档与子文件夹（不递归深层）以便逐层导航时使用；输入 folder 或 workspace，返回该层级的子节点列表。",
+	Intent:      "已知文档文件夹nodeId或知识库workspaceId，仅需浏览直接子节点时使用；不递归、不执行关键词检索。钉盘spaceId/dentryUuid目录使用 drive +list。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -233,8 +257,8 @@ var List = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "列出文件夹或知识库下的直接子节点",
-			UseWhen:      []string{"当你已知某个文档文件夹或知识库的 ID、想浏览它下面直接包含的文档与子文件夹（不递归深层）以便逐层导航时使用；输入 folder 或 workspace，返回该层级的子节点列表。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			UseWhen:      []string{"已知文档文件夹nodeId或知识库workspaceId，仅需浏览直接子节点时使用；不递归、不执行关键词检索。钉盘spaceId/dentryUuid目录使用 drive +list。"},
+			AvoidWhen:    []string{"已有关键词或属性条件且要限定文档文件夹使用 doc +search --folder；钉盘目录使用 drive +list；知识库层级管理使用 wiki，不重复搜索加列表做目录浏览"},
 			Examples: []string{
 				"dws doc +list --folder DOC_FOLDER_NODE_ID",
 				"dws doc +list --workspace WS_ID --limit 20",
@@ -246,11 +270,13 @@ var List = shortcut.Shortcut{
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
-		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
-		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回节点数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页；--max-pages/--max-items 仅在 --page-all 时生效且必须大于 0"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--max-pages 仅在 --page-all 时生效，且必须大于 0"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "--page-all 最多返回节点数，必须大于 0"},
 	},
-	Tips: []string{`dws doc +list --folder DOC_FOLDER_NODE_ID`, `dws doc +list --workspace WS_ID --limit 20`},
+	Constraints: docAutoPaginationConstraints(),
+	Tips:        []string{`dws doc +list --folder DOC_FOLDER_NODE_ID`, `dws doc +list --workspace WS_ID --limit 20`},
+	Validate:    validateDocAutoPagination,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if rt.Changed("folder") {
@@ -564,6 +590,9 @@ var CommentReply = shortcut.Shortcut{
 			"replyCommentKey": rt.Str("comment-key"),
 		}
 		if rt.Bool("emoji") {
+			if err := commentreaction.Validate(rt.Str("content")); err != nil {
+				return err
+			}
 			params["emoji"] = true
 		}
 		if rt.Changed("mention") {
@@ -844,8 +873,8 @@ var TemplateList = shortcut.Shortcut{
 	Service:     "doc",
 	Command:     "+template-list",
 	Product:     productDoc,
-	Description: "获取文档模板列表",
-	Intent:      "当你想基于模板新建文档、需要先浏览可用的模板（自己的 MY 或公共 PUBLIC）并拿到 templateId 时使用；返回模板列表，随后可配合 +template-apply 套用。",
+	Description: "浏览可用文档模板；默认只读取一页",
+	Intent:      "当你没有明确模板名称或关键词、需要浏览自己的 MY 或公共 PUBLIC 模板并获取 templateId 时使用；默认只读取一页，要求全部模板或完整浏览时必须使用 --page-all。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -859,37 +888,52 @@ var TemplateList = shortcut.Shortcut{
 			CLIPath:        "doc +template-list",
 			PrimaryCLIPath: "doc +template-list",
 		},
-		Description: "获取文档模板列表",
+		Description: "浏览可用文档模板；默认只读取一页",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "获取文档模板列表",
-			UseWhen:      []string{"当你想基于模板新建文档、需要先浏览可用的模板（自己的 MY 或公共 PUBLIC）并拿到 templateId 时使用；返回模板列表，随后可配合 +template-apply 套用。"},
+			AgentSummary: "浏览 MY/PUBLIC 文档模板；完整浏览必须显式自动翻页",
+			UseWhen:      []string{"没有明确模板名称或关键词、需要浏览自己的或公开模板时使用；要求全部模板或完整模板库时使用 --page-all"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws doc +template-list --source PUBLIC"},
+			Examples: []string{
+				"dws doc +template-list --source PUBLIC",
+				"dws doc +template-list --source PUBLIC --page-all --max-pages 20",
+			},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "source", Type: shortcut.FlagString, Desc: "模板来源: MY / PUBLIC (默认 MY)", Enum: []string{"MY", "PUBLIC"}},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回数量上限"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量（默认 20）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页；--max-pages/--max-items 仅在 --page-all 时生效且必须大于 0"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--max-pages 仅在 --page-all 时生效，且必须大于 0"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "--page-all 最多返回模板数，必须大于 0"},
 	},
-	Tips: []string{`dws doc +template-list --source PUBLIC`},
+	Constraints: docAutoPaginationConstraints(),
+	Tips:        []string{`dws doc +template-list --source PUBLIC`, `dws doc +template-list --source PUBLIC --page-all --max-pages 20`},
+	Validate:    validateDocAutoPagination,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
 		}
-		if rt.Changed("limit") {
-			params["maxResults"] = rt.Int("limit")
+		pageSize := rt.Int("limit")
+		if pageSize <= 0 {
+			pageSize = 20
 		}
-		if v := rt.Str("cursor"); v != "" {
-			params["nextCursor"] = v
+		result, err := collectDocPages(rt, "list_doc_templates", "templates", params, func(data map[string]any) []map[string]any {
+			return collectTemplateCandidates(data)
+		}, docPageOptions{
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
+			PageSizeParam: "maxResults", CursorParam: "nextCursor",
+		})
+		if err != nil {
+			return err
 		}
-		return rt.CallMCP("list_doc_templates", params)
+		return rt.Output(result)
 	},
 }
 
@@ -1021,7 +1065,7 @@ func init() {
 	CommentCreateInline.Contract = corecmd.ContractDecl{}
 	TemplateApply.Contract = corecmd.ContractDecl{}
 	canonicalizeHistoryShortcuts()
-	shortcut.Register(
+	registerDocShortcuts(
 		Search,
 		List,
 		Copy,

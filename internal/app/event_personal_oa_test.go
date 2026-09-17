@@ -246,7 +246,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		personalResolveEventIdentity = oldIdentity
 		personalGetSubscription = oldGet
 	})
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			LocalSubject: "subject",
@@ -306,6 +306,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			{"--group", "cid-1"},
 			{"--query", "urgent"},
 			{"--filter-json", `{"field":"content","op":"eq","value":"urgent"}`},
+			{"--role-types", "executor"},
 		} {
 			name := strings.TrimPrefix(args[0], "--")
 			t.Run(eventKey+"/reject-"+name, func(t *testing.T) {
@@ -503,7 +504,7 @@ func TestPersonalOAMultiConsumeCreatesIndependentAllSubscriptionsOnSharedBus(t *
 		ClientID:     "client",
 		SourceID:     "open",
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return identity, nil
 	}
 	var requests []personal.CreateSubscriptionRequest
@@ -629,7 +630,7 @@ func TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation(t *testing.T
 		personalResolveEventIdentity = oldIdentity
 		personalGetSubscription = oldGet
 	})
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{
 			AccessToken:  "token",
 			LocalSubject: "subject",

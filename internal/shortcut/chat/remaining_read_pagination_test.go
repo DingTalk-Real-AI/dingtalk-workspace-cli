@@ -5,12 +5,14 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 func TestCrossPlatformCoverageChatListAllPageAllUsesNumericCursorAndDeduplicates(t *testing.T) {
@@ -54,7 +56,7 @@ func TestCrossPlatformCoverageDirectMessagesPageAllUsesMillisecondCursor(t *test
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+messages-list-direct", "--open-dingtalk-id", "D-user",
+		"chat", "+messages-list-direct", "--open-dingtalk-id", fixtureCurrentDOpenID,
 		"--time", "2026-08-05 16:49:00", "--forward=false", "--limit", "1",
 		"--page-all", "--page-limit", "5",
 	})
@@ -95,9 +97,84 @@ func TestCrossPlatformCoverageDirectMessagesPageLimitPublishesExecutableContinua
 		t.Fatal(err)
 	}
 	if payload["complete"] != false || payload["hasMore"] != true ||
-		payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" || payload["nextPage"] == nil {
+		payload["truncated"] != true || payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" || payload["nextPage"] == nil {
 		t.Fatalf("payload = %#v", payload)
 	}
+}
+
+func TestCrossPlatformCoverageChatListAllMaxItemsPublishesStableTruncation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"}],"hasMore":true,"nextCursor":88}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].args["limit"] != 1 || payload["nextCursor"] != float64(88) {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatListAllFailsClosedOnOversizeAndCanceledDelay(t *testing.T) {
+	t.Run("oversized lower page", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"},{"openConversationId":"g2"}],"hasMore":true,"nextCursor":88}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--max-items", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("oversized lower page unexpectedly published a continuation")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].args["limit"] != 1 || payload["nextCursor"] != nil {
+			t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
+		}
+	})
+
+	t.Run("canceled delay", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"}],"hasMore":true,"nextCursor":88}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		root.SetContext(ctx)
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--page-delay", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("canceled delay unexpectedly succeeded")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageDirectMessagesPageAllFailsClosedWithoutMillisecondCursor(t *testing.T) {
@@ -162,6 +239,17 @@ func TestCrossPlatformCoverageChatRemainingPaginationValidation(t *testing.T) {
 		if err := root.Execute(); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
+	}
+	root := newPlatformCoverageRoot()
+	cmd, _, err := root.Find([]string{"chat", "+chat-list-all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("max-items", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateChatListAll(shortcut.RuntimeContextForTest(cmd, ChatListAll)); err == nil {
+		t.Fatal("direct auto-page validation unexpectedly succeeded")
 	}
 }
 

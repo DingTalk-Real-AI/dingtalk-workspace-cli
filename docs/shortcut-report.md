@@ -56,13 +56,13 @@
 
 | shortcut | 多步/智能逻辑 | 验证 |
 |----------|--------------|------|
-| `chat +dm --to <姓名> --text` | 搜人→解析唯一 userId→发单聊；多人消歧 | ✅ dry-run 真机 |
+| `chat +dm --to <姓名> --content` | 搜人→解析唯一 userId→发单聊；多人消歧 | ✅ dry-run 真机 |
 | `contact +lookup --name <姓名>` | 搜人→解析 userId→取完整资料 | ✅ **真机端到端** |
 | `todo +assign --to <姓名> --task` | 解析人→建待办并把 TA 设为执行人 | ✅ dry-run 真机 |
-| `chat +send-to-group --group <群名> --text` | 按群名搜群(search_groups)→消歧→发消息 | ✅ 编译/挂载 |
+| `chat +send-to-group --group <群名> --content` | 按群名搜群(search_groups)→消歧→发消息 | ✅ 编译/挂载 |
 | `calendar +book --title --start --end [--with <姓名CSV>]` | 建日程→按名加参与者→**失败回滚删日程**（对标 lark `calendar +create`） | ✅ dry-run 真机 |
 | `calendar +free --who <姓名> --start --end` | 解析人→查其时段忙闲 | ✅ **真机端到端**（解析 202397→查忙闲） |
-| `chat +broadcast --to <姓名CSV> --text` | 多名逐一解析→群发单聊，失败汇总不中断 | ✅ 编译/挂载 |
+| `chat +broadcast --to <姓名CSV> --content` | 多名逐一解析→群发单聊，失败汇总不中断 | ✅ 编译/挂载 |
 | `minutes +latest-minutes` | 列妙记→取最新一条详情 | ✅ 编译/挂载 |
 | `chat +group-members --group <群名>` | 按群名搜群→列群成员 | ✅ 编译/挂载 |
 | `contact +org --name <姓名>` | 解析人→取详情拿 deptId→查部门详情 | ✅ **真机端到端**（3 步：董鑫阳→模型算法/16人） |
@@ -76,7 +76,7 @@
 | `todo +todo-done --task <关键词>` | 列我的待办→按标题匹配→标记完成 | ✅ 编译/挂载 |
 | `calendar +reschedule --event <id>` | 查日程详情→改时间（查→改机械多步） | ✅ 编译/挂载 |
 | `wiki +wiki-new-doc --space <名>` | 按名搜知识空间→在其下建文档（跨 doc server 路由） | ✅ 编译/挂载 |
-| `doc +doc-append --doc --text` | 文档末尾追加文本（update_document append 模式） | ✅ 编译/挂载 |
+| `doc +doc-append --doc --content` | 文档末尾追加文本（update_document append 模式） | ✅ 编译/挂载 |
 | `minutes +action-items` | 列妙记→取最新→取其待办事项 | ✅ 编译/挂载 |
 | `minutes +detail --id <taskUuid>` | 一条命令聚合听记 basic/summary/keywords/transcript/todos，partial-failure 容错 | ✅ 全量测试 |
 | `minutes +replace-batch --id --pair "原文=>替换"…` | 多组批量替换文字，去重校验+逐组结果聚合 | ✅ 全量测试 |

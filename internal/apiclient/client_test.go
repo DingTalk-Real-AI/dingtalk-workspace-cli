@@ -17,11 +17,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 func TestNewClient_DefaultBaseURL(t *testing.T) {
@@ -57,21 +58,16 @@ func TestNormalisePath(t *testing.T) {
 }
 
 func TestDo_Success(t *testing.T) {
-	AllowedHosts["127.0.0.1"] = true
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := NewClient("test-token", "")
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get(AuthHeader) != "test-token" {
 			t.Errorf("expected auth header %q, got %q", "test-token", r.Header.Get(AuthHeader))
 		}
 		if r.Method != "GET" {
 			t.Errorf("expected GET, got %s", r.Method)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		json.NewEncoder(w).Encode(map[string]string{"name": "test"})
-	}))
-	defer srv.Close()
-
-	c := NewClient("test-token", srv.URL)
+		return jsonHTTPResponse(`{"name":"test"}`), nil
+	})
 	resp, err := c.Do(context.Background(), RawAPIRequest{
 		Method: "GET",
 		Path:   "/v1.0/test",
@@ -84,9 +80,26 @@ func TestDo_Success(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDoDingTalkExtensionHeader(t *testing.T) {
+	c := NewClient("test-token", "")
+	c.DingTalkExt = `{"umid":"runtime-value"}`
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("runtime extension = %q", got)
+		}
+		if got := r.Header.Get(AuthHeader); got != "test-token" {
+			t.Fatalf("auth header changed = %q", got)
+		}
+		return jsonHTTPResponse(`{"ok":true}`), nil
+	})
+	if _, err := c.Do(context.Background(), RawAPIRequest{Method: "GET", Path: "/v1.0/test"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDo_PostWithBody(t *testing.T) {
-	AllowedHosts["127.0.0.1"] = true
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := NewClient("tok", "")
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
@@ -94,16 +107,12 @@ func TestDo_PostWithBody(t *testing.T) {
 			t.Errorf("expected JSON content type")
 		}
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["key"] != "value" {
 			t.Errorf("expected body key=value, got %v", body)
 		}
-		w.WriteHeader(200)
-		w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient("tok", srv.URL)
+		return jsonHTTPResponse(`{"ok":true}`), nil
+	})
 	resp, err := c.Do(context.Background(), RawAPIRequest{
 		Method: "POST",
 		Path:   "/v1.0/test",
@@ -129,17 +138,13 @@ func TestDo_InvalidMethod(t *testing.T) {
 }
 
 func TestDo_QueryParams(t *testing.T) {
-	AllowedHosts["127.0.0.1"] = true
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := NewClient("tok", "")
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Query().Get("pageSize") != "10" {
 			t.Errorf("expected pageSize=10, got %v", r.URL.Query())
 		}
-		w.WriteHeader(200)
-		w.Write([]byte(`{}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient("tok", srv.URL)
+		return jsonHTTPResponse(`{}`), nil
+	})
 	_, err := c.Do(context.Background(), RawAPIRequest{
 		Method: "GET",
 		Path:   "/v1.0/test",
@@ -169,8 +174,10 @@ func TestIsLegacyAPI(t *testing.T) {
 	}
 }
 
-func TestDo_LegacyAPI_TokenInQueryParam(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestCrossPlatformCoverageDoLegacyAPITokenInQueryParam(t *testing.T) {
+	c := NewClient("legacy-token", "")
+	c.DingTalkExt = `{"umid":"legacy-value"}`
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		// Legacy API: token should be in query param.
 		if r.URL.Query().Get(LegacyAuthParam) != "legacy-token" {
 			t.Errorf("expected access_token=legacy-token in query, got %v", r.URL.Query())
@@ -179,23 +186,11 @@ func TestDo_LegacyAPI_TokenInQueryParam(t *testing.T) {
 		if r.Header.Get(AuthHeader) != "" {
 			t.Errorf("expected no auth header for legacy API, got %q", r.Header.Get(AuthHeader))
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		w.Write([]byte(`{"errcode":0,"errmsg":"ok","result":{"userid":"user1"}}`))
-	}))
-	defer srv.Close()
-
-	// Use full URL with oapi.dingtalk.com in the path, but redirect to test server.
-	// Since we can't DNS-resolve oapi.dingtalk.com, we use the test server URL
-	// and pass the full oapi URL as Path so that NormalisePath preserves it.
-	// Then we override the resolved URL in the client to point to our test server.
-	//
-	// Best approach: directly verify that buildURL + IsLegacyAPI routing works
-	// by testing buildURL output and calling Do with a custom transport that
-	// redirects oapi.dingtalk.com to our test server.
-	c := NewClient("legacy-token", "")
-	// Replace the transport to redirect oapi.dingtalk.com to test server.
-	c.HTTPClient.Transport = &legacyTestTransport{targetURL: srv.URL}
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("legacy runtime extension = %q", got)
+		}
+		return jsonHTTPResponse(`{"errcode":0,"errmsg":"ok","result":{"userid":"user1"}}`), nil
+	})
 
 	resp, err := c.Do(context.Background(), RawAPIRequest{
 		Method: "POST",
@@ -208,23 +203,6 @@ func TestDo_LegacyAPI_TokenInQueryParam(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
-}
-
-// legacyTestTransport redirects requests from oapi.dingtalk.com to a local test server.
-type legacyTestTransport struct {
-	targetURL string
-}
-
-func (t *legacyTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Rewrite the host to point to our test server, preserving path and query.
-	newURL := t.targetURL + req.URL.Path
-	if req.URL.RawQuery != "" {
-		newURL += "?" + req.URL.RawQuery
-	}
-	parsed, _ := url.Parse(newURL)
-	req.URL = parsed
-	req.Host = parsed.Host
-	return http.DefaultTransport.RoundTrip(req)
 }
 
 func TestNormalisePath_Legacy(t *testing.T) {
@@ -276,29 +254,23 @@ func TestResolvePageLimit(t *testing.T) {
 	}
 }
 
-func TestPaginateAll_ProgressLog(t *testing.T) {
-	AllowedHosts["127.0.0.1"] = true
+func TestCrossPlatformCoveragePaginateAllProgressLog(t *testing.T) {
 	callCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := NewClient("test-token", "")
+	c.DingTalkExt = `{"umid":"paginated-value"}`
+	c.HTTPClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		callCount++
-		w.Header().Set("Content-Type", "application/json")
-		if callCount >= 3 {
-			json.NewEncoder(w).Encode(map[string]any{
-				"result": map[string]any{"has_more": false, "items": []any{1, 2}},
-			})
-		} else {
-			json.NewEncoder(w).Encode(map[string]any{
-				"result": map[string]any{
-					"has_more":    true,
-					"next_cursor": 100,
-					"items":       []any{callCount},
-				},
-			})
+		if got := r.Header.Get(requestmeta.DingTalkExtHeader); got != c.DingTalkExt {
+			t.Fatalf("page %d runtime extension = %q", callCount, got)
 		}
-	}))
-	defer srv.Close()
-
-	c := NewClient("test-token", srv.URL)
+		var body string
+		if callCount >= 3 {
+			body = `{"result":{"has_more":false,"items":[1,2]}}`
+		} else {
+			body = `{"result":{"has_more":true,"next_cursor":100,"items":[1]}}`
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
 
 	var logBuf bytes.Buffer
 	pages, err := c.PaginateAll(context.Background(), RawAPIRequest{

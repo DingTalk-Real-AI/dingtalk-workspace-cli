@@ -7,14 +7,18 @@ cd "$ROOT"
 python3 scripts/gen_skill_shortcut_sections.py --check
 
 chat_skill="skills/multi/dingtalk-chat/SKILL.md"
+aisearch_skill="skills/multi/dingtalk-aisearch/SKILL.md"
 doc_skill="skills/multi/dingtalk-doc/SKILL.md"
 event_skill="skills/multi/dingtalk-event/SKILL.md"
 mono_skill="skills/mono/SKILL.md"
 runtime_contract="skills/multi/dingtalk-shared/references/runtime-contract.md"
-chat_target_bytes=10000
-chat_max_overage_percent=5
+chat_target_bytes=9500
+chat_max_overage_percent=0
 chat_max_bytes=$((chat_target_bytes * (100 + chat_max_overage_percent) / 100))
-doc_max_bytes=9000
+aisearch_max_bytes=9000
+doc_target_bytes=12000
+doc_max_overage_percent=0
+doc_max_bytes=$((doc_target_bytes * (100 + doc_max_overage_percent) / 100))
 event_max_bytes=10000
 runtime_contract_max_bytes=3000
 
@@ -25,10 +29,17 @@ if [ "$chat_bytes" -gt "$chat_max_bytes" ]; then
 	exit 1
 fi
 
+aisearch_bytes="$(wc -c < "$aisearch_skill" | tr -d ' ')"
+if [ "$aisearch_bytes" -gt "$aisearch_max_bytes" ]; then
+	printf '%s\n' \
+		"skill context budget exceeded: $aisearch_skill is ${aisearch_bytes} bytes (max ${aisearch_max_bytes})" >&2
+	exit 1
+fi
+
 doc_bytes="$(wc -c < "$doc_skill" | tr -d ' ')"
 if [ "$doc_bytes" -gt "$doc_max_bytes" ]; then
 	printf '%s\n' \
-		"skill context budget exceeded: $doc_skill is ${doc_bytes} bytes (max ${doc_max_bytes})" >&2
+		"skill context budget exceeded: $doc_skill is ${doc_bytes} bytes (target ${doc_target_bytes}, max ${doc_max_bytes} with ${doc_max_overage_percent}% allowance)" >&2
 	exit 1
 fi
 
@@ -78,6 +89,8 @@ for required_heading in \
 	"## 最小 DWS 执行契约" \
 	"## Golden Route" \
 	"## 关键结果语义" \
+	"## 写生命周期" \
+	"## 上下文预算" \
 	"## 按需加载" \
 	"## 错误最短路径"
 do
@@ -113,6 +126,23 @@ do
 	if ! grep -Fq -- "$required_route" "$doc_skill"; then
 		printf '%s\n' \
 			"skill route regression: $doc_skill is missing $required_route" >&2
+		exit 1
+	fi
+done
+
+for heading_reference in \
+	"skills/multi/dingtalk-doc/references/doc/doc-block.md" \
+	"skills/multi/dingtalk-doc/references/doc/doc-update.md"
+do
+	if ! grep -Fq -- '--level 1' "$heading_reference" || \
+		! grep -Fq 'heading.level="heading-1"' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference must distinguish numeric CLI input from Runtime readback" >&2
+		exit 1
+	fi
+	if grep -Fq 'heading.level=1' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference expects the wrong Runtime projection" >&2
 		exit 1
 	fi
 done
@@ -168,6 +198,7 @@ done
 for forbidden_route in \
 	"## 标准 SOP" \
 	"dws aisearch person --keyword" \
+	"dws aisearch person --query" \
 	"dws chat message send-by-webhook" \
 	"dt_media_upload" \
 	"MUST 先用 Read"
@@ -191,5 +222,14 @@ if grep -Fq "充分阅读产品参考文件" "$mono_skill"; then
 	exit 1
 fi
 
+for bounded_skill in "$chat_skill" "$aisearch_skill"
+do
+	if grep -Fq '| head' "$bounded_skill"; then
+		printf '%s\n' \
+			"skill output budget regression: $bounded_skill recommends shell head truncation" >&2
+		exit 1
+	fi
+done
+
 printf '%s\n' \
-	"skill context budget: ok (chat_bytes=$chat_bytes target=$chat_target_bytes max=$chat_max_bytes allowance=${chat_max_overage_percent}% doc_bytes=$doc_bytes doc_max=$doc_max_bytes event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows doc_shortcut_rows=$doc_shortcut_rows)"
+	"skill context budget: ok (chat_bytes=$chat_bytes chat_target=$chat_target_bytes chat_max=$chat_max_bytes chat_allowance=${chat_max_overage_percent}% aisearch_bytes=$aisearch_bytes aisearch_max=$aisearch_max_bytes doc_bytes=$doc_bytes doc_target=$doc_target_bytes doc_max=$doc_max_bytes doc_allowance=${doc_max_overage_percent}% event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows doc_shortcut_rows=$doc_shortcut_rows)"

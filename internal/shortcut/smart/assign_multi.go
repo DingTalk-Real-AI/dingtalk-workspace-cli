@@ -14,6 +14,7 @@
 package smart
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -21,7 +22,9 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	todoshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/todo"
 )
 
 // AssignMulti: create ONE personal todo and assign it to SEVERAL people at once,
@@ -41,10 +44,11 @@ import (
 //
 //	dws todo +assign-multi --to "张三,李四,王五" --task "周五前提交排期"
 var AssignMulti = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+assign-multi",
-	Product:     "todo",
-	Description: "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+assign-multi",
+	Product:       "todo",
+	Description:   "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
 	Intent: "当你想把同一条待办同时指派给好几个同事、但手上只有他们的姓名而不是 userId 时使用；" +
 		"内部会把 --to 里的每个姓名逐个解析成唯一 userId，只要有任何一个姓名查不到或者重名有歧义，" +
 		"就把这些问题一次性汇总报错、并且完全不创建待办（不会建出只指派了一半人的残缺待办）。" +
@@ -63,16 +67,19 @@ var AssignMulti = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +assign-multi",
 		},
 		Description: "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
+		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: true},
+		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的多人指派待办","properties":{"taskId":{"type":"string","description":"新待办稳定 taskId"},"subject":{"type":"string","description":"待办标题"},"executors":{"type":"array","description":"已解析执行人摘要","items":{"type":"string"}},"count":{"type":"integer","description":"执行人数"},"verified":{"type":"boolean","description":"是否完成详情读回核验"}},"required":["taskId","subject","executors","count","verified"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
-			UseWhen:      []string{"当你想把同一条待办同时指派给好几个同事、但手上只有他们的姓名而不是 userId 时使用；内部会把 --to 里的每个姓名逐个解析成唯一 userId，只要有任何一个姓名查不到或者重名有歧义，就把这些问题一次性汇总报错、并且完全不创建待办（不会建出只指派了一半人的残缺待办）。全部姓名都解析成功后，才用这些 userId 一次性创建这条待办并指派给所有人。会真实创建一条新的待办。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws todo +assign-multi --to \"张三,李四\" --task \"周五前提交排期\""},
+			AgentSummary:        "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
+			UseWhen:             []string{"当你想把同一条待办同时指派给好几个同事、但手上只有他们的姓名而不是 userId 时使用；内部会把 --to 里的每个姓名逐个解析成唯一 userId，只要有任何一个姓名查不到或者重名有歧义，就把这些问题一次性汇总报错、并且完全不创建待办（不会建出只指派了一半人的残缺待办）。全部姓名都解析成功后，才用这些 userId 一次性创建这条待办并指派给所有人。会真实创建一条新的待办。"},
+			AvoidWhen:           []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:            []string{"dws todo +assign-multi --to \"张三,李四\" --task \"周五前提交排期\""},
+			ExampleDispositions: todoStatefulPreviewExampleDispositions(),
 		},
 	},
 	Flags: []shortcut.Flag{
@@ -98,7 +105,6 @@ var AssignMulti = shortcut.Shortcut{
 		if len(names) == 0 {
 			return apperrors.NewValidation("--to 不能为空，请至少提供一个执行人姓名")
 		}
-
 		// Resolve every name up front. Collect all failures and abort before any
 		// write, so we never create a todo assigned to only some of the people.
 		var (
@@ -123,22 +129,36 @@ var AssignMulti = shortcut.Shortcut{
 		if len(executorIDs) == 0 {
 			return apperrors.NewValidation("没有解析出任何有效的执行人 userId，已中止")
 		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dryRun": true, "executed": false, "preview_kind": "plan", "subject": task,
+				"assigneeQueries": names, "executorIds": executorIDs, "executors": resolved, "count": len(executorIDs),
+			})
+		}
 
 		// Create the todo once, assigning all resolved executors. Params mirror the
 		// todo helper's `task create` call site verbatim.
-		if err := rt.CallMCP("create_personal_todo", map[string]any{
+		params := map[string]any{
 			"PersonalTodoCreateVO": map[string]any{
 				"subject":     task,
 				"executorIds": executorIDs,
 			},
-		}); err != nil {
+		}
+		data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", params)
+		if err != nil {
+			return err
+		}
+		taskID, _, err := todoshortcut.VerifyCreatedTodo(rt, data, "todo/create_personal_todo", task)
+		if err != nil {
 			return err
 		}
 
 		return rt.Output(map[string]any{
+			"taskId":    taskID,
 			"subject":   task,
 			"executors": resolved,
 			"count":     len(executorIDs),
+			"verified":  true,
 		})
 	},
 }

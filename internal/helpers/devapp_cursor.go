@@ -31,7 +31,7 @@ import (
 // registerDevAppCursorFlags adds the two cursor flags every list/search command
 // exposes. pageSize defaults to 20.
 func registerDevAppCursorFlags(cmd *cobra.Command) {
-	cmd.Flags().String("cursor", "", "游标令牌：首次查询留空，续翻传上次出参的 nextCursor")
+	cmd.Flags().String("cursor", "", "游标令牌：首次查询留空，续翻传上次 meta.pagination.next_token")
 	cmd.Flags().Int("page-size", 20, "单页条数，默认 20")
 }
 

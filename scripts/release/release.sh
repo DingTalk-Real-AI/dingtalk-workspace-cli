@@ -19,7 +19,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: release.sh <prerelease|stable> <version> [options]
 
-Runs the full test, command-compatibility, package, and install preflight.
+Runs the full test, authoritative CLI/Schema compatibility, package, and install preflight.
 The default is validation only. Official publication is cloud-only.
 
 Options:
@@ -359,10 +359,12 @@ else
   make policy
 
   if [ -n "$previous_stable" ]; then
-    printf '==> Comparing command tree with %s\n' "$previous_stable"
-    "$ROOT/scripts/policy/check-command-compatibility.sh" \
+    printf '==> Comparing authoritative CLI and Schema with %s\n' "$previous_stable"
+    "$SCRIPT_DIR/check-release-compatibility.sh" \
+      --repo-root "$ROOT" \
       --base-ref HEAD \
-      --stable-ref "$previous_stable"
+      --stable-ref "$previous_stable" \
+      --candidate-ref HEAD
   fi
 
   printf '==> Building local release artifacts for %s\n' "$VERSION"
@@ -412,11 +414,13 @@ printf '==> Revalidating delivered stable baseline %s\n' "$previous_stable"
 require_delivered_previous_stable
 
 if [ "$previous_stable" != "$previous_stable_before_refresh" ]; then
-  printf '==> Stable authority advanced from %s to %s; rechecking command compatibility\n' \
+  printf '==> Stable authority advanced from %s to %s; rechecking authoritative CLI and Schema compatibility\n' \
     "${previous_stable_before_refresh:-none}" "$previous_stable"
-  "$ROOT/scripts/policy/check-command-compatibility.sh" \
+  "$SCRIPT_DIR/check-release-compatibility.sh" \
+    --repo-root "$ROOT" \
     --base-ref HEAD \
-    --stable-ref "$previous_stable"
+    --stable-ref "$previous_stable" \
+    --candidate-ref HEAD
 fi
 
 if [ "$PUBLISH" -eq 1 ]; then

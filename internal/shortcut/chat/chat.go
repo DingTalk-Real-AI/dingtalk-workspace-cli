@@ -24,13 +24,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
-// isOpenID reports whether value looks like an openDingTalkId (starts with D/d),
-// mirroring helpers.isOpenDingTalkID.
+// isOpenID classifies mixed userId/openDingTalkId inputs using the canonical
+// current-D wire format shared with helpers and smart shortcuts.
 func isOpenID(v string) bool {
-	v = strings.TrimSpace(v)
-	return len(v) > 0 && (v[0] == 'D' || v[0] == 'd')
+	return targetresolver.LooksLikeCurrentDOpenDingTalkID(v)
 }
 
 // splitIDs partitions a mixed list of userId / openDingTalkId values, mirroring
@@ -48,6 +49,18 @@ func splitIDs(vals []string) (userIDs, openIDs []string) {
 		}
 	}
 	return userIDs, openIDs
+}
+
+func validateExplicitOpenIDs(flagName string, values []string) error {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		if err := targetresolver.ValidateExplicitOpenDingTalkID(flagName, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // toInt64Slice converts string values to []int64, mirroring helpers.parseCSVInt64.

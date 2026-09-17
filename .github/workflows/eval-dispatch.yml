@@ -1,0 +1,296 @@
+name: PR Eval Dispatch
+
+# `/eval <products> [sha=<full-head-sha>] [cases=<ref>]` PR 评论 → 生成可验证的评测请求，报告由 bot 回贴。
+# 本 workflow 只在默认分支上下文运行，不 checkout、不执行 PR 代码。
+# 审核 SHA 规则：评测他人 PR 必须显式携带 sha=（审阅背书凭据，验证
+# 其恰为当前 open head）；评测自己创建的 PR 可省略，自动钉住派发时刻
+# 的当前 head（作者自背书，无第三方偷换窗口）；受控评测执行端另以
+# FETCH_HEAD 校验兜底派发后的变更。
+# 授权两级：仓库 write/maintain/admin 可派发任意 PR；默认分支
+# .github/eval-allowlist.txt 名单内的用户仅可派发自己创建的 PR。
+# 触发通道：workflow 先创建占位评论，再上传与本次 run/comment 绑定的
+# 不可变 manifest artifact，最后把 artifact 指针写回同一评论。评论仅是
+# 不可信通知；受控评测服务必须验证成功 run、artifact 与 manifest，并在
+# 触发评测前原子占用 manifest.idempotency_key，重复占用只能 no-op。
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions: {}
+
+concurrency:
+  group: eval-dispatch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch internal evaluation
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/eval')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # 该 job 仅处理 PR；评论写入也限定在 PR Conversation 这一权限域。
+      pull-requests: write
+    steps:
+      - name: Check out default branch tooling
+        uses: actions/checkout@v4
+
+      - name: Verify commenter dispatch authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          PR_AUTHOR: ${{ github.event.issue.user.login }}
+          EVAL_ALLOWLIST_PATH: .github/eval-allowlist.txt
+        run: |
+          # 不用 --fail：非协作者查权限返回 404 错误体，交由 guard 走名单分支；硬网络错误降级为空对象同样 fail-closed
+          permission_json="$(curl --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/collaborators/${COMMENTER}/permission")" || permission_json='{}'
+          printf '%s' "$permission_json" | python3 scripts/ci/eval_dispatch_guard.py permission
+
+      - name: Parse /eval command
+        id: parse
+        continue-on-error: true
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: python3 scripts/ci/eval_comment_parse.py
+
+      - name: Reply usage on parse failure
+        if: steps.parse.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          PARSE_ERROR: ${{ steps.parse.outputs.error }}
+        run: |
+          body="❌ /eval 命令解析失败：${PARSE_ERROR}"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --raw-field body="$body" \
+            > /dev/null
+          exit 1
+
+      - name: Verify reviewed PR head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          EXPECTED_PR_NUMBER: ${{ github.event.issue.number }}
+          REVIEWED_SHA: ${{ steps.parse.outputs.reviewed_sha }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          pr_json="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          printf '%s' "$pr_json" \
+            | python3 scripts/ci/eval_dispatch_guard.py head \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Create dispatch placeholder
+        id: placeholder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          placeholder_body="🛰️ /eval 请求已通过权限与版本校验，正在生成可验证的评测请求。"
+          response="$(
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --raw-field body="$placeholder_body"
+          )"
+          comment_id="$(
+            printf '%s' "$response" \
+              | jq -er \
+                --arg issue_url "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}" \
+                'select(.issue_url == $issue_url) | .id | tostring | select(test("^[1-9][0-9]*$"))'
+          )"
+          printf 'comment_id=%s\n' "$comment_id" >> "$GITHUB_OUTPUT"
+
+      - name: Build dispatch request manifest
+        env:
+          REPOSITORY_ID: '1187709537'
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_ID: '331725458'
+          WORKFLOW_PATH: .github/workflows/eval-dispatch.yml
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_COMMENT_ID: ${{ github.event.comment.id }}
+          DISPATCH_COMMENT_ID: ${{ steps.placeholder.outputs.comment_id }}
+          ACTOR_ID: ${{ github.event.comment.user.id }}
+          ACTOR_LOGIN: ${{ github.event.comment.user.login }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PRODUCTS: ${{ steps.parse.outputs.products }}
+          CASES_REF: ${{ steps.parse.outputs.cases_ref }}
+          SOURCE_BODY: ${{ github.event.comment.body }}
+          MANIFEST_PATH: ${{ runner.temp }}/eval-dispatch-request.json
+        run: |
+          set -euo pipefail
+          if [ "$REPOSITORY" != "DingTalk-Real-AI/dingtalk-workspace-cli" ]; then
+            echo "unexpected repository: ${REPOSITORY}" >&2
+            exit 1
+          fi
+          for value in \
+            "$REPOSITORY_ID" \
+            "$WORKFLOW_ID" \
+            "$RUN_ID" \
+            "$RUN_ATTEMPT" \
+            "$SOURCE_COMMENT_ID" \
+            "$DISPATCH_COMMENT_ID" \
+            "$ACTOR_ID" \
+            "$PR_NUMBER"; do
+            if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+              echo "dispatch manifest contains a non-canonical identifier" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "dispatch manifest contains an invalid PR head SHA" >&2
+            exit 1
+          fi
+
+          hash_output="$(printf '%s' "$SOURCE_BODY" | sha256sum)"
+          source_body_sha256="${hash_output%% *}"
+          if [[ ! "$source_body_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "failed to hash source comment" >&2
+            exit 1
+          fi
+          idempotency_key="${REPOSITORY_ID}:${SOURCE_COMMENT_ID}"
+
+          umask 077
+          jq -n \
+            --arg repository_id "$REPOSITORY_ID" \
+            --arg repository "$REPOSITORY" \
+            --arg workflow_id "$WORKFLOW_ID" \
+            --arg workflow_path "$WORKFLOW_PATH" \
+            --arg run_id "$RUN_ID" \
+            --arg run_attempt "$RUN_ATTEMPT" \
+            --arg source_comment_id "$SOURCE_COMMENT_ID" \
+            --arg dispatch_comment_id "$DISPATCH_COMMENT_ID" \
+            --arg actor_id "$ACTOR_ID" \
+            --arg actor_login "$ACTOR_LOGIN" \
+            --arg pr_number "$PR_NUMBER" \
+            --arg pr_head_sha "$PR_HEAD_SHA" \
+            --arg products "$PRODUCTS" \
+            --arg cases_ref "$CASES_REF" \
+            --arg source_body_sha256 "$source_body_sha256" \
+            --arg idempotency_key "$idempotency_key" \
+            '{
+              schema_version: 1,
+              repository_id: $repository_id,
+              repository: $repository,
+              workflow_id: $workflow_id,
+              workflow_path: $workflow_path,
+              run_id: $run_id,
+              run_attempt: $run_attempt,
+              source_comment_id: $source_comment_id,
+              dispatch_comment_id: $dispatch_comment_id,
+              actor_id: $actor_id,
+              actor_login: $actor_login,
+              pr_number: $pr_number,
+              pr_head_sha: $pr_head_sha,
+              products: $products,
+              cases_ref: $cases_ref,
+              source_body_sha256: $source_body_sha256,
+              idempotency_key: $idempotency_key
+            }' > "$MANIFEST_PATH"
+
+      - name: Upload dispatch request manifest
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-dispatch-request-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.placeholder.outputs.comment_id }}
+          path: ${{ runner.temp }}/eval-dispatch-request.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: false
+
+      - name: Finalize dispatch marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_COMMENT_ID: ${{ steps.placeholder.outputs.comment_id }}
+          REPOSITORY_ID: '1187709537'
+          WORKFLOW_ID: '331725458'
+          WORKFLOW_PATH: .github/workflows/eval-dispatch.yml
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PRODUCTS: ${{ steps.parse.outputs.products }}
+          CASES_REF: ${{ steps.parse.outputs.cases_ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DISPATCH_COMMENT_ID" =~ ^[1-9][0-9]*$ ]] || \
+             [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "artifact marker contains a non-canonical identifier" >&2
+            exit 1
+          fi
+
+          artifact_digest="${ARTIFACT_DIGEST,,}"
+          if [[ "$artifact_digest" != sha256:* ]]; then
+            artifact_digest="sha256:${artifact_digest}"
+          fi
+          if [[ ! "$artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "artifact marker contains an invalid digest" >&2
+            exit 1
+          fi
+
+          marker_json="$(
+            jq -nc \
+              --arg repository_id "$REPOSITORY_ID" \
+              --arg workflow_id "$WORKFLOW_ID" \
+              --arg workflow_path "$WORKFLOW_PATH" \
+              --arg run_id "$RUN_ID" \
+              --arg run_attempt "$RUN_ATTEMPT" \
+              --arg dispatch_comment_id "$DISPATCH_COMMENT_ID" \
+              --arg artifact_id "$ARTIFACT_ID" \
+              --arg artifact_digest "$artifact_digest" \
+              '{
+                schema_version: 1,
+                repository_id: $repository_id,
+                workflow_id: $workflow_id,
+                workflow_path: $workflow_path,
+                run_id: $run_id,
+                run_attempt: $run_attempt,
+                dispatch_comment_id: $dispatch_comment_id,
+                artifact_id: $artifact_id,
+                artifact_digest: $artifact_digest
+              }'
+          )"
+          cases_note=""
+          if [ -n "$CASES_REF" ]; then
+            cases_note="，用例版本 \`${CASES_REF}\`"
+          fi
+          body="<!-- eval-dispatch: ${marker_json} -->"$'\n'"🛰️ /eval 已受理：产品集 \`${PRODUCTS}\`${cases_note}，评测对象 \`${PR_HEAD_SHA}\`。"$'\n'"受控评测服务将在数分钟内处理，完成后由 bot 回贴报告。"
+          response="$(
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${DISPATCH_COMMENT_ID}" \
+              --raw-field body="$body"
+          )"
+          printf '%s' "$response" \
+            | jq -e \
+              --arg comment_id "$DISPATCH_COMMENT_ID" \
+              --arg body "$body" \
+              '((.id | tostring) == $comment_id) and (.body == $body)' \
+              > /dev/null
+
+      - name: Mark dispatch preparation failure
+        if: ${{ failure() && steps.placeholder.outputs.comment_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_COMMENT_ID: ${{ steps.placeholder.outputs.comment_id }}
+        run: |
+          failure_body="❌ /eval 请求准备失败，未生成可消费的评测请求。请稍后重试。"
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/issues/comments/${DISPATCH_COMMENT_ID}" \
+            --raw-field body="$failure_body" \
+            > /dev/null \
+            || true

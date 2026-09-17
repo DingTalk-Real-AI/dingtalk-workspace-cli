@@ -96,7 +96,7 @@ func TestCallbackInboundMediaPreservesFutureRichTextAttachment(t *testing.T) {
 
 // TestExtractCallbackText covers the markdown / richText fallback path used
 // when SDK data.Text.Content is empty. This is the recovery path for
-// `dws chat message send --group ... --text ...` (defaults to msgType=markdown)
+// `dws chat message send --conversation-id ... --content ...` (defaults to msgType=markdown)
 // which otherwise gets silently dropped by the connector.
 func TestExtractCallbackText(t *testing.T) {
 	cases := []struct {

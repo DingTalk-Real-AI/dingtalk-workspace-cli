@@ -19,6 +19,12 @@ func TestCrossPlatformCoverageProductDeclRegistryRoundTrip(t *testing.T) {
 
 	RegisterProductDecl(ProductDecl{
 		ID: " sample ",
+		HelpReferences: HelpReferences{
+			RelatedSkills: []string{" dingtalk-sample ", "dingtalk-sample"},
+			Documentation: []HelpDocumentation{
+				SkillDocumentation(" Sample guide ", "dingtalk-sample", "references/sample.md"),
+			},
+		},
 		Selection: ProductSelectionDecl{
 			AgentSummary: "Manage samples",
 			UseWhen:      []string{"target is a sample"},
@@ -31,6 +37,17 @@ func TestCrossPlatformCoverageProductDeclRegistryRoundTrip(t *testing.T) {
 	got, ok := LookupProductDecl("sample")
 	if !ok || got.ID != "sample" || got.Selection.AgentSummary != "Manage samples" {
 		t.Fatalf("LookupProductDecl = %#v, ok=%v", got, ok)
+	}
+	if len(got.HelpReferences.RelatedSkills) != 1 || got.HelpReferences.RelatedSkills[0] != "dingtalk-sample" ||
+		len(got.HelpReferences.Documentation) != 1 || got.HelpReferences.Documentation[0].Label != "Sample guide" ||
+		got.HelpReferences.Documentation[0].URL != "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/skills/multi/dingtalk-sample/references/sample.md" {
+		t.Fatalf("normalized HelpReferences = %#v", got.HelpReferences)
+	}
+	got.HelpReferences.RelatedSkills[0] = "mutated"
+	got.HelpReferences.Documentation[0].Label = "mutated"
+	again, _ := LookupProductDecl("sample")
+	if again.HelpReferences.RelatedSkills[0] != "dingtalk-sample" || again.HelpReferences.Documentation[0].Label != "Sample guide" {
+		t.Fatalf("LookupProductDecl leaked mutable HelpReferences: %#v", again.HelpReferences)
 	}
 	ids := RegisteredProductDeclIDs()
 	found := false
@@ -76,4 +93,38 @@ func TestCrossPlatformCoverageProductDeclRegisterPanicsOnIncompleteSelection(t *
 		}
 	}()
 	RegisterProductDecl(ProductDecl{ID: "broken"})
+}
+
+func TestCrossPlatformCoverageProductDeclNormalizesHelpReferenceEdges(t *testing.T) {
+	empty := normalizeHelpReferences("empty", HelpReferences{})
+	if empty.RelatedSkills != nil || empty.Documentation != nil {
+		t.Fatalf("empty HelpReferences = %#v, want nil slices", empty)
+	}
+
+	deduplicated := normalizeHelpReferences("sample", HelpReferences{
+		Documentation: []HelpDocumentation{
+			{Label: "Primary", URL: "https://example.com/guide"},
+			{Label: "Duplicate", URL: "https://example.com/guide"},
+		},
+	})
+	if len(deduplicated.Documentation) != 1 || deduplicated.Documentation[0].Label != "Primary" {
+		t.Fatalf("deduplicated Documentation = %#v", deduplicated.Documentation)
+	}
+
+	for _, tc := range []struct {
+		name string
+		doc  HelpDocumentation
+	}{
+		{name: "missing label", doc: HelpDocumentation{URL: "https://example.com/guide"}},
+		{name: "non HTTPS URL", doc: HelpDocumentation{Label: "invalid", URL: "http://example.com"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("normalizeHelpReferences(%#v) did not panic", tc.doc)
+				}
+			}()
+			normalizeHelpReferences("invalid-help", HelpReferences{Documentation: []HelpDocumentation{tc.doc}})
+		})
+	}
 }

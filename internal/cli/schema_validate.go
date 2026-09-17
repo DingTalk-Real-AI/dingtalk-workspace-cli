@@ -16,29 +16,44 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"math"
+	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-// ValidateInputSchema performs strict local validation for MCP tool inputs.
+// ValidateInputSchema performs strict local validation for reviewed tool inputs.
 // It enforces required/type/enum checks and rejects unknown properties by default.
 func ValidateInputSchema(params map[string]any, schema map[string]any) error {
+	return validateInputSchema(params, schema, true)
+}
+
+func validateInputSchema(params map[string]any, schema map[string]any, rejectUnknownByDefault bool) error {
 	if len(schema) == 0 {
 		return nil
 	}
 	if params == nil {
 		params = map[string]any{}
 	}
-	if err := validateSchemaValue("$", params, schema); err != nil {
+	if err := validateSchemaValueWithPolicy("$", params, schema, rejectUnknownByDefault); err != nil {
 		return apperrors.NewValidation(fmt.Sprintf("input schema validation failed: %v", err))
 	}
 	return nil
 }
 
+// ValidateJSONSchemaValue validates one decoded JSON value against the
+// required/type/enum/properties/items subset used by reviewed CLI contracts.
+func ValidateJSONSchemaValue(value any, schema map[string]any) error {
+	return validateSchemaValue("$", value, schema)
+}
+
 func validateSchemaValue(path string, value any, schema map[string]any) error {
+	return validateSchemaValueWithPolicy(path, value, schema, true)
+}
+
+func validateSchemaValueWithPolicy(path string, value any, schema map[string]any, rejectUnknownByDefault bool) error {
 	if len(schema) == 0 {
 		return nil
 	}
@@ -54,7 +69,8 @@ func validateSchemaValue(path string, value any, schema map[string]any) error {
 
 	properties := schemaProperties(schema)
 	required := schemaRequired(schema)
-	if object, ok := value.(map[string]any); ok && (len(required) > 0 || len(properties) > 0 || hasType(expectedTypes, "object")) {
+	_, additionalPropertiesDeclared := schema["additionalProperties"]
+	if object, ok := value.(map[string]any); ok && (len(required) > 0 || len(properties) > 0 || hasType(expectedTypes, "object") || additionalPropertiesDeclared) {
 		for _, field := range required {
 			if _, exists := object[field]; !exists {
 				return fmt.Errorf("%s.%s is required", path, field)
@@ -62,12 +78,12 @@ func validateSchemaValue(path string, value any, schema map[string]any) error {
 		}
 
 		allowUnknown, additionalSchema, hasAdditionalSchema := additionalProperties(schema)
-		strictUnknown := len(properties) > 0 && !allowUnknown && !hasAdditionalSchema
+		strictUnknown := !allowUnknown && !hasAdditionalSchema && (additionalPropertiesDeclared || rejectUnknownByDefault && len(properties) > 0)
 
 		for key, raw := range object {
 			childPath := path + "." + key
 			if propertySchema, known := properties[key]; known {
-				if err := validateSchemaValue(childPath, raw, propertySchema); err != nil {
+				if err := validateSchemaValueWithPolicy(childPath, raw, propertySchema, rejectUnknownByDefault); err != nil {
 					return err
 				}
 				continue
@@ -77,7 +93,7 @@ func validateSchemaValue(path string, value any, schema map[string]any) error {
 				return fmt.Errorf("%s is not allowed", childPath)
 			}
 			if hasAdditionalSchema {
-				if err := validateSchemaValue(childPath, raw, additionalSchema); err != nil {
+				if err := validateSchemaValueWithPolicy(childPath, raw, additionalSchema, rejectUnknownByDefault); err != nil {
 					return err
 				}
 			}
@@ -87,7 +103,7 @@ func validateSchemaValue(path string, value any, schema map[string]any) error {
 	if itemsSchema, ok := schema["items"].(map[string]any); ok {
 		if list, ok := value.([]any); ok {
 			for idx, item := range list {
-				if err := validateSchemaValue(fmt.Sprintf("%s[%d]", path, idx), item, itemsSchema); err != nil {
+				if err := validateSchemaValueWithPolicy(fmt.Sprintf("%s[%d]", path, idx), item, itemsSchema, rejectUnknownByDefault); err != nil {
 					return err
 				}
 			}
@@ -166,7 +182,7 @@ func matchesType(value any, expected string) bool {
 		if !ok {
 			return false
 		}
-		return math.Trunc(n) == n
+		return n.IsInt()
 	case "null":
 		return value == nil
 	default:
@@ -202,46 +218,45 @@ func valuesEqual(left, right any) bool {
 	lNum, lOK := numberValue(left)
 	rNum, rOK := numberValue(right)
 	if lOK && rOK {
-		return lNum == rNum
+		return lNum.Cmp(rNum) == 0
 	}
 	return reflect.DeepEqual(left, right)
 }
 
-func numberValue(value any) (float64, bool) {
+func numberValue(value any) (*big.Rat, bool) {
+	var text string
 	switch typed := value.(type) {
 	case float64:
-		return typed, true
+		text = strconv.FormatFloat(typed, 'g', -1, 64)
 	case float32:
-		return float64(typed), true
+		text = strconv.FormatFloat(float64(typed), 'g', -1, 32)
 	case int:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int8:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int16:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int32:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int64:
-		return float64(typed), true
+		text = strconv.FormatInt(typed, 10)
 	case uint:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint8:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint16:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint32:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint64:
-		return float64(typed), true
+		text = strconv.FormatUint(typed, 10)
 	case json.Number:
-		parsed, err := typed.Float64()
-		if err != nil {
-			return 0, false
-		}
-		return parsed, true
+		text = typed.String()
 	default:
-		return 0, false
+		return nil, false
 	}
+	parsed, ok := new(big.Rat).SetString(text)
+	return parsed, ok
 }
 
 func schemaProperties(schema map[string]any) map[string]map[string]any {
@@ -269,7 +284,7 @@ func schemaRequired(schema map[string]any) []string {
 		out := make([]string, 0, len(typed))
 		for _, value := range typed {
 			text, ok := value.(string)
-			if ok && strings.TrimSpace(text) != "" {
+			if ok && text != "" {
 				out = append(out, text)
 			}
 		}

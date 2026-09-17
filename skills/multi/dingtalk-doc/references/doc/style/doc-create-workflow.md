@@ -364,14 +364,14 @@ dws doc +create --name "<文档名>" --content "短内容" --doc-format markdown
 - 开头摘要、关键章节、表格表头、末尾章节都存在。
 - 回读文本顺序和临时 Markdown 一致。
 - 没有把字面量 `\n` 渲染成一整行。
-- 如果返回 `chunksWritten > 1`，检查分片边界没有破坏表格、代码块或列表。
+- 如果返回 `chunksWritten > 1`，看 `degradations`：为空即表示分片没有改变渲染结构，无需人工核对边界；非空时按其中的 `kind` 与 `line` 定点检查（如 `table_split` 表示该表被拆成多张、每张带重发的表头）。
 - 最终回复必须给用户 `docUrl`；如果只拿到 `nodeId`，说明链接字段未返回，并报告已尝试 `doc info`。
 
 ## 缺失补救
 
 DWS 写入管道会自动处理长内容分片。只有出现以下情况才手工补片：
 
-- 返回 `CONTENT_TRUNCATED`
+- 返回 `doc_write_commit_unknown`（分片超时，提交状态未知）
 - 命令超时或只写入部分分片
 - 回读发现后半段缺失、章节乱序或表格损坏
 

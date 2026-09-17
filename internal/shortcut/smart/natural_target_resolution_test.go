@@ -22,7 +22,7 @@ func TestCrossPlatformCoverageNaturalSearchAndSenderFlagsStayPublicOptional(t *t
 		want  []string
 	}{
 		{name: "search natural adapters", flags: SearchMsg.Flags, want: []string{"chat-query", "sender-query"}},
-		{name: "chat messages natural adapters", flags: ChatMessages.Flags, want: []string{"chat-query", "sender-query"}},
+		{name: "chat messages natural adapters", flags: ChatMessages.Flags, want: []string{"chat-query", "sender", "sender-query"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,21 +91,21 @@ func TestCrossPlatformCoverageChatMessagesResolvesNaturalChatAndUserTargets(t *t
 	}{
 		{
 			name:      "chat query",
-			args:      []string{"chat", "+chat-messages", "--chat-query", "项目冲刺"},
+			args:      []string{"chat", "+chat-messages", "--no-reactions", "--chat-query", "项目冲刺"},
 			wantTool:  "list_conversation_message_v2",
 			wantKey:   "openconversation_id",
 			wantValue: "cid-1",
 		},
 		{
 			name:      "natural group through group flag",
-			args:      []string{"chat", "+chat-messages", "--group", "项目冲刺"},
+			args:      []string{"chat", "+chat-messages", "--no-reactions", "--group", "项目冲刺"},
 			wantTool:  "list_conversation_message_v2",
 			wantKey:   "openconversation_id",
 			wantValue: "cid-1",
 		},
 		{
 			name:      "user query",
-			args:      []string{"chat", "+chat-messages", "--user-query", "张三"},
+			args:      []string{"chat", "+chat-messages", "--no-reactions", "--user-query", "张三"},
 			wantTool:  "list_individual_chat_message",
 			wantKey:   "openDingTalkId",
 			wantValue: "open1",
@@ -135,7 +135,7 @@ func TestCrossPlatformCoverageChatMessagesStableGroupBypassesNaturalResolution(t
 	fake := &platformCoverageCaller{}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-fixture-chat-0001"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--group", "cid-fixture-chat-0001"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +159,8 @@ func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEithe
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
-		"--sender-query", "测试用户甲", "--page-all",
+		"chat", "+chat-messages", "--no-reactions", "--group", "cid-fixture-chat-0001",
+		"--sender", "测试用户甲", "--page-all",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,64 @@ func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEithe
 	}
 }
 
-func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureKeepsUnfilteredMessages(t *testing.T) {
+func TestChatMessagesFormatValidSenderSkipsDirectoryAndFiltersStableID(t *testing.T) {
+	fake := &platformCoverageCaller{
+		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+			{"openMessageId":"wanted","sender":"目标展示名","senderOpenDingTalkId":"DAAAAAAAAAAAiE","content":"保留"},
+			{"openMessageId":"other","sender":"其他人","senderOpenDingTalkId":"DAQEBAQEBAQEiE","content":"过滤"}
+		]}}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--no-reactions", "--group", "cid-fixture-chat-0001",
+		"--sender", "DAAAAAAAAAAAiE", "--page-all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
+		t.Fatalf("format-valid sender unexpectedly preflighted: %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["complete"] != true {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestChatMessagesWithoutSenderDoesNotResolveEveryMessageIdentity(t *testing.T) {
+	fake := &platformCoverageCaller{chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+		{"openMessageId":"m1","sender":"群昵称一","senderOpenDingTalkId":"D1","content":"一"},
+		{"openMessageId":"m2","sender":"群昵称二","senderOpenDingTalkId":"D2","content":"二"}
+	]}}`}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--group", "cid-fixture-chat-0001", "--page-all"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
+		t.Fatalf("calls=%#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	identity := payload["identityResult"].(map[string]any)
+	if payload["count"] != float64(2) || identity["status"] != "requires_query_check" ||
+		identity["negativeConclusionAllowed"] != false {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureStopsWithoutUnfilteredMessages(t *testing.T) {
 	fake := &platformCoverageCaller{
 		contactSearchResult: `{"result":[]}`,
 		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
@@ -213,25 +270,29 @@ func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureKeepsUnfiltered
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
+		"chat", "+chat-messages", "--no-reactions", "--group", "cid-fixture-chat-0001",
 		"--sender-query", "不存在的人", "--page-all",
 	})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("optional sender failure stopped message read: %v", err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("sender resolution failure unexpectedly succeeded")
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
 		fake.calls[1].tool != "search_contact_by_key_word" {
-		t.Fatalf("calls = %#v, want message read followed by non-blocking failed resolve", fake.calls)
+		t.Fatalf("calls = %#v, want message read followed by failed resolve", fake.calls)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		t.Fatalf("decode output: %v\n%s", err, output.String())
 	}
-	if payload["count"] != float64(1) || payload["complete"] != false ||
-		payload["partial"] != true || payload["failedCount"] != float64(1) ||
+	if payload["count"] != float64(0) || payload["complete"] != false ||
+		payload["partial"] != false || payload["failedCount"] != float64(1) ||
 		payload["stopReason"] != "sender_resolution_failed" {
-		t.Fatalf("unfiltered fallback payload = %#v", payload)
+		t.Fatalf("fail-closed payload = %#v", payload)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 0 {
+		t.Fatalf("failed resolution leaked unfiltered messages: %#v", payload["messages"])
 	}
 	if _, exists := payload["resolvedFilters"]; exists {
 		t.Fatalf("failed resolution unexpectedly published resolvedFilters: %#v", payload)
@@ -246,7 +307,7 @@ func TestCrossPlatformCoverageChatMessagesNaturalUserAmbiguityStopsBeforeMessage
 	fake := &platformCoverageCaller{contactSearchResult: `{"result":[{"name":"张三","userId":"u1","openDingTalkId":"D1"},{"name":"张三","userId":"u2","openDingTalkId":"D2"}]}`}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--user-query", "张三"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--user-query", "张三"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("ambiguous user unexpectedly reached message read")
 	}
@@ -259,7 +320,7 @@ func TestCrossPlatformCoverageChatMessagesRejectsConversationIDInPeerIdentityFla
 	fake := &platformCoverageCaller{}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", "cid-fixture-chat-0001"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--open-dingtalk-id", "cid-fixture-chat-0001"})
 	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "--group") {
 		t.Fatalf("error = %v", err)
@@ -315,7 +376,7 @@ func TestCrossPlatformCoverageSearchMsgResolvesNaturalChatAndSenderBeforeSearch(
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+search-msg",
+		"chat", "+search-msg", "--no-reactions",
 		"--chat-query", "项目冲刺",
 		"--sender-query", "张三",
 		"--no-enrich",
@@ -323,15 +384,18 @@ func TestCrossPlatformCoverageSearchMsgResolvesNaturalChatAndSenderBeforeSearch(
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 3 {
-		t.Fatalf("calls = %#v, want chat resolve + user resolve + search", fake.calls)
+	if len(fake.calls) != 4 {
+		t.Fatalf("calls = %#v, want chat resolve + user resolve + scope validation + search", fake.calls)
 	}
-	search := fake.calls[2]
+	if preflight := fake.calls[2]; preflight.product != "chat" || preflight.tool != "get_conversation_info" || preflight.args["openConversationId"] != "cid-1" {
+		t.Fatalf("scope preflight = %#v", preflight)
+	}
+	search := fake.calls[3]
 	if search.product != "im" || search.tool != "search_messages" {
 		t.Fatalf("search = %#v", search)
 	}
-	if got, want := search.args["openConversationIds"], []string{"cid-1"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("openConversationIds = %#v, want %#v", got, want)
+	if _, exists := search.args["openConversationIds"]; exists {
+		t.Fatalf("global fallback unexpectedly forwarded openConversationIds: %#v", search.args)
 	}
 	if got, want := search.args["senderOpenDingTakIds"], []string{"D1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("senderOpenDingTakIds = %#v, want %#v", got, want)
@@ -347,7 +411,7 @@ func TestCrossPlatformCoverageSearchMsgPreservesResolvedSenderWhenDisplayNameDif
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+search-msg", "--sender-query", "测试用户甲", "--no-enrich"})
+	root.SetArgs([]string{"chat", "+search-msg", "--no-reactions", "--sender-query", "测试用户甲", "--no-enrich"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +448,7 @@ func TestCrossPlatformCoverageSearchMsgAcceptsStableIDInChatQuery(t *testing.T) 
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+search-msg",
+		"chat", "+search-msg", "--no-reactions",
 		"--chat-query", "cid-fixture-chat-0002",
 		"--text", "评测",
 		"--no-enrich",
@@ -392,14 +456,17 @@ func TestCrossPlatformCoverageSearchMsgAcceptsStableIDInChatQuery(t *testing.T) 
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].tool != "search_messages" {
+	if len(fake.calls) != 2 || fake.calls[0].tool != "get_conversation_info" || fake.calls[1].tool != "search_messages" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
-	if got, want := fake.calls[0].args["openConversationIds"], []string{"cid-fixture-chat-0002"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("openConversationIds = %#v, want %#v", got, want)
+	if fake.calls[0].args["openConversationId"] != "cid-fixture-chat-0002" {
+		t.Fatalf("scope preflight = %#v", fake.calls[0])
 	}
-	if fake.calls[0].args["keyword"] != "评测" {
-		t.Fatalf("keyword = %#v", fake.calls[0].args["keyword"])
+	if _, exists := fake.calls[1].args["openConversationIds"]; exists {
+		t.Fatalf("global fallback unexpectedly forwarded openConversationIds: %#v", fake.calls[1].args)
+	}
+	if fake.calls[1].args["keyword"] != "评测" {
+		t.Fatalf("keyword = %#v", fake.calls[1].args["keyword"])
 	}
 }
 
@@ -432,7 +499,7 @@ func TestCrossPlatformCoverageSearchMsgNaturalSenderAmbiguityStopsBeforeSearch(t
 	fake := &platformCoverageCaller{contactSearchResult: `{"result":[{"name":"张三","userId":"u1","openDingTalkId":"D1"},{"name":"张三","userId":"u2","openDingTalkId":"D2"}]}`}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+search-msg", "--sender-query", "张三", "--no-enrich"})
+	root.SetArgs([]string{"chat", "+search-msg", "--no-reactions", "--sender-query", "张三", "--no-enrich"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("ambiguous sender unexpectedly reached search")
 	}

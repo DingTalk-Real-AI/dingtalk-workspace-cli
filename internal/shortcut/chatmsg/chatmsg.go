@@ -66,6 +66,7 @@ var messageResultContractV1 = MessageResultContract{
 		"senderId",
 		"senderType",
 		"messageType",
+		"messageAiSendFlag",
 		"text",
 		"createTime",
 		"updateTime",
@@ -86,11 +87,13 @@ var messageResultContractV1 = MessageResultContract{
 		"hasMore",
 		"nextPage",
 		"stopReason",
+		"truncated",
 		"truncatedByPageLimit",
 		"truncatedByResultLimit",
 		"failedCount",
 		"failures",
 		"partial",
+		"scope",
 		"resourceDownloads",
 	},
 }
@@ -121,7 +124,58 @@ func NewMessageListPayload(messages []map[string]any) map[string]any {
 		"failedCount":     0,
 		"failures":        []map[string]any{},
 		"partial":         false,
+		"truncated":       false,
 	}
+}
+
+// ApplyTruncation publishes the stable aggregate bit while preserving the
+// established reason-specific fields for compatibility and diagnosis.
+func ApplyTruncation(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	byPage, _ := payload["truncatedByPageLimit"].(bool)
+	byItems, _ := payload["truncatedByResultLimit"].(bool)
+	payload["truncated"] = byPage || byItems
+}
+
+// ListMessageItems returns message rows from the common list response envelopes.
+func ListMessageItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	scopes := []map[string]any{data}
+	for _, wrapper := range []string{"result", "data"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			scopes = append(scopes, inner)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
+			if rows, ok := scope[key].([]any); ok {
+				items := messageMaps(rows)
+				if len(items) > 0 {
+					return items
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// SearchMessageItems flattens grouped search results into stable message rows.
+func SearchMessageItems(data map[string]any) []map[string]any {
+	return SearchItems(data)
+}
+
+func messageMaps(rows []any) []map[string]any {
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if item, ok := row.(map[string]any); ok {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 // StableMessageID returns the normalized message identity used for
@@ -184,7 +238,7 @@ func senderDisplayName(m map[string]any) string {
 // Text reads a message's textual content (tolerating common text keys and one
 // level of nesting) and runs it through CleanText.
 func Text(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body", "plainText"} {
+	for _, key := range []string{"text", "content", "msgContent", "message", "msg", "body", "plainText"} {
 		v, ok := m[key]
 		if !ok || v == nil {
 			continue
@@ -195,7 +249,7 @@ func Text(m map[string]any) any {
 				return CleanText(t)
 			}
 		case map[string]any:
-			for _, inner := range []string{"text", "content", "value"} {
+			for _, inner := range []string{"text", "content", "richText", "title", "value"} {
 				if s, ok := t[inner].(string); ok && s != "" {
 					return CleanText(s)
 				}
@@ -247,6 +301,14 @@ func MessageType(m map[string]any) any {
 	return firstMessageValue(m, "msgType", "messageType", "message_type", "type")
 }
 
+// MessageAISendFlag preserves the lower IM marker that identifies a message
+// sent through an AI client. The service currently publishes the exact
+// messageAiSendFlag field (for example "DWS"); readers must not infer it from
+// sender type, robot status, clawType request metadata, or message content.
+func MessageAISendFlag(m map[string]any) any {
+	return firstMessageValue(m, "messageAiSendFlag")
+}
+
 // SenderID preserves the stable sender identity without replacing the legacy
 // scalar sender display field. Nested sender records and both userId families
 // are accepted because list/search/mget currently expose different shapes.
@@ -283,9 +345,10 @@ func SenderType(m map[string]any) any {
 // legacy aliases such as time or msgType, but the underlying identity,
 // context, reaction, quote, forward, and resource semantics come from here.
 func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
+	ownedResources := Resources(m)
 	row := map[string]any{
 		"sender":     Sender(m),
-		"text":       Text(m),
+		"text":       projectedResourceText(m, ownedResources),
 		"createTime": CreateTime(m),
 	}
 	if value := MessageID(m); value != nil {
@@ -305,6 +368,9 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	}
 	if value := MessageType(m); value != nil {
 		row["messageType"] = value
+	}
+	if value := MessageAISendFlag(m); value != nil {
+		row["messageAiSendFlag"] = value
 	}
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
@@ -357,7 +423,8 @@ func QuotedMessage(m map[string]any) map[string]any {
 	if value := Sender(quoted); value != nil {
 		out["sender"] = value
 	}
-	if value := Text(quoted); value != nil {
+	resources := Resources(quoted)
+	if value := projectedResourceText(quoted, resources); value != nil {
 		out["text"] = value
 	}
 	if value := CreateTime(quoted); value != nil {
@@ -366,7 +433,10 @@ func QuotedMessage(m map[string]any) map[string]any {
 	if value := MessageType(quoted); value != nil {
 		out["messageType"] = value
 	}
-	if resources := Resources(quoted); len(resources) > 0 {
+	if value := MessageAISendFlag(quoted); value != nil {
+		out["messageAiSendFlag"] = value
+	}
+	if len(resources) > 0 {
 		out["resourceRefs"] = resources
 	}
 	return out
@@ -400,10 +470,14 @@ func Resources(m map[string]any) []map[string]any {
 	collectResourceIDs(m, "mediaid", mediaIDTextRE, &mediaIDs)
 	mediaIDs = uniqueResourceIDs(mediaIDs)
 	sort.Strings(mediaIDs)
+	mediaNames := make(map[string]resourceNameCandidate)
+	collectResourceNames(m, "mediaid", mediaNames)
 	fileIDs := make([]string, 0)
 	collectResourceIDs(m, "fileid", fileIDTextRE, &fileIDs)
 	fileIDs = uniqueResourceIDs(fileIDs)
 	sort.Strings(fileIDs)
+	fileNames := make(map[string]resourceNameCandidate)
+	collectResourceNames(m, "fileid", fileNames)
 	if len(mediaIDs) == 0 && len(fileIDs) == 0 {
 		return nil
 	}
@@ -434,7 +508,7 @@ func Resources(m map[string]any) []map[string]any {
 		} else {
 			missing = append(missing, "open-conversation-id")
 		}
-		out = append(out, map[string]any{
+		resource := map[string]any{
 			"type":       "mediaId",
 			"resourceId": id,
 			"download": map[string]any{
@@ -443,10 +517,14 @@ func Resources(m map[string]any) []map[string]any {
 				"ready":     len(missing) == 0,
 				"missing":   missing,
 			},
-		})
+		}
+		if candidate, ok := mediaNames[id]; ok {
+			resource["name"] = candidate.name
+		}
+		out = append(out, resource)
 	}
 	for _, id := range fileIDs {
-		out = append(out, map[string]any{
+		resource := map[string]any{
 			"type":       "fileId",
 			"resourceId": id,
 			"download": map[string]any{
@@ -458,7 +536,15 @@ func Resources(m map[string]any) []map[string]any {
 				"ready":   true,
 				"missing": []string{},
 			},
-		})
+		}
+		if candidate, ok := fileNames[id]; ok {
+			resource["name"] = candidate.name
+		}
+		out = append(out, resource)
+	}
+	for _, resource := range out {
+		resource["resourceIdType"] = resource["type"]
+		attachResourceContentType(m, fmt.Sprint(resource["resourceId"]), resource)
 	}
 	return out
 }
@@ -503,11 +589,163 @@ func resourcesDeep(m map[string]any, inheritedConversationID string, depth int) 
 
 var mediaIDTextRE = regexp.MustCompile(`(?i)\bmedia[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
 var fileIDTextRE = regexp.MustCompile(`(?i)\bfile[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+var fileNameAndIDTextRE = regexp.MustCompile(`(?i)\[文件\]\s*([^\r\n]*?)\s+file[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+var legacyResourceDownloadHintRE = regexp.MustCompile(`\s*注意：如需下载使用dws\s+(?:chat message download-media|drive download)命令下载\s*`)
+
+// projectedResourceText removes only the exact, machine-generated download
+// hint emitted by older IM APIs. The readable resource marker and ID remain in
+// text, while resourceRefs publishes the current executable download command.
+// Text without an owned mediaId/fileId is left byte-for-byte unchanged so an
+// ordinary user sentence mentioning a command can never be rewritten.
+func projectedResourceText(m map[string]any, resources []map[string]any) any {
+	value := Text(m)
+	text, ok := value.(string)
+	if !ok || len(resources) == 0 ||
+		(!mediaIDTextRE.MatchString(text) && !fileIDTextRE.MatchString(text)) {
+		return value
+	}
+	return strings.TrimSpace(legacyResourceDownloadHintRE.ReplaceAllString(text, ""))
+}
+
+type resourceNameCandidate struct {
+	name     string
+	priority int
+}
+
+const (
+	resourceNamePriorityText       = 1
+	resourceNamePriorityStructured = 2
+)
+
+// collectResourceNames keeps a resource ID paired with a name only when both
+// are present in the same structured object or in the legacy, machine-shaped
+// "[文件] name fileId: id" text. This deliberately does not borrow a generic
+// message title or sender name: an unknown resource name is safer than a
+// plausible but incorrect one.
+func collectResourceNames(value any, targetKey string, out map[string]resourceNameCandidate) {
+	switch typed := value.(type) {
+	case map[string]any:
+		directIDs := directResourceIDs(typed, targetKey)
+		if len(directIDs) == 1 {
+			if name := directResourceName(typed, targetKey); name != "" {
+				recordResourceName(out, directIDs[0], name, resourceNamePriorityStructured)
+			}
+		}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				continue
+			}
+			collectResourceNames(typed[key], targetKey, out)
+		}
+	case []any:
+		for _, child := range typed {
+			collectResourceNames(child, targetKey, out)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			collectResourceNames(child, targetKey, out)
+		}
+	case string:
+		if targetKey == "fileid" {
+			for _, match := range fileNameAndIDTextRE.FindAllStringSubmatch(typed, -1) {
+				name := strings.TrimSpace(match[1])
+				id := resourceIDScalar(match[2])
+				if name != "" && id != "" {
+					recordResourceName(out, id, name, resourceNamePriorityText)
+				}
+			}
+		}
+		trimmed := strings.TrimSpace(typed)
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			var decoded any
+			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+				collectResourceNames(decoded, targetKey, out)
+			}
+		}
+	}
+}
+
+func directResourceIDs(value map[string]any, targetKey string) []string {
+	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	ids := make([]string, 0, 1)
+	for _, key := range keys {
+		normalizedKey := normalizeMessageKey(key)
+		if normalizedKey != targetKey &&
+			!(normalizedKey == "resourceid" && resourceType == targetKey) {
+			continue
+		}
+		if id := resourceIDScalar(value[key]); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return uniqueResourceIDs(ids)
+}
+
+func directResourceName(value map[string]any, targetKey string) string {
+	for _, wanted := range []string{"filename", "resourcename", "originalfilename"} {
+		if name := directResourceString(value, wanted); name != "" {
+			return name
+		}
+	}
+	// A bare "name" is accepted only inside an explicit resource envelope.
+	// Message rows also commonly contain a sender/group name, which must never
+	// become the attachment filename merely because the row has a resource ID.
+	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
+	if resourceType == targetKey && directResourceString(value, "resourceid") != "" {
+		return directResourceString(value, "name")
+	}
+	return ""
+}
+
+func directResourceString(value map[string]any, wanted string) string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if normalizeMessageKey(key) != wanted {
+			continue
+		}
+		if text, ok := value[key].(string); ok {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func recordResourceName(
+	out map[string]resourceNameCandidate,
+	id, name string,
+	priority int,
+) {
+	id = resourceIDScalar(id)
+	name = strings.TrimSpace(name)
+	if id == "" || name == "" {
+		return
+	}
+	if current, ok := out[id]; ok && current.priority >= priority {
+		return
+	}
+	out[id] = resourceNameCandidate{name: name, priority: priority}
+}
 
 func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceType", "resource_type")))
+		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceIdType", "resource_id_type", "resourceType", "resource_type")))
 		for key, child := range typed {
 			normalizedKey := normalizeMessageKey(key)
 			if normalizedKey == targetKey ||
@@ -820,14 +1058,9 @@ func ApplyMessagePagination(payload, data map[string]any, messages []map[string]
 	if !hasMore {
 		return
 	}
-	if len(messages) == 0 {
-		payload["failedCount"] = 1
-		payload["failures"] = []map[string]any{{
-			"stage": "pagination",
-			"error": "下层返回 hasMore=true 但当前页没有消息",
-		}}
-		return
-	}
+	// Empty visible pages may still carry an authoritative advancing cursor
+	// (for example, filtered system messages). Validate the cursor normally;
+	// callers retain bounds and never treat hasMore=true as exhaustion.
 	_, boundary, err := messagePaginationCursorBoundary(page["nextCursor"])
 	if err != nil {
 		payload["failedCount"] = 1
@@ -864,6 +1097,12 @@ func messagePaginationCursorBoundary(value any) (string, string, error) {
 			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
 		}
 		millis = int64(typed)
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
 	case string:
 		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
 		if err != nil {
@@ -920,6 +1159,9 @@ func paginationValuePresent(value any) bool {
 	switch typed := value.(type) {
 	case nil:
 		return false
+	case json.Number:
+		number, err := typed.Float64()
+		return err != nil || number != 0
 	case string:
 		return strings.TrimSpace(typed) != "" && strings.TrimSpace(typed) != "0"
 	case int:
@@ -1039,7 +1281,7 @@ func isKnownRichDecoration(node any) bool {
 }
 
 // richItemTexts walks a decoded DingTalk rich-content blob and returns the
-// readable text carried by its rich-content items (items[].data.text). It only
+// readable text and links carried by its rich-content items. It only
 // harvests item bodies, so decorative fields (card titles, preview URLs, layout
 // config) contribute nothing and are dropped. An empty result means "not a
 // recognised rich-content block".
@@ -1063,10 +1305,21 @@ func richItemTexts(node any) []string {
 					if !ok {
 						continue
 					}
-					if s, ok := data["text"].(string); ok {
-						if s = strings.TrimSpace(s); s != "" {
-							texts = append(texts, s)
+					text, _ := data["text"].(string)
+					text = strings.TrimSpace(text)
+					// Link and image items both use data.url; only link targets
+					// belong alongside the readable label.
+					if mm["type"] == "link" {
+						url, _ := data["url"].(string)
+						url = strings.TrimSpace(url)
+						if text == "" {
+							text = url
+						} else if url != "" && url != text {
+							text += "（" + url + "）"
 						}
+					}
+					if text != "" {
+						texts = append(texts, text)
 					}
 				}
 			}
@@ -1106,4 +1359,30 @@ func IsEncrypted(s string) bool {
 		}
 	}
 	return true
+}
+
+// attachResourceContentType joins only the exact owned resource, never a
+// neighbouring attachment or a quoted child's type.
+func attachResourceContentType(value any, id string, target map[string]any) {
+	switch v := value.(type) {
+	case map[string]any:
+		if fmt.Sprint(v["resourceId"]) == id {
+			if kind, ok := v["resourceType"].(string); ok && kind != "mediaId" && kind != "fileId" && kind != "" {
+				target["contentType"] = kind
+			}
+		}
+		for key, child := range v {
+			if !isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				attachResourceContentType(child, id, target)
+			}
+		}
+	case []any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	case []map[string]any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	}
 }

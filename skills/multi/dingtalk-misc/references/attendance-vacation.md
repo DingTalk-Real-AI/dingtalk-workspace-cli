@@ -1,140 +1,129 @@
-# 假期余额导出参考 (attendance-vacation)
+# 考勤假期、余额与变更流水
 
-> 本文档由 `attendance.md` 路由调用。当用户提到“导出假期余额”、“假期余额列表”、“所有假期规则余额”、“假期余额 Excel”、“年假/病假/调休余额导出”等诉求时，必须先阅读本文档，再调用配套脚本。
+本 Reference 处理假期类型、余额、余额变更记录、假期规则修改、余额设置和假期余额 Excel。请假/加班/补卡审批表单与记录走 [attendance.md](attendance.md)；考勤统计 Excel 走 [attendance-report.md](attendance-report.md)。
 
-## 强制门禁
+已知下列路由时直接执行，不先查 vacation Help、产品 Schema 或 Shortcut 列表。只有参数/确认不确定时查一次精确 leaf compact Schema；只有真实 `unknown flag` 时查一次 leaf Help。
 
-**任何调用 `attendance_vacation_balance.py` 的请求，都必须经过本文档定义的工作流，禁止只凭脚本路径或 `--help` 自行拼命令。**
+## Golden Route
 
-执行前必须确认：
-- 人员范围：指定员工 / 部门 / 多部门；缺失时必须追问
-- 导出范围：默认导出所有假期规则余额；用户指定“年假/病假/调休”等时才传 `--leave-keywords`
-- 输出形式：生成 Excel，不在对话中粘贴完整表格
+| 用户意图 | 唯一推荐入口 | 关键边界 |
+|---|---|---|
+| 列出可用假期规则/类型 | `dws attendance vacation types --format json` | 无业务参数；从真实返回读取 leaveCode、名称、单位、来源和适用范围 |
+| 查询某人某类当前余额 | `dws attendance vacation balance` | `--users <ids> --leave-code <code>`；当前 main 的 leave-code 必填 |
+| 查询某人某类余额变更流水 | `dws attendance vacation records` | `--user <id> --leave-code <code> --start YYYY-MM-DD --end YYYY-MM-DD`；四项均必填 |
+| 查询某时间段假期使用数据（管理员） | `dws attendance report query-leave` | `--users --leave-names --start/--end "YYYY-MM-DD HH:mm:ss"`；最多 20 人、32 天 |
+| 修改假期规则 | `dws attendance vacation update-type` | 仅目标规则当前 `leaveStatisticType=freedom`；`--leave-code` 加至少一个修改字段；user_required |
+| 设置员工假期余额 | `dws attendance vacation save-balance` | SET 替换，不是 ADD；user_required |
+| 导出多员工/多假期余额 Excel | `python3 scripts/attendance_vacation_balance.py` | 脚本逐个真实 leaveCode 查询并横向汇总 |
 
-## 核心原则
+## 只读查询
 
-Agent 只负责解析人员范围并获取 userId 列表；假期规则查询、`leaveCode` 解析、假期规则单位解析、余额查询、字段解析、用户信息补齐、Excel 生成都由脚本完成。
+### 1. 解析人和假期规则
 
-`--leave-keywords` 是 `attendance_vacation_balance.py` 的脚本入参，只用于按假期名称筛选导出列；**不是** `dws attendance vacation balance` 的入参。`vacation balance` 当前只支持批量 `--users` 和单个 `--leave-code`，因此脚本必须先获取假期规则列表，再按每个匹配到的 `leaveCode` 分别查询余额。
+- 姓名先用 `dws aisearch person --query "<姓名>" --dimension name --format json`；零命中、多候选停止。
+- 先调用 `vacation types`，按假期名称唯一匹配 leaveCode。不要猜 UUID，不跨 profile 复用历史 code。
+- 用户要求年假和调休等多个类型时，对每个匹配 leaveCode 分别查询；不能省略 leave-code 后声称查询了全部。
+- `corpId` / `opUserId` 由当前登录上下文注入，不向用户索要。
 
-脚本输出结构参考钉钉假期余额列表：
-- 每名员工一行
-- 基础列固定：`姓名`、`部门`、`入职时间`、`首次工作时间`
-- 假期规则横向动态展开为多列，表头必须携带 `vacation types` 返回的规则单位，例如 `年假(天)`、`病假(天)`、`调休(小时)`
-- 特殊值统一展示为 `不限制余额`、`不适用`、`未设置`
-- 当某个假期规则 `leaveCode` 查询余额时接口返回“假期类型没有余额”类业务错误，表示该规则不限制余额，脚本应为该规则列填充 `不限制余额`
-- 当余额记录中返回 `visible=false`，表示该员工不适用该假期规则，脚本应为该员工 + 该规则单元格填充 `不适用`
-- 当接口返回“员工未设置入职时间”或“员工未设置首次参加工作时间”类业务错误，表示该假期规则依赖员工时间字段且当前员工缺失配置，脚本应为该员工 + 该规则单元格填充 `不适用`
-- 当 `vacation types` 返回假期规则 `source=external`，表示该规则由开放接口写入；若这类外部规则调用余额接口失败且不是权限错误，脚本不应阻断导出，应为该员工 + 该规则单元格填充 `外部规则暂无余额，需通过接口初始化更新余额`
+### 2. 当前余额
 
-## 严格禁止 (NEVER DO)
-
-- 禁止凭历史记忆复用 userId、deptId、leaveCode
-- 禁止 Agent 手工汇总、转置或目测假期余额
-- 禁止 Agent 自行只查单个 `leave-code` 再声称是“所有假期规则余额”；如需导出所有假期规则余额，必须交由脚本按假期规则列表逐个 `leaveCode` 查询并汇总
-- 禁止直接输出裸 userId；脚本会通过 `contact user get` 转换姓名和部门
-- 禁止把 Excel 明细内容完整贴在对话里，只返回路径和摘要
-
-## 严格要求 (MUST DO)
-
-- 所有 `dws` 命令必须携带 `--format json`
-- 假期规则名称`--leave-keywords`与假期规则`leaveCode`的映射必须从 `vacation types` 实时建立，禁止硬编码
-- 假期规则单位必须从 `vacation types` 实时读取，优先使用 `leaveViewUnit` 等展示单位字段，并在 Excel 表头中展示为 `假期名称(单位)`
-- 假期规则来源必须从 `vacation types` 实时读取；当 `source=external` 时按外部接口写入规则处理
-- 任何接口失败必须向用户清晰报错，禁止静默吞掉
-- `vacation balance` 返回“假期类型没有余额”时不作为致命错误处理，应按该假期规则 `leaveCode` 生成 `不限制余额`
-- `vacation balance` 返回员工维度 `visible=false` 时不作为查询失败处理，应按该员工 + 假期规则 `leaveCode` 生成 `不适用`
-- `vacation balance` 返回“员工未设置入职时间”或“员工未设置首次参加工作时间”时不作为查询失败处理，应按该员工 + 假期规则 `leaveCode` 生成 `不适用`
-- 对 `source=external` 的外部假期规则，`vacation balance` 查询失败且不是权限错误时不作为导出失败处理，应按该员工 + 假期规则 `leaveCode` 生成 `外部规则暂无余额，需通过接口初始化更新余额`
-
-## 涉及工具
-
-| 工具 | 用途 | 安全等级 |
-|------|------|---------|
-| `dws attendance vacation types` | 获取当前可见的假期规则清单，用于建立假期名称/关键词 → `leaveCode` 的映射，读取 `leaveViewUnit` 等规则单位、`source` 规则来源，并决定 Excel 假期列顺序 | 只读 |
-| `dws attendance vacation balance` | 按批量 `--users` + 单个 `--leave-code` 查询员工假期余额；由脚本按匹配到的 `leaveCode` 逐个调用 | 只读 |
-| `dws aisearch person` | 按姓名搜索用户获取 userId（搜人首选） | 只读 |
-| `dws contact user get` | 批量查询 userId → 用户信息（姓名/部门/入职时间等），用于 Excel 基础列补齐 | 只读 |
-| `dws contact dept search` | 搜索部门获取 deptId | 只读 |
-| `dws contact dept list-members` | 获取部门成员 userId 列表 | 只读 |
-
-## 工作流
-
-### 阶段 0：参数解析
-
-1. 识别人员范围：
-   - 指定员工姓名：用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取 userId
-   - 指定部门：用 `dws contact dept search --query "<部门名>" --format json`，再用 `dws contact dept list-members --ids <deptId> --format json` 获取成员
-   - 已提供 userId：直接使用
-2. 识别假期列范围：
-   - 未指定假期类型：导出所有假期规则余额，不传 `--leave-keywords`
-   - 指定假期类型：传 `--leave-keywords "年假,病假"`
-
-### 阶段 1: 获取完整人员列表
-
-**场景 A — 指定员工姓名**:
 ```bash
-dws aisearch person --keyword "<员工姓名>" --dimension name --format json
+dws attendance vacation balance \
+  --users <USER_ID_1,USER_ID_2> \
+  --leave-code <LEAVE_CODE> \
+  --format json
 ```
 
-**场景 B — 按部门查询**:
+返回时同时展示假期名称、leaveCode 对应单位和真实余额。`visible=false` 表示该员工不适用该规则，不等于余额 0；“假期类型没有余额”按“不限制余额”处理；权限错误不做同义重试。
+
+### 3. 变更流水
+
 ```bash
-dws contact dept search --query "<部门名>" --format json
-dws contact dept list-members --ids <deptId> --format json
+dws attendance vacation records \
+  --user <USER_ID> --leave-code <LEAVE_CODE> \
+  --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
+  --format json
 ```
 
-**场景 C — 多个部门**: 对每个部门分别执行 B，汇总去重。
+按服务端真实时间、变更数量、原因和有效期展示；不要把空数组描述成“没有发放过”，只能说“该查询范围返回 0 条记录”。用户要求“今年”时使用当年 1 月 1 日到当前日期；不得查询未来日期补齐全年。
 
-**场景 D — 全公司**: 暂不支持，引导用户指定部门。
+## 修改假期规则
 
-**场景 E — 用户已给 userId 列表**: 直接跳过本步。
+`vacation update-type` 为 `confirmation=user_required`。流程：
 
-### 阶段 2：调用脚本生成 Excel
+1. `vacation types` 唯一定位规则并保存完整当前值。
+2. 检查目标规则的精确 `leaveStatisticType`。只有值严格等于 `freedom` 时才能继续；其他值立即报告后端不支持，不调用写接口、不改写枚举、不查 Help、不重试。能力缺陷允许正确阻塞，不为追求 case 成功而绕过。
+3. 仅组装用户要求的变更字段；展示名称/code、`当前值 → 新值`、适用范围影响。
+4. 用户确认后执行；写后再次 `vacation types`，按同一 leaveCode 核对。
+
+可用修改字段：`--name`、`--unit day|halfDay|hour`、`--paid`、`--per-hours`、`--when-can-leave entry|formal`、`--visibility-rules '<JSON数组>'`。至少传一项。
+
+可见范围约定：
+
+- 不传 `--visibility-rules`：不修改。
+- 指定范围：`[{"type":"staff|dept|label|employee_type","visible":["id1"]}]`。
+- 全公司：必须显式使用哨兵 `[{"type":"dept","visible":["-1"]}]`。
+- `[]`、`[{}]` 或空 visible 无效，禁止用来表达全公司或清空。
+
+临时修改单位/一天折算时长后恢复时，确认计划必须同时覆盖修改和恢复；修改后回读，再用步骤 1 保存值恢复并回读。恢复失败报告 partial，不得宣称完成。
+
+## 设置假期余额
+
+`vacation save-balance` 是 SET：传入新总余额会替换当前余额。即使用户说“增加 3 天”，也必须先读取当前值再计算新总值。
+
+1. 用 `vacation balance --users <单个目标> --leave-code <code>` 查询当前值和单位。
+2. 计算并展示：目标员工、假期、当前余额、新总余额、差额、原因、可选有效期。
+3. 获得明确确认后执行：
 
 ```bash
-python scripts/attendance_vacation_balance.py \
-  --users <userId1>,<userId2>,... \
+dws attendance vacation save-balance \
+  --target <USER_ID> --leave-code <LEAVE_CODE> \
+  --num <NEW_TOTAL> --reason "<REASON>" \
+  [--start <YYYY-MM-DD> --end <YYYY-MM-DD>] \
+  --format json
+```
+
+4. 再次调用 `vacation balance` 验证新总值。CLI 会把实际单位数量乘以 100 发送（例如 8→800），Agent 传用户可读的 8，不自行乘 100。
+
+可能提交后超时不得盲目重试，先读余额对账。批量调整需逐员工保留成功/失败/未知账本；不要把一人成功扩展成全部成功。
+
+## 假期余额 Excel
+
+### 1. 解析范围
+
+- 人员范围必填：指定员工、部门/多部门或明确 userId 列表。完整解析并去重，禁止只取部门第一页。
+- 用户未指定假期类型时导出全部可见规则，不传 `--leave-keywords`；指定类型时传名称关键词，脚本实时映射 leaveCode。
+
+### 2. 执行
+
+```bash
+python3 scripts/attendance_vacation_balance.py \
+  --users <USER_ID_1,USER_ID_2> \
   [--leave-keywords "年假,病假,调休"] \
-  [--out 假期余额列表.xlsx]
+  [--out <相对路径.xlsx>]
 ```
 
-脚本内部自动执行：
-1. `dws attendance vacation types --format json` 获取假期规则列表、`leaveCode`、展示单位、规则来源 `source` 和列顺序
-2. 对匹配到的每个假期规则，调用 `dws attendance vacation balance --users <批量用户> --leave-code <单个leaveCode> --format json` 查询余额；`vacation balance` 不支持 `--leave-keywords`
-3. 处理特殊业务返回：
-   - 返回“假期类型没有余额”类业务错误：该 `leaveCode` 对应列填充 `不限制余额`
-   - 返回员工维度 `visible=false`：该员工 + 该 `leaveCode` 单元格填充 `不适用`
-   - 返回“员工未设置入职时间”或“员工未设置首次参加工作时间”：该员工 + 该 `leaveCode` 单元格填充 `不适用`
-   - `source=external` 的外部假期规则查询失败且不是权限错误：该员工 + 该 `leaveCode` 单元格填充 `外部规则暂无余额，需通过接口初始化更新余额`
-4. `dws contact user get --ids <批量用户> --format json` 获取姓名、部门等信息
-5. 生成 Excel：`attendance_vacation_balance_<yyyyMMdd_HHmmss>.xlsx`
+`--leave-keywords` 是脚本参数，不是 `dws attendance vacation balance` 参数。脚本自动执行：
 
-### 阶段 3：返回结果
+- `vacation types` 建立名称、leaveCode、单位、source 和列顺序。
+- 对每个匹配规则逐个调用 `vacation balance --leave-code`。
+- userId→姓名/部门/入职信息。
+- 每名员工一行，假期规则横向展开并在表头保留单位。
 
-向用户返回脚本 stdout 摘要即可，必须包含：
-- 输出文件路径
-- 员工数量
-- 假期规则列数
-- 如传了 `--leave-keywords`，说明筛选关键词
+特殊值必须保真：
 
-不要粘贴 Excel 全量内容。
+- 服务端表示无余额上限 → `不限制余额`。
+- `visible=false` 或员工缺少规则依赖的入职/首次工作时间 → `不适用`。
+- `source=external` 且非权限类余额错误 → `外部规则暂无余额，需通过接口初始化更新余额`。
+- 真实无返回且无上述证据 → `未设置`，不得填 0。
 
-## 错误处理
+返回脚本 stdout 中的路径、员工数、规则列数、筛选关键词和 warning，不粘贴完整 Excel。只允许工作目录内安全相对路径，默认不覆盖。
 
-| 错误 | 处理方式 |
-|------|---------|
-| 权限不足 | 提示当前账号无权查询目标员工假期余额，需管理员或管理范围权限 |
-| 人员范围缺失 | 追问员工或部门，禁止猜测 |
-| 无假期规则 | 提示未匹配到假期规则，建议先执行 `dws attendance vacation types --format json` 验证 |
-| 假期类型没有余额 | 不作为失败返回；按对应假期规则 `leaveCode` 填充 `不限制余额` |
-| `visible=false` | 不作为失败返回；按对应员工 + 假期规则 `leaveCode` 填充 `不适用` |
-| 员工未设置入职时间 / 首次参加工作时间 | 不作为失败返回；说明该规则依赖员工时间字段，按对应员工 + 假期规则 `leaveCode` 填充 `不适用` |
-| 外部假期规则查询失败 | 当假期规则 `source=external` 且失败不是权限错误时，不作为导出失败；按对应员工 + 假期规则 `leaveCode` 填充 `外部规则暂无余额，需通过接口初始化更新余额` |
-| openpyxl 缺失 | 提示执行 `pip install openpyxl` |
-| 接口返回结构不确定 | 使用脚本 `--inspect` 重新执行一次，查看首条原始结构 |
+## 错误最短路径
 
-## 配套脚本
-
-| 脚本 | 场景 | CLI 参数 |
-|------|------|---------|
-| [attendance_vacation_balance.py](../scripts/attendance_vacation_balance.py) | 假期余额列表 Excel 导出；脚本按假期名称关键词筛选规则，并逐个 `leaveCode` 调用余额查询 | `--users [--leave-keywords] [--out] [--inspect]` |
+1. 假期名称零命中/多候选：停止，展示候选；禁止按列表首项继续。
+2. 权限不足：说明目标员工不在管理范围或需要管理员权限，不切换组织/身份。
+3. leaveCode 为空或过期：重新调用一次 `vacation types`；仍不存在则停止，不猜 code。
+4. 写请求可能已提交：先按同一 user/code 回读对账；禁止自动重放。
+5. Excel 脚本依赖缺失：报告缺失依赖，不自动联网安装。
+6. 返回结构漂移：脚本明确提示后才用一次 `--inspect`；不要先加载产品 Schema。

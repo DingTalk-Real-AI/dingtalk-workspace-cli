@@ -22,6 +22,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -133,10 +134,11 @@ type LeafContract = corecmd.ContractDecl
 //
 // 执行面（不算声明）：Validate、Call、RunE、PostMount；Server/Tool 仅路由。
 type LeafSpec struct {
-	Use     string
-	Short   string
-	Long    string
-	Example string
+	Use           string
+	Short         string
+	Long          string
+	Example       string
+	OutputRollout output.RolloutState
 
 	// Server 非空时走 callMCPToolOnServer（显式 server 路由），否则走
 	// callMCPTool（按 product 路由）。Call 非空时两者都被忽略。不是 CLI 声明。
@@ -167,7 +169,8 @@ type LeafSpec struct {
 
 	// Call 是执行体：非空时替代默认 MCP 派发。toolArgs 已由 Flags/ConstParams
 	// 装配完成；Call 不应再写业务参数。分页等横切由领域工具处理，不进声明。
-	Call func(cmd *cobra.Command, tool string, args map[string]any) error
+	Call       func(cmd *cobra.Command, tool string, args map[string]any) error
+	ResultCall func(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error)
 
 	// Validate 是编排钩子（条件式校验），不是声明面。单 flag 转换用
 	// LeafFlag.Transform；可声明的互斥/至少一个应写 Constraints。
@@ -225,6 +228,9 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	if spec.Call != nil {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Call must be nil (metadata-only mode)", name))
 	}
+	if spec.ResultCall != nil {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): ResultCall must be nil (metadata-only mode)", name))
+	}
 	if spec.RunE != nil {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): RunE must be nil (metadata-only mode)", name))
 	}
@@ -241,6 +247,9 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Contract is required", name))
 	}
 	corecmd.AttachContract(cmd, spec.Safety, spec.Contract, cmd.Short, cmd.Long)
+	if spec.OutputRollout != "" {
+		output.SetCommandRollout(cmd, spec.OutputRollout)
+	}
 
 	confirm := strings.TrimSpace(spec.Safety.Confirmation) == "user_required"
 	if spec.Validate == nil && !confirm {
@@ -390,30 +399,40 @@ func HasContractConfirmDeferred(cmd *cobra.Command) bool {
 // dispatch 收敛为一个闭包：Call 优先，其次显式 Server 路由，最后按 product
 // 自动路由。RunE 逃生舱存在时不设 Dispatch（与旧行为一致）。
 func FromLeafSpec(spec LeafSpec) corecmd.Spec {
+	if spec.Call != nil && spec.ResultCall != nil {
+		panic(fmt.Sprintf("command %q must not declare both Call and ResultCall", spec.Use))
+	}
 	cs := corecmd.Spec{
-		Use:          spec.Use,
-		Short:        spec.Short,
-		Long:         spec.Long,
-		Example:      spec.Example,
-		Flags:        spec.Flags,
-		Constraints:  spec.Constraints,
-		Safety:       spec.Safety,
-		ConfirmFirst: spec.ConfirmFirst,
-		ConstParams:  spec.ConstParams,
-		Contract:     spec.Contract,
-		Validate:     spec.Validate,
-		PostMount:    spec.PostMount,
-		RunE:         spec.RunE,
+		Use:           spec.Use,
+		Short:         spec.Short,
+		Long:          spec.Long,
+		Example:       spec.Example,
+		OutputRollout: spec.OutputRollout,
+		Flags:         spec.Flags,
+		Constraints:   spec.Constraints,
+		Safety:        spec.Safety,
+		ConfirmFirst:  spec.ConfirmFirst,
+		ConstParams:   spec.ConstParams,
+		Contract:      spec.Contract,
+		Validate:      spec.Validate,
+		PostMount:     spec.PostMount,
+		RunE:          spec.RunE,
 	}
 	if spec.RunE == nil {
-		cs.Invoke = func(c *corecmd.Ctx, toolArgs map[string]any) error {
-			if spec.Call != nil {
-				return spec.Call(c.Command(), spec.Tool, toolArgs)
+		if spec.ResultCall != nil {
+			cs.ResultInvoke = func(c *corecmd.Ctx, toolArgs map[string]any) (output.CommandResult, error) {
+				return spec.ResultCall(c.Command(), spec.Tool, toolArgs)
 			}
-			if spec.Server != "" {
-				return callMCPToolOnServer(spec.Server, spec.Tool, toolArgs)
+		} else {
+			cs.Invoke = func(c *corecmd.Ctx, toolArgs map[string]any) error {
+				if spec.Call != nil {
+					return spec.Call(c.Command(), spec.Tool, toolArgs)
+				}
+				if spec.Server != "" {
+					return callMCPToolOnServer(spec.Server, spec.Tool, toolArgs)
+				}
+				return callMCPTool(spec.Tool, toolArgs)
 			}
-			return callMCPTool(spec.Tool, toolArgs)
 		}
 	}
 	return cs

@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package corecmd is the shared, dispatch-agnostic base for building leaf
-// commands. It concentrates flag registration, the alias/env/default effective
-// value fallback chain, required validation, cross-flag constraint declaration
-// checks + runtime enforcement, SafetySpec-driven confirmation, toolArgs
-// assembly, and Agent Runtime Schema projection.
+// Package corecmd is the shared, dispatch-agnostic base for building commands.
+// It concentrates typed group policy, flag registration, the alias/env/default
+// effective value fallback chain, required validation, cross-flag constraint
+// declaration checks + runtime enforcement, SafetySpec-driven confirmation,
+// toolArgs assembly, and Agent Runtime Schema projection.
 //
 // Declaration vs execution (framework rule):
 //
@@ -49,6 +49,8 @@ package corecmd
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -63,6 +65,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
@@ -144,6 +147,15 @@ type FlagSpec struct {
 	// alike) and makes a whitespace-only value count as empty in required checks.
 	Trim bool
 
+	// Input declares extra input sources for a KindString flag beyond the
+	// literal command-line value: InputFile enables @path (value replaced by
+	// the file content), InputStdin enables - (value replaced by stdin).
+	// "@@value" always escapes to the literal "@value". Only explicit CLI
+	// tokens are resolved; EnvVar fallback and registration defaults pass
+	// through unchanged. Resolution runs before required/enum/constraint/
+	// Validate checks, so they see the payload content. Empty = flag value only.
+	Input []string
+
 	// Schema parameter final facts (embedded to dws.schema.*; assembly pass-through).
 	Enum              []string // accepted values
 	Format            string   // machine-readable format (e.g. uri)
@@ -179,6 +191,9 @@ const (
 type Constraint struct {
 	Kind  ConstraintKind
 	Flags []string
+	// PresenceOnly counts explicitly supplied flags, including empty strings
+	// used to clear values in a partial update. Defaults remain unchanged.
+	PresenceOnly bool
 	// Description, when non-empty, replaces the constraint's default help text.
 	Description string
 }
@@ -220,15 +235,19 @@ const (
 //   - Validate / PostMount — orchestration only; must not register business flags
 //     or assemble business params that belong in Flags/ConstParams.
 //
-// Exactly one of RunE / Invoke / Orchestrate must be set; New validates this at
-// construction time. corecmd stays dispatch-agnostic and never calls a backend:
-// the adapters (FromLeafSpec / FromShortcut) supply the body.
+// Exactly one of RunE / Invoke / ResultInvoke / Orchestrate must be set; New
+// validates this at construction time. Non-leaf commands are declared
+// separately through ApplyGroupPolicy so leaf execution fields can never be
+// configured and then silently ignored. corecmd stays dispatch-agnostic and
+// never calls a backend: the adapters (FromLeafSpec / FromShortcut) supply the
+// body.
 type Spec struct {
-	Use     string
-	Short   string
-	Long    string
-	Example string
-	Hidden  bool
+	Use           string
+	Short         string
+	Long          string
+	Example       string
+	Hidden        bool
+	OutputRollout output.RolloutState
 
 	Flags       []FlagSpec
 	Constraints []Constraint
@@ -248,7 +267,8 @@ type Spec struct {
 	// backend call).
 	ConfirmFirst bool
 	// ConstParams are fixed toolArgs merged after flag assembly (e.g. precheckOnly).
-	// They are payload declaration, not user flags, and never satisfy Required.
+	// They are payload declaration, not user flags, never satisfy Required, and
+	// require an Invoke or ResultInvoke dispatcher that consumes assembled args.
 	ConstParams map[string]any
 	// Contract is the authoring-time leaf contract declaration (selection /
 	// interface / parameters / dry-run / identity). When non-empty, embed
@@ -266,6 +286,8 @@ type Spec struct {
 	RunE func(cmd *cobra.Command, args []string) error
 	// Invoke executes a single-step command with the assembled toolArgs.
 	Invoke func(c *Ctx, toolArgs map[string]any) error
+	// ResultInvoke executes once and returns an immutable framework 2.0 result.
+	ResultInvoke func(c *Ctx, toolArgs map[string]any) (output.CommandResult, error)
 	// Orchestrate executes a multi-step command; it assembles whatever payloads
 	// it needs from the Ctx.
 	Orchestrate func(c *Ctx) error
@@ -358,9 +380,12 @@ func (c *Ctx) Yes() bool { return BoolFlag(c.cmd, "yes") }
 // malformed spec can never run the pipeline — write-confirmation prompt
 // included — and then silently exit 0 having done nothing.
 func New(spec Spec) *cobra.Command {
+	spec.ConstParams = cloneConstParams(spec.ConstParams)
 	validateDispatchDecl(spec)
+	validateConstParamsDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	validateInputSpecs(spec.Use, spec.Flags)
 	// Help prose inherits the declaration when not authored separately:
 	// Selection.Examples (already contract-validated against the real flags)
 	// double as the --help Example block, keeping one authored source.
@@ -385,15 +410,52 @@ func New(spec Spec) *cobra.Command {
 	if spec.PostMount != nil {
 		spec.PostMount(cmd)
 	}
+	attachInterfaceBoolConstParams(cmd, spec.ConstParams)
+	if spec.OutputRollout != "" {
+		output.SetCommandRollout(cmd, spec.OutputRollout)
+	}
 	if spec.ConfirmFirst {
 		if cmd.Annotations == nil {
 			cmd.Annotations = map[string]string{}
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
+	installExecution(cmd, executionSpec{
+		Flags:        spec.Flags,
+		Constraints:  spec.Constraints,
+		Safety:       spec.Safety,
+		ConfirmFirst: spec.ConfirmFirst,
+		ConstParams:  spec.ConstParams,
+		Validate:     spec.Validate,
+		RunE:         spec.RunE,
+		Invoke:       spec.Invoke,
+		ResultInvoke: spec.ResultInvoke,
+		Orchestrate:  spec.Orchestrate,
+	})
+	return cmd
+}
+
+// executionSpec is private retained state for the existing RunE pipeline, not
+// another authoring surface. Build-only fields stay on Cobra/ContractFinal.
+// Keeping this separate from Spec also avoids allocating space for zeroed help
+// and Contract fields in every command's execution closure.
+type executionSpec struct {
+	Flags        []FlagSpec
+	Constraints  []Constraint
+	Safety       contract.SafetySpec
+	ConfirmFirst bool
+	ConstParams  map[string]any
+	Validate     func(*cobra.Command, []string) error
+	RunE         func(*cobra.Command, []string) error
+	Invoke       func(*Ctx, map[string]any) error
+	ResultInvoke func(*Ctx, map[string]any) (output.CommandResult, error)
+	Orchestrate  func(*Ctx) error
+}
+
+func installExecution(cmd *cobra.Command, spec executionSpec) {
 	if spec.RunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
+			if err := runDeclaredPreflight(cmd, args, &spec); err != nil {
 				return err
 			}
 			if !spec.ConfirmFirst {
@@ -403,10 +465,10 @@ func New(spec Spec) *cobra.Command {
 			}
 			return spec.RunE(cmd, args)
 		}
-		return cmd
+		return
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := runDeclaredPreflight(cmd, args, spec); err != nil {
+		if err := runDeclaredPreflight(cmd, args, &spec); err != nil {
 			return err
 		}
 		ctx := newCtx(cmd, args, spec.Flags)
@@ -430,9 +492,29 @@ func New(spec Spec) *cobra.Command {
 				return err
 			}
 		}
+		if spec.ResultInvoke != nil {
+			if !output.UsesUnifiedResult(cmd) {
+				return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
+			}
+			result, err := spec.ResultInvoke(ctx, toolArgs)
+			if err != nil {
+				return err
+			}
+			return output.StoreResult(cmd.Context(), result)
+		}
 		return spec.Invoke(ctx, toolArgs)
 	}
-	return cmd
+}
+
+func cloneConstParams(params map[string]any) map[string]any {
+	if params == nil {
+		return nil
+	}
+	frozen := make(map[string]any, len(params))
+	for key, value := range params {
+		frozen[key] = value
+	}
+	return frozen
 }
 
 // ConfirmFirstAnnotation marks commands whose Spec declared ConfirmFirst. The
@@ -453,11 +535,16 @@ func HasDeclaredConfirmFirst(cmd *cobra.Command) bool {
 // known. Keeping this in one function is deliberate — when the RunE escape
 // hatch carried its own copy it silently dropped every declared check, so a
 // spec could publish Required flags that nothing enforced.
-func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
+func runDeclaredPreflight(cmd *cobra.Command, args []string, spec *executionSpec) error {
 	if spec.ConfirmFirst {
 		if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 			return err
 		}
+	}
+	// Input resolution rewrites explicit @file / stdin values in place so the
+	// required/enum/constraint/Validate stages below check the payload content.
+	if err := resolveInputFlags(cmd, spec.Flags); err != nil {
+		return err
 	}
 	if err := ValidateRequired(cmd, spec.Flags); err != nil {
 		return err
@@ -486,12 +573,15 @@ func validateDispatchDecl(spec Spec) {
 	if spec.Invoke != nil {
 		declared++
 	}
+	if spec.ResultInvoke != nil {
+		declared++
+	}
 	if spec.Orchestrate != nil {
 		declared++
 	}
 	if declared != 1 {
 		panic(fmt.Sprintf(
-			"command %q must declare exactly one of RunE/Invoke/Orchestrate, got %d",
+			"command %q must declare exactly one of RunE/Invoke/Orchestrate, got %d (ResultInvoke is also a dispatcher)",
 			spec.Use, declared))
 	}
 	// ConfirmFirst only changes the ordering of a declared confirmation gate.
@@ -499,6 +589,21 @@ func validateDispatchDecl(spec Spec) {
 		panic(fmt.Sprintf(
 			"command %q sets ConfirmFirst but Safety.Confirmation is not user_required",
 			spec.Use))
+	}
+}
+
+func validateConstParamsDecl(spec Spec) {
+	if len(spec.ConstParams) == 0 {
+		return
+	}
+	if spec.Invoke == nil && spec.ResultInvoke == nil {
+		panic(fmt.Sprintf("command %q ConstParams require Invoke or ResultInvoke", spec.Use))
+	}
+	for _, flag := range spec.Flags {
+		key := bindKey(flag)
+		if _, conflicts := spec.ConstParams[key]; conflicts {
+			panic(fmt.Sprintf("command %q ConstParams key %q conflicts with flag --%s", spec.Use, key, flag.Name))
+		}
 	}
 }
 
@@ -558,18 +663,7 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 		for _, alias := range flag.Aliases {
 			RegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
 			_ = cmd.Flags().MarkHidden(alias)
-			if registered := cmd.Flags().Lookup(alias); registered != nil {
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOf,
-					flag.Name,
-				)
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOrigin,
-					runtimeannotate.FlagAliasOriginCorecmdV1,
-				)
-			}
+			AnnotateFlagAlias(cmd, alias, flag.Name)
 		}
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)
@@ -578,6 +672,30 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 			_ = cmd.Flags().MarkHidden(flag.Name)
 		}
 	}
+}
+
+// AnnotateFlagAlias records framework-owned evidence that aliasName is a hidden
+// compatibility alias for canonicalName. It is for commands that already own
+// their Cobra flag registration outside FlagSpec but still need the same
+// interface-snapshot alias contract as FlagSpec.Aliases.
+func AnnotateFlagAlias(cmd *cobra.Command, aliasName, canonicalName string) {
+	if cmd == nil {
+		return
+	}
+	registered := cmd.Flags().Lookup(aliasName)
+	if registered == nil {
+		return
+	}
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOf,
+		canonicalName,
+	)
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOrigin,
+		runtimeannotate.FlagAliasOriginCorecmdV1,
+	)
 }
 
 // RegisterFlag registers one flag by Kind. Default is applied at registration
@@ -618,10 +736,69 @@ func registerFlagP(cmd *cobra.Command, kind FlagKind, name, shorthand, def, usag
 		if value := strings.TrimSpace(def); value != "" {
 			defaults = strings.Split(value, ",")
 		}
-		cmd.Flags().StringSliceP(name, shorthand, defaults, usage)
+		value := &commandStringSliceValue{values: defaults}
+		cmd.Flags().VarP(value, name, shorthand, usage)
 	default:
 		cmd.Flags().StringP(name, shorthand, def, usage)
 	}
+}
+
+// commandStringSliceValue preserves pflag's StringSlice contract while
+// avoiding encoding/csv's 4 KiB writer allocation for the overwhelmingly
+// common empty default. pflag calls String during every flag registration to
+// capture DefValue, so the stock implementation otherwise pays that buffer for
+// every complete-tree build before any command executes.
+type commandStringSliceValue struct {
+	values  []string
+	changed bool
+}
+
+func (s *commandStringSliceValue) Set(raw string) error {
+	values, err := readCommandStringSlice(raw)
+	if err != nil {
+		return err
+	}
+	if !s.changed {
+		s.values = values
+	} else {
+		s.values = append(s.values, values...)
+	}
+	s.changed = true
+	return nil
+}
+
+func (*commandStringSliceValue) Type() string { return "stringSlice" }
+
+func (s *commandStringSliceValue) String() string {
+	if s == nil || len(s.values) == 0 {
+		return "[]"
+	}
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+	_ = writer.Write(s.values)
+	writer.Flush()
+	return "[" + strings.TrimSuffix(buffer.String(), "\n") + "]"
+}
+
+func (s *commandStringSliceValue) Append(value string) error {
+	s.values = append(s.values, value)
+	return nil
+}
+
+func (s *commandStringSliceValue) Replace(values []string) error {
+	s.values = values
+	return nil
+}
+
+func (s *commandStringSliceValue) GetSlice() []string {
+	return s.values
+}
+
+func readCommandStringSlice(raw string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	return csv.NewReader(strings.NewReader(raw)).Read()
 }
 
 // ValidateRequired reproduces the handwritten required semantics: plain Required
@@ -669,7 +846,10 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 		}
 	}
 	if err := cmdutil.MissingRequiredFlagsError(cmd, plain...); err != nil {
-		return err
+		return apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("missing_required_flags"),
+		)
 	}
 	for _, flag := range flags {
 		if !flag.Required || flag.ValidationMode == ValidationShortcut ||
@@ -681,7 +861,7 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 			if hint == "" {
 				hint = fmt.Sprintf("flag --%s is required", flag.Name)
 			}
-			return fmt.Errorf("%s", hint)
+			return apperrors.NewValidation(hint)
 		}
 	}
 	return nil
@@ -1096,7 +1276,11 @@ func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Con
 	for _, constraint := range constraints {
 		var set []string
 		for _, name := range constraint.Flags {
-			if constraintProvided(cmd, flagsByName[name]) {
+			provided := constraintProvided(cmd, flagsByName[name])
+			if constraint.PresenceOnly {
+				provided = flagNameProvided(cmd, flagsByName[name])
+			}
+			if provided {
 				set = append(set, name)
 			}
 		}
@@ -1360,6 +1544,20 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		d.PreviewKind = strings.TrimSpace(d.PreviewKind)
 		payload.DryRun = &d
 	}
+	if decl.Result != nil {
+		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)
+		if err != nil {
+			panic(fmt.Sprintf("command %q has invalid Contract.Result: %v", cmd.Name(), err))
+		}
+		payload.Result = result
+	}
+	if decl.Pagination != nil {
+		pagination, err := contract.NormalizePaginationSpec(decl.Pagination, decl.Identity.CanonicalPath)
+		if err != nil {
+			panic(fmt.Sprintf("command %q has invalid Contract.Pagination: %v", cmd.Name(), err))
+		}
+		payload.Pagination = pagination
+	}
 	if decl.Interface != nil {
 		iface := &contract.InterfaceSpec{
 			Mode:         strings.TrimSpace(decl.Interface.Mode),
@@ -1422,8 +1620,16 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	}
 	if len(decl.Parameters) > 0 {
 		payload.Parameters = append([]contract.ParamDecl(nil), decl.Parameters...)
+		for index := range payload.Parameters {
+			payload.Parameters[index].Enum = append([]string(nil), decl.Parameters[index].Enum...)
+			payload.Parameters[index].AnyOf = append([]contract.FormatAlternative(nil), decl.Parameters[index].AnyOf...)
+			if decl.Parameters[index].Required != nil {
+				required := *decl.Parameters[index].Required
+				payload.Parameters[index].Required = &required
+			}
+		}
 	}
-	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
+	contractfinal.RegisterOwnedRuntimeContractFinal(cmd, payload)
 }
 
 // schemaSafetyFromDecl copies the single command SafetySpec into the final
@@ -1463,14 +1669,16 @@ func flagKindSchemaType(kind FlagKind) string {
 	}
 }
 
-// AnnotateConstraints projects the relationship constraints into the Agent
-// Runtime Schema: exactly_one decomposes into require_one_of + mutually_exclusive
+// AnnotateConstraints records executable relationship constraints for Schema
+// assembly: exactly_one decomposes into require_one_of + mutually_exclusive
 // (matching the handwritten commands' use of AnnotateRuntimeConstraints).
 //
 // When a group still has hidden siblings, the full declared flag list is
-// projected (not collapsed to a single visible "required"). ValidateConstraints
-// accepts any member of the declared group — including hidden — so marking the
-// sole visible flag required would falsely claim declare ≡ execute.
+// retained here (not collapsed to a single visible "required").
+// ValidateConstraints accepts any member of the declared group — including
+// hidden — so marking the sole visible flag required would falsely claim
+// declare ≡ execute. Final Schema assembly separately canonicalizes reviewed
+// aliases and projects this executable contract onto published inputs.
 func AnnotateConstraints(cmd *cobra.Command, constraints []Constraint) {
 	var projected runtimeannotate.RuntimeSchemaConstraints
 	var required []string

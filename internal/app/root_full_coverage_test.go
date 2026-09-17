@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -37,29 +37,64 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 	rootNormalizeProcessProfileArgs = func() func() { return func() {} }
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 	rootStopAllStdioClients = func() {}
+	var executedLeaf *cobra.Command
 	rootNewRootCommandWithEngine = func(context.Context, *pipeline.Engine) *cobra.Command {
-		return &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		sheet := &cobra.Command{Use: "sheet"}
+		executedLeaf = &cobra.Command{Use: "read", Run: func(*cobra.Command, []string) {}}
+		sheet.AddCommand(executedLeaf)
+		root.AddCommand(sheet)
+		return root
 	}
-	rootExecuteCommand = func(cmd *cobra.Command) (*cobra.Command, error) { return cmd, nil }
-	if code := Execute(); code != 0 {
-		t.Fatalf("successful Execute code = %d", code)
+	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { return executedLeaf, nil }
+	if code, commandPath, errorMessage := ExecuteWithTelemetry(); code != 0 || commandPath != "sheet read" || errorMessage != "" {
+		t.Fatalf("successful ExecuteWithTelemetry = code %d path %q error %q", code, commandPath, errorMessage)
 	}
 
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return errors.New("alias/canonical conflict") }
-	if code := Execute(); code == 0 {
-		t.Fatal("pre-parse conflict returned zero")
+	if code, _, errorMessage := ExecuteWithTelemetry(); code == 0 || errorMessage != "alias/canonical conflict" {
+		t.Fatalf("pre-parse conflict = code %d error %q", code, errorMessage)
 	}
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 
 	wantErr := errors.New("unknown command missing")
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { return nil, wantErr }
-	if code := Execute(); code == 0 {
-		t.Fatal("failed Execute returned zero")
+	if code, _, errorMessage := ExecuteWithTelemetry(); code == 0 || errorMessage != "unknown command" {
+		t.Fatalf("failed ExecuteWithTelemetry = code %d error %q", code, errorMessage)
 	}
 
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { panic("boom") }
-	if code := Execute(); code != 5 {
-		t.Fatalf("panic Execute code = %d", code)
+	os.Args = []string{"dws", "sheet", "read"}
+	if code, commandPath, errorMessage := ExecuteWithTelemetry(); code != 5 || commandPath != "sheet read" || errorMessage != "internal panic" {
+		t.Fatalf("panic ExecuteWithTelemetry = code %d path %q error %q", code, commandPath, errorMessage)
+	}
+}
+
+func TestCrossPlatformCoverageTelemetryCommandPath(t *testing.T) {
+	if got := telemetryCommandPath(nil); got != "dws" {
+		t.Fatalf("nil command path = %q, want dws", got)
+	}
+	if got := telemetryCommandPathForArgs(nil, nil); got != "dws" {
+		t.Fatalf("nil root command path = %q, want dws", got)
+	}
+	root := &cobra.Command{Use: "dws"}
+	sheet := &cobra.Command{Use: "sheet"}
+	read := &cobra.Command{Use: "read <range>"}
+	sheet.AddCommand(read)
+	root.AddCommand(sheet)
+	if got := telemetryCommandPath(root); got != "dws" {
+		t.Fatalf("root command path = %q, want dws", got)
+	}
+	if got := telemetryCommandPath(read); got != "sheet read" {
+		t.Fatalf("leaf command path = %q, want sheet read", got)
+	}
+	root.PersistentFlags().String("profile", "", "")
+	read.Aliases = []string{"get"}
+	if got := telemetryCommandPathForArgs(root, []string{"--profile", "corp-a", "sheet", "get", "A1:B2"}); got != "sheet read" {
+		t.Fatalf("pre-execution command path = %q, want sheet read", got)
+	}
+	if got := telemetryCommandPathForArgs(root, []string{"missing"}); got != "dws" {
+		t.Fatalf("unknown pre-execution command path = %q, want dws", got)
 	}
 }
 
@@ -67,15 +102,20 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 	oldLoadPlugins := rootLoadPlugins
 	oldEdition := edition.Get()
 	oldVersion, oldBuild, oldCommit := version, buildTime, gitCommit
+	oldArgs := os.Args
 	t.Cleanup(func() {
 		rootLoadPlugins = oldLoadPlugins
 		edition.Override(oldEdition)
 		version, buildTime, gitCommit = oldVersion, oldBuild, oldCommit
+		os.Args = oldArgs
 	})
 
-	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	var pluginProfileSelectors []string
+	rootLoadPlugins = func(_ *cobra.Command, _ *pipeline.Engine, _ executor.Runner, selector string) []*cobra.Command {
+		pluginProfileSelectors = append(pluginProfileSelectors, selector)
 		return []*cobra.Command{{Use: "plugin-added", Run: func(*cobra.Command, []string) {}}}
 	}
+	os.Args = []string{"dws", "--profile=explicit-profile"}
 	preRunCalled := false
 	edition.Override(&edition.Hooks{
 		AfterPersistentPreRun: func(*cobra.Command, []string) error { preRunCalled = true; return nil },
@@ -84,6 +124,9 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		},
 	})
 	root := NewRootCommandWithEngine(context.Background(), pipeline.NewEngine())
+	if len(pluginProfileSelectors) != 1 || pluginProfileSelectors[0] != "explicit-profile" {
+		t.Fatalf("plugin profile selector = %#v, want explicit-profile", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"version", "--client-id", "client", "--client-secret", "secret", "--debug"})
@@ -91,7 +134,11 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		t.Fatalf("root version execution = %v preRun=%v", err, preRunCalled)
 	}
 
+	os.Args = []string{"dws", "--profile", "separate-profile"}
 	root = NewRootCommandWithEngine(context.Background(), nil)
+	if len(pluginProfileSelectors) != 2 || pluginProfileSelectors[1] != "separate-profile" {
+		t.Fatalf("space-separated plugin profile selector = %#v, want separate-profile", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(nil)
@@ -109,7 +156,11 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		t.Fatalf("JSON version = %v", err)
 	}
 
+	os.Args = []string{"dws"}
 	root = NewRootCommandWithEngine(context.Background(), nil)
+	if len(pluginProfileSelectors) != 3 || pluginProfileSelectors[2] != "" {
+		t.Fatalf("empty plugin profile selector = %#v, want empty selector", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"version", "--output", "bad\x00path"})
@@ -157,11 +208,11 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	})
 
 	oldMkdir := rootMkdirAll
-	oldCreate := rootCreateFile
+	oldCreate := rootCreateTemp
 	oldClose := rootCloseFile
 	t.Cleanup(func() {
 		rootMkdirAll = oldMkdir
-		rootCreateFile = oldCreate
+		rootCreateTemp = oldCreate
 		rootCloseFile = oldClose
 	})
 	wantErr := errors.New("filesystem")
@@ -193,17 +244,19 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 		t.Fatal("mkdir failure succeeded")
 	}
 	rootMkdirAll = func(string, os.FileMode) error { return nil }
-	rootCreateFile = func(string) (*os.File, error) { return nil, wantErr }
+	rootCreateTemp = func(string, string) (*os.File, error) { return nil, wantErr }
 	if err := configureOutputSink(newOutputCommand(filepath.Join("create-failure", "out"))); err == nil {
 		t.Fatal("create failure succeeded")
 	}
-	rootCreateFile = oldCreate
+	rootCreateTemp = oldCreate
 	file, err := os.CreateTemp(t.TempDir(), "close")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := &cobra.Command{Use: "close"}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-target"),
+	}))
 	rootCloseFile = func(*os.File) error { return wantErr }
 	if err := closeOutputSink(cmd); err == nil {
 		t.Fatal("close failure succeeded")
@@ -216,7 +269,9 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-success-target"),
+	}))
 	if err := closeOutputSink(cmd); err != nil {
 		t.Fatalf("close success = %v", err)
 	}
@@ -238,7 +293,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	oldStdioRegister := rootRegisterResolvedStdioServer
 	oldHooks := rootPluginLoadHooks
 	oldSync := rootPluginSyncSkills
-	oldToken := rootAuthLoadTokenData
+	oldIdentity := rootPluginResolveIdentity
 	t.Cleanup(func() {
 		rootPluginInjectConfigEnv = oldInject
 		rootPluginLoadUser = oldUser
@@ -250,7 +305,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 		rootRegisterResolvedStdioServer = oldStdioRegister
 		rootPluginLoadHooks = oldHooks
 		rootPluginSyncSkills = oldSync
-		rootAuthLoadTokenData = oldToken
+		rootPluginResolveIdentity = oldIdentity
 	})
 
 	p1 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "one"}}
@@ -259,8 +314,10 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	rootPluginInjectConfigEnv = func(*plugin.Loader) {}
 	rootPluginLoadUser = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p1, p2} }
 	rootPluginLoadDev = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p3} }
-	rootAuthLoadTokenData = func(string) (*authpkg.TokenData, error) {
-		return &authpkg.TokenData{UserID: "user", CorpID: "corp"}, nil
+	resolvedProfileSelector := "unset"
+	rootPluginResolveIdentity = func(_ string, selector string) (*profilemetadata.ProfileMetadata, error) {
+		resolvedProfileSelector = selector
+		return &profilemetadata.ProfileMetadata{UserID: "user", CorpID: "corp"}, nil
 	}
 	rootPluginDescriptors = func(p *plugin.Plugin) []mcptypes.ServerDescriptor {
 		if p == p1 {
@@ -316,7 +373,10 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	}
 	synced := false
 	rootPluginSyncSkills = func([]*plugin.Plugin) { synced = true }
-	got := loadPlugins(nil, pipeline.NewEngine(), runnerCoverageFallback{})
+	got := loadPlugins(nil, pipeline.NewEngine(), runnerCoverageFallback{}, "explicit-profile")
+	if resolvedProfileSelector != "explicit-profile" {
+		t.Fatalf("plugin identity profile selector = %q, want explicit-profile", resolvedProfileSelector)
+	}
 	if len(got) != 2 || got[0].Name() != "one-http" || got[1].Name() != "one-stdio" {
 		t.Fatalf("loaded plugin commands = %#v", got)
 	}

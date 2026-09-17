@@ -264,7 +264,7 @@ func TestCrossPlatformCoverageValidateFlagsRequiredAndEnum(t *testing.T) {
 	}
 }
 
-func TestLiveMountPreservesRequiredEnumDeclarationOrder(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountPreservesRequiredEnumDeclarationOrder(t *testing.T) {
 	s := Shortcut{
 		Service: "contact",
 		Command: "+validation-order",
@@ -315,7 +315,7 @@ func TestCrossPlatformCoverageValidateFlagsRejectsEmptyRequiredValuesAndInvalidS
 	}
 }
 
-func TestLiveMountRequiredDefaultStillRequiresChanged(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountRequiredDefaultStillRequiresChanged(t *testing.T) {
 	s := Shortcut{
 		Service: "contact",
 		Command: "+required-default",
@@ -377,7 +377,7 @@ func TestCrossPlatformCoverageDeclarativeConstraintsRejectEmptyAndConflictingVal
 	}
 }
 
-func TestLiveMountCustomConstraintRunsShortcutValidate(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountCustomConstraintRunsShortcutValidate(t *testing.T) {
 	validated := false
 	executed := false
 	s := Shortcut{
@@ -472,9 +472,15 @@ func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 	if got := len(byName["calendar"].Commands()); got != 1 {
 		t.Errorf("calendar has %d leaves, want 1", got)
 	}
+	for name, command := range byName {
+		policy, declared, err := corecmd.GroupPolicyFor(command)
+		if err != nil || !declared || policy.Mode != corecmd.GroupNavigationOnly {
+			t.Errorf("%s shortcut service parent policy = %+v, %v, %v", name, policy, declared, err)
+		}
+	}
 }
 
-func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
+func TestCrossPlatformCoverageBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 	testseam.Swap(t, &allShortcuts, []Shortcut(nil))
 	Register(
 		Shortcut{Service: "calendar", Command: "+builtin", Execute: noop},
@@ -494,7 +500,7 @@ func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 
 func noop(_ *RuntimeContext) error { return nil }
 
-func TestLiveMountEOFRequiresConfirmation(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountEOFRequiresConfirmation(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,
@@ -522,7 +528,7 @@ func TestLiveMountEOFRequiresConfirmation(t *testing.T) {
 	}
 }
 
-func TestLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
 	called := false
 	explicit := contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -587,7 +593,7 @@ func TestLiveMountExplicitSafetyDrivesRuntimeAndContractFinal(t *testing.T) {
 	}
 }
 
-func TestLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,
@@ -614,7 +620,7 @@ func TestLiveMountInteractiveDeclineReturnsCancelError(t *testing.T) {
 	}
 }
 
-func TestLiveMountYesBypassesPrompt(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountYesBypassesPrompt(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskHighWrite,
@@ -638,7 +644,7 @@ func TestLiveMountYesBypassesPrompt(t *testing.T) {
 	}
 }
 
-func TestLiveMountDryRunBypassesPrompt(t *testing.T) {
+func TestCrossPlatformCoverageLiveMountDryRunBypassesPrompt(t *testing.T) {
 	called := false
 	s := Shortcut{
 		Service: "chat", Command: "+send", Risk: RiskWrite,

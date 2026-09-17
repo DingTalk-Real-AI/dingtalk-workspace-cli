@@ -165,7 +165,7 @@ func TestResolveIdentityHeadersOmitsAbsentOrInvalidAgentHost(t *testing.T) {
 	}
 }
 
-func TestRootRejectsInvalidAgentHostBeforeEditionHook(t *testing.T) {
+func TestCrossPlatformCoverageRootRejectsInvalidAgentHostBeforeEditionHook(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	const invalidValue = "DO_NOT_ECHO"
 	t.Setenv(envDWSAgentHost, invalidValue)

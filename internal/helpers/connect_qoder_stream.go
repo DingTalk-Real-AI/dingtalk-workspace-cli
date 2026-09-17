@@ -153,8 +153,13 @@ func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text s
 		sessionID = f.sessions.id(convID)
 	}
 	msg := map[string]any{
-		"type":               "user",
-		"message":            map[string]any{"role": "user", "content": text},
+		"type": "user",
+		"message": map[string]any{
+			"role": "user",
+			"content": []map[string]string{
+				{"type": "text", "text": text},
+			},
+		},
 		"parent_tool_use_id": nil,
 		"session_id":         sessionID,
 	}
@@ -471,10 +476,11 @@ func qoderControlResponse(line, requestID string) (bool, error) {
 
 func parseQoderPersistentLine(line string) (delta, final string, done bool) {
 	var ev struct {
-		Type    string `json:"type"`
-		Subtype string `json:"subtype"`
-		Error   string `json:"error"`
-		Result  string `json:"result"`
+		Type    string   `json:"type"`
+		Subtype string   `json:"subtype"`
+		Error   string   `json:"error"`
+		Errors  []string `json:"errors"`
+		Result  string   `json:"result"`
 		Message struct {
 			Content []struct {
 				Type string `json:"type"`
@@ -503,6 +509,9 @@ func parseQoderPersistentLine(line string) (delta, final string, done bool) {
 		if ev.Subtype != "" && ev.Subtype != "success" {
 			if ev.Error != "" {
 				return "", ev.Error, true
+			}
+			if len(ev.Errors) > 0 {
+				return "", strings.Join(ev.Errors, "\n"), true
 			}
 		}
 		if t := text(); t != "" {

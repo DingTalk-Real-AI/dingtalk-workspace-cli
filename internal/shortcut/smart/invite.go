@@ -99,15 +99,48 @@ var Invite = shortcut.Shortcut{
 			return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
 		}
 
-		// Batch-add all participants. eventId + attendeesToAdd copied verbatim
-		// from the helper's `attendee add` call site (add_calendar_participant).
-		return rt.CallMCP("add_calendar_participant", map[string]any{
+		preflight, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		if _, err := calendarSmartRequireEvent(preflight, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":      true,
+				"dryRun":       true,
+				"executed":     false,
+				"eventId":      eventID,
+				"inviteeCount": len(userIDs),
+			})
+		}
+
+		// Batch-add all participants and require explicit success.
+		written, err := rt.CallMCPWriteDataStrict("calendar", "add_calendar_participant", map[string]any{
 			"eventId":        eventID,
 			"attendeesToAdd": userIDs,
+		})
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartWriteReceipt(written, "calendar/add_calendar_participant"); err != nil {
+			return err
+		}
+		// Participant readback exposes display names, not the userIds used by
+		// the write. The explicit write receipt confirms the invitation;
+		// display-name equality cannot independently verify its targets.
+		return rt.Output(map[string]any{
+			"success":      true,
+			"eventId":      eventID,
+			"invitedCount": len(userIDs),
+			"acknowledged": true,
+			"verified":     false,
 		})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Invite, "参会人添加接口已明确返回成功的邀请；acknowledged=true，verified=false 表示未进行参会人身份读回验证")
 	shortcut.Register(Invite)
 }

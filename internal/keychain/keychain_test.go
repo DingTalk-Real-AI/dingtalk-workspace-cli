@@ -184,6 +184,35 @@ func TestRemoveAuthTokenEntriesPreservesOtherAccounts(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRemoveAccountEntriesWithPrefixesPreservesUnrelatedAccounts(t *testing.T) {
+	service := "test-prefix-cleanup"
+	entries := map[string]string{
+		"appsecret:client-a":     "secret-a",
+		"client-secret:client-b": "secret-b",
+		"app-token:client-a":     "token-a",
+		"auth-token":             "user-token",
+		"unrelated":              "keep",
+	}
+	for account, value := range entries {
+		if err := Set(service, account, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RemoveAccountEntriesWithPrefixes(service, "appsecret:", "client-secret:", "app-token:"); err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{"appsecret:client-a", "client-secret:client-b", "app-token:client-a"} {
+		if got, err := Get(service, account); err != nil || got != "" {
+			t.Fatalf("credential %q survived: %q, %v", account, got, err)
+		}
+	}
+	for account, want := range map[string]string{"auth-token": "user-token", "unrelated": "keep"} {
+		if got, err := Get(service, account); err != nil || got != want {
+			t.Fatalf("unrelated %q = %q, %v; want %q", account, got, err, want)
+		}
+	}
+}
+
 func TestMigrationNoLegacyData(t *testing.T) {
 	t.Parallel()
 

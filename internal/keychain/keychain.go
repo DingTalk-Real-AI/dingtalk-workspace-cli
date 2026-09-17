@@ -178,6 +178,13 @@ func RemoveAuthTokenEntries(service string) error {
 	return platformRemoveAuthTokenEntries(service)
 }
 
+// RemoveAccountEntriesWithPrefixes removes every account whose original name
+// starts with one of prefixes. It is used by explicit credential-reset flows;
+// ordinary profile operations must continue removing only their exact slots.
+func RemoveAccountEntriesWithPrefixes(service string, prefixes ...string) error {
+	return platformRemoveAccountEntriesWithPrefixes(service, prefixes)
+}
+
 // Exists checks if an entry exists in the keychain.
 func Exists(service, account string) bool {
 	val, err := Get(service, account)

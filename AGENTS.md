@@ -26,7 +26,25 @@ unrelated work, and use `gofmt` for every modified Go file.
 
 Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
-`internal/app`). There is no
+`internal/app`). Schema identity is **not** produced at compile or release
+time; shipping binaries do not embed binary-pinned cache digests. On
+supported platforms (darwin/linux/windows amd64/arm64) production enables the
+persistent cache: install or the first schema-consuming path generates
+identity from this binary's live declarations, writes authenticated disk
+shards, and later processes load that local identity then verify digests
+before reading protobuf. A missing sidecar generates then uses the cache;
+it is not a permanent live-only mode. Plugins that change the command
+surface still disable cache publication, repair, and prewarm; read-only
+serving of the unchanged reviewed surface continues (plugin commands never
+enter the Schema surface, cached or live). Tests may also inject identity via
+`RegisterSchemaCacheOptions`.
+See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
+local-identity shipping model, complete-tree performance contract, cache
+delivery; no sibling plan/design/performance pages are kept. Telemetry
+delivery is the detached background-process model (see
+`.changes/clitrack-detached-reporting.md`), not the retired in-process
+`NoFlushWait` CLI default.
+There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
 `internal/cli/schema_catalog/`, `internal/cli/schema_meta_index.gob`, and
@@ -44,7 +62,8 @@ Schema contract) keep separate authorities — do not merge them with
 ## Command framework declaration
 
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
-- Today: `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
+- Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
+- Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves
 - **Declare = final Schema source**: `Flags` / `Constraints` / `Safety` / `ConstParams` / `Contract` (`corecmd.ContractDecl`; nested fields are `contract.*`)
 - Naming: `ContractDecl` is the authoring leaf declaration. "Schema" means Catalog / `ToolSpec` delivery — do not reintroduce `SchemaDecl`.
 - `Safety` uses `contract.SafetySpec` (`internal/corecmd/contract` only — no `cli.*` type alias). Its `confirmation` drives the runtime gate; `effect` / `risk` / `idempotency` are published unchanged. When `Contract` is set, convert once via `contractfinal.RegisterRuntimeContractFinal` (all callers — `corecmd.New` registers internally); assembly **pass-throughs** Final.
@@ -55,11 +74,16 @@ Schema contract) keep separate authorities — do not merge them with
   - homology gates → `internal/cli/homology`
   - Catalog assembly / `ResolveMeta` (`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`); go:embed only for reviewed inputs → `internal/cli` root (package-local aliases for annotate/store APIs live in `runtime_schema_seam.go`; the former `cli/runtimeannotate` / `cli/contractfinal` shim packages are removed — import `corecmd/*` directly)
   - **Hard rule**: `internal/corecmd` (and its subpackages) must **not** import any `internal/cli` package
+- Command metadata must not keep discarded Cobra trees alive. Use framework
+  `commandstore.Map` weak keys for DTO metadata; values must not reference commands.
+  Execution-hook lookups must also use weak values when closures can capture a
+  command; the installed RunE pipeline owns those hooks strongly.
 - Authoring tiers (current, not aspirational):
   - **Tier1** — `corecmd.New` / `helpers.NewLeafCommand` (fully managed declare + execute)
   - **Tier2** — `DeclareLeafMetadata` (helpers migration; **Shortcut may also use this path — acceptable**)
   - **Tier3** — bare Cobra (should shrink over time; reviewed exclusions where needed)
   - Long-term outlook only: broader mcpbind / fewer hand-written `Execute` bodies. **Not** a current hard requirement to delete `Shortcut.Execute` or force mcpbind.
+- Group policy is separate from the leaf tiers: `corecmd.Spec` remains leaf-only. `ApplyGroupPolicy` must not infer or enable `TraverseChildren`; parent local-flag inheritance remains an explicit owning-command surface.
 - Description declare vs delivery: construction requires `ContractDecl.Description` (evidence). Catalog delivery prefers Cobra Long → provenance `cobra_help`; without Long, declared text → `contract_final`. Title: declared first, then Short, then MCP. Do **not** read this as "declare = wire final" or dual authority.
 - **Execute** = hooks (`Validate` / `Call` / `RunE` / `PostMount`) — not a second surface authority
 - Declaration path has **no reviewed parallel fields**; migration-only `runtime_gate` annotate until `Safety` is declared
@@ -167,6 +191,21 @@ CI determinism (`check-schema-assembly.sh`) and policy jq gates consume a
 fresh assembly dump; runtime consumes the same `ResolveSchemaBuild` path via
 `RegisterSchemaSourceRoot`. Neither path may reopen annotations, merge source
 records, or use a previous Catalog JSON as a source.
+
+Pure typed consumption lives in `internal/cli/schemaruntime`, with parent-cli
+aliases for compatibility. It must remain independent of cli/Cobra/app/auth.
+The private generated protobuf lives in `internal/cli/schemacachepb`; bounded
+authenticated I/O and atomic publication live in `internal/schemacache` and
+must not call payload parsers. Framework constraint DTO normalization belongs
+to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
+`internal/schemareader` owns the immutable binary identity and composes that
+backend with the same typed decoders used by the CLI. Keep repair and process
+memoization in cli. Every public process invocation constructs the same complete
+Cobra tree before parsing argv, including root help, version, Schema, utilities,
+business commands, and completion. Do not add argv-selected product trees,
+pre-Cobra Schema execution, or a separate root-help projection.
+The startup warning's agent-relative paths are shared through internal/skillpaths.
+Publish the live Catalog pointer only after its Meta projection is complete.
 
 ### Assembly vs consumption
 
@@ -464,6 +503,134 @@ Keep CLI confirmation behavior and Schema metadata consistent, and add a
 semantic regression test through the final embedded loader/query delivery
 path; a generator unit test or JSON count alone is insufficient.
 
+## Unified result Schema and performance
+
+The unified runtime envelope and the per-command Schema result declaration are
+related but distinct contracts:
+
+- Runtime owns the outer machine envelope (`ok`, `outcome`, `data`, `error`,
+  `meta`) and derives it through `internal/output`. Business commands return a
+  `CommandResult`; they must not hand-author the outer JSON shape.
+- A leaf `Contract.Result` / `contract.ResultSpec` describes the reviewed
+  business value inside `data`. It may declare `outcomes`, `data_schema`, and
+  `sensitive_paths`. `Contract.Pagination` is a separate command capability
+  because pagination is emitted under envelope `meta`, not inside `data`.
+- `outcomes` is the set of results a command may produce; it is not the outcome
+  of the current invocation. `data_schema` is a JSON Schema object for business
+  data and must not duplicate the framework envelope.
+- Result declarations are delivered in the full leaf and in the reviewed
+  `--compact` Agent projection. Compact retains the normalized `result` object
+  verbatim but still omits provenance, interface bindings, and other audit-only
+  fields. Product/group summaries remain navigation views and need not repeat
+  every leaf Result. When an Agent needs return-shape facts, query the compact
+  leaf directly; do not load the whole full Catalog.
+- A missing `result` means “no reviewed return-value declaration is published
+  for this leaf.” It does **not** prove that the runtime is legacy, and it must
+  not be filled by inference from examples, MCP samples, or previous command
+  output. Runtime rollout remains an internal per-command fact.
+- The public contract has no `contract_version`, no `--output-contract`, and no
+  Agent-selectable protocol alias. Agents continue to request machine output
+  with `--format json`; migrated commands use the unified result directly and
+  unmigrated commands retain their current legacy output.
+- Existing `dev` / `devapp` pilot coverage is gradual. Active reviewed
+  `devapp` shortcuts are gated on a non-empty Result declaration, while `dev`
+  currently has representative Result coverage. Do not describe that as
+  repository-wide coverage. Any newly activated Agent-visible command should
+  add and test its Result declaration; the remaining pilot gaps should shrink,
+  not expand.
+
+The compact/full leaf `result` object has one stable shape:
+
+```json
+{
+  "result": {
+    "outcomes": ["success", "pending", "partial_failure", "failure"],
+    "data_schema": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "description": "Stable resource ID"},
+              "name": {"type": "string", "description": "Display name"}
+            }
+          }
+        }
+      }
+    },
+    "sensitive_paths": ["credential.secret"]
+  },
+  "pagination": {
+    "kind": "cursor",
+    "cursor_parameter": "cursor",
+    "meta_path": "meta.pagination",
+    "endpoint_exhausted_path": "meta.pagination.endpoint_exhausted",
+    "next_token_path": "meta.pagination.next_token"
+  }
+}
+```
+
+Field rules:
+
+| Field | Required | Contract |
+|---|---|---|
+| `outcomes` | yes | Non-empty unique subset of `success`, `pending`, `partial_failure`, `failure`; normalization publishes canonical order. |
+| `data_schema` | yes | One recursive JSON Schema **object** describing only the runtime envelope's `data` value. Every named `properties` child must have a non-empty `description`. It must not duplicate `ok`, `outcome`, `error`, or `meta`. |
+| `sensitive_paths` | no | Unique safe dot paths relative to `data`; renderers/redaction consumers must not treat them as shell/JQ expressions. |
+
+Optional members are omitted, never emitted as `null`. A leaf without a
+reviewed Result omits the entire `result` key. Compact must preserve the same
+normalized Result value as the full leaf; it must not summarize, infer, rename,
+or independently rebuild any Result field. Product/group summaries do not
+aggregate child Result objects.
+
+`pagination` is a sibling of `result`, not a child. It declares the canonical
+CLI cursor parameter and the fixed framework paths under `meta.pagination`.
+Product response fields used to derive that metadata remain mapper internals;
+they are not part of `result.data_schema`. Do not execute a second request to
+derive pagination metadata.
+
+Invalid result declarations fail closed during normalization: unknown or
+duplicate outcomes, a non-object/multiple `data_schema`, unsafe or duplicate
+sensitive paths, unsupported pagination kinds, attempts to override framework
+meta paths, and an invalid cursor parameter must be rejected rather than
+silently removed.
+Full-leaf wire round trips must
+preserve the normalized Result exactly. Do not commit generated Schema JSON as
+evidence; tests construct contracts in Go and runtime/CI assemble the Catalog
+from declarations.
+
+### Performance model and rules
+
+- Catalog construction is declaration-driven and cached through the existing
+  lazy `sync.Once` delivery path. Do not reassemble or reopen annotations per
+  command invocation, per leaf lookup, or per renderer.
+- Normalizing one Result declaration is linear in the size of that declaration.
+  Full `schema --all` is linear in tools + parameters + Result schema bytes and
+  is an audit/compatibility export, not the normal Agent discovery path.
+  Overview → compact product/group → compact leaf remains the normal route;
+  only the final leaf carries its Result declaration.
+- Constructing a `CommandResult` defensively clones result data and validates
+  invariants; rendering is buffer-first and then writes once. Both CPU cost and
+  transient memory are O(payload size), with roughly one additional in-memory
+  rendered copy. This buys immutability and prevents partial JSON leakage, but
+  it is not free.
+- Large list/search commands must use bounded pages and publish continuation
+  facts. The current emitter buffers one command result/page before publishing;
+  pagination is the memory bound. Continuous event streams are a separate,
+  command-specific protocol and are not described by `ResultSpec`.
+- A `dual_validate` command must execute the business request exactly once,
+  validate a shadow unified result, and preserve legacy bytes. Never obtain
+  validation by issuing a second network or write request.
+- Filters and alternate formats are render-time work over the same in-memory
+  result. They must not rerun the business operation or rebuild Schema.
+- Performance changes must preserve the one-result, buffer-first, fail-closed,
+  and atomic `--output` guarantees. Do not trade correctness for a microbenchmark
+  improvement. For a material hot-path change, benchmark representative small
+  and page-sized payloads and report allocations/bytes as well as latency.
+
 ## Current Schema boundaries
 
 - `schema list` remains a progressive overview. `schema --all` is the stable
@@ -479,8 +646,9 @@ path; a generator unit test or JSON count alone is insufficient.
   a complete compatibility baseline.
 - `dws <path> --help` defines whether Cobra exposes a path and which flags the
   executable accepts. A compact leaf defines Agent selection, CLI parameters,
-  constraints, and safety/confirmation semantics. Full leaf fields such as
-  `property`, `interface_ref`, and provenance are audit facts. A conflict is
-  contract drift, not permission to guess.
+  constraints, safety/confirmation semantics, and any reviewed `result`
+  contract. Full leaf fields such as `property`, `interface_ref`, and
+  provenance are audit facts. A conflict is contract drift, not permission to
+  guess.
 - Schema and Help describe commands; neither returns DingTalk business data.
   After discovery, execute the real read/search/list command to obtain data.

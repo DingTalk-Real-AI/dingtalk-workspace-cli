@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	configpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -56,14 +58,16 @@ var (
 )
 
 var (
-	appConfigStoreSecret       = StoreSecret
-	appConfigMarshalIndent     = json.MarshalIndent
-	appConfigAtomicWrite       = helpers.AtomicWriteJSON
-	appConfigReadFile          = os.ReadFile
-	appConfigRemove            = os.Remove
-	appConfigLoad              = LoadAppConfig
-	appConfigResolveSecret     = ResolveSecret
-	appConfigBeforeResolveLock = func() {}
+	appConfigStoreSecret             = StoreSecret
+	appConfigMarshalIndent           = json.MarshalIndent
+	appConfigAtomicWrite             = helpers.AtomicWriteJSON
+	appConfigReadFile                = os.ReadFile
+	appConfigRemove                  = os.Remove
+	appConfigLoad                    = LoadAppConfig
+	appConfigResolveSecret           = ResolveSecret
+	appConfigRemoveCredentialEntries = keychain.RemoveAccountEntriesWithPrefixes
+	appConfigAcquireDualLock         = AcquireDualLock
+	appConfigBeforeResolveLock       = func() {}
 )
 
 // Cached resolved credentials (avoid repeated keychain access).
@@ -107,6 +111,18 @@ func LoadAppConfig(configDir string) (*AppConfig, error) {
 // If the client secret is a plain string, it will be stored in keychain
 // and the config file will contain a reference to it.
 func SaveAppConfig(configDir string, config *AppConfig) error {
+	lock, err := appConfigAcquireDualLock(context.Background(), configDir)
+	if err != nil {
+		return fmt.Errorf("locking app config: %w", err)
+	}
+	defer lock.Release()
+	return saveAppConfigLocked(configDir, config)
+}
+
+// saveAppConfigLocked persists app config while the caller holds the shared
+// auth dual lock. Keeping the lock outside the keychain→app.json→legacy-slot
+// sequence makes credential replacement atomic across DWS processes.
+func saveAppConfigLocked(configDir string, config *AppConfig) error {
 	// Store plain secret in keychain, convert to reference
 	if config.ClientSecret.IsPlain() && config.ClientID != "" {
 		storedRef, err := appConfigStoreSecret(config.ClientID, config.ClientSecret)
@@ -130,6 +146,14 @@ func SaveAppConfig(configDir string, config *AppConfig) error {
 	path := GetAppConfigPath(configDir)
 	if err := appConfigAtomicWrite(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("writing app config: %w", err)
+	}
+	// Only delete the historical slot after the canonical reference is durably
+	// present in app.json. This ordering prevents a failed config write from
+	// leaving an explicit legacy SecretRef dangling.
+	if isCanonicalClientSecretRef(config.ClientSecret, config.ClientID) {
+		if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(config.ClientID)); err != nil {
+			slog.Warn("auth: failed to remove legacy Client Secret slot", "client_id", config.ClientID, "error", err)
+		}
 	}
 	cleanupLegacySiblingAppConfig(configDir, config)
 
@@ -174,11 +198,28 @@ func cleanupLegacySiblingAppConfig(configDir string, config *AppConfig) {
 
 // DeleteAppConfig removes the app configuration and associated keychain secrets.
 func DeleteAppConfig(configDir string) error {
+	lock, err := appConfigAcquireDualLock(context.Background(), configDir)
+	if err != nil {
+		return fmt.Errorf("locking app config reset: %w", err)
+	}
+	defer lock.Release()
+	return deleteAppConfigLocked(configDir)
+}
+
+func deleteAppConfigLocked(configDir string) error {
 	// Load existing config to clean up keychain
 	existing, _ := LoadAppConfig(configDir)
 	if existing != nil {
 		RemoveSecretStore(existing.ClientSecret)
 	}
+	// Explicit auth reset removes every application credential namespace,
+	// including orphaned slots from older app.json versions and App Tokens.
+	credentialCleanupErr := appConfigRemoveCredentialEntries(
+		keychain.Service,
+		secretKeyPrefix,
+		clientSecretPrefix,
+		appTokenPrefix,
+	)
 
 	// Remove config file
 	path := GetAppConfigPath(configDir)
@@ -198,6 +239,9 @@ func DeleteAppConfig(configDir string) error {
 	cachedResolvedSecret = ""
 	cachedResolvedMu.Unlock()
 
+	if credentialCleanupErr != nil {
+		return fmt.Errorf("removing application credential entries: %w", credentialCleanupErr)
+	}
 	return nil
 }
 

@@ -16,6 +16,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"reflect"
@@ -23,8 +24,11 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 type chatMessageSearchCall struct {
@@ -33,13 +37,52 @@ type chatMessageSearchCall struct {
 	args      map[string]any
 }
 
+func chatCallsByTool(calls []chatMessageSearchCall, toolName string) []chatMessageSearchCall {
+	filtered := make([]chatMessageSearchCall, 0, 1)
+	for _, call := range calls {
+		if call.toolName == toolName {
+			filtered = append(filtered, call)
+		}
+	}
+	return filtered
+}
+
 type chatMessageSearchCaller struct {
-	calls []chatMessageSearchCall
+	calls           []chatMessageSearchCall
+	searchResponse  string
+	searchResponses []string
+	searchCalls     int
+	searchError     error
+	failPreflight   bool
+	preflightError  error
 }
 
 func (c *chatMessageSearchCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
+	text := `{}`
+	if toolName == "get_conversation_info" {
+		if c.preflightError != nil {
+			return nil, c.preflightError
+		}
+		if c.failPreflight {
+			return nil, errors.New("conversation not found")
+		}
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
+	}
+	if toolName == "search_messages_by_keyword" || toolName == "search_messages" {
+		if c.searchError != nil {
+			c.searchCalls++
+			return nil, c.searchError
+		}
+		text = `{"result":{"messages":[],"hasMore":false}}`
+		if c.searchCalls < len(c.searchResponses) {
+			text = c.searchResponses[c.searchCalls]
+		} else if c.searchResponse != "" {
+			text = c.searchResponse
+		}
+		c.searchCalls++
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
 func (*chatMessageSearchCaller) Format() string { return "json" }
@@ -72,6 +115,7 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 		productID   string
 		toolName    string
 		wantToolArg map[string]any
+		preflight   []string
 	}{
 		{
 			name:      "keyword search",
@@ -79,13 +123,13 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			productID: "chat",
 			toolName:  "search_messages_by_keyword",
 			wantToolArg: map[string]any{
-				"keyword":            "categoryName",
-				"openConversationId": "cid-1",
-				"startTime":          startTime.UnixMilli(),
-				"endTime":            endTime.UnixMilli(),
-				"limit":              100,
-				"cursor":             "0",
+				"keyword":   "categoryName",
+				"startTime": startTime.UnixMilli(),
+				"endTime":   endTime.UnixMilli(),
+				"limit":     100,
+				"cursor":    "0",
 			},
+			preflight: []string{"cid-1"},
 		},
 		{
 			name:      "advanced search",
@@ -93,16 +137,16 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			productID: "im",
 			toolName:  "search_messages",
 			wantToolArg: map[string]any{
-				"keyword":             "categoryName",
-				"openConversationIds": []string{"cid-1", "cid-2"},
-				"messageType":         "text",
-				"onlyRobotMessages":   true,
-				"searchConvType":      "group",
-				"startTime":           startTime.UnixMilli(),
-				"endTime":             endTime.UnixMilli(),
-				"limit":               100,
-				"cursor":              "0",
+				"keyword":           "categoryName",
+				"messageType":       "text",
+				"onlyRobotMessages": true,
+				"searchConvType":    "group",
+				"startTime":         startTime.UnixMilli(),
+				"endTime":           endTime.UnixMilli(),
+				"limit":             100,
+				"cursor":            "0",
 			},
+			preflight: []string{"cid-1", "cid-2"},
 		},
 	}
 
@@ -116,14 +160,21 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			cmd := newChatCommand()
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
+			cmd.SetOut(io.Discard)
 			cmd.SetArgs(tt.args)
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("chat search returned error: %v", err)
 			}
-			if len(caller.calls) != 1 {
-				t.Fatalf("tool call count = %d, want 1", len(caller.calls))
+			if len(caller.calls) != len(tt.preflight)+1 {
+				t.Fatalf("tool calls = %#v", caller.calls)
 			}
-			call := caller.calls[0]
+			for index, conversationID := range tt.preflight {
+				call := caller.calls[index]
+				if call.productID != "chat" || call.toolName != "get_conversation_info" || call.args["openConversationId"] != conversationID {
+					t.Fatalf("preflight[%d] = %#v", index, call)
+				}
+			}
+			call := caller.calls[len(caller.calls)-1]
 			if call.productID != tt.productID || call.toolName != tt.toolName {
 				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tt.productID, tt.toolName)
 			}
@@ -131,6 +182,507 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 				t.Fatalf("tool args = %#v, want %#v", call.args, tt.wantToolArg)
 			}
 		})
+	}
+}
+
+func executeNativeScopedSearch(t *testing.T, caller *chatMessageSearchCaller, args ...string) (map[string]any, error) {
+	t.Helper()
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	var output strings.Builder
+	cmd.SetOut(&output)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output.String()), &payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func TestNativeScopedSearchFiltersGlobalResultsForBothEntries(t *testing.T) {
+	start := "2026-07-09T00:00:00+08:00"
+	end := "2026-07-11T00:00:00+08:00"
+	for _, tt := range []struct {
+		name       string
+		args       []string
+		tool       string
+		scopeParam string
+	}{
+		{
+			name:       "keyword search",
+			args:       []string{"message", "search", "--query", "周报", "--group", "cid-target", "--start", start, "--end", end},
+			tool:       "search_messages_by_keyword",
+			scopeParam: "openConversationId",
+		},
+		{
+			name:       "advanced search",
+			args:       []string{"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target"},
+			tool:       "search_messages",
+			scopeParam: "openConversationIds",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessageSearchCaller{searchResponse: `{
+				"result": {
+					"conversationMessagesList": [
+						{"openConversationId":"cid-target","title":"目标群","messages":[{"openMessageId":"m-target","content":"目标"}]},
+						{"openConversationId":"cid-other","title":"其他群","messages":[{"openMessageId":"m-other","content":"越界"}]}
+					],
+					"hasMore": false
+				}
+			}`}
+			payload, err := executeNativeScopedSearch(t, caller, tt.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, _ := payload["result"].(map[string]any)
+			groups, _ := result["conversationMessagesList"].([]any)
+			if len(groups) != 1 {
+				t.Fatalf("result = %#v", result)
+			}
+			group, _ := groups[0].(map[string]any)
+			if group["openConversationId"] != "cid-target" {
+				t.Fatalf("group = %#v", group)
+			}
+			scope, _ := payload["scope"].(map[string]any)
+			if scope["targetsValidated"] != true || scope["resultsWithinScope"] != true || scope["filterMode"] != "client" {
+				t.Fatalf("scope = %#v", scope)
+			}
+			searchCall := caller.calls[len(caller.calls)-1]
+			if searchCall.toolName != tt.tool {
+				t.Fatalf("search call = %#v", searchCall)
+			}
+			if _, exists := searchCall.args[tt.scopeParam]; exists {
+				t.Fatalf("global fallback unexpectedly forwarded %s: %#v", tt.scopeParam, searchCall.args)
+			}
+		})
+	}
+}
+
+func TestNativeScopedSearchInvalidCIDStopsBeforeSearch(t *testing.T) {
+	caller := &chatMessageSearchCaller{failPreflight: true}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-invalid")
+	if err == nil {
+		t.Fatal("invalid CID unexpectedly succeeded")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_conversation_scope_invalid" {
+		t.Fatalf("error = %#v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != "get_conversation_info" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+}
+
+func TestNativeScopedSearchPreservesPreflightAuthError(t *testing.T) {
+	want := &CLIError{Code: CodeAuthNotConfigured, Message: "当前未登录"}
+	caller := &chatMessageSearchCaller{preflightError: want}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err == nil {
+		t.Fatal("auth failure unexpectedly succeeded")
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != CodeAuthNotConfigured {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageNativeScopedSearchPreservesAmbiguousMCPToolErrors(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		want *CLIError
+	}{
+		{
+			name: "rate limited",
+			want: &CLIError{
+				Code:    CodeMCPToolError,
+				Message: `{"success":false,"errorCode":"invalidRequest.rateLimited","errorMsg":"slow down"}`,
+			},
+		},
+		{
+			name: "permission denied",
+			want: &CLIError{
+				Code:    CodeMCPToolError,
+				Message: `{"success":false,"errorCode":"forbidden.noPermission","errorMsg":"permission denied"}`,
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &chatMessageSearchCaller{preflightError: test.want}
+			_, err := executeNativeScopedSearch(t, caller,
+				"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+			if err != test.want {
+				t.Fatalf("error = %#v, want original %#v", err, test.want)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].toolName != "get_conversation_info" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestNativeScopedSearchScansUntilTargetConversationAppears(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponses: []string{
+		`{"result":{"conversationMessagesList":[{"openConversationId":"cid-other","messages":[{"openMessageId":"m-other"}]}],"hasMore":true,"nextCursor":"c2"}}`,
+		`{"result":{"conversationMessagesList":[{"openConversationId":"cid-target","messages":[{"openMessageId":"m-target"}]}],"hasMore":false}}`,
+	}}
+	payload, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := payload["result"].(map[string]any)
+	if result["pagesFetched"] != float64(2) || result["complete"] != true {
+		t.Fatalf("result = %#v", result)
+	}
+	groups, _ := result["conversationMessagesList"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("groups = %#v", groups)
+	}
+	searchCalls := make([]chatMessageSearchCall, 0, 2)
+	for _, call := range caller.calls {
+		if call.toolName == "search_messages" {
+			searchCalls = append(searchCalls, call)
+		}
+	}
+	if len(searchCalls) != 2 || searchCalls[1].args["cursor"] != "c2" {
+		t.Fatalf("search calls = %#v", searchCalls)
+	}
+}
+
+func TestCrossPlatformCoverageNativeScopedSearchPageAllOptions(t *testing.T) {
+	t.Run("page limit preserves continuation", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponse: `{
+			"result": {
+				"conversationMessagesList": [
+					{"openConversationId":"cid-target","messages":[{"openMessageId":"m1"}]}
+				],
+				"hasMore": true,
+				"nextCursor": "c2"
+			}
+		}`}
+		payload, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target",
+			"--page-all", "--page-limit", "1", "--page-delay", "0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		paging, _ := payload["paging"].(map[string]any)
+		if paging["pages"] != float64(1) || paging["total"] != float64(1) || paging["truncated"] != true {
+			t.Fatalf("paging = %#v", paging)
+		}
+		if caller.searchCalls != 1 {
+			t.Fatalf("search calls = %d, want 1", caller.searchCalls)
+		}
+	})
+
+	t.Run("max items truncates within filtered page", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponse: `{
+			"result": {
+				"conversationMessagesList": [
+					{"openConversationId":"cid-target","messages":[
+						{"openMessageId":"m1"},
+						{"openMessageId":"m2"}
+					]}
+				],
+				"hasMore": false
+			}
+		}`}
+		payload, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target",
+			"--page-all", "--max-items", "1", "--page-delay", "0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, _ := payload["result"].(map[string]any)
+		groups, _ := result["conversationMessagesList"].([]any)
+		group, _ := groups[0].(map[string]any)
+		messages, _ := group["messages"].([]any)
+		if len(messages) != 1 {
+			t.Fatalf("messages = %#v", messages)
+		}
+		paging, _ := payload["paging"].(map[string]any)
+		if paging["total"] != float64(1) || paging["truncatedWithinPage"] != true || paging["resumeCursorReliable"] != false {
+			t.Fatalf("paging = %#v", paging)
+		}
+	})
+}
+
+func TestNativeScopedSearchMissingConversationIdentityFailsClosed(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponse: `{"result":{"messages":[{"openMessageId":"m1"}],"hasMore":false}}`}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err == nil {
+		t.Fatal("unverifiable scoped result unexpectedly succeeded")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_conversation_scope_unverified" {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestNativeScopedSearchValidEmptyResultIsComplete(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+	payload, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := payload["result"].(map[string]any)
+	if result["complete"] != true || result["hasMore"] != false {
+		t.Fatalf("result = %#v", result)
+	}
+	scope, _ := payload["scope"].(map[string]any)
+	if scope["targetsValidated"] != true || scope["sourceComplete"] != true {
+		t.Fatalf("scope = %#v", scope)
+	}
+}
+
+func TestCrossPlatformCoverageNativeScopedSearchFailureAndPaginationBranches(t *testing.T) {
+	t.Run("empty scope uses the native search call", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{}
+		previousDeps := deps
+		t.Cleanup(func() { deps = previousDeps })
+		InitDeps(caller)
+		deps.Out.w = io.Discard
+
+		cmd := &cobra.Command{Use: "search"}
+		err := runConversationScopedMessageSearch(
+			cmd,
+			"im",
+			"search_messages",
+			"openConversationIds",
+			map[string]any{"keyword": "周报"},
+			[]string{"", " "},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].toolName != "search_messages" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("invalid page options fail before preflight", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{}
+		previousDeps := deps
+		t.Cleanup(func() { deps = previousDeps })
+		InitDeps(caller)
+
+		cmd := &cobra.Command{Use: "search"}
+		AddPagedMCPFlags(cmd)
+		if err := cmd.Flags().Set("page-all", "true"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Flags().Set("page-limit", "0"); err != nil {
+			t.Fatal(err)
+		}
+		err := runConversationScopedMessageSearch(
+			cmd,
+			"im",
+			"search_messages",
+			"openConversationIds",
+			map[string]any{"keyword": "周报"},
+			[]string{"cid-target"},
+		)
+		if err == nil || !strings.Contains(err.Error(), "--page-limit must be between 1 and 500") {
+			t.Fatalf("error = %v", err)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("invalid paging made calls: %#v", caller.calls)
+		}
+	})
+
+	t.Run("cancelled context interrupts page delay", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponse: `{
+			"result": {
+				"messages": [{"openMessageId":"m1","openConversationId":"cid-target"}],
+				"hasMore": true,
+				"nextCursor": "c2"
+			}
+		}`}
+		previousDeps := deps
+		t.Cleanup(func() { deps = previousDeps })
+		InitDeps(caller)
+		deps.Out.w = io.Discard
+
+		cmd := &cobra.Command{Use: "search"}
+		AddPagedMCPFlags(cmd)
+		if err := cmd.Flags().Set("page-all", "true"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Flags().Set("page-delay", "60000"); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		cmd.SetContext(ctx)
+		err := runConversationScopedMessageSearch(
+			cmd,
+			"im",
+			"search_messages",
+			"openConversationIds",
+			map[string]any{"keyword": "周报", "limit": 100, "cursor": "0"},
+			[]string{"cid-target"},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context canceled", err)
+		}
+		if caller.searchCalls != 1 {
+			t.Fatalf("search calls = %d, want 1", caller.searchCalls)
+		}
+	})
+
+	t.Run("lower search error", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchError: errors.New("search unavailable")}
+		_, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+		if err == nil {
+			t.Fatal("lower search error was ignored")
+		}
+	})
+
+	t.Run("stalled cursor fails closed", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponse: `{
+			"result": {
+				"messages": [{"openMessageId":"m1","openConversationId":"cid-target"}],
+				"hasMore": true
+			}
+		}`}
+		_, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "search_conversation_scope_cursor_stalled" {
+			t.Fatalf("error = %#v", err)
+		}
+	})
+
+	t.Run("result limit preserves continuation", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponse: `{
+			"result": {
+				"messages": [{"openMessageId":"m1","openConversationId":"cid-target"}],
+				"hasMore": true,
+				"nextCursor": "c2"
+			}
+		}`}
+		payload, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target", "--limit", "1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, _ := payload["result"].(map[string]any)
+		if result["complete"] != false || result["hasMore"] != true || result["nextCursor"] != "c2" {
+			t.Fatalf("result = %#v", result)
+		}
+	})
+
+	t.Run("duplicate message ids are removed across pages", func(t *testing.T) {
+		caller := &chatMessageSearchCaller{searchResponses: []string{
+			`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-target"}],"hasMore":true,"nextCursor":"c2"}}`,
+			`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-target"},{"openMessageId":"m2","openConversationId":"cid-target"}],"hasMore":false}}`,
+		}}
+		payload, err := executeNativeScopedSearch(t, caller,
+			"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, _ := payload["result"].(map[string]any)
+		groups, _ := result["conversationMessagesList"].([]any)
+		group, _ := groups[0].(map[string]any)
+		messages, _ := group["messages"].([]any)
+		if len(messages) != 2 {
+			t.Fatalf("deduplicated messages = %#v", messages)
+		}
+	})
+
+	if got := uniqueNonEmptyStrings([]string{" cid ", "", "cid"}); !reflect.DeepEqual(got, []string{"cid"}) {
+		t.Fatalf("uniqueNonEmptyStrings = %#v", got)
+	}
+	for _, test := range []struct {
+		value any
+		want  int
+	}{
+		{value: int64(7), want: 7},
+		{value: json.Number("8"), want: 8},
+		{value: float64(9), want: 9},
+		{value: int64(0), want: 11},
+	} {
+		if got := positiveSearchLimit(test.value, 11); got != test.want {
+			t.Errorf("positiveSearchLimit(%#v) = %d, want %d", test.value, got, test.want)
+		}
+	}
+	if cleanSearchCursor(nil) != "" || cleanSearchCursor(" null ") != "" || cleanSearchCursor(" c2 ") != "c2" {
+		t.Fatal("cleanSearchCursor did not normalize sentinel values")
+	}
+}
+
+func TestCrossPlatformCoverageNativeScopedSearchDryRunShowsCompositePlanWithoutCallingTools(t *testing.T) {
+	caller := &chatMessageSearchCaller{}
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	InitDeps(caller)
+	cmd := &cobra.Command{Use: "search"}
+	cmd.Flags().Bool("dry-run", true, "")
+	AddPagedMCPFlags(cmd)
+	for name, value := range map[string]string{
+		"page-all":   "true",
+		"page-limit": "7",
+		"max-items":  "9",
+		"page-delay": "11",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set --%s: %v", name, err)
+		}
+	}
+	var output strings.Builder
+	cmd.SetOut(&output)
+	err := runConversationScopedMessageSearch(
+		cmd,
+		"im",
+		"search_messages",
+		"openConversationIds",
+		map[string]any{
+			"keyword":             "周报",
+			"openConversationIds": []string{"cid-target"},
+			"limit":               100,
+			"cursor":              "0",
+		},
+		[]string{"cid-target"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run made calls: %#v", caller.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output.String()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := payload["plan"].([]any)
+	if payload["dry_run"] != true || payload["executed"] != false || len(plan) != 3 {
+		t.Fatalf("payload = %#v", payload)
+	}
+	searchStage, _ := plan[1].(map[string]any)
+	arguments, _ := searchStage["arguments"].(map[string]any)
+	if _, exists := arguments["openConversationIds"]; exists {
+		t.Fatalf("dry-run global search still carries scope: %#v", searchStage)
+	}
+	if searchStage["pageAll"] != true ||
+		searchStage["pageLimit"] != float64(7) ||
+		searchStage["maxItems"] != float64(9) ||
+		searchStage["pageDelay"] != float64(11) {
+		t.Fatalf("dry-run paging = %#v", searchStage)
 	}
 }
 
@@ -142,6 +694,13 @@ type chatChangedContractCaller struct {
 func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
 	text := `{}`
+	if toolName == "list_messages_by_ids" {
+		messageID := args["openMsgIds"].([]string)[0]
+		text = `{"result":[{"openMessageId":"` + messageID + `","openConversationId":"cid"}]}`
+	}
+	if toolName == "get_conversation_info" {
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
+	}
 	if c.resolveUsers && toolName == "get_user_info_by_user_ids" {
 		text = `{"result":[{"userId":"123","openDingTalkId":"open-123"}]}`
 	}
@@ -160,10 +719,17 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	cmd := newChatCommand()
+	installExampleGlobalFlags(cmd)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
-	cmd.SetArgs(args)
-	return cmd.Execute()
+	cmd.SetArgs(append(append([]string(nil), args...), "--yes"))
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := cmd.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.T) {
@@ -179,6 +745,99 @@ func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.
 	want := map[string]any{"openconversation_id": "cid-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
 	if !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDefaultTimeUsesShanghaiLocation(t *testing.T) {
+	previousLocal := time.Local
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantTool   string
+		wantTarget map[string]any
+	}{
+		{
+			name:       "group",
+			args:       []string{"message", "list", "--group", "cid-1", "--limit", "50"},
+			wantTool:   "list_conversation_message_v2",
+			wantTarget: map[string]any{"openconversation_id": "cid-1"},
+		},
+		{
+			name:       "user",
+			args:       []string{"message", "list", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "user open DingTalk ID fallback",
+			args:       []string{"message", "list", "--user", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "open DingTalk ID",
+			args:       []string{"message", "list", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "direct user",
+			args:       []string{"message", "list-direct", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "direct open DingTalk ID",
+			args:       []string{"message", "list-direct", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+	}
+
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("EST", -5*3600)} {
+		t.Run(loc.String(), func(t *testing.T) {
+			time.Local = loc
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					caller := &chatChangedContractCaller{}
+					before := time.Now()
+					err := executeChatChangedContract(t, caller, tt.args...)
+					after := time.Now()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(caller.calls) != 1 {
+						t.Fatalf("calls = %#v, want one MCP call", caller.calls)
+					}
+					if caller.calls[0].toolName != tt.wantTool {
+						t.Fatalf("tool = %q, want %q", caller.calls[0].toolName, tt.wantTool)
+					}
+					for key, want := range tt.wantTarget {
+						if got := caller.calls[0].args[key]; got != want {
+							t.Fatalf("arg %s = %#v, want %#v", key, got, want)
+						}
+					}
+					raw, ok := caller.calls[0].args["time"].(string)
+					if !ok || raw == "" {
+						t.Fatalf("time arg = %#v, want non-empty string", caller.calls[0].args["time"])
+					}
+					gotMs, err := parseISOTimeToMillis("time", raw)
+					if err != nil {
+						t.Fatalf("time arg = %q, parse err = %v", raw, err)
+					}
+					wantMin := before.Add(-time.Second).UnixMilli()
+					wantMax := after.Add(time.Second).UnixMilli()
+					if gotMs < wantMin || gotMs > wantMax {
+						t.Fatalf("time arg = %q (%d), want between %d and %d", raw, gotMs, wantMin, wantMax)
+					}
+					if caller.calls[0].args["forward"] != false {
+						t.Fatalf("forward = %#v, want false when --time is omitted", caller.calls[0].args["forward"])
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -199,6 +858,22 @@ func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatAuditRejectsUnsupportedStatus(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"group", "audit-join-validation",
+		"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", "AuditRefuse")
+	if err == nil {
+		t.Fatal("expected unsupported audit status error")
+	}
+	if !strings.Contains(err.Error(), `unsupported audit status "AuditRefuse"`) {
+		t.Fatalf("error = %v, want unsupported status", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("unsupported status must not call MCP: %#v", caller.calls)
 	}
 }
 
@@ -228,11 +903,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello"},
 		},
 	}
 
@@ -242,10 +917,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			if got := caller.calls[0].args["clawType"]; got != "qwenwork" {
+			if got := sendCalls[0].args["clawType"]; got != "qwenwork" {
 				t.Fatalf("clawType = %#v, want qwenwork", got)
 			}
 		})
@@ -261,11 +937,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 	}
 
@@ -275,10 +951,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			got, present := caller.calls[0].args["clawType"]
+			got, present := sendCalls[0].args["clawType"]
 			if !present || got != "" {
 				t.Fatalf("clawType = %#v, present = %v; want present empty string", got, present)
 			}
@@ -299,25 +976,25 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			name: "send",
 			args: []string{
 				"message", "send", "--group", "cid",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "text",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "send keeps missing member placeholders unchanged",
 			args: []string{
 				"message", "send", "--group", "cid",
 				"--text", "DWS 发消息自测",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 			},
 			contentField: "text",
 			wantContent:  "DWS 发消息自测",
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply",
@@ -325,15 +1002,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "reply adds missing member placeholders",
@@ -341,13 +1018,13 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "DWS 回复艾特前津（非主用）自测",
-				"--at-open-dingtalk-ids", "D-target,D-second,D-target",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "DWS synthetic reply mention test",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2 + "," + helperCurrentDOpenID,
 			},
 			contentField: "content",
-			wantContent:  "<@D-target> <@D-second> DWS 回复艾特前津（非主用）自测",
-			wantOpenIDs:  []string{"D-target", "D-second", "D-target"},
+			wantContent:  "<@" + helperCurrentDOpenID + "> <@" + helperCurrentDOpenID2 + "> DWS synthetic reply mention test",
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2, helperCurrentDOpenID},
 		},
 		{
 			name: "reply adds missing member placeholders after at-all",
@@ -355,15 +1032,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "请大家确认",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> <@D-target> 请大家确认",
+			wantContent:  "<@all> <@" + helperCurrentDOpenID + "> 请大家确认",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply at-all preserves alliance word",
@@ -371,7 +1048,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 				"--at-all",
 			},
@@ -385,7 +1062,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 			},
 			contentField: "content",
@@ -399,10 +1076,11 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			args := caller.calls[0].args
+			args := sendCalls[0].args
 			gotAtAll, hasAtAll := args["atAll"]
 			if tc.wantAtAll {
 				if !hasAtAll || gotAtAll != true {
