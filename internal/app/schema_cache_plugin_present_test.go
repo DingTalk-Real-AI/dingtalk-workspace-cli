@@ -193,3 +193,111 @@ func TestCrossPlatformCoverageSchemaAssemblyIgnoresPluginRegistrationSideEffects
 		t.Fatalf("schema assembly identity changed after real plugin registration side effects: clean=%x with-plugins=%x", clean, withPlugins)
 	}
 }
+
+// Strongest form of the isolation proof: drive the REAL production loader
+// (rootLoadPlugins → loadPlugins) against a fully isolated plugin universe —
+// an enabled stdio plugin with a CLI overlay plus pluginConfigs entries whose
+// env injection (InjectPluginConfigEnv, the loader's first side effect, which
+// may set any non-blacklisted variable including DWS_-prefixed ones) actually
+// fires — and assert the assembled schema identity is still byte-identical.
+func TestCrossPlatformCoverageSchemaAssemblyIgnoresRealPluginLoaderSideEffects(t *testing.T) {
+	isolatePluginRuntime(t)
+
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	t.Setenv("HOME", t.TempDir())
+
+	const (
+		canaryDWS   = "DWS_PLUGIN_LOADER_CANARY"
+		canaryPlain = "PLUGIN_LOADER_PLAIN_CANARY"
+	)
+	t.Cleanup(func() {
+		_ = os.Unsetenv(canaryDWS)
+		_ = os.Unsetenv(canaryPlain)
+	})
+
+	pluginDir := filepath.Join(configDir, "plugins", "user", "loader-side-effect")
+	if err := os.MkdirAll(filepath.Join(pluginDir, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{
+	"name": "loader-side-effect",
+	"version": "0.1.0",
+	"type": "managed",
+	"description": "loader side effect fixture",
+	"mcpServers": {
+		"local": {
+			"name": "local fixture server",
+			"description": "stdio fixture",
+			"type": "stdio",
+			"command": "${DWS_PLUGIN_ROOT}/bin/proxy",
+			"args": [],
+			"prefixes": ["loader-side-effect"],
+			"cli": "overlay.json"
+		}
+	}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "overlay.json"), []byte(`{
+	"id": "local",
+	"command": "loader-side-effect",
+	"description": "loader side effect fixture",
+	"groups": {"health": {"description": "health checks"}},
+	"toolOverrides": {"ping": {"cliName": "ping", "group": "health"}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "bin", "proxy"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{
+	"enabledPlugins": {"loader-side-effect": true},
+	"pluginConfigs": {"loader-side-effect": {
+		"` + canaryDWS + `": "loader-injected",
+		"` + canaryPlain + `": "plain-injected"
+	}}
+}`
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	assembleIdentity := func() (buildID [32]byte) {
+		resolved, err := cli.ResolveSchemaBuild(NewSchemaSourceRootCommand())
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity, err := cli.IdentityFromArtifacts("open", artifacts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return identity.BuildID
+	}
+
+	clean := assembleIdentity()
+
+	scratch := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+	pluginCmds := rootLoadPlugins(scratch, nil, executor.EchoRunner{}, "")
+	if len(pluginCmds) == 0 {
+		t.Fatal("real plugin loader returned no commands for the fixture plugin")
+	}
+
+	if got := os.Getenv(canaryDWS); got != "loader-injected" {
+		t.Fatalf("plugin config env injection did not fire: %s=%q", canaryDWS, got)
+	}
+	if got := os.Getenv(canaryPlain); got != "plain-injected" {
+		t.Fatalf("plugin config env injection did not fire: %s=%q", canaryPlain, got)
+	}
+	if _, ok := LookupStdioClient("loader-side-effect/local"); !ok {
+		t.Fatal("real loader stdio registration side effect missing")
+	}
+
+	withLoader := assembleIdentity()
+	if clean != withLoader {
+		t.Fatalf("schema assembly identity changed after the real plugin loader ran: clean=%x with-loader=%x", clean, withLoader)
+	}
+}
