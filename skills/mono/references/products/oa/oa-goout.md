@@ -36,7 +36,7 @@
 7.【组装条目】展平子控件条目（extract=true，无容器条目；bizAlias 不组装，服务端按 id 匹配）：
    · type（可见时）：{"id":子控件id,"name":"外出类型","value":"<option 显示值>","extValue":<重组 JSON 字符串 {"label":<option.value>,"key":<option.key>,"extension":<option.extension>}——键名是 label 而非 option 中的 value，禁止原样序列化 option 对象>}
    · startTime / finishTime：{"id":子控件id,"name":"开始时间"/"结束时间","value":<有效单位格式>}
-   · duration：{"id":子控件id,"name":"时长","value":<数字：有效单位=hour → durationInHour，否则 durationInDay>,"extValue":<步骤 6 响应原样 JSON 字符串 + "_from"和"_to"（= 起止 value）>}
+   · duration：{"id":子控件id,"name":"时长","value":<数字：有效单位=hour → durationInHour，否则 durationInDay>,"extValue":<步骤 6 响应按 oa-form-components.md 外出套件映射表转换后的 JSON 字符串 + "_from"和"_to"（= 起止 value），禁止原样透传>}
    · traveler（可见且有同行人时）：{"id":子控件id,"name":"同行人","value":"<userId JSON 数组字符串>","extValue":<[{"emplId":uid,"name":姓名,"avatar":"","itemId":uid}] JSON 字符串>}
      —— value 必须是 userId 的 JSON 数组字符串（如 "[\"uid1\",\"uid2\"]"）；生产实证：姓名显示值会触发服务端系统错误
    · 套件外控件条目（如 {"id":"外出事由","name":"外出事由","value":"…"}，控件 id 以当次 form-schema 为准，可能即中文 label）
