@@ -106,7 +106,7 @@ func TestDevPipelineSafetyStdoutJSONParseable(t *testing.T) {
 func TestDevPipelineSafetyFailureStdoutZeroBytes(t *testing.T) {
 	out, _, err := runDevAppFamilyProdAligned(t, &captureRunner{},
 		"dev", "app", "get") // 缺 --unified-app-id / --app-key
-	if err == nil || !strings.Contains(err.Error(), "请传入 --unified-app-id 或 --app-key") {
+	if err == nil || !strings.Contains(err.Error(), "请至少指定 --unified-app-id、--app-key 之一") {
 		t.Fatalf("Execute() error = %v, want locator validation", err)
 	}
 	if out.Len() != 0 {

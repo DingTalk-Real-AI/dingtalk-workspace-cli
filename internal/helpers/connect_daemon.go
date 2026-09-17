@@ -976,7 +976,11 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "not_required", Idempotency: "unknown"},
-		Validate:      func(c *cobra.Command, _ []string) error { return validateConnectRestart(c) },
+		Constraints: []LeafConstraint{{
+			Kind:  LeafAtLeastOne,
+			Flags: []string{"robot-client-id", "unified-app-id"},
+		}},
+		Validate: func(c *cobra.Command, _ []string) error { return validateConnectRestart(c) },
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: "connect_restart", CanonicalPath: "dev.connect_restart", CLIPath: "dev connect restart", PrimaryCLIPath: "dev connect restart"},
 			Description: "使用持久化配置重启本地连接器守护进程",

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -43,6 +44,115 @@ func fullSchemaSnapshotForTest(t testing.TB) cli.SchemaCatalogSnapshot {
 		t.Fatalf("build shared final Schema snapshot: %v", fullSchemaSnapshotErr)
 	}
 	return fullSchemaSnapshot
+}
+
+func TestCrossPlatformCoverageCatalogRequiredInputsMatchRuntimeValidators(t *testing.T) {
+	snapshot := fullSchemaSnapshotForTest(t)
+	toolsByCLIPath := make(map[string]map[string]any, len(snapshot.Tools))
+	for _, tool := range snapshot.Tools {
+		toolsByCLIPath[schemaContractString(tool["cli_path"])] = tool
+	}
+
+	required := map[string][]string{
+		"dev mcp auth get":          {"mcp-id"},
+		"dev mcp auth save":         {"mcp-id", "auth-type"},
+		"dev mcp credential bind":   {"mcp-id", "credential-id"},
+		"dev mcp credential debug":  {"mcp-id", "credential-id"},
+		"dev mcp credential delete": {"mcp-id", "credential-id"},
+		"dev mcp credential get":    {"mcp-id", "credential-id"},
+		"dev mcp credential list":   {"mcp-id"},
+		"dev mcp credential save":   {"mcp-id", "name"},
+		"dev mcp credential unbind": {"mcp-id"},
+		"dev mcp hsf method-list":   {"interface-name"},
+		"dev mcp member add":        {"mcp-id", "user-ids"},
+		"dev mcp member list":       {"mcp-id"},
+		"dev mcp member remove":     {"mcp-id", "user-ids"},
+		"dev mcp url get":           {"mcp-id"},
+		"dev mcp service create":    {"name", "description"},
+		"dev mcp service delete":    {"mcp-id"},
+		"dev mcp service get":       {"mcp-id"},
+		"dev mcp service update":    {"mcp-id"},
+		"dev mcp tool create": {
+			"mcp-id", "name", "http-info", "api-outputs", "tool-outputs", "output-mappings",
+		},
+		"dev mcp tool create-hsf": {
+			"mcp-id", "name", "hsf-info",
+			"tool-inputs", "input-mappings", "tool-outputs", "output-mappings",
+		},
+		"dev mcp tool debug":      {"mcp-id", "tool-id", "value"},
+		"dev mcp tool delete":     {"mcp-id", "tool-id"},
+		"dev mcp tool get":        {"mcp-id", "tool-id"},
+		"dev mcp tool list":       {"mcp-id"},
+		"dev mcp tool publish":    {"mcp-id", "tool-id"},
+		"dev mcp tool update-hsf": {"mcp-id", "tool-id"},
+		"dev mcp tool update": {
+			"mcp-id", "tool-id", "name", "http-info", "api-outputs", "tool-outputs", "output-mappings",
+		},
+		"dev mcp tool versions": {"mcp-id", "tool-id"},
+	}
+	for cliPath, names := range required {
+		tool := toolsByCLIPath[cliPath]
+		if tool == nil {
+			t.Errorf("missing Catalog tool for %q", cliPath)
+			continue
+		}
+		parameters := schemaContractMap(tool["parameters"])
+		for _, name := range names {
+			if parameters[name] == nil || parameters[name]["required"] != true {
+				t.Errorf("%s --%s required = %#v, want true", cliPath, name, parameters[name]["required"])
+			}
+		}
+	}
+
+	requireOneOf := map[string][]string{
+		"chat crypto decrypt":     {"text", "file"},
+		"chat emotion favorite":   {"media-id", "file-path"},
+		"chat +chat-bots":         {"group", "chat-query", "group-query"},
+		"chat +chat-invite-url":   {"group", "chat-query", "group-query"},
+		"chat +conversation-info": {"group", "open-dingtalk-id"},
+		"dev connect restart":     {"robot-client-id", "unified-app-id"},
+		"dev app get":             {"unified-app-id", "app-key"},
+		"dev mcp credential save": {"content", "content-file"},
+		"dev mcp service update":  {"name", "description", "icon-url", "introduction", "server-name"},
+		"dev mcp tool debug":      {"credential-id", "no-credential"},
+		"dev mcp tool update-hsf": {"name", "title", "description", "hsf-info", "tool-inputs", "input-mappings", "tool-outputs", "output-mappings", "timeout", "only-original-keys"},
+		"doc +fetch":              {"node", "query"},
+		"minutes +detail":         {"id", "ids"},
+	}
+	exactlyOne := map[string]bool{
+		"chat crypto decrypt":     true,
+		"chat emotion favorite":   true,
+		"chat +chat-bots":         true,
+		"chat +chat-invite-url":   true,
+		"chat +conversation-info": true,
+		"dev mcp credential save": true,
+		"dev mcp tool debug":      true,
+		"doc +fetch":              true,
+		"minutes +detail":         true,
+	}
+	hasGroup := func(tool map[string]any, kind string, want []string) bool {
+		constraints, _ := tool["constraints"].(map[string]any)
+		groups, _ := constraints[kind].([]any)
+		for _, raw := range groups {
+			if reflect.DeepEqual(schemaContractStringSlice(raw), want) {
+				return true
+			}
+		}
+		return false
+	}
+	for cliPath, group := range requireOneOf {
+		tool := toolsByCLIPath[cliPath]
+		if tool == nil {
+			t.Errorf("missing Catalog tool for %q", cliPath)
+			continue
+		}
+		if !hasGroup(tool, "require_one_of", group) {
+			t.Errorf("%s does not publish require_one_of %v", cliPath, group)
+		}
+		if exactlyOne[cliPath] && !hasGroup(tool, "mutually_exclusive", group) {
+			t.Errorf("%s does not publish mutually_exclusive %v", cliPath, group)
+		}
+	}
 }
 
 func TestDeliverySchemaContractMapsToExecutableTree(t *testing.T) {

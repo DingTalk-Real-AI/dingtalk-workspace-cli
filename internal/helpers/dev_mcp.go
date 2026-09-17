@@ -198,7 +198,7 @@ func newDevMCPURLGetCommand(runner executor.Runner) *cobra.Command {
 			return runDevMCPURLGet(runner, cmd, params)
 		},
 	}
-	cmd.Flags().Int("mcp-id", 0, "MCP 服务 ID")
+	addDevMCPMCPIDFlag(cmd)
 	cmd.Flags().String("source", "MARKET", "服务来源：MARKET 或 PUBLISHED")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPServerURLGetTool)
@@ -308,6 +308,7 @@ func newDevMCPServiceCreateCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("icon-url", "", "服务图标 URL")
 	cmd.Flags().String("introduction", "", "服务详情介绍，支持 markdown")
 	cmd.Flags().String("server-name", "", "服务英文标识，kebab-case，用于稳定识别已发布 MCP 服务")
+	markDevMCPRequiredFlags(cmd, "name", "description")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPServiceCreateTool)
 	DeclareLeafMetadata(cmd, LeafSpec{
@@ -359,8 +360,12 @@ func newDevMCPServiceUpdateCommand(runner executor.Runner) *cobra.Command {
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
-		Validate:      validateDevMCPServiceUpdate,
-		Contract:      devMCPContract(cmd, devMCPServiceUpdateTool, "dev mcp service update", "更新 MCP 服务开发配置", true),
+		Constraints: []LeafConstraint{{
+			Kind:  LeafAtLeastOne,
+			Flags: []string{"name", "description", "icon-url", "introduction", "server-name"},
+		}},
+		Validate: validateDevMCPServiceUpdate,
+		Contract: devMCPContract(cmd, devMCPServiceUpdateTool, "dev mcp service update", "更新 MCP 服务开发配置", true),
 	})
 	return cmd
 }
@@ -449,7 +454,7 @@ func newDevMCPToolGetCommand(runner executor.Runner) *cobra.Command {
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPReadSafety(),
-		Contract:      devMCPContract(cmd, devMCPToolGetTool, "dev mcp tool get", "读取指定 MCP 工具定义", false),
+		Contract:      devMCPContract(cmd, devMCPToolGetTool, "dev mcp tool get", "读取指定 MCP 工具定义", false, "tool-id"),
 	})
 	return cmd
 }
@@ -503,7 +508,7 @@ func newDevMCPToolUpdateCommand(runner executor.Runner) *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
 		Validate:      validateDevMCPToolUpdate,
-		Contract:      devMCPContract(cmd, devMCPToolUpdateHTTPTool, "dev mcp tool update", "更新 HTTP 类型的 MCP 工具草稿", true),
+		Contract:      devMCPContract(cmd, devMCPToolUpdateHTTPTool, "dev mcp tool update", "更新 HTTP 类型的 MCP 工具草稿", true, "tool-id"),
 	})
 	return cmd
 }
@@ -539,13 +544,18 @@ func newDevMCPToolDebugCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("version-id", "", "指定调试的版本 ID")
 	cmd.Flags().Int("credential-id", 0, "凭证账号 ID（credential list 可查）；服务已配置鉴权时必须指定，作为本次调试的实际运行时鉴权（debug 不吃 bind 绑定的凭证；缺省不传不会被直接拦，会降级空跑、下游返回 40014 等误导报错）")
 	cmd.Flags().Bool("no-credential", false, "无鉴权工具的正常走法——声明本次调试不使用凭证（与 --credential-id 二选一必填其一）")
+	markDevMCPRequiredFlags(cmd, "value")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPToolDebugTool)
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
-		Validate:      validateDevMCPToolDebug,
-		Contract:      devMCPContract(cmd, devMCPToolDebugTool, "dev mcp tool debug", "使用指定输入和凭证调试 MCP 工具", true),
+		Constraints: []LeafConstraint{{
+			Kind:  LeafExactlyOne,
+			Flags: []string{"credential-id", "no-credential"},
+		}},
+		Validate: validateDevMCPToolDebug,
+		Contract: devMCPContract(cmd, devMCPToolDebugTool, "dev mcp tool debug", "使用指定输入和凭证调试 MCP 工具", true, "tool-id"),
 	})
 	return cmd
 }
@@ -583,7 +593,7 @@ func newDevMCPToolPublishCommand(runner executor.Runner) *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
 		Validate:      validateDevMCPToolLocator,
-		Contract:      devMCPContract(cmd, devMCPToolPublishTool, "dev mcp tool publish", "发布 MCP 工具草稿", true),
+		Contract:      devMCPContract(cmd, devMCPToolPublishTool, "dev mcp tool publish", "发布 MCP 工具草稿", true, "tool-id"),
 	})
 	return cmd
 }
@@ -610,7 +620,7 @@ func newDevMCPToolDeleteCommand(runner executor.Runner) *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPDestructiveSafety(),
 		Validate:      validateDevMCPToolLocator,
-		Contract:      devMCPContract(cmd, devMCPToolDeleteTool, "dev mcp tool delete", "永久删除 MCP 工具", true),
+		Contract:      devMCPContract(cmd, devMCPToolDeleteTool, "dev mcp tool delete", "永久删除 MCP 工具", true, "tool-id"),
 	})
 	return cmd
 }
@@ -639,7 +649,7 @@ func newDevMCPToolVersionsCommand(runner executor.Runner) *cobra.Command {
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPReadSafety(),
-		Contract:      devMCPContract(cmd, devMCPToolVersionsTool, "dev mcp tool versions", "查询 MCP 工具版本历史", false),
+		Contract:      devMCPContract(cmd, devMCPToolVersionsTool, "dev mcp tool versions", "查询 MCP 工具版本历史", false, "tool-id"),
 	})
 	return cmd
 }
@@ -713,6 +723,7 @@ func newDevMCPAuthConfigSaveCommand(runner executor.Runner) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("api-secret-auth-config")
 	cmd.Flags().String("token-auth-config", "", "TOKEN 换取及注入配置 JSON 对象：{authFields, fetchTokenRequest, 注入位, tokenExpireRules, refreshToken, testRequest}；注入位按下游要求三选一：authHeaders（token 放请求头）/ authQuery（token 放 query 参数）/ authBody。引用密钥字段用 #(\"<dataId>\") 函数语法（不是 {{}} 模板）、引换 token 响应用 $.Body.<字段>；完整可跑模板见 skill mcp.md 鉴权节")
 	cmd.Flags().String("signature-auth-config", "", "SIGNATURE 自定义鉴权配置 JSON 对象（静态 API key 直引 / 自定义签名表达式两类场景）。直引写法见上方 Examples 与 skill mcp.md：value 用 #(\"<authFields 的 dataId>\") 函数语法")
+	markDevMCPRequiredFlags(cmd, "auth-type")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPAuthConfigSaveTool)
 	DeclareLeafMetadata(cmd, LeafSpec{
@@ -854,13 +865,18 @@ func newDevMCPCredentialSaveCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("name", "", "凭证账号名称")
 	cmd.Flags().String("content", "", "密钥键值 JSON 对象；推荐改用 --content-file")
 	cmd.Flags().String("content-file", "", "密钥键值 JSON 文件路径，传 - 从 stdin 读取")
+	markDevMCPRequiredFlags(cmd, "name")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPCredentialSaveTool)
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
-		Validate:      validateDevMCPCredentialSave,
-		Contract:      devMCPContract(cmd, devMCPCredentialSaveTool, "dev mcp credential save", "新增或更新 MCP 凭证账号", true),
+		Constraints: []LeafConstraint{{
+			Kind:  LeafExactlyOne,
+			Flags: []string{"content", "content-file"},
+		}},
+		Validate: validateDevMCPCredentialSave,
+		Contract: devMCPContract(cmd, devMCPCredentialSaveTool, "dev mcp credential save", "新增或更新 MCP 凭证账号", true),
 	})
 	return cmd
 }
@@ -938,6 +954,7 @@ func newDevMCPMemberMutationCommand(runner executor.Runner, use, short, tool str
 	}
 	addDevMCPMCPIDFlag(cmd)
 	cmd.Flags().String("user-ids", "", "成员 staffId 列表，多个用逗号或分号分隔")
+	markDevMCPRequiredFlags(cmd, "user-ids")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, tool)
 	return cmd
@@ -973,6 +990,7 @@ func devMCPServerNameFlag(cmd *cobra.Command) (string, error) {
 func addDevMCPCredentialLocatorFlags(cmd *cobra.Command) {
 	addDevMCPMCPIDFlag(cmd)
 	cmd.Flags().Int("credential-id", 0, "凭证账号 ID")
+	markDevMCPRequiredFlags(cmd, "credential-id")
 }
 
 func devMCPCredentialLocatorParams(cmd *cobra.Command) (map[string]any, error) {
@@ -1018,6 +1036,7 @@ func devMCPCredentialContent(cmd *cobra.Command) (map[string]any, error) {
 
 func addDevMCPMCPIDFlag(cmd *cobra.Command) {
 	cmd.Flags().Int("mcp-id", 0, "MCP 服务 ID")
+	markDevMCPRequiredFlags(cmd, "mcp-id")
 }
 
 func addDevMCPToolLocatorFlags(cmd *cobra.Command) {
@@ -1029,6 +1048,12 @@ func addDevMCPToolIDFlag(cmd *cobra.Command) {
 	cmd.Flags().String("tool-id", "", "MCP 工具 ID，G-ACT- 开头")
 	cmd.Flags().String("action-id", "", "已更名为 --tool-id")
 	_ = cmd.Flags().MarkHidden("action-id")
+}
+
+func markDevMCPRequiredFlags(cmd *cobra.Command, names ...string) {
+	for _, name := range names {
+		_ = cmd.MarkFlagRequired(name)
+	}
 }
 
 // devMCPRequiredToolID reads --tool-id and rejects the pre-0714 --action-id
@@ -1051,6 +1076,7 @@ func addDevMCPToolUpsertFlags(cmd *cobra.Command, includeToolID bool) {
 		addDevMCPToolIDFlag(cmd)
 	}
 	cmd.Flags().String("name", "", "工具唯一标识，snake_case")
+	markDevMCPRequiredFlags(cmd, "name")
 	cmd.Flags().String("title", "", "必填。工具中文标题：中文自然语言、≤30 字、与功能一致")
 	cmd.Flags().String("description", "", "必填。工具功能完整描述（LLM 选择工具的核心依据）：动词开头，说明功能/何时用/入参来源/破坏性行为")
 	cmd.Flags().String("http-info", "", "必填。HTTP 接口配置 JSON 对象：{method,url,auth:{type,...}}")

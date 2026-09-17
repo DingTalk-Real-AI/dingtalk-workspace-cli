@@ -70,7 +70,7 @@ func requireDevValidationError(t *testing.T, err error, wantMsg string) *apperro
 // 无参数二选一报结构化 validation（rc=3），stdout 零字节。
 func TestDevAppGetMissingLocatorStructuredValidation(t *testing.T) {
 	out, _, err := runDevDomainErrorCase(t, &captureRunner{}, "dev", "app", "get")
-	requireDevValidationError(t, err, "请传入 --unified-app-id 或 --app-key")
+	requireDevValidationError(t, err, "请至少指定 --unified-app-id、--app-key 之一")
 	if out.Len() != 0 {
 		t.Fatalf("error path must keep stdout empty, got %q", out.String())
 	}

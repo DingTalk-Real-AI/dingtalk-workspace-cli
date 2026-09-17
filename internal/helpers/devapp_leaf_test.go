@@ -236,7 +236,7 @@ func TestDevAppGetLeafDualKey(t *testing.T) {
 	r := &fakeDevAppRunner{}
 	cmd := prepareDevAppLeafTestCommand(newDevAppGetCommand(r))
 	if err := cmd.RunE(cmd, nil); err == nil ||
-		!strings.Contains(err.Error(), "请传入 --unified-app-id 或 --app-key") {
+		!strings.Contains(err.Error(), "请至少指定 --unified-app-id、--app-key 之一") {
 		t.Fatalf("err = %v, want 二选一报错", err)
 	}
 	// 只 app-key：params 含 appKey，无 unifiedAppId。

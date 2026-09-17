@@ -506,7 +506,7 @@ func TestCrossPlatformCoverageDevAppGetRequiresLocator(t *testing.T) {
 	root.SetArgs([]string{"get"})
 
 	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "请传入 --unified-app-id 或 --app-key") {
+	if err == nil || !strings.Contains(err.Error(), "请至少指定 --unified-app-id、--app-key 之一") {
 		t.Fatalf("error = %v, want locator validation", err)
 	}
 }

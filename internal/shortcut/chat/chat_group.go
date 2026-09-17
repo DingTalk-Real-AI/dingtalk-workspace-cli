@@ -531,6 +531,7 @@ var ChatInviteURL = shortcut.Shortcut{
 		{Name: "expires-seconds", Type: shortcut.FlagInt, Desc: "链接有效期（秒），0 表示永久"},
 	},
 	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"group", "chat-query", "group-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"group", "chat-query", "group-query"}},
 	},
 	Tips: []string{
@@ -1372,6 +1373,7 @@ var ChatBots = shortcut.Shortcut{
 		{Name: "group-query", Type: shortcut.FlagString, Desc: "--chat-query 的兼容别名", Hidden: true},
 	},
 	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"group", "chat-query", "group-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"group", "chat-query", "group-query"}},
 	},
 	Tips: []string{

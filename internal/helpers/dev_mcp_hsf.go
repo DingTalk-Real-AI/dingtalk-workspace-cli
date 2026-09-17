@@ -45,6 +45,7 @@ func newDevMCPHsfMethodListCommand(runner executor.Runner) *cobra.Command {
 	}
 	cmd.Flags().String("interface-name", "", "必填。HSF 接口全限定名（不能只传简名），如 com.dingtalk.open.connect.workbench.api.service.hsf.MCPHsfService")
 	cmd.Flags().String("version", "", "可选。HSF 服务版本号，缺省 1.0.0")
+	markDevMCPRequiredFlags(cmd, "interface-name")
 	preferLegacyLeaf(cmd)
 	annotateDevMCPTool(cmd, devMCPHsfMethodListTool)
 	DeclareLeafMetadata(cmd, LeafSpec{
@@ -121,8 +122,15 @@ func newDevMCPToolUpdateHsfCommand(runner executor.Runner) *cobra.Command {
 	DeclareLeafMetadata(cmd, LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        devMCPWriteSafety(),
-		Validate:      validateDevMCPHsfUpdate,
-		Contract:      devMCPContract(cmd, devMCPToolUpdateHsfTool, "dev mcp tool update-hsf", "更新 HSF 类型的 MCP 工具草稿", true),
+		Constraints: []LeafConstraint{{
+			Kind: LeafAtLeastOne,
+			Flags: []string{
+				"name", "title", "description", "hsf-info", "tool-inputs",
+				"input-mappings", "tool-outputs", "output-mappings", "timeout", "only-original-keys",
+			},
+		}},
+		Validate: validateDevMCPHsfUpdate,
+		Contract: devMCPContract(cmd, devMCPToolUpdateHsfTool, "dev mcp tool update-hsf", "更新 HSF 类型的 MCP 工具草稿", true, "tool-id"),
 	})
 	return cmd
 }

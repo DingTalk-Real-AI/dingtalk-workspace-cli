@@ -22,6 +22,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/spf13/cobra"
 	"golang.org/x/image/bmp"
@@ -156,6 +157,10 @@ func newChatEmotionFavoriteCommand() *cobra.Command {
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown",
 		},
+		Constraints: []LeafConstraint{{
+			Kind:  LeafExactlyOne,
+			Flags: []string{"media-id", "file-path"},
+		}},
 		Contract: personalEmotionFavoriteContract(),
 	})
 	return cmd
@@ -167,7 +172,7 @@ func runChatEmotionFavorite(cmd *cobra.Command, _ []string) error {
 	filePath, _ := cmd.Flags().GetString("file-path")
 	filePath = strings.TrimSpace(filePath)
 	if mediaID == "" && filePath == "" {
-		return fmt.Errorf("one of --media-id or --file-path is required")
+		return apperrors.NewValidation("--media-id 与 --file-path 必须且只能指定一个")
 	}
 	sourceConversationID, _ := cmd.Flags().GetString("source-conversation-id")
 	sourceMessageID, _ := cmd.Flags().GetString("source-message-id")
