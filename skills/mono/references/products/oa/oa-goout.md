@@ -30,7 +30,7 @@
    · duration-unit：有效单位 hour → HOUR；day/halfDay → DAY
    · valid=false → 原样转告 title/alertInfo + 冲突同行人（userIds），请用户剔除后重试；不得跳过校验直接发起
 6.【时长计算】dws attendance +calculate-approve-duration --biz-type 2 --approve-biz-type attendance.goout --duration-mode <M> --start <T1> --end <T2> [--half-start AM|PM --half-end AM|PM]
-   · 外出固定 --biz-type 2 --approve-biz-type attendance.goout（生产实证；--biz-type 5 不可用，报业务错误 C0002）
+   · 外出固定 --biz-type 2 --approve-biz-type attendance.goout（--biz-type 5 不可用，报业务错误 C0002）
    · 有效单位 → --duration-mode：day → 1；halfDay → 2（必须同时传 --half-start/--half-end，上午=AM、下午=PM）；hour → 3（--start/--end 传 "yyyy-MM-dd HH:mm:00"）
    → durationInHour / durationInDay / detailList / compressedValue（服务端权威，禁止本地估算）
 7.【组装条目】展平子控件条目（extract=true，无容器条目；bizAlias 不组装，服务端按 id 匹配）：
@@ -38,7 +38,7 @@
    · startTime / finishTime：{"id":子控件id,"name":"开始时间"/"结束时间","value":<有效单位格式>}
    · duration：{"id":子控件id,"name":"时长","value":<数字：有效单位=hour → durationInHour，否则 durationInDay>,"extValue":<步骤 6 响应按 oa-form-components.md 外出套件映射表转换后的 JSON 字符串 + "_from"和"_to"（= 起止 value），禁止原样透传>}
    · traveler（可见且有同行人时）：{"id":子控件id,"name":"同行人","value":"<userId JSON 数组字符串>","extValue":<[{"emplId":uid,"name":姓名,"avatar":"","itemId":uid}] JSON 字符串>}
-     —— value 必须是 userId 的 JSON 数组字符串（如 "[\"uid1\",\"uid2\"]"）；生产实证：姓名显示值会触发服务端系统错误
+     —— value 必须是 userId 的 JSON 数组字符串（如 "[\"uid1\",\"uid2\"]"）；姓名显示值会触发服务端系统错误
    · 套件外控件条目（如 {"id":"外出事由","name":"外出事由","value":"…"}，控件 id 以当次 form-schema 为准，可能即中文 label）
 8.【流程预演（必选）】forecast-process --request —— 外出模板常见必选自选审批人节点（required=true 时缺 targetSelectActioners 会被服务端拒绝）；自选结果组装字段为 actionerKey（取自本次 forecast 的 workflowActor.actorKey，禁止跨模板/跨流程复用）+ actionerStaffIds（userId）；字段名写成 activityId/actionerUserIds 会创建成功但流转挂起（tasks 返回空 taskIdList）
 9.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）

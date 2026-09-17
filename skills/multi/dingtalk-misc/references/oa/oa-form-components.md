@@ -489,7 +489,7 @@ extValue = JSON.stringify({
 | duration | 数字：有效单位=hour → durationInHour，否则 durationInDay | 时长计算响应**按下方映射表转换后**的 JSON 字符串 + `"_from"`/`"_to"`（= 起止 value） |
 | traveler（可见且有同行人时） | **userId JSON 数组字符串** `"[\"uid1\",\"uid2\"]"` | `[{"emplId":uid,"name":姓名,"avatar":"","itemId":uid}]` JSON 字符串（avatar 可空） |
 
-duration extValue 映射（`+calculate-approve-duration` 响应（`data.value`）→ extValue 结构；生产实证 2026-09-01）：
+duration extValue 映射（`+calculate-approve-duration` 响应（`data.value`）→ extValue 结构）：
 
 | extValue 字段 | 来源 | 转换 |
 |---|---|---|
@@ -505,10 +505,10 @@ duration extValue 映射（`+calculate-approve-duration` 响应（`data.value`�
 
 > **IMPORTANT：**
 > - `bizAlias` 不组装（MCP formComponentValues 无此字段，服务端按 id 匹配）；**不构造 DDBizSuite 容器条目**（extract=true 展平）；控件 id 必须当次 form-schema 实时取（模板改版即失效，套件外控件 id 可能即中文 label）。
-> - **traveler 的 value 必须是 userId 的 JSON 数组字符串**（生产实证：姓名显示值经 MCP 通道会触发服务端系统错误）；服务端回读时将 value 规范化为逗号连接 userId 串。
-> - 时长、detailList、compressedValue 一律以 `+calculate-approve-duration`（**--biz-type 2 --approve-biz-type attendance.goout**，生产实证；--biz-type 5 报业务错误 C0002）服务端计算为准，**严禁本地估算/手改**（不支持 customDuration）；duration 的 value 提交数字（detail 回读为字符串属服务端归一化）。
+> - **traveler 的 value 必须是 userId 的 JSON 数组字符串**（姓名显示值经 MCP 通道会触发服务端系统错误）；服务端回读时将 value 规范化为逗号连接 userId 串。
+> - 时长、detailList、compressedValue 一律以 `+calculate-approve-duration`（**--biz-type 2 --approve-biz-type attendance.goout**；--biz-type 5 报业务错误 C0002）服务端计算为准，**严禁本地估算/手改**（不支持 customDuration）；duration 的 value 提交数字（detail 回读为字符串属服务端归一化）。
 > - 有同行人时必须先经 `+check-companion-schedules --approve-type 2` 校验：`valid=false` → 原样转告 title/alertInfo + 冲突同行人（userIds），剔除后重试。
-> - 外出模板常见必选自选审批人节点：forecast 返回 `workflowActivityRuleVOs[].targetSelect=true` 且 `required=true` 时**必须选人**组装 `targetSelectActioners`（实证：缺失时服务端拒绝创建）；组装字段为 **actionerKey**（= 本次 forecast 的 `workflowActor.actorKey`）+ **actionerStaffIds**（userId）——字段名误写为 activityId/actionerUserIds 会创建成功但流转挂起（tasks 返回空 taskIdList，2026-09-01 实证）；一切以当次 forecast 返回为准。
+> - 外出模板常见必选自选审批人节点：forecast 返回 `workflowActivityRuleVOs[].targetSelect=true` 且 `required=true` 时**必须选人**组装 `targetSelectActioners`（缺失时服务端拒绝创建）；组装字段为 **actionerKey**（= 本次 forecast 的 `workflowActor.actorKey`）+ **actionerStaffIds**（userId）——字段名误写为 activityId/actionerUserIds 会创建成功但流转挂起（tasks 返回空 taskIdList）；一切以当次 forecast 返回为准。
 
 ### DDBizSuite · attendance.batchovertime（加班套件）
 
