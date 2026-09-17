@@ -185,6 +185,26 @@ func attendanceComplexOvertimeSettingResult() *contract.ResultSpec {
 	}
 }
 
+// attendancePositiveFiniteNumber 要求时长提议值为有限且大于零的数字（number 或数字字符串）。
+// 服务端直接采信逐日/总时长提议值、不做裁决截断：负数、零、NaN/Inf、null 或非数字
+// 都会以错误的加班时长进入后续审批组装，必须在调用前拒绝。
+func attendancePositiveFiniteNumber(value any) error {
+	switch n := value.(type) {
+	case string:
+		parsed, err := strconv.ParseFloat(n, 64)
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed <= 0 {
+			return fmt.Errorf("必须为大于 0 的有限数字")
+		}
+	case float64:
+		if math.IsNaN(n) || math.IsInf(n, 0) || n <= 0 {
+			return fmt.Errorf("必须为大于 0 的有限数字")
+		}
+	default:
+		return fmt.Errorf("必须为数字或数字字符串")
+	}
+	return nil
+}
+
 // ── record ──────────────────────────────────────────────────
 
 // GetRecord 查询个人考勤详情（get_user_attendance_record）。
@@ -639,8 +659,8 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		{Name: "new-overtime", Type: shortcut.FlagBool, Desc: "是否使用新版加班规则；仅明确为新版加班时传"},
 		{Name: "principal-users", Type: shortcut.FlagStringSlice, Desc: "出差、外出等场景的同行人员工 userId，逗号分隔"},
 		{Name: "nature-day", Type: shortcut.FlagBool, Desc: "是否按自然日计算；不传时沿用业务默认规则"},
-		{Name: "duration-in-hour", Type: shortcut.FlagString, Desc: "提议总时长（小时，数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3"},
-		{Name: "duration-in-day", Type: shortcut.FlagString, Desc: "提议总时长（天，数字）；歧义窗口携带，仅 --duration-mode 1/2"},
+		{Name: "duration-in-hour", Type: shortcut.FlagString, Desc: "提议总时长（小时，大于 0 的数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3"},
+		{Name: "duration-in-day", Type: shortcut.FlagString, Desc: "提议总时长（天，大于 0 的数字）；歧义窗口携带，仅 --duration-mode 1/2"},
 		{Name: "detail-list", Type: shortcut.FlagString, Desc: "多日逐日明细 JSON 数组，如 [{\"workDate\":\"2026-09-01 00:00:00\",\"durationInHour\":\"4\"}]；跨天窗口必传"},
 		{Name: "modified-date", Type: shortcut.FlagString, Desc: "明细修改日，格式 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带"},
 	},
@@ -648,7 +668,7 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"biz-type"}, Description: "--biz-type 必须在 1 到 8 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-mode", "half-start", "half-end"}, Description: "--duration-mode 必须在 1 到 5 之间；半天模式必须同时提供 --half-start 和 --half-end"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "起止时间格式必须正确，且 --end 不得早于 --start"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-in-hour", "duration-in-day", "detail-list", "modified-date"}, Description: "--duration-in-hour/--duration-in-day 互斥、必须为数字且与 --duration-mode 单位匹配；--detail-list 必须为 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss）与 durationInHour 或 durationInDay；--modified-date 格式为 yyyy-MM-dd HH:mm:ss"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-in-hour", "duration-in-day", "detail-list", "modified-date"}, Description: "--duration-in-hour/--duration-in-day 互斥、必须为大于 0 的数字且与 --duration-mode 单位匹配；--detail-list 必须为 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss）与大于 0 的 durationInHour 或 durationInDay（互斥且与单位匹配）；--modified-date 格式为 yyyy-MM-dd HH:mm:ss"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Int("biz-type") < 1 || rt.Int("biz-type") > 8 {
@@ -688,16 +708,16 @@ var CalculateApproveDuration = shortcut.Shortcut{
 			return fmt.Errorf("--duration-in-hour 与 --duration-in-day 互斥")
 		}
 		if durHour != "" {
-			if _, err := strconv.ParseFloat(durHour, 64); err != nil {
-				return fmt.Errorf("--duration-in-hour 必须为数字")
+			if v, err := strconv.ParseFloat(durHour, 64); err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+				return fmt.Errorf("--duration-in-hour 必须为大于 0 的有限数字")
 			}
 			if mode != 3 {
 				return fmt.Errorf("--duration-in-hour 仅适用于 --duration-mode 3（小时）")
 			}
 		}
 		if durDay != "" {
-			if _, err := strconv.ParseFloat(durDay, 64); err != nil {
-				return fmt.Errorf("--duration-in-day 必须为数字")
+			if v, err := strconv.ParseFloat(durDay, 64); err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+				return fmt.Errorf("--duration-in-day 必须为大于 0 的有限数字")
 			}
 			if mode != 1 && mode != 2 {
 				return fmt.Errorf("--duration-in-day 仅适用于 --duration-mode 1/2（天/半天）")
@@ -732,9 +752,28 @@ var CalculateApproveDuration = shortcut.Shortcut{
 				default:
 					return fmt.Errorf("--detail-list 第 %d 项 workDate 必须为 yyyy-MM-dd HH:mm:ss 字符串或毫秒时间戳", i+1)
 				}
-				if _, ok := item["durationInHour"]; !ok {
-					if _, ok2 := item["durationInDay"]; !ok2 {
-						return fmt.Errorf("--detail-list 第 %d 项缺少 durationInHour 或 durationInDay", i+1)
+				hourRaw, hasHour := item["durationInHour"]
+				dayRaw, hasDay := item["durationInDay"]
+				if !hasHour && !hasDay {
+					return fmt.Errorf("--detail-list 第 %d 项缺少 durationInHour 或 durationInDay", i+1)
+				}
+				if hasHour && hasDay {
+					return fmt.Errorf("--detail-list 第 %d 项 durationInHour 与 durationInDay 互斥", i+1)
+				}
+				if hasHour {
+					if mode != 3 {
+						return fmt.Errorf("--detail-list 第 %d 项 durationInHour 仅适用于 --duration-mode 3（小时）", i+1)
+					}
+					if err := attendancePositiveFiniteNumber(hourRaw); err != nil {
+						return fmt.Errorf("--detail-list 第 %d 项 durationInHour %w", i+1, err)
+					}
+				}
+				if hasDay {
+					if mode != 1 && mode != 2 {
+						return fmt.Errorf("--detail-list 第 %d 项 durationInDay 仅适用于 --duration-mode 1/2（天/半天）", i+1)
+					}
+					if err := attendancePositiveFiniteNumber(dayRaw); err != nil {
+						return fmt.Errorf("--detail-list 第 %d 项 durationInDay %w", i+1, err)
 					}
 				}
 			}
