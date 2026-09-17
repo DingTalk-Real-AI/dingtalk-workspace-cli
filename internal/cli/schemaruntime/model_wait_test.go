@@ -143,4 +143,9 @@ func TestCrossPlatformCoverageSchemaCacheWaitCodec(t *testing.T) {
 	if _, err := waitToProto(&broken); err == nil {
 		t.Fatal("waitToProto accepted an unknown terminal outcome")
 	}
+	// toolsToProto wraps the per-tool wait conversion error with the tool
+	// identity so a broken cached declaration is attributable.
+	if _, err := toolsToProto([]ToolSpec{waitFixtureTool(&broken)}); err == nil || !strings.Contains(err.Error(), `tool "sample.run" wait:`) {
+		t.Fatalf("toolsToProto() error = %v, want wrapped wait error", err)
+	}
 }
