@@ -32,6 +32,11 @@ interface OpenNodesUpdateRequest {
 必须提供 `--expected-revision` 与稳定 `--request-id`；append 可选 pageId，
 overwrite 必须用 `--page-id` 指定替换页面。上述约束在远端调用前校验。
 
+写入前使用 `whiteboard +diff` 时，应把其 `sourceDigest` 原样传给同次
+`whiteboard +update --expected-source-digest`。CLI 会在任何远端调用前重新规范化
+source 并校验摘要；格式错误返回 `invalid_expected_source_digest`，内容不一致返回
+`source_digest_mismatch`，两者均为 `execution_started=false`。
+
 V1 没有“按真实节点 ID patch 既有节点”的语义。`source.nodes` 中的每一项都会
 创建一个新节点，`id` 仅是本次请求内建立父子关系和连接线引用的临时 ID：
 append 是新增节点，overwrite 是整页删除后重新创建。

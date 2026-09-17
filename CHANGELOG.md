@@ -6,6 +6,41 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62] - 2026-09-16
+
+This stable release promotes the sealed `v1.0.62-beta.8` baseline and adds verified AI Table, document, event, calendar, chat, AISearch, and language-default improvements merged afterwards.
+
+### Changes since `v1.0.62-beta.8`
+
+### Added
+
+- Add AI Table shortcuts for exact field/view resolution, bounded record reads and NDJSON export, batch record/field creation with readback and recovery, App pages and widgets, forms, dashboards, aggregation, and attachment downloads. Preserve existing entry points and equivalent aliases; reject incomplete pagination, mismatched write verification, and unverified AI submission receipts instead of reporting success. Downstream capability and permission limitations remain explicit.
+
+- **Doc shortcut workflows** — add local and online document structure checks with `doc +script`, verified standalone media upload with `doc +media-upload`, optional title fallback, and ordered media attachments during document creation.
+- **Doc reading and editing** — add direct-folder search filtering, readable date filters, chapter and regex block-context reads, document comments, and verified same-document block copying and range editing while preserving existing commands and aliases. Range edits remain sequential, not atomic.
+- **Doc media controls** — add clipboard image input, attachment preview/summary selection, vertical cover positioning, persistent preview output, and explicit download overwrite; fix tag filtering and keep upload progress off JSON stdout.
+- **Doc download confirmation** — use `doc +download-overwrite --source media|cover` for confirmed replacement of local files. Existing media, preview, and cover downloads retain their no-clobber behavior and safety contracts; preserve the preview output shorthand `-o`.
+- **Create with media confirmation** — use `doc +create-with-media --media-files` to create a document and upload local images or attachments after confirmation. Plain `doc +create` retains its published behavior and does not accept media uploads.
+
+### Changed
+
+- **AITable query routing** (#1342) — clarifies routing among raw record queries, server-side statistics, PostgreSQL analysis, and full data export.
+
+- **默认界面语言** — 未设置语言或语言值不受支持时，默认使用简体中文；保留 `DWS_LANG` 优先于 `LANG` 的解析顺序及显式英文设置。
+
+### Fixed
+
+- **Personal events** now obtain managed AppKey metadata when it is missing locally in open-source normal mode, without requiring an AppSecret or changing saved credentials. Existing application identities retain precedence, background listeners reuse the resolved AppKey, and metadata failures report actionable retryability.
+
+- Clarify AISearch evidence checks for time, identity, relevance, uniqueness, and same-condition handoffs to native products.
+
+- Guide newly shared AI Table forms to pass their known title through `--form-name`; require usage-only Agent answers to perform exactly one safe leaf discovery query, then lead with a complete command or an explicit placeholder template without guessing missing IDs, and state that omitted share settings stay unchanged without claiming execution; reject undeclared record-comment rich-content fields before invoking MCP; preserve actionable comment visibility errors; and move AI Table comments, record ID pagination, entity search, and PSQL machine output onto reviewed unified result contracts whose dry-run previews satisfy the published Result Schema and whose comment pagination guidance reads continuation state from `meta.pagination`.
+
+- **Calendar invitation receipts** — fixes false `readback_attendee_missing` failures from `calendar +invite` and `calendar +book --with` when participant responses omit user IDs and display names differ from directory names. Invitations require an explicit successful write receipt and report `verified=false`; `+invite` adds `acknowledged=true`, while `+book --with` adds `attendeesAcknowledged=true` and retains event readback through `eventVerified=true`.
+
+- **Chat rich-text links** — preserve link-item URL targets alongside their labels in message projections, including links without labels.
+
+
 ## [1.0.62-beta.8] - 2026-09-11
 
 ### Added

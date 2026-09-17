@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -104,7 +105,7 @@ func executeNativePrimaryTodo(t *testing.T, caller edition.ToolCaller, args ...s
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(cmd, context.Background())
 }
 
 func findNativePrimaryLeaf(t *testing.T, root *cobra.Command, path ...string) *cobra.Command {

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -127,7 +128,7 @@ func TestCrossPlatformCoverageMessageResourceFailureLedgerBoundaries(t *testing.
 	helpers.InitDeps(&larkAlignmentCaller{})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"+coverage-chat", "+resource-ledger", "--download-resources", "--output-dir", "./downloads"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if cause == nil || ledger["failedCount"] != 1 {

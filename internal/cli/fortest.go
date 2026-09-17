@@ -16,6 +16,7 @@ package cli
 import (
 	"sync/atomic"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/spf13/cobra"
 )
 
@@ -73,6 +74,26 @@ func DeliverySchemaAllPayloadForTest() (map[string]any, error) {
 	return deliverySchemaAllPayload()
 }
 
+// DeliverySchemaOverviewPayloadForTest exercises the production route split.
+func DeliverySchemaOverviewPayloadForTest() (map[string]any, error) {
+	return deliverySchemaOverviewPayload()
+}
+
+// DeliverySchemaQueryPayloadForTest exercises one production path query.
+func DeliverySchemaQueryPayloadForTest(path string) (map[string]any, error) {
+	return queryDeliverySchemaPayload([]string{path})
+}
+
+// DeliverySchemaCacheArtifactsForTest derives artifacts from an already
+// assembled live result without invoking its source factory again.
+func DeliverySchemaCacheArtifactsForTest() (SchemaCacheArtifacts, error) {
+	loaded := runtimeDeliveryLiveCatalog.Load()
+	if loaded == nil {
+		return SchemaCacheArtifacts{}, runtimeDeliverySchemaCatalogErr
+	}
+	return buildSchemaCacheArtifactsFromLoaded(*loaded)
+}
+
 // RestorePackageCLISchemaDeliveryForTest reinstalls the package-cli TestMain
 // assembled-delivery stub after a production-assembly exercise. Outside package
 // cli TestMain it clears the factory and resets lazy delivery state.
@@ -84,6 +105,30 @@ func RestorePackageCLISchemaDeliveryForTest() {
 	storeSchemaSourceRootFn(nil)
 	assembleDeliverySchemaCatalogFn = assembleSchemaCatalogFromRoot
 	resetSchemaDeliveryState()
+}
+
+// AwaitSchemaCachePrewarmForTest blocks until the registered runtime's
+// speculative prewarm (if any) settles, so counter and filesystem assertions
+// are deterministic.
+func AwaitSchemaCachePrewarmForTest() {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil {
+		return
+	}
+	_ = registration.runtime.settledPrewarm()
+}
+
+// SchemaCachePrewarmPayloadsHandleForTest returns the never-adopted prewarm
+// payloads handle after it settles, so tests can assert repair reset closes it.
+func SchemaCachePrewarmPayloadsHandleForTest() *schemacache.Registry {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil {
+		return nil
+	}
+	if pw := registration.runtime.settledPrewarm(); pw != nil {
+		return pw.payloads
+	}
+	return nil
 }
 
 // restorePackageCLISchemaDeliveryHook is installed by package-cli TestMain so

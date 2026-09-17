@@ -58,7 +58,7 @@ func runDingCoverage(t *testing.T, declaration shortcut.Shortcut, caller *dingCo
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd, cmd.Execute()
+	return cmd, corecmd.ExecuteForTest(cmd)
 }
 
 func runDingCoverageOutput(t *testing.T, declaration shortcut.Shortcut, caller *dingCoverageCaller, args ...string) ([]byte, error) {
@@ -71,7 +71,7 @@ func runDingCoverageOutput(t *testing.T, declaration shortcut.Shortcut, caller *
 	cmd.SetOut(&stdout)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return stdout.Bytes(), err
 }
 
@@ -490,5 +490,5 @@ func runDingRoot(t *testing.T, declaration shortcut.Shortcut, caller *dingCovera
 		argv = append(argv, "--yes")
 	}
 	root.SetArgs(argv)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }

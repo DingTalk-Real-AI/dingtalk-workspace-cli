@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
+description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
 metadata:
   internal: true
@@ -48,14 +48,14 @@ metadata:
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 101 | `dingtalk-aitable` |
+| `aitable` | 126 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
-| `chat` | 99 | `dingtalk-chat` |
+| `chat` | 102 | `dingtalk-chat` |
 | `contact` | 13 | `dingtalk-contact` |
 | `devapp` | 25 | `dingtalk-misc` |
 | `ding` | 1 | `dingtalk-misc` |
-| `doc` | 45 | `dingtalk-doc` |
+| `doc` | 49 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
 | `minutes` | 29 | `dingtalk-minutes` |
@@ -64,7 +64,7 @@ metadata:
 | `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
 | `todo` | 21 | `dingtalk-todo` |
-| `whiteboard` | 2 | `dingtalk-misc` |
+| `whiteboard` | 3 | `dingtalk-misc` |
 | `wiki` | 20 | `dingtalk-wiki` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
@@ -88,7 +88,7 @@ metadata:
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
 | `contact`         | 通讯录：用户查询/部门/角色/花名册（学历/家庭/银行卡/紧急联系人/合同等基础字段）/离职员工/特别关注，以及创建企业、企业账号和邀请员工；不含职业历程/绩效/人才池（那些去 `hrbrain`） | [contact.md](./references/products/contact.md)                 |
-| `contract`        | 法务智能合同：台账、批量导入、听记起草、合同审查、归档、项目、相对方与账款管理 | [contract.md](./references/products/contract.md)               |
+| `contract`        | 法务智能合同：台账、批量导入、听记起草、归档、项目、相对方与账款管理 | [contract.md](./references/products/contract.md)               |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
@@ -104,7 +104,7 @@ metadata:
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
-| `whiteboard`      | 独立与文档内嵌白板：带内容创建、读取 OpenNodes、追加节点、整页重建             | [whiteboard.md](./references/products/whiteboard.md)           |
+| `whiteboard`      | 独立与文档内嵌白板：带内容创建、本地 SVG 预渲染、读取 OpenNodes、写前 diff、追加节点、整页重建 | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
 | `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
@@ -112,7 +112,7 @@ metadata:
 
 用户提到"AI应用/创建应用/生成系统/做工具/管理后台/低代码/宜搭" → **当前无稳定产品参考**（勿猜 `aiapp` 命令）；向用户说明能力未以产品文档发布，multi 布局见 `dingtalk-misc` 的 `unsupported-scripts.md`
 用户提到"目标管理/Agoal/战略解码/经营合约或字段配置/计分卡/目标规则周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催" → `agoal`；只填写、提交或查询日报周报月报正文时才走 `report`
-用户提到"法务/智能合同/合同台账/合同审查/合同归档/合同项目/相对方/合同账款/按听记起草合同" → `contract`（合同审批实例的查询或处理走 `oa`；合同文件存储操作走 `drive`）
+用户提到"法务/智能合同/合同台账/合同归档/合同项目/相对方/合同账款/按听记起草合同" → `contract`（合同审批实例的查询或处理走 `oa`；合同文件存储操作走 `drive`）
 用户提到"找人/搜人/谁负责 XX/某事项的负责人/某项目的人/团队成员/上级/下级/按工号找人/按手机号找人" → `aisearch`（通用语义找人；若明确涉及人才池/绩效/职业历程/结构化高级条件，去 `hrbrain`）
 用户提到"表格/多维表/AI表格/记录/数据/视图/图表/仪表盘/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询" → `aitable`
 用户提到"考勤/打卡/排班" → `attendance`
@@ -348,3 +348,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
   - [lite-recipes.md](./references/best_practices/lite-recipes.md) — Lite Recipe 速查（核心流程判定为 lite 后直接执行）
   - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
   - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
+
+Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
+
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。

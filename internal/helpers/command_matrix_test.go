@@ -11,6 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // TestProductCommandMatrixCoverage complements the curated examples by walking
@@ -179,7 +181,7 @@ func TestCrossPlatformCoverageProductCommandMatrixCoverage(t *testing.T) {
 				resetCommandFlags(root)
 				root.SetArgs(invocation)
 				ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-				_ = root.ExecuteContext(ctx)
+				_ = corecmd.ExecuteContextForTest(root, ctx)
 				cancel()
 
 				if index == 0 {
@@ -188,7 +190,7 @@ func TestCrossPlatformCoverageProductCommandMatrixCoverage(t *testing.T) {
 						resetCommandFlags(root)
 						root.SetArgs(invocation)
 						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-						_ = root.ExecuteContext(ctx)
+						_ = corecmd.ExecuteContextForTest(root, ctx)
 						cancel()
 					}
 				}
@@ -203,7 +205,7 @@ func TestCrossPlatformCoverageProductCommandMatrixCoverage(t *testing.T) {
 				resetCommandFlags(root)
 				root.SetArgs(noYes)
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-				_ = root.ExecuteContext(ctx)
+				_ = corecmd.ExecuteContextForTest(root, ctx)
 				cancel()
 			}
 			os.Stdin = stdin
@@ -211,7 +213,7 @@ func TestCrossPlatformCoverageProductCommandMatrixCoverage(t *testing.T) {
 			resetCommandFlags(root)
 			root.SetArgs(base)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-			_ = root.ExecuteContext(ctx)
+			_ = corecmd.ExecuteContextForTest(root, ctx)
 			cancel()
 			caller.dry = false
 		})

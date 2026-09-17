@@ -133,7 +133,7 @@ func TestCrossPlatformCoverageApplyGroupPolicyDoesNotLeakParentLocalFlags(t *tes
 	root.AddCommand(parent)
 	root.SetArgs([]string{"search", "--dimension", "name", "enterprise"})
 
-	err := root.Execute()
+	err := ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "unknown flag: --dimension") {
 		t.Fatalf("Execute() error = %v, want parent local flag rejected by child", err)
 	}
