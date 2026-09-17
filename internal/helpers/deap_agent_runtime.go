@@ -529,6 +529,11 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		case <-ctx.Done():
 			return nil
 		case <-done:
+			// CommandContext may close the consumer pipes before select observes
+			// cancellation (especially on Windows). An explicit stop is not a crash.
+			if ctx.Err() != nil {
+				return nil
+			}
 			failureMu.Lock()
 			defer failureMu.Unlock()
 			return failure
@@ -553,6 +558,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 			return err
 		case line, ok := <-lines:
 			if !ok {
+				if ctx.Err() != nil {
+					return nil
+				}
 				failureMu.Lock()
 				defer failureMu.Unlock()
 				return failure
@@ -627,10 +635,17 @@ func persistEmployeeState(dir string, state digitalEmployeeRunState) error {
 }
 
 func (r *employeeRuntime) recoverInterruptedTasks() error {
-	entries, err := os.ReadDir(filepath.Join(r.dir, "tasks"))
+	taskDir := filepath.Join(r.dir, "tasks")
+	info, err := os.Stat(taskDir)
 	if os.IsNotExist(err) {
 		return nil
 	}
+	// Windows ReadDir may classify an existing regular file as not found.
+	// Only a genuinely absent ledger may be treated as a first startup.
+	if err != nil || !info.IsDir() {
+		return employeeTerminal("ledger_unavailable")
+	}
+	entries, err := os.ReadDir(taskDir)
 	if err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}

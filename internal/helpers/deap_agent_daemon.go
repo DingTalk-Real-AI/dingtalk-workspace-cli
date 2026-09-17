@@ -209,10 +209,17 @@ func employeeWatchStop(ctx context.Context, cancel context.CancelFunc, dir, runI
 
 func employeeFindBindings(agentUUID string) ([]digitalEmployeeBinding, error) {
 	root := filepath.Join(deapConnectConfigDir(), "digital-employees")
-	entries, err := os.ReadDir(root)
+	info, err := os.Stat(root)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("employee binding root is not a directory")
+	}
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
 	}
