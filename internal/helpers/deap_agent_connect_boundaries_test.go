@@ -18,13 +18,13 @@ import (
 )
 
 func TestCrossPlatformCoverageEmployeeConnectCommitBoundaries(t *testing.T) {
-	for _, scenario := range []string{"draft", "cancelled-lock", "existing-live", "existing-dsh", "missing-self", "options", "device", "adapter-write", "consume-write", "resume-unbound", "local-start"} {
+	for _, scenario := range []string{"draft", "cancelled-lock", "existing-live", "existing-dsh", "missing-self", "options", "device", "adapter-write", "consume-write", "resume-unbound", "local-start", "device-mismatch", "adapter-unavailable"} {
 		t.Run(scenario, func(t *testing.T) {
 			setupSuccessfulConnectSeams(t)
 			caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"owner"}]}`)
 			InitDepsForTest(t, caller)
 			channel := "dsh"
-			if scenario == "existing-live" || scenario == "missing-self" || scenario == "options" || scenario == "local-start" {
+			if scenario == "existing-live" || scenario == "missing-self" || scenario == "options" || scenario == "local-start" || scenario == "device-mismatch" {
 				channel = "custom"
 			}
 			cmd := newConnectTestCommandWithMode(t, false, channel)
@@ -68,6 +68,14 @@ func TestCrossPlatformCoverageEmployeeConnectCommitBoundaries(t *testing.T) {
 				_ = cmd.Flags().Set("allowed-users", "unknown-user")
 			case "device":
 				_ = cmd.Flags().Set("device-id", "invalid\nidentity")
+			case "adapter-unavailable":
+				testseam.Swap(t, &digitalEmployeeResolveAdapter, func(string) (digitalEmployeeAdapter, error) { return nil, errors.New("adapter unavailable") })
+			case "device-mismatch":
+				b.DeviceID = "11111111-1111-4111-8111-111111111111"
+				if err := saveDigitalEmployeeBinding(deapConnectConfigDir(), b); err != nil {
+					t.Fatal(err)
+				}
+				_ = cmd.Flags().Set("device-id", "22222222-2222-4222-8222-222222222222")
 			case "local-start":
 				testseam.Swap(t, &digitalEmployeeNewForwarder, func(context.Context, digitalEmployeeAdapterConfig) (forwarder, error) {
 					return nil, errors.New("agent unavailable")

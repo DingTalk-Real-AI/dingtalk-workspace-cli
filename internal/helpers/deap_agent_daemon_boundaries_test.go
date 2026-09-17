@@ -18,7 +18,7 @@ import (
 )
 
 func TestCrossPlatformCoverageEmployeeDaemonStartupFailures(t *testing.T) {
-	for _, scenario := range []string{"unsupported", "executable", "stage", "log", "start", "exited", "cancelled", "timeout", "blocked"} {
+	for _, scenario := range []string{"unsupported", "executable", "stage", "log", "start", "exited", "cancelled", "timeout", "blocked", "cancel-after-start"} {
 		t.Run(scenario, func(t *testing.T) {
 			cfg := employeeBoundaryConfig(t)
 			dir := digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile)
@@ -54,6 +54,20 @@ func TestCrossPlatformCoverageEmployeeDaemonStartupFailures(t *testing.T) {
 			if scenario == "cancelled" {
 				cancel()
 			}
+			if scenario == "cancel-after-start" {
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					for ctx.Err() == nil {
+						if _, err := os.Stat(filepath.Join(dir, "fixture-started")); err == nil {
+							cancel()
+							return
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+				}()
+				defer func() { cancel(); <-done }()
+			}
 			err := startDigitalEmployeeDaemon(cmd, cfg)
 			cancel()
 			if child != nil && child.Process != nil {
@@ -79,6 +93,10 @@ func TestEmployeeDaemonBoundaryFixture(t *testing.T) {
 		return
 	}
 	switch os.Getenv("DWS_DAEMON_BOUNDARY") {
+	case "cancel-after-start":
+		if err := os.WriteFile(filepath.Join(os.Getenv("DWS_DAEMON_BOUNDARY_DIR"), "fixture-started"), []byte("ready"), 0600); err != nil {
+			os.Exit(2)
+		}
 	case "exited":
 		os.Exit(1)
 	case "blocked":

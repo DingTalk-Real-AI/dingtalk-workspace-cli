@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -84,6 +85,7 @@ func employeeTerminal(code string) error {
 
 var employeeReadyLine = regexp.MustCompile(`^\[event\] ready(?:\s|$)`)
 var employeeExecCommand = exec.CommandContext
+var employeeConsumerStopTimeout = 7 * time.Second
 
 func readDigitalEmployeeState(dir string) (digitalEmployeeRunState, error) {
 	var s digitalEmployeeRunState
@@ -473,22 +475,7 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	go func() {
 		defer readWG.Done()
 		defer close(lines)
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 4096), digitalEmployeeStdinLimit)
-		for scanner.Scan() {
-			line := append([]byte(nil), scanner.Bytes()...)
-			select {
-			case lines <- line:
-			case <-ctx.Done():
-				return
-			}
-		}
-		if scanner.Err() != nil {
-			select {
-			case readErr <- employeeTerminal("consumer_event_oversized"):
-			default:
-			}
-		}
+		employeeReadEvents(ctx, stdout, lines, readErr)
 	}()
 	done := make(chan struct{})
 	go func() { readWG.Wait(); _ = proc.Wait(); close(done) }()
@@ -497,8 +484,13 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		_ = stdin.Close()
 		select {
 		case <-done:
-		case <-time.After(7 * time.Second):
+		case <-time.After(employeeConsumerStopTimeout):
 			_ = proc.Process.Kill()
+			// Descendants may still hold a pipe open. Close both readers before
+			// joining, so no scanner/Wait goroutine outlives this worker.
+			_ = stdout.Close()
+			_ = stderr.Close()
+			<-done
 		}
 	}()
 	timer := time.NewTimer(digitalEmployeeReadyTimeout)
@@ -531,12 +523,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		case <-done:
 			// CommandContext may close the consumer pipes before select observes
 			// cancellation (especially on Windows). An explicit stop is not a crash.
-			if ctx.Err() != nil {
-				return nil
-			}
 			failureMu.Lock()
 			defer failureMu.Unlock()
-			return failure
+			return employeeConsumerExit(ctx, failure)
 		}
 	}
 	state.Status = "running"
@@ -558,12 +547,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 			return err
 		case line, ok := <-lines:
 			if !ok {
-				if ctx.Err() != nil {
-					return nil
-				}
 				failureMu.Lock()
 				defer failureMu.Unlock()
-				return failure
+				return employeeConsumerExit(ctx, failure)
 			}
 			var e employeeEvent
 			if json.Unmarshal(line, &e) != nil {
@@ -574,6 +560,36 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 			}
 		}
 	}
+}
+
+// Read consumer stdout separately from process supervision. Backpressure must
+// never prevent cancellation from releasing the process and its pipe readers.
+func employeeReadEvents(ctx context.Context, source io.Reader, lines chan<- []byte, readErr chan<- error) {
+	scanner := bufio.NewScanner(source)
+	scanner.Buffer(make([]byte, 4096), digitalEmployeeStdinLimit)
+	for scanner.Scan() {
+		line := append([]byte(nil), scanner.Bytes()...)
+		select {
+		case lines <- line:
+		case <-ctx.Done():
+			return
+		}
+	}
+	if scanner.Err() != nil {
+		select {
+		case readErr <- employeeTerminal("consumer_event_oversized"):
+		default:
+		}
+	}
+}
+
+// Cancellation is graceful even when pipe/process completion wins the select.
+// Callers hold failureMu while reading the failure snapshot.
+func employeeConsumerExit(ctx context.Context, failure *employeeRunError) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	return failure
 }
 
 func employeeReadRetryHint(line string, failure *employeeRunError) {

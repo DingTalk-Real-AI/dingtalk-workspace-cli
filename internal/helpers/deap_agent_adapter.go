@@ -44,6 +44,8 @@ type digitalEmployeeAdapter interface {
 type digitalEmployeeLocalAdapter struct{}
 type digitalEmployeeDSHAdapter struct{}
 
+var digitalEmployeeResolveAdapter = digitalEmployeeAdapterFor
+
 func digitalEmployeeAdapterFor(channel string) (digitalEmployeeAdapter, error) {
 	if channel == "dsh" {
 		return digitalEmployeeDSHAdapter{}, nil

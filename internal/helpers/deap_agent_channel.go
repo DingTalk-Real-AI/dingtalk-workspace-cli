@@ -274,7 +274,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	binding.RuntimeBindingID, binding.DeviceID = id, device
 	cfg.Binding = binding
-	adapter, err := digitalEmployeeAdapterFor(channel)
+	adapter, err := digitalEmployeeResolveAdapter(channel)
 	if err != nil {
 		return err
 	}

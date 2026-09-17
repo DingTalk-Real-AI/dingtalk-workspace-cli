@@ -14,11 +14,13 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func TestCrossPlatformCoverageEmployeeServerReceiptDurability(t *testing.T) {
-	for _, scenario := range []string{"caller", "confirmed-id", "rejection-write", "refresh-identity"} {
+	for _, scenario := range []string{"caller", "confirmed-id", "rejection-write", "refresh-identity", "empty-result"} {
 		t.Run(scenario, func(t *testing.T) {
 			_, b := lifecycleFixture(t)
 			cmd := lifecycleCmd(t, "bind", b.AgentUUID)
@@ -26,6 +28,8 @@ func TestCrossPlatformCoverageEmployeeServerReceiptDurability(t *testing.T) {
 			caller := &employeeServerErrorCaller{errors: []error{rejection}}
 			InitDepsForTest(t, caller)
 			switch scenario {
+			case "empty-result":
+				InitDepsForTest(t, &employeeNilResultCaller{})
 			case "caller":
 				testseam.Swap(t, &deps, nil)
 			case "confirmed-id":
@@ -47,6 +51,7 @@ func TestCrossPlatformCoverageEmployeeServerReceiptDurability(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "rejection-write":
+				caller.errors = []error{apperrors.NewAPI("unavailable", apperrors.WithReason("mcp_tool_error"), apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "TOOL_NOT_FOUND"}))}
 				testseam.Swap(t, &deapConnectForceRefreshSupervisorToken, func(context.Context, string, string) (string, error) { return "", errors.New("refresh failed") })
 				testseam.Swap(t, &employeeServerWrite, func(path string, value any) error {
 					if op, ok := value.(employeeServerOperation); ok && op.Phase == "rejected" {
@@ -67,6 +72,12 @@ func TestCrossPlatformCoverageEmployeeServerReceiptDurability(t *testing.T) {
 			}
 		})
 	}
+}
+
+type employeeNilResultCaller struct{ digitalEmployeeProtocolCaller }
+
+func (*employeeNilResultCaller) CallToolWithToken(context.Context, string, string, string, map[string]any) (*edition.ToolResult, error) {
+	return nil, nil
 }
 
 func TestCrossPlatformCoverageEmployeeBindingViewAndUnbindResume(t *testing.T) {
@@ -110,7 +121,11 @@ func TestCrossPlatformCoverageEmployeeBindingViewAndUnbindResume(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				if err := writeEmployeeJSON(employeeServerOperationPath(b.DWSProfile), employeeServerOperation{Key: "key", Phase: "confirmed", RuntimeBindingID: b.RuntimeBindingID}); err != nil {
+				action := "bind"
+				if scenario == "unbound-consume" {
+					action = "unbind"
+				}
+				if err := writeEmployeeJSON(employeeServerOperationPath(b.DWSProfile), employeeServerOperation{Key: "key", Phase: "confirmed", Action: action, RuntimeBindingID: b.RuntimeBindingID}); err != nil {
 					t.Fatal(err)
 				}
 				testseam.Swap(t, &employeeServerWrite, func(string, any) error { return errors.New("receipt unavailable") })
