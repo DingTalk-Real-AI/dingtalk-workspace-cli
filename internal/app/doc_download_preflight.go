@@ -42,7 +42,7 @@ func (r *runtimeRunner) preflightDocDownload(ctx context.Context, tc *transport.
 
 	preflightStart := time.Now()
 	info, err := tc.CallTool(ctx, endpoint, docGetDocumentInfoTool, map[string]any{"nodeId": nodeID})
-	RecordTiming(ctx, "doc_download_preflight", time.Since(preflightStart))
+	RecordNestedTiming(ctx, "doc_download_preflight", time.Since(preflightStart))
 	if err != nil {
 		return err
 	}

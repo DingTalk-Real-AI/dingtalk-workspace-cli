@@ -52,6 +52,8 @@ func TestNormalizeResultSpecRejectsInvalidContractsDeterministically(t *testing.
 		{"unknown outcome", func(r *ResultSpec) { r.Outcomes = []ResultOutcome{"ok"} }, "unknown outcome"},
 		{"duplicate outcome", func(r *ResultSpec) { r.Outcomes = []ResultOutcome{ResultOutcomeSuccess, ResultOutcomeSuccess} }, "duplicate outcome"},
 		{"schema array", func(r *ResultSpec) { r.DataSchema = json.RawMessage(`[]`) }, "data_schema: must be one JSON object"},
+		{"schema null", func(r *ResultSpec) { r.DataSchema = json.RawMessage(`null`) }, "data_schema: must be one JSON object"},
+		{"trailing garbage", func(r *ResultSpec) { r.DataSchema = json.RawMessage(`{} x`) }, "data_schema: must be one JSON object"},
 		{"multiple schemas", func(r *ResultSpec) { r.DataSchema = json.RawMessage(`{} {}`) }, "data_schema: must be one JSON object"},
 		{"missing property description", func(r *ResultSpec) {
 			r.DataSchema = json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}}}`)

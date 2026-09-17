@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -34,7 +35,10 @@ func TestCrossPlatformCoverageWhiteboardTrace(t *testing.T) {
 		t.Fatalf("wrong origin: %s", b)
 	}
 	info, _ := os.Stat(files[0])
-	if info.Mode().Perm()&0077 != 0 {
+	// Go synthesizes 0666 for every writable file on Windows, so the POSIX
+	// group/other bits are meaningless there (access is governed by the
+	// per-user temp DACL); assert them only where they carry semantics.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 		t.Fatal("trace readable by other users")
 	}
 
