@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillpaths"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
@@ -22,80 +23,7 @@ import (
 // where dws skills get installed. Mirrors install.sh / install.ps1 /
 // build/npm/install.js so that `dws skill setup` and the install scripts
 // agree on the install footprint.
-var skillSetupAgentHomes = []string{
-	".agents/skills",
-	".config/agents/skills",
-	".gemini/antigravity/skills",
-	".gemini/antigravity-cli/skills",
-	".deepagents/agent/skills",
-	".firebender/skills",
-	".copilot/skills",
-	".config/opencode/skills",
-	".aider-desk/skills",
-	".astrbot/data/skills",
-	".autohand/skills",
-	".augment/skills",
-	".bob/skills",
-	".claude/skills",
-	".openclaw/skills",
-	".codeartsdoer/skills",
-	".codebuddy/skills",
-	".codemaker/skills",
-	".codestudio/skills",
-	".commandcode/skills",
-	".continue/skills",
-	".snowflake/cortex/skills",
-	".config/crush/skills",
-	".config/devin/skills",
-	".factory/skills",
-	".forge/skills",
-	".config/goose/skills",
-	".grok/skills",
-	".hermes/skills",
-	".inferencesh/skills",
-	".jazz/skills",
-	".junie/skills",
-	".iflow/skills",
-	".kilocode/skills",
-	".config/kimchi/harness/skills",
-	".kiro/skills",
-	".kode/skills",
-	".lingma/skills",
-	".mcpjam/skills",
-	".minimax/skills",
-	".vibe/skills",
-	".moxby/skills",
-	".mux/skills",
-	".openhands/skills",
-	".ona/skills",
-	".pi/agent/skills",
-	".qoder/skills",
-	".qoder-cn/skills",
-	".qwen/skills",
-	".reasonix/skills",
-	".rovodev/skills",
-	".roo/skills",
-	".tabnine/agent/skills",
-	".terramind/skills",
-	".tinycloud/skills",
-	".trae/skills",
-	".trae-cn/skills",
-	".codeium/windsurf/skills",
-	".zcode/skills",
-	".zencoder/skills",
-	".neovate/skills",
-	".pochi/skills",
-	".adal/skills",
-	".qoderwork/skills",
-	// beta.6 compatibility roots: cleanup only.
-	".cursor/skills",
-	".gemini/skills",
-	".codex/skills",
-	".github/skills",
-	".windsurf/skills",
-	".cline/skills",
-	".amp/skills",
-}
+var skillSetupAgentHomes = skillpaths.AgentHomes()
 
 const (
 	skillSetupModeMono  = "mono"

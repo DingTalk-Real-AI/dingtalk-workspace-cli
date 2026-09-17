@@ -26,7 +26,25 @@ unrelated work, and use `gofmt` for every modified Go file.
 
 Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
-`internal/app`). There is no
+`internal/app`). Schema identity is **not** produced at compile or release
+time; shipping binaries do not embed binary-pinned cache digests. On
+supported platforms (darwin/linux/windows amd64/arm64) production enables the
+persistent cache: install or the first schema-consuming path generates
+identity from this binary's live declarations, writes authenticated disk
+shards, and later processes load that local identity then verify digests
+before reading protobuf. A missing sidecar generates then uses the cache;
+it is not a permanent live-only mode. Plugins that change the command
+surface still disable cache publication, repair, and prewarm; read-only
+serving of the unchanged reviewed surface continues (plugin commands never
+enter the Schema surface, cached or live). Tests may also inject identity via
+`RegisterSchemaCacheOptions`.
+See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
+local-identity shipping model, complete-tree performance contract, cache
+delivery; no sibling plan/design/performance pages are kept. Telemetry
+delivery is the detached background-process model (see
+`.changes/clitrack-detached-reporting.md`), not the retired in-process
+`NoFlushWait` CLI default.
+There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
 `internal/cli/schema_catalog/`, `internal/cli/schema_meta_index.gob`, and
@@ -56,6 +74,10 @@ Schema contract) keep separate authorities — do not merge them with
   - homology gates → `internal/cli/homology`
   - Catalog assembly / `ResolveMeta` (`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`); go:embed only for reviewed inputs → `internal/cli` root (package-local aliases for annotate/store APIs live in `runtime_schema_seam.go`; the former `cli/runtimeannotate` / `cli/contractfinal` shim packages are removed — import `corecmd/*` directly)
   - **Hard rule**: `internal/corecmd` (and its subpackages) must **not** import any `internal/cli` package
+- Command metadata must not keep discarded Cobra trees alive. Use framework
+  `commandstore.Map` weak keys for DTO metadata; values must not reference commands.
+  Execution-hook lookups must also use weak values when closures can capture a
+  command; the installed RunE pipeline owns those hooks strongly.
 - Authoring tiers (current, not aspirational):
   - **Tier1** — `corecmd.New` / `helpers.NewLeafCommand` (fully managed declare + execute)
   - **Tier2** — `DeclareLeafMetadata` (helpers migration; **Shortcut may also use this path — acceptable**)
@@ -169,6 +191,21 @@ CI determinism (`check-schema-assembly.sh`) and policy jq gates consume a
 fresh assembly dump; runtime consumes the same `ResolveSchemaBuild` path via
 `RegisterSchemaSourceRoot`. Neither path may reopen annotations, merge source
 records, or use a previous Catalog JSON as a source.
+
+Pure typed consumption lives in `internal/cli/schemaruntime`, with parent-cli
+aliases for compatibility. It must remain independent of cli/Cobra/app/auth.
+The private generated protobuf lives in `internal/cli/schemacachepb`; bounded
+authenticated I/O and atomic publication live in `internal/schemacache` and
+must not call payload parsers. Framework constraint DTO normalization belongs
+to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
+`internal/schemareader` owns the immutable binary identity and composes that
+backend with the same typed decoders used by the CLI. Keep repair and process
+memoization in cli. Every public process invocation constructs the same complete
+Cobra tree before parsing argv, including root help, version, Schema, utilities,
+business commands, and completion. Do not add argv-selected product trees,
+pre-Cobra Schema execution, or a separate root-help projection.
+The startup warning's agent-relative paths are shared through internal/skillpaths.
+Publish the live Catalog pointer only after its Meta projection is complete.
 
 ### Assembly vs consumption
 
