@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
@@ -71,7 +73,7 @@ func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
 		"--open-conversation-id=conversation",
 		"--output=" + outputDir,
 	})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

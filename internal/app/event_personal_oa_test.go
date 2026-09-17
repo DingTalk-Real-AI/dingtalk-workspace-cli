@@ -12,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +26,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 	var listOut bytes.Buffer
 	list.SetOut(&listOut)
 	list.SetArgs([]string{"--category", "oa"})
-	if err := list.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(list); err != nil {
 		t.Fatalf("event list --category oa error = %v", err)
 	}
 	tests := []struct {
@@ -35,14 +37,14 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskCreated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalTaskFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -50,7 +52,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskRedirected,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -58,28 +60,28 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalInstanceStarted,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceCC,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "cc_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "finish_time", "event_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "result", "create_time", "finish_time",
+				"staff_id", "activity_id", "corp_id", "business_id", "process_code", "title", "status", "result", "create_time", "finish_time",
 				"event_time",
 			},
 		},
@@ -96,7 +98,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 		var schemaOut bytes.Buffer
 		schema.SetOut(&schemaOut)
 		schema.SetArgs([]string{eventKey, "--flatten"})
-		if err := schema.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(schema); err != nil {
 			t.Fatalf("event schema %s --flatten error = %v", eventKey, err)
 		}
 		var doc map[string]any
@@ -119,12 +121,122 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 				t.Fatalf("schema property %s for %s = %#v", name, eventKey, properties[name])
 			}
 		}
+		for name, source := range map[string]string{
+			"staff_id":    "payload.body.staffId",
+			"activity_id": "payload.body.activityId",
+			"corp_id":     "payload.body.corpId",
+			"business_id": "payload.body.businessId",
+		} {
+			property := properties[name].(map[string]any)
+			if property["type"] != "string" || !strings.Contains(property["description"].(string), source) {
+				t.Fatalf("%s schema for %s = %#v, want string sourced from %s", name, eventKey, property, source)
+			}
+		}
+		if eventKey == personal.EventOAApprovalInstanceCC {
+			cc := properties["cc_time"].(map[string]any)
+			if cc["type"] != "integer" || cc["format"] != "timestamp_ms" {
+				t.Fatalf("cc_time schema = %#v, want timestamp_ms integer", cc)
+			}
+		}
 		if _, ok := properties["payload"]; ok {
 			t.Fatalf("schema for %s exposed generic payload: %#v", eventKey, properties)
 		}
 	}
 	if strings.Contains(listOut.String(), personal.EventMention) {
 		t.Fatalf("OA category list leaked IM event:\n%s", listOut.String())
+	}
+}
+
+func TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput(t *testing.T) {
+	// Match the reported wire nesting, using synthetic identifiers only.
+	const data = `{"eventKey":"EVENT_KEY","eventId":"oa-event",
+		"payload":{"uid":100001,"staffId":"outer-staff-must-not-be-used","activityId":"outer-activity-must-not-be-used",
+        "corpid":"outer-corp","corpId":"outer-corp","bizid":"outer-biz","businessId":"outer-business","ccTime":123,"body":{
+			"processInstanceId":"instance-1","taskId":"task-1","title":"测试审批",
+			"status":"RUNNING",OPTIONAL_FIELDS"createTime":1789616921000},"event_time":1789616921000}}`
+	ccTime, zeroTime := int64(1789629013805), int64(0)
+	for _, eventKey := range []string{
+		personal.EventOAApprovalTaskCreated,
+		personal.EventOAApprovalTaskFinished,
+		personal.EventOAApprovalTaskRedirected,
+		personal.EventOAApprovalInstanceStarted,
+		personal.EventOAApprovalInstanceCC,
+		personal.EventOAApprovalInstanceTerminated,
+		personal.EventOAApprovalInstanceFinished,
+	} {
+		for _, tt := range []struct {
+			name     string
+			field    string
+			staff    string
+			activity string
+			corp     string
+			business string
+			ccTime   *int64
+		}{
+			{name: "present", field: `"staffId":"00012345","activityId":"0012_abcd","corpId":"ding-test-corp","businessId":"000202609170001","ccTime":1789629013805,`, staff: "00012345", activity: "0012_abcd", corp: "ding-test-corp", business: "000202609170001", ccTime: &ccTime},
+			{name: "staff only", field: `"staffId":"00012345",`, staff: "00012345"},
+			{name: "activity only", field: `"activityId":"0012_abcd",`, activity: "0012_abcd"},
+			{name: "corp only", field: `"corpId":"ding-test-corp",`, corp: "ding-test-corp"},
+			{name: "business only", field: `"businessId":"000202609170001",`, business: "000202609170001"},
+			{name: "cc time only", field: `"ccTime":1789629013805,`, ccTime: &ccTime},
+			{name: "zero cc time", field: `"ccTime":0,`, ccTime: &zeroTime},
+			{name: "missing"},
+			{name: "empty", field: `"staffId":"","activityId":"","corpId":"","businessId":"",`},
+			{name: "null", field: `"staffId":null,"activityId":null,"corpId":null,"businessId":null,"ccTime":null,`},
+		} {
+			t.Run(eventKey+"/"+tt.name, func(t *testing.T) {
+				ev := transport.Event{
+					Type:      transport.FrameTypeEvent,
+					EventType: eventKey,
+					Data:      strings.NewReplacer("EVENT_KEY", eventKey, "OPTIONAL_FIELDS", tt.field).Replace(data),
+				}
+				if eventKey == personal.EventOAApprovalInstanceCC {
+					ev.Data = strings.Replace(ev.Data, `"status":"RUNNING",`, "", 1)
+				}
+				for _, flatten := range []bool{true, false} {
+					var out bytes.Buffer
+					pipeline, err := consume.BuildPipeline(consume.FormatNDJSON, "", nil, &out,
+						consume.WithProjector(personalEventProjector(false, flatten)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() { _ = pipeline.Close() })
+					if err := pipeline.Deliver(ev); err != nil {
+						t.Fatal(err)
+					}
+					if bytes.Count(out.Bytes(), []byte("\n")) != 1 {
+						t.Fatalf("expected one NDJSON line, got %q", out.String())
+					}
+					var got map[string]any
+					if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+						t.Fatal(err)
+					}
+					if !flatten {
+						if got["data"] != ev.Data {
+							t.Fatalf("non-flatten output changed original data: %#v", got)
+						}
+						continue
+					}
+					for name, want := range map[string]string{"staff_id": tt.staff, "activity_id": tt.activity, "corp_id": tt.corp, "business_id": tt.business} {
+						value, exists := got[name]
+						if want == "" && exists || want != "" && value != want {
+							t.Fatalf("%s = %#v (present=%v), want %q (omitted when empty)", name, value, exists, want)
+						}
+					}
+					value, exists := got["cc_time"]
+					if eventKey == personal.EventOAApprovalInstanceCC && tt.ccTime != nil {
+						if value != float64(*tt.ccTime) {
+							t.Fatalf("cc_time = %#v, want %d from body rather than event_time", value, *tt.ccTime)
+						}
+					} else if exists {
+						t.Fatalf("unexpected cc_time for %s without a CC body value: %#v", eventKey, value)
+					}
+					if got["type"] != eventKey || got["process_instance_id"] != "instance-1" || got["title"] != "测试审批" {
+						t.Fatalf("flattened business fields changed: %#v", got)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -181,7 +293,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(&stderr)
 			cmd.SetArgs([]string{eventKey, "--dry-run"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("OA dry-run error = %v", err)
 			}
 			if !strings.Contains(stderr.String(), "event_types      : "+eventKey) {
@@ -205,7 +317,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 				cmd.SetOut(io.Discard)
 				cmd.SetErr(io.Discard)
 				cmd.SetArgs(append([]string{eventKey}, append(args, "--dry-run")...))
-				err := cmd.Execute()
+				err := corecmd.ExecuteForTest(cmd)
 				if err == nil || !strings.Contains(err.Error(), "not supported") {
 					t.Fatalf("OA consume %s error = %v, want unsupported option", args[0], err)
 				}
@@ -221,7 +333,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(&stderr)
 		cmd.SetArgs(append(append([]string(nil), oaEvents...), "--dry-run"))
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("multi OA dry-run error = %v", err)
 		}
 		for _, eventKey := range oaEvents {
@@ -247,7 +359,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(&stderr)
 		cmd.SetArgs([]string{"--subscribe-id", "oa-sub-task", "--dry-run"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("implicit reused OA dry-run error = %v", err)
 		}
 		if !strings.Contains(stderr.String(), "event_types      : "+personal.EventOAApprovalTaskCreated) {
@@ -273,7 +385,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 				cmd.SetOut(io.Discard)
 				cmd.SetErr(io.Discard)
 				cmd.SetArgs(args)
-				err := cmd.Execute()
+				err := corecmd.ExecuteForTest(cmd)
 				if err == nil || !strings.Contains(err.Error(), flag+" not supported for OA event") {
 					t.Fatalf("%s reused OA dry-run %s error = %v", mode, flag, err)
 				}
@@ -288,7 +400,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs([]string{"--subscribe-id", "im-sub-at", "--query", "urgent", "--dry-run"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("implicit reused IM dry-run error = %v", err)
 		}
 	})
@@ -304,7 +416,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			args := append([]string(nil), oaEvents...)
 			args = append(args, flag, value, "--dry-run")
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "not supported for OA event") {
 				t.Fatalf("multi OA consume %s error = %v", flag, err)
 			}
@@ -336,7 +448,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(test.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("existing IM consume behavior changed: %v", err)
 			}
 		})
@@ -543,7 +655,7 @@ func TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation(t *testing.T
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"--subscribe-id", "oa-sub-task", "--group", "cid-1"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "--group not supported for OA event "+personal.EventOAApprovalTaskCreated) {
 		t.Fatalf("implicit reused OA runtime error = %v", err)
 	}
@@ -606,7 +718,7 @@ func TestPersonalOAStatusAndStopCommandWiring(t *testing.T) {
 		"--subscribe-id", "oa-sub-task",
 		"--status", "all",
 	})
-	if err := status.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(status); err != nil {
 		t.Fatalf("OA event status error = %v", err)
 	}
 	if statusOpts.EventKey != personal.EventOAApprovalTaskCreated ||
@@ -628,7 +740,7 @@ func TestPersonalOAStatusAndStopCommandWiring(t *testing.T) {
 	event.AddCommand(newEventStopCommand())
 	root.AddCommand(event)
 	root.SetArgs([]string{"event", "stop", "oa-sub-task", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("OA event stop error = %v", err)
 	}
 	if stopOpts.SubscribeID != "oa-sub-task" || stopOpts.All {

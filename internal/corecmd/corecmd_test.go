@@ -1082,7 +1082,7 @@ func TestCrossPlatformCoverageNewCommandOrchestration(t *testing.T) {
 	}
 
 	cmd.SetArgs([]string{"--a", "v"})
-	if err := cmd.Execute(); err != nil {
+	if err := ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(order, []string{"validate", "dispatch"}) {
@@ -1114,7 +1114,7 @@ func TestCrossPlatformCoverageNewCommandRunEEscapeHatch(t *testing.T) {
 
 	missing := newEscape()
 	missing.SetArgs(nil)
-	if err := missing.Execute(); err == nil {
+	if err := ExecuteForTest(missing); err == nil {
 		t.Fatal("escape hatch must still enforce a declared Required flag")
 	}
 	if ran {
@@ -1123,7 +1123,7 @@ func TestCrossPlatformCoverageNewCommandRunEEscapeHatch(t *testing.T) {
 
 	satisfied := newEscape()
 	satisfied.SetArgs([]string{"--x", "value"})
-	if err := satisfied.Execute(); err != nil {
+	if err := ExecuteForTest(satisfied); err != nil {
 		t.Fatalf("escape hatch must run once the declaration is satisfied: %v", err)
 	}
 	if !ran {
@@ -1152,7 +1152,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 	}
 	cmd := New(spec)
 	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "need") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "need") {
 		t.Fatalf("required err = %v", err)
 	}
 	if validated || dispatched {
@@ -1163,7 +1163,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 	validated, dispatched = false, false
 	cmd = New(spec)
 	cmd.SetArgs([]string{"--need", "a", "--other", "b"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "互斥") {
 		t.Fatalf("constraint err = %v", err)
 	}
 	if validated || dispatched {
@@ -1183,7 +1183,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 		},
 	})
 	cmd.SetArgs([]string{"--x", "v"})
-	if err := cmd.Execute(); !errors.Is(err, boom) {
+	if err := ExecuteForTest(cmd); !errors.Is(err, boom) {
 		t.Fatalf("validate hook err = %v", err)
 	}
 	if dispatched {
@@ -1201,7 +1201,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 		},
 	})
 	cmd.SetArgs([]string{"--y", "v"})
-	if err := cmd.Execute(); !errors.Is(err, boom) {
+	if err := ExecuteForTest(cmd); !errors.Is(err, boom) {
 		t.Fatalf("BuildArgs err = %v", err)
 	}
 	if dispatched {
@@ -1227,7 +1227,7 @@ func TestCrossPlatformCoverageNewCommandDeclineCancels(t *testing.T) {
 	cmd.SetIn(strings.NewReader("no\n"))
 	cmd.SetErr(&strings.Builder{})
 	cmd.SetArgs([]string{"--x", "v"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("decline err = %v", err)
 	}
 	if dispatched {
@@ -1336,7 +1336,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateDispatch(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--n-alias", "via-alias", "--count", "4", "--on", "--ids", " a , b ", "--yes", "pos1"})
-	if err := cmd.Execute(); err != nil {
+	if err := ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if seen.str != "via-alias" {
@@ -1376,7 +1376,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateHonorsConfirmation(t *testing
 	declined := build()
 	declined.SetIn(strings.NewReader("no\n"))
 	declined.SetArgs([]string{"--x", "v"})
-	if err := declined.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(declined); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("declined orchestrate err = %v", err)
 	}
 	if ran {
@@ -1385,7 +1385,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateHonorsConfirmation(t *testing
 	// --yes bypasses the prompt and runs it.
 	confirmed := build()
 	confirmed.SetArgs([]string{"--x", "v", "--yes"})
-	if err := confirmed.Execute(); err != nil {
+	if err := ExecuteForTest(confirmed); err != nil {
 		t.Fatal(err)
 	}
 	if !ran {
@@ -1653,7 +1653,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	declined := build(nil)
 	declined.SetIn(strings.NewReader("no\n"))
 	declined.SetArgs(nil)
-	if err := declined.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(declined); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("declined guard-first err = %v", err)
 	}
 	if ran {
@@ -1665,7 +1665,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	confirmed := build(nil)
 	confirmed.SetIn(strings.NewReader("yes\n"))
 	confirmed.SetArgs(nil)
-	if err := confirmed.Execute(); err == nil || !strings.Contains(err.Error(), "x") {
+	if err := ExecuteForTest(confirmed); err == nil || !strings.Contains(err.Error(), "x") {
 		t.Fatalf("confirmed guard-first required err = %v", err)
 	}
 	if ran {
@@ -1677,7 +1677,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	satisfied := build(nil)
 	satisfied.SetIn(strings.NewReader("yes\n"))
 	satisfied.SetArgs([]string{"--x", "v"})
-	if err := satisfied.Execute(); err != nil {
+	if err := ExecuteForTest(satisfied); err != nil {
 		t.Fatalf("satisfied guard-first err = %v", err)
 	}
 	if !ran {
@@ -1710,7 +1710,7 @@ func TestCrossPlatformCoverageNewCommandRunEHonorsConfirmation(t *testing.T) {
 	blocked := build()
 	blocked.SetIn(strings.NewReader(""))
 	blocked.SetArgs(nil)
-	err := blocked.Execute()
+	err := ExecuteForTest(blocked)
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("RunE confirmation err = %#v, want confirmation_required", err)
@@ -1721,7 +1721,7 @@ func TestCrossPlatformCoverageNewCommandRunEHonorsConfirmation(t *testing.T) {
 
 	confirmed := build()
 	confirmed.SetArgs([]string{"--yes"})
-	if err := confirmed.Execute(); err != nil {
+	if err := ExecuteForTest(confirmed); err != nil {
 		t.Fatalf("confirmed RunE err = %v", err)
 	}
 	if !ran {
@@ -1742,7 +1742,7 @@ func TestCrossPlatformCoverageNewCommandPreflightEnumGate(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--mode", "zzz"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), `参数 --mode 取值 "zzz" 不合法`) {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), `参数 --mode 取值 "zzz" 不合法`) {
 		t.Fatalf("preflight enum err = %v", err)
 	}
 	if dispatched {

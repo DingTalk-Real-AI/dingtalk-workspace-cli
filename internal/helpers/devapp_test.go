@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -160,7 +161,7 @@ func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app", "member", tc.cmd}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 
@@ -274,7 +275,7 @@ func TestDevAppRobotCommandsBuildToolParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if got := runner.last.CanonicalProduct; got != "devapp" {
@@ -367,7 +368,7 @@ func TestDevAppVersionCommandsBuildToolParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if got := runner.last.Tool; got != tc.wantTool {
@@ -400,7 +401,7 @@ func TestDevAppRobotAndVersionWritesRequireGuard(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil {
 				t.Fatal("Execute() error = nil, want write guard")
 			}
@@ -422,7 +423,7 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"list", "--name", "Waker", "--cursor", "tok-2", "--page-size", "5", "--sort-type", "gmt_modified", "--sort-order", "desc"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "list_dev_app" {
@@ -448,7 +449,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"get", "--unified-app-id", "u-1"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "get_dev_app" {
@@ -468,7 +469,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) 
 	root.SetErr(&out)
 	root.SetArgs([]string{"get", "--app-key", "dingxxx"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "get_dev_app" {
@@ -488,7 +489,7 @@ func TestCrossPlatformCoverageDevAppGetPrefersUnifiedAppIDWhenBothPresent(t *tes
 	root.SetErr(&out)
 	root.SetArgs([]string{"get", "--unified-app-id", "u-1", "--app-key", "dingxxx"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	want := map[string]any{"unifiedAppId": "u-1", "appKey": "dingxxx"}
@@ -505,7 +506,7 @@ func TestCrossPlatformCoverageDevAppGetRequiresLocator(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"get"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "请传入 --unified-app-id 或 --app-key") {
 		t.Fatalf("error = %v, want locator validation", err)
 	}
@@ -519,7 +520,7 @@ func TestDevAppCreateUsesCurrentInnerToolAndWriteGuard(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"create", "--name", "Demo"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("error = %v, want write guard", err)
 	}
@@ -529,7 +530,7 @@ func TestDevAppCreateUsesCurrentInnerToolAndWriteGuard(t *testing.T) {
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "create", "--name", "Demo", "--desc", "internal app", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "create_dev_app" {
@@ -550,7 +551,7 @@ func TestDevAppUpdateUsesCurrentInnerTool(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "update", "--unified-app-id", "u-123", "--desc", "new desc", "--yes"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "update_dev_app" {
@@ -592,7 +593,7 @@ func TestDevAppLifecycleBuildsLocatorParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if got := runner.last.Tool; got != tc.wantTool {
@@ -618,7 +619,7 @@ func TestDevAppDeleteConfirmName(t *testing.T) {
 		root.SetOut(&out)
 		root.SetErr(&out)
 		root.SetArgs([]string{"dev", "app", "delete", "--unified-app-id", "u-123", "--confirm-name", "DemoApp", "--yes"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("Execute() error = %v", err)
 		}
 		if runner.last.Tool != "delete_dev_app" {
@@ -633,7 +634,7 @@ func TestDevAppDeleteConfirmName(t *testing.T) {
 		root.SetOut(&out)
 		root.SetErr(&out)
 		root.SetArgs([]string{"dev", "app", "delete", "--unified-app-id", "u-123", "--confirm-name", "WrongName", "--yes"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if err == nil || !strings.Contains(err.Error(), "名称不匹配") {
 			t.Fatalf("error = %v, want 名称不匹配", err)
 		}
@@ -649,7 +650,7 @@ func TestDevAppDeleteConfirmName(t *testing.T) {
 		root.SetOut(&out)
 		root.SetErr(&out)
 		root.SetArgs([]string{"dev", "app", "delete", "--unified-app-id", "u-123", "--confirm-name", "DemoApp", "--yes"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if err == nil || !strings.Contains(err.Error(), "无法读取应用名") {
 			t.Fatalf("error = %v, want 无法读取应用名 (fail-closed)", err)
 		}
@@ -669,7 +670,7 @@ func TestDevAppEventListForwardsKeyword(t *testing.T) {
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "event", "list", "--unified-app-id", "u-1", "--keyword", "通讯录"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if runner.last.Tool != devAppEventListTool {
@@ -696,7 +697,7 @@ func TestDevAppEventSubscribeUsesEventCodes(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if runner.last.Tool != tc.wantTool {
@@ -736,7 +737,7 @@ func TestCrossPlatformCoverageDevAppEventSubscribeRunnerFailureIsNotRetried(t *t
 		"--yes",
 	})
 
-	if err := root.Execute(); !stderrors.Is(err, wantErr) {
+	if err := corecmd.ExecuteForTest(root); !stderrors.Is(err, wantErr) {
 		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
 	}
 	if runner.calls != 1 {
@@ -759,7 +760,7 @@ func TestDevAppEventSubscribeRequiresEventCodes(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), "--event-codes 为必填") {
 				t.Fatalf("Execute() error = %v, want --event-codes 为必填", err)
 			}
@@ -786,7 +787,7 @@ func TestCrossPlatformCoverageDevAppEventSubscribeRejectsSeparatorOnlyEventCodes
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), "--event-codes 为必填") {
 				t.Fatalf("Execute() error = %v, want --event-codes 为必填", err)
 			}
@@ -831,7 +832,7 @@ func TestDevAppWebappCommandsBuildParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if got := runner.last.Tool; got != tc.wantTool {
@@ -892,7 +893,7 @@ func TestDevAppPermissionCommandsBuildParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, tc.args...))
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			if got := runner.last.Tool; got != tc.wantTool {
@@ -913,7 +914,7 @@ func TestDevAppCredentialsGetBuildsParams(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "credentials", "get", "--unified-app-id", "u-123"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != "get_dev_app_credentials" {
@@ -942,7 +943,7 @@ func TestDevAppCredentialsGetKeepsSecretFields(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "credentials", "get", "--unified-app-id", "u-123"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	rendered := out.String()
@@ -975,7 +976,7 @@ func TestDevAppMemberCommandsValidateRequiredFlags(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app", "member", tc.cmd}, tc.args...))
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil {
 				t.Fatalf("Execute() error = nil, want %q", tc.wantErr)
 			}
@@ -1004,7 +1005,7 @@ func TestDevAppSecurityConfigBuildsOnlyProvidedLists(t *testing.T) {
 		"--dry-run",
 	})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 
@@ -1033,7 +1034,7 @@ func TestDevAppSecurityConfigOmitsAbsentOptionalLists(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "security", "config", "--unified-app-id", "app-001", "--redirect-urls", "https://callback.example.invalid/callback", "--dry-run"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 
@@ -1054,7 +1055,7 @@ func TestDevAppSecurityConfigRequiresAtLeastOneConfig(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "security", "config", "--unified-app-id", "app-001", "--dry-run"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil {
 		t.Fatal("Execute() error = nil, want validation error")
 	}
@@ -1094,7 +1095,7 @@ func TestDevAppMemberAndSecurityRequireWriteGuard(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil {
 				t.Fatal("Execute() error = nil, want write guard")
 			}
@@ -1141,7 +1142,7 @@ func TestEveryDevAppWriteCommandRequiresGuard(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "app"}, path...))
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil {
 				t.Fatal("Execute() error = nil, want write guard")
 			}
@@ -1186,7 +1187,7 @@ func TestDevAppUnwrapsSuccessfulServiceResult(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "version", "list", "--unified-app-id", "u-1"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
@@ -1229,7 +1230,7 @@ func TestDevAppVersionCheckApprovalPreservesApprovalCandidateNames(t *testing.T)
 		"--format", "json",
 	})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	if got := runner.last.Tool; got != devAppVersionPublishTool {
@@ -1542,7 +1543,7 @@ func TestDevAppRobotResultFailAndExpiredAreTerminalFailures(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs([]string{"dev", "app", "robot", "result", "--task-id", "t-1", "--format", "json"})
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 			var env struct {
@@ -1581,7 +1582,7 @@ func runDevAppRobotResultOutput(t *testing.T, result map[string]any) map[string]
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "app", "robot", "result", "--task-id", "t-1", "--format", "json"})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
 	var env struct {

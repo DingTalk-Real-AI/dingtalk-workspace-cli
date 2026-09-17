@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -258,7 +259,7 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.argv)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if fake.product != tc.wantProduct || fake.tool != tc.wantTool {
@@ -345,7 +346,7 @@ func TestCrossPlatformCoverageChatMuteMemberResolvesUserIDToOpenDingTalkID(t *te
 		"--mute-time", "300000",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 {
@@ -401,7 +402,7 @@ func TestCrossPlatformCoverageConversationCategoryTitleValidation(t *testing.T) 
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.argv)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if tc.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("error = %v, want containing %q", err, tc.wantError)

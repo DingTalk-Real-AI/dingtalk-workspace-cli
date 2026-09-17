@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -80,7 +81,7 @@ func runAitableWorkflowCommandWithCaller(t *testing.T, caller *aitableWorkflowCa
 		stdin = strings.NewReader("")
 	}
 	cmd.SetIn(stdin)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageAitableWorkflowDisableRequiresConfirmation(t *testing.T) {
