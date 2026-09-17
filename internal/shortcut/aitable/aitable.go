@@ -2102,6 +2102,11 @@ func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[st
 	if rt.DryRun() {
 		return rt.CallMCP(tool, params)
 	}
+	// CallMCPData/CallMCPWriteDataStrict return the raw MCP envelope
+	// {"success":..,"data":..} (see runner.callMCPData/callMCPWriteData: plain
+	// json.Unmarshal, no envelope stripping). Extracting envelope["data"] here is
+	// the single required unwrap, mirroring the atomic path in helpers/aitable.go;
+	// it is not a double-unwrap.
 	var (
 		envelope map[string]any
 		err      error
