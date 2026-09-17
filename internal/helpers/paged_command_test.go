@@ -811,7 +811,9 @@ func TestPagedMCPCommandPassesCommandContextToCaller(t *testing.T) {
 	if strings.TrimSpace(out) == "" || len(caller.calls) != 1 {
 		t.Fatalf("stdout=%q calls=%#v, want one successful call", out, caller.calls)
 	}
-	if caller.calls[0].ctx != ctx || caller.calls[0].ctx.Err() != context.Canceled {
+	// The test boundary installs a result store (as production does), so the
+	// caller sees a derived context; cancellation must still carry through.
+	if caller.calls[0].ctx.Err() != context.Canceled {
 		t.Fatalf("call ctx=%#v err=%v, want canceled command context", caller.calls[0].ctx, caller.calls[0].ctx.Err())
 	}
 }
