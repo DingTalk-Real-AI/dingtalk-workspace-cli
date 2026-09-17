@@ -555,13 +555,13 @@ children 条目（位于容器 value 字符串内部，`key`=子控件 props.id�
 | 1 | partner | `{"key":<id>,"label":"加班人","value":"<姓名逗号连接>","bizAlias":"partner","extendValue":[{"avatar":"","emplId":<userId>,"name":<姓名>,"read":false,"readTime":0,"itemId":<userId>}]}`；姓名↔userId 经 aisearch person 同源解析；单/多选与上限以当次 form-schema partner props 为准 |
 | 2/3 | startTime / finishTime | `{"key":<id>,"label":"开始时间"/"结束时间","value":<有效单位格式>,"bizAlias":"startTime"/"finishTime"}`；无 extendValue |
 | 4 | everyDayDuration | 多天（跨度>1 天）：value=stringify 行数组，行=`{"rowValue":[{overtimeDate 子条目},{"key":<overtimeDuration id>,"label":"加班时长","value":"<每日时长字符串>","bizAlias":"overtimeDuration"}],"rowNumber":"<TableField id>_<12位随机串>"}`，extendValue=`"{\"statValue\":[],\"componentName\":\"TableField\"}"`（字符串）；单日省略本行。**多天明细随两阶段确认流程组装（流程见 [oa-overtime.md](oa-overtime.md) 步骤 6）**；rowNumber 形态 `<TableField id>_<12位随机串>`；overtimeDate.extendValue.status 可回填计算响应 detailList[].dayType（workDay/restDay/holiday），空串亦可 |
-| 5 | duration | `{"key":<id>,"label":<多天="总时长"/单日=schema label>,"value":"<总时长字符串>","bizAlias":"duration","extendValue":{...时长计算响应原样...,"durationUnit":<有效单位>,"_from":<T1>,"_to":<T2>}}`；总时长取 durationInHour（hour）或 durationInDay（day/halfDay） |
+| 5 | duration | `{"key":<id>,"label":<多天="总时长"/单日=schema label>,"value":"<总时长字符串>","bizAlias":"duration","extendValue":{...时长计算响应按外出套件映射表转换后的字段集（非原样透传，见 IMPORTANT）...,"durationUnit":<有效单位>,"_from":<T1>,"_to":<T2>}}`；总时长取 durationInHour（hour）或 durationInDay（day/halfDay） |
 | 6 | compensation | 时长计算响应 `overtimeRedressBy=="manual"` → 必选：`{"key":<id>,"label":"加班补偿","value":"转调休\|加班费","bizAlias":"compensation","extendValue":{"key":"vacation\|charge"}}`；否则空条目 `{"key":<id>,"label":"加班补偿","bizAlias":"compensation"}` |
 
 > **IMPORTANT：**
 > - children 内 `bizAlias` 照常携带（容器 value 字符串为同构形态，与展平形态「不组装 bizAlias」相反）；控件 id 必须当次 form-schema 实时取。
 > - 时长、detailList、compressedValue、featureMap 一律以 `+calculate-approve-duration --biz-type 1 --new-overtime` 服务端计算为准，严禁本地估算/手造；compressedValue 为服务端 gzip 签名，禁止解析改写。
-> - 时长计算响应 → duration extendValue 的字段映射参照外出套件章节映射表（同一 calculate_approve_duration 工具）；一阶段判歧义语义以 oa-overtime.md 步骤 6 为准（歧义窗口返回 durationInHour=0 + 逐日骨架）。
+> - 时长计算响应 → duration extendValue 的字段映射参照外出套件章节映射表（同一 calculate_approve_duration 工具），**禁止原样透传**：extendValue 必含非空 `unit`（映射自响应 `durationUnit`）、`durationInHour`、`durationInDay`、`compressedValue`，缺任一即拒「不合法的参数」；值类型不限。一阶段判歧义语义以 oa-overtime.md 步骤 6 为准（歧义窗口返回 durationInHour=0 + 逐日骨架）。
 > - 与 H5 发起链路的已知差异（不补齐）：H5 feature 层在计算响应上恒附加 `_overTimeApplyUserId`（加班人 uid，排查用途）随 duration extendValue 持久化；CLI 不组装该字段（服务端不依赖），PC 端同样不携带。
 > - partner（InnerContactField）value 姓名形态可落库（姓名 value + emplId extValue）；若姓名形态被丢弃/报错，改用 userId JSON 数组字符串，extendValue 保留姓名数组。
 > - 明细级 `overtimeDurationStatus`（detailList[].approveInfo）：0=回填 / 1=回填并提示 message / 2=该日禁止加班（置灰禁提交；CLI 应终止并转告 message）。CLI 时长以服务端计算为准，天然满足回填语义。

@@ -225,8 +225,7 @@ Flags:
 - `result.processDescription` — 表单描述
 - `result.content` — 表单组件 JSON 字符串，包含表单项（items）和标题等配置
 
-请假/补卡发起链路的服务端前置命令（leave-duration / leave-check / supply-plans / supply-check，`dws attendance approve` 组）见 attendance.md 对应章节；发起工作流与纪律见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」与 [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」。
-
+考勤套件发起链路的服务端前置命令（`dws attendance approve` 组与 `+` shortcut）见 attendance.md 对应章节；四个套件的发起工作流与纪律见下方「套件发起工作流（独立文档）」指针表。
 
 ### 流程预测
 
@@ -645,7 +644,6 @@ Flags:
 ```
 MCP 工具: `list_pending_tasks`。
 
-
 ### 查询我处理过的审批单
 ```
 Usage:
@@ -791,7 +789,6 @@ Flags:
       --remark string               退回说明 (可选)
 ```
 
-
 ## 意图判断
 
 用户说"待审批/待处理审批" → `approval list-pending`
@@ -868,12 +865,12 @@ dws oa approval form-schema --process-code <code> --format json
 dws oa approval list-initiated --process-code <code> \
   --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" \
   --cursor 0 --limit 20 --format json
-  
+
 # 9. 我处理过的审批单
 dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json
-# 10. 我发起的审批单 
+# 10. 我发起的审批单
 dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json
-# 11. 抄送我的审批单 
+# 11. 抄送我的审批单
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 
 # 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
