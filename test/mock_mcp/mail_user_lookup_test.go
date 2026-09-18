@@ -59,6 +59,18 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 			wantCode: 7,
 		},
 		{
+			name:        "live numeric error preserves valid and unmatched results",
+			args:        []string{"batch-get", "--org-emails", "a@example.com,invalid,missing@example.com"},
+			batchReply:  `{"success":false,"errorCode":"1001","errorMsg":"orgEmails[1]必须是完整有效的企业邮箱地址"}`,
+			failedReply: `{"success":false,"errorCode":"1001","errorMsg":"orgEmail必须是完整有效的企业邮箱地址"}`,
+			wantTools:   []string{"batch_get_users_by_org_emails", "get_user_by_org_email", "get_user_by_org_email", "get_user_by_org_email"},
+			wantArgs: []map[string]any{
+				{"orgEmails": []any{"a@example.com", "invalid", "missing@example.com"}},
+				{"orgEmail": "a@example.com"}, {"orgEmail": "invalid"}, {"orgEmail": "missing@example.com"},
+			},
+			wantCode: 7,
+		},
+		{
 			name:       "invalid and malformed items preserve later valid and unmatched results",
 			args:       []string{"batch-get", "--org-emails", "invalid,broken@example.com,a@example.com,missing@example.com"},
 			batchReply: `{"success":false,"errorCode":"SYSTEM_ERROR","errorMsg":"orgEmails[0]必须是完整有效的企业邮箱地址"}`,

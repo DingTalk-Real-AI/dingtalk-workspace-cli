@@ -304,6 +304,10 @@ func TestCrossPlatformCoverageMailUserBatchTypedFailureClassification(t *testing
 		global   bool
 	}{
 		{"address rejection", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "SYSTEM_ERROR"})), true, false},
+		{"live numeric address rejection", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "1001"})), true, false},
+		{"legacy numeric address rejection", &CLIError{Code: CodeMCPToolError, Message: `{"errorCode":"1001","errorMsg":"orgEmails[1]必须是完整有效的企业邮箱地址"}`}, true, false},
+		{"other numeric system error", apperrors.NewAPI("upstream unavailable", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "1001"})), false, false},
+		{"single address numeric error", apperrors.NewAPI("orgEmail必须是完整有效的企业邮箱地址", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "1001"})), false, false},
 		{"other system error", apperrors.NewAPI("upstream unavailable", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "SYSTEM_ERROR"})), false, false},
 		{"mapping syntax error", apperrors.NewAPI("business error: success=false", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PARAM_ERROR", TechnicalDetail: "Expected ',' in expression"})), false, false},
 		{"missing code", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址"), false, false},

@@ -159,7 +159,9 @@ func mailUserBatchRejectedAddress(err error) bool {
 			return false
 		}
 	}
-	return body.ErrorCode == "SYSTEM_ERROR" && strings.HasPrefix(body.ErrorMsg, "orgEmails[") && strings.HasSuffix(body.ErrorMsg, "必须是完整有效的企业邮箱地址")
+	// Live Mail responses use the serialized system-error code "1001".
+	// Keep fallback limited to the explicit per-address batch validation error.
+	return (body.ErrorCode == "1001" || body.ErrorCode == "SYSTEM_ERROR") && strings.HasPrefix(body.ErrorMsg, "orgEmails[") && strings.HasSuffix(body.ErrorMsg, "必须是完整有效的企业邮箱地址")
 }
 
 func mailUserLookupGlobalFailure(err error) bool {
