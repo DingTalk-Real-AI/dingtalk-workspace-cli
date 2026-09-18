@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -140,13 +141,22 @@ func callMailUserBatchLookupResult(cmd *cobra.Command, tool string, args map[str
 }
 
 func mailUserBatchRejectedAddress(err error) bool {
-	var cliErr *CLIError
-	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
-		return false
-	}
 	var body struct{ ErrorCode, ErrorMsg string }
-	if json.Unmarshal([]byte(cliErr.Message), &body) != nil {
-		return false
+	var apiErr *apperrors.Error
+	if errors.As(err, &apiErr) {
+		// The runtime classifies business failures before helpers see them.
+		if apiErr.Category != apperrors.CategoryAPI {
+			return false
+		}
+		body.ErrorCode, body.ErrorMsg = apiErr.ServerDiag.ServerErrorCode, apiErr.Message
+	} else {
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
+			return false
+		}
+		if json.Unmarshal([]byte(cliErr.Message), &body) != nil {
+			return false
+		}
 	}
 	return body.ErrorCode == "SYSTEM_ERROR" && strings.HasPrefix(body.ErrorMsg, "orgEmails[") && strings.HasSuffix(body.ErrorMsg, "必须是完整有效的企业邮箱地址")
 }
@@ -155,6 +165,14 @@ func mailUserLookupGlobalFailure(err error) bool {
 	var exit interface{ ExitCode() int }
 	if errors.As(err, &exit) && (exit.ExitCode() == ExitAuth || exit.ExitCode() == ExitPermission) {
 		return true
+	}
+	var apiErr *apperrors.Error
+	if errors.As(err, &apiErr) {
+		switch apiErr.Reason {
+		case "request_timeout", "request_cancelled", "http_client_timeout", "tls_timeout", "connection_refused", "dns_resolution_failed", "io_timeout", "request_failed":
+			return true
+		}
+		return strings.EqualFold(apiErr.ServerDiag.ServerErrorCode, "noPermission")
 	}
 	var cliErr *CLIError
 	if !errors.As(err, &cliErr) {

@@ -13,11 +13,13 @@ category: Added
   results when individual inputs or response records fail. Partial output
   separates `succeeded`, `failed` and `unknown` entries (exit code 7). An explicit
   server rejection of an invalid batch address falls back to at most 100
-  deduplicated single-address lookups; global authentication, permission and
+  deduplicated single-address lookups, including errors classified by the
+  runtime transport; global authentication, permission and
   connection failures do not trigger that fallback. Unconfirmed results are
   never reported as not-found.
 - **Large integer output precision** — preserves integer IDs beyond the exact
-  `float64` range through `--jq`, `--fields` and formatted output.
+  `float64` range when decoding MCP text responses and through `--jq`, `--fields`
+  and formatted output.
 - **International login is English-first** — `dws auth login --intl` now renders
   its terminal copy, the DingTalk authorization page (`lang=en-US`) and the
   callback success page in English without requiring `DWS_LANG=en`. A locale

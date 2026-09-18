@@ -296,6 +296,31 @@ func TestCrossPlatformCoverageToolCallResultPreservesRawObjectAndNumberPrecision
 	}
 }
 
+func TestCrossPlatformCoverageToolCallTextContentPreservesNumberPrecision(t *testing.T) {
+	const text = `{"success":true,"result":{"users":[{"uid":9223372036854775806,"orgId":9007199254740993}],"ratio":1.25}}`
+	raw, err := json.Marshal(map[string]any{"content": []map[string]string{{"type": "text", "text": text}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result ToolCallResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	business := result.Content["result"].(map[string]any)
+	user := business["users"].([]any)[0].(map[string]any)
+	if user["uid"] != json.Number("9223372036854775806") || user["orgId"] != json.Number("9007199254740993") || business["ratio"] != json.Number("1.25") {
+		t.Fatalf("text content lost numeric precision: %#v", business)
+	}
+	encoded, err := json.Marshal(result.Content)
+	if err != nil || !strings.Contains(string(encoded), `"uid":9223372036854775806`) {
+		t.Fatalf("decoded content cannot round-trip large UID: %s, %v", encoded, err)
+	}
+	encoded, err = json.Marshal(result)
+	if err != nil || !bytes.Equal(encoded, raw) {
+		t.Fatalf("raw MCP result changed: %s, %v", encoded, err)
+	}
+}
+
 func TestCrossPlatformCoverageJSONRPCRejectsOversizedResponseBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(bytes.Repeat([]byte(" "), config.MaxResponseBodySize+1))

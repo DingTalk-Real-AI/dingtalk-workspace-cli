@@ -16,12 +16,14 @@ import (
 func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 	const employee = `{"uid":9223372036854775806,"orgId":456,"staffId":"mock-staff","name":"Mock Employee","orgEmail":"a@example.com"}`
 	for _, tc := range []struct {
-		name       string
-		args       []string
-		batchReply string
-		wantTools  []string
-		wantArgs   []map[string]any
-		wantCode   int
+		name        string
+		args        []string
+		batchReply  string
+		failedReply string
+		wantTools   []string
+		wantArgs    []map[string]any
+		wantCode    int
+		wantUnknown int
 	}{
 		{
 			name:      "single",
@@ -46,6 +48,26 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				{"orgEmail": "a@example.com"}, {"orgEmail": "invalid"}, {"orgEmail": "missing@example.com"},
 			},
 			wantCode: 7,
+		},
+		{
+			name:        "permission failure stops fallback without losing results",
+			args:        []string{"batch-get", "--org-emails", "a@example.com,invalid,missing@example.com"},
+			batchReply:  `{"success":false,"errorCode":"SYSTEM_ERROR","errorMsg":"orgEmails[1]必须是完整有效的企业邮箱地址"}`,
+			failedReply: `{"success":false,"errorCode":"noPermission","errorMsg":"Not a member"}`,
+			wantTools:   []string{"batch_get_users_by_org_emails", "get_user_by_org_email", "get_user_by_org_email"},
+			wantArgs: []map[string]any{
+				{"orgEmails": []any{"a@example.com", "invalid", "missing@example.com"}},
+				{"orgEmail": "a@example.com"}, {"orgEmail": "invalid"},
+			},
+			wantCode: 7, wantUnknown: 1,
+		},
+		{
+			name:       "mapping configuration error must not trigger fallback",
+			args:       []string{"batch-get", "--org-emails", "a@example.com,missing@example.com"},
+			batchReply: `{"success":false,"errorCode":"PARAM_ERROR","errorMsg":"Expected ',' in expression"}`,
+			wantTools:  []string{"batch_get_users_by_org_emails"},
+			wantArgs:   []map[string]any{{"orgEmails": []any{"a@example.com", "missing@example.com"}}},
+			wantCode:   1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -72,6 +94,9 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 					response = `{"success":true,"result":null}`
 				} else if request.Params.Arguments["orgEmail"] == "invalid" {
 					response = `{"success":false,"errorCode":"SYSTEM_ERROR","errorMsg":"orgEmail必须是完整有效的企业邮箱地址"}`
+					if tc.failedReply != "" {
+						response = tc.failedReply
+					}
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -105,13 +130,16 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 					t.Fatalf("unexpected MCP call %d: %#v", i, call)
 				}
 			}
-			if !strings.Contains(stdout, "9223372036854775806") {
+			if tc.wantCode != 1 && !strings.Contains(stdout, "9223372036854775806") {
 				t.Fatalf("large UID precision lost: %s", stdout)
 			}
 			var envelope struct {
 				OK      bool   `json:"ok"`
 				Outcome string `json:"outcome"`
-				Data    struct {
+				Error   struct {
+					UpstreamCode string `json:"upstream_code"`
+				} `json:"error"`
+				Data struct {
 					Result    json.RawMessage `json:"result"`
 					Succeeded []struct {
 						ID    string `json:"id"`
@@ -120,21 +148,39 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 					Failed []struct {
 						ID string `json:"id"`
 					} `json:"failed"`
-					Unknown []any `json:"unknown"`
+					Unknown []struct {
+						ID string `json:"id"`
+					} `json:"unknown"`
 				} `json:"data"`
 			}
 			if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
 				t.Fatal(err)
 			}
 			if tc.wantCode == 7 {
-				if envelope.OK || envelope.Outcome != "partial_failure" || len(envelope.Data.Succeeded) != 2 || !envelope.Data.Succeeded[0].Found || envelope.Data.Succeeded[1].Found || envelope.Data.Succeeded[1].ID != "missing@example.com" || len(envelope.Data.Failed) != 1 || envelope.Data.Failed[0].ID != "invalid" || len(envelope.Data.Unknown) != 0 {
+				if envelope.OK || envelope.Outcome != "partial_failure" || len(envelope.Data.Succeeded) != 2-tc.wantUnknown || !envelope.Data.Succeeded[0].Found || envelope.Data.Succeeded[0].ID != "a@example.com" || len(envelope.Data.Failed) != 1 || envelope.Data.Failed[0].ID != "invalid" || len(envelope.Data.Unknown) != tc.wantUnknown {
 					t.Fatalf("partial results lost or misclassified: %s", stdout)
+				}
+				if tc.wantUnknown == 1 {
+					if envelope.Data.Unknown[0].ID != "missing@example.com" {
+						t.Fatalf("unattempted lookup not marked unknown: %s", stdout)
+					}
+				} else if envelope.Data.Succeeded[1].Found || envelope.Data.Succeeded[1].ID != "missing@example.com" {
+					t.Fatalf("confirmed unmatched address lost: %s", stdout)
+				}
+			} else if tc.wantCode == 1 {
+				if envelope.OK || envelope.Outcome != "failure" || envelope.Error.UpstreamCode != "PARAM_ERROR" {
+					t.Fatalf("mapping error misclassified: %s", stdout)
 				}
 			} else if !envelope.OK || envelope.Outcome != "success" || len(envelope.Data.Result) == 0 {
 				t.Fatalf("invalid success result: %s", stdout)
 			}
-			if tc.name == "batch found and not found" && !strings.Contains(string(envelope.Data.Result), `"notFoundOrgEmails":["missing@example.com"]`) {
-				t.Fatalf("unmatched address lost: %s", stdout)
+			if tc.name == "batch found and not found" {
+				var result struct {
+					NotFoundOrgEmails []string `json:"notFoundOrgEmails"`
+				}
+				if err := json.Unmarshal(envelope.Data.Result, &result); err != nil || !reflect.DeepEqual(result.NotFoundOrgEmails, []string{"missing@example.com"}) {
+					t.Fatalf("unmatched address lost: %s", stdout)
+				}
 			}
 		})
 	}

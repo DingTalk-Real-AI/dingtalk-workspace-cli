@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -289,5 +290,52 @@ func TestCrossPlatformCoverageMailUserBatchRejectsInconsistentPartialIdentity(t 
 	})
 	if err == nil || result != nil {
 		t.Fatalf("duplicate partial identities must fail closed: result=%v err=%v", result, err)
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchTypedFailureClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		err      error
+		fallback bool
+		global   bool
+	}{
+		{"address rejection", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "SYSTEM_ERROR"})), true, false},
+		{"other system error", apperrors.NewAPI("upstream unavailable", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "SYSTEM_ERROR"})), false, false},
+		{"mapping syntax error", apperrors.NewAPI("business error: success=false", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PARAM_ERROR", TechnicalDetail: "Expected ',' in expression"})), false, false},
+		{"missing code", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址"), false, false},
+		{"auth", apperrors.NewAuth("expired"), false, true},
+		{"permission", apperrors.NewAPI("Not a member", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "noPermission"})), false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := fmt.Errorf("wrapped: %w", tc.err)
+			if got := mailUserBatchRejectedAddress(err); got != tc.fallback {
+				t.Fatalf("fallback=%v, want %v", got, tc.fallback)
+			}
+			if got := mailUserLookupGlobalFailure(err); got != tc.global {
+				t.Fatalf("global=%v, want %v", got, tc.global)
+			}
+		})
+	}
+	for _, reason := range []string{"request_timeout", "request_cancelled", "http_client_timeout", "tls_timeout", "connection_refused", "dns_resolution_failed", "io_timeout", "request_failed"} {
+		t.Run(reason, func(t *testing.T) {
+			caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, args map[string]any) (string, error) {
+				if tool == "batch_get_users_by_org_emails" {
+					return "", apperrors.NewAPI("orgEmails[1]必须是完整有效的企业邮箱地址", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "SYSTEM_ERROR"}))
+				}
+				if args["orgEmail"] == "a@example.com" {
+					return `{"success":true,"result":{"uid":123}}`, nil
+				}
+				return "", apperrors.NewAPI("request failed", apperrors.WithReason(reason))
+			}}
+			got, code, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "a@example.com,b@example.com,c@example.com")
+			if err != nil || code != 7 || caller.calls != 3 {
+				t.Fatalf("connection failure did not stop fallback: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
+			}
+			data := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)
+			if len(data["succeeded"].([]any)) != 1 || data["failed"].([]any)[0].(map[string]any)["id"] != "b@example.com" || data["unknown"].([]any)[0].(map[string]any)["id"] != "c@example.com" {
+				t.Fatalf("connection failure lost confirmed results: %s", got)
+			}
+		})
 	}
 }
