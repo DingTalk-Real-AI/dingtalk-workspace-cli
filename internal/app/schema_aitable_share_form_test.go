@@ -204,7 +204,8 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := string(raw)
+			// Git may check Markdown out with CRLF on Windows.
+			body := strings.ReplaceAll(string(raw), "\r\n", "\n")
 			if strings.HasSuffix(path, "/SKILL.md") {
 				frontmatter, markdown, found := strings.Cut(strings.TrimPrefix(body, "---\n"), "\n---\n")
 				if !strings.HasPrefix(body, "---\n") || !found {
