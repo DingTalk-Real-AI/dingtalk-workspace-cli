@@ -77,7 +77,7 @@ func (e *deapAgentAvatarStageError) Unwrap() error {
 	return e.Err
 }
 
-func deapAgentValidateIconInput(raw string) (string, bool, error) {
+func deapAgentValidateAvatarURLInput(raw string) (string, bool, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return "", false, nil
@@ -85,51 +85,51 @@ func deapAgentValidateIconInput(raw string) (string, bool, error) {
 	parsed, err := url.Parse(value)
 	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
 		if parsed.Host == "" {
-			return "", false, apperrors.NewValidation("参数 --icon 必须是完整的 HTTP(S) 地址")
+			return "", false, apperrors.NewValidation("参数 --avatar-url 必须是完整的 HTTP(S) 地址")
 		}
 		return value, false, nil
 	}
 	resolved, err := apperrors.SafeInputPath(value)
 	if err != nil {
-		return "", true, apperrors.NewValidation(fmt.Sprintf("参数 --icon 路径不安全: %v", err))
+		return "", true, apperrors.NewValidation(fmt.Sprintf("参数 --avatar-url 路径不安全: %v", err))
 	}
 	ext := strings.ToLower(filepath.Ext(resolved))
 	if !deapAgentAvatarExtensions[ext] {
 		return "", true, apperrors.NewValidation(
-			"参数 --icon 本地文件只支持 jpg、jpeg、png、gif 或 webp")
+			"参数 --avatar-url 本地文件只支持 jpg、jpeg、png、gif 或 webp")
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return "", true, apperrors.NewValidation("参数 --icon 本地文件不可读")
+		return "", true, apperrors.NewValidation("参数 --avatar-url 本地文件不可读")
 	}
 	if !info.Mode().IsRegular() {
-		return "", true, apperrors.NewValidation("参数 --icon 必须是普通文件")
+		return "", true, apperrors.NewValidation("参数 --avatar-url 必须是普通文件")
 	}
 	if info.Size() > deapAgentAvatarMaxFileSize {
-		return "", true, apperrors.NewValidation("参数 --icon 头像不能超过 10 MiB")
+		return "", true, apperrors.NewValidation("参数 --avatar-url 头像不能超过 10 MiB")
 	}
 	return resolved, true, nil
 }
 
-func deapAgentValidateIconFlag(cmd *cobra.Command) error {
-	raw, _ := cmd.Flags().GetString("icon")
-	_, _, err := deapAgentValidateIconInput(raw)
+func deapAgentValidateAvatarURLFlag(cmd *cobra.Command) error {
+	raw, _ := cmd.Flags().GetString("avatar-url")
+	_, _, err := deapAgentValidateAvatarURLInput(raw)
 	return err
 }
 
 func deapAgentCallCreateWithAvatar(cmd *cobra.Command, tool string, args map[string]any) error {
 	deapAgentPrepareProfile(args)
-	icon, local, err := deapAgentValidateIconInput(stringArgument(args, "icon"))
+	avatarURL, local, err := deapAgentValidateAvatarURLInput(stringArgument(args, "avatarUrl"))
 	if err != nil {
 		return err
 	}
 	if !local {
 		return callMCPToolOnServer(deapAgentServerID, tool, args)
 	}
-	delete(args, "icon")
+	delete(args, "avatarUrl")
 	if deps.Caller.DryRun() {
-		args["icon"] = map[string]any{
-			"localFile": filepath.Base(icon), "upload": true, "redacted": true,
+		args["avatarUrl"] = map[string]any{
+			"localFile": filepath.Base(avatarURL), "upload": true, "redacted": true,
 		}
 		return deps.Out.PrintJSON(map[string]any{
 			"dryRun": true, "action": "create_then_" + deapAgentAvatarUploadAction, "request": args,
@@ -143,13 +143,13 @@ func deapAgentCallCreateWithAvatar(cmd *cobra.Command, tool string, args map[str
 	if err != nil {
 		return &deapAgentAvatarStageError{Stage: "创建结果解析", Err: err}
 	}
-	fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, icon)
+	fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, avatarURL)
 	if err != nil {
 		return &deapAgentAvatarStageError{Stage: "上传", AgentUUID: agentUUID, Err: err}
 	}
 	return callMCPToolOnServer(deapAgentServerID, deapAgentSaveDraftTool, map[string]any{
 		"agentUuid": agentUUID,
-		"icon":      fileURL,
+		"avatarUrl": fileURL,
 	})
 }
 
@@ -158,7 +158,7 @@ func deapAgentCallSaveWithAvatar(cmd *cobra.Command, tool string, args map[strin
 		return err
 	}
 	deapAgentPrepareProfile(args)
-	icon, local, err := deapAgentValidateIconInput(stringArgument(args, "icon"))
+	avatarURL, local, err := deapAgentValidateAvatarURLInput(stringArgument(args, "avatarUrl"))
 	if err != nil {
 		return err
 	}
@@ -167,18 +167,18 @@ func deapAgentCallSaveWithAvatar(cmd *cobra.Command, tool string, args map[strin
 	}
 	agentUUID := stringArgument(args, "agentUuid")
 	if deps.Caller.DryRun() {
-		args["icon"] = map[string]any{
-			"localFile": filepath.Base(icon), "upload": true, "redacted": true,
+		args["avatarUrl"] = map[string]any{
+			"localFile": filepath.Base(avatarURL), "upload": true, "redacted": true,
 		}
 		return deps.Out.PrintJSON(map[string]any{
 			"dryRun": true, "action": deapAgentAvatarUploadAction, "request": args,
 		})
 	}
-	fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, icon)
+	fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, avatarURL)
 	if err != nil {
 		return &deapAgentAvatarStageError{Stage: "上传", Err: err}
 	}
-	args["icon"] = fileURL
+	args["avatarUrl"] = fileURL
 	return callMCPToolOnServer(deapAgentServerID, tool, args)
 }
 

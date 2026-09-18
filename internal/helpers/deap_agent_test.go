@@ -63,7 +63,7 @@ func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
 	root := deapHandler{}.Command(&captureRunner{})
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
-		"name": "头像助手", "description": "测试本地头像", "icon": avatarInput,
+		"name": "头像助手", "description": "测试本地头像", "avatar-url": avatarInput,
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -81,12 +81,41 @@ func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
 	if caller.calls[0].toolName != deapAgentCreateTool || caller.calls[1].toolName != deapAgentSaveDraftTool {
 		t.Fatalf("tool order = %s, %s", caller.calls[0].toolName, caller.calls[1].toolName)
 	}
-	if _, exists := caller.calls[0].args["icon"]; exists {
+	if _, exists := caller.calls[0].args["avatarUrl"]; exists {
 		t.Fatal("local path leaked into create MCP call")
 	}
 	if caller.calls[1].args["agentUuid"] != "agent-created" ||
-		caller.calls[1].args["icon"] != "https://oss.example/avatar.png" {
+		caller.calls[1].args["avatarUrl"] != "https://oss.example/avatar.png" {
 		t.Fatalf("save args = %#v", caller.calls[1].args)
+	}
+}
+
+func TestDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	uploader := &deapAgentAvatarUploaderStub{err: errors.New("must not upload")}
+	testseam.Swap(t, &deapAgentAvatarFileUploader, deapAgentAvatarUploader(uploader))
+
+	root := deapHandler{}.Command(&captureRunner{})
+	create := deapFindLeaf(t, root, "create")
+	for name, value := range map[string]string{
+		"name": "头像助手", "description": "测试公网头像",
+		"avatar-url": "https://cdn.example/avatar.png",
+	} {
+		if err := create.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := create.RunE(create, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentCreateTool {
+		t.Fatalf("MCP calls = %#v, want one create", caller.calls)
+	}
+	if caller.calls[0].args["avatarUrl"] != "https://cdn.example/avatar.png" {
+		t.Fatalf("create args = %#v", caller.calls[0].args)
+	}
+	if uploader.gotPath != "" {
+		t.Fatalf("HTTP avatar unexpectedly uploaded from %q", uploader.gotPath)
 	}
 }
 
@@ -104,7 +133,7 @@ func TestDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate(t *testing.T) {
 	save := deapFindLeaf(t, root, "save-draft")
 	save.Flags().Bool("yes", false, "test confirmation")
 	for name, value := range map[string]string{
-		"agent-uuid": "agent-existing", "icon": "./avatar.webp", "yes": "true",
+		"agent-uuid": "agent-existing", "avatar-url": "./avatar.webp", "yes": "true",
 	} {
 		if err := save.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -120,7 +149,7 @@ func TestDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate(t *testing.T) {
 	if len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentSaveDraftTool {
 		t.Fatalf("MCP calls = %#v, want one save-draft", caller.calls)
 	}
-	if caller.calls[0].args["icon"] != "https://oss.example/avatar.webp" {
+	if caller.calls[0].args["avatarUrl"] != "https://oss.example/avatar.webp" {
 		t.Fatalf("save args = %#v", caller.calls[0].args)
 	}
 }
@@ -1081,7 +1110,7 @@ func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 			"main-program-type": "a2a",
 		}, wantErr: "--main-program-type"},
 		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "icon": "avatar.bmp",
+			"name": "值班助手", "description": "处理值班问题", "avatar-url": "avatar.bmp",
 		}, wantErr: "本地文件只支持"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),

@@ -225,7 +225,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "create",
 		Short:     "创建草稿态数字员工",
-		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。icon 可传公网 HTTP(S) 地址或本地图片路径；本地图片会先上传为 OSS 地址再写入草稿。用户传入的主管标识始终是 userId。mainProgramType 仅支持 open_code、local_agent；无特殊要求时默认不传，由 OpenAPI 按 open_code 处理。local_agent 不需要平台模型、人设、Skill 或 MCP 才能创建。",
+		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。avatar-url 可传公网 HTTP(S) 地址或本地图片路径；本地图片复用 Skill 文件上传封装，在 CLI 内部上传为 OSS 地址后写入草稿。用户传入的主管标识始终是 userId。mainProgramType 仅支持 open_code、local_agent；无特殊要求时默认不传，由 OpenAPI 按 open_code 处理。local_agent 不需要平台模型、人设、Skill 或 MCP 才能创建。",
 		Tool:      deapAgentCreateTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -233,7 +233,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			{Name: "name", Usage: "数字员工名称，同组织内唯一（最多 30 个 Unicode 码点）", Bind: "name", Required: true, Trim: true},
 			{Name: "description", Usage: "数字员工职责描述（最多 300 个 Unicode 码点）", Bind: "description", Required: true, Trim: true},
 			{Name: "dept-id", Usage: "归属部门 ID；不传时服务端使用操作人主任职部门", Bind: "deptId", Trim: true, OmitEmpty: true},
-			{Name: "icon", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片（最大 10 MiB）", Bind: "icon", Trim: true, OmitEmpty: true},
+			{Name: "avatar-url", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片路径（最大 10 MiB）；本地文件由 CLI 自动上传", Bind: "avatarUrl", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
 			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
@@ -249,7 +249,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			if err := deapAgentMaxRunes(cmd, "description", 300); err != nil {
 				return err
 			}
-			if err := deapAgentValidateIconFlag(cmd); err != nil {
+			if err := deapAgentValidateAvatarURLFlag(cmd); err != nil {
 				return err
 			}
 			return nil
@@ -269,7 +269,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 				AgentSummary: "创建新的草稿态 DEAP 数字员工",
 				UseWhen:      []string{"需要从零创建数字员工并获得 agentUuid 时"},
 				AvoidWhen:    []string{"已有 agentUuid 只需修改草稿时使用 save-draft", "创建普通开放平台应用时使用 dev app create"},
-				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --icon ./avatar.png --dry-run --format json`},
+				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --avatar-url ./avatar.png --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
@@ -284,7 +284,7 @@ func newDeapAgentDetailCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "detail",
 		Short:     "查询数字员工管理态详情",
-		Long:      "按 agentUuid 查询数字员工详情。--type draft 读取当前草稿，published 读取已发布配置，默认 draft；这是配置来源，不是独立 snapshot 字段。返回 status 是发布/生命周期状态，不代表本地 Agent 正在运行。人员标识统一为 userId。Skill/MCP 作为独立能力资源才使用 draft/published snapshot。iconUrl 可能是临时地址，不要作为持久输入。",
+		Long:      "按 agentUuid 查询数字员工详情。--type draft 读取当前草稿，published 读取已发布配置，默认 draft；这是配置来源，不是独立 snapshot 字段。返回 status 是发布/生命周期状态，不代表本地 Agent 正在运行。人员标识统一为 userId。Skill/MCP 作为独立能力资源才使用 draft/published snapshot。详情的 avatarUrl 仅按当前接口结果使用；修改头像请重新传公网 URL 或本地文件路径。",
 		Tool:      deapAgentDetailTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -375,7 +375,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "save-draft",
 		Short:     "更新数字员工草稿",
-		Long:      "更新指定数字员工草稿但不发布。只更新显式传入的字段，未传字段保持不变；skills-file 和 mcps-file 分开表达 Skill/MCP，只有显式提供空数组文件才清空对应类别。dept-id 不传时保持原部门；icon 可传公网 HTTP(S) 地址或本地图片。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
+		Long:      "更新指定数字员工草稿但不发布。只更新显式传入的字段，未传字段保持不变；skills-file 和 mcps-file 分开表达 Skill/MCP，只有显式提供空数组文件才清空对应类别。dept-id 不传时保持原部门；avatar-url 可传公网 HTTP(S) 地址或本地图片，本地图片由 CLI 自动上传。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
 		Tool:      deapAgentSaveDraftTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -383,7 +383,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
 			{Name: "name", Usage: "数字员工名称（最多 30 个 Unicode 码点）", Bind: "name", Trim: true, OmitEmpty: true},
 			{Name: "description", Usage: "数字员工职责描述（最多 300 个 Unicode 码点）；不传保持原值", Bind: "description", Trim: true, OmitEmpty: true},
-			{Name: "icon", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片（最大 10 MiB）；不传保持原值", Bind: "icon", Trim: true, OmitEmpty: true},
+			{Name: "avatar-url", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片路径（最大 10 MiB）；本地文件由 CLI 自动上传，不传保持原值", Bind: "avatarUrl", Trim: true, OmitEmpty: true},
 			{Name: "dept-id", Usage: "归属部门 ID；不传保持原部门，不支持清空", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "prompt", Usage: "人设/System Prompt（最多 5000 个 Unicode 码点）", Bind: "prompt", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
@@ -406,7 +406,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			if err := deapAgentMaxRunes(cmd, "prompt", 5000); err != nil {
 				return err
 			}
-			if err := deapAgentValidateIconFlag(cmd); err != nil {
+			if err := deapAgentValidateAvatarURLFlag(cmd); err != nil {
 				return err
 			}
 			return nil

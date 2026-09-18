@@ -11,15 +11,15 @@ Flags:
   --name             必填，同组织内唯一（≤30 Unicode 码点）
   --description      必填，职责描述（≤300 码点）
   --dept-id          归属部门 ID；可选，省略时服务端补操作人主任职部门
-  --icon             公网 HTTP(S) 头像地址，或本地图片路径（≤10 MiB）
+  --avatar-url       公网 HTTP(S) 头像地址，或本地图片路径（≤10 MiB）
   --supervisor-user-id 直属上级 userId
   --main-program-type 可选：open_code | local_agent；无特殊要求默认不传
   --response-mode    mention_only | targeted_proactive | mention_only,targeted_proactive；local_agent 可省略
 Example:
-  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --icon ./avatar.png --dry-run --format json
+  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --avatar-url ./avatar.png --dry-run --format json
 ```
 
-只建草稿，不会上线。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--icon` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时会组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。
+只建草稿，不会上线。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
@@ -67,7 +67,7 @@ Usage:
 Flags:
   --agent-uuid       必填
   --prompt           人设 / System Prompt（≤5000 码点）
-  其余可更新字段：name / description / icon / dept-id /
+  其余可更新字段：name / description / avatar-url / dept-id /
   supervisor-user-id / main-program-type / response-mode
   --skills-file      Skill 草稿配置 JSON 数组；不传保持原关联，显式 [] 才清空
   --mcps-file        MCP 草稿配置 JSON 数组；不传保持原关联，显式 [] 才清空
@@ -75,7 +75,7 @@ Flags:
 
 `save-draft` 是按字段更新：未传基础字段保持草稿原值。Skill 和 MCP 使用分开的 `skills` / `mcps` 用户契约；对应文件不传时保持原关联，显式空数组只清空该类别。成功响应与 `detail --type draft` 结构一致，用于立即确认保存结果。
 
-特别注意 `--icon`：不要把 `detail` 返回的临时 `iconUrl` 直接回填。可传可公开访问的 HTTP(S) 地址，也可传本地图片；CLI 将本地图片上传后只把 OSS URL 传给 OpenAPI，不输出临时凭证。
+`--avatar-url` 可传可公开访问的 HTTP(S) 地址，也可传本地图片路径。传本地文件时 CLI 复用 Skill 上传封装，自动取得临时上传凭证、完成 multipart 上传，再将 OSS URL 作为 `avatarUrl` 保存；不输出临时凭证，用户无需手工编排上传步骤。
 
 写操作，需用户确认：先 `--dry-run`，确认后加 `--yes`。
 

@@ -53,7 +53,7 @@ dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type draft --format js
 dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format json
 ```
 
-`save-draft` 只更新显式字段。基础字段不传保持原值；`--skills-file` / `--mcps-file` 不传保持原关联，显式 `[]` 只清空对应类别。不要把临时签名的 `iconUrl` 当长期 `icon` 回填；本地头像路径由 CLI 上传并回写 OSS URL。
+`save-draft` 只更新显式字段。基础字段不传保持原值；`--skills-file` / `--mcps-file` 不传保持原关联，显式 `[]` 只清空对应类别。头像统一使用 `--avatar-url`；它既可接收公网 HTTP(S)，也可接收本地路径，本地文件由 CLI 复用 Skill 上传封装并回写 OSS URL。
 
 ## 发布、查询和删除
 
