@@ -666,6 +666,13 @@ func validateWaitDecl(spec Spec) {
 			"command %q declares Contract.Wait without ResultInvoke: wait closes the unified-result envelope, which legacy Invoke/Orchestrate/RunE paths cannot rewrite",
 			spec.Use))
 	}
+	switch spec.OutputRollout {
+	case output.RolloutUnifiedActive, output.RolloutUnifiedStable, output.RolloutUnifiedOnly:
+	default:
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait with output rollout %q: the wait phase closes the unified-result envelope, so the declaration requires a unified rollout (unified_active/stable/only); legacy_only and dual_validate would publish a capability that fails at dispatch",
+			spec.Use, spec.OutputRollout))
+	}
 	mode := strings.TrimSpace(decl.Mode)
 	needsPoll := mode == contract.WaitModePoll || mode == contract.WaitModeAuto
 	needsEvent := mode == contract.WaitModeEvent || mode == contract.WaitModeAuto
@@ -711,11 +718,15 @@ func registerWaitFlags(cmd *cobra.Command, spec Spec) {
 
 // validateWaitFlagCombination rejects --wait-timeout without --wait.
 // Silently ignoring the timeout would let callers believe the command waited
-// for a terminal state when it actually returned immediately.
+// for a terminal state when it actually returned immediately. The check runs
+// inside the dispatch closure, which sits below the WithValidation boundary,
+// so the error must carry its own validation classification: a plain
+// fmt.Errorf would be root-adapted to internal (exit 5) instead of the
+// parameter-error contract (validation, exit 3).
 func validateWaitFlagCombination(cmd *cobra.Command) error {
 	if cmd.Flags().Changed(waitTimeoutFlagName) && !BoolFlag(cmd, waitFlagName) {
-		return fmt.Errorf("--%s requires --%s: timeout without wait is silently ignored",
-			waitTimeoutFlagName, waitFlagName)
+		return apperrors.NewValidation(fmt.Sprintf("--%s requires --%s: timeout without wait is silently ignored",
+			waitTimeoutFlagName, waitFlagName), apperrors.WithReason("invalid_parameters"))
 	}
 	return nil
 }

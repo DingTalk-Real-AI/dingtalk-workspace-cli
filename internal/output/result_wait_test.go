@@ -14,6 +14,7 @@
 package output
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
@@ -163,3 +164,56 @@ func TestWithOperationTerminalStateWithoutOperationInfoLeavesEnvelopeUntouched(t
 		t.Fatalf("operation=%+v, want untouched", env.Meta.Operation)
 	}
 }
+
+func TestWithOutcomePreservesTablePresentationOnAllClosePaths(t *testing.T) {
+	// All three wait close paths (terminal success, terminal failure,
+	// timed-out pending) must keep the product-declared table presentation:
+	// enabling --wait must not change how the same command renders by
+	// default.
+	rendered := false
+	withTable := func(result CommandResult) CommandResult {
+		return WithOutcome(result, result.Outcome(), WithTablePresentation(func(w io.Writer, _ any) error {
+			rendered = true
+			return nil
+		}))
+	}
+
+	accepted := pendingAcceptedResult()
+	accepted = withTable(accepted)
+	accepted = withTable(accepted) // rewrap through the wait-phase double close
+
+	if success := WithOutcome(accepted, OutcomeSuccess); !presentationHasTable(success) || rendered {
+		t.Fatal("success close lost the table presentation")
+	}
+	failure := WithOutcome(accepted, OutcomeFailure, WithErrorInfo(&ErrorInfo{
+		Type: "wait", Subtype: "terminal_failure", Message: "等待到达失败终态：REJECTED",
+	}))
+	if !presentationHasTable(failure) {
+		t.Fatal("failure close lost the table presentation")
+	}
+	timedOut := WithOutcome(accepted, OutcomePending, WithOperationTimedOut("NEW"))
+	if !presentationHasTable(timedOut) {
+		t.Fatal("timeout close lost the table presentation")
+	}
+
+	// A nil or foreign CommandResult implementation rewraps without a table.
+	if presentationHasTable(WithOutcome(foreignResult{}, OutcomeSuccess)) {
+		t.Fatal("foreign CommandResult must not fabricate a presentation")
+	}
+	_ = rendered
+}
+
+func presentationHasTable(result CommandResult) bool {
+	concrete, ok := result.(*commandResult)
+	if !ok || concrete.presentation == nil {
+		return false
+	}
+	return concrete.presentation.defaultFormat == FormatTable && concrete.presentation.renderTable != nil
+}
+
+type foreignResult struct{}
+
+func (foreignResult) Outcome() Outcome    { return OutcomePending }
+func (foreignResult) ExitCode() int       { return 0 }
+func (foreignResult) Data() any           { return nil }
+func (foreignResult) envelope() *Envelope { return &Envelope{Outcome: OutcomePending, OK: true} }

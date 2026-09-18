@@ -28,6 +28,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/wait"
 )
@@ -631,6 +632,20 @@ func TestWaitTimeoutWithoutWaitFlagIsRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "--wait-timeout requires --wait") {
 		t.Fatalf("err=%v, want flag combination error", err)
 	}
+	// The combination check runs inside the dispatch closure, below the
+	// WithValidation boundary, so it must carry its own classification: a
+	// parameter error (validation, exit 3), never the root adapter's
+	// internal fallback (exit 5).
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("err=%v, want typed validation error", err)
+	}
+	if appErr.Reason != "invalid_parameters" {
+		t.Fatalf("reason=%q, want invalid_parameters", appErr.Reason)
+	}
+	if code := appErr.ExitCode(); code != apperrors.ExitCodeValidation {
+		t.Fatalf("exit code = %d, want %d", code, apperrors.ExitCodeValidation)
+	}
 }
 
 func TestWaitTimeoutWithWaitFlagProceeds(t *testing.T) {
@@ -666,6 +681,32 @@ func TestAttachContractPanicsOnInvalidWaitDeclaration(t *testing.T) {
 	AttachContract(&cobra.Command{Use: "wait-sample"}, contract.SafetySpec{
 		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
 	}, decl, "", "")
+}
+
+func TestWaitDeclRequiresUnifiedOutputRollout(t *testing.T) {
+	// The wait phase closes the unified-result envelope, so a declared wait
+	// capability is only publishable on a unified rollout. legacy_only and
+	// dual_validate would construct fine, register --wait, and publish the
+	// Schema capability, then fail at dispatch on UsesUnifiedResult — a
+	// "published but unusable" capability. The framework must refuse the
+	// declaration at construction instead.
+	for _, rollout := range []output.RolloutState{"", output.RolloutLegacyOnly, output.RolloutDualValidate} {
+		spec := baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+			t.Fatal("WaitPoll must not run for a rejected wait declaration")
+			return nil, nil
+		})
+		spec.OutputRollout = rollout
+		func() {
+			defer func() {
+				recovered := recover()
+				message, ok := recovered.(string)
+				if !ok || !strings.Contains(message, "requires a unified rollout") {
+					t.Fatalf("rollout %q: panic=%v, want unified-rollout rejection", rollout, recovered)
+				}
+			}()
+			New(spec)
+		}()
+	}
 }
 
 func TestWaitDeclPaddedStatusValuesAreNormalized(t *testing.T) {

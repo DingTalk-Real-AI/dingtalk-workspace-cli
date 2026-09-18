@@ -163,9 +163,14 @@ func WithOperationTerminalState(state string) ResultOption {
 // pending) outcome; the exit code is re-derived from the new envelope.
 func WithOutcome(result CommandResult, outcome Outcome, opts ...ResultOption) CommandResult {
 	env := *result.envelope()
+	var presentation *resultPresentation
 	for _, opt := range opts {
 		if opt.apply != nil {
 			opt.apply(&env)
+		}
+		if opt.presentation != nil {
+			copy := *opt.presentation
+			presentation = &copy
 		}
 	}
 	env.Outcome = outcome
@@ -179,7 +184,16 @@ func WithOutcome(result CommandResult, outcome Outcome, opts ...ResultOption) Co
 	if env.Error != nil {
 		env.Error.ExitCode = exitCode
 	}
-	return &commandResult{env: env, exitCode: exitCode}
+	// Rewrapping preserves the source result's presentation unless the opts
+	// declare a new one. The wait phase closes an accepted pending result
+	// into its terminal (or timed-out pending) envelope; dropping the
+	// product-declared table presentation here would silently change how the
+	// same command renders once --wait is enabled. Presentation is
+	// immutable, so the shared pointer is safe.
+	if presentation == nil {
+		presentation = resultPresentationFor(result)
+	}
+	return &commandResult{env: env, exitCode: exitCode, presentation: presentation}
 }
 
 // Failure constructs an immutable typed failure result.
