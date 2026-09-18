@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -60,6 +61,7 @@ var (
 	rootRunPreParse                 = pipeline.RunPreParse
 	rootStopAllStdioClients         = StopAllStdioClients
 	rootLoadPlugins                 = loadPlugins
+	rootPluginLoadHadSideEffects    atomic.Bool
 	rootMkdirAll                    = os.MkdirAll
 	rootCreateTemp                  = os.CreateTemp
 	rootSyncFile                    = (*os.File).Sync
@@ -1184,19 +1186,14 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
 		pluginStart := time.Now()
+		rootPluginLoadHadSideEffects.Store(false)
 		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
 		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
-		if len(pluginCmds) > 0 {
-			// Plugin commands mount only into this runtime command tree; the
-			// persisted schema cache is assembled from the declaration-only
-			// schema source root, which never contains plugin commands, and
-			// the delivery loader runs that assembly under the
-			// registration-time environment snapshot (captured before this
-			// plugin block), so plugin-config env injection cannot shape the
-			// published surface either. A plugin shadowing a built-in command
-			// is the same documented discrepancy with or without a cache, so
-			// plugin discovery must not disable cache publication — otherwise
-			// every plugin user pays full live assembly forever.
+		if rootPluginLoadHadSideEffects.Load() || len(pluginCmds) > 0 {
+			// Plugin discovery changes process-global runtime state. Keep the
+			// parent process read-only with respect to persistent Schema cache;
+			// cache repair is delegated to the isolated declaration builder.
+			cli.MarkSchemaCacheRuntimeUncertain()
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}
@@ -1927,6 +1924,7 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	sortPluginsForRegistration(devPlugins)
 
 	allPlugins := append(userPlugins, devPlugins...)
+	rootPluginLoadHadSideEffects.Store(len(allPlugins) > 0)
 	descriptorsByPlugin := make(map[*plugin.Plugin][]mcptypes.ServerDescriptor, len(allPlugins))
 
 	// 3. Resolve every descriptor once, then choose identity winners before

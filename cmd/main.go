@@ -38,6 +38,9 @@ func main() {
 }
 
 func run() int {
+	if handled, code := app.RunSchemaCacheBuilder(os.Args[1:], os.Stdout); handled {
+		return code
+	}
 	if telemetry.RunWorker(os.Args[1:], os.Stdin) {
 		return 0
 	}

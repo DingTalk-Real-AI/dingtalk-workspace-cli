@@ -28,7 +28,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
 
-const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
+const (
+	defaultSchemaCacheLockTimeout    = 250 * time.Millisecond
+	defaultSchemaCacheBuilderTimeout = 30 * time.Second
+)
 
 var (
 	canonicalJSONMarshal = json.Marshal
@@ -111,12 +114,10 @@ func RegisterSchemaCacheOptions(options SchemaCacheOptions) error {
 	return nil
 }
 
-// MarkSchemaCacheRuntimeUncertain disables persistent I/O for a process whose
-// schema assembly source changed after registration. Plugin command discovery
-// is deliberately NOT such a change: plugins mount only into the runtime
-// command tree, never into the declaration-only schema source root, so a
-// plugin-present process still assembles a byte-identical builtin schema
-// surface and may publish and consume the persisted cache like any other.
+// MarkSchemaCacheRuntimeUncertain disables persistent cache publication for a
+// process whose runtime state changed after registration. The process may
+// still read an authenticated existing cache; cache repair is delegated to the
+// isolated declaration builder.
 func MarkSchemaCacheRuntimeUncertain() { schemaCacheRuntimeUncertain.Store(true) }
 
 // SchemaCacheFastPathIdentity returns only the currently registered, eligible
@@ -158,11 +159,8 @@ func validateSchemaCacheOptions(options SchemaCacheOptions) error {
 
 // readableSchemaCacheRuntime is the read-path counterpart of
 // activeSchemaCacheRuntime: it ignores schemaCacheRuntimeUncertain. Plugin
-// commands mount on the Cobra tree and never enter the reviewed Schema
-// surface (neither cached nor live-assembled), so while uncertain the cached
-// payload is byte-identical to what live assembly would produce. Reads are
-// therefore safe; every publish/repair/prewarm/fast-path decision keeps using
-// activeSchemaCacheRuntime and stays disabled while uncertain.
+// processes may read an authenticated existing generation, while repair and
+// publication use the isolated declaration builder when uncertainty is set.
 func readableSchemaCacheRuntime() *schemaCacheRuntime {
 	registration := schemaCacheRegistrationValue.Load()
 	if registration == nil || registration.runtime == nil {
@@ -199,6 +197,16 @@ func activeSchemaCacheRuntime() *schemaCacheRuntime {
 	return registration.runtime
 }
 
+func repairableSchemaCacheRuntime() *schemaCacheRuntime {
+	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+		return runtime
+	}
+	if schemaCacheRuntimeUncertain.Load() {
+		return readableSchemaCacheRuntime()
+	}
+	return nil
+}
+
 type schemaCacheRuntime struct {
 	options   atomic.Pointer[SchemaCacheOptions]
 	openOnce  sync.Once
@@ -227,6 +235,10 @@ type schemaCacheRuntime struct {
 	products        map[string]*schemaCacheProductLoad
 	payloadMu       sync.Mutex
 	payloads        map[string]*schemaCachePayloadLoad
+	// repairCache is opened without WithNoCreate only for isolated-builder
+	// publication, then reused by subsequent reads in this process.
+	repairCacheMu sync.Mutex
+	repairCache   *schemacache.Cache
 	// userCache holds the per-user fallback backend adopted by the repair
 	// path when the preferred shared cache cannot be locked (typically
 	// root-owned read-only). Once set, opened() serves reads from it.
@@ -357,6 +369,9 @@ func (r *schemaCacheRuntime) settledPrewarm() *schemaCachePrewarm {
 
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
 	if cache := r.userCacheBackend(); cache != nil {
+		return cache, nil
+	}
+	if cache := r.repairCacheBackend(); cache != nil {
 		return cache, nil
 	}
 	if pw := r.settledPrewarm(); pw != nil && pw.cache != nil {
@@ -804,6 +819,18 @@ func (r *schemaCacheRuntime) storeProduct(productID string, product schemaruntim
 	r.productMu.Unlock()
 }
 
+func (r *schemaCacheRuntime) repairCacheBackend() *schemacache.Cache {
+	r.repairCacheMu.Lock()
+	defer r.repairCacheMu.Unlock()
+	return r.repairCache
+}
+
+func (r *schemaCacheRuntime) setRepairCache(cache *schemacache.Cache) {
+	r.repairCacheMu.Lock()
+	r.repairCache = cache
+	r.repairCacheMu.Unlock()
+}
+
 func (r *schemaCacheRuntime) userCacheBackend() *schemacache.Cache {
 	r.userCacheMu.Lock()
 	defer r.userCacheMu.Unlock()
@@ -841,6 +868,57 @@ func (r *schemaCacheRuntime) switchToUserCache() bool {
 	return true
 }
 
+func (r *schemaCacheRuntime) waitForPublishedGeneration(cache *schemacache.Cache, recheck func() (any, error)) (any, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultSchemaCacheBuilderTimeout)
+	defer cancel()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if identity, ok := peekLocalSchemaCacheIdentity(cache.Directory()); ok && schemaCacheEditionMatches(identity.Edition, r.cacheEdition()) {
+			r.adoptGeneratedIdentity(identity)
+			r.resetPayloadsHandle()
+		}
+		if value, err := recheck(); err == nil {
+			return value, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *schemaCacheRuntime) repairWithIsolatedBuilder(cache *schemacache.Cache, recheck func() (any, error)) (any, loadedSchemaCatalog, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultSchemaCacheBuilderTimeout)
+	defer cancel()
+	result, err := buildSchemaCacheInIsolatedProcess(ctx)
+	if err != nil {
+		return nil, loadedSchemaCatalog{}, err
+	}
+	if err := r.publishGeneratedResult(cache, result); err != nil {
+		return nil, loadedSchemaCatalog{}, err
+	}
+	value, err := recheck()
+	if err != nil {
+		return nil, loadedSchemaCatalog{}, fmt.Errorf("read isolated Schema cache generation: %w", err)
+	}
+	return value, loadedSchemaCatalog{}, nil
+}
+
+func (r *schemaCacheRuntime) openRepairBackend() (*schemacache.Cache, error) {
+	opts := r.optionsSnapshot()
+	options := []schemacache.Option{}
+	if opts.Counters != nil {
+		options = append(options, schemacache.WithCounters(opts.Counters))
+	}
+	cache, err := schemacache.Open(opts.cacheEdition(), options...)
+	if err == nil {
+		r.setRepairCache(cache)
+	}
+	return cache, err
+}
+
 // repairSchemaCache is the sole miss/corruption coordinator. The lock-holder
 // rechecks with low-level readers before touching the process-wide live Once.
 func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any, loadedSchemaCatalog, error) {
@@ -848,6 +926,13 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 		return nil, *loaded, nil
 	}
 	cache, openErr := r.opened()
+	if schemaCacheRuntimeUncertain.Load() {
+		cache, openErr = r.openRepairBackend()
+		if openErr != nil && r.switchToUserCache() {
+			cache = r.userCacheBackend()
+			openErr = nil
+		}
+	}
 	if openErr == nil {
 		lock, lockErr := cache.AcquireLock(context.Background(), r.optionsSnapshot().LockTimeout)
 		if lockErr == nil {
@@ -857,6 +942,9 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 			r.resetPayloadsHandle()
 			if value, err := recheck(); err == nil {
 				return value, loadedSchemaCatalog{}, nil
+			}
+			if schemaCacheRuntimeUncertain.Load() {
+				return r.repairWithIsolatedBuilder(cache, recheck)
 			}
 			loaded := deliverySchemaCatalog()
 			if runtimeDeliverySchemaCatalogErr != nil {
@@ -870,30 +958,41 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 		// (typically a root-owned read-only shared cache) falls back to the
 		// per-user cache — reuse a repair an earlier process persisted there,
 		// or persist this one for the processes after us.
+		if errors.Is(lockErr, schemacache.ErrLockTimeout) && schemaCacheRuntimeUncertain.Load() {
+			if value, err := r.waitForPublishedGeneration(cache, recheck); err == nil {
+				return value, loadedSchemaCatalog{}, nil
+			}
+		}
 		if !errors.Is(lockErr, schemacache.ErrLockTimeout) && r.switchToUserCache() {
 			// Publish the per-user generation under that cache's rebuild lock:
 			// two binaries (an upgrade's old and new versions) can fall back
 			// concurrently, and unsynchronized Registry/Payloads/Meta writes
 			// would interleave into a mixed generation neither can validate.
-			userCache := r.userCacheBackend()
-			userLock, userLockErr := userCache.AcquireLock(context.Background(), r.optionsSnapshot().LockTimeout)
+			cache = r.userCacheBackend()
+			userLock, userLockErr := cache.AcquireLock(context.Background(), r.optionsSnapshot().LockTimeout)
 			if userLockErr == nil {
 				defer userLock.Release()
 				r.resetPayloadsHandle()
 				if value, err := recheck(); err == nil {
 					return value, loadedSchemaCatalog{}, nil
 				}
+				if schemaCacheRuntimeUncertain.Load() {
+					return r.repairWithIsolatedBuilder(cache, recheck)
+				}
 				loaded := deliverySchemaCatalog()
 				if runtimeDeliverySchemaCatalogErr != nil {
 					return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
 				}
-				r.publishGeneratedOrMatching(userCache, loaded)
+				r.publishGeneratedOrMatching(cache, loaded)
 				return nil, loaded, nil
 			}
 			// Another process owns the per-user repair; stay live-only.
 		}
 		// Remaining lock failures preserve authoritative availability and skip
 		// publication. No cache error may override a successful live result.
+	}
+	if schemaCacheRuntimeUncertain.Load() {
+		return nil, loadedSchemaCatalog{}, fmt.Errorf("Schema cache repair requires the isolated builder")
 	}
 	loaded := deliverySchemaCatalog()
 	if runtimeDeliverySchemaCatalogErr != nil {
@@ -910,29 +1009,42 @@ func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache
 	if err != nil {
 		return
 	}
-	// The registered identity is kept only when it pins these exact artifacts
-	// (digests, lengths, and payload index region); otherwise the freshly
-	// derived identity is adopted, which also repairs a stale BuildID. A
-	// repersisted identity whose index pins do not describe the published
-	// payload would fail ReadPayloadIndex in every later process and force
-	// each one back into repair.
 	identity := r.optionsSnapshot().Identity
 	if !schemaCacheIdentityReady(identity) || !artifacts.match(identity) {
-		generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
-		if genErr != nil {
+		identity, err = IdentityFromArtifacts(r.cacheEdition(), artifacts)
+		if err != nil {
 			return
 		}
-		identity = generated
 		r.adoptGeneratedIdentity(identity)
 	}
-	// Publish is Registry/Payloads then Meta-last. Persist identity.json only
-	// after that commit so readers never observe a new sidecar pointing at a
-	// half-published generation. Upgrade invalidation is ExpectedIdentity
-	// digest/auth plus this live-artifact match, not a fingerprint filename.
 	if err := cache.Publish(identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
 		return
 	}
 	_ = persistLocalSchemaCacheIdentity(cache.Directory(), identity)
+}
+
+func (r *schemaCacheRuntime) publishGeneratedResult(cache *schemacache.Cache, result SchemaCacheBuildResult) error {
+	if cache == nil {
+		return fmt.Errorf("Schema cache is nil")
+	}
+	if err := validateDetachedSchemaCacheBuildResult(result); err != nil {
+		return err
+	}
+	identity := result.Identity
+	if !schemaCacheEditionMatches(identity.Edition, r.cacheEdition()) {
+		return fmt.Errorf("isolated Schema cache edition %q does not match runtime edition %q", identity.Edition, r.cacheEdition())
+	}
+	r.adoptGeneratedIdentity(identity)
+	// Publish is Registry/Payloads then Meta-last. Persist identity.json only
+	// after that commit so readers never observe a new sidecar pointing at a
+	// half-published generation.
+	if err := cache.Publish(identity.ExpectedIdentity(), result.Artifacts.RegistryArtifact(), result.Artifacts.MetaArtifact(), result.Artifacts.PayloadArtifact()); err != nil {
+		return err
+	}
+	if err := persistLocalSchemaCacheIdentity(cache.Directory(), identity); err != nil {
+		return err
+	}
+	return nil
 }
 
 // SchemaCacheArtifacts is the deterministic cache hand-off used by the

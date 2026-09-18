@@ -14,6 +14,9 @@
 package cli
 
 import (
+	"context"
+	"errors"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"os"
 	"path/filepath"
@@ -121,12 +124,21 @@ func TestCrossPlatformCoverageUncertainRuntimeServesCacheReads(t *testing.T) {
 	}
 }
 
-// TestCrossPlatformCoverageUncertainColdCacheStillAssembles covers the tier-2
-// fallback leg: with no populated cache, uncertainty must not wedge schema
-// queries — the live catalog still assembles and answers.
-func TestCrossPlatformCoverageUncertainColdCacheStillAssembles(t *testing.T) {
+// TestCrossPlatformCoverageUncertainColdCacheUsesIsolatedBuilder covers the
+// cold-cache path: uncertainty must use the isolated builder rather than
+// assembling the catalog in the plugin process.
+func TestCrossPlatformCoverageUncertainColdCacheUsesIsolatedBuilder(t *testing.T) {
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	MarkSchemaCacheRuntimeUncertain()
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
@@ -134,15 +146,14 @@ func TestCrossPlatformCoverageUncertainColdCacheStillAssembles(t *testing.T) {
 	if _, err := DeliverySchemaQueryPayloadForTest("definitely-not-a-schema-path"); err == nil {
 		t.Fatal("unknown path unexpectedly resolved")
 	}
-	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog == 0 {
-		t.Fatal("cold uncertain query never assembled the live catalog")
+	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog != 0 {
+		t.Fatalf("cold uncertain query assembled the parent catalog: %#v", counts)
 	}
 }
 
-// TestCrossPlatformCoverageUncertainRuntimeNeverPublishes covers the tier-2
-// write gate: a query served under uncertainty must not create or rewrite any
-// cache artifact, including the per-user fallback publication.
-func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
+// TestCrossPlatformCoverageUncertainRuntimePublishesThroughBuilder covers the
+// tier-2 write gate: uncertainty may publish only the isolated builder result.
+func TestCrossPlatformCoverageUncertainRuntimePublishesThroughBuilder(t *testing.T) {
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 	coverageSchemaCacheHome(t)
@@ -166,8 +177,8 @@ func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
 		t.Fatal("unknown path unexpectedly resolved")
 	}
 	marker := filepath.Join(home, "dws")
-	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
-		t.Fatalf("uncertain query wrote cache state: %v", statErr)
+	if _, statErr := os.Stat(marker); statErr != nil {
+		t.Fatalf("isolated builder did not publish cache state: %v", statErr)
 	}
 }
 
@@ -237,10 +248,8 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
 
-	// Cold cache: both loaders fall through to live assembly. Overview runs
-	// first because the first successful assembly publishes the live catalog,
-	// after which the loaders answer from it at the top and never reach their
-	// cache-fallback branch.
+	// Cold cache: both loaders use the isolated builder. Overview runs first
+	// and publishes the detached generation; the following loader reads it.
 	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
 		t.Fatalf("uncertain cold-cache overview payload: %v", err)
 	}
@@ -249,11 +258,15 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 		t.Fatalf("uncertain cold-cache all payload: %v", err)
 	}
 
-	// A failing assembly must surface instead of degrading silently. The
-	// source-root registration resets cache options, so re-register them and
-	// keep the uncertainty marker to stay on the read-only fallback path.
+	// A failing isolated builder must surface instead of degrading silently.
+	// The source-root registration resets cache options, so re-register them
+	// and keep the uncertainty marker.
 	RegisterSchemaSourceRoot(nil)
 	register()
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{}, errors.New("isolated builder failed")
+	})
+	t.Cleanup(registerPackageTestIsolatedBuilder)
 	MarkSchemaCacheRuntimeUncertain()
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()

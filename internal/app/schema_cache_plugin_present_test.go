@@ -14,6 +14,8 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,19 +35,51 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestSchemaCacheBuilderPrivateProtocol(t *testing.T) {
+	var output bytes.Buffer
+	handled, code := RunSchemaCacheBuilder([]string{schemaCacheBuilderArgument}, &output)
+	if !handled || code != 0 {
+		t.Fatalf("builder handled=%v code=%d", handled, code)
+	}
+	result, err := cli.ReadSchemaCacheBuildResult(bytes.NewReader(output.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Identity.Edition != "open" || len(result.Artifacts.Registry) == 0 {
+		t.Fatalf("invalid builder result: edition=%q registry=%d", result.Identity.Edition, len(result.Artifacts.Registry))
+	}
+}
+
 // A process with runtime plugins mounted must still publish and reuse the
 // persisted Schema cache: plugin commands live only in the runtime command
 // tree, never in the declaration-only schema source root, so the cache cannot
-// misrepresent the builtin schema surface. Regression guard for the removed
-// plugin-discovery MarkSchemaCacheRuntimeUncertain call, which made every
-// plugin user pay full live assembly forever.
+// misrepresent the builtin schema surface. Regression guard for the isolated
+// builder path.
 func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.T) {
 	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	isolateSchemaCacheHome(t)
 	t.Setenv(schemaCacheTestEnv, "1")
-	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
+	cli.RegisterSchemaCacheIsolatedBuilder(func(ctx context.Context) (cli.SchemaCacheBuildResult, error) {
+		resolved, err := cli.ResolveSchemaBuild(NewSchemaSourceRootCommand(ctx))
+		if err != nil {
+			return cli.SchemaCacheBuildResult{}, err
+		}
+		artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+		if err != nil {
+			return cli.SchemaCacheBuildResult{}, err
+		}
+		identity, err := cli.IdentityFromArtifacts("open", artifacts)
+		if err != nil {
+			return cli.SchemaCacheBuildResult{}, err
+		}
+		return cli.SchemaCacheBuildResult{Artifacts: artifacts, Identity: identity}, nil
+	})
+	t.Cleanup(func() {
+		cli.RegisterSchemaCacheIsolatedBuilder(buildSchemaCacheInChild)
+		_ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{})
+	})
 
 	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		return []*cobra.Command{{
@@ -78,7 +112,7 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 	if !ok || meta.Identity.Canonical != "calendar.create_calendar_event" {
 		t.Fatalf("plugin-present ResolveMeta = %#v, %v", meta, ok)
 	}
-	identity, ok := cli.SchemaCacheFastPathIdentity()
+	identity, ok := cli.SchemaCacheReadableIdentityForTest()
 	if !ok {
 		t.Fatal("plugin-present process did not adopt a generated Schema cache identity")
 	}
@@ -101,7 +135,7 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 		return NewSchemaSourceRootCommand()
 	})
 	applyProductionSchemaCache()
-	if hit, hitOK := cli.SchemaCacheFastPathIdentity(); !hitOK || hit.BuildID != identity.BuildID {
+	if hit, hitOK := cli.SchemaCacheReadableIdentityForTest(); !hitOK || hit.BuildID != identity.BuildID {
 		t.Fatalf("plugin-present reloaded identity = %#v ready=%v", hit, hitOK)
 	}
 	meta, ok = cli.ResolveMeta("calendar event create")
