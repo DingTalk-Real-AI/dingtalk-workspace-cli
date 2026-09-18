@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -77,6 +78,45 @@ func TestCrossPlatformCoverageWhiteboardTemplateLanguageSchema(t *testing.T) {
 				t.Fatal("language must remain optional")
 			}
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardTemplateScopeSelectionDelivered(t *testing.T) {
+	tests := []struct {
+		path     string
+		useTerms []string
+		avoid    string
+	}{
+		{"whiteboard template personal list", []string{"我的模板", "自己保存"}, "public list"},
+		{"whiteboard template team list", []string{"知识库模板", "template-workspace"}, "目标白板"},
+		{"whiteboard template public list", []string{"模板中心", "没有个人或团队来源限定"}, "personal list"},
+		{"whiteboard template personal create", []string{"来自 personal list", "个人"}, "来源"},
+		{"whiteboard template team create", []string{"来自 team list", "同一个 template-workspace"}, "目标 folder/workspace"},
+		{"whiteboard template public create", []string{"来自 public list", "模板中心"}, "来源"},
+	}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			payload := executeShortcutSchemaQuery(t, "--cli-path", test.path, "--compact")
+			useWhen := strings.Join(schemaContractStringSlice(payload["use_when"]), " ")
+			avoidWhen := strings.Join(schemaContractStringSlice(payload["avoid_when"]), " ")
+			for _, term := range test.useTerms {
+				if !strings.Contains(useWhen, term) {
+					t.Fatalf("use_when %q does not distinguish %q", useWhen, term)
+				}
+			}
+			if !strings.Contains(avoidWhen, test.avoid) {
+				t.Fatalf("avoid_when %q does not distinguish %q", avoidWhen, test.avoid)
+			}
+		})
+	}
+
+	personalSave := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard template personal save", "--compact")
+	if got := strings.Join(schemaContractStringSlice(personalSave["use_when"]), " "); !strings.Contains(got, "没有团队") {
+		t.Fatalf("personal save does not publish the unspecified-scope default: %q", got)
+	}
+	teamSave := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard template team save", "--compact")
+	if got := strings.Join(schemaContractStringSlice(teamSave["use_when"]), " "); !strings.Contains(got, "团队共享") {
+		t.Fatalf("team save does not require team-sharing intent: %q", got)
 	}
 }
 
@@ -255,6 +295,7 @@ func TestCrossPlatformCoverageWhiteboardMergedCapabilities(t *testing.T) {
 		"whiteboard create-with-content", "whiteboard export", "whiteboard export-get",
 		"whiteboard template personal save", "whiteboard template personal list", "whiteboard template personal create",
 		"whiteboard template team save", "whiteboard template team list", "whiteboard template team create",
+		"whiteboard template public list", "whiteboard template public create",
 	} {
 		t.Run(path, func(t *testing.T) {
 			payload := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")

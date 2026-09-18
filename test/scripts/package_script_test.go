@@ -3466,16 +3466,8 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		t.Fatal("cross-release wrapper must accept --exec so CGO rebuilds can reuse pinned toolchains")
 	}
 
-	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")
-	for _, required := range []string{
-		`__asm__("_snprintf")`,
-		`__asm__("_vsnprintf")`,
-		`__asm__("__imp__snprintf")`,
-		`__asm__("__imp__vsnprintf")`,
-	} {
-		if !strings.Contains(windowsCompat, required) {
-			t.Errorf("Windows SafeChat CRT compatibility layer is missing %q", required)
-		}
+	if _, err := os.Stat("third_party/safechat-go-sdk/msvcrt_compat_windows.c"); err == nil {
+		t.Fatal("legacy MSVCRT bridge must stay removed: rebuilt Windows libsafechat archives no longer reference legacy CRT names")
 	}
 
 	defaultBuild := read("scripts/dev/build.sh")

@@ -2709,7 +2709,7 @@ user 对象字段：
 	userSearchCmd.Flags().String("limit", "", "每页返回数量")
 	userSearchCmd.Flags().String("size", "", "--limit 的别名")
 	_ = userSearchCmd.Flags().MarkHidden("size")
-	userCmd.AddCommand(userSearchCmd)
+	userCmd.AddCommand(userSearchCmd, newMailUserGetCommand(), newMailUserBatchGetCommand())
 
 	// ── template 子命令组 ──────────────────────────────────
 
