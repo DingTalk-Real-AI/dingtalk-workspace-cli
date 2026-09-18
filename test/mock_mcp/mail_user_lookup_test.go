@@ -59,7 +59,7 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				{"orgEmails": []any{"a@example.com", "invalid", "missing@example.com"}},
 				{"orgEmail": "a@example.com"}, {"orgEmail": "invalid"},
 			},
-			wantCode: 7, wantUnknown: 1,
+			wantCode: 1, wantUnknown: 2,
 		},
 		{
 			name:       "mapping configuration error must not trigger fallback",
@@ -138,6 +138,9 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				Outcome string `json:"outcome"`
 				Error   struct {
 					UpstreamCode string `json:"upstream_code"`
+					Details      struct {
+						PartialResult json.RawMessage `json:"partialResult"`
+					} `json:"details"`
 				} `json:"error"`
 				Data struct {
 					Result    json.RawMessage `json:"result"`
@@ -168,7 +171,26 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 					t.Fatalf("confirmed unmatched address lost: %s", stdout)
 				}
 			} else if tc.wantCode == 1 {
-				if envelope.OK || envelope.Outcome != "failure" || envelope.Error.UpstreamCode != "PARAM_ERROR" {
+				wantUpstream := "PARAM_ERROR"
+				if tc.wantUnknown != 0 {
+					wantUpstream = "noPermission"
+					var progress struct {
+						Succeeded []struct {
+							ID   string `json:"id"`
+							User struct {
+								UID json.Number `json:"uid"`
+							} `json:"user"`
+						} `json:"succeeded"`
+						Failed  []json.RawMessage `json:"failed"`
+						Unknown []struct {
+							ID string `json:"id"`
+						} `json:"unknown"`
+					}
+					if err := json.Unmarshal(envelope.Error.Details.PartialResult, &progress); err != nil || len(progress.Succeeded) != 1 || progress.Succeeded[0].ID != "a@example.com" || progress.Succeeded[0].User.UID != "9223372036854775806" || len(progress.Failed) != 0 || len(progress.Unknown) != tc.wantUnknown || progress.Unknown[0].ID != "invalid" || progress.Unknown[1].ID != "missing@example.com" {
+						t.Fatalf("global failure lost confirmed data or marked unconfirmed items failed: %s", stdout)
+					}
+				}
+				if envelope.OK || envelope.Outcome != "failure" || envelope.Error.UpstreamCode != wantUpstream {
 					t.Fatalf("mapping error misclassified: %s", stdout)
 				}
 			} else if !envelope.OK || envelope.Outcome != "success" || len(envelope.Data.Result) == 0 {

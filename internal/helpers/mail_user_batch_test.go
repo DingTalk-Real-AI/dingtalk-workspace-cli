@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -145,8 +144,16 @@ func TestCrossPlatformCoverageMailUserBatchFallbackStopsOnPermissionFailure(t *t
 		return `{"success":false,"errorCode":"noPermission","errorMsg":"Not a member"}`, nil
 	}}
 	got, code, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "a@example.com,b@example.com,c@example.com")
-	if err != nil || code != 7 || caller.calls != 3 || !strings.Contains(string(got), `"unknown"`) {
+	if err == nil || apperrors.ExitCode(err) != 1 || caller.calls != 3 || len(got) != 0 {
 		t.Fatalf("permission failure: %s code=%d err=%v calls=%d", got, code, err, caller.calls)
+	}
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != CodeMCPToolError {
+		t.Fatalf("permission failure lost its original classification: %v", err)
+	}
+	progress := typed.Details["partialResult"].(map[string]any)
+	if len(progress["succeeded"].([]any)) != 1 || len(progress["unknown"].([]output.PartialUnknownEntry)) != 2 {
+		t.Fatalf("permission failure lost confirmed progress: %#v", progress)
 	}
 }
 
@@ -238,7 +245,7 @@ func TestCrossPlatformCoverageMailUserBatchFallbackOmittedEmployee(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageMailUserBatchFallbackCancellationKeepsResults(t *testing.T) {
+func TestCrossPlatformCoverageMailUserBatchFallbackCancellationPropagates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, _ map[string]any) (string, error) {
@@ -249,12 +256,8 @@ func TestCrossPlatformCoverageMailUserBatchFallbackCancellationKeepsResults(t *t
 		return `{"success":true,"result":{"uid":123}}`, nil
 	}}
 	got, code, err := executeMailUserLookupWithContext(t, ctx, caller, "batch-get", "--org-emails", "a@example.com,b@example.com")
-	if err != nil || code != 7 || caller.calls != 2 {
+	if !errors.Is(err, context.Canceled) || len(got) != 0 || caller.calls != 2 {
 		t.Fatalf("cancellation: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
-	}
-	data := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)
-	if len(data["succeeded"].([]any)) != 1 || len(data["unknown"].([]any)) != 1 || data["unknown"].([]any)[0].(map[string]any)["id"] != "b@example.com" {
-		t.Fatalf("cancellation lost results or misclassified unattempted lookup: %s", got)
 	}
 }
 
@@ -287,7 +290,7 @@ func TestCrossPlatformCoverageMailUserBatchRejectsInconsistentPartialIdentity(t 
 	result, err := mailUserBatchResult([]*mailUserBatchItem{
 		{id: "same", email: "a@example.com", notFound: true},
 		{id: "same", failure: &output.ErrorInfo{Type: "validation", Message: "invalid input"}},
-	})
+	}, nil)
 	if err == nil || result != nil {
 		t.Fatalf("duplicate partial identities must fail closed: result=%v err=%v", result, err)
 	}
@@ -329,12 +332,58 @@ func TestCrossPlatformCoverageMailUserBatchTypedFailureClassification(t *testing
 				return "", apperrors.NewAPI("request failed", apperrors.WithReason(reason))
 			}}
 			got, code, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "a@example.com,b@example.com,c@example.com")
-			if err != nil || code != 7 || caller.calls != 3 {
+			if err == nil || apperrors.ExitCode(err) != 1 || len(got) != 0 || caller.calls != 3 {
 				t.Fatalf("connection failure did not stop fallback: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
 			}
-			data := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)
-			if len(data["succeeded"].([]any)) != 1 || data["failed"].([]any)[0].(map[string]any)["id"] != "b@example.com" || data["unknown"].([]any)[0].(map[string]any)["id"] != "c@example.com" {
-				t.Fatalf("connection failure lost confirmed results: %s", got)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != reason {
+				t.Fatalf("connection failure lost its original classification: %v", err)
+			}
+			data := typed.Details["partialResult"].(map[string]any)
+			if len(data["succeeded"].([]any)) != 1 || len(data["failed"].([]output.PartialFailedEntry)) != 0 || len(data["unknown"].([]output.PartialUnknownEntry)) != 2 {
+				t.Fatalf("connection failure lost confirmed results: %#v", data)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchGlobalFailurePreservesError(t *testing.T) {
+	for _, cause := range []error{
+		apperrors.NewAuth("expired", apperrors.WithDetails(map[string]any{"original": true})),
+		&CLIError{Code: CodeAuthTokenExpired, Details: map[string]any{"original": true}},
+		&CLIError{Code: CodeAuthPermission},
+		&apperrors.PATError{RawJSON: `{"success":false,"code":"PAT_NO_PERMISSION"}`},
+		&CLIError{Code: CodeNetworkTimeout, Cause: context.DeadlineExceeded},
+		&CLIError{Code: CodeUnclassified, Cause: context.Canceled},
+	} {
+		t.Run(fmt.Sprintf("%T/%d", cause, apperrors.ExitCode(cause)), func(t *testing.T) {
+			caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, args map[string]any) (string, error) {
+				if tool == "batch_get_users_by_org_emails" {
+					return mailBatchAddressRejection, nil
+				}
+				if args["orgEmail"] == "a@example.com" {
+					return `{"success":true,"result":{"uid":123}}`, nil
+				}
+				return "", cause
+			}}
+			got, _, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "a@example.com,b@example.com,c@example.com")
+			preserved := errors.Is(err, cause)
+			if original, ok := cause.(*apperrors.PATError); ok {
+				var pat apperrors.RawStderrError
+				preserved = errors.As(err, &pat) && reflect.DeepEqual(mailLookupTestJSON(t, []byte(pat.RawStderr())), mailLookupTestJSON(t, []byte(original.RawJSON)))
+			}
+			if !preserved || apperrors.ExitCode(err) != apperrors.ExitCode(cause) || len(got) != 0 || caller.calls != 3 {
+				t.Fatalf("global failure changed: got=%s err=%v cause=%v calls=%d", got, err, cause, caller.calls)
+			}
+			switch original := cause.(type) {
+			case *apperrors.Error:
+				if original.Details["partialResult"] != nil {
+					t.Fatal("caller-owned error was mutated")
+				}
+			case *CLIError:
+				if original.Details["partialResult"] != nil {
+					t.Fatal("caller-owned error was mutated")
+				}
 			}
 		})
 	}

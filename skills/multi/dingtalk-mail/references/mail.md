@@ -1166,8 +1166,11 @@ dws schema mail.batch_get_users_by_org_emails --compact
 两个列表都按去重后的请求顺序排列；没有匹配员工时 `users=[]`，全部找到时 `notFoundOrgEmails=[]`。
 未匹配项不表示调用失败。后端明确因单个非法邮箱拒绝整批时，CLI 自动用单查接口逐项查询，保留可用结果。
 正常批量仅请求一次；上述兜底最多追加 100 次单查，邮箱忽略大小写去重。鉴权、权限、连接和其他整批故障不会触发兜底。
+兜底期间发生全局鉴权、权限或连接故障时立即停止，保留原错误分类和退出码；结构化错误中的
+`error.details.partialResult` 保留已确认结果，尚未确认的项记为 `unknown`。
+取消操作和原始 PAT 授权错误直接交回框架，不转换为退出码 7，也不改写其原有协议。
 
-部分失败时返回 `outcome=partial_failure`，退出码为 **7**，结果仍在 stdout：
+单项失败而其他项有确认结果时返回 `outcome=partial_failure`，退出码为 **7**，结果仍在 stdout：
 
 - `data.total`：去重后的邮箱与空元素总数。
 - `data.succeeded`：已确认查询，每项包含请求邮箱 `id`、`orgEmail` 和 `found`；找到时还有 `user` 员工信息，`found=false` 表示确认未匹配。

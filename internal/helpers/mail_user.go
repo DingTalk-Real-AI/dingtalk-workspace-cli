@@ -90,6 +90,8 @@ func newMailUserBatchGetCommand() *cobra.Command {
 服务端去除首尾空格后忽略大小写去重，保留首次出现的地址及顺序；不补全域名、不转换邮箱别名。
 空元素单独记为失败；后端因非法邮箱拒绝整批时，CLI 自动逐项查询，保留其他邮箱的结果。
 超过 100 个邮箱时请分批调用；鉴权、权限或连接故障不会触发逐项兜底。
+逐项兜底期间发生全局故障时保留原错误分类和退出码；结构化错误通过 error.details.partialResult 保留已确认结果。
+取消操作会立即交回框架处理；取消和原始 PAT 授权协议保持不变。
 
 返回 success、result、errorCode、errorMsg。result.users 是匹配到的员工数组，字段与 mail user get 一致；
 result.notFoundOrgEmails 是未找到有效员工的邮箱数组。两个数组均按去重后的请求顺序返回。

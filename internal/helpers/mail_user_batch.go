@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,15 +68,15 @@ func callMailUserBatchLookupResult(cmd *cobra.Command, tool string, args map[str
 			if item.failure != nil {
 				continue
 			}
-			if cmd.Context().Err() != nil {
-				break
+			if contextErr := cmd.Context().Err(); contextErr != nil {
+				return mailUserBatchResult(items, contextErr)
 			}
 			single, singleErr := fetchMailUserLookupData(cmd, "get_user_by_org_email", map[string]any{"orgEmail": item.email})
 			if singleErr != nil {
-				item.failure = &output.ErrorInfo{Type: "api", Message: singleErr.Error()}
 				if mailUserLookupGlobalFailure(singleErr) {
-					break
+					return mailUserBatchResult(items, singleErr)
 				}
+				item.failure = &output.ErrorInfo{Type: "api", Message: singleErr.Error()}
 				continue
 			}
 			var user map[string]json.RawMessage
@@ -104,7 +105,7 @@ func callMailUserBatchLookupResult(cmd *cobra.Command, tool string, args map[str
 			}
 			item.user = user
 		}
-		return mailUserBatchResult(items)
+		return mailUserBatchResult(items, nil)
 	}
 
 	// Decode each channel and record independently. An invalid channel or row
@@ -137,7 +138,7 @@ func callMailUserBatchLookupResult(cmd *cobra.Command, tool string, args map[str
 			item.notFound = true
 		}
 	}
-	return mailUserBatchResult(items)
+	return mailUserBatchResult(items, nil)
 }
 
 func mailUserBatchRejectedAddress(err error) bool {
@@ -162,6 +163,9 @@ func mailUserBatchRejectedAddress(err error) bool {
 }
 
 func mailUserLookupGlobalFailure(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
 	var exit interface{ ExitCode() int }
 	if errors.As(err, &exit) && (exit.ExitCode() == ExitAuth || exit.ExitCode() == ExitPermission) {
 		return true
@@ -186,7 +190,7 @@ func mailUserLookupGlobalFailure(err error) bool {
 	return strings.EqualFold(body.ErrorCode, "noPermission")
 }
 
-func mailUserBatchResult(items []*mailUserBatchItem) (output.CommandResult, error) {
+func mailUserBatchResult(items []*mailUserBatchItem, cause error) (output.CommandResult, error) {
 	users := make([]map[string]json.RawMessage, 0)
 	missing := make([]string, 0)
 	succeeded := make([]any, 0)
@@ -209,6 +213,29 @@ func mailUserBatchResult(items []*mailUserBatchItem) (output.CommandResult, erro
 			unknown = append(unknown, output.PartialUnknownEntry{ID: item.id, Reason: "lookup did not return a valid employee or confirm not-found; retry this address"})
 		}
 	}
+	if cause != nil {
+		// A global failure owns the outcome/exit code. Keep confirmed data as
+		// diagnostics instead of downgrading auth, permission or cancellation
+		// into a per-address failure with exit code 7.
+		progress := map[string]any{"total": len(items), "succeeded": succeeded, "failed": failed, "unknown": unknown}
+		var typed *apperrors.Error
+		if errors.As(cause, &typed) {
+			copy := *typed
+			copy.Cause = cause
+			copy.Details = mailUserBatchErrorDetails(typed.Details, progress)
+			return nil, &copy
+		}
+		var cliErr *CLIError
+		if errors.As(cause, &cliErr) {
+			copy := *cliErr
+			copy.Cause = cause
+			copy.Details = mailUserBatchErrorDetails(cliErr.Details, progress)
+			return nil, &copy
+		}
+		// Context and raw PAT errors have framework-owned cancellation and
+		// authorization protocols. Preserve them verbatim.
+		return nil, cause
+	}
 	if len(failed) == 0 && len(unknown) == 0 {
 		return output.Success(map[string]any{"success": true, "result": map[string]any{"users": users, "notFoundOrgEmails": missing}}), nil
 	}
@@ -220,4 +247,13 @@ func mailUserBatchResult(items []*mailUserBatchItem) (output.CommandResult, erro
 		return nil, err
 	}
 	return output.Partial(partial), nil
+}
+
+func mailUserBatchErrorDetails(existing map[string]any, progress map[string]any) map[string]any {
+	details := make(map[string]any, len(existing)+1)
+	for key, value := range existing {
+		details[key] = value
+	}
+	details["partialResult"] = progress
+	return details
 }

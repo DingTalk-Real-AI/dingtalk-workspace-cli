@@ -17,6 +17,10 @@ category: Added
   runtime transport; global authentication, permission and
   connection failures do not trigger that fallback. Unconfirmed results are
   never reported as not-found.
+  During fallback, global failures retain their original classification and
+  exit status, with confirmed progress in structured error
+  `details.partialResult`. Cancellation and raw PAT authorization errors are
+  returned to the framework unchanged instead of becoming partial success.
 - **Large integer output precision** — preserves integer IDs beyond the exact
   `float64` range when decoding MCP text responses and through `--jq`, `--fields`
   and formatted output.
