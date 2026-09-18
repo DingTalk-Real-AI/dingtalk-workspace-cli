@@ -421,7 +421,11 @@ func responseCursor(data map[string]any) string {
 	}
 	for _, key := range []string{"nextCursor", "next_cursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "error-v1:") {
+				return ""
+			}
+			return trimmed
 		}
 	}
 	for _, key := range []string{"data", "result", "pagination", "page"} {

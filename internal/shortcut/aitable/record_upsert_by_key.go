@@ -304,6 +304,10 @@ func responseHasMore(data map[string]any) bool {
 	}
 	for _, key := range []string{"nextCursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "error-v1:") {
+				continue
+			}
 			return true
 		}
 	}

@@ -27,7 +27,7 @@ func recordQueryCursorError(err error) *apperrors.Error {
 	diag := aitableServerDiag(err)
 	code := diag.ServerErrorCode
 	switch code {
-	case "INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE", "CURSOR_OFFSET_LIMIT":
+	case "INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE", "CURSOR_OFFSET_LIMIT", "NON_RESUMABLE_ERROR_CURSOR":
 	default:
 		return nil
 	}
@@ -36,6 +36,10 @@ func recordQueryCursorError(err error) *apperrors.Error {
 	hint := "丢弃本轮和此前保存的累计结果及旧游标；核对查询条件后，不传 --cursor 从第一页重新查询。若持续失败，先等待服务版本/数据稳定；不要重跑含写入步骤的整条命令。"
 	details := map[string]any{"discard_previous_results": true, "restart_from_first_page": true}
 	switch code {
+	case "NON_RESUMABLE_ERROR_CURSOR":
+		reason = "pagination_non_resumable_error"
+		hint = "服务端返回了不可恢复的错误游标（error-v1: 保护游标）；丢弃全部累计结果和旧游标，立即停止分页，禁止将该游标回传。核对查询条件后可尝试不传 --cursor 从第一页重新查询。"
+		details = map[string]any{"discard_previous_results": true, "restart_from_first_page": false, "stop_pagination": true}
 	case "CURSOR_SNAPSHOT_UNAVAILABLE":
 		reason = "pagination_snapshot_unavailable"
 		hint = "服务端缺少排序分页所需版本信息；丢弃累计结果和旧游标，待服务修复后从第一页查询。不要原样重试，也不要重跑含写入步骤的整条命令。"
