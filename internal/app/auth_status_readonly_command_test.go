@@ -221,3 +221,39 @@ func TestCrossPlatformCoverageAuthStatusReadOnlyBuiltProcessWhileLocked(t *testi
 		t.Fatal("built readonly exposed credentials")
 	}
 }
+
+func TestCrossPlatformCoverageAuthStatusReadOnlyFlagProbeParseFailure(t *testing.T) {
+	cmd := newAuthStatusCommand()
+	if authStatusReadOnlyRequested(cmd, []string{"--definitely-unknown-flag"}) {
+		t.Fatal("invalid flag parse must not report a read-only invocation")
+	}
+}
+
+func TestCrossPlatformCoverageAuthStatusReadOnlyMissingFlagInternalError(t *testing.T) {
+	cmd := newAuthStatusCommand()
+	cmd.ResetFlags()
+	cmd.Flags().String("profile", "", "")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "failed to read --readonly") {
+		t.Fatalf("missing readonly flag error = %v, want internal error", err)
+	}
+}
+
+func TestCrossPlatformCoverageAuthStatusTableInconclusiveState(t *testing.T) {
+	cmd := newAuthStatusCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	diagnostic := &authStatusDiagnostic{
+		Reason:  "local_state_unreadable",
+		Message: "无法安全读取所选身份的本地登录态，无法判断登录状态",
+		Hint:    "检查 --profile 和本地凭证存储",
+	}
+	if err := writeAuthStatusResult(cmd, false, false, nil, diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "无法判断") {
+		t.Fatalf("inconclusive table output = %q, want 无法判断", out.String())
+	}
+}

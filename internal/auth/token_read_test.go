@@ -15,9 +15,11 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func TestCrossPlatformCoverageTokenReadDoesNotAcquireLock(t *testing.T) {
@@ -661,5 +664,64 @@ func BenchmarkTokenReadSnapshot(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageReadTokenOpaqueEditionBackend(t *testing.T) {
+	previous := edition.Get()
+	hooks := *previous
+	hooks.LoadToken = func(string) ([]byte, error) { return nil, nil }
+	edition.Override(&hooks)
+	t.Cleanup(func() { edition.Override(previous) })
+	if _, err := ReadTokenDataForProfile(t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "read-only inspection is not supported") {
+		t.Fatalf("opaque edition backend error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageReadTokenLegacyMirrorRequiresMigration(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	cleanupKeychain(t)
+	dir := t.TempDir()
+	legacy := testToken("legacy-snapshot", "legacy-corp", "Legacy Org")
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	if _, err := ReadTokenDataForProfile(dir, ""); !errors.Is(err, ErrTokenMigrationRequired) {
+		t.Fatalf("legacy mirror error = %v, want ErrTokenMigrationRequired", err)
+	}
+}
+
+func TestCrossPlatformCoverageReadTokenCanonicalMigrationModernRegistry(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	cleanupKeychain(t)
+	dir := t.TempDir()
+	cfg := &ProfilesConfig{
+		Version:        profilesVersion,
+		CurrentProfile: unresolvedProfileSelector("canon-corp"),
+		Profiles:       []Profile{{Name: "historical", CorpID: "canon-corp"}},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ProfilesPath(dir), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadTokenDataForProfile(dir, ""); !errors.Is(err, ErrTokenMigrationRequired) {
+		t.Fatalf("canonical migration error = %v, want ErrTokenMigrationRequired", err)
+	}
+}
+
+func TestCrossPlatformCoverageReadTokenCompoundSelectorNeedsIdentityMigration(t *testing.T) {
+	dir, data := setupUnresolvedProfileSelection(t, profilesVersion)
+	if _, err := ReadTokenDataForProfile(dir, data.CorpID+":"+data.UserID); !errors.Is(err, ErrTokenMigrationRequired) {
+		t.Fatalf("compound selector probe error = %v, want ErrTokenMigrationRequired", err)
+	}
+}
+
+func TestCrossPlatformCoverageProfileMetadataNeedsMigrationVersionGate(t *testing.T) {
+	if !profileMetadataNeedsMigration(nil) {
+		t.Fatal("nil registry must require migration")
+	}
+	if !profileMetadataNeedsMigration(&ProfilesConfig{Version: profilesVersion - 1}) {
+		t.Fatal("registry below profilesVersion must require migration")
 	}
 }
