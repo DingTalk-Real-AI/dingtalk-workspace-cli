@@ -79,6 +79,13 @@ type ReadToolCaller interface {
 	CallReadTool(ctx context.Context, productID, toolName string, args map[string]any) (*ToolResult, error)
 }
 
+// WhiteboardTemplatePreviewCaller performs only the reviewed template service
+// preflight with boolean dryRun=true. It must never fall back to an ordinary
+// write call when the capability or a required guard is missing.
+type WhiteboardTemplatePreviewCaller interface {
+	CallWhiteboardTemplatePreview(ctx context.Context, toolName string, args map[string]any) (*ToolResult, error)
+}
+
 // RuntimeDefaultFn resolves a single runtimeDefault placeholder (e.g.
 // "$currentUserId") to a concrete string value. Called lazily at RunE time.
 // Returning (_, false) is equivalent to "not registered" and falls through

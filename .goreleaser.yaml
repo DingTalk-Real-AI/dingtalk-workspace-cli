@@ -38,8 +38,8 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=v{{.Version}}
-      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit={{.ShortCommit}}
-      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime={{.Date}}
+      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit={{.Commit}}
+      - -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime={{.CommitDate}}
     goos:
       - darwin
       - linux

@@ -15,6 +15,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"io"
 	"strings"
 
@@ -33,7 +34,17 @@ func RenderHelpAffordances(cmd *cobra.Command) {
 
 	cliPath := commandCLIPath(cmd)
 	productID := ""
-	if SchemaSourceRootRegistered() {
+	// Navigation-only group pages are never tool paths, so ResolveMeta can
+	// only miss for them — and with an unusable cache that miss costs a full
+	// live catalog assembly the rendered output never consumes. Leaves and
+	// hybrid groups keep the lookup. corecmd.ApplyGroupPolicy owns this
+	// marker; group commands carry a non-nil RunE, so Run/RunE alone cannot
+	// identify them.
+	isGroupPage := false
+	if policy, ok, err := corecmd.GroupPolicyFor(cmd); err == nil && ok && policy.Mode == corecmd.GroupNavigationOnly {
+		isGroupPage = true
+	}
+	if !isGroupPage && SchemaSourceRootRegistered() {
 		if meta, ok := ResolveMeta(cliPath); ok {
 			renderSelectionGuidance(cmd, meta.Selection)
 			if meta.Safety.ShouldRender() {

@@ -74,6 +74,7 @@ type TimingEntry struct {
 	Duration  time.Duration
 	Timestamp time.Time
 	Seq       int // insertion order
+	Nested    bool
 }
 
 // TimingCollector collects timing measurements for a single command execution.
@@ -95,6 +96,17 @@ func NewTimingCollector() *TimingCollector {
 
 // Record adds a timing entry with the given name and duration.
 func (tc *TimingCollector) Record(name string, d time.Duration) {
+	tc.record(name, d, false)
+}
+
+// RecordNested adds a diagnostic sub-phase. Nested phases are included in the
+// report but excluded from overhead accounting because their duration is
+// already covered by an enclosing top-level phase.
+func (tc *TimingCollector) RecordNested(name string, d time.Duration) {
+	tc.record(name, d, true)
+}
+
+func (tc *TimingCollector) record(name string, d time.Duration, nested bool) {
 	if tc == nil {
 		return
 	}
@@ -105,6 +117,7 @@ func (tc *TimingCollector) Record(name string, d time.Duration) {
 		Duration:  d,
 		Timestamp: time.Now(),
 		Seq:       tc.seq,
+		Nested:    nested,
 	})
 	tc.seq++
 }
@@ -212,6 +225,14 @@ func RecordTiming(ctx context.Context, name string, d time.Duration) {
 	}
 }
 
+// RecordNestedTiming records a diagnostic sub-phase without double-counting
+// it when BuildReport derives framework overhead.
+func RecordNestedTiming(ctx context.Context, name string, d time.Duration) {
+	if tc := TimingCollectorFromContext(ctx); tc != nil {
+		tc.RecordNested(name, d)
+	}
+}
+
 // StartTiming is a convenience function that returns a stop function for defer usage.
 // Example:
 //
@@ -236,6 +257,7 @@ type PerfPhase struct {
 	Name       string `json:"name"`
 	DurationMs int64  `json:"duration_ms"`
 	Seq        int    `json:"seq"`
+	Nested     bool   `json:"nested,omitempty"`
 }
 
 // PerfReport is the JSON-serialisable performance report.
@@ -268,8 +290,11 @@ func (tc *TimingCollector) BuildReport(cliVersion, command string) PerfReport {
 			Name:       e.Name,
 			DurationMs: ms,
 			Seq:        e.Seq,
+			Nested:     e.Nested,
 		}
-		sumMs += ms
+		if !e.Nested {
+			sumMs += ms
+		}
 		if ms > slowestMs {
 			slowestMs = ms
 			slowestName = e.Name

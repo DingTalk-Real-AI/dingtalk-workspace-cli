@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -32,7 +33,7 @@ func runDocCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...stri
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func TestCrossPlatformCoverageDocTransferAndDiffEdges(t *testing.T) {

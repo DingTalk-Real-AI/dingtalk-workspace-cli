@@ -103,8 +103,18 @@ func wikiNodeWriteError(rt *shortcut.RuntimeContext, id, sourceID string, cause 
 		enriched := *legacy
 		enriched.Message = fmt.Sprintf("节点写请求已提交，回执=%s；核验未完成：%s", encoded, legacy.Message)
 		enriched.Suggestion = "先在同一 profile 下按回执核对；返回 ID 不证明本轮资源归属，禁止直接重试或自动删除。"
-		enriched.Cause = cause
+		// Preserve errors.Is/As without rendering the superseded recovery hint
+		// from the readback failure: replaying the completed write is unsafe.
+		enriched.Cause = &writeVerificationCause{cause: cause, message: legacy.Message}
 		return &enriched
 	}
 	return fmt.Errorf("节点写请求已提交，回执=%s；请先核对，禁止直接重试：%w", encoded, cause)
 }
+
+type writeVerificationCause struct {
+	cause   error
+	message string
+}
+
+func (e *writeVerificationCause) Error() string { return e.message }
+func (e *writeVerificationCause) Unwrap() error { return e.cause }

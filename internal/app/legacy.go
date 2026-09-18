@@ -85,7 +85,9 @@ func annotatePreferredShortcutOwners(commands []*cobra.Command) {
 		if command == nil {
 			return
 		}
-		pathParts := append(append([]string(nil), parents...), command.Name())
+		// Only the joined string escapes this depth-first walk. Children may
+		// reuse the unused slice capacity; no sibling retains their path parts.
+		pathParts := append(parents, command.Name())
 		cliPath := strings.Join(pathParts, " ")
 		if owner, ok := shortcut.PreferredShortcutForCLIPath(cliPath); ok {
 			if command.Annotations == nil {

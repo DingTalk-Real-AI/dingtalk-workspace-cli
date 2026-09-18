@@ -102,7 +102,7 @@ func TestCrossPlatformCoverageChatResultWireSuccessDryRunAndPartialFailure(t *te
 	if errorBody["type"] != "api" || errorBody["subtype"] != "search_messages_incomplete" ||
 		errorBody["retryable"] != true || errorBody["retry_after_seconds"] != float64(9) ||
 		errorBody["rpc_code"] != float64(-32029) || errorBody["trace_id"] != "trace-chat-result" ||
-		errorBody["cause"] != "upstream busy" || partial["complete"] != false || partial["count"] != float64(1) {
+		errorBody["cause"] != nil || partial["complete"] != false || partial["count"] != float64(1) {
 		t.Fatalf("typed partial failure wire = %#v", failure)
 	}
 	if _, duplicated := details["failures"]; duplicated {
