@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func TestSchemaAssemblyEnvironmentSnapshotDoesNotMutateParent(t *testing.T) {
+func TestCrossPlatformCoverageSchemaAssemblyEnvironmentSnapshotDoesNotMutateParent(t *testing.T) {
 	const canary = "DWS_TEST_SCHEMA_ASSEMBLY_ENV_ISOLATION"
 	t.Cleanup(func() {
 		_ = os.Unsetenv(canary)

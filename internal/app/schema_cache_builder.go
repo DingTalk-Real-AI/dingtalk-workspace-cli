@@ -28,9 +28,23 @@ import (
 )
 
 const (
-	schemaCacheBuilderArgument  = "--_dws-schema-builder=1"
-	schemaCacheBuilderTimeout   = 30 * time.Second
-	maxSchemaCacheBuilderStderr = 64 << 10
+	schemaCacheBuilderArgument = "--_dws-schema-builder=1"
+	schemaCacheBuilderTimeout  = 30 * time.Second
+)
+
+var maxSchemaCacheBuilderStderr = 64 << 10
+
+var (
+	schemaCacheBuilderCommand       = exec.CommandContext
+	schemaCacheBuilderExecutable    = os.Executable
+	schemaCacheBuilderEnvironment   = cli.SchemaAssemblyEnvironmentSnapshot
+	schemaCacheBuilderWorkingDir    = cli.SchemaAssemblyWorkingDirectory
+	schemaCacheBuilderResponseLimit = 64 << 20
+	schemaCacheBuilderAssemble      = buildSchemaCacheResult
+	schemaCacheResolve              = cli.ResolveSchemaBuild
+	schemaCacheBuildArtifacts       = cli.BuildSchemaCacheArtifacts
+	schemaCacheIdentity             = cli.IdentityFromArtifacts
+	schemaCacheReadResult           = cli.ReadSchemaCacheBuildResult
 )
 
 // RunSchemaCacheBuilder handles only the private declaration-builder process.
@@ -40,29 +54,34 @@ func RunSchemaCacheBuilder(args []string, output io.Writer) (bool, int) {
 	if len(args) != 1 || args[0] != schemaCacheBuilderArgument {
 		return false, 0
 	}
-	resolved, err := cli.ResolveSchemaBuild(NewSchemaSourceRootCommand(context.Background()))
+	result, err := schemaCacheBuilderAssemble(context.Background())
 	if err != nil {
 		return true, writeSchemaCacheBuilderError(output, err)
 	}
-	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+	if err := cli.WriteSchemaCacheBuildResult(output, result); err != nil {
+		return true, 1
+	}
+	return true, 0
+}
+
+func buildSchemaCacheResult(ctx context.Context) (cli.SchemaCacheBuildResult, error) {
+	resolved, err := schemaCacheResolve(NewSchemaSourceRootCommand(ctx))
 	if err != nil {
-		return true, writeSchemaCacheBuilderError(output, err)
+		return cli.SchemaCacheBuildResult{}, err
+	}
+	artifacts, err := schemaCacheBuildArtifacts(resolved)
+	if err != nil {
+		return cli.SchemaCacheBuildResult{}, err
 	}
 	editionName := "open"
 	if hooks := edition.Get(); hooks != nil && strings.TrimSpace(hooks.Name) != "" {
 		editionName = hooks.Name
 	}
-	identity, err := cli.IdentityFromArtifacts(editionName, artifacts)
+	identity, err := schemaCacheIdentity(editionName, artifacts)
 	if err != nil {
-		return true, writeSchemaCacheBuilderError(output, err)
+		return cli.SchemaCacheBuildResult{}, err
 	}
-	if err := cli.WriteSchemaCacheBuildResult(output, cli.SchemaCacheBuildResult{
-		Artifacts: artifacts,
-		Identity:  identity,
-	}); err != nil {
-		return true, 1
-	}
-	return true, 0
+	return cli.SchemaCacheBuildResult{Artifacts: artifacts, Identity: identity}, nil
 }
 
 func writeSchemaCacheBuilderError(output io.Writer, err error) int {
@@ -90,42 +109,49 @@ func (b *cappedBuffer) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
+func validateSchemaCacheBuilderProcessOutput(stdout, stderr *cappedBuffer, runErr error) error {
+	if stdout.truncated {
+		return fmt.Errorf("Schema cache builder response exceeded output limit")
+	}
+	if runErr == nil {
+		return nil
+	}
+	message := strings.TrimSpace(stderr.String())
+	if stderr.truncated {
+		message += " (stderr truncated)"
+	}
+	if message != "" {
+		return fmt.Errorf("Schema cache builder: %w: %s", runErr, message)
+	}
+	return fmt.Errorf("Schema cache builder: %w", runErr)
+}
+
 func buildSchemaCacheInChild(ctx context.Context) (cli.SchemaCacheBuildResult, error) {
-	executable, err := os.Executable()
+	executable, err := schemaCacheBuilderExecutable()
 	if err != nil {
 		return cli.SchemaCacheBuildResult{}, fmt.Errorf("resolve CLI executable: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, schemaCacheBuilderTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, executable, schemaCacheBuilderArgument)
-	cmd.Env = cli.SchemaAssemblyEnvironmentSnapshot()
-	if workingDir := cli.SchemaAssemblyWorkingDirectory(); workingDir != "" {
+	cmd := schemaCacheBuilderCommand(ctx, executable, schemaCacheBuilderArgument)
+	cmd.Env = schemaCacheBuilderEnvironment()
+	if workingDir := schemaCacheBuilderWorkingDir(); workingDir != "" {
 		cmd.Dir = workingDir
 	}
 	if len(cmd.Env) == 0 {
 		return cli.SchemaCacheBuildResult{}, fmt.Errorf("Schema assembly environment snapshot is empty")
 	}
 	var stdout cappedBuffer
-	stdout.limit = 64 << 20
+	stdout.limit = schemaCacheBuilderResponseLimit
 	var stderr cappedBuffer
 	stderr.limit = maxSchemaCacheBuilderStderr
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
-	if stdout.truncated {
-		return cli.SchemaCacheBuildResult{}, fmt.Errorf("Schema cache builder response exceeded output limit")
+	if err := validateSchemaCacheBuilderProcessOutput(&stdout, &stderr, runErr); err != nil {
+		return cli.SchemaCacheBuildResult{}, err
 	}
-	if runErr != nil {
-		message := strings.TrimSpace(stderr.String())
-		if stderr.truncated {
-			message += " (stderr truncated)"
-		}
-		if message != "" {
-			return cli.SchemaCacheBuildResult{}, fmt.Errorf("Schema cache builder: %w: %s", runErr, message)
-		}
-		return cli.SchemaCacheBuildResult{}, fmt.Errorf("Schema cache builder: %w", runErr)
-	}
-	result, err := cli.ReadSchemaCacheBuildResult(bytes.NewReader(stdout.Bytes()))
+	result, err := schemaCacheReadResult(bytes.NewReader(stdout.Bytes()))
 	if err != nil {
 		return cli.SchemaCacheBuildResult{}, err
 	}

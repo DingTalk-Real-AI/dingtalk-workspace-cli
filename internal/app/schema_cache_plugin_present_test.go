@@ -16,11 +16,15 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -35,7 +39,110 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestSchemaCacheBuilderPrivateProtocol(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheBuilderChildProcess(t *testing.T) {
+	expected, err := schemaCacheBuilderAssemble(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldCommand := schemaCacheBuilderCommand
+	oldRead := schemaCacheReadResult
+	t.Cleanup(func() {
+		schemaCacheBuilderCommand = oldCommand
+		schemaCacheReadResult = oldRead
+	})
+	schemaCacheBuilderCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderProtocolHelper")
+	}
+	schemaCacheReadResult = func(io.Reader) (cli.SchemaCacheBuildResult, error) {
+		return expected, nil
+	}
+	result, err := buildSchemaCacheInChild(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Identity.BuildID != expected.Identity.BuildID {
+		t.Fatalf("child result identity = %x, want %x", result.Identity.BuildID, expected.Identity.BuildID)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderChildHelper(t *testing.T) {
+	if !strings.Contains(strings.Join(os.Args, " "), "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderChildHelper") {
+		return
+	}
+	_, code := RunSchemaCacheBuilder([]string{schemaCacheBuilderArgument}, os.Stdout)
+	os.Exit(code)
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderExitHelper(t *testing.T) {
+	if strings.Contains(strings.Join(os.Args, " "), "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderExitHelper") {
+		os.Exit(7)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderOutputHelper(t *testing.T) {
+	if strings.Contains(strings.Join(os.Args, " "), "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderOutputHelper") {
+		_, _ = os.Stdout.Write([]byte("oversized"))
+		os.Exit(0)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderProtocolHelper(t *testing.T) {
+	if strings.Contains(strings.Join(os.Args, " "), "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderProtocolHelper") {
+		_, _ = os.Stdout.Write([]byte("ignored"))
+		os.Exit(0)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderStderrHelper(t *testing.T) {
+	if strings.Contains(strings.Join(os.Args, " "), "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderStderrHelper") {
+		_, _ = os.Stderr.Write([]byte("noisy child"))
+		os.Exit(7)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderChildSetupErrors(t *testing.T) {
+	oldExecutable := schemaCacheBuilderExecutable
+	oldEnvironment := schemaCacheBuilderEnvironment
+	oldWorkingDir := schemaCacheBuilderWorkingDir
+	oldCommand := schemaCacheBuilderCommand
+	oldRead := schemaCacheReadResult
+	t.Cleanup(func() {
+		schemaCacheBuilderExecutable = oldExecutable
+		schemaCacheBuilderEnvironment = oldEnvironment
+		schemaCacheBuilderWorkingDir = oldWorkingDir
+		schemaCacheBuilderCommand = oldCommand
+		schemaCacheReadResult = oldRead
+	})
+	schemaCacheBuilderExecutable = func() (string, error) { return "", errors.New("executable unavailable") }
+	if _, err := buildSchemaCacheInChild(context.Background()); err == nil {
+		t.Fatal("missing executable unexpectedly succeeded")
+	}
+	schemaCacheBuilderExecutable = oldExecutable
+	schemaCacheBuilderEnvironment = func() []string { return nil }
+	if _, err := buildSchemaCacheInChild(context.Background()); err == nil {
+		t.Fatal("empty environment unexpectedly succeeded")
+	}
+	schemaCacheBuilderEnvironment = oldEnvironment
+	schemaCacheBuilderWorkingDir = func() string { return "" }
+	schemaCacheReadResult = func(io.Reader) (cli.SchemaCacheBuildResult, error) {
+		return cli.SchemaCacheBuildResult{}, nil
+	}
+	schemaCacheBuilderCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderChildHelper")
+	}
+	if _, err := buildSchemaCacheInChild(context.Background()); err != nil {
+		t.Fatalf("child with empty working directory failed: %v", err)
+	}
+	schemaCacheBuilderWorkingDir = oldWorkingDir
+	schemaCacheBuilderCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderExitHelper")
+	}
+	if _, err := buildSchemaCacheInChild(context.Background()); err == nil {
+		t.Fatal("child failure unexpectedly succeeded")
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderPrivateProtocol(t *testing.T) {
 	var output bytes.Buffer
 	handled, code := RunSchemaCacheBuilder([]string{schemaCacheBuilderArgument}, &output)
 	if !handled || code != 0 {
@@ -47,6 +154,95 @@ func TestSchemaCacheBuilderPrivateProtocol(t *testing.T) {
 	}
 	if result.Identity.Edition != "open" || len(result.Artifacts.Registry) == 0 {
 		t.Fatalf("invalid builder result: edition=%q registry=%d", result.Identity.Edition, len(result.Artifacts.Registry))
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderDispatchErrors(t *testing.T) {
+	if handled, code := RunSchemaCacheBuilder(nil, &bytes.Buffer{}); handled || code != 0 {
+		t.Fatalf("non-builder dispatch = handled:%v code:%d", handled, code)
+	}
+	oldAssemble := schemaCacheBuilderAssemble
+	oldResolve := schemaCacheResolve
+	oldArtifacts := schemaCacheBuildArtifacts
+	oldIdentity := schemaCacheIdentity
+	t.Cleanup(func() {
+		schemaCacheBuilderAssemble = oldAssemble
+		schemaCacheResolve = oldResolve
+		schemaCacheBuildArtifacts = oldArtifacts
+		schemaCacheIdentity = oldIdentity
+	})
+	schemaCacheBuilderAssemble = func(context.Context) (cli.SchemaCacheBuildResult, error) {
+		return cli.SchemaCacheBuildResult{}, errors.New("assembly failed")
+	}
+	if handled, code := RunSchemaCacheBuilder([]string{schemaCacheBuilderArgument}, &bytes.Buffer{}); !handled || code != 1 {
+		t.Fatalf("assembly failure dispatch = handled:%v code:%d", handled, code)
+	}
+	schemaCacheResolve = func(*cobra.Command) (cli.ResolvedSchemaBuild, error) {
+		return cli.ResolvedSchemaBuild{}, errors.New("resolve failed")
+	}
+	if _, err := buildSchemaCacheResult(context.Background()); err == nil {
+		t.Fatal("resolve failure unexpectedly succeeded")
+	}
+	schemaCacheResolve = oldResolve
+	schemaCacheBuildArtifacts = func(cli.ResolvedSchemaBuild) (cli.SchemaCacheArtifacts, error) {
+		return cli.SchemaCacheArtifacts{}, errors.New("artifact build failed")
+	}
+	if _, err := buildSchemaCacheResult(context.Background()); err == nil {
+		t.Fatal("artifact failure unexpectedly succeeded")
+	}
+	schemaCacheBuildArtifacts = oldArtifacts
+	schemaCacheIdentity = func(string, cli.SchemaCacheArtifacts) (cli.SchemaCacheIdentity, error) {
+		return cli.SchemaCacheIdentity{}, errors.New("identity failed")
+	}
+	if _, err := buildSchemaCacheResult(context.Background()); err == nil {
+		t.Fatal("identity failure unexpectedly succeeded")
+	}
+	schemaCacheIdentity = oldIdentity
+	schemaCacheBuilderAssemble = func(context.Context) (cli.SchemaCacheBuildResult, error) {
+		return cli.SchemaCacheBuildResult{}, nil
+	}
+	if handled, code := RunSchemaCacheBuilder([]string{schemaCacheBuilderArgument}, schemaFailWriter{}); !handled || code != 1 {
+		t.Fatalf("writer failure dispatch = handled:%v code:%d", handled, code)
+	}
+}
+
+type schemaFailWriter struct{}
+
+func (schemaFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+func TestCrossPlatformCoverageSchemaCacheBuilderProcessOutput(t *testing.T) {
+	if err := validateSchemaCacheBuilderProcessOutput(&cappedBuffer{}, &cappedBuffer{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	truncated := &cappedBuffer{truncated: true}
+	if err := validateSchemaCacheBuilderProcessOutput(truncated, &cappedBuffer{}, nil); err == nil {
+		t.Fatal("truncated stdout unexpectedly accepted")
+	}
+	if err := validateSchemaCacheBuilderProcessOutput(&cappedBuffer{}, &cappedBuffer{}, errors.New("child failed")); err == nil {
+		t.Fatal("child failure unexpectedly accepted")
+	}
+	stderr := &cappedBuffer{truncated: true}
+	_, _ = stderr.Write([]byte("diagnostic"))
+	if err := validateSchemaCacheBuilderProcessOutput(&cappedBuffer{}, stderr, errors.New("child failed")); err == nil {
+		t.Fatal("truncated stderr failure unexpectedly accepted")
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderOutputLimits(t *testing.T) {
+	var buffer cappedBuffer
+	buffer.limit = 2
+	if n, err := buffer.Write([]byte("abcd")); err != nil || n != 4 || buffer.String() != "ab" || !buffer.truncated {
+		t.Fatalf("capped buffer = n:%d err:%v value:%q truncated:%v", n, err, buffer.String(), buffer.truncated)
+	}
+	buffer = cappedBuffer{limit: 8}
+	if n, err := buffer.Write([]byte("abcd")); err != nil || n != 4 || buffer.String() != "abcd" || buffer.truncated {
+		t.Fatalf("uncapped buffer = n:%d err:%v value:%q truncated:%v", n, err, buffer.String(), buffer.truncated)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheBuilderError(t *testing.T) {
+	if code := writeSchemaCacheBuilderError(&bytes.Buffer{}, errors.New("builder failed")); code != 1 {
+		t.Fatalf("error exit code = %d, want 1", code)
 	}
 }
 
@@ -234,6 +430,30 @@ func TestCrossPlatformCoverageSchemaAssemblyIgnoresPluginRegistrationSideEffects
 // env injection (InjectPluginConfigEnv, the loader's first side effect, which
 // may set any non-blacklisted variable including DWS_-prefixed ones) actually
 // fires — and assert the assembled schema identity is still byte-identical.
+func TestCrossPlatformCoveragePluginConfigInjectionMarksRuntimeUncertainWithoutLoadablePlugin(t *testing.T) {
+	isolatePluginRuntime(t)
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	const canary = "DWS_PLUGIN_CONFIG_WITHOUT_PLUGIN"
+	_ = os.Unsetenv(canary)
+	t.Cleanup(func() { _ = os.Unsetenv(canary) })
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{
+	"pluginConfigs": {"removed-plugin": {"`+canary+`": "injected"}}
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rootPluginLoadHadSideEffects.Store(false)
+	if commands := loadPlugins(&cobra.Command{Use: "dws"}, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
+		t.Fatalf("removed plugin unexpectedly produced %d commands", len(commands))
+	}
+	if got := os.Getenv(canary); got != "injected" {
+		t.Fatalf("plugin config env injection = %q, want injected", got)
+	}
+	if !rootPluginLoadHadSideEffects.Load() {
+		t.Fatal("plugin config environment injection did not mark runtime uncertain")
+	}
+}
+
 func TestCrossPlatformCoverageSchemaAssemblyIgnoresRealPluginLoaderSideEffects(t *testing.T) {
 	isolatePluginRuntime(t)
 

@@ -1895,7 +1895,7 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// variables so that expandPluginVars can resolve ${KEY} references
 	// in plugin.json headers, endpoints, etc. User-set env vars take
 	// precedence (InjectPluginConfigEnv skips already-set keys).
-	rootPluginInjectConfigEnv(pluginLoader)
+	rootPluginLoadHadSideEffects.Store(rootPluginInjectConfigEnv(pluginLoader))
 
 	// Resolve the plugin user identity from the profile metadata file only.
 	// Plugin stdio servers need UserID/CorpID as environment identity — never
@@ -1924,7 +1924,9 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	sortPluginsForRegistration(devPlugins)
 
 	allPlugins := append(userPlugins, devPlugins...)
-	rootPluginLoadHadSideEffects.Store(len(allPlugins) > 0)
+	if len(allPlugins) > 0 {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 	descriptorsByPlugin := make(map[*plugin.Plugin][]mcptypes.ServerDescriptor, len(allPlugins))
 
 	// 3. Resolve every descriptor once, then choose identity winners before

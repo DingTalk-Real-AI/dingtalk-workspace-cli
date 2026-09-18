@@ -23,9 +23,11 @@ import (
 	"reflect"
 )
 
-const (
-	schemaCacheBuilderProtocolVersion = 1
-	maxSchemaCacheBuilderResponse     = 64 << 20
+const schemaCacheBuilderProtocolVersion = 1
+
+var (
+	maxSchemaCacheBuilderResponse = 64 << 20
+	marshalSchemaCacheBuilder     = json.Marshal
 )
 
 // SchemaCacheBuildResult is the detached result of a clean declaration-only
@@ -79,7 +81,7 @@ func WriteSchemaCacheBuildResult(w io.Writer, result SchemaCacheBuildResult) err
 		ProductCount:    result.Artifacts.ProductCount,
 		Identity:        result.Identity,
 	}
-	encoded, err := json.Marshal(wire)
+	encoded, err := marshalSchemaCacheBuilder(wire)
 	if err != nil {
 		return err
 	}
@@ -92,7 +94,7 @@ func WriteSchemaCacheBuildResult(w io.Writer, result SchemaCacheBuildResult) err
 
 // ReadSchemaCacheBuildResult reads and validates a private builder response.
 func ReadSchemaCacheBuildResult(r io.Reader) (SchemaCacheBuildResult, error) {
-	encoded, err := io.ReadAll(io.LimitReader(r, maxSchemaCacheBuilderResponse+1))
+	encoded, err := io.ReadAll(io.LimitReader(r, int64(maxSchemaCacheBuilderResponse)+1))
 	if err != nil {
 		return SchemaCacheBuildResult{}, err
 	}
