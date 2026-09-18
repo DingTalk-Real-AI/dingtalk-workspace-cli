@@ -18,6 +18,8 @@ const (
 	TeamTemplateSaveTool       = "save_team_whiteboard_tpl"
 	TeamTemplateListTool       = "list_team_whiteboard_tpls"
 	TeamTemplateCreateTool     = "apply_team_whiteboard_tpl"
+	PublicTemplateListTool     = "list_public_whiteboard_tpls"
+	PublicTemplateCreateTool   = "apply_public_whiteboard_tpl"
 )
 
 type TemplateScope string
@@ -25,6 +27,7 @@ type TemplateScope string
 const (
 	TemplateScopePersonal TemplateScope = "personal"
 	TemplateScopeTeam     TemplateScope = "team"
+	TemplateScopePublic   TemplateScope = "public"
 )
 
 func ValidateTemplateRequestID(value string) error {
@@ -57,14 +60,14 @@ func ValidateTemplateMaxPages(value int) error {
 	return nil
 }
 
-// ValidateTemplatePreviewCall bounds the remote preflight exception to four
+// ValidateTemplatePreviewCall bounds the remote preflight exception to five
 // reviewed tools and an explicit boolean true; strings and missing flags fail.
 func ValidateTemplatePreviewCall(server, tool string, args map[string]any) error {
 	if server != ServerID || args["dryRun"] != true {
 		return fmt.Errorf("whiteboard template preview requires whiteboard server and boolean dryRun=true")
 	}
 	switch tool {
-	case PersonalTemplateSaveTool, TeamTemplateSaveTool, PersonalTemplateCreateTool, TeamTemplateCreateTool:
+	case PersonalTemplateSaveTool, TeamTemplateSaveTool, PersonalTemplateCreateTool, TeamTemplateCreateTool, PublicTemplateCreateTool:
 		return nil
 	default:
 		return fmt.Errorf("tool %q does not support whiteboard template preview", tool)
