@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -128,7 +129,7 @@ func TestCrossPlatformCoverageDevMCPGroupHelp(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(args)
-			if err := root.ExecuteContext(t.Context()); err != nil {
+			if err := corecmd.ExecuteContextForTest(root, t.Context()); err != nil {
 				t.Fatalf("execute help: %v", err)
 			}
 			if out.Len() == 0 {
@@ -198,7 +199,7 @@ func TestCrossPlatformCoverageDevMCPCommandRunErrors(t *testing.T) {
 	} {
 		root := newDevAppTestRoot(failed)
 		root.SetArgs(args)
-		requireMCPError(t, root.ExecuteContext(t.Context()), "runner failed")
+		requireMCPError(t, corecmd.ExecuteContextForTest(root, t.Context()), "runner failed")
 	}
 }
 

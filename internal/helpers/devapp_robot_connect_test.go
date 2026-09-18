@@ -18,6 +18,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // TestDevAppRobotConnectRegistered confirms `dev connect` is wired into
@@ -77,7 +79,7 @@ func TestDevAppRobotConnectValidation(t *testing.T) {
 			root.SetOut(&out)
 			root.SetErr(&out)
 			root.SetArgs(append([]string{"dev", "connect"}, tc.args...))
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
@@ -1110,7 +1111,7 @@ func TestCrossPlatformCoverageContractHelperEdges(t *testing.T) {
 	var stdout bytes.Buffer
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("record create from stdin: %v", err)
 	}
 	call := onlyContractCall(t, caller)

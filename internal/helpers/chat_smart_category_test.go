@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -65,7 +66,7 @@ func TestChatCategoryCreateSmartUsesMCPParameterNames(t *testing.T) {
 		"--keywords", "alpha, ,beta,",
 		"--members", "open-id-1, ,open-id-2,",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("chat category create-smart returned error: %v", err)
 	}
 
@@ -147,7 +148,7 @@ func TestChatCategoryCreateSmartRejectsBlankInputs(t *testing.T) {
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
 			cmd.SetArgs(append([]string{"category", "create-smart"}, tt.args...))
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want containing %q", err, tt.wantErr)
 			}
@@ -173,7 +174,7 @@ func TestChatCategoryCreateSmartAllowsOmittedRulesAndTrimsName(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"category", "create-smart", "--name", "  priority  "})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("chat category create-smart returned error: %v", err)
 	}
 

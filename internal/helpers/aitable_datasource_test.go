@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -62,7 +63,7 @@ func runAitableDatasourceCommandWithCaller(t *testing.T, ctx context.Context, ca
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"datasource"}, args...))
-	return root.ExecuteContext(ctx)
+	return corecmd.ExecuteContextForTest(root, ctx)
 }
 
 func TestAitableDatasourceSyncRejectsMissingTableIDs(t *testing.T) {

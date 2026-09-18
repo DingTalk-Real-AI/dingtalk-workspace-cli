@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 )
 
@@ -27,7 +28,7 @@ func TestEventStopHelpDescribesPersonalSubscription(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"--help"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := out.String()
@@ -51,7 +52,7 @@ func TestEventStopRequiresSubscribeIDOrAll(t *testing.T) {
 	cmd := newEventStopCommand()
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "subscribe_id is required unless --all is set") {
 		t.Fatalf("Execute() error = %v, want subscribe_id requirement", err)
 	}
@@ -62,7 +63,7 @@ func TestEventStopSubscribeIDAndAllAreMutuallyExclusive(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"subId-1", "--all"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "subscribe_id and --all are mutually exclusive") {
 		t.Fatalf("Execute() error = %v, want mutual exclusion", err)
 	}
@@ -73,7 +74,7 @@ func TestEventStopAsAppRejectsSubscribeID(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", "subId-1"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}

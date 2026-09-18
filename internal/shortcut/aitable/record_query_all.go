@@ -57,7 +57,7 @@ func queryRecordWindow(rt *shortcut.RuntimeContext, params map[string]any, limit
 		}
 		data, err := rt.CallMCPData(serverMain, "query_records", request)
 		if err != nil {
-			return recordQueryWindow{}, err
+			return recordQueryWindow{}, helpers.RecordQueryRecoveryError(err)
 		}
 		if !window.HasTotalCount {
 			window.TotalCount, window.HasTotalCount = responseTotalCount(data)
@@ -366,7 +366,7 @@ func queryAllRecords(rt *shortcut.RuntimeContext, params map[string]any, maxReco
 		}
 		data, err := rt.CallMCPData(serverMain, "query_records", request)
 		if err != nil {
-			return nil, err
+			return nil, helpers.RecordQueryRecoveryError(err)
 		}
 		records, found := findRecords(data)
 		if !found {

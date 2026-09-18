@@ -3,9 +3,45 @@
 package aitable
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
+
+func TestCrossPlatformCoverageAITableQueryPublishesCursorInvalidation(t *testing.T) {
+	var description string
+	for _, flag := range RecordQuery.Flags {
+		if flag.Name == "cursor" {
+			description = flag.Desc
+		}
+	}
+	for _, code := range []string{"INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE"} {
+		if !strings.Contains(description, code) {
+			t.Errorf("cursor discovery omits runtime recovery code %s", code)
+		}
+	}
+}
+
+// 窗口查询和全量查询共用同一恢复要求：失败时不能输出先前页，也不能自动重启。
+func TestCrossPlatformCoverageAITableQueryRejectsStalePages(t *testing.T) {
+	for _, all := range []bool{false, true} {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"records":[{"recordId":"old"}],"nextCursor":"stale"}`},
+			{text: `{"status":"error","error":{"code":"CURSOR_SNAPSHOT_CHANGED","message":"changed"}}`},
+		}}
+		args := []string{"--base-id", "b", "--table-id", "t", "--limit", "40"}
+		if all {
+			args = append(args, "--all")
+		}
+		out, err := runAITableCompositeCLI(t, caller, "+record-query", args...)
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Retryable || typed.Details["discard_previous_results"] != true || out != "" || len(caller.calls) != 2 {
+			t.Fatalf("all=%t unsafe query: out=%q err=%#v calls=%d", all, out, err, len(caller.calls))
+		}
+	}
+}
 
 func TestCrossPlatformCoverageAITableBaseListRetainsEmptyPageContinuation(t *testing.T) {
 	for _, command := range []string{"+base-list", "+base-search"} {
