@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -50,6 +49,8 @@ type CLIError struct {
 	Message    string
 	Suggestion string
 	Operation  string // the operation that failed (for traceability)
+	ServerCode string
+	Details    map[string]any
 	Cause      error
 }
 
@@ -99,6 +100,12 @@ func (e *CLIError) ToJSON() map[string]any {
 	if e.Operation != "" {
 		errMap["operation"] = e.Operation
 	}
+	if e.ServerCode != "" {
+		errMap["server_error_code"] = e.ServerCode
+	}
+	if len(e.Details) > 0 {
+		errMap["details"] = e.Details
+	}
 	if e.Suggestion != "" {
 		errMap["suggestion"] = e.Suggestion
 	}
@@ -142,8 +149,13 @@ func WrapErrorWithOperation(err error, operation string) error {
 	// Preserve that contract so helper shortcuts render the same recovery
 	// guidance as their underlying direct leaf commands instead of reclassifying
 	// typed failures from localized message text.
-	var typed *apperrors.Error
-	if errors.As(err, &typed) {
+	//
+	// Deliberately DeclaresClassification and not PreserveClassification: this is
+	// a classification boundary, so a bare context.DeadlineExceeded — which
+	// declares no category of its own — must still reach the network-timeout
+	// branch below. Passing it through here would forfeit NETWORK_TIMEOUT, the
+	// API exit code and the retry hint, and leave ExitCode to report internal/5.
+	if apperrors.DeclaresClassification(err) {
 		return err
 	}
 	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：
@@ -610,6 +622,8 @@ func ClassifyMCPResponseText(text string) error {
 			Code:       CodeMCPToolError,
 			Message:    businessErrorDisplayMessage(body, text),
 			Suggestion: suggestForBusinessError(body),
+			ServerCode: businessErrorCode(body),
+			Details:    businessErrorDetails(body),
 		}
 	}
 

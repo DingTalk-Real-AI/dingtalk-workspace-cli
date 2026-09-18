@@ -2,6 +2,16 @@
 
 本页只在根 Skill 的 Golden Route 和精确任务 Reference 都无法选路时加载。它不是创建、读取或更新任务的前置必读，也不要求预加载样式、JSONML 或完整产品帮助。
 
+
+## Shortcut边界与代价
+
+- `doc +search` 用于按关键词或属性定位待阅读编辑的在线文档；文字文档可加 `--extensions adoc`。`--folder` 是搜索后的直接成员过滤，不递归，必须配 `--page-all`，需要分别完整读取搜索候选和目录成员；触及上限不能宣称完整。只浏览文档文件夹用 `doc +list`，钉盘目录用 `drive +list`，普通钉盘文件搜索用 `drive +search`。不要为目录浏览重复走搜索与列表。
+- `doc +script --command init-draft` 是在线文字文档编辑前的本地准备步骤：生成Markdown/JSONML草稿，编辑后用 `doc +create/+update --content @相对路径`；不会上传或创建远端文档。`parse`只检查结构和字数。现有统一入口保留，整条命令因包含本地建文件而声明write；这不表示parse会写入。通用本地文件用编辑器或本地工具；`markdown create`创建远端原生.md，不能替代本地建文件。
+- `doc +download-overwrite`仅覆盖下载在线文字文档的正文媒体或封面，要求确认。普通钉盘文件用 `drive +download`，该入口仍不覆盖已有文件；不借用Doc覆盖入口绕过这个限制。
+- `doc +media-upload`只上传同一文字文档的资源并校验字节，不插入正文；正文插入用 `doc +media-insert`，电子表格用 `sheet media-upload`，普通文件入库用 `drive +upload`。
+- 封面写入优先 `doc +resource-update/+resource-delete`，原子 `doc style cover set`保留既有兼容用途；不串行重复调用两个入口。
+
+
 ## 高频入口
 
 | 意图 | 推荐命令 | 精确 Reference |

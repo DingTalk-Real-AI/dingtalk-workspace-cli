@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -162,7 +163,7 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			cmd.SilenceUsage = true
 			cmd.SetOut(io.Discard)
 			cmd.SetArgs(tt.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("chat search returned error: %v", err)
 			}
 			if len(caller.calls) != len(tt.preflight)+1 {
@@ -197,7 +198,7 @@ func executeNativeScopedSearch(t *testing.T, caller *chatMessageSearchCaller, ar
 	var output strings.Builder
 	cmd.SetOut(&output)
 	cmd.SetArgs(args)
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		return nil, err
 	}
 	var payload map[string]any
@@ -724,7 +725,7 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	cmd.SilenceUsage = true
 	cmd.SetArgs(append(append([]string(nil), args...), "--yes"))
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := cmd.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(cmd, ctx)
 	if err != nil {
 		return err
 	}

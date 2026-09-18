@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
@@ -172,7 +173,7 @@ func TestPluginOverlayBuildsConferenceTreeAndDispatchesOriginalProperties(t *tes
 		"--title", "验证会议",
 		"--dry-run",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("conference start: %v", err)
 	}
 	if len(runner.invocations) != 1 {
@@ -206,7 +207,7 @@ func TestPluginOverlayBuildsConferenceTreeAndDispatchesOriginalProperties(t *tes
 		"--params", `{"title":"params"}`,
 		"--dry-run",
 	})
-	if err := precedenceRoot.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(precedenceRoot); err != nil {
 		t.Fatalf("conference payload precedence: %v", err)
 	}
 	if got := precedenceRunner.invocations[0].Params["title"]; got != "params" {
@@ -237,7 +238,7 @@ func TestPluginOverlayTypedFlags(t *testing.T) {
 		"--tags", "one,two",
 		"--dry-run",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("typed plugin command: %v", err)
 	}
 	if len(runner.invocations) != 1 {
@@ -275,7 +276,7 @@ func TestPluginSensitiveCommandRequiresConfirmation(t *testing.T) {
 			root := pluginTestRoot(buildPluginCommands(
 				[]mcptypes.ServerDescriptor{conferencePluginDescriptor()}, runner, nil)...)
 			root.SetArgs(testCase.args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if testCase.wantError {
 				var appErr *apperrors.Error
 				if !errors.As(err, &appErr) ||
@@ -328,7 +329,7 @@ func TestPluginOverlayMergesServersWithoutProbingHTTP(t *testing.T) {
 	requirePluginChild(t, commands[0], "two")
 	root := pluginTestRoot(commands...)
 	root.SetArgs([]string{"conference", "--help"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("conference help: %v", err)
 	}
 	if got := calls.Load(); got != 0 {
@@ -336,7 +337,7 @@ func TestPluginOverlayMergesServersWithoutProbingHTTP(t *testing.T) {
 	}
 	for _, command := range []string{"one", "two"} {
 		root.SetArgs([]string{"conference", command, "--dry-run"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("conference %s: %v", command, err)
 		}
 	}
@@ -407,7 +408,7 @@ func TestConflictingPluginDescriptorCannotReplaceDistributionEndpoint(t *testing
 	})
 	root := &cobra.Command{Use: "dws"}
 	root.AddCommand(&cobra.Command{Use: "drive"})
-	if commands := loadPlugins(root, nil, executor.EchoRunner{}); len(commands) != 0 {
+	if commands := loadPlugins(root, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
 		t.Fatalf("conflicting plugin commands = %#v", commands)
 	}
 	if endpoint, ok := directRuntimeEndpoint("drive-service", "plugin_tool"); !ok ||
@@ -419,7 +420,7 @@ func TestConflictingPluginDescriptorCannotReplaceDistributionEndpoint(t *testing
 func TestSchemaSourceRootDoesNotLoadRuntimePlugins(t *testing.T) {
 	isolatePluginRuntime(t)
 	var calls atomic.Int32
-	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		calls.Add(1)
 		AppendDynamicServer(conferencePluginDescriptor())
 		return buildPluginCommands(
@@ -538,7 +539,7 @@ func TestPluginShorthandsCannotShadowHostOrHelp(t *testing.T) {
 		}
 	}
 	host.SetArgs([]string{"conference", "safe", "-h"})
-	if err := host.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(host); err != nil {
 		t.Fatalf("plugin help: %v", err)
 	}
 	if len(runner.invocations) != 0 {
@@ -592,7 +593,7 @@ func TestPluginPayloadPrecedenceRequiredAndTypedPositionals(t *testing.T) {
 				nil,
 			)...)
 			root.SetArgs(testCase.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("payload command: %v", err)
 			}
 			if len(runner.invocations) != 1 {
@@ -665,7 +666,7 @@ func TestPluginDescriptorWinnerKeepsRouteAuthAndClientAtomic(t *testing.T) {
 	}`)
 
 	root := pluginTestRoot()
-	commands := loadPlugins(root, nil, executor.EchoRunner{})
+	commands := loadPlugins(root, nil, executor.EchoRunner{}, "")
 	if len(commands) != 1 || commands[0].Name() != "alpha-command" {
 		t.Fatalf("plugin winner commands = %#v", commands)
 	}
@@ -793,7 +794,7 @@ func TestUnsupportedPluginDescriptorsDoNotRegisterRuntimeState(t *testing.T) {
 	}`)
 
 	root := pluginTestRoot()
-	if commands := loadPlugins(root, nil, executor.EchoRunner{}); len(commands) != 0 {
+	if commands := loadPlugins(root, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
 		t.Fatalf("unsupported plugin descriptors produced commands %#v", commands)
 	}
 	if endpoint, ok := directRuntimeEndpoint("unsafe-http-id", "unsafe_tool"); ok {

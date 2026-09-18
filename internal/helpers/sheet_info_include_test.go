@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageSheetInfoIncludePassthrough(t *testing.T) {
@@ -27,7 +29,7 @@ func TestCrossPlatformCoverageSheetInfoIncludePassthrough(t *testing.T) {
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs([]string{"info", "--node", "n1", "--sheet-id", "Sheet1", "--include", "row_heights,col_widths"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 {

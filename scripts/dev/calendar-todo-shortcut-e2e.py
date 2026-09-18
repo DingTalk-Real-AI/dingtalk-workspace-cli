@@ -340,7 +340,8 @@ def main() -> int:
             payload = invoke([
                 "calendar", "+invite", "--event", overlap_event, "--with", self_name,
             ], confirm=True)
-            require_boolean(business(payload), "verified", True)
+            require_boolean(business(payload), "acknowledged", True)
+            require_boolean(business(payload), "verified", False)
         run_case("calendar", "+invite", invite)
 
         def conflicts() -> None:
@@ -409,7 +410,9 @@ def main() -> int:
             ], confirm=True)
             book_event = stable_string(business(payload), ("eventId", "id"))
             event_ids.append(book_event)
-            require_boolean(business(payload), "verified", True)
+            require_boolean(business(payload), "eventVerified", True)
+            require_boolean(business(payload), "attendeesAcknowledged", True)
+            require_boolean(business(payload), "verified", False)
         run_case("calendar", "+book", book)
         if book_event:
             run_case("calendar", "+tomorrow", lambda: list_contains_id(

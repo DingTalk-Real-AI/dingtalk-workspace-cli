@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -772,14 +773,14 @@ func TestCrossPlatformCoverageDaemonListAndNamePaginationEdges(t *testing.T) {
 	list := prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	var out bytes.Buffer
 	list.SetOut(&out)
-	if err := list.Execute(); err != nil || strings.TrimSpace(out.String()) != "no connectors found" {
+	if err := corecmd.ExecuteForTest(list); err != nil || strings.TrimSpace(out.String()) != "no connectors found" {
 		t.Fatalf("empty list output = %q, %v", out.String(), err)
 	}
 	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	out.Reset()
 	list.SetOut(&out)
 	list.SetArgs([]string{"--json"})
-	if err := list.Execute(); err != nil || strings.TrimSpace(out.String()) != "[]" {
+	if err := corecmd.ExecuteForTest(list); err != nil || strings.TrimSpace(out.String()) != "[]" {
 		t.Fatalf("json list array = %q, %v", out.String(), err)
 	}
 
@@ -790,7 +791,7 @@ func TestCrossPlatformCoverageDaemonListAndNamePaginationEdges(t *testing.T) {
 	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	out.Reset()
 	list.SetOut(&out)
-	if err := list.Execute(); err != nil || !strings.Contains(out.String(), "STATE") {
+	if err := corecmd.ExecuteForTest(list); err != nil || !strings.Contains(out.String(), "STATE") {
 		t.Fatalf("table list = %q, %v", out.String(), err)
 	}
 
@@ -799,7 +800,7 @@ func TestCrossPlatformCoverageDaemonListAndNamePaginationEdges(t *testing.T) {
 	}
 	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	list.SetOut(&bytes.Buffer{})
-	if err := list.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(list); err == nil {
 		t.Fatal("list with blocked directory succeeded")
 	}
 }
@@ -816,7 +817,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 		command.SetArgs(nil)
 		command.SetOut(&bytes.Buffer{})
 		command.SetErr(&bytes.Buffer{})
-		if err := command.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(command); err == nil {
 			t.Errorf("%s without identity succeeded", command.Name())
 		}
 	}
@@ -824,13 +825,13 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	status := prepareUnifiedTestCommand(newDevAppRobotConnectStatusCommand())
 	status.SetArgs([]string{"--robot-client-id", "missing", "--json"})
 	status.SetOut(&bytes.Buffer{})
-	if err := status.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(status); err != nil {
 		t.Fatalf("status command = %v", err)
 	}
 	stop := prepareUnifiedTestCommand(newDevAppRobotConnectStopCommand())
 	stop.SetArgs([]string{"--unified-app-id", "missing", "--yes"})
 	stop.SetOut(&bytes.Buffer{})
-	if err := stop.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(stop); err != nil {
 		t.Fatalf("stop command = %v", err)
 	}
 
@@ -838,7 +839,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "missing"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("restart without state succeeded")
 	}
 
@@ -851,7 +852,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "blocked"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("restart with blocked directory succeeded")
 	}
 	connectDaemonDirOverride = baseDir
@@ -863,7 +864,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "corrupt-restart"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("restart with corrupt state succeeded")
 	}
 
@@ -875,7 +876,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "no-unified"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("restart without unified app ID succeeded")
 	}
 
@@ -890,7 +891,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "restart", "--yes"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(restart); err != nil {
 		t.Fatalf("restart command = %v", err)
 	}
 
@@ -903,7 +904,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "restart", "--yes"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(restart); err != nil {
 		t.Fatalf("restart after stop warning = %v", err)
 	}
 	daemonProcessAlive = defaultProcessAlive
@@ -928,7 +929,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	root.SetArgs([]string{"restart", "--robot-client-id", "restart", "--profile", "override", "--yes"})
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("restart with profile override = %v", err)
 	}
 
@@ -940,7 +941,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "restart"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("restart without executable succeeded")
 	}
 
@@ -953,7 +954,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "restart"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
-	if err := restart.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(restart); err == nil {
 		t.Fatal("failing restart subprocess succeeded")
 	}
 }
@@ -966,7 +967,7 @@ func TestFrameworkConnectControlDryRunPlansAndLegacyListRollback(t *testing.T) {
 	stop.SetArgs([]string{"--unified-app-id", "app", "--dry-run"})
 	var stopOut bytes.Buffer
 	stop.SetOut(&stopOut)
-	if err := stop.Execute(); err != nil || !strings.Contains(stopOut.String(), `"preview_kind": "plan"`) {
+	if err := corecmd.ExecuteForTest(stop); err != nil || !strings.Contains(stopOut.String(), `"preview_kind": "plan"`) {
 		t.Fatalf("stop preview=%q err=%v", stopOut.String(), err)
 	}
 
@@ -974,7 +975,7 @@ func TestFrameworkConnectControlDryRunPlansAndLegacyListRollback(t *testing.T) {
 	restart.SetArgs([]string{"--unified-app-id", "app", "--dry-run"})
 	var restartOut bytes.Buffer
 	restart.SetOut(&restartOut)
-	if err := restart.Execute(); err != nil || !strings.Contains(restartOut.String(), `"preview_kind": "plan"`) {
+	if err := corecmd.ExecuteForTest(restart); err != nil || !strings.Contains(restartOut.String(), `"preview_kind": "plan"`) {
 		t.Fatalf("restart preview=%q err=%v", restartOut.String(), err)
 	}
 
@@ -989,7 +990,7 @@ func TestFrameworkConnectControlDryRunPlansAndLegacyListRollback(t *testing.T) {
 	restart.SetArgs([]string{"--robot-client-id", "saved", "--dry-run"})
 	restartOut.Reset()
 	restart.SetOut(&restartOut)
-	if err := restart.Execute(); err != nil || !strings.Contains(restartOut.String(), "saved-app") {
+	if err := corecmd.ExecuteForTest(restart); err != nil || !strings.Contains(restartOut.String(), "saved-app") {
 		t.Fatalf("saved restart preview=%q err=%v", restartOut.String(), err)
 	}
 
@@ -999,7 +1000,7 @@ func TestFrameworkConnectControlDryRunPlansAndLegacyListRollback(t *testing.T) {
 		var out bytes.Buffer
 		list.SetOut(&out)
 		list.SetArgs([]string{"--format", format})
-		if err := list.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(list); err != nil {
 			t.Fatalf("legacy list %s: %v", format, err)
 		}
 	}

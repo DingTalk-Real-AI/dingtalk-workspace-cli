@@ -92,8 +92,16 @@ func TestCrossPlatformCoverageWikiLegacyReadbackHintDoesNotReplayWrite(t *testin
 	if strings.Contains(stdout.String(), unsafeHint) || !strings.Contains(schemaContractString(info["hint"]), "禁止直接重试") || !strings.Contains(schemaContractString(info["message"]), `"returnedNodeId":"copy-legacy"`) {
 		t.Errorf("legacy hint encourages replay or loses receipt: %s", stdout.String())
 	}
+	if info["cause"] != nil {
+		t.Errorf("internal readback cause exposed: %#v", info["cause"])
+	}
 	var legacy *helpers.CLIError
 	if !errors.As(err, &legacy) || legacy == cause || legacy.Code != cause.Code || legacy.Operation != cause.Operation || !errors.Is(err, cause) || cause.Suggestion != unsafeHint {
 		t.Errorf("legacy identity or original cause changed: err=%#v cause=%#v", err, cause)
+	}
+	// The internal diagnostic still suppresses unsafe replay advice even though
+	// the public envelope intentionally no longer renders this error chain.
+	if legacy == nil || legacy.Cause == nil || legacy.Cause.Error() != cause.Message {
+		t.Fatalf("internal diagnostic must contain only the readback message: %#v", legacy)
 	}
 }

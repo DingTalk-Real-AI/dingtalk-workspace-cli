@@ -30,6 +30,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -68,7 +69,7 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 	exportCmd.SetOut(&exported)
 	exportCmd.SetErr(&bytes.Buffer{})
 	exportCmd.SetArgs([]string{"--base64"})
-	if err := exportCmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(exportCmd); err != nil {
 		t.Fatalf("auth export --base64 error = %v", err)
 	}
 	if strings.TrimSpace(exported.String()) == "" {
@@ -93,7 +94,7 @@ func TestAuthExportImportBase64RoundTrip(t *testing.T) {
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", inputPath, "--base64"})
-	if err := importCmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(importCmd); err != nil {
 		t.Fatalf("auth import --base64 error = %v", err)
 	}
 	if !bytes.Equal(imported, bundle) {
@@ -109,7 +110,7 @@ func TestCrossPlatformCoverageAuthExportUnsupportedBackendIsValidationError(t *t
 	exportCmd.SetErr(&bytes.Buffer{})
 	exportCmd.SetArgs([]string{"--base64"})
 
-	err := exportCmd.Execute()
+	err := corecmd.ExecuteForTest(exportCmd)
 	if err == nil {
 		t.Fatal("auth export should reject an unsupported credential backend")
 	}
@@ -162,7 +163,7 @@ func TestCrossPlatformCoverageAuthImportUnsupportedBackendIsValidationErrorBefor
 	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", filepath.Join(root, "missing-bundle.tar.gz")})
 
-	err := importCmd.Execute()
+	err := corecmd.ExecuteForTest(importCmd)
 	if err == nil {
 		t.Fatal("auth import should reject an unsupported credential backend")
 	}
@@ -296,7 +297,7 @@ func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackendWithPopulatedC
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", inputPath})
-	err := importCmd.Execute()
+	err := corecmd.ExecuteForTest(importCmd)
 	if err == nil {
 		t.Fatal("auth import should reject a populated Windows DPAPI backend")
 	}
@@ -351,7 +352,7 @@ func TestCrossPlatformCoverageAuthImportRequiresForceWhenPopulated(t *testing.T)
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&stderr)
 	importCmd.SetArgs([]string{"--input", bundlePath})
-	err := importCmd.Execute()
+	err := corecmd.ExecuteForTest(importCmd)
 	if err == nil {
 		t.Fatal("auth import without --force should fail when auth exists")
 	}
@@ -382,7 +383,7 @@ func TestAuthImportRequiresForceWhenPopulated(t *testing.T) {
 	importCmd.SetOut(&bytes.Buffer{})
 	importCmd.SetErr(&bytes.Buffer{})
 	importCmd.SetArgs([]string{"--input", bundlePath})
-	err := importCmd.Execute()
+	err := corecmd.ExecuteForTest(importCmd)
 	if err == nil {
 		t.Fatal("auth import without --force should fail when auth exists")
 	}
@@ -734,7 +735,7 @@ func TestAuthMigrateKeychainDryRunAndConfirmedExecution(t *testing.T) {
 
 	root, out := newRoot()
 	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("migrate-keychain --dry-run error = %v\noutput:\n%s", err, out.String())
 	}
 	if !strings.Contains(out.String(), `"dry_run":true`) || !strings.Contains(out.String(), `"entries":4`) {
@@ -743,7 +744,7 @@ func TestAuthMigrateKeychainDryRunAndConfirmedExecution(t *testing.T) {
 
 	root, out = newRoot()
 	root.SetArgs([]string{"migrate-keychain", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("migrate-keychain --yes error = %v\noutput:\n%s", err, out.String())
 	}
 	if !strings.Contains(out.String(), `"dry_run":false`) || !strings.Contains(out.String(), `"entries":4`) {
@@ -776,14 +777,14 @@ func TestAuthMigrateKeychainRequiresConfirmationAndSystemMode(t *testing.T) {
 	t.Setenv(keychain.DisableKeychainEnv, "")
 	root := newRoot()
 	root.SetArgs([]string{"migrate-keychain"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--yes") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("unconfirmed migration error = %v, want --yes guidance", err)
 	}
 
 	t.Setenv(keychain.DisableKeychainEnv, "1")
 	root = newRoot()
 	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "env -u") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "env -u") {
 		t.Fatalf("file-DEK mode migration error = %v, want system-mode guidance", err)
 	}
 }
@@ -1733,7 +1734,7 @@ func TestAuthLoginRecommendSkipsPostLoginTUI(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--token", "login-token", "--recommend"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("auth login --recommend error = %v\noutput:\n%s", err, out.String())
 	}
 	if len(fake.tools) != 2 {
@@ -1789,7 +1790,7 @@ func TestAuthLoginRecommendUsesNewExactIdentity(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"--recommend"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("auth login --recommend error = %v", err)
 	}
 	for _, profile := range authorizationProfiles {
@@ -1846,7 +1847,7 @@ func TestAuthLoginDefaultTUIModeSkipsSelectorWhenAllGranted(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--token", "login-token"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("auth login error = %v\noutput:\n%s", err, out.String())
 	}
 	if len(fake.tools) != 1 {
@@ -1904,7 +1905,7 @@ func TestAuthLoginDefaultTUIModeRecommendedAlreadyGrantedSkipsTUIAndAuthorizatio
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--token", "login-token"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("auth login error = %v\noutput:\n%s", err, out.String())
 	}
 	if len(fake.tools) != 1 {
@@ -1995,7 +1996,7 @@ func TestAuthLoginDefaultTUIRunsAfterLoginTokenSaved(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"--token", "login-token"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("auth login error = %v\noutput:\n%s", err, out.String())
 	}
 	if !sawTokenBeforeScopeTUI {
@@ -2232,4 +2233,37 @@ func authLogoutTestToken(corpID string) *authpkg.TokenData {
 		UserName:     "User " + corpID,
 		ClientID:     "client-" + corpID,
 	}
+}
+
+func TestCrossPlatformCoverageAuthLoginPushDisplayLangDefaultsInternationalToEnglish(t *testing.T) {
+	previous := i18n.Lang()
+	t.Cleanup(func() { i18n.SetLang(previous) })
+
+	// LANG-derived Chinese must not leak into the international login copy.
+	t.Setenv("DWS_LANG", "")
+	i18n.SetLang("zh")
+	restore := authLoginPushDisplayLang(authLoginConfig{International: true})
+	if got := i18n.Lang(); got != "en" {
+		t.Fatalf("international login language = %q, want en", got)
+	}
+	restore()
+	if got := i18n.Lang(); got != "zh" {
+		t.Fatalf("restored language = %q, want zh", got)
+	}
+
+	// An explicit DWS_LANG keeps the user's choice.
+	t.Setenv("DWS_LANG", "zh")
+	restore = authLoginPushDisplayLang(authLoginConfig{International: true})
+	if got := i18n.Lang(); got != "zh" {
+		t.Fatalf("pinned language = %q, want zh", got)
+	}
+	restore()
+
+	// Domestic login keeps the ambient locale.
+	t.Setenv("DWS_LANG", "")
+	restore = authLoginPushDisplayLang(authLoginConfig{})
+	if got := i18n.Lang(); got != "zh" {
+		t.Fatalf("domestic login language = %q, want zh", got)
+	}
+	restore()
 }

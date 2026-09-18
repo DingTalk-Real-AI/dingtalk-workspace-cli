@@ -17,16 +17,12 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
-// RuntimeSchemaConstraints describes cross-parameter rules that cannot be
-// represented by an individual parameter's required bit.
-type RuntimeSchemaConstraints struct {
-	MutuallyExclusive [][]string `json:"mutually_exclusive,omitempty"`
-	RequireOneOf      [][]string `json:"require_one_of,omitempty"`
-	RequireTogether   [][]string `json:"require_together,omitempty"`
-}
+// RuntimeSchemaConstraints is retained here for framework compatibility.
+type RuntimeSchemaConstraints = contract.RuntimeSchemaConstraints
 
 // AnnotateRuntimeConstraints records command-level parameter relationships.
 func AnnotateRuntimeConstraints(cmd *cobra.Command, constraints RuntimeSchemaConstraints) {
@@ -65,42 +61,10 @@ func CommandConstraints(cmd *cobra.Command) RuntimeSchemaConstraints {
 
 // NormalizeConstraints trims, deduplicates, and drops undersized groups.
 func NormalizeConstraints(constraints RuntimeSchemaConstraints) RuntimeSchemaConstraints {
-	constraints.MutuallyExclusive = normalizeGroups(constraints.MutuallyExclusive, 2)
-	constraints.RequireOneOf = normalizeGroups(constraints.RequireOneOf, 1)
-	constraints.RequireTogether = normalizeGroups(constraints.RequireTogether, 2)
-	return constraints
+	return contract.NormalizeRuntimeSchemaConstraints(constraints)
 }
 
 // ConstraintsEmpty reports whether no constraint groups remain.
 func ConstraintsEmpty(constraints RuntimeSchemaConstraints) bool {
-	return len(constraints.MutuallyExclusive) == 0 &&
-		len(constraints.RequireOneOf) == 0 &&
-		len(constraints.RequireTogether) == 0
-}
-
-func normalizeGroups(groups [][]string, minimum int) [][]string {
-	out := make([][]string, 0, len(groups))
-	seenGroups := map[string]bool{}
-	for _, group := range groups {
-		clean := make([]string, 0, len(group))
-		seenNames := map[string]bool{}
-		for _, name := range group {
-			name = strings.TrimSpace(name)
-			if name == "" || seenNames[name] {
-				continue
-			}
-			seenNames[name] = true
-			clean = append(clean, name)
-		}
-		if len(clean) < minimum {
-			continue
-		}
-		key := strings.Join(clean, "\x00")
-		if seenGroups[key] {
-			continue
-		}
-		seenGroups[key] = true
-		out = append(out, clean)
-	}
-	return out
+	return contract.RuntimeSchemaConstraintsEmpty(constraints)
 }

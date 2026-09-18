@@ -87,7 +87,7 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
-| `comment list` | 分页查询记录评论与回复 | `--base-id --table-id --record-id` | 空 comments 不代表结束；按 hasMore/nextToken 续页 |
+| `comment list` | 分页查询记录评论与回复 | `--base-id --table-id --record-id` | 空 `data.comments` 不代表结束；仅 `meta.pagination.endpoint_exhausted=true` 时停止，否则按 `meta.pagination.next_token` 续页 |
 | `comment create` | 创建评论话题 | 定位参数 + `--content` 或 `--rich-content` | 非幂等；未知状态先 list 对账 |
 | `comment reply` | 回复已有评论 | 定位参数 + `--topic-id --comment-key` + 正文 | 标识必须来自同一记录真实返回；非幂等 |
 | `comment update` | 完整替换本人评论正文 | 定位参数 + `--topic-id --comment-key` + 正文 | 仅纯文本会移除旧 @和图片；无 CAS |

@@ -77,6 +77,12 @@ var contractCompositeIface = &contract.InterfaceSpec{
 	Reason:       "命令通过智能合同 MCP 服务器分派并包裹在 *OpenRequest 结构中，不能绑定为单一 interface_ref",
 }
 
+var contractReviewRetiredIface = &contract.InterfaceSpec{
+	Mode:         contract.InterfaceModeComposite,
+	Availability: contract.InterfaceUnavailable,
+	Reason:       "旧版合同审查 MCP 已下线；本叶子仅为 Hidden 的历史 argv 兼容入口，运行时以 command_retired 失败关闭，不可被 Agent 调用",
+}
+
 var (
 	safetyRead        = contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}
 	safetyWrite       = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
@@ -291,13 +297,16 @@ func declareContractSchema(r *contractSchemaRefs) {
 				ProductID: "contract", Name: "review_benefit", CanonicalPath: "contract.review_benefit",
 				CLIPath: "contract review benefit", PrimaryCLIPath: "contract review benefit",
 			},
-			Description: "查询用户组织的合同审查权益数据。",
-			Interface:   contractCompositeIface,
+			Description: "历史兼容入口：旧版审查权益 MCP 已下线；执行仅返回 command_retired，不能查询审查权益。",
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询合同审查权益。",
-				UseWhen:      []string{"用户要查看合同审查的权益额度或使用情况"},
-				AvoidWhen:    []string{"创建审查任务用 review create；查审查结果用 review result"},
-				Examples:     []string{"dws contract review benefit --format json"},
+				AgentSummary: "已下线的历史 argv 兼容入口，不能查询合同审查权益。",
+				UseWhen:      []string{"用户明确只要旧版 dws contract review benefit 的下线说明"},
+				AvoidWhen: []string{
+					"用户要查看合同审查权益额度或使用情况",
+					"用户要对合同发起 AI 审查、解析合同或查询审查结果",
+				},
+				Examples: []string{"dws contract review benefit --format json"},
 			},
 		},
 	})
@@ -309,13 +318,16 @@ func declareContractSchema(r *contractSchemaRefs) {
 				ProductID: "contract", Name: "review_create", CanonicalPath: "contract.review_create",
 				CLIPath: "contract review create", PrimaryCLIPath: "contract review create",
 			},
-			Description: "创建合同审查任务。",
-			Interface:   contractCompositeIface,
+			Description: "历史兼容入口：旧版创建审查任务 MCP 已下线；执行仅返回 command_retired，不能创建审查任务。",
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建合同审查任务，提交合同文件进行 AI 审查。",
-				UseWhen:      []string{"用户要对合同文件发起 AI 审查"},
-				AvoidWhen:    []string{"解析合同文件用 review analysis；查审查结果用 review result"},
-				Examples:     []string{"dws contract review create --file ./review_request.json --format json"},
+				AgentSummary: "已下线的历史 argv 兼容入口，不能发起 AI 审查。",
+				UseWhen:      []string{"用户明确只要旧版 dws contract review create 的下线说明"},
+				AvoidWhen: []string{
+					"用户要对合同文件发起 AI 审查",
+					"用户要解析合同或查询审查结果",
+				},
+				Examples: []string{"dws contract review create --file ./review_request.json --format json"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "file", Property: "IntelligentContractReviewClientRequest", Required: boolPtr(true)},
@@ -330,13 +342,16 @@ func declareContractSchema(r *contractSchemaRefs) {
 				ProductID: "contract", Name: "review_analysis", CanonicalPath: "contract.review_analysis",
 				CLIPath: "contract review analysis", PrimaryCLIPath: "contract review analysis",
 			},
-			Description: "解析合同文件，返回合同摘要和审查推荐模型。",
-			Interface:   contractCompositeIface,
+			Description: "历史兼容入口：旧版合同解析 MCP 已下线；执行仅返回 command_retired，不能解析合同。",
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
-				AgentSummary: "解析合同文件并返回摘要和审查推荐。",
-				UseWhen:      []string{"用户要解析合同文件获取摘要和审查建议"},
-				AvoidWhen:    []string{"创建正式审查任务用 review create；查审查结果用 review result"},
-				Examples:     []string{"dws contract review analysis --file ./analysis_request.json --format json"},
+				AgentSummary: "已下线的历史 argv 兼容入口，不能解析合同。",
+				UseWhen:      []string{"用户明确只要旧版 dws contract review analysis 的下线说明"},
+				AvoidWhen: []string{
+					"用户要解析合同文件获取摘要和审查建议",
+					"用户要创建审查任务或查询审查结果",
+				},
+				Examples: []string{"dws contract review analysis --file ./analysis_request.json --format json"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "file", Property: "AnalysisContractApiRequest", Required: boolPtr(true)},
@@ -351,13 +366,16 @@ func declareContractSchema(r *contractSchemaRefs) {
 				ProductID: "contract", Name: "review_result", CanonicalPath: "contract.review_result",
 				CLIPath: "contract review result", PrimaryCLIPath: "contract review result",
 			},
-			Description: "查询合同审查结果。",
-			Interface:   contractCompositeIface,
+			Description: "历史兼容入口：旧版审查结果 MCP 已下线；执行仅返回 command_retired，不能查询审查结果。",
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
-				AgentSummary: "按任务 ID 查询合同审查结果。",
-				UseWhen:      []string{"用户已创建审查任务后要查询审查结果"},
-				AvoidWhen:    []string{"创建审查任务用 review create"},
-				Examples:     []string{`dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`},
+				AgentSummary: "已下线的历史 argv 兼容入口，不能查询合同审查结果。",
+				UseWhen:      []string{"用户明确只要旧版 dws contract review result 的下线说明"},
+				AvoidWhen: []string{
+					"用户已创建审查任务后要查询审查结果",
+					"用户要创建审查任务",
+				},
+				Examples: []string{`dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "task-id", Property: "taskId", Required: boolPtr(true)},

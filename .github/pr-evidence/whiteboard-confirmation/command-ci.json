@@ -1,0 +1,1 @@
+{"command": "DWS_PACKAGE_VERSION=0.0.0-test go test -v -count=1 ./scripts/policy/schema-compat ./scripts/policy/schemacompat", "exit_code": 0, "started": "2026-09-16T16:11:23.466045+08:00", "head": "c5a76891b791c2727859a70fbc1306e27b8935a4"}

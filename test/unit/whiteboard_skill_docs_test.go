@@ -162,8 +162,11 @@ func TestWhiteboardOperationReferencesPublishValidEnvelopes(t *testing.T) {
 					t.Errorf("stored write example must not pre-authorize execution:\n%s", fence)
 				}
 			}
-			if tc.overwrite && strings.Join(commands, " ") != "+query +update" {
-				t.Errorf("overwrite default commands = %v, want one pre-write snapshot then one internally verified update", commands)
+			if tc.overwrite && strings.Join(commands, " ") != "+query +diff +update" {
+				t.Errorf("overwrite default commands = %v, want one pre-write snapshot, diff, then one internally verified update", commands)
+			}
+			if tc.overwrite && !strings.Contains(string(data), "--expected-source-digest <DIFF_SOURCE_DIGEST>") {
+				t.Error("overwrite update must bind the confirmed diff source digest")
 			}
 		})
 	}

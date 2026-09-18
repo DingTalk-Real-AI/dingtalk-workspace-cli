@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 	"github.com/spf13/cobra"
 )
@@ -65,12 +67,22 @@ func newAitableEntityCommand() *cobra.Command {
 				return err
 			}
 			keyword := strings.TrimSpace(mustGetFlag(cmd, "keyword"))
+			if keyword == "" || aitableprotocol.UTF16Length(keyword) > 100 {
+				return apperrors.NewValidation("实体搜索关键词不能为空且不能超过 100 个字符",
+					apperrors.WithReason("invalid_entity_reference"),
+					apperrors.WithExecutionStarted(false))
+			}
+			if result, ok := aitableUnifiedDryRunResult("search_entities", map[string]any{
+				"entityType": string(entityType), "keyword": keyword, "limit": aitabletarget.EntitySearchPageSize,
+			}); ok {
+				return output.StoreResult(cmd.Context(), result)
+			}
 			result, err := aitabletarget.SearchEntities(
 				nativeAitableEntityReader{ctx: cmd.Context()}, entityType, keyword)
 			if err != nil {
 				return err
 			}
-			return deps.Out.PrintJSON(result)
+			return output.StoreResult(cmd.Context(), output.Success(result))
 		},
 	}
 	searchCmd.Flags().String("entity-type", "", "实体类型：PERSON、DEPARTMENT 或 GROUP (必填)")
@@ -78,7 +90,8 @@ func newAitableEntityCommand() *cobra.Command {
 	_ = searchCmd.MarkFlagRequired("entity-type")
 	_ = searchCmd.MarkFlagRequired("keyword")
 	DeclareLeafMetadata(searchCmd, LeafSpec{
-		Safety: aitableSafetyRead(),
+		Safety:        aitableSafetyRead(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -88,6 +101,7 @@ func newAitableEntityCommand() *cobra.Command {
 				PrimaryCLIPath: "aitable entity search",
 			},
 			Description: "搜索 AI 表格人员、部门或群组候选。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Interface:   aitableMCPInterface("search_entities"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按显示名称搜索人员、部门或群组候选，并返回稳定标识供筛选使用。",
@@ -101,15 +115,16 @@ func newAitableEntityCommand() *cobra.Command {
 			},
 			Result: &contract.ResultSpec{
 				Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-				DataSchema: json.RawMessage(`{
+				DataSchema: aitableResultSchemaWithDryRun("实体搜索业务结果或 dry-run 请求预览", json.RawMessage(`{
 					"type":"object",
 					"properties":{
 						"entityType":{"type":"string","description":"实体类型"},
 						"keyword":{"type":"string","description":"搜索关键词"},
 						"candidates":{"type":"array","description":"完整候选列表","items":{"type":"object","description":"一个实体候选"}},
 						"profile":{"type":"string","description":"当前非敏感 profile 标识"}
-					}
-				}`),
+					},
+					"required":["entityType","keyword","candidates"]
+				}`)),
 			},
 		},
 	})

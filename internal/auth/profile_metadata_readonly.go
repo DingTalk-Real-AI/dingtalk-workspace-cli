@@ -18,21 +18,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 )
 
-// ProfileMetadata is the minimal, non-sensitive identity projection exposed to
-// telemetry callers. It intentionally excludes profile names, client IDs,
-// organization names, token material, and credential status.
-type ProfileMetadata struct {
-	UserID   string
-	UserName string
-	CorpID   string
-}
+type ProfileMetadata = profilemetadata.ProfileMetadata
 
-// ResolveProfileMetadataReadOnly resolves one identity exclusively from the
-// non-sensitive profiles.json metadata. It deliberately avoids auth locks,
-// token stores, Keychain access, migrations, quarantine renames, and writes.
-// A missing metadata file or an empty current profile returns (nil, nil).
+// ResolveProfileMetadataReadOnly reads only non-sensitive profiles.json metadata.
+// Keep selection and normalization pure so startup checks do not initialize auth.
 func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadata, error) {
 	cfg, err := loadProfileMetadataReadOnly(configDir)
 	if err != nil || cfg == nil {

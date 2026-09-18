@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -54,6 +55,121 @@ func TestCrossPlatformCoverageWhiteboardReceiptDeliveredInFullAndCompactSchema(t
 	}
 }
 
+func TestCrossPlatformCoverageWhiteboardTemplateLanguageSchema(t *testing.T) {
+	for _, scope := range []string{"personal", "team"} {
+		for _, compact := range []bool{false, true} {
+			args := []string{"--cli-path", "whiteboard template " + scope + " save"}
+			if compact {
+				args = append(args, "--compact")
+			}
+			payload := executeShortcutSchemaQuery(t, args...)
+			params := schemaContractMap(payload["parameters"])
+			workspace, present := params["template-workspace"]
+			if present != (scope == "team") {
+				t.Fatalf("%s compact=%v unexpected destination parameter: %#v", scope, compact, workspace)
+			}
+			if present && workspace["required"] == true {
+				t.Fatal("team save destination must remain optional")
+			}
+			if got := params["language"]["default"]; got != "zh_CN" {
+				t.Fatalf("%s compact=%v language=%#v", scope, compact, params["language"])
+			}
+			if params["language"]["required"] == true {
+				t.Fatal("language must remain optional")
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardTemplateScopeSelectionDelivered(t *testing.T) {
+	tests := []struct {
+		path     string
+		useTerms []string
+		avoid    string
+	}{
+		{"whiteboard template personal list", []string{"我的模板", "自己保存"}, "public list"},
+		{"whiteboard template team list", []string{"知识库模板", "template-workspace"}, "目标白板"},
+		{"whiteboard template public list", []string{"模板中心", "没有个人或团队来源限定"}, "personal list"},
+		{"whiteboard template personal create", []string{"来自 personal list", "个人"}, "来源"},
+		{"whiteboard template team create", []string{"来自 team list", "同一个 template-workspace"}, "目标 folder/workspace"},
+		{"whiteboard template public create", []string{"来自 public list", "模板中心"}, "来源"},
+	}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			payload := executeShortcutSchemaQuery(t, "--cli-path", test.path, "--compact")
+			useWhen := strings.Join(schemaContractStringSlice(payload["use_when"]), " ")
+			avoidWhen := strings.Join(schemaContractStringSlice(payload["avoid_when"]), " ")
+			for _, term := range test.useTerms {
+				if !strings.Contains(useWhen, term) {
+					t.Fatalf("use_when %q does not distinguish %q", useWhen, term)
+				}
+			}
+			if !strings.Contains(avoidWhen, test.avoid) {
+				t.Fatalf("avoid_when %q does not distinguish %q", avoidWhen, test.avoid)
+			}
+		})
+	}
+
+	personalSave := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard template personal save", "--compact")
+	if got := strings.Join(schemaContractStringSlice(personalSave["use_when"]), " "); !strings.Contains(got, "没有团队") {
+		t.Fatalf("personal save does not publish the unspecified-scope default: %q", got)
+	}
+	teamSave := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard template team save", "--compact")
+	if got := strings.Join(schemaContractStringSlice(teamSave["use_when"]), " "); !strings.Contains(got, "团队共享") {
+		t.Fatalf("team save does not require team-sharing intent: %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardDiffContractDeliveredInFullAndCompactSchema(t *testing.T) {
+	want, err := contract.NormalizeResultSpec(whiteboard.Diff.Contract.Result, "whiteboard.shortcut_diff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, compact := range []bool{false, true} {
+		args := []string{"--cli-path", "whiteboard +diff"}
+		if compact {
+			args = append(args, "--compact")
+		}
+		payload := executeShortcutSchemaQuery(t, args...)
+		if got := schemaContractString(payload["canonical_path"]); got != "whiteboard.shortcut_diff" {
+			t.Fatalf("compact=%v canonical_path=%q", compact, got)
+		}
+		params := schemaContractMap(payload["parameters"])
+		if got := schemaContractString(params["page-id"]["required_when"]); got != "操作独立白板时" {
+			t.Fatalf("compact=%v page-id required_when=%q", compact, got)
+		}
+		if got := params["detail-limit"]["default"]; got != float64(100) && got != "100" {
+			t.Fatalf("compact=%v detail-limit default=%#v", compact, got)
+		}
+		encoded, err := json.Marshal(payload["result"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var gotSpec contract.ResultSpec
+		if err := json.Unmarshal(encoded, &gotSpec); err != nil {
+			t.Fatal(err)
+		}
+		got, err := contract.NormalizeResultSpec(&gotSpec, "whiteboard.shortcut_diff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var gotSchema, wantSchema any
+		if err := json.Unmarshal(got.DataSchema, &gotSchema); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(want.DataSchema, &wantSchema); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(gotSchema, wantSchema) || !reflect.DeepEqual(got.Outcomes, want.Outcomes) || !reflect.DeepEqual(got.SensitivePaths, want.SensitivePaths) {
+			t.Fatalf("compact=%v lost diff Result contract", compact)
+		}
+	}
+	update := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard +update")
+	if got := schemaContractString(schemaContractMap(update["parameters"])["expected-source-digest"]["property"]); got != "expectedSourceDigest" {
+		t.Fatalf("+update expected-source-digest property=%q", got)
+	}
+}
+
 func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered(t *testing.T) {
 	query := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard query", "--compact")
 	queryParams := schemaContractMap(query["parameters"])
@@ -94,7 +210,7 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 	}
 	createResult, _ := create["result"].(map[string]any)
 	createDataSchema, _ := createResult["data_schema"].(map[string]any)
-	if got := schemaContractStringSlice(createDataSchema["required"]); !reflect.DeepEqual(got, []string{"requestId", "nodeId", "revision"}) {
+	if got := schemaContractStringSlice(createDataSchema["required"]); !reflect.DeepEqual(got, []string{"requestId", "nodeId", "revision", "sourceDigest"}) {
 		t.Fatalf("whiteboard create result required=%v, want stable pre-release projection", got)
 	}
 	createParams := schemaContractMap(create["parameters"])
@@ -104,6 +220,11 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 		}
 	}
 	fullCreate := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard create-with-content")
+	for _, projection := range []map[string]any{create, fullCreate} {
+		if got := schemaContractString(projection["confirmation"]); got != "user_required" {
+			t.Fatalf("create confirmation=%q, want user_required", got)
+		}
+	}
 	fullParams := schemaContractMap(fullCreate["parameters"])
 	if got := fullParams["source"]["property"]; got != "source" {
 		t.Fatalf("create source property=%v, want source", got)
@@ -111,6 +232,42 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 	if got := fullParams["source"]["type"]; got != "string" {
 		t.Fatalf("create source file flag type=%v, want string", got)
 	}
+	if got := schemaContractString(fullParams["expected-source-digest"]["property"]); got != "expectedSourceDigest" {
+		t.Fatalf("create expected-source-digest property=%q", got)
+	}
+
+	render := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard render", "--compact")
+	if got := schemaContractString(render["canonical_path"]); got != "whiteboard.render" {
+		t.Fatalf("render canonical_path=%q", got)
+	}
+	if got := schemaContractString(render["effect"]); got != "write" {
+		t.Fatalf("render effect=%q", got)
+	}
+	if got := schemaContractString(render["confirmation"]); got != "user_required" {
+		t.Fatalf("render confirmation=%q", got)
+	}
+	if got := schemaContractString(render["risk"]); got != "medium" {
+		t.Fatalf("render risk=%q", got)
+	}
+	renderResult, _ := render["result"].(map[string]any)
+	renderDataSchema, _ := renderResult["data_schema"].(map[string]any)
+	properties, _ := renderDataSchema["properties"].(map[string]any)
+	nextAction, _ := properties["nextAction"].(map[string]any)
+	if nextAction["const"] != "await_user_confirmation" {
+		t.Fatalf("render must deliver wait-for-user action: %#v", nextAction)
+	}
+	if got := schemaContractStringSlice(renderDataSchema["required"]); !containsSchemaContractString(got, "artifactPath") || !containsSchemaContractString(got, "sourceDigest") || !containsSchemaContractString(got, "warnings") {
+		t.Fatalf("render required=%v", got)
+	}
+}
+
+func containsSchemaContractString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCrossPlatformCoverageWhiteboardExportDryRunContractsDelivered(t *testing.T) {
@@ -129,5 +286,22 @@ func TestCrossPlatformCoverageWhiteboardExportDryRunContractsDelivered(t *testin
 		if !ok || dryRun["preview_kind"] != "request" || dryRun["remote_reads"] == true {
 			t.Fatalf("%s invalid dry-run contract: %#v", path, full["dry_run"])
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardMergedCapabilities(t *testing.T) {
+	for _, path := range []string{
+		"whiteboard render", "whiteboard +diff", "whiteboard +query", "whiteboard +update",
+		"whiteboard create-with-content", "whiteboard export", "whiteboard export-get",
+		"whiteboard template personal save", "whiteboard template personal list", "whiteboard template personal create",
+		"whiteboard template team save", "whiteboard template team list", "whiteboard template team create",
+		"whiteboard template public list", "whiteboard template public create",
+	} {
+		t.Run(path, func(t *testing.T) {
+			payload := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+			if payload["cli_path"] != path {
+				t.Fatalf("capability absent from Schema: %#v", payload)
+			}
+		})
 	}
 }

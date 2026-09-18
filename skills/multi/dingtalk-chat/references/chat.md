@@ -134,6 +134,15 @@ Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换�
 显式稳定 ID 当前不携带可验证的 profile provenance；调用方必须保证来源，不得宣称所有
 跨 profile 误用都会在本地写入前被拦截。
 
+## 三方加密消息解密
+
+`+chat-messages`、`+at-me`、`+search-msg`、`+thread-replies` 在策略允许时自动解密三方加密（SafeChat）消息密文，无需新 flag，也不需要手动调用 `batch_ding_decrypt_messages`。
+
+- 解密成功的消息投影带 `contentDecrypted: true`、`cryptoLayer: "ding+safechat"`、`dingKeyVersion`（>0 时），文本字段渲染明文。
+- payload 级解密台账 additive：`decryptCandidateCount` / `decryptAllowedCount` / `decryptedCount` / `decryptFailedCount` / `decryptFailures[]`。
+- 单条解密失败只进台账并将 `partial` 置 true，不改变命令退出码；策略关闭保留密文并记 `policy_disabled` 失败项。
+- stub 构建（无 SafeChat 后端）或 `--dry-run` 时不解密、无台账字段，输出与解密能力上线前一致；策略关闭同样不解密并保留密文，但会输出非空解密台账（`decryptFailedCount >= 1`，失败项 `reason` 为 `policy_disabled`），既有 `partial` 字段可能因此翻为 true。
+
 ## 故障处理
 
 - `unknown flag`：读取同一 leaf Help，最多修正一次；

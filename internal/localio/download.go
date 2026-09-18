@@ -7,6 +7,8 @@ package localio
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +53,8 @@ var downloadTempCounter atomic.Uint64
 
 // DownloadOptions controls safe, atomic publication beneath BaseDir.
 type DownloadOptions struct {
+	ExpectedSize  *int64 // When supplied, validate downloaded bytes before publication.
+	Overwrite     bool   // Explicit opt-in; defaults retain no-clobber semantics.
 	BaseDir       string
 	Output        string
 	PreferredName string
@@ -59,6 +63,7 @@ type DownloadOptions struct {
 
 // DownloadResult describes the published local artifact.
 type DownloadResult struct {
+	SHA256       string // Hash of successfully downloaded bytes; empty for local publication.
 	AbsolutePath string
 	RelativePath string
 	SizeBytes    int64
@@ -76,11 +81,14 @@ func downloadWithClient(ctx context.Context, rawURL string, opts DownloadOptions
 }
 
 func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOptions, client *http.Client, maxBytes int64) (DownloadResult, error) {
+	if opts.ExpectedSize != nil && (*opts.ExpectedSize < 0 || *opts.ExpectedSize > maxBytes) {
+		return DownloadResult{}, fmt.Errorf("invalid expected download size")
+	}
 	parsed, err := ValidateDownloadURL(rawURL)
 	if err != nil {
 		return DownloadResult{}, err
 	}
-	target, err := openDownloadTarget(opts.BaseDir, opts.Output, parsed.String(), opts.PreferredName)
+	target, err := openDownloadTargetMode(opts.BaseDir, opts.Output, parsed.String(), opts.PreferredName, opts.Overwrite)
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -115,7 +123,11 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		_ = tmp.Close()
 		_ = target.parentRoot.Remove(tmpName)
 	}
-	size, copyErr := io.Copy(tmp, io.LimitReader(resp.Body, maxBytes+1))
+	digest := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(tmp, digest), io.LimitReader(resp.Body, maxBytes+1))
+	if copyErr == nil && opts.ExpectedSize != nil && size != *opts.ExpectedSize {
+		copyErr = fmt.Errorf("download size mismatch: got %d, want %d", size, *opts.ExpectedSize)
+	}
 	if copyErr == nil && size > maxBytes {
 		copyErr = fmt.Errorf("LOCAL_DOWNLOAD_TOO_LARGE: 下载内容超过上限 %d 字节", maxBytes)
 	}
@@ -133,11 +145,15 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		cleanup()
 		return DownloadResult{}, err
 	}
-	if err := publishTempFile(target.parentRoot, tmpName, target.destinationName); err != nil {
+	publish := publishTempFile
+	if opts.Overwrite {
+		publish = replaceDownloadFile
+	}
+	if err := publish(target.parentRoot, tmpName, target.destinationName); err != nil {
 		cleanup()
 		return DownloadResult{}, err
 	}
-	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size}, nil
+	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size, SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
 }
 
 // ValidateOutput rejects absolute paths and portable `..` escapes.
@@ -192,6 +208,10 @@ func ResolveOutputPath(baseDir, output, rawURL, preferredName string) (string, s
 }
 
 func openDownloadTarget(baseDir, output, rawURL, preferredName string) (*downloadTarget, error) {
+	return openDownloadTargetMode(baseDir, output, rawURL, preferredName, false)
+}
+
+func openDownloadTargetMode(baseDir, output, rawURL, preferredName string, overwrite bool) (*downloadTarget, error) {
 	if err := ValidateOutput(output); err != nil {
 		return nil, err
 	}
@@ -258,8 +278,14 @@ func openDownloadTarget(baseDir, output, rawURL, preferredName string) (*downloa
 			_ = parentRoot.Close()
 			return fail(fmt.Errorf("LOCAL_PATH_UNSAFE: --output 目标是目录"))
 		}
-		_ = parentRoot.Close()
-		return fail(fmt.Errorf("LOCAL_FILE_EXISTS: 目标文件已存在；请选择新的输出路径"))
+		if !info.Mode().IsRegular() {
+			_ = parentRoot.Close()
+			return fail(fmt.Errorf("LOCAL_PATH_UNSAFE: 目标必须是普通文件"))
+		}
+		if !overwrite {
+			_ = parentRoot.Close()
+			return fail(fmt.Errorf("LOCAL_FILE_EXISTS: 目标文件已存在；请选择新的输出路径"))
+		}
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		_ = parentRoot.Close()
 		return fail(fmt.Errorf("检查输出文件失败: %w", statErr))
@@ -423,4 +449,20 @@ func sanitizeFilename(raw string) string {
 		return ""
 	}
 	return name
+}
+
+// replaceDownloadFile publishes only a completed sibling temp file. Rename
+// replaces the directory entry itself; it never follows the destination link.
+func replaceDownloadFile(root *os.Root, tempName, destinationName string) error {
+	if info, err := root.Lstat(destinationName); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("LOCAL_PATH_UNSAFE: 覆盖目标不是普通文件")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := root.Rename(tempName, destinationName); err != nil {
+		return fmt.Errorf("发布覆盖文件失败: %w", err)
+	}
+	return nil
 }

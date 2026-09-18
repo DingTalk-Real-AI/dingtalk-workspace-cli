@@ -375,6 +375,17 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
 	}
+	// Decrypt evidence written in place by the shared inbound decrypt pipeline;
+	// pass it through so consumers can tell decrypted plaintext from native.
+	if value, ok := m["contentDecrypted"]; ok {
+		row["contentDecrypted"] = value
+	}
+	if value, ok := m["cryptoLayer"]; ok {
+		row["cryptoLayer"] = value
+	}
+	if value, ok := m["dingKeyVersion"]; ok {
+		row["dingKeyVersion"] = value
+	}
 	if includeReactions {
 		if reactions := Reactions(m); len(reactions) > 0 {
 			row["reactions"] = reactions
@@ -1281,7 +1292,7 @@ func isKnownRichDecoration(node any) bool {
 }
 
 // richItemTexts walks a decoded DingTalk rich-content blob and returns the
-// readable text carried by its rich-content items (items[].data.text). It only
+// readable text and links carried by its rich-content items. It only
 // harvests item bodies, so decorative fields (card titles, preview URLs, layout
 // config) contribute nothing and are dropped. An empty result means "not a
 // recognised rich-content block".
@@ -1305,10 +1316,21 @@ func richItemTexts(node any) []string {
 					if !ok {
 						continue
 					}
-					if s, ok := data["text"].(string); ok {
-						if s = strings.TrimSpace(s); s != "" {
-							texts = append(texts, s)
+					text, _ := data["text"].(string)
+					text = strings.TrimSpace(text)
+					// Link and image items both use data.url; only link targets
+					// belong alongside the readable label.
+					if mm["type"] == "link" {
+						url, _ := data["url"].(string)
+						url = strings.TrimSpace(url)
+						if text == "" {
+							text = url
+						} else if url != "" && url != text {
+							text += "（" + url + "）"
 						}
+					}
+					if text != "" {
+						texts = append(texts, text)
 					}
 				}
 			}

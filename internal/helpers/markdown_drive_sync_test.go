@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -95,7 +96,7 @@ func executeMarkdownDriveCommand(t *testing.T, product *cobra.Command, input io.
 	} else {
 		root.SetErr(io.Discard)
 	}
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func executeMarkdownGlobalDryRun(t *testing.T, product *cobra.Command, args ...string) error {
@@ -113,7 +114,7 @@ func executeMarkdownGlobalDryRun(t *testing.T, product *cobra.Command, args ...s
 	if deps != nil && deps.Out != nil {
 		root.SetErr(deps.Out.errW)
 	}
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func writeMarkdownDriveFixture(t *testing.T, name, content string) string {
@@ -860,7 +861,7 @@ func TestMarkdownPatchCancellationStopsBeforeUploadMetadata(t *testing.T) {
 	_ = stderr
 }
 
-func TestMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
 	names := map[string]string{
 		`../../escape.md`:       "escape.md",
 		`..\..\windows.md`:      "windows.md",
@@ -891,6 +892,7 @@ func TestMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
 	}
 	if !isTimeoutCLIError(&CLIError{Code: CodeNetworkTimeout}) ||
 		!isTimeoutCLIError(errors.New("request timeout")) ||
+		!isTimeoutCLIError(context.DeadlineExceeded) ||
 		!isPermissionCLIError(&CLIError{Code: CodeAuthPermission}) ||
 		!isPermissionCLIError(&PATError{RawJSON: `{}`}) {
 		t.Fatal("typed routing errors were not classified")
@@ -1273,26 +1275,33 @@ func TestMarkdownOverwritePreservesRemoteName(t *testing.T) {
 	}
 }
 
-func TestMarkdownDomainResolutionErrorsAreActionable(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownDomainResolutionErrorsAreActionable(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		want string
+		name      string
+		steps     []markdownDriveStep
+		want      string
+		wantCause error
 	}{
-		{name: "timeout", err: context.DeadlineExceeded, want: "超时"},
-		{name: "permission", err: &CLIError{Code: CodeAuthPermission, Message: "denied"}, want: "无权限"},
-		{name: "not found", err: errors.New("missing"), want: "均未找到"},
+		{name: "deadline", steps: []markdownDriveStep{{err: context.DeadlineExceeded}, {err: context.DeadlineExceeded}}, want: "超时", wantCause: context.DeadlineExceeded},
+		{name: "drive canceled", steps: []markdownDriveStep{{err: context.Canceled}, {err: errors.New("missing")}}, want: context.Canceled.Error(), wantCause: context.Canceled},
+		{name: "doc canceled", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: context.Canceled}}, want: context.Canceled.Error(), wantCause: context.Canceled},
+		{name: "doc deadline", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: context.DeadlineExceeded}}, want: "超时", wantCause: context.DeadlineExceeded},
+		{name: "permission", steps: []markdownDriveStep{{err: &CLIError{Code: CodeAuthPermission, Message: "denied"}}, {err: &CLIError{Code: CodeAuthPermission, Message: "denied"}}}, want: "无权限"},
+		{name: "not found", steps: []markdownDriveStep{{err: errors.New("missing")}, {err: errors.New("missing")}}, want: "均未找到"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			caller := &markdownDriveCaller{
 				format: "json",
-				steps:  []markdownDriveStep{{err: test.err}, {err: test.err}},
+				steps:  test.steps,
 			}
 			installMarkdownDriveDeps(t, caller)
 			_, err := resolveFileDomain(context.Background(), "node-1")
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want substring %q", err, test.want)
+			}
+			if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+				t.Fatalf("route error = %v, want cause %v", err, test.wantCause)
 			}
 			if len(caller.calls) != 2 {
 				t.Fatalf("route probes = %#v", caller.calls)
