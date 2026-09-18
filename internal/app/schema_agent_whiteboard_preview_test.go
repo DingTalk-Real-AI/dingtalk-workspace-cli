@@ -20,12 +20,14 @@ func (c *agentExampleFailClosedCaller) CallWhiteboardTemplatePreview(_ context.C
 	scope := "personal"
 	if tool == whiteboard.TeamTemplateSaveTool || tool == whiteboard.TeamTemplateCreateTool {
 		scope = "team"
+	} else if tool == whiteboard.PublicTemplateCreateTool {
+		scope = "public"
 	}
 	result := map[string]any{
 		"success": true, "dryRun": true, "executed": false,
 		"resourceType": whiteboard.TemplateType, "requestId": args["requestId"],
 	}
-	if tool == whiteboard.PersonalTemplateCreateTool || tool == whiteboard.TeamTemplateCreateTool {
+	if tool == whiteboard.PersonalTemplateCreateTool || tool == whiteboard.TeamTemplateCreateTool || tool == whiteboard.PublicTemplateCreateTool {
 		result["templateScope"] = scope
 		result["templateId"] = args["templateId"]
 		result["verified"] = true
@@ -49,7 +51,7 @@ func (c *agentExampleFailClosedCaller) CallWhiteboardTemplatePreview(_ context.C
 
 func TestCrossPlatformCoverageAgentTemplatePreviewFixture(t *testing.T) {
 	caller := &agentExampleFailClosedCaller{}
-	for _, tool := range []string{whiteboard.PersonalTemplateSaveTool, whiteboard.TeamTemplateSaveTool, whiteboard.PersonalTemplateCreateTool, whiteboard.TeamTemplateCreateTool} {
+	for _, tool := range []string{whiteboard.PersonalTemplateSaveTool, whiteboard.TeamTemplateSaveTool, whiteboard.PersonalTemplateCreateTool, whiteboard.TeamTemplateCreateTool, whiteboard.PublicTemplateCreateTool} {
 		for _, dry := range []any{nil, false, "true", true} {
 			result, err := caller.CallWhiteboardTemplatePreview(context.Background(), tool, map[string]any{"dryRun": dry, "templateWorkspaceId": "ws"})
 			if dry != true {
