@@ -57,6 +57,8 @@ dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format j
 
 CLI 的 `--main-program-type` 映射到 MCP 顶层字段 `type`；详情响应也以 `type` 返回 `open_code` 或 `local_agent`。详情查询命令自身的 `--type draft|published` 仅选择配置来源。
 
+`open_code` 必须至少配置一个响应模式；`local_agent` 可省略。创建 `open_code` 或从其它类型切换到 `open_code` 时同时传 `--response-mode`。
+
 ## 发布、查询和删除
 
 ```bash

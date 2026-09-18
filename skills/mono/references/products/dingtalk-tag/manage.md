@@ -23,7 +23,7 @@ Example:
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
-MCP 的主程序类型字段为 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数仍是 `--main-program-type`。没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；只有明确接入本地 Agent/DSH 时才传 `local_agent`。详情命令的 `--type draft|published` 表示配置来源，不是主程序类型。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
+MCP 的主程序类型字段为 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数仍是 `--main-program-type`。没有特殊要求时默认按 `open_code` 处理，因此创建时必须至少传一个 `--response-mode`；`local_agent` 可省略。详情命令的 `--type draft|published` 表示配置来源，不是主程序类型。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
 
 ## detail / list — 查询
 
@@ -74,6 +74,8 @@ Flags:
 ```
 
 `save-draft` 是按字段更新：未传基础字段保持草稿原值。Skill 和 MCP 使用分开的 `skills` / `mcps` 用户契约；对应文件不传时保持原关联，显式空数组只清空该类别。成功响应与 `detail --type draft` 结构一致，用于立即确认保存结果。
+
+响应模式规则按合并后的草稿判断：`open_code` 必须至少有一个合法 `responseMode`，`local_agent` 可以没有。显式切换为 `open_code` 时 CLI 要求同时传 `--response-mode`；没有修改类型或响应模式时不要求用户重复回填，OpenAPI 会结合当前草稿做最终校验。
 
 `--avatar-url` 可传可公开访问的 HTTP(S) 地址，也可传本地图片路径。传本地文件时 CLI 复用 Skill 上传封装，自动取得临时上传凭证、完成 multipart 上传，再将 OSS URL 作为 `avatarUrl` 保存；不输出临时凭证，用户无需手工编排上传步骤。
 

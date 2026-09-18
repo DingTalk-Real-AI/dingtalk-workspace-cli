@@ -64,6 +64,7 @@ func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试本地头像", "avatar-url": avatarInput,
+		"response-mode": "mention_only",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -99,7 +100,7 @@ func TestDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload(t *testing.T) {
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试公网头像",
-		"avatar-url": "https://cdn.example/avatar.png",
+		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -1079,6 +1080,30 @@ func TestDeapAgentResponseModeNormalization(t *testing.T) {
 	}
 }
 
+func TestDevDeapAgentCreateAllowsLocalAgentWithoutResponseMode(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	root := deapHandler{}.Command(&captureRunner{})
+	create := deapFindLeaf(t, root, "create")
+	for name, value := range map[string]string{
+		"name": "本地助手", "description": "连接本地 Agent", "main-program-type": "local_agent",
+	} {
+		if err := create.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := create.RunE(create, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].args["type"] != "local_agent" {
+		t.Fatalf("create calls = %#v, want local_agent without responseMode", caller.calls)
+	}
+	profile, _ := caller.calls[0].args["digitalTagEmployeeProfile"].(map[string]any)
+	if _, exists := profile["responseMode"]; exists {
+		t.Fatalf("responseMode unexpectedly sent: %#v", profile)
+	}
+}
+
 func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	cases := []struct {
@@ -1111,7 +1136,17 @@ func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 		}, wantErr: "--main-program-type"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "avatar-url": "avatar.bmp",
+			"response-mode": "mention_only",
 		}, wantErr: "本地文件只支持"},
+		{leaf: "create", flags: map[string]string{
+			"name": "值班助手", "description": "处理值班问题",
+		}, wantErr: "open_code 类型必须至少提供一个 --response-mode"},
+		{leaf: "create", flags: map[string]string{
+			"name": "值班助手", "description": "处理值班问题", "main-program-type": "open_code",
+		}, wantErr: "open_code 类型必须至少提供一个 --response-mode"},
+		{leaf: "save-draft", flags: map[string]string{
+			"agent-uuid": "agent-1", "main-program-type": "open_code",
+		}, wantErr: "切换为 open_code 时必须至少提供一个 --response-mode"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),
 		}, wantErr: "最多允许 5000"},
