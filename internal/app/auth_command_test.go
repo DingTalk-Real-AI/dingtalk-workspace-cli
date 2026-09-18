@@ -2183,7 +2183,7 @@ func authLogoutTestToken(corpID string) *authpkg.TokenData {
 	}
 }
 
-func TestAuthLoginPushDisplayLangDefaultsInternationalToEnglish(t *testing.T) {
+func TestCrossPlatformCoverageAuthLoginPushDisplayLangDefaultsInternationalToEnglish(t *testing.T) {
 	previous := i18n.Lang()
 	t.Cleanup(func() { i18n.SetLang(previous) })
 

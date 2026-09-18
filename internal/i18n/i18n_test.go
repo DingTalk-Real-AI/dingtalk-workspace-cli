@@ -117,7 +117,7 @@ func TestAuthLoginSummaryTranslations(t *testing.T) {
 	}
 }
 
-func TestPushLangRestoresPreviousLocale(t *testing.T) {
+func TestCrossPlatformCoveragePushLangRestoresPreviousLocale(t *testing.T) {
 	previous := Lang()
 	t.Cleanup(func() { SetLang(previous) })
 
@@ -132,7 +132,7 @@ func TestPushLangRestoresPreviousLocale(t *testing.T) {
 	}
 }
 
-func TestLangPinnedByEnvOnlyHonorsDWSLang(t *testing.T) {
+func TestCrossPlatformCoverageLangPinnedByEnvOnlyHonorsDWSLang(t *testing.T) {
 	t.Setenv("LANG", "zh_CN.UTF-8")
 	t.Setenv("DWS_LANG", "")
 	if LangPinnedByEnv() {

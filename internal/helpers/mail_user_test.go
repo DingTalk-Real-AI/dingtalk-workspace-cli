@@ -53,6 +53,11 @@ func executeMailUserLookup(t *testing.T, caller *mailUserGetCaller, command stri
 
 func executeMailUserLookupWithExit(t *testing.T, caller *mailUserGetCaller, command string, args ...string) ([]byte, int, error) {
 	t.Helper()
+	return executeMailUserLookupWithContext(t, context.Background(), caller, command, args...)
+}
+
+func executeMailUserLookupWithContext(t *testing.T, ctx context.Context, caller *mailUserGetCaller, command string, args ...string) ([]byte, int, error) {
+	t.Helper()
 	testseam.Protect(t, &deps)
 	InitDeps(caller)
 	var stdout, stderr bytes.Buffer
@@ -65,7 +70,7 @@ func executeMailUserLookupWithExit(t *testing.T, caller *mailUserGetCaller, comm
 	root.PersistentFlags().String("fields", "", "selected fields")
 	root.PersistentFlags().String("jq", "", "output query")
 	root.SetArgs(append([]string{"user", command}, args...))
-	ctx, _ := output.WithResultStore(context.Background())
+	ctx, _ = output.WithResultStore(ctx)
 	cmd, err := root.ExecuteContextC(ctx)
 	code := 0
 	if err == nil {

@@ -8,9 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/spf13/cobra"
 )
 
 func mailLookupTestJSON(t *testing.T, raw []byte) any {
@@ -162,5 +167,127 @@ func TestCrossPlatformCoverageMailUserBatchEmptyLabelCannotCollideWithBadAddress
 	failed := data["failed"].([]any)
 	if len(failed) != 2 || failed[0].(map[string]any)["id"] == failed[1].(map[string]any)["id"] || len(data["succeeded"].([]any)) != 1 {
 		t.Fatalf("input identities collided: %s", got)
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchRequiresStringSliceFlag(t *testing.T) {
+	for _, wrongType := range []bool{false, true} {
+		t.Run(fmt.Sprint(wrongType), func(t *testing.T) {
+			caller := &mailUserGetCaller{}
+			testseam.Protect(t, &deps)
+			InitDeps(caller)
+			cmd := &cobra.Command{}
+			if wrongType {
+				cmd.Flags().String("org-emails", "a@example.com", "")
+			}
+			if err := validateMailUserBatchGet(cmd, nil); err == nil {
+				t.Fatal("validation accepted a missing or incorrectly typed flag")
+			}
+			result, err := callMailUserBatchLookupResult(cmd, "batch_get_users_by_org_emails", nil)
+			if err == nil || result != nil || caller.calls != 0 {
+				t.Fatalf("invalid command declaration dispatched RPC: result=%v err=%v calls=%d", result, err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchFallbackResponseValidation(t *testing.T) {
+	for _, response := range []string{
+		`{"success":true,"result":[]}`,
+		`{"success":true,"result":{"uid":"bad"}}`,
+		`{"success":true,"result":{"uid":123,"orgEmail":42}}`,
+		`{"success":true,"result":{"uid":123,"orgEmail":"other@example.com"}}`,
+	} {
+		t.Run(response, func(t *testing.T) {
+			caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, args map[string]any) (string, error) {
+				if tool == "batch_get_users_by_org_emails" {
+					return mailBatchAddressRejection, nil
+				}
+				if args["orgEmail"] == "a@example.com" {
+					return `{"success":true,"result":{"uid":123}}`, nil
+				}
+				return response, nil
+			}}
+			got, code, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "a@example.com,b@example.com")
+			if err != nil || code != 7 || caller.calls != 3 {
+				t.Fatalf("fallback response: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
+			}
+			data := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)
+			if len(data["succeeded"].([]any)) != 1 || len(data["failed"].([]any)) != 0 || len(data["unknown"].([]any)) != 1 || data["unknown"].([]any)[0].(map[string]any)["id"] != "b@example.com" {
+				t.Fatalf("malformed employee must remain unknown without losing valid results: %s", got)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchFallbackOmittedEmployee(t *testing.T) {
+	caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, _ map[string]any) (string, error) {
+		if tool == "batch_get_users_by_org_emails" {
+			return mailBatchAddressRejection, nil
+		}
+		return `{"success":true}`, nil
+	}}
+	got, code, err := executeMailUserLookupWithExit(t, caller, "batch-get", "--org-emails", "missing@example.com")
+	if err != nil || code != 0 || caller.calls != 2 {
+		t.Fatalf("omitted employee: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
+	}
+	result := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)["result"].(map[string]any)
+	if len(result["users"].([]any)) != 0 || !reflect.DeepEqual(result["notFoundOrgEmails"], []any{"missing@example.com"}) {
+		t.Fatalf("mapped empty result changed: %s", got)
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchFallbackCancellationKeepsResults(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	caller := &mailUserGetCaller{respond: func(_ context.Context, tool string, _ map[string]any) (string, error) {
+		if tool == "batch_get_users_by_org_emails" {
+			return mailBatchAddressRejection, nil
+		}
+		cancel()
+		return `{"success":true,"result":{"uid":123}}`, nil
+	}}
+	got, code, err := executeMailUserLookupWithContext(t, ctx, caller, "batch-get", "--org-emails", "a@example.com,b@example.com")
+	if err != nil || code != 7 || caller.calls != 2 {
+		t.Fatalf("cancellation: output=%s code=%d err=%v calls=%d", got, code, err, caller.calls)
+	}
+	data := mailLookupTestJSON(t, got).(map[string]any)["data"].(map[string]any)
+	if len(data["succeeded"].([]any)) != 1 || len(data["unknown"].([]any)) != 1 || data["unknown"].([]any)[0].(map[string]any)["id"] != "b@example.com" {
+		t.Fatalf("cancellation lost results or misclassified unattempted lookup: %s", got)
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchFailureClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		global bool
+	}{
+		{"ordinary", errors.New("ordinary error"), false},
+		{"auth", &CLIError{Code: CodeAuthTokenExpired}, true},
+		{"permission", &CLIError{Code: CodeAuthPermission}, true},
+		{"timeout", &CLIError{Code: CodeNetworkTimeout}, true},
+		{"unreachable", &CLIError{Code: CodeNetworkUnreachable}, true},
+		{"malformed business error", &CLIError{Code: CodeMCPToolError, Message: "invalid JSON"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := fmt.Errorf("wrapped: %w", tc.err)
+			if mailUserBatchRejectedAddress(err) {
+				t.Fatal("unrelated error incorrectly enables batch fallback")
+			}
+			if got := mailUserLookupGlobalFailure(err); got != tc.global {
+				t.Fatalf("global failure=%v, want %v", got, tc.global)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMailUserBatchRejectsInconsistentPartialIdentity(t *testing.T) {
+	result, err := mailUserBatchResult([]*mailUserBatchItem{
+		{id: "same", email: "a@example.com", notFound: true},
+		{id: "same", failure: &output.ErrorInfo{Type: "validation", Message: "invalid input"}},
+	})
+	if err == nil || result != nil {
+		t.Fatalf("duplicate partial identities must fail closed: result=%v err=%v", result, err)
 	}
 }
