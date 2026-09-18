@@ -207,10 +207,14 @@ func TestCrossPlatformCoverageMailUserLookupFilteredUIDPrecision(t *testing.T) {
 func TestCrossPlatformCoverageMailUserGetResultAndMapping(t *testing.T) {
 	for _, result := range []string{
 		`{"uid":9223372036854775806,"orgId":456,"staffId":"staff-789","name":"张三","orgEmail":"ZhangSan+tag@Example.com"}`,
-		`null`, `{}`, `{"uid":null}`,
+		`null`, `{}`, `{"uid":null}`, `{"uid":null,"orgId":null,"staffId":null,"name":null,"orgEmail":null}`,
+		`{"uid":9223372036854775806,"orgId":9223372036854775805,"extra":{"future":true}}`, "",
 	} {
 		t.Run(result, func(t *testing.T) {
 			response := `{"success":true,"result":` + result + `}`
+			if result == "" {
+				response = `{"success":true}`
+			}
 			caller := &mailUserGetCaller{response: response}
 			got, err := executeMailUserGet(t, caller, "--org-email", " ZhangSan+tag@Example.com ")
 			if err != nil {
@@ -266,6 +270,14 @@ func TestCrossPlatformCoverageMailUserGetFailures(t *testing.T) {
 	for _, response := range []string{
 		`{"success":false,"errorCode":"noPermission","errorMsg":"Not a member"}`,
 		`{"result":null}`, `{"success":"true"}`, `null`, `[]`, `invalid`,
+		`{"success":true,"result":[]}`, `{"success":true,"result":true}`,
+		`{"success":true,"result":123}`, `{"success":true,"result":"employee"}`,
+		`{"success":true,"result":{"uid":"123"}}`, `{"success":true,"result":{"uid":false}}`,
+		`{"success":true,"result":{"uid":1.5}}`, `{"success":true,"result":{"uid":9223372036854775808}}`,
+		`{"success":true,"result":{"uid":123,"orgId":"456"}}`,
+		`{"success":true,"result":{"uid":123,"staffId":456}}`,
+		`{"success":true,"result":{"uid":123,"name":[]}}`,
+		`{"success":true,"result":{"uid":123,"orgEmail":true}}`,
 	} {
 		caller := &mailUserGetCaller{response: response}
 		got, err := executeMailUserGet(t, caller, "--org-email", "a@example.com")

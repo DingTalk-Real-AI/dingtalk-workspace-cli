@@ -64,6 +64,11 @@ func TestCrossPlatformCoverageMailUserLookupDeliveredSchema(t *testing.T) {
 		properties := object(object(result["data_schema"])["properties"])
 		employee := object(properties["result"])
 		if tc.command == "batch-get" {
+			for _, view := range []map[string]any{full, compact} {
+				if !strings.Contains(schemaContractString(view["description"]), "仍读取 data.succeeded 中 found=true 的 user") {
+					t.Fatal("batch Schema must tell Agents to retain confirmed members after exit code 7")
+				}
+			}
 			if !reflect.DeepEqual(result["outcomes"], []any{"success", "partial_failure", "failure"}) {
 				t.Fatalf("batch partial outcome missing: %#v", result["outcomes"])
 			}

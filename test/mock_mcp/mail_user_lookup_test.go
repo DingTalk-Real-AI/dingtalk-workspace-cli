@@ -19,6 +19,7 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 		name        string
 		args        []string
 		batchReply  string
+		singleReply string
 		failedReply string
 		wantTools   []string
 		wantArgs    []map[string]any
@@ -30,6 +31,14 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 			args:      []string{"get", "--org-email", "a@example.com"},
 			wantTools: []string{"get_user_by_org_email"},
 			wantArgs:  []map[string]any{{"orgEmail": "a@example.com"}},
+		},
+		{
+			name:        "single malformed result is an API failure",
+			args:        []string{"get", "--org-email", "a@example.com"},
+			singleReply: `{"success":true,"result":{"uid":"123"}}`,
+			wantTools:   []string{"get_user_by_org_email"},
+			wantArgs:    []map[string]any{{"orgEmail": "a@example.com"}},
+			wantCode:    1,
 		},
 		{
 			name:       "batch found and not found",
@@ -48,6 +57,17 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				{"orgEmail": "a@example.com"}, {"orgEmail": "invalid"}, {"orgEmail": "missing@example.com"},
 			},
 			wantCode: 7,
+		},
+		{
+			name:       "invalid and malformed items preserve later valid and unmatched results",
+			args:       []string{"batch-get", "--org-emails", "invalid,broken@example.com,a@example.com,missing@example.com"},
+			batchReply: `{"success":false,"errorCode":"SYSTEM_ERROR","errorMsg":"orgEmails[0]必须是完整有效的企业邮箱地址"}`,
+			wantTools:  []string{"batch_get_users_by_org_emails", "get_user_by_org_email", "get_user_by_org_email", "get_user_by_org_email", "get_user_by_org_email"},
+			wantArgs: []map[string]any{
+				{"orgEmails": []any{"invalid", "broken@example.com", "a@example.com", "missing@example.com"}},
+				{"orgEmail": "invalid"}, {"orgEmail": "broken@example.com"}, {"orgEmail": "a@example.com"}, {"orgEmail": "missing@example.com"},
+			},
+			wantCode: 7, wantUnknown: 1,
 		},
 		{
 			name:        "permission failure stops fallback without losing results",
@@ -88,8 +108,12 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 					authorization: r.Header.Get("Authorization"), tool: request.Params.Name, arguments: request.Params.Arguments, err: err})
 				mu.Unlock()
 				response := `{"success":true,"result":` + employee + `}`
-				if request.Params.Name == "batch_get_users_by_org_emails" {
+				if tc.singleReply != "" {
+					response = tc.singleReply
+				} else if request.Params.Name == "batch_get_users_by_org_emails" {
 					response = tc.batchReply
+				} else if request.Params.Arguments["orgEmail"] == "broken@example.com" {
+					response = `{"success":true,"result":{"uid":"bad"}}`
 				} else if request.Params.Arguments["orgEmail"] == "missing@example.com" {
 					response = `{"success":true,"result":null}`
 				} else if request.Params.Arguments["orgEmail"] == "invalid" {
@@ -137,6 +161,7 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				OK      bool   `json:"ok"`
 				Outcome string `json:"outcome"`
 				Error   struct {
+					Type         string `json:"type"`
 					UpstreamCode string `json:"upstream_code"`
 					Details      struct {
 						PartialResult json.RawMessage `json:"partialResult"`
@@ -160,18 +185,25 @@ func TestMockMCPSmoke_MailEmployeeLookups(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.wantCode == 7 {
-				if envelope.OK || envelope.Outcome != "partial_failure" || len(envelope.Data.Succeeded) != 2-tc.wantUnknown || !envelope.Data.Succeeded[0].Found || envelope.Data.Succeeded[0].ID != "a@example.com" || len(envelope.Data.Failed) != 1 || envelope.Data.Failed[0].ID != "invalid" || len(envelope.Data.Unknown) != tc.wantUnknown {
+				if envelope.OK || envelope.Outcome != "partial_failure" || len(envelope.Data.Succeeded) != 2 || !envelope.Data.Succeeded[0].Found || envelope.Data.Succeeded[0].ID != "a@example.com" || len(envelope.Data.Failed) != 1 || envelope.Data.Failed[0].ID != "invalid" || len(envelope.Data.Unknown) != tc.wantUnknown {
 					t.Fatalf("partial results lost or misclassified: %s", stdout)
 				}
 				if tc.wantUnknown == 1 {
-					if envelope.Data.Unknown[0].ID != "missing@example.com" {
-						t.Fatalf("unattempted lookup not marked unknown: %s", stdout)
+					if envelope.Data.Unknown[0].ID != "broken@example.com" {
+						t.Fatalf("malformed lookup not marked unknown: %s", stdout)
 					}
-				} else if envelope.Data.Succeeded[1].Found || envelope.Data.Succeeded[1].ID != "missing@example.com" {
+				}
+				if envelope.Data.Succeeded[1].Found || envelope.Data.Succeeded[1].ID != "missing@example.com" {
 					t.Fatalf("confirmed unmatched address lost: %s", stdout)
 				}
 			} else if tc.wantCode == 1 {
 				wantUpstream := "PARAM_ERROR"
+				if tc.singleReply != "" {
+					wantUpstream = ""
+					if envelope.Error.Type != "api" || !strings.Contains(stdout, "invalid employee result") {
+						t.Fatalf("malformed employee must be an API failure: %s", stdout)
+					}
+				}
 				if tc.wantUnknown != 0 {
 					wantUpstream = "noPermission"
 					var progress struct {

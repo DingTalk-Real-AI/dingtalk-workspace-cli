@@ -9,6 +9,9 @@ category: Added
   employees plus `notFoundOrgEmails`. Both declare required input mappings,
   read-only safety, and result fields, and use platform-injected operator and
   organization identity.
+  Direct single lookup validates the employee result and declared field types
+  before reporting success, while retaining null/omitted not-found results and
+  exact integer IDs. This check does not reject a batch because one item is bad.
 - **Mail batch partial results** — preserves confirmed employee and not-found
   results when individual inputs or response records fail. Partial output
   separates `succeeded`, `failed` and `unknown` entries (exit code 7). An explicit
@@ -21,6 +24,9 @@ category: Added
   exit status, with confirmed progress in structured error
   `details.partialResult`. Cancellation and raw PAT authorization errors are
   returned to the framework unchanged instead of becoming partial success.
+  Agent guidance requires reading confirmed members from `succeeded` even on
+  exit code 7, continuing authorized follow-up work with them and reporting
+  unmatched, failed and unknown addresses.
 - **Large integer output precision** — preserves integer IDs beyond the exact
   `float64` range when decoding MCP text responses and through `--jq`, `--fields`
   and formatted output.

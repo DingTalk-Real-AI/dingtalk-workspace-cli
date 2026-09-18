@@ -1148,6 +1148,7 @@ dws schema mail.get_user_by_org_email --compact
 不得猜测或补全域名，也不转换邮箱别名；保留输入的大小写和 `+` 后缀。
 结果位于统一输出的 `data`：`success=true` 且 `result.uid` 非空表示找到员工；
 `result` 为 null、缺失或 `uid` 为空表示未找到有效员工。
+单查会校验 `result` 及已声明员工字段的类型；畸形结果返回 API 错误，不会作为成功员工信息交给 Agent。
 `result.staffId` 即组织内 `userId`，不是工号；`result.uid` 是钉钉全局 UID。
 只知道姓名或工号时使用 `mail user search`，查询邮箱容量与别名使用 `mail mailbox profile`。
 
@@ -1179,6 +1180,9 @@ dws schema mail.batch_get_users_by_org_emails --compact
 
 坏记录不会丢弃其他有效结果；返回缺少某个数组时，仍保留另一数组中可确认的项。全部查询均无法确认或均失败时返回 `failure`。
 解析方应先检查 `outcome`：完全成功仍使用 `data.result.users` / `notFoundOrgEmails`；部分成功使用上述逐项通道。
+**退出码 7 不代表全部查询失败。** Agent 仍须解析 stdout，读取 `data.succeeded` 中 `found=true` 的 `user`，
+用已确认有效成员继续用户已授权的后续操作，并报告未匹配、失败和未知邮箱。不得仅因退出码非零丢弃有效成员，
+也不得把 `found=false`、`failed` 或 `unknown` 的邮箱当作有效成员。只使用返回的真实成员 ID，不猜测或补造 ID。
 
 ### 搜索邮箱用户（通讯录）
 ```

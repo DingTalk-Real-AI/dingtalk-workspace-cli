@@ -98,6 +98,8 @@ result.notFoundOrgEmails 是未找到有效员工的邮箱数组。两个数组�
 全部未找到时 users=[]，全部找到时 notFoundOrgEmails=[]；未匹配邮箱不表示调用失败。
 部分失败时 outcome=partial_failure（退出码 7），data.succeeded 保留已确认查询（found 和 user），
 data.failed 列出逐项错误，data.unknown 列出返回缺失或异常而无法确认的邮箱；不得当作未找到。
+退出码 7 不代表全部查询失败：仍读取 data.succeeded 中 found=true 的 user，用已确认有效成员继续用户已授权的后续操作，
+并报告未匹配、失败和未知邮箱；不得将未确认项当作有效成员。
 staffId 即组织内 userId，不是工号；uid 是钉钉全局用户 ID。
 单个邮箱可用 mail user get；只有姓名或工号时使用 mail user search。`,
 		Example:       "  dws mail user batch-get --org-emails alice@example.com,bob@example.com",
@@ -195,6 +197,20 @@ func callMailUserLookupResult(cmd *cobra.Command, tool string, args map[string]a
 	data, err := fetchMailUserLookupData(cmd, tool, args)
 	if err != nil {
 		return nil, err
+	}
+	if raw, present := data["result"]; present {
+		// Validate only the direct single-lookup result. Keep the original raw
+		// payload for exact IDs and let batch lookup classify each row itself.
+		var employee struct {
+			UID      *int64  `json:"uid"`
+			OrgID    *int64  `json:"orgId"`
+			StaffID  *string `json:"staffId"`
+			Name     *string `json:"name"`
+			OrgEmail *string `json:"orgEmail"`
+		}
+		if err := json.Unmarshal(raw, &employee); err != nil {
+			return nil, apperrors.NewAPI(tool + " returned an invalid employee result")
+		}
 	}
 	return output.Success(data), nil
 }
