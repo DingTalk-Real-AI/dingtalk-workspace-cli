@@ -903,7 +903,7 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 				"name": "值班助手", "description": "处理值班问题",
 				"deptId": "dept-1",
 				"digitalTagEmployeeProfile": map[string]any{
-					"directSupervisorUid": "supervisor-1", "mainProgramType": "local_agent",
+					"supervisorUserId": "supervisor-1", "mainProgramType": "local_agent",
 					"responseMode": "mention_only,targeted_proactive",
 				},
 			},
@@ -933,7 +933,7 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			wantArgs: map[string]any{
 				"agentUuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
 				"digitalTagEmployeeProfile": map[string]any{
-					"directSupervisorUid": "supervisor-1", "mainProgramType": "local_agent",
+					"supervisorUserId": "supervisor-1", "mainProgramType": "local_agent",
 					"responseMode": "targeted_proactive",
 				},
 			},

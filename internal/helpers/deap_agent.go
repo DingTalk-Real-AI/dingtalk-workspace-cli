@@ -234,7 +234,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			{Name: "description", Usage: "数字员工职责描述（最多 300 个 Unicode 码点）", Bind: "description", Required: true, Trim: true},
 			{Name: "dept-id", Usage: "归属部门 ID；不传时服务端使用操作人主任职部门", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "icon", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片（最大 10 MiB）", Bind: "icon", Trim: true, OmitEmpty: true},
-			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.directSupervisorUid", Trim: true, OmitEmpty: true},
+			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
 			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 		},
@@ -272,7 +272,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --icon ./avatar.png --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.directSupervisorUid", Description: "直属上级 userId"},
+				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
 				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.mainProgramType", Enum: deapAgentMainProgramTypeValues, Description: "可选主程序类型；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；明确接入本地 Agent/DSH 时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；支持 mention_only、targeted_proactive，或英文逗号分隔的双值组合 mention_only,targeted_proactive"},
 			},
@@ -386,7 +386,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "icon", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片（最大 10 MiB）；不传保持原值", Bind: "icon", Trim: true, OmitEmpty: true},
 			{Name: "dept-id", Usage: "归属部门 ID；不传保持原部门，不支持清空", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "prompt", Usage: "人设/System Prompt（最多 5000 个 Unicode 码点）", Bind: "prompt", Trim: true, OmitEmpty: true},
-			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.directSupervisorUid", Trim: true, OmitEmpty: true},
+			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
 			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 			{Name: "skills-file", Usage: "Skill 草稿配置 JSON 数组文件，元素为 skillId/enabled/attributes；不传保持原配置，显式空数组才清空", Bind: "skillsFile", Trim: true, OmitEmpty: true},
@@ -429,7 +429,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 				Examples:     []string{`dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --name "值班助手" --description "处理值班问题" --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.directSupervisorUid", Description: "直属上级 userId"},
+				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
 				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.mainProgramType", Enum: deapAgentMainProgramTypeValues, Description: "可选主程序类型；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；支持 mention_only、targeted_proactive，或英文逗号分隔的双值组合 mention_only,targeted_proactive"},
 				{Name: "skills-file", Property: "skills", InterfaceType: "array"},
@@ -616,7 +616,7 @@ func deapAgentPrepareProfile(args map[string]any) {
 		argument string
 		property string
 	}{
-		{"digitalTagEmployeeProfile.directSupervisorUid", "directSupervisorUid"},
+		{"digitalTagEmployeeProfile.supervisorUserId", "supervisorUserId"},
 		{"digitalTagEmployeeProfile.mainProgramType", "mainProgramType"},
 		{"digitalTagEmployeeProfile.responseMode", "responseMode"},
 	} {
