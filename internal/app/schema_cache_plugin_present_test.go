@@ -128,7 +128,7 @@ func TestCrossPlatformCoverageSchemaCacheBuilderChildSetupErrors(t *testing.T) {
 		return cli.SchemaCacheBuildResult{}, nil
 	}
 	schemaCacheBuilderCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderChildHelper")
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderOutputHelper")
 	}
 	if _, err := buildSchemaCacheInChild(context.Background()); err != nil {
 		t.Fatalf("child with empty working directory failed: %v", err)
