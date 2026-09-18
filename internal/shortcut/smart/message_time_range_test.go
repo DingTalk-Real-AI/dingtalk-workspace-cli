@@ -56,7 +56,7 @@ func TestCrossPlatformCoverageResolveMessageTimeRange(t *testing.T) {
 	if ascending.direction() != "newer" || ascending.stopReason() != "range_end" {
 		t.Fatalf("ascending direction/reason = %q, %q", ascending.direction(), ascending.stopReason())
 	}
-	if ascending.initialBoundary(now) != formatDingTalkMessageBoundary(*ascending.start) {
+	if ascending.initialBoundary(now) != ascending.start.UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("ascending boundary = %q", ascending.initialBoundary(now))
 	}
 	metadata := ascending.metadata()
@@ -73,7 +73,7 @@ func TestCrossPlatformCoverageResolveMessageTimeRange(t *testing.T) {
 	if startOnly.end == nil || !startOnly.end.Equal(now) || startOnly.direction() != "older" || startOnly.stopReason() != "range_start" {
 		t.Fatalf("start-only range = %#v", startOnly)
 	}
-	if startOnly.initialBoundary(now) != formatDingTalkMessageBoundary(now) {
+	if startOnly.initialBoundary(now) != now.UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("start-only boundary = %q", startOnly.initialBoundary(now))
 	}
 
@@ -84,7 +84,7 @@ func TestCrossPlatformCoverageResolveMessageTimeRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fractional.initialBoundary(now); got != "2026-08-03T00:00:00.5+08:00" {
+	if got := fractional.initialBoundary(now); got != "2026-08-02T16:00:00.5Z" {
 		t.Fatalf("fractional boundary = %q", got)
 	}
 	fractionalMetadata := fractional.metadata()
@@ -97,7 +97,6 @@ func TestCrossPlatformCoverageResolveMessageTimeRange(t *testing.T) {
 		"invalid start": {"start": "not-a-time"},
 		"invalid end":   {"end": "not-a-time"},
 		"reversed":      {"start": "2026-08-03", "end": "2026-08-02"},
-		"asc no start":  {"end": "2026-08-03", "order": "asc"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := resolveChatMessageTimeRange(messageTimeRangeRuntime(t, values), now); err == nil {

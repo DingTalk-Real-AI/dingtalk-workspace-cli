@@ -60,8 +60,8 @@ func ParseURL(raw string) (Target, error) {
 	if err != nil {
 		return Target{}, invalidURL(raw, fmt.Sprintf("URL 解析失败: %v", err))
 	}
-	if !strings.EqualFold(parsed.Scheme, "https") || !strings.EqualFold(parsed.Hostname(), aliDocsHost) || parsed.User != nil {
-		return Target{}, invalidURL(raw, "仅接受 https://alidocs.dingtalk.com 的无凭据 URL")
+	if !strings.EqualFold(parsed.Scheme, "https") || (!strings.EqualFold(parsed.Hostname(), aliDocsHost) && !strings.EqualFold(parsed.Hostname(), "docs.dingtalk.com")) || parsed.User != nil {
+		return Target{}, invalidURL(raw, "仅接受 https://alidocs.dingtalk.com 或 https://docs.dingtalk.com 的无凭据 URL")
 	}
 
 	segments := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
@@ -442,4 +442,42 @@ func invalidResponse(entityType, query, cause string) error {
 		apperrors.WithHint(cause),
 		apperrors.WithDetails(map[string]any{"entityType": entityType, "query": query}),
 	)
+}
+
+// ResolveChildName uses complete field/view directories and refuses malformed,
+// duplicate, or ambiguous candidates before returning an ID.
+func ResolveChildName(reader Reader, baseID, tableID, kind, name string) (Resolution, error) {
+	query := strings.TrimSpace(name)
+	if !validID(baseID) || !validID(tableID) || query == "" {
+		return Resolution{}, apperrors.NewValidation("需要有效 Base/Table ID 和非空名称")
+	}
+	tool, collection, idKey, nameKey := "get_fields", "fields", "fieldId", "fieldName"
+	if kind == "view" {
+		tool, collection, idKey, nameKey = "get_views", "views", "viewId", "viewName"
+	} else if kind != "field" {
+		return Resolution{}, apperrors.NewValidation("仅支持 field/view 名称解析")
+	}
+	data, err := reader.CallMCPData("aitable", tool, map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return Resolution{}, err
+	}
+	items, found, err := findObjectList(data, collection)
+	if err != nil || !found {
+		return Resolution{}, invalidResponse(kind, query, "缺少有效完整目录")
+	}
+	next, more, known := Pagination(data)
+	if next != "" && (!known || more) || known && more {
+		return Resolution{}, incomplete(kind, query, nil, "目录仍有续页，不能证明名称唯一")
+	}
+	candidates := make([]Candidate, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		id, n := firstString(item, idKey, "id"), firstString(item, nameKey, "name")
+		if id == "" || n == "" || seen[id] {
+			return Resolution{}, invalidResponse(kind, query, "目录缺少 ID/名称或重复 ID")
+		}
+		seen[id] = true
+		candidates = append(candidates, Candidate{ID: id, Name: n})
+	}
+	return selectCandidate(kind, query, candidates, false)
 }

@@ -13,6 +13,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx"
@@ -629,7 +630,16 @@ func ResolveChatTarget(rt Reader, directValue, queryValue string) (ChatResolutio
 // search and ambiguity checks.
 func LooksLikeOpenConversationID(value string) bool {
 	value = strings.TrimSpace(value)
-	return len(value) >= 12 && strings.HasPrefix(strings.ToLower(value), "cid")
+	if len(value) < 12 || !strings.HasPrefix(strings.ToLower(value), "cid") {
+		return false
+	}
+	for _, char := range value {
+		if char > unicode.MaxASCII ||
+			!(unicode.IsLetter(char) || unicode.IsDigit(char) || strings.ContainsRune("_+-=/", char)) {
+			return false
+		}
+	}
+	return true
 }
 
 type chatPagination struct {

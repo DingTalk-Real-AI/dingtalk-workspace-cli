@@ -520,12 +520,25 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 //  3. insert_document_block with attachment element
 //  4. list_document_blocks → prove the uploaded resource is visible in the document
 func runMediaInsert(cmd *cobra.Command, _ []string) error {
-	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
-	if err != nil {
-		return err
-	}
+	return insertDocMediaFile(cmd, "", "", deps.Out.PrintJSON)
+}
 
-	filePath := mustGetFlag(cmd, "file")
+// InsertDocMediaFile inserts one file into an explicitly selected document for
+// a composite creation flow. It does not inherit the document's title as the
+// attachment filename. The caller validates every local path before creation.
+func InsertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(any) error) error {
+	return insertDocMediaFile(cmd, nodeID, filePath, emit)
+}
+func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(any) error) error {
+	composite := nodeID != ""
+	if !composite {
+		var err error
+		nodeID, err = mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+		if err != nil {
+			return err
+		}
+		filePath = mustGetFlag(cmd, "file")
+	}
 	if filePath == "" {
 		return fmt.Errorf("flag --file is required")
 	}
@@ -539,6 +552,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	fileName, _ := cmd.Flags().GetString("name")
+	if composite {
+		fileName = ""
+	}
 	if fileName == "" {
 		fileName = filepath.Base(filePath)
 	} else if filepath.Ext(fileName) == "" {
@@ -553,9 +569,18 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	fileSize := fileInfo.Size()
+	fileView, _ := cmd.Flags().GetString("file-view")
+	if fileView != "" {
+		if fileView != "preview" && fileView != "summary" {
+			return fmt.Errorf("file-view仅支持preview/summary")
+		}
+		if strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("file-view仅适用于附件，不支持图片")
+		}
+	}
 
 	if deps.Caller.DryRun() {
-		return deps.Out.PrintJSON(map[string]any{
+		return emit(map[string]any{
 			"contractVersion": "doc.operation.v1",
 			"dry_run":         true,
 			"preview_kind":    "plan",
@@ -574,9 +599,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	// Step 1: get upload credentials (uploadUrl + resourceId)
-	deps.Out.PrintInfo(fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	fmt.Fprintln(cmd.ErrOrStderr(), fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
 
-	credText, err := callMCPToolReturnText(ctx, "get_doc_attachment_upload_info", map[string]any{
+	credText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
 		"fileName": fileName,
 		"fileSize": float64(fileSize),
@@ -592,7 +617,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 2: HTTP PUT file to OSS
-	deps.Out.PrintInfo("[2/4] 上传文件到 OSS...")
+	fmt.Fprintln(cmd.ErrOrStderr(), "[2/4] 上传文件到 OSS...")
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -615,7 +640,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 3: insert block into document
-	deps.Out.PrintInfo("[3/4] 插入块到文档...")
+	fmt.Fprintln(cmd.ErrOrStderr(), "[3/4] 插入块到文档...")
 
 	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
 
@@ -642,6 +667,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		if mimeType == "text/markdown" {
 			viewType = "summary"
 		}
+		if fileView != "" {
+			viewType = fileView
+		}
 		element = map[string]any{
 			"blockType": "attachment",
 			"attachment": map[string]any{
@@ -667,7 +695,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		insertArgs["referenceBlockId"] = v
 	}
 
-	insertText, err := callMCPToolReturnText(ctx, "insert_document_block", insertArgs)
+	insertText, err := callMCPToolReturnTextOnServer(ctx, "doc", "insert_document_block", insertArgs)
 	if err != nil {
 		return apperrors.NewAPI(
 			"附件已上传，但正文 block 插入结果未知；请先检查媒体列表，不要重复上传或插入",
@@ -698,8 +726,8 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 	insertedBlockID := insertedDocBlockID(insertResult)
 
-	deps.Out.PrintInfo("[4/4] 回读验证媒体块...")
-	verifiedBlockID, verifyErr := verifyInsertedDocMedia(ctx, nodeID, insertedBlockID, resourceID, resourceURL)
+	fmt.Fprintln(cmd.ErrOrStderr(), "[4/4] 回读验证媒体块...")
+	verifiedBlockID, verifyErr := verifyInsertedDocMediaView(ctx, nodeID, insertedBlockID, resourceID, resourceURL, fileView)
 	if verifyErr != nil {
 		return docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, verifyErr)
 	}
@@ -707,7 +735,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		insertedBlockID = verifiedBlockID
 	}
 
-	return deps.Out.PrintJSON(map[string]any{
+	return emit(map[string]any{
 		"contractVersion": "doc.operation.v1",
 		"ok":              true,
 		"status":          "success",
@@ -753,6 +781,9 @@ func docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName s
 var docMediaVerifyWait = waitForDocVerification
 
 func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, resourceURL string) (string, error) {
+	return verifyInsertedDocMediaView(ctx, nodeID, blockID, resourceID, resourceURL, "")
+}
+func verifyInsertedDocMediaView(ctx context.Context, nodeID, blockID, resourceID, resourceURL, view string) (string, error) {
 	delays := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
 	var lastErr error
 	for attempt := 0; attempt <= len(delays); attempt++ {
@@ -761,7 +792,7 @@ func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, re
 			lastErr = err
 		} else {
 			lastErr = nil
-			if found := findVerifiedMediaBlock(blocks, blockID, resourceID, resourceURL); found != "" {
+			if found := findVerifiedMediaBlock(blocks, blockID, resourceID, resourceURL); found != "" && docMediaViewMatches(blocks, found, view) {
 				return found, nil
 			}
 		}
@@ -775,6 +806,50 @@ func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, re
 		return "", fmt.Errorf("媒体资源在有界回读窗口内仍无法读取: %w", lastErr)
 	}
 	return "", fmt.Errorf("媒体资源在有界回读窗口内仍不可见")
+}
+
+// MCP summary is persisted as the editor's wideCard; preview is unchanged.
+// The mapping is checked against the exact block ID, never another attachment.
+func docMediaViewMatches(value any, blockID, requested string) bool {
+	if requested == "" {
+		return true
+	}
+	expected := requested
+	if requested == "summary" {
+		expected = "wideCard"
+	}
+	var walk func(any) bool
+	walk = func(v any) bool {
+		switch x := v.(type) {
+		case []any:
+			if len(x) > 1 {
+				_, isNode := x[0].(string)
+				if attrs, ok := x[1].(map[string]any); ok && isNode && directDocBlockIdentity(attrs) == blockID {
+					return attrs["viewType"] == expected
+				}
+			}
+			for _, c := range x {
+				if walk(c) {
+					return true
+				}
+			}
+		case map[string]any:
+			if _, ok := x["jsonml"].(string); ok {
+				if decoded := docMediaReadbackValue(x); decoded != nil {
+					if _, same := decoded.(map[string]any); !same {
+						return walk(decoded)
+					}
+				}
+			}
+			for _, c := range x {
+				if walk(c) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(value)
 }
 
 func waitForDocVerification(ctx context.Context, delay time.Duration) error {

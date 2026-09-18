@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
 VERSION="${1:-${DWS_PACKAGE_VERSION:-}}"
 
@@ -98,6 +98,18 @@ verify_binary_version() {
     printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }
+  build_info="$(go version -m "$binary")" || {
+    printf '%s does not expose readable Go build information\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'build	CGO_ENABLED=1' || {
+    printf '%s was not built with CGO enabled\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'dep	safechat-go-sdk	' || {
+    printf '%s does not link the SafeChat backend\n' "$asset" >&2
+    return 1
+  }
 
   case "$asset" in
     dws-darwin-amd64*) target_os=darwin; target_arch=amd64 ;;
@@ -118,16 +130,18 @@ verify_binary_version() {
     printf '%s does not contain an embedded runtime manifest\n' "$asset" >&2
     return 1
   }
-  ps_count="$(find "$runtime_root/ps" -type f 2>/dev/null | wc -l | tr -d ' ')"
-  [ "$ps_count" = 123 ] || {
-    printf '%s contains %s ps files; expected 123\n' "$asset" "$ps_count" >&2
+  if [ -e "$runtime_root/ps" ] || [ -L "$runtime_root/ps" ]; then
+    printf '%s contains retired ps data files\n' "$asset" >&2
     return 1
-  }
+  fi
   target="$target_os/$target_arch"
   [ -f "$library" ] || {
     printf '%s does not contain its target runtime library\n' "$asset" >&2
     return 1
   }
+  if [ "$target_os" = linux ]; then
+    (cd "$ROOT" && go run ./scripts/build/linux-abi "$binary" "$library") || return 1
+  fi
   manifest_library_sha="$(sed -n 's/.*"library_sha256": "\([0-9a-f]*\)".*/\1/p' "$runtime_root/manifest.json")"
   if command -v sha256sum >/dev/null 2>&1; then
     actual_library_sha="$(sha256sum "$library" | awk '{print $1}')"
@@ -147,25 +161,7 @@ verify_binary_version() {
     printf '%s contains %s runtime libraries; expected exactly one\n' "$asset" "$library_count" >&2
     return 1
   }
-  ps_digest="$({
-    find "$runtime_root/ps" -type f | LC_ALL=C sort | while IFS= read -r path; do
-      if command -v sha256sum >/dev/null 2>&1; then
-        file_sha="$(sha256sum "$path" | awk '{print $1}')"
-      else
-        file_sha="$(shasum -a 256 "$path" | awk '{print $1}')"
-      fi
-      printf '%s  ps/%s\n' "$file_sha" "$(basename "$path")"
-    done
-  } | if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}')"
-  manifest_ps_digest="$(sed -n 's/.*"ps_manifest_sha256": "\([0-9a-f]*\)".*/\1/p' "$runtime_root/manifest.json")"
-  [ "${#manifest_ps_digest}" -eq 64 ] || {
-    printf '%s runtime manifest has an invalid ps checksum\n' "$asset" >&2
-    return 1
-  }
-  [ "$ps_digest" = "$manifest_ps_digest" ] || {
-    printf '%s ps payload checksum mismatch\n' "$asset" >&2
-    return 1
-  }
+
 }
 
 for asset in $EXPECTED_PLATFORM_ASSETS; do

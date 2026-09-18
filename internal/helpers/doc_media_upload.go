@@ -15,6 +15,12 @@ import (
 // runDocMediaUpload 上传绑定到文档 nodeId 的可复用媒体资源，但不插入正文块。
 // 白板 Vector/SVG 使用返回的 resourceId 与 resourceUrl 引用同一文档下的资源。
 func runDocMediaUpload(cmd *cobra.Command, _ []string) error {
+	return RunDocMediaUploadWithResult(cmd, func(data map[string]any) error { return deps.Out.PrintJSON(data) })
+}
+
+// RunDocMediaUploadWithResult shares the existing upload without coupling the
+// Shortcut to the legacy renderer. emit receives only a completed upload.
+func RunDocMediaUploadWithResult(cmd *cobra.Command, emit func(map[string]any) error) error {
 	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 	if err != nil {
 		return err
@@ -74,7 +80,7 @@ func runDocMediaUpload(cmd *cobra.Command, _ []string) error {
 		message := strings.ReplaceAll(err.Error(), uploadURL, "<redacted upload URL>")
 		return fmt.Errorf("document media upload failed: %s", message)
 	}
-	return deps.Out.PrintJSON(map[string]any{
+	return emit(map[string]any{
 		"nodeId":      nodeID,
 		"resourceId":  resourceID,
 		"resourceUrl": resourceURL,

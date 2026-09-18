@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 )
@@ -29,7 +30,7 @@ func TestCrossPlatformCoverageShortcutListDeclaresRuntimeSchemaDelivery(t *testi
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
 	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("execute shortcut list: %v", err)
 	}
 	var payload struct {
@@ -65,7 +66,7 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 		var stdout bytes.Buffer
 		cmd.SetOut(&stdout)
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any
@@ -112,7 +113,7 @@ func TestCrossPlatformCoverageChatCompatibilityHelpTierKeepsPublicCatalogSemanti
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
 	cmd.SetArgs([]string{"--service", "chat"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	var payload struct {
@@ -122,8 +123,8 @@ func TestCrossPlatformCoverageChatCompatibilityHelpTierKeepsPublicCatalogSemanti
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Count != 98 || len(payload.Shortcuts) != 98 {
-		t.Fatalf("default Chat public Catalog = count:%d rows:%d, want 98/98", payload.Count, len(payload.Shortcuts))
+	if payload.Count != 102 || len(payload.Shortcuts) != 102 {
+		t.Fatalf("default Chat public Catalog = count:%d rows:%d, want 102/102", payload.Count, len(payload.Shortcuts))
 	}
 	compatibility := 0
 	for _, row := range payload.Shortcuts {

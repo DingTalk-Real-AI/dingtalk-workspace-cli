@@ -201,7 +201,9 @@ func TestCrossPlatformCoverageEventBusCommandAllBranchesCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventReadyFDFromEnv = func() *os.File { return write }
-	eventResolvePersonal = func(context.Context, string, string) (personal.Identity, error) { return personal.Identity{}, fail }
+	eventResolvePersonal = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return personal.Identity{}, fail
+	}
 	if err := makeBus(string(dwsevent.SourceKindPersonalStream)).RunE(makeBus(string(dwsevent.SourceKindPersonalStream)), nil); !errors.Is(err, fail) {
 		t.Fatalf("personal identity error = %v", err)
 	}
@@ -212,7 +214,7 @@ func TestCrossPlatformCoverageEventBusCommandAllBranchesCoverage(t *testing.T) {
 		t.Fatalf("ready failure marker = %q", marker)
 	}
 	eventReadyFDFromEnv = func() *os.File { return nil }
-	eventResolvePersonal = func(context.Context, string, string) (personal.Identity, error) {
+	eventResolvePersonal = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open"}, nil
 	}
 	eventNewPersonalSource = func(context.Context, personalStreamSourceOptions) (*source.PersonalSource, error) { return nil, fail }

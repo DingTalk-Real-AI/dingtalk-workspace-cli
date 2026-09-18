@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -56,7 +57,7 @@ func runAttendanceCoverageCommand(t *testing.T, caller edition.ToolCaller, args 
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func runAttendanceRecordingCommand(t *testing.T, caller *attendanceRecordingCaller, args ...string) (string, error) {
@@ -72,7 +73,7 @@ func runAttendanceRecordingCommand(t *testing.T, caller *attendanceRecordingCall
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	err := root.ExecuteContext(context.Background())
+	err := corecmd.ExecuteContextForTest(root, context.Background())
 	return output.String(), err
 }
 
@@ -195,7 +196,7 @@ func TestCrossPlatformCoverageAttendanceConfirmedMutationEdges(t *testing.T) {
 	installExampleGlobalFlags(root)
 	root.SilenceErrors, root.SilenceUsage = true, true
 	root.SetArgs([]string{"group", "create", "--name=group", "--type=TURN", "--yes"})
-	_ = root.Execute()
+	_ = corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageAttendanceConfirmedMutationSuccessCoverage(t *testing.T) {

@@ -32,6 +32,13 @@ import (
 // empty. Explicit Safety overrides Risk expansion; Contract is pass-through into
 // ContractFinal when authored.
 func FromShortcut(s Shortcut) corecmd.Spec {
+	return fromShortcut(&s)
+}
+
+func fromShortcut(s *Shortcut) corecmd.Spec {
+	if s == nil {
+		return corecmd.Spec{}
+	}
 	safety := s.Safety
 	if !safetySpecDeclared(safety) {
 		safety = shortcutSafetySpec(s.risk())
@@ -54,7 +61,7 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 		OutputRollout: s.OutputRollout,
 		// Only the prose part: corecmd.New appends its own 参数约束
 		// section, so the adapter must not pre-render it.
-		Long:        shortcutIntentProse(s),
+		Long:        shortcutIntentProse(*s),
 		Flags:       fromShortcutFlags(s.Flags),
 		Constraints: fromShortcutConstraints(s.Constraints),
 		Safety:      safety,
@@ -72,12 +79,12 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 				return apperrors.NewInternal(fmt.Sprintf(
 					"shortcut %s %s 未实现 Execute", s.Service, s.Command))
 			}
-			return s.Execute(&RuntimeContext{cmd: c.Command(), shortcut: s})
+			return s.Execute(&RuntimeContext{cmd: c.Command(), shortcut: *s})
 		},
 	}
 }
 
-func fromShortcutPostMount(s Shortcut) func(*cobra.Command) {
+func fromShortcutPostMount(s *Shortcut) func(*cobra.Command) {
 	hasVisibleFlagAliases := false
 	for _, flag := range s.Flags {
 		if flag.AliasesVisible && len(flag.Aliases) > 0 {
@@ -158,12 +165,12 @@ func shortcutExamples(tips []string) string {
 	return "  " + strings.Join(tips, "\n  ")
 }
 
-func fromShortcutValidate(s Shortcut) func(*cobra.Command, []string) error {
+func fromShortcutValidate(s *Shortcut) func(*cobra.Command, []string) error {
 	if s.Validate == nil {
 		return nil
 	}
 	return func(cmd *cobra.Command, _ []string) error {
-		return s.Validate(&RuntimeContext{cmd: cmd, shortcut: s})
+		return s.Validate(&RuntimeContext{cmd: cmd, shortcut: *s})
 	}
 }
 
@@ -257,9 +264,10 @@ func fromShortcutConstraints(constraints []Constraint) []corecmd.Constraint {
 			panic(fmt.Sprintf("unknown shortcut constraint kind %q", c.Kind))
 		}
 		out = append(out, corecmd.Constraint{
-			Kind:        kind,
-			Flags:       append([]string(nil), c.Flags...),
-			Description: c.Description,
+			Kind:         kind,
+			Flags:        append([]string(nil), c.Flags...),
+			Description:  c.Description,
+			PresenceOnly: c.PresenceOnly,
 		})
 	}
 	return out
