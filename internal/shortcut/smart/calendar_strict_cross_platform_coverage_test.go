@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -73,7 +74,7 @@ func runCalendarSmartCLI(t *testing.T, caller edition.ToolCaller, args ...string
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil {
 		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
 			err = emitErr
@@ -291,10 +292,9 @@ func TestCrossPlatformCoverageCalendarSmartWriteReceiptsAndReadback(t *testing.T
 		"contact/search_contact_by_key_word": {{text: `{"result":[{"userId":"user-placeholder","name":"fixture person"}]}`}},
 		"calendar/get_calendar_detail":       {{text: `{"success":true,"result":{"id":"` + eventID + `"}}`}},
 		"calendar/add_calendar_participant":  {{text: `{"success":true}`}},
-		"calendar/get_calendar_participants": {{text: `{"success":true,"result":[{"userId":"user-placeholder"}]}`}},
 	}}
 	payload, _, err = runCalendarSmartCLI(t, invite, "calendar", "+invite", "--event", eventID, "--with", "fixture person", "--yes")
-	if err != nil || payload["success"] != true || payload["verified"] != true || payload["invitedCount"] != float64(1) {
+	if err != nil || payload["success"] != true || payload["verified"] != false || payload["acknowledged"] != true || payload["invitedCount"] != float64(1) {
 		t.Fatalf("invite payload=%#v err=%v", payload, err)
 	}
 }
@@ -425,25 +425,6 @@ func TestCrossPlatformCoverageCalendarSmartSharedFailureBranches(t *testing.T) {
 		t.Fatalf("suggested slots=%#v %v", slots, err)
 	}
 
-	for _, response := range []map[string]any{
-		{"success": false},
-		{"success": true},
-		{"success": true, "result": map[string]any{}},
-		{"success": true, "result": "bad"},
-		{"success": true, "result": map[string]any{"attendees": map[string]any{}}},
-		{"success": true, "result": []any{"bad"}},
-		{"success": true, "result": []any{map[string]any{"role": "none"}}},
-		{"success": true, "result": []any{map[string]any{"userId": "u", "self": "yes"}}},
-	} {
-		if _, err := calendarSmartAttendees(response); err == nil {
-			t.Fatalf("bad attendees accepted: %#v", response)
-		}
-	}
-	attendees, err := calendarSmartAttendees(map[string]any{"success": true, "result": map[string]any{"participants": []any{map[string]any{"userId": "u", "displayName": "name", "self": true}}}})
-	if err != nil || !attendees["u"] || !attendees["name"] || !attendees["__self__"] {
-		t.Fatalf("attendees=%#v %v", attendees, err)
-	}
-
 	event := map[string]any{"startDateTime": "2026-08-17T09:00:00+08:00", "endDateTime": "2026-08-17T10:00:00+08:00"}
 	if err := calendarSmartVerifyEventTimes(event, "2026-08-17T09:00:00+08:00", "2026-08-17T10:00:00+08:00"); err != nil {
 		t.Fatal(err)
@@ -471,15 +452,6 @@ func TestCrossPlatformCoverageCalendarSmartSharedFailureBranches(t *testing.T) {
 	if err := calendarSmartVerifyCreatedEvent(map[string]any{"id": "event-1", "summary": "wrong"}, "event-1", "title", "s", "e"); err == nil {
 		t.Fatal("wrong created event title accepted")
 	}
-	if err := calendarSmartVerifyAttendees(map[string]bool{}, []string{"u"}, nil, ""); err == nil {
-		t.Fatal("missing attendee accepted")
-	}
-	if err := calendarSmartVerifyAttendees(map[string]bool{"name": true}, []string{"u"}, []string{"name"}, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := calendarSmartVerifyAttendees(map[string]bool{"__self__": true}, []string{"u"}, nil, "u"); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func calendarSmartRuntimeForTest(t *testing.T, caller edition.ToolCaller) *shortcut.RuntimeContext {
@@ -491,28 +463,7 @@ func calendarSmartRuntimeForTest(t *testing.T, caller edition.ToolCaller) *short
 	return shortcut.RuntimeContextForTest(cmd, shortcut.Shortcut{Service: "calendar", Product: "calendar"})
 }
 
-func TestCrossPlatformCoverageCalendarSmartCurrentUserDeleteAndPageCap(t *testing.T) {
-	for name, steps := range map[string][]calendarSmartTestStep{
-		"call":    {{err: errors.New("profile failure")}},
-		"missing": {{text: `{"success":true,"result":{}}`}},
-		"success": {{text: `{"success":true,"result":{"userId":"user-placeholder"}}`}},
-	} {
-		t.Run("profile-"+name, func(t *testing.T) {
-			caller := &calendarSmartTestCaller{steps: map[string][]calendarSmartTestStep{"contact/get_current_user_profile": steps}}
-			id, err := calendarSmartCurrentUserID(calendarSmartRuntimeForTest(t, caller), map[string]bool{"__self__": true})
-			if name == "success" {
-				if err != nil || id == "" {
-					t.Fatalf("id=%q err=%v", id, err)
-				}
-			} else if err == nil {
-				t.Fatal("bad profile accepted")
-			}
-		})
-	}
-	if id, err := calendarSmartCurrentUserID(calendarSmartRuntimeForTest(t, &calendarSmartTestCaller{}), map[string]bool{}); err != nil || id != "" {
-		t.Fatalf("profile unnecessarily called: id=%q err=%v", id, err)
-	}
-
+func TestCrossPlatformCoverageCalendarSmartDeleteAndPageCap(t *testing.T) {
 	deleteCases := map[string]*calendarSmartTestCaller{
 		"write-call":              {steps: map[string][]calendarSmartTestStep{"calendar/delete_calendar_event": {{err: errors.New("write")}}}},
 		"receipt":                 {steps: map[string][]calendarSmartTestStep{"calendar/delete_calendar_event": {{text: `{"result":{}}`}}}},

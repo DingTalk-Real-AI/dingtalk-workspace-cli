@@ -16,6 +16,7 @@ package smart
 import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
@@ -33,10 +34,11 @@ import (
 //
 //	dws minutes +action-items
 var ActionItems = shortcut.Shortcut{
-	Service:     "minutes",
-	Command:     "+action-items",
-	Product:     "minutes",
-	Description: "读取指定或我最新一条听记中已抽取的行动项",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes",
+	Command:       "+action-items",
+	Product:       "minutes",
+	Description:   "读取指定或我最新一条听记中已抽取的行动项",
 	Intent: "当你要读取已知 taskUuid（--id）的听记行动项，或不传 --id 自动选择自己最新听记时使用；" +
 		"只接受服务端显式 actions/dingtalkTodoList 数组，合法空数组表示没有抽取到行动项，缺字段或错误响应不会被当成空成功。" +
 		"这是只读的 Minutes 产物读取，不会创建或修改钉钉 Todo。",
@@ -44,14 +46,14 @@ var ActionItems = shortcut.Shortcut{
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
 	},
-	Contract: minutesSmartContract(
+	Contract: withMinutesActionItemsResult(minutesSmartContract(
 		"+action-items",
 		"读取最新听记中已抽取的行动项",
 		"要读取指定听记（--id）或默认最新听记中由听记服务抽取的 actions/dingtalkTodoList 时使用；该命令只读，不会创建钉钉待办。",
 		[]string{"要创建或修改真正的钉钉待办时使用 Todo 产品命令"},
 		[]string{"dws minutes +action-items --id <taskUuid>", "dws minutes +action-items"},
 		nil,
-	),
+	)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid；不传时选择我最新的一条"},
 	},
@@ -88,13 +90,28 @@ var ActionItems = shortcut.Shortcut{
 		todosData, err := rt.CallMCPData("minutes", "list_minutes_todos", map[string]any{
 			"taskUuid": taskUUID,
 		})
-		if err != nil {
-			return err
+		fact := minutesdata.FailedTodos(taskUUID, err)
+		if err == nil {
+			fact = minutesdata.InspectTodos(taskUUID, todosData)
 		}
-		if err := minutesdata.ValidateArtifact("todos", taskUUID, todosData); err != nil {
-			return err
+		if fact.Successful() {
+			meta := &output.Meta{Count: output.NewCount(len(fact.Items))}
+			return output.StoreResult(rt.Command().Context(), output.Success(fact.Payload(), output.WithMeta(meta)))
 		}
-		return rt.Output(todosData["result"])
+		started := true
+		return output.StoreResult(rt.Command().Context(), output.Failure(&output.ErrorInfo{
+			Type:             "api",
+			Subtype:          "minutes_todos_" + string(fact.State),
+			Message:          fact.Message,
+			Hint:             "只有 state=known_empty 才能解释为没有行动项；当前状态不得改写为空结果。",
+			Operation:        "minutes/list_minutes_todos",
+			Origin:           "mcp",
+			Stage:            "artifact_read",
+			ExecutionStarted: &started,
+			Retryable:        false,
+			Details:          fact.Ledger(),
+			TechnicalDetail:  fact.Message,
+		}))
 	},
 }
 

@@ -212,7 +212,18 @@ func findRestoredDriveNode(rt *shortcut.RuntimeContext, recycleItem map[string]a
 			return "", driveResponseError("drive/restore_recycle_item", "restored_node_ambiguous", "服务端已接受恢复，但按原名称找到多个节点，无法唯一确认恢复终态；请用 +list 核对")
 		}
 	}
-	return "", driveResponseError("drive/restore_recycle_item", "restored_node_not_found", "服务端已接受恢复，但没有返回节点 ID，且在有界等待后仍按原名称搜索不到恢复后的节点；远端效果未知，请先用 +list 确认")
+	return "", driveResponseErrorWithDetails(
+		"drive/restore_recycle_item",
+		"restored_node_not_found",
+		"服务端已接受恢复，但没有返回节点 ID，且在有界等待后仍按原名称搜索不到恢复后的节点；远端效果未知，请先用 +list 确认",
+		map[string]any{"resource": map[string]any{
+			"resourceType":  "recycle_item",
+			"recycleItemId": nestedString(recycleItem, "recycleItemId", "id"),
+			"originalName":  name, "originalPath": originalPath,
+			"accepted": true, "readbackComplete": false,
+			"ownership": "known_target",
+		}},
+	)
 }
 
 func findRestoredDriveNodeAtOriginalPath(rt *shortcut.RuntimeContext, originalPath, name string) (string, bool, error) {
@@ -379,7 +390,7 @@ func publishMutationShortcut(command string, published bool) shortcut.Shortcut {
 	if published {
 		flags = append(flags, shortcut.Flag{Name: "permission", Type: shortcut.FlagString, Default: "DOWNLOADER", Desc: "公开权限", Enum: []string{"READER", "DOWNLOADER", "EDITOR"}})
 	}
-	return shortcut.Shortcut{
+	result := shortcut.Shortcut{
 		Service: "drive", Command: command, Product: "drive", Description: description, Intent: useWhen,
 		Risk: shortcut.RiskHighWrite, Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: driveContract(command, description, useWhen,
@@ -415,6 +426,11 @@ func publishMutationShortcut(command string, published bool) shortcut.Shortcut {
 			return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "publish": verified})
 		},
 	}
+	if published {
+		result.Contract.Interface.Availability = contract.InterfaceUnavailable
+		result.Contract.Interface.Reason = "Current ordinary-file and online-document fixtures return operation.notSupported; keep CLI compatibility but exclude Agent selection until a reviewed eligible-node set→get→unset canary passes."
+	}
+	return result
 }
 
 func boolField(data map[string]any, keys ...string) (bool, bool) {
@@ -551,6 +567,16 @@ var Upload = shortcut.Shortcut{
 			}
 		}
 		if remoteName := firstString(verified, "name", "fileName"); !driveReadbackNameMatches(verified, name) {
+			resource := make(map[string]any, len(verified)+6)
+			for key, value := range verified {
+				resource[key] = value
+			}
+			resource["resourceType"] = "file"
+			resource["nodeId"] = nodeID
+			resource["requestedName"] = name
+			resource["observedName"] = remoteName
+			resource["sizeBytes"] = info.Size()
+			resource["ownership"] = "owned"
 			return driveCommittedWriteMismatch(
 				operation,
 				"readback_mismatch",
@@ -558,7 +584,7 @@ var Upload = shortcut.Shortcut{
 				nodeID,
 				name,
 				remoteName,
-				verified,
+				resource,
 			)
 		}
 		remoteSize, hasRemoteSize := firstInt64(verified, "fileSize", "size", "byteSize", "length")

@@ -147,8 +147,7 @@ else
 	# those packages' dependency graph. All changed production packages remain
 	# instrumented via coverpkg, so unexercised statements still count as
 	# uncovered while redundant zero-test driver binaries are avoided.
-	go test -count=1 -timeout="$TIMEOUT" -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
-		-coverpkg="$COVERPKG" -coverprofile="$PROFILE" -covermode=atomic "$@"
+	sh ./scripts/ci/run-platform-coverage-tests.sh "$PROFILE" "$COVERPKG" "$TIMEOUT" "$@"
 fi
 
 ./scripts/policy/check-coverage-gate.sh \

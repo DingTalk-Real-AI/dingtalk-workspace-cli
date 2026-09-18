@@ -15,15 +15,15 @@ package contractfinal
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 )
 
-var contractFinalByCommand sync.Map // *cobra.Command → *contract.ContractFinalPayload
+var contractFinalByCommand commandstore.Map // live command → *contract.ContractFinalPayload
 
 // RegisterRuntimeContractFinal annotates dws.schema.contract then stores the
 // typed final Schema overlay. This is the atomic annotate+store implementation.
@@ -37,6 +37,22 @@ func RegisterRuntimeContractFinal(cmd *cobra.Command, payload contract.ContractF
 	runtimeannotate.AnnotateRuntimeContract(cmd)
 	p := cloneContractFinalPayload(payload)
 	contractFinalByCommand.Store(cmd, &p)
+}
+
+// RegisterOwnedRuntimeContractFinal transfers an already normalized payload
+// from the command builder into the runtime store. The caller must not retain
+// or mutate payload after this call. Read access remains defensive through
+// RuntimeContractFinal, which always returns a deep copy.
+//
+// This narrow seam avoids cloning the complete typed contract twice while
+// constructing the production tree. General callers should keep using
+// RegisterRuntimeContractFinal when they cannot transfer ownership.
+func RegisterOwnedRuntimeContractFinal(cmd *cobra.Command, payload contract.ContractFinalPayload) {
+	if cmd == nil {
+		return
+	}
+	runtimeannotate.AnnotateRuntimeContract(cmd)
+	contractFinalByCommand.Store(cmd, &payload)
 }
 
 // RuntimeContractFinal returns the registered final Schema overlay (read-only).
@@ -61,6 +77,7 @@ func cloneContractFinalPayload(in contract.ContractFinalPayload) contract.Contra
 	out.Parameters = cloneSlice(in.Parameters)
 	for i := range out.Parameters {
 		out.Parameters[i].Enum = cloneSlice(in.Parameters[i].Enum)
+		out.Parameters[i].AnyOf = cloneSlice(in.Parameters[i].AnyOf)
 		if in.Parameters[i].Required != nil {
 			required := *in.Parameters[i].Required
 			out.Parameters[i].Required = &required
@@ -145,7 +162,8 @@ func HasRuntimeContractFinal(cmd *cobra.Command) bool {
 // invocation identity. declared distinguishes a matched declaration whose
 // safety is unavailable or conflicting from a legacy invocation with no unified
 // declaration context. Repeated equivalent command-tree registrations are
-// accepted; conflicting matches fail closed with ok=false.
+// accepted; conflicting matches fail closed with ok=false. Only live commands
+// participate; the invocation owner must retain its command tree.
 func ResolveRuntimeSafety(canonicalPath, cliPath string) (safety contract.SafetySpec, declared, ok bool) {
 	canonicalPath = strings.TrimSpace(canonicalPath)
 	cliPath = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(cliPath), "dws "))

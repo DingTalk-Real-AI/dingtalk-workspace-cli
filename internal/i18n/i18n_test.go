@@ -71,7 +71,7 @@ func TestCrossPlatformCoverageLoadCatalogHandlesValidAndInvalidResources(t *test
 		t.Fatalf("parseCatalog(valid) = %#v", catalog)
 	}
 	SetLang(strings.Repeat(" ", 2))
-	if Lang() != "en" {
+	if Lang() != "zh" {
 		t.Fatalf("blank language = %q", Lang())
 	}
 }

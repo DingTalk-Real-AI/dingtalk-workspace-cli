@@ -20,29 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CommandSafety holds the safety metadata for a CLI command, resolved at
-// runtime via ResolveMeta. This is a read-only view — NOT a second safety
-// source. Production Meta is projected from the runtime-assembled
-// SchemaRegistry into a cached map[cli_path]CommandMeta during
-// deliverySchemaCatalog's sync.Once; steady-state ResolveMeta / leaf --help
-// are O(1) map lookups (同源 with assembly, not a separate gob authority).
-type CommandSafety struct {
-	Effect       string // read / write / destructive
-	Risk         string // low / medium / high
-	Confirmation string // not_required / user_required
-	Idempotency  string // idempotent / retryable / non_idempotent / unknown
-}
-
-// ShouldRender returns true when any reviewed safety metadata is available.
-// Agent-visible leaves render the full tuple even for read/low operations so
-// absence is never mistaken for an unknown or unsafe command.
-func (s CommandSafety) ShouldRender() bool {
-	return strings.TrimSpace(s.Effect) != "" ||
-		strings.TrimSpace(s.Risk) != "" ||
-		strings.TrimSpace(s.Confirmation) != "" ||
-		strings.TrimSpace(s.Idempotency) != ""
-}
-
 // SafetyForCLIPath returns the safety metadata for a command identified by its
 // CLI path (e.g. "dev app delete"). Returns ok=false when the path is absent
 // from the Schema surface (utility commands, hidden commands, shortcuts), or

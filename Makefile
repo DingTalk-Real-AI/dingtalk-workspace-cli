@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build check-safechat test-aem test-safechat rebuild test test-plan test-auth-legacy-compat typed-validation-errors shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -22,6 +22,7 @@ help:
 	@printf "  make test-safechat - Run the message-crypto tests against the SafeChat backend\n"
 	@printf "  make test-plan     - Verify CI test and full-suite coverage package plans cover their scopes exactly once\n"
 	@printf "  make test-auth-legacy-compat - Run stable legacy authentication compatibility regressions\n"
+	@printf "  make typed-validation-errors - Enforce typed framework parameter-validation boundaries\n"
 	@printf "  make shortcut-public-e2e-proof - Prove every reviewed Devdoc/HRbrain/PAT public Shortcut through exact and owning raw execution\n"
 	@printf "  make lint          - Run formatting checks, go vet, and staticcheck\n"
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
@@ -55,15 +56,16 @@ build:
 rebuild:
 	@./scripts/dev/build.sh
 
-# No dws command imports internal/msgcrypto yet, so a tagged CLI build would
-# link nothing extra and look identical to the default binary. Gate the package
-# itself until a caller wires it in.
 check-safechat:
-	@CGO_ENABLED=1 $(GO) build -tags safechat ./internal/msgcrypto/...
-	@CGO_ENABLED=1 $(GO) vet -tags safechat ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) build ./cmd ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) vet ./internal/msgcrypto/...
+
+test-aem:
+	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@$(POLICY_ENV) $(GO) -C third_party/aem-go-sdk test -count=1 -timeout=2m ./...
 
 test-safechat:
-	@CGO_ENABLED=1 $(GO) test -count=1 -tags safechat ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) test -count=1 ./internal/msgcrypto/...
 
 test:
 	@DWS_PACKAGE_VERSION="$(DWS_PACKAGE_VERSION)" $(GO) test -count=1 -timeout=10m ./...
@@ -74,6 +76,9 @@ test-plan:
 test-auth-legacy-compat:
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@GO="$(GO)" $(POLICY_ENV) ./scripts/policy/check-auth-legacy-compat.sh
+
+typed-validation-errors:
+	@GO="$(GO)" ./scripts/policy/check-typed-validation-errors.sh
 
 shortcut-public-e2e-proof: build
 	@GO="$(GO)" DWS_PACKAGE_VERSION="$(DWS_PACKAGE_VERSION)" ./scripts/policy/check-shortcut-public-e2e-proof.sh
@@ -100,15 +105,18 @@ fmt:
 	$(GO_SOURCE_LIST) > "$$go_files"; \
 	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
-policy: test-auth-legacy-compat shortcut-public-e2e-proof
+policy: test-aem test-auth-legacy-compat typed-validation-errors shortcut-public-e2e-proof
 	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@$(POLICY_ENV) ./scripts/policy/check-runtime-payload.sh --allow-unsupported-tools
+	@$(POLICY_ENV) ./scripts/build/generate-runtime-payload-assets.sh --check
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
 	@$(POLICY_ENV) ./scripts/policy/check-multi-im-skill-chain.sh
 	@$(POLICY_ENV) ./scripts/policy/check-multi-doc-skill-chain.sh
 	@python3 scripts/run_chat_shortcut_live_audit_test.py
 	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
-	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@SCHEMA_CACHE_PROTO_CHECK=1 $(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@$(POLICY_ENV) ./scripts/policy/check-module-tidy.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-concepts.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-alias-cooccurrence.sh
 	@$(POLICY_ENV) $(GO) test -count=1 ./internal/app -run '^(TestParamAlias(FixtureThroughEmbeddedDeliveryPath|ReadCommandFinalPayload|WriteCommandFinalPayload|CanonicalConflictFailsBeforeRunE|BlockedFlagReachesReviewedFinalError)|TestFlagConflictErrorFormattingIsDeterministic)$$'
@@ -232,6 +240,9 @@ generate-schema:
 # Optional local/CI dump of an assembled Catalog under artifacts/ by default.
 # Override SCHEMA_CATALOG_OUTPUT and SCHEMA_META_INDEX_OUTPUT as needed. This
 # is not a go:generate or production delivery step.
+check-schema-cache-proto:
+	@SCHEMA_CACHE_PROTO_CHECK=1 ./scripts/generate-schema-cache-proto.sh --check
+
 generate-schema-catalog:
 	$(GO) run -a ./internal/generator/cmd_schema_catalog \
 		-root . \

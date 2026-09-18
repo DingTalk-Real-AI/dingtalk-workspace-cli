@@ -6,11 +6,15 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
@@ -217,6 +221,2595 @@ install_binary
 	}
 }
 
+func TestInstallScriptRepoFileIsExecutable(t *testing.T) {
+	repoScript, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install.sh) error = %v", err)
+	}
+	info, err := os.Stat(repoScript)
+	if err != nil {
+		t.Fatalf("Stat(install.sh) error = %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("scripts/install.sh mode = %s; want executable bit (main ships 100755)", info.Mode())
+	}
+
+	cmd := exec.Command("git", "ls-files", "-s", "--", "scripts/install.sh")
+	cmd.Dir = filepath.Join("..", "..")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git ls-files scripts/install.sh: %v", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) < 1 || fields[0] != "100755" {
+		t.Fatalf("git index mode for scripts/install.sh = %q; want 100755", strings.TrimSpace(string(out)))
+	}
+}
+
+func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+	scriptText := string(scriptData)
+	if !strings.Contains(scriptText, `schema_tree="${shared_dir}/dws/schema"`) {
+		t.Fatal("install.sh must resolve schema_tree under dws/schema before identity cleanup")
+	}
+	if !strings.Contains(scriptText, `find "$schema_tree" -name 'identity.json'`) {
+		t.Fatal("install.sh must delete identity.json only under schema_tree")
+	}
+	if strings.Contains(scriptText, `find "$shared_dir" -name 'identity.json'`) {
+		t.Fatal("install.sh must not recursively delete identity.json under the wide shared_dir")
+	}
+	if !strings.Contains(scriptText, "shared_dir_preexisted=0") || !strings.Contains(scriptText, "custom_shared_root=0") {
+		t.Fatal("install.sh must distinguish installer-created dedicated roots from pre-existing custom SHARED_DIR roots")
+	}
+	if !strings.Contains(scriptText, `custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1`) {
+		t.Fatal("install.sh must gate root chmod behind custom+pre-existing shared root checks")
+	}
+	if strings.Count(scriptText, `chmod a+rX "$shared_dir"`) != 1 {
+		t.Fatal(`install.sh must chmod a+rX "$shared_dir" only on the installer-created/dedicated-root branch`)
+	}
+	layoutIdx := strings.Index(scriptText, "shared_schema_layout_safe")
+	cleanupIdx := strings.Index(scriptText, `find "$schema_tree" -name 'identity.json'`)
+	chmodIdx := strings.Index(scriptText, "! shared_schema_make_artifacts_readable")
+	artifactIdx := strings.Index(scriptText, `schema_cache_artifacts_present "$schema_tree"`)
+	if layoutIdx < 0 || cleanupIdx < 0 || layoutIdx > cleanupIdx {
+		t.Fatal("install.sh must validate cache paths before sidecar cleanup")
+	}
+	if chmodIdx < 0 || artifactIdx < 0 || chmodIdx < artifactIdx {
+		t.Fatal("install.sh must validate and warm artifacts before changing permissions")
+	}
+	if strings.Contains(scriptText, `chmod -R a+rX "$schema_tree"`) || strings.Contains(scriptText, "chmod -R a+rX \"$(dirname") {
+		t.Fatal("install.sh must not recursively chmod schema cache contents")
+	}
+
+	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
+	// 1777, so a root under it is other-traversable all the way up.
+	traversableRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
+	writeFakeBinary := func(t *testing.T, binDir, name, body string) {
+		t.Helper()
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, name), []byte(body), 0o755)
+	}
+
+	t.Run("unsupported arch never claims success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", "#!/bin/sh\nexit 0\n")
+		harness := string(scriptData[:cut]) + `
+		detect_os() { printf '%s\n' windows; }
+		detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("unsupported arch installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("unsupported arch claimed shared cache success:\n%s", text)
+		}
+		if _, err := os.Stat(shared); !os.IsNotExist(err) {
+			t.Fatalf("unsupported arch created shared cache dir: %v", err)
+		}
+	})
+
+	t.Run("zero files is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", "#!/bin/sh\nexit 0\n")
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("empty cache installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("empty write claimed shared cache success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not written") {
+			t.Fatalf("empty write missing skip warning:\n%s", text)
+		}
+	})
+
+	t.Run("success requires artifacts", func(t *testing.T) {
+		root := traversableRoot(t, ".dws-messaging-success-")
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", `#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("populated cache installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("populated write did not claim success:\n%s", text)
+		}
+	})
+
+	t.Run("fingerprint leftover is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", `#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.legacyfp.json"
+`)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("legacy fingerprint installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("legacy fingerprint sidecar claimed shared cache success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not written") {
+			t.Fatalf("legacy fingerprint sidecar missing skip warning:\n%s", text)
+		}
+	})
+}
+
+func TestInstallScriptSharedSchemaCacheRejectsUnsafeExistingObjects(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	run := func(t *testing.T, root, shared string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+	detect_os() { printf '%s\n' linux; }
+	detect_arch() { printf '%s\n' amd64; }
+	INSTALL_DIR="` + binDir + `"
+	INSTALL_NAME=dws-test
+	build_shared_schema_cache
+	`
+		harnessPath := filepath.Join(root, "unsafe-cache-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("unsafe cache harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("schema symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws", "schema")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("dws symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("hardlink is not chmodded", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outside := filepath.Join(root, "outside-identity.json")
+		mustWriteFile(t, outside, []byte("keep"), 0o600)
+		if err := os.Link(outside, filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("outside hardlink mode = %04o, want 0600", info.Mode().Perm())
+		}
+	})
+
+	t.Run("non-regular object is rejected", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(edition, "identity.json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		if _, err := os.Stat(filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatalf("FIFO was removed: %v", err)
+		}
+	})
+}
+
+func TestInstallScriptSharedCachePathSafetyPrecedesMutation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	run := func(t *testing.T, root, shared string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "cache-path-safety-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("cache path safety harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("planted probe symlink is not followed", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		victim := filepath.Join(outside, "victim")
+		if err := os.Symlink(victim, filepath.Join(shared, ".dws-schema-cache-write-test")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		if _, err := os.Lstat(victim); !os.IsNotExist(err) {
+			t.Fatalf("write probe followed the planted symlink and created %s: %v", victim, err)
+		}
+		if _, err := os.Lstat(filepath.Join(shared, ".dws-schema-cache-write-test")); err != nil {
+			t.Fatalf("planted probe entry was removed: %v", err)
+		}
+	})
+
+	t.Run("symlinked shared root is rejected before mutation", func(t *testing.T) {
+		root := t.TempDir()
+		outside := filepath.Join(root, "outside")
+		edition := filepath.Join(outside, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(edition, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		shared := filepath.Join(root, "link")
+		if err := os.Symlink(outside, shared); err != nil {
+			t.Fatal(err)
+		}
+		out := run(t, root, shared)
+		if !strings.Contains(out, "unsafe cache path") {
+			t.Fatalf("symlinked shared root must be reported, output:\n%s", out)
+		}
+		if _, err := os.Stat(sentinel); err != nil {
+			t.Fatalf("outside identity.json was mutated through the symlinked root: %v", err)
+		}
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+}
+
+func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(scriptData)
+	for _, want := range []string{
+		"function Test-SchemaCacheArtifactsPresent",
+		"function Get-SchemaCacheTree",
+		"function Build-SharedSchemaCache",
+		"function Initialize-SharedSchemaCacheRoot",
+		"function Protect-SharedSchemaCacheTree",
+		"function Set-SharedSchemaCacheAcl",
+		"function Test-SharedSchemaCachePathTrusted",
+		"function Get-WindowsElevationState",
+		"function Test-IsWindowsElevated",
+		"DWS_SCHEMA_CACHE_DIR",
+		"schema --all",
+		"identity.json",
+		"meta.cache",
+		"registry.shards.cache",
+		"payloads.shards.cache",
+		"first schema command will build a per-user cache",
+		"Shared schema cache built",
+		"Schema cache not written",
+		"Build-SharedSchemaCache",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("install.ps1 missing schema-cache contract %q", want)
+		}
+	}
+	buildFn := extractPowerShellFunction(t, text, "Build-SharedSchemaCache")
+	guardEnd := strings.Index(buildFn, "$arch = Get-Arch")
+	if guardEnd < 0 || !strings.Contains(buildFn[:guardEnd], "if (Test-IsWindowsElevated)") {
+		t.Fatal("Build-SharedSchemaCache must check Windows elevation before touching cache paths")
+	}
+	guard := buildFn[:guardEnd]
+	if !strings.Contains(guard, "first schema command will build a per-user cache") || !strings.Contains(guard, "return") {
+		t.Fatal("elevated Windows cache guard must explain the fallback and return")
+	}
+	if !strings.Contains(text, "function Get-WindowsElevationState") || !strings.Contains(text, "return $null") {
+		t.Fatal("Windows elevation detection must fail closed when token state is indeterminate")
+	}
+	if !strings.Contains(buildFn, "Test-SchemaCacheArtifactsPresent") {
+		t.Fatal("Build-SharedSchemaCache must verify artifacts before claiming success")
+	}
+	if !strings.Contains(buildFn, "Initialize-SharedSchemaCacheRoot") {
+		t.Fatal("Build-SharedSchemaCache must Initialize-SharedSchemaCacheRoot instead of bare New-Item")
+	}
+	if !strings.Contains(buildFn, "Get-SchemaCacheTree") {
+		t.Fatal("Build-SharedSchemaCache must resolve the precise dws\\schema tree before cleanup")
+	}
+	if !strings.Contains(buildFn, "Get-SchemaCacheTree -Base $cacheDir") {
+		t.Fatal("Build-SharedSchemaCache must derive schemaTree from cache base, not delete under bare cacheDir")
+	}
+	if strings.Contains(buildFn, "Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter \"identity.json\"") {
+		t.Fatal("Build-SharedSchemaCache must not recurse identity cleanup under bare $cacheDir")
+	}
+	if !strings.Contains(buildFn, "Protect-SharedSchemaCacheTree") {
+		t.Fatal("Build-SharedSchemaCache must Protect-SharedSchemaCacheTree after a successful warm")
+	}
+	if !strings.Contains(buildFn, "Protect-SharedSchemaCacheTree -Path $schemaTree") {
+		t.Fatal("Build-SharedSchemaCache must protect only the dws\\schema subtree, not the wide cache base")
+	}
+	if strings.Contains(buildFn, "Protect-SharedSchemaCacheTree -Path $cacheDir") {
+		t.Fatal("Build-SharedSchemaCache must not recursively protect the wide $cacheDir base")
+	}
+	trustFn := extractPowerShellFunction(t, text, "Test-SharedSchemaCachePathTrusted")
+	if strings.Contains(trustFn, "FileSystemRights]::Modify -bor") || strings.Contains(trustFn, "FileSystemRights]::FullControl -bor") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must not OR Modify/FullControl into the write probe mask")
+	}
+	if !strings.Contains(trustFn, "FileSystemRights]::Write -bor") || !strings.Contains(trustFn, "FileSystemRights]::Delete -bor") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must probe real Write/Delete bits")
+	}
+	// Every granting ACE is adjudicated, inheritable ones included: the
+	// installer creates dws\schema below the accepted root, so an
+	// inherit-only write ACE becomes effective on those children and must
+	// reject the root instead of being skipped.
+	if strings.Contains(trustFn, "$isOrdinary") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must check every Allow ACE, not only ordinary SIDs")
+	}
+	if !strings.Contains(trustFn, "$trustedSids") || !strings.Contains(trustFn, "-notcontains $sid") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must attribute write ACEs to a trusted-SID set")
+	}
+	if strings.Contains(trustFn, "PropagationFlags]::InheritOnly") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must not skip inherit-only write ACEs; they become effective on the children created below the root")
+	}
+	for _, helper := range []string{
+		"function Test-SharedSchemaCacheLayoutSafe",
+		"function Test-SharedSchemaCacheTreeObjectsSafe",
+		"function Test-SharedSchemaCacheTreeTrusted",
+		"function Test-SharedSchemaCacheFileSingleLink",
+		"function Clear-SharedSchemaCacheIdentitySidecars",
+	} {
+		if !strings.Contains(text, helper) {
+			t.Fatalf("install.ps1 missing schema-cache safety helper %q", helper)
+		}
+	}
+	initFn := extractPowerShellFunction(t, text, "Initialize-SharedSchemaCacheRoot")
+	if strings.Count(initFn, "Set-SharedSchemaCacheAcl") != 1 {
+		t.Fatal("Initialize-SharedSchemaCacheRoot must ACL-harden only the installer-created root")
+	}
+	if !strings.Contains(initFn, "Test-SharedSchemaCacheLayoutSafe") {
+		t.Fatal("Initialize-SharedSchemaCacheRoot must reject a non-directory or reparse root")
+	}
+	// The strict root DACL grants the non-elevated creator no write right, so
+	// applying it at creation time would make the dws\schema population below
+	// it fail. The root must start with the provisional creator right and be
+	// finalized (strict DACL re-applied) only after the warm-up populated it.
+	if !strings.Contains(initFn, "Set-SharedSchemaCacheAcl -Path $Path -Provisional") {
+		t.Fatal("Initialize-SharedSchemaCacheRoot must apply the provisional ACL so a fresh root stays populatable by the creating user")
+	}
+	finalizeIdx := strings.Index(buildFn, "Set-SharedSchemaCacheAcl -Path $cacheDir")
+	if finalizeIdx < 0 || !strings.Contains(buildFn, "$script:SharedSchemaRootCreatedThisRun") {
+		t.Fatal("Build-SharedSchemaCache must finalize a freshly created shared root (strict DACL) before claiming success")
+	}
+	protectTreeIdx := strings.Index(buildFn, "Protect-SharedSchemaCacheTree -Path $schemaTree")
+	if protectTreeIdx < 0 || finalizeIdx < protectTreeIdx {
+		t.Fatal("Build-SharedSchemaCache must finalize the root DACL after the tree protection pass")
+	}
+	if strings.Contains(buildFn, "New-Item -ItemType Directory -Path $sharedDir -Force") {
+		t.Fatal("Build-SharedSchemaCache must not blindly New-Item -Force the shared root")
+	}
+	// A pre-existing dws\schema subtree may carry explicit untrusted write
+	// ACEs the shared-root DACL check never sees; descendant security must be
+	// established before the privileged cleanup or ACL recursion touches it.
+	if !strings.Contains(buildFn, "$schemaTreePreExisting") || !strings.Contains(buildFn, "Test-SharedSchemaCacheTreeTrusted -Tree $schemaTree") {
+		t.Fatal("Build-SharedSchemaCache must gate a pre-existing schema tree on descendant DACL trust")
+	}
+	// Identity cleanup must not be a separate -Recurse scan: validation is
+	// fused into the walk so a substituted entry aborts before any deletion.
+	if strings.Contains(buildFn, "Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter") {
+		t.Fatal("identity cleanup must not use a separate -Recurse scan; validation must be fused into the walk")
+	}
+	// When dws exists but schema does not, the freshly created schema tree
+	// inherits the dws level's ACEs; that level must pass the same DACL
+	// trust check the shared root does.
+	if !strings.Contains(buildFn, "Test-SharedSchemaCachePathTrusted -Path $dwsIntermediate") {
+		t.Fatal("Build-SharedSchemaCache must gate a freshly created schema tree on the dws intermediate DACL trust")
+	}
+	clearFn := extractPowerShellFunction(t, text, "Clear-SharedSchemaCacheIdentitySidecars")
+	if !strings.Contains(clearFn, "Remove-Item -LiteralPath") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must delete validated entries by literal path")
+	}
+	if !strings.Contains(clearFn, "Get-Item -LiteralPath") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must re-establish object identity per entry before deletion")
+	}
+	if strings.Contains(clearFn, "-Recurse") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must walk manually, never -Recurse")
+	}
+	protectFn := extractPowerShellFunction(t, text, "Protect-SharedSchemaCacheTree")
+	if strings.Contains(protectFn, "-Recurse") {
+		t.Fatal("Protect-SharedSchemaCacheTree must walk manually, never -Recurse")
+	}
+	if !strings.Contains(protectFn, "Get-Item -LiteralPath") || !strings.Contains(protectFn, "Test-SharedSchemaCacheFileSingleLink") {
+		t.Fatal("Protect-SharedSchemaCacheTree must re-establish object identity per entry before the ACL rewrite")
+	}
+	// Object checks gate both the identity cleanup and the recursive ACL
+	// rewrite: the tree is verified before the fused cleanup walk and again
+	// before Protect-SharedSchemaCacheTree (the warm-up just rewrote it).
+	cleanupIdx := strings.Index(buildFn, "Clear-SharedSchemaCacheIdentitySidecars")
+	treeCheckIdx := strings.Index(buildFn, "Test-SharedSchemaCacheTreeObjectsSafe")
+	if cleanupIdx < 0 || treeCheckIdx < 0 || treeCheckIdx > cleanupIdx {
+		t.Fatal("Test-SharedSchemaCacheTreeObjectsSafe must run before identity cleanup")
+	}
+	if strings.Count(buildFn, "Test-SharedSchemaCacheTreeObjectsSafe") < 2 {
+		t.Fatal("Test-SharedSchemaCacheTreeObjectsSafe must re-run before Protect-SharedSchemaCacheTree")
+	}
+	successIdx := strings.Index(buildFn, "Shared schema cache built")
+	verifyIdx := strings.Index(buildFn, "Test-SchemaCacheArtifactsPresent")
+	protectIdx := strings.Index(buildFn, "Protect-SharedSchemaCacheTree")
+	if successIdx < 0 || verifyIdx < 0 || verifyIdx > successIdx {
+		t.Fatal("success message must follow artifact verification")
+	}
+	if protectIdx < 0 || protectIdx > successIdx {
+		t.Fatal("Protect-SharedSchemaCacheTree must run before claiming shared success")
+	}
+	if strings.Count(text, "Build-SharedSchemaCache") < 4 {
+		t.Fatal("install.ps1 must invoke Build-SharedSchemaCache after binary install paths")
+	}
+}
+
+func TestInstallPowerShellElevatedCacheMutationSkipped(t *testing.T) {
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(scriptData)
+	cut := strings.LastIndex(text, "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := text[:cut]
+
+	for _, tc := range []struct {
+		name  string
+		state string
+	}{
+		{name: "elevated", state: "return $true"},
+		{name: "indeterminate fails closed", state: "return $null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			shared := filepath.Join(root, "shared")
+			local := filepath.Join(root, "local")
+			if err := os.MkdirAll(shared, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(local, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteFile(t, filepath.Join(shared, "sentinel"), []byte("shared"), 0o600)
+			mustWriteFile(t, filepath.Join(local, "sentinel"), []byte("local"), 0o600)
+			harness := prefix + `
+function Get-WindowsElevationState { ` + tc.state + ` }
+$env:DWS_SCHEMA_CACHE_SHARED_DIR = "` + shared + `"
+$env:ProgramData = "` + filepath.Join(root, "programdata") + `"
+$env:LOCALAPPDATA = "` + local + `"
+$env:DWS_SCHEMA_CACHE_DIR = "before"
+$InstallDir = "` + filepath.Join(root, "bin") + `"
+$BinName = "dws"
+Build-SharedSchemaCache
+if ($env:DWS_SCHEMA_CACHE_DIR -ne "before") { Write-Output "ENV_CHANGED"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path "` + shared + `" "dws")) { Write-Output "SHARED_MUTATED"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path "` + local + `" "dws")) { Write-Output "LOCAL_MUTATED"; exit 1 }
+Write-Output "ELEVATED_CACHE_SKIP_OK"
+`
+			harnessPath := filepath.Join(root, "elevated-cache-skip.ps1")
+			mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+			cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("elevated cache skip harness: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(output), "ELEVATED_CACHE_SKIP_OK") {
+				t.Fatalf("elevated cache skip output:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestInstallPowerShellSchemaCacheVerifyBeforeClaim(t *testing.T) {
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	writeFakeGo := func(t *testing.T, exePath, source string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(exePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		src := filepath.Join(t.TempDir(), "fake-dws.go")
+		mustWriteFile(t, src, []byte(source), 0o644)
+		cmd := exec.Command("go", "build", "-o", exePath, src)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("build fake dws: %v\n%s", err, out)
+		}
+	}
+
+	runHarness := func(t *testing.T, extra, envShared, envLocal string) string {
+		t.Helper()
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		harness := prefix + extra + "\nBuild-SharedSchemaCache\n"
+		harnessPath := filepath.Join(root, "schema-cache-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+envShared,
+			"LOCALAPPDATA="+envLocal,
+			"ProgramData="+filepath.Join(root, "programdata-empty"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("schema-cache harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("unsupported arch never claims success", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		text := runHarness(t, `
+function Get-Arch { return "386" }
+$InstallDir = "`+filepath.Join(root, "bin")+`"
+$BinName = "dws"
+`, shared, local)
+		if strings.Contains(text, "schema cache built") || strings.Contains(text, "Schema cache built") {
+			t.Fatalf("unsupported arch claimed success:\n%s", text)
+		}
+	})
+
+	t.Run("zero files is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		writeFakeGo(t, filepath.Join(binDir, "dws.exe"), "package main\nfunc main() {}\n")
+		text := runHarness(t, `
+function Get-Arch { return "amd64" }
+$InstallDir = "`+binDir+`"
+$BinName = "dws"
+`, shared, local)
+		if strings.Contains(text, "Shared schema cache built") || strings.Contains(text, "✅ Schema cache built") {
+			t.Fatalf("empty write claimed success:\n%s", text)
+		}
+		if !strings.Contains(text, "Schema cache not written") {
+			t.Fatalf("empty write missing skip warning:\n%s", text)
+		}
+	})
+
+	t.Run("success requires artifacts", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		writeFakeGo(t, filepath.Join(binDir, "dws.exe"), `package main
+import (
+	"os"
+	"path/filepath"
+)
+func main() {
+	base := os.Getenv("DWS_SCHEMA_CACHE_DIR")
+	if base == "" {
+		os.Exit(1)
+	}
+	dir := filepath.Join(base, "dws", "schema", "open", "v1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		os.Exit(1)
+	}
+	for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			os.Exit(1)
+		}
+	}
+}
+`)
+		text := runHarness(t, `
+function Get-Arch { return "amd64" }
+$InstallDir = "`+binDir+`"
+$BinName = "dws"
+`, shared, local)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("populated write did not claim success:\n%s", text)
+		}
+	})
+
+	t.Run("artifact helper requires sidecar and shards", func(t *testing.T) {
+		root := t.TempDir()
+		empty := filepath.Join(root, "empty")
+		full := filepath.Join(root, "full", "dws", "schema", "open", "v1")
+		legacy := filepath.Join(root, "legacy", "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(empty, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(full, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(legacy, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(full, "meta.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "registry.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "payloads.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "meta.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "registry.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "payloads.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "identity.legacyfp.json"), []byte("{}"), 0o600)
+		harness := prefix + `
+$empty = Test-SchemaCacheArtifactsPresent -Dir "` + empty + `"
+$full = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full", "dws", "schema") + `"
+$legacy = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "legacy", "dws", "schema") + `"
+$wide = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full") + `"
+if ($empty) { Write-Output "EMPTY_TRUE"; exit 1 }
+if (-not $full) { Write-Output "FULL_FALSE"; exit 1 }
+if ($legacy) { Write-Output "LEGACY_TRUE"; exit 1 }
+if ($wide) { Write-Output "WIDE_TRUE"; exit 1 }
+Write-Output "ARTIFACT_HELPER_OK"
+`
+		harnessPath := filepath.Join(root, "artifact-helper.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("artifact helper: %v\n%s", err, output)
+		}
+		if !strings.Contains(string(output), "ARTIFACT_HELPER_OK") {
+			t.Fatalf("artifact helper output:\n%s", output)
+		}
+	})
+}
+
+func TestInstallPowerShellSchemaCacheObjectGuards(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX object shapes are exercised without Windows reparse semantics")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	runHarness := func(t *testing.T, shared string) string {
+		t.Helper()
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		harness := prefix + `
+function Get-Arch { return "amd64" }
+$InstallDir = "` + binDir + `"
+$BinName = "dws"
+Build-SharedSchemaCache
+`
+		harnessPath := filepath.Join(root, "schema-object-guard-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+			"LOCALAPPDATA="+filepath.Join(root, "local"),
+			"ProgramData="+filepath.Join(root, "programdata-empty"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("object-guard harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("schema symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws", "schema")); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache path") {
+			t.Fatalf("symlinked schema level not rejected:\n%s", out)
+		}
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("hardlink is not touched", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outside := filepath.Join(root, "outside-identity.json")
+		mustWriteFile(t, outside, []byte("keep"), 0o600)
+		if err := os.Link(outside, filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache contents") {
+			t.Fatalf("hardlinked sidecar not rejected:\n%s", out)
+		}
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("outside hardlink mode = %04o, want 0600", info.Mode().Perm())
+		}
+	})
+
+	t.Run("non-regular object is rejected", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(edition, "identity.json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache contents") {
+			t.Fatalf("FIFO sidecar not rejected:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatalf("FIFO was removed: %v", err)
+		}
+	})
+}
+
+// TestInstallPowerShellSharedSchemaCacheUnsafeTreeObjectsWindows pins the
+// Windows-native object guards directly: junctions inside the tree and
+// hardlinked files must fail Test-SharedSchemaCacheTreeObjectsSafe, and a
+// junction component of the shared base must fail the components check, so
+// neither cleanup nor the recursive ACL rewrite can leave the intended root.
+func TestInstallPowerShellSharedSchemaCacheUnsafeTreeObjectsWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junction and fsutil semantics require a Windows host")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	root := t.TempDir()
+	tree := filepath.Join(root, "shared", "dws", "schema")
+	edition := filepath.Join(tree, "open", "v1")
+	outsideDir := filepath.Join(root, "outside-dir")
+	outsideFile := filepath.Join(root, "outside-file.json")
+	for _, dir := range []string{filepath.Join(tree, "open", "v1"), outsideDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWriteFile(t, outsideFile, []byte("keep"), 0o600)
+	mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+	harness := string(scriptData[:cut]) + `
+$tree = "` + tree + `"
+$edition = "` + edition + `"
+$plain = Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree
+if (-not $plain) { Write-Output "PLAIN_TREE_FALSE"; exit 1 }
+New-Item -ItemType Junction -Path (Join-Path $edition "junction") -Target "` + outsideDir + `" | Out-Null
+if (Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree) { Write-Output "JUNCTION_TREE_TRUE"; exit 1 }
+Remove-Item -LiteralPath (Join-Path $edition "junction") -Force
+New-Item -ItemType HardLink -Path (Join-Path $edition "hardlinked.json") -Target "` + outsideFile + `" | Out-Null
+if (Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree) { Write-Output "HARDLINK_TREE_TRUE"; exit 1 }
+Remove-Item -LiteralPath (Join-Path $edition "hardlinked.json") -Force
+New-Item -ItemType Junction -Path (Join-Path (Split-Path -Parent $tree) "schema-junction") -Target "` + outsideDir + `" | Out-Null
+if (Test-SharedSchemaCacheLayoutSafe -Paths @((Join-Path (Split-Path -Parent $tree) "schema-junction"))) { Write-Output "JUNCTION_LEVEL_TRUE"; exit 1 }
+Write-Output "WINDOWS_UNSAFE_OBJECTS_OK"
+`
+	harnessPath := filepath.Join(root, "unsafe-tree-objects.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("unsafe tree objects harness: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "WINDOWS_UNSAFE_OBJECTS_OK") {
+		t.Fatalf("unsafe tree objects output:\n%s", output)
+	}
+}
+
+// TestInstallPowerShellClearIdentitySidecarsFusedWalk pins the fused
+// validate-and-delete walk: only plain identity*.json files under nested
+// directories are removed, sentinel neighbours survive, and a reparse entry
+// aborts the whole cleanup before any deletion.
+func TestInstallPowerShellClearIdentitySidecarsFusedWalk(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX symlink shapes are exercised without Windows reparse semantics")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	runClear := func(t *testing.T, harnessEpilogue string) string {
+		t.Helper()
+		root := t.TempDir()
+		harness := prefix + harnessEpilogue
+		harnessPath := filepath.Join(root, "clear-sidecars-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("clear-sidecars harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("removes only identity sidecars across nested dirs", func(t *testing.T) {
+		root := t.TempDir()
+		tree := filepath.Join(root, "schema")
+		edition := filepath.Join(tree, "open", "v1")
+		nested := filepath.Join(edition, "nested")
+		if err := os.MkdirAll(nested, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "identity.0.0.1.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "meta.cache"), []byte("keep"), 0o600)
+		mustWriteFile(t, filepath.Join(nested, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(nested, "payloads.shards.cache"), []byte("keep"), 0o600)
+		out := runClear(t, `
+$tree = "`+tree+`"
+Clear-SharedSchemaCacheIdentitySidecars -Tree $tree
+$edition = Join-Path $tree "open/v1"
+$nested = Join-Path $edition "nested"
+if (Test-Path -LiteralPath (Join-Path $edition "identity.json")) { Write-Output "IDENTITY_LEFT"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path $edition "identity.0.0.1.json")) { Write-Output "OLD_IDENTITY_LEFT"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path $nested "identity.json")) { Write-Output "NESTED_IDENTITY_LEFT"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $edition "meta.cache"))) { Write-Output "SENTINEL_GONE"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $nested "payloads.shards.cache"))) { Write-Output "NESTED_SENTINEL_GONE"; exit 1 }
+Write-Output "CLEAR_SIDECARS_OK"
+`)
+		if !strings.Contains(out, "CLEAR_SIDECARS_OK") {
+			t.Fatalf("clear-sidecars output:\n%s", out)
+		}
+	})
+
+	t.Run("reparse entry aborts before deletion", func(t *testing.T) {
+		root := t.TempDir()
+		tree := filepath.Join(root, "schema")
+		edition := filepath.Join(tree, "open", "v1")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outsideSentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, outsideSentinel, []byte("keep"), 0o600)
+		// "0-outside-link" sorts before "identity.json" so the abort is
+		// deterministic regardless of provider enumeration order.
+		if err := os.Symlink(outside, filepath.Join(edition, "0-outside-link")); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "meta.cache"), []byte("keep"), 0o600)
+		out := runClear(t, `
+$tree = "`+tree+`"
+try {
+  Clear-SharedSchemaCacheIdentitySidecars -Tree $tree
+  Write-Output "NO_ABORT"; exit 1
+} catch {
+  Write-Output "ABORTED"
+}
+$edition = Join-Path $tree "open/v1"
+if (-not (Test-Path -LiteralPath (Join-Path $edition "identity.json"))) { Write-Output "IDENTITY_DELETED_BEFORE_ABORT"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $edition "meta.cache"))) { Write-Output "SENTINEL_GONE"; exit 1 }
+Write-Output "CLEAR_ABORT_OK"
+`)
+		if !strings.Contains(out, "ABORTED") || !strings.Contains(out, "CLEAR_ABORT_OK") {
+			t.Fatalf("clear-abort output:\n%s", out)
+		}
+		got, err := os.ReadFile(outsideSentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+}
+
+// TestInstallPowerShellSharedSchemaCacheInheritableWriteWindows pins the
+// inheritable/descendant write rejection: a shared root carrying an
+// inherit-only write ACE for an untrusted principal must fail the root trust
+// check, and a pre-existing schema tree entry with an explicit untrusted
+// write ACE must fail the descendant trust gate, before any privileged
+// recursion runs.
+func TestInstallPowerShellSharedSchemaCacheInheritableWriteWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("DACL inheritance semantics require a Windows host")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	root := t.TempDir()
+	ioRoot := filepath.Join(root, "io-root")
+	tree := filepath.Join(root, "shared", "dws", "schema")
+	edition := filepath.Join(tree, "open", "v1")
+	for _, dir := range []string{ioRoot, edition} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+	harness := string(scriptData[:cut]) + `
+$ioRoot = "` + ioRoot + `"
+$tree = "` + tree + `"
+$edition = "` + edition + `"
+& icacls.exe $ioRoot /grant "*S-1-5-32-545:(OI)(CI)(IO)(WD)" | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Output "ICACLS_IO_FAIL"; exit 1 }
+if (Test-SharedSchemaCachePathTrusted -Path $ioRoot) { Write-Output "IO_ROOT_TRUE"; exit 1 }
+if (-not (Test-SharedSchemaCacheTreeTrusted -Tree $tree)) { Write-Output "CLEAN_TREE_FALSE"; exit 1 }
+& icacls.exe $edition /grant "*S-1-5-32-545:(WD)" | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Output "ICACLS_DESC_FAIL"; exit 1 }
+if (Test-SharedSchemaCacheTreeTrusted -Tree $tree) { Write-Output "DESC_WRITE_TREE_TRUE"; exit 1 }
+Write-Output "INHERITABLE_WRITE_OK"
+`
+	harnessPath := filepath.Join(root, "inheritable-write.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("inheritable-write harness: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "INHERITABLE_WRITE_OK") {
+		t.Fatalf("inheritable-write output:\n%s", output)
+	}
+}
+
+func TestInstallPowerShellSharedSchemaCacheApplyThenValidateACL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows ACL apply-then-validate requires a Windows host")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	root := t.TempDir()
+	target := filepath.Join(root, "shared-root")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	harness := string(scriptData[:cut]) + `
+$target = "` + target + `"
+New-Item -ItemType Directory -Path $target -Force | Out-Null
+Set-SharedSchemaCacheItemAcl -Path $target
+if (-not (Test-SharedSchemaCachePathTrusted -Path $target)) {
+  Write-Output "TRUST_FALSE"
+  exit 1
+}
+Write-Output "APPLY_THEN_VALIDATE_OK"
+`
+	harnessPath := filepath.Join(root, "acl-apply-validate.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("apply-then-validate: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "APPLY_THEN_VALIDATE_OK") {
+		t.Fatalf("apply-then-validate output:\n%s", output)
+	}
+}
+
+// TestInstallScriptSharedSchemaCachePinnedCreation pins the missing-root
+// creation path of build_shared_schema_cache: levels that do not exist yet
+// are created one component at a time with plain mkdir under umask 077
+// (never mkdir -p, which resolves a symlink swapped in at the leaf between
+// validation and creation), a target pre-planted as a symlink is rejected
+// before the mktemp probe or warm-up can write through it, and the full
+// three-level gate re-runs after creation and before the first write.
+func TestInstallScriptSharedSchemaCachePinnedCreation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	t.Run("static contract", func(t *testing.T) {
+		text := string(scriptData)
+		for _, banned := range []string{`mkdir -p "$shared_dir"`, `mkdir -p "$schema_tree"`} {
+			if strings.Contains(text, banned) {
+				t.Fatalf("cache levels must be created via shared_schema_create_missing_levels, found %q", banned)
+			}
+		}
+		buildStart := strings.Index(text, "build_shared_schema_cache() {")
+		if buildStart < 0 {
+			t.Fatal("build_shared_schema_cache not found")
+		}
+		buildBody := text[buildStart:]
+		for _, want := range []string{
+			`shared_schema_create_missing_levels "$shared_dir"`,
+			`shared_schema_create_missing_levels "$schema_tree"`,
+			`shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree"`,
+			`shared_schema_tree_objects_safe "$schema_tree"`,
+		} {
+			if !strings.Contains(buildBody, want) {
+				t.Fatalf("build_shared_schema_cache missing %q", want)
+			}
+		}
+		// Creation must be pinned before the first write: the mktemp probe and
+		// every later mutation happen only after the levels exist and the full
+		// gate has re-run over all three of them.
+		createAt := strings.Index(buildBody, `shared_schema_create_missing_levels "$schema_tree"`)
+		probeAt := strings.Index(buildBody, `mktemp "$shared_dir/.dws-schema-cache-write-test.XXXXXX"`)
+		relockAt := strings.Index(buildBody, `shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree"`)
+		if createAt < 0 || probeAt < 0 || relockAt < 0 || !(createAt < relockAt && relockAt < probeAt) {
+			t.Fatalf("expected creation < three-level re-check < mktemp probe, got %d/%d/%d", createAt, relockAt, probeAt)
+		}
+		helperAt := strings.Index(text, "shared_schema_create_missing_levels() {")
+		if helperAt < 0 {
+			t.Fatal("shared_schema_create_missing_levels not found")
+		}
+		helperBody := text[helperAt:buildStart]
+		for _, want := range []string{"umask 077", `mkdir "$_scm_anchor"`, `[ ! -L "$_scm_target" ]`} {
+			if !strings.Contains(helperBody, want) {
+				t.Fatalf("shared_schema_create_missing_levels missing %q", want)
+			}
+		}
+	})
+
+	run := func(t *testing.T, root, shared, interpreter string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "pinned-creation-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(interpreter, harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("pinned creation harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	assertLevelLocked := func(t *testing.T, path string) {
+		t.Helper()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("level %s missing: %v", path, err)
+		}
+		if info.Mode()&0o022 != 0 {
+			t.Fatalf("level %s carries group/world write bits: %v", path, info.Mode())
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != os.Getuid() {
+			t.Fatalf("level %s owned by uid %d, want invoking uid %d", path, stat.Uid, os.Getuid())
+		}
+	}
+
+	t.Run("missing custom root is created and warmed", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-missing")
+		out := run(t, root, shared, "sh")
+		if !strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("expected shared cache warm-up, output:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")); err != nil {
+			t.Fatalf("warm-up artifacts missing under created root: %v", err)
+		}
+		assertLevelLocked(t, shared)
+		assertLevelLocked(t, filepath.Join(shared, "dws"))
+		assertLevelLocked(t, filepath.Join(shared, "dws", "schema"))
+	})
+
+	t.Run("missing custom root replaced by symlink is not created through", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-swap")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(outside, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(outside, "dws"), shared); err != nil {
+			t.Fatal(err)
+		}
+		out := run(t, root, shared, "sh")
+		if strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("warm-up ran through a symlinked root, output:\n%s", out)
+		}
+		if info, err := os.Lstat(shared); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("planted root symlink was replaced or removed: %v", err)
+		}
+		entries, err := os.ReadDir(filepath.Join(outside, "dws", "schema"))
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("outside tree mutated through the symlink: %v (%d entries)", err, len(entries))
+		}
+	})
+
+	t.Run("created levels stay locked under another shell dialect", func(t *testing.T) {
+		dashPath, err := exec.LookPath("dash")
+		if err != nil {
+			t.Skip("dash unavailable")
+		}
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-dash")
+		out := run(t, root, shared, dashPath)
+		if !strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("expected shared cache warm-up under dash, output:\n%s", out)
+		}
+		assertLevelLocked(t, filepath.Join(shared, "dws", "schema"))
+	})
+}
+
+// TestInstallScriptSharedSchemaCacheRootAncestryLocked pins the parent
+// ancestry lock from review 5230137690: a custom shared root reachable
+// through a non-sticky group/world-writable level can be renamed to a
+// symlink after the final validation, and the following chmod a+rX then
+// follows the link and widens an arbitrary target directory. The installer
+// must reject such ancestry before the first creation or write, and
+// re-check it immediately before the chmod block.
+func TestInstallScriptSharedSchemaCacheRootAncestryLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+	text := string(scriptData)
+
+	t.Run("static contract", func(t *testing.T) {
+		buildStart := strings.Index(text, "build_shared_schema_cache() {")
+		helperAt := strings.Index(text, "shared_schema_root_ancestry_locked() {")
+		if buildStart < 0 || helperAt < 0 {
+			t.Fatal("build_shared_schema_cache or ancestry lock helper not found")
+		}
+		if helperAt > buildStart {
+			t.Fatal("shared_schema_root_ancestry_locked must be defined before build_shared_schema_cache")
+		}
+		helperBody := text[helperAt:buildStart]
+		for _, want := range []string{
+			`shared_schema_ancestry_level_safe "$_sra_walk" 0 "$_sra_invoker"`,
+			"dirname",
+		} {
+			if !strings.Contains(helperBody, want) {
+				t.Fatalf("shared_schema_root_ancestry_locked missing %q", want)
+			}
+		}
+		// Relative roots have no well-defined ancestor walk; they must fail closed.
+		if !strings.Contains(helperBody, "*)\n      return 1") &&
+			!strings.Contains(helperBody, "*) return 1") {
+			t.Fatalf("shared_schema_root_ancestry_locked must reject relative roots")
+		}
+		buildBody := text[buildStart:]
+		lockAt := strings.Index(buildBody, `shared_schema_root_ancestry_locked "$shared_dir"`)
+		createAt := strings.Index(buildBody, `shared_schema_create_missing_levels "$shared_dir"`)
+		chmodAt := strings.Index(buildBody, `chmod a+rX "$shared_dir" "$dws_intermediate"`)
+		if lockAt < 0 || createAt < 0 || chmodAt < 0 || !(lockAt < createAt) {
+			t.Fatalf("ancestry lock must run before root creation, got lock=%d create=%d chmod=%d", lockAt, createAt, chmodAt)
+		}
+		// The pre-chmod re-check must re-run the lock after the warm-up and
+		// before the first a+rX on the root pathname.
+		relockRel := strings.Index(buildBody[lockAt+1:], `shared_schema_root_ancestry_locked "$shared_dir"`)
+		if relockRel < 0 || lockAt+1+relockRel > chmodAt {
+			t.Fatalf("pre-chmod ancestry re-check missing or after chmod: relock=%d chmod=%d", lockAt+1+relockRel, chmodAt)
+		}
+	})
+
+	runPredicate := func(t *testing.T, target string) string {
+		t.Helper()
+		root := t.TempDir()
+		harness := string(scriptData[:cut]) + `
+if shared_schema_root_ancestry_locked "` + target + `"; then
+  printf 'rc=0\n'
+else
+  printf 'rc=1\n'
+fi
+`
+		harnessPath := filepath.Join(root, "ancestry-predicate.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		out, err := exec.Command("sh", harnessPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("predicate harness: %v\n%s", err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	t.Run("predicate mirrors runtime ancestry rule", func(t *testing.T) {
+		base := t.TempDir()
+		for _, tc := range []struct {
+			name string
+			mode os.FileMode
+			want string
+		}{
+			{"owner-only parent", 0o700, "rc=0"},
+			{"other-traversable parent", 0o755, "rc=0"},
+			// Go's os.Chmod drops setuid/setgid/sticky from plain octal
+			// modes; os.ModeSticky is the only way to plant the bit.
+			{"sticky world-writable parent", 0o777 | os.ModeSticky, "rc=0"},
+			{"non-sticky world-writable parent", 0o777, "rc=1"},
+			{"non-sticky group-writable parent", 0o770, "rc=1"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				parent := filepath.Join(base, strings.ReplaceAll(tc.name, " ", "-"))
+				if err := os.Mkdir(parent, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+				// os.Mkdir modes are masked by the process umask; re-apply.
+				if err := os.Chmod(parent, tc.mode); err != nil {
+					t.Fatal(err)
+				}
+				target := filepath.Join(parent, "shared")
+				if err := os.Mkdir(target, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if got := runPredicate(t, target); got != tc.want {
+					t.Fatalf("shared_schema_root_ancestry_locked %s = %s, want %s", target, got, tc.want)
+				}
+			})
+		}
+		if got := runPredicate(t, "relative/shared"); got != "rc=1" {
+			t.Fatalf("relative root accepted: %s", got)
+		}
+	})
+
+	t.Run("non-sticky writable parent rejects before any mutation", func(t *testing.T) {
+		root := t.TempDir()
+		loose := filepath.Join(root, "loose")
+		shared := filepath.Join(loose, "shared")
+		outside := filepath.Join(root, "outside-victim")
+		if err := os.Mkdir(loose, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(loose, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(outside, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		// PATH-shimmed chmod performs the review's exact attack on first use
+		// against the root: rename the freshly validated shared root away and
+		// replace it with a symlink to the outside victim, then delegate.
+		shimDir := filepath.Join(root, "shim")
+		if err := os.Mkdir(shimDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(shimDir, "chmod"), []byte(`#!/bin/sh
+real=/bin/chmod
+for arg do
+  case "$arg" in
+    "$SWAP_TARGET")
+      if [ ! -f "$SWAP_MARKER" ]; then
+        : >"$SWAP_MARKER"
+        mv "$SWAP_TARGET" "$SWAP_TARGET.orig"
+        ln -s "$SWAP_VICTIM" "$SWAP_TARGET"
+      fi
+      ;;
+  esac
+done
+exec "$real" "$@"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "swap-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+			sharedSchemaCacheOwnerEnv(),
+			"PATH="+shimDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"SWAP_TARGET="+shared,
+			"SWAP_VICTIM="+outside,
+			"SWAP_MARKER="+filepath.Join(root, "swap-marker"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("swap harness: %v\n%s", err, output)
+		}
+		if strings.Contains(string(output), "Building shared schema cache") {
+			t.Fatalf("warm-up ran under a non-sticky writable parent, output:\n%s", output)
+		}
+		if _, err := os.Lstat(shared); !os.IsNotExist(err) {
+			t.Fatalf("shared root was created despite unsafe ancestry: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "swap-marker")); !os.IsNotExist(err) {
+			t.Fatal("chmod was reached against the shared root; the swap attack window is open")
+		}
+		if _, err := os.Stat(shared + ".orig"); !os.IsNotExist(err) {
+			t.Fatal("shared root was renamed by the shim despite the gate")
+		}
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("outside victim permissions widened: %v", info.Mode().Perm())
+		}
+	})
+
+	t.Run("sticky writable parent still builds", func(t *testing.T) {
+		root := t.TempDir()
+		sticky := filepath.Join(root, "sticky")
+		shared := filepath.Join(sticky, "shared")
+		if err := os.Mkdir(sticky, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(sticky, 0o777|os.ModeSticky); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "sticky-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("sticky harness: %v\n%s", err, output)
+		}
+		if !strings.Contains(string(output), "Building shared schema cache") {
+			t.Fatalf("sticky writable parent must stay usable, output:\n%s", output)
+		}
+		if _, err := os.Stat(filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")); err != nil {
+			t.Fatalf("warm-up artifacts missing: %v", err)
+		}
+	})
+}
+
+func TestInstallScriptSharedSchemaCacheUmaskAncestorsTraversable(t *testing.T) {
+	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
+	// 1777, so a root under it is other-traversable all the way up.
+	traversableRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+	root := traversableRoot(t, ".dws-umask-ancestors-")
+	binDir := filepath.Join(root, "bin")
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+	harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+	harnessPath := filepath.Join(root, "umask-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command("sh", harnessPath)
+	cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("umask harness: %v\n%s", err, output)
+	}
+	text := string(output)
+	if !strings.Contains(text, "Shared schema cache built: "+shared) {
+		t.Fatalf("umask 077 install did not claim shared success:\n%s", text)
+	}
+	for _, dir := range []string{shared, filepath.Join(shared, "dws"), filepath.Join(shared, "dws", "schema")} {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if info.Mode().Perm()&0o005 != 0o005 {
+			t.Fatalf("%s mode %04o missing other r+x after shared success", dir, info.Mode().Perm())
+		}
+	}
+}
+
+func TestInstallScriptSharedSchemaCachePreservesPreexistingCustomRootMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	// realInstallRoot creates the test root under /tmp (1777, sticky): a
+	// shared root must sit behind other-traversable ancestors, and neither
+	// the per-user $TMPDIR chain (0700 T/) nor a 0750 $HOME models that.
+	realInstallRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
+	writeFake := func(t *testing.T, binDir string) {
+		t.Helper()
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+	}
+
+	t.Run("private 0700 custom root is not broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(shared, "unrelated-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(shared, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-private-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private 0700 custom root must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private 0700 custom root missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing custom root mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("unrelated child must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("unrelated child mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("already-traversable custom root succeeds without root chmod", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		foreign := filepath.Join(shared, "other-app")
+		if err := os.MkdirAll(foreign, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(foreign, "identity.json"), []byte("keep\n"), 0o600)
+		if err := os.Chmod(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-open-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("open custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("traversable custom root did not claim success:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("pre-existing custom root mode = %04o; want unchanged 0755", info.Mode().Perm())
+		}
+		for _, dir := range []string{filepath.Join(shared, "dws"), filepath.Join(shared, "dws", "schema")} {
+			di, err := os.Stat(dir)
+			if err != nil {
+				t.Fatalf("stat %s: %v", dir, err)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x", dir, di.Mode().Perm())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(foreign, "identity.json")); err != nil {
+			t.Fatalf("foreign identity.json must survive: %v", err)
+		}
+	})
+
+	t.Run("pre-existing caller-owned dws level is not broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		privateDws := filepath.Join(shared, "dws")
+		if err := os.MkdirAll(privateDws, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(privateDws, "caller-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(privateDws, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-dws-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private dws harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private pre-existing dws level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private pre-existing dws level missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(privateDws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing dws level mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("caller child under dws must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller child under dws mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("pre-existing caller-owned dws/schema level is not recursively broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		privateSchema := filepath.Join(shared, "dws", "schema")
+		if err := os.MkdirAll(privateSchema, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(privateSchema, "caller-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(privateSchema, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-schema-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private schema harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private pre-existing dws/schema level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private pre-existing dws/schema level missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(privateSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing dws/schema level mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("caller child under dws/schema must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller child under dws/schema mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("upgraded current edition artifacts are re-shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// The current edition already exists from a previous install; its old
+		// artifacts are private, and the warm-up below atomically replaces
+		// them with fresh 0600 staging files under umask 077.
+		currentEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(currentEdition, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"meta.cache", "identity.json"} {
+			mustWriteFile(t, filepath.Join(currentEdition, name), []byte("old\n"), 0o600)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-upgrade-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("upgraded edition harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("upgraded current edition did not claim success:\n%s", text)
+		}
+		for _, name := range []string{"identity.json", "meta.cache"} {
+			info, statErr := os.Stat(filepath.Join(currentEdition, name))
+			if statErr != nil {
+				t.Fatal(statErr)
+			}
+			if info.Mode().Perm()&0o004 != 0o004 {
+				t.Fatalf("regenerated %s mode %04o missing other read behind shared success", name, info.Mode().Perm())
+			}
+		}
+		for _, dir := range []string{filepath.Join(shared, "dws", "schema", "open"), currentEdition} {
+			di, statErr := os.Stat(dir)
+			if statErr != nil {
+				t.Fatal(statErr)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x", dir, di.Mode().Perm())
+			}
+		}
+	})
+
+	t.Run("pre-existing traversable dws/schema widens only new editions", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		ownedEdition := filepath.Join(shared, "dws", "schema", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		if err := os.MkdirAll(ownedEdition, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		ownedFile := filepath.Join(ownedEdition, "meta.cache")
+		mustWriteFile(t, ownedFile, []byte("old\n"), 0o600)
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-newedition-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("pre-existing schema warmup harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("traversable pre-existing dws/schema did not claim success:\n%s", text)
+		}
+		newEdition := filepath.Join(shared, "dws", "schema", "open")
+		for _, p := range []string{newEdition, filepath.Join(newEdition, "v1")} {
+			di, err := os.Stat(p)
+			if err != nil {
+				t.Fatalf("stat %s: %v", p, err)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x (new edition must be shared-readable)", p, di.Mode().Perm())
+			}
+		}
+		shard, err := os.Stat(filepath.Join(newEdition, "v1", "meta.cache"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shard.Mode().Perm()&0o004 != 0o004 {
+			t.Fatalf("new shard mode %04o missing other read", shard.Mode().Perm())
+		}
+		ownedInfo, err := os.Stat(ownedEdition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ownedInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller-owned pre-existing edition mode = %04o unexpectedly broadened", ownedInfo.Mode().Perm())
+		}
+		ownedFileInfo, err := os.Stat(ownedFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ownedFileInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller-owned pre-existing edition file mode = %04o unexpectedly broadened", ownedFileInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("spaced custom root re-shares and verifies the fresh edition", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		binDir := filepath.Join(root, "bin")
+		// A space inside the custom shared root is the regression condition:
+		// the re-share and readability checks must not word-split these paths.
+		shared := filepath.Join(root, "My Shared Cache")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "spaced-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("spaced custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("spaced custom root did not claim success:\n%s", text)
+		}
+		if strings.Contains(text, "not shared") {
+			t.Fatalf("spaced custom root must not fall back:\n%s", text)
+		}
+		newEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		di, err := os.Stat(newEdition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if di.Mode().Perm()&0o005 != 0o005 {
+			t.Fatalf("spaced root edition mode %04o missing other r+x", di.Mode().Perm())
+		}
+		shard, err := os.Stat(filepath.Join(newEdition, "meta.cache"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shard.Mode().Perm()&0o004 != 0o004 {
+			t.Fatalf("spaced root shard mode %04o missing other read", shard.Mode().Perm())
+		}
+	})
+
+	t.Run("traversable root behind a private parent is not shared", func(t *testing.T) {
+		root := t.TempDir()
+		// root itself stays 0700: the shared root below is traversable, but no
+		// other user can reach it through the private parent. Success must be
+		// downgraded and the parent must never be widened.
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(root, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + "\ndetect_os() { printf '%s\\n' linux; }\ndetect_arch() { printf '%s\\n' amd64; }\nINSTALL_DIR=\"" + binDir + "\"\nINSTALL_NAME=dws-test\nbuild_shared_schema_cache\n"
+		harnessPath := filepath.Join(root, "private-parent-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private parent harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("unreachable parent must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private parent missing fallback warning:\n%s", text)
+		}
+		rootInfo, err := os.Stat(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rootInfo.Mode().Perm() != 0o700 {
+			t.Fatalf("private parent mode = %04o; want unchanged 0700", rootInfo.Mode().Perm())
+		}
+	})
+
+	// runSharedCacheHarness executes build_shared_schema_cache against the
+	// fake binary with the caller's shared root; preHook carries shell lines
+	// (umask, fixtures) placed ahead of the script body. It returns the
+	// combined output for claim assertions.
+	runSharedCacheHarness := func(t *testing.T, root, shared, preHook string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		writeFake(t, binDir)
+		harness := preHook + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "runtime-safe-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("runtime-safe harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("group-writable caller-owned dws level is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		// The caller-owned dws level keeps its group-write bit. A mutable
+		// pre-existing level could be swapped between validation and the
+		// pathname-based find/chmod walks, so the ownership lock now refuses
+		// the shared path entirely before any mutation instead of letting the
+		// later cross-user gates downgrade a completed warm-up.
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o775); err != nil {
+			t.Fatal(err)
+		}
+		// MkdirAll's mode is filtered by the process umask; the group-write
+		// bit is the fixture, so set it explicitly.
+		if err := os.Chmod(filepath.Join(shared, "dws"), 0o775); err != nil {
+			t.Fatal(err)
+		}
+		text := runSharedCacheHarness(t, root, shared, "umask 077\n")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("group-writable dws level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache skipped: unsafe cache path") {
+			t.Fatalf("group-writable dws level missing skip warning:\n%s", text)
+		}
+		if strings.Contains(text, "Building shared schema cache") {
+			t.Fatalf("group-writable dws level must not reach warm-up:\n%s", text)
+		}
+		info, err := os.Stat(filepath.Join(shared, "dws"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o775 {
+			t.Fatalf("caller-owned dws mode = %04o; want unchanged 0775", info.Mode().Perm())
+		}
+	})
+
+	t.Run("world-writable non-sticky custom root is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// 0777 without the sticky bit is a mutable root: the ownership lock
+		// refuses the shared path before any mutation rather than warming a
+		// cache whose ancestor any principal could swap mid-walk.
+		if err := os.Chmod(shared, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		text := runSharedCacheHarness(t, root, shared, "umask 077\n")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("world-writable non-sticky root must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache skipped: unsafe cache path") {
+			t.Fatalf("world-writable non-sticky root missing skip warning:\n%s", text)
+		}
+		if strings.Contains(text, "Building shared schema cache") {
+			t.Fatalf("world-writable non-sticky root must not reach warm-up:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o777 {
+			t.Fatalf("custom root mode = %04o; want unchanged 0777", info.Mode().Perm())
+		}
+	})
+
+	t.Run("stale group-writable shard is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		stale := filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")
+		if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, stale, []byte("stale"), 0o662)
+		// WriteFile's mode is filtered by the process umask; the group-write
+		// bit is the fixture, so set it explicitly.
+		if err := os.Chmod(stale, 0o662); err != nil {
+			t.Fatal(err)
+		}
+		// The fake warm-up truncates the existing shard in place, which keeps
+		// its mode; chmod a+rX adds bits without clearing the group write bit,
+		// and validateCacheFile (mode&0022 != 0) makes every reader reject the
+		// edition. The installer must downgrade instead of claiming success.
+		text := runSharedCacheHarness(t, root, shared, "")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("group-writable stale shard must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("group-writable stale shard missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(stale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm()&0o022 == 0 {
+			t.Fatalf("stale shard mode = %04o; want group/other write preserved", info.Mode().Perm())
+		}
+	})
+
+	t.Run("runtime ancestry predicate requires sticky on writable levels", func(t *testing.T) {
+		root := t.TempDir()
+		harness := string(scriptData[:cut]) + `
+dir="` + filepath.Join(root, "level") + `"
+mkdir -p "$dir"
+chmod 0777 "$dir"
+if shared_schema_ancestry_level_safe "$dir" 0 "$(id -u)"; then
+  printf 'UNSAFE_ACCEPTED\n'
+fi
+chmod +t "$dir"
+if shared_schema_ancestry_level_safe "$dir" 0 "$(id -u)"; then
+  printf 'STICKY_ACCEPTED\n'
+fi
+`
+		harnessPath := filepath.Join(root, "ancestry-predicate-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		output, err := exec.Command("sh", harnessPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("ancestry predicate harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "UNSAFE_ACCEPTED") {
+			t.Fatalf("world-writable non-sticky level must fail the runtime ancestry rule:\n%s", text)
+		}
+		if !strings.Contains(text, "STICKY_ACCEPTED") {
+			t.Fatalf("sticky world-writable level must pass the runtime ancestry rule (mirrors /tmp):\n%s", text)
+		}
+	})
+
+	t.Run("foreign-owned ancestor under a root warm-up is not advertised as shared", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("root-only scenario: chown to another account requires root; the runtime rejects ancestry owned by neither root nor the reader")
+		}
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec.Command("chown", "nobody", shared).Run(); err != nil {
+			t.Skipf("cannot chown the shared root to nobody: %v", err)
+		}
+		// Warm-up runs as root (artifacts root-owned), but the custom root is
+		// owned by nobody: validateAncestryDirectory rejects levels owned by
+		// neither root nor the reader for every account, so advertising
+		// success would misreport a cache every reader falls back from.
+		text := runSharedCacheHarness(t, root, shared, "")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("foreign-owned ancestor must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("foreign-owned ancestor missing fallback warning:\n%s", text)
+		}
+	})
+
+	t.Run("readability guard still fires under spaced paths", func(t *testing.T) {
+		root := t.TempDir()
+		schemaTree := filepath.Join(root, "Another Shared Root", "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(schemaTree, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.json"} {
+			mustWriteFile(t, filepath.Join(schemaTree, name), []byte("x"), 0o644)
+		}
+		harness := func(extra string) string {
+			return string(scriptData[:cut]) + `
+tree="` + filepath.Join(root, "Another Shared Root", "dws", "schema") + `"
+` + extra + `
+if shared_schema_artifacts_readable "$tree"; then
+  printf 'READABLE_OK\n'
+else
+  printf 'READABLE_FAIL\n'
+fi
+`
+		}
+		runHarness := func(body string) string {
+			h := harness(body)
+			path := filepath.Join(root, "guard-harness.sh")
+			mustWriteFile(t, path, []byte(h), 0o755)
+			out, err := exec.Command("sh", path).CombinedOutput()
+			if err != nil {
+				t.Fatalf("guard harness: %v\n%s", err, out)
+			}
+			return string(out)
+		}
+		if got := runHarness(""); !strings.Contains(got, "READABLE_OK") {
+			t.Fatalf("readable spaced tree must pass: %s", got)
+		}
+		// One unreadable shard under the identity-bearing edition must fail
+		// the guard even though every path contains a space.
+		if err := os.Chmod(filepath.Join(schemaTree, "meta.cache"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(filepath.Join(schemaTree, "meta.cache"), 0o644) })
+		if got := runHarness(""); !strings.Contains(got, "READABLE_FAIL") {
+			t.Fatalf("unreadable spaced artifact must fail the guard: %s", got)
+		}
+	})
+}
+
+func lookPowerShellForScriptsOptional() (string, error) {
+	for _, name := range []string{"pwsh", "powershell"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", errors.New("PowerShell is not available")
+}
+
+// sharedSchemaCacheOwnerEnv declares the owner uid the installer requires for
+// a cross-user shared cache. Production defaults to root (uid 0) and these
+// tests run as the invoking user, so the harness names that uid to exercise the
+// shared-success path; the foreign-owner regression names an unrelated uid.
+func sharedSchemaCacheOwnerEnv() string {
+	return "DWS_SCHEMA_CACHE_SHARED_OWNER_UID=" + strconv.Itoa(os.Getuid())
+}
+
+// TestInstallScriptSharedSchemaCacheRejectsForeignOwner pins the accuracy of
+// the shared-cache claim: the runtime only accepts a shared cache whose paths
+// are owned by root or by the reading user, so a warm-up whose artifacts carry
+// another uid's ownership must not be advertised as shared. Such a cache stays
+// usable by the installing user, so the artifacts remain in place.
+func TestInstallScriptSharedSchemaCacheRejectsForeignOwner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	// The shared root must sit behind other-traversable ancestors (/tmp is
+	// 1777 sticky); the per-user $TMPDIR chain is 0700 and would fail the
+	// reachability guard before ownership is even considered.
+	root, rootErr := os.MkdirTemp("/tmp", ".dws-foreign-owner-")
+	if rootErr != nil {
+		t.Fatal(rootErr)
+	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	binDir := filepath.Join(root, "bin")
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+	if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+	harnessPath := filepath.Join(root, "foreign-owner-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command("sh", harnessPath)
+	// A required owner uid no artifact carries models the real cross-user read:
+	// the tree is readable and traversable, yet the runtime rejects it for every
+	// user except its owner.
+	cmd.Env = append(os.Environ(),
+		"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+		"DWS_SCHEMA_CACHE_SHARED_OWNER_UID=99999")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("foreign owner harness: %v\n%s", err, output)
+	}
+	text := string(output)
+	if strings.Contains(text, "Shared schema cache built") {
+		t.Fatalf("artifacts owned by another uid must not claim a shared cache:\n%s", text)
+	}
+	if !strings.Contains(text, "built for the installing user only") {
+		t.Fatalf("missing the per-installer accuracy message:\n%s", text)
+	}
+	newEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+	di, err := os.Stat(newEdition)
+	if err != nil {
+		t.Fatalf("per-installer cache missing: %v", err)
+	}
+	if di.Mode().Perm()&0o005 != 0o005 {
+		t.Fatalf("per-installer edition mode %04o missing other r+x", di.Mode().Perm())
+	}
+}
+
 func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
 	if err != nil {
@@ -227,9 +2820,9 @@ func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(scriptData)
-	for _, forbidden := range []string{"Publish-RuntimePayload", `Join-Path $InstallDir ".dws-runtime"`} {
+	for _, forbidden := range []string{"Publish-RuntimePayload", `Join-Path $InstallDir ".dws-runtime"`, "$psSource", "ps_file_count", "ps_manifest_sha256"} {
 		if strings.Contains(text, forbidden) {
-			t.Fatalf("PowerShell installer retains sidecar behavior %q", forbidden)
+			t.Fatalf("PowerShell installer retains retired payload behavior %q", forbidden)
 		}
 	}
 }
@@ -4971,5 +7564,122 @@ func mustWriteFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	}
 	if err := os.WriteFile(path, data, mode); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+}
+
+// TestInstallScriptRefusesMuslLinux pins that every installer that fetches the
+// glibc-linked dws release asset rejects musl-based Linux before downloading.
+func TestInstallScriptRefusesMuslLinux(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	for _, installer := range []struct {
+		script      string
+		entry       string
+		downloadsAt string
+	}{
+		{script: "install.sh", entry: "install_binary", downloadsAt: "resolve_version"},
+		{script: "install-event.sh", entry: "install_binary", downloadsAt: "releases/download"},
+		{script: "install-devapp.sh", entry: "main", downloadsAt: "releases/download"},
+	} {
+		t.Run(installer.script, func(t *testing.T) {
+			scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", installer.script))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			body := extractShellFunction(t, scriptPath, "require_glibc_on_linux")
+			// The loader probe covers musl distributions whose ldd does not
+			// report a version, notably Alpine where BusyBox ldd only forwards
+			// to the loader.
+			if !strings.Contains(body, "/lib/ld-musl-") {
+				t.Error("musl detection does not probe the musl dynamic loader")
+			}
+			// ldd must decide first. A glibc distribution with musl or
+			// musl-tools installed also carries the loader file, so consulting
+			// the glob before ldd refuses a system that can run the binary.
+			lddAt := strings.Index(body, "ldd --version")
+			globAt := strings.Index(body, "/lib/ld-musl-")
+			if lddAt < 0 {
+				t.Error("musl detection does not consult ldd --version")
+			} else if lddAt > globAt {
+				t.Errorf("ldd --version must be consulted before the loader-file fallback (ldd=%d, glob=%d)", lddAt, globAt)
+			}
+
+			entry := extractShellFunction(t, scriptPath, installer.entry)
+			guardAt := strings.Index(entry, "require_glibc_on_linux")
+			downloadAt := strings.Index(entry, installer.downloadsAt)
+			if guardAt < 0 {
+				t.Fatalf("%s does not call require_glibc_on_linux", installer.entry)
+			}
+			if downloadAt < 0 || guardAt > downloadAt {
+				t.Errorf("%s must run require_glibc_on_linux before %q (guard=%d, download=%d)",
+					installer.entry, installer.downloadsAt, guardAt, downloadAt)
+			}
+
+			run := func(t *testing.T, targetOS, lddOutput string, muslLoaderPresent bool) (string, error) {
+				t.Helper()
+				binDir := filepath.Join(t.TempDir(), "bin")
+				mustWriteFile(t, filepath.Join(binDir, "ldd"),
+					[]byte(fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' %q\n", lddOutput)), 0o755)
+				if muslLoaderPresent {
+					// Simulate a system carrying the musl loader without
+					// writing to the host /lib. When the glob matches nothing a
+					// POSIX shell passes the literal pattern to ls, so a stub
+					// that succeeds on it reproduces the file being present and
+					// delegates to the real ls otherwise.
+					mustWriteFile(t, filepath.Join(binDir, "ls"),
+						[]byte("#!/bin/sh\ncase \"$*\" in\n*ld-musl-*) exit 0 ;;\nesac\nexec /bin/ls \"$@\"\n"), 0o755)
+				}
+				harness := fmt.Sprintf(`err() { printf '%%s\n' "$@" >&2; exit 1; }
+BIN_NAME=dws
+os=%q
+%s
+require_glibc_on_linux
+printf 'accepted\n'
+`, targetOS, body)
+				cmd := exec.Command("sh", "-c", harness)
+				cmd.Env = append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+				output, err := cmd.CombinedOutput()
+				return string(output), err
+			}
+
+			for _, tc := range []struct {
+				name       string
+				targetOS   string
+				lddOutput  string
+				muslLoader bool
+				wantAccept bool
+			}{
+				{name: "glibc linux", targetOS: "linux", lddOutput: "ldd (GNU libc) 2.31", wantAccept: true},
+				{name: "musl linux", targetOS: "linux", lddOutput: "musl libc 1.2.5", wantAccept: false},
+				{name: "darwin skips the probe", targetOS: "darwin", lddOutput: "musl libc 1.2.5", wantAccept: true},
+				// A glibc distribution with musl or musl-tools installed
+				// carries the loader file but still runs glibc binaries.
+				{name: "glibc linux with musl loader present", targetOS: "linux", lddOutput: "ldd (GNU libc) 2.31", muslLoader: true, wantAccept: true},
+				{name: "ubuntu glibc with musl loader present", targetOS: "linux", lddOutput: "ldd (Ubuntu GLIBC 2.39-0ubuntu8) 2.39", muslLoader: true, wantAccept: true},
+				// Alpine's BusyBox ldd reports no version, so the loader file
+				// is still the only signal available there.
+				{name: "inconclusive ldd with musl loader present", targetOS: "linux", lddOutput: "", muslLoader: true, wantAccept: false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					output, err := run(t, tc.targetOS, tc.lddOutput, tc.muslLoader)
+					if tc.wantAccept {
+						if err != nil {
+							t.Fatalf("require_glibc_on_linux rejected %s: %v\noutput:\n%s", tc.name, err, output)
+						}
+						return
+					}
+					if err == nil {
+						t.Fatalf("require_glibc_on_linux accepted %s:\n%s", tc.name, output)
+					}
+					if !strings.Contains(output, "musl libc") {
+						t.Fatalf("rejection output does not name musl libc:\n%s", output)
+					}
+				})
+			}
+		})
 	}
 }

@@ -37,12 +37,7 @@ func TestCrossPlatformCoverageAITableLegacyContractLedgerIsExact(t *testing.T) {
 func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormalization(t *testing.T) {
 	item := RecordQuery
 	for _, required := range []string{
-		"单页行数据",
-		"nextCursor 显式续页",
-		"完整读取全表时不要使用本 Shortcut",
-		"--all --page-limit 0",
-		"不是同一结果模型",
-		"禁止相互拼接、转换或混合推导",
+		"默认返回一页", "--all", "--export-output", "max-records", "view-id", "复杂视图条件无法转换时明确失败",
 	} {
 		if !strings.Contains(item.Intent, required) {
 			t.Errorf("RecordQuery intent missing %q", required)
@@ -50,13 +45,14 @@ func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormali
 	}
 	selection := item.Contract.Selection
 	for _, required := range []string{
-		"字段和值必须先按字段类型解析",
-		"需要全部、完整、汇总、统计、导出或逐条处理全表数据",
-		"不要手写 cursor 循环或把当前页当全量",
+		"字段和值必须先按字段类型解析", "不拉明细做汇总", "10000", "CSV/Excel", "NDJSON",
 	} {
 		if !strings.Contains(selection.AgentSummary, required) && !containsAny(selection.UseWhen, required) && !containsAny(selection.AvoidWhen, required) {
 			t.Errorf("RecordQuery selection missing %q", required)
 		}
+	}
+	if containsAny(selection.AvoidWhen, "需要全部、完整、汇总、统计、导出或逐条处理全表数据") {
+		t.Errorf("RecordQuery selection still routes summary, statistics, or export to record query --all: %#v", selection.AvoidWhen)
 	}
 	flags := map[string]string{}
 	for _, flag := range item.Flags {

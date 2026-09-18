@@ -53,6 +53,7 @@ var TableCopy = shortcut.Shortcut{
 		{Name: "source-table-id", Type: shortcut.FlagString, Desc: "源 Table ID", Required: true},
 		{Name: "target-base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "new-name", Type: shortcut.FlagString, Desc: "目标表名", Required: true},
+		{Name: "strict-fields", Type: shortcut.FlagBool, Desc: "发现公式/关联/查找/系统等无法重建字段时在写入前失败；不代表复制所有视图"},
 		{Name: "include-records", Type: shortcut.FlagBool, Desc: "复制全部记录；默认只复制可安全重建的字段结构"},
 		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "复制记录的写前上限，1-10000"},
 	},
@@ -109,6 +110,10 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 		createFields = append(createFields, declaration)
 		copiedSourceFields = append(copiedSourceFields, field)
 	}
+	if rt.Bool("strict-fields") && len(warnings) > 0 {
+		return apperrors.NewValidation("源表含无法安全重建的字段；strict-fields 模式未创建目标表", apperrors.WithReason("table_copy_unsupported_fields"), apperrors.WithDetails(map[string]any{"warnings": warnings}))
+	}
+
 	var sourceRecords []map[string]any
 	if rt.Bool("include-records") {
 		sourceRecords, err = queryAllRecords(rt, map[string]any{"baseId": sourceBase, "tableId": sourceTable}, maxRecords)
@@ -195,24 +200,25 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			batch = append(batch, record)
 			wire = append(wire, record)
 		}
-		writeData, writeErr := rt.CallMCPWriteDataStrict(serverMain, "create_records", map[string]any{"baseId": targetBase, "tableId": targetTable, "records": wire})
+		writeData, clientToken, writeErr := createRecordsReconciled(rt, targetBase, targetTable, wire)
 		createdIDs := createdRecordIDs(writeData)
 		if len(createdIDs) == 0 {
 			if returned, found := findRecords(writeData); found {
 				createdIDs = recordIDs(returned)
 			}
 		}
-		if len(createdIDs) != len(batch) {
-			if writeErr == nil {
-				writeErr = fmt.Errorf("create_records returned %d record IDs for %d copied records", len(createdIDs), len(batch))
-			}
+		if len(createdIDs) > 0 {
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "clientToken": clientToken, "recordIds": createdIDs})
+		}
+		// createRecordsReconciled only succeeds with a complete, unique ID set.
+		if writeErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = createdCount
 			result.FailedCount = len(sourceRecords) - createdCount
-			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
+			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset, "clientToken": clientToken, "createdRecordIds": createdIDs, "nextStep": "reconcile this token; do not rerun table-copy or recreate this batch"}
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", targetBase, "--table-id", targetTable, "--client-token", clientToken)
 			return compositeError(result, writeErr, false)
 		}
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "recordIds": createdIDs})
 		verifyErr := verifyTableCopyRecordsEventually(rt, targetBase, targetTable, createdIDs, batch, recordVerifier)
 		if verifyErr != nil {
 			result.Status = "partial_success"
@@ -220,6 +226,7 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			result.FailedCount = len(sourceRecords) - createdCount
 			result.Checkpoint = map[string]any{
 				"targetTableId":    targetTable,
+				"clientToken":      clientToken,
 				"createdRecordIds": createdIDs,
 				"nextRecordOffset": offset,
 				"nextStep":         "verify the created record IDs and cells before copying any remaining records; do not rerun create_records for this batch",

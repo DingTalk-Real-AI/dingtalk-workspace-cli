@@ -375,6 +375,17 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
 	}
+	// Decrypt evidence written in place by the shared inbound decrypt pipeline;
+	// pass it through so consumers can tell decrypted plaintext from native.
+	if value, ok := m["contentDecrypted"]; ok {
+		row["contentDecrypted"] = value
+	}
+	if value, ok := m["cryptoLayer"]; ok {
+		row["cryptoLayer"] = value
+	}
+	if value, ok := m["dingKeyVersion"]; ok {
+		row["dingKeyVersion"] = value
+	}
 	if includeReactions {
 		if reactions := Reactions(m); len(reactions) > 0 {
 			row["reactions"] = reactions
@@ -542,6 +553,10 @@ func Resources(m map[string]any) []map[string]any {
 		}
 		out = append(out, resource)
 	}
+	for _, resource := range out {
+		resource["resourceIdType"] = resource["type"]
+		attachResourceContentType(m, fmt.Sprint(resource["resourceId"]), resource)
+	}
 	return out
 }
 
@@ -668,7 +683,7 @@ func collectResourceNames(value any, targetKey string, out map[string]resourceNa
 
 func directResourceIDs(value map[string]any, targetKey string) []string {
 	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
-		firstMessageValue(value, "resourceType", "resource_type"))))
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
 	keys := make([]string, 0, len(value))
 	for key := range value {
 		keys = append(keys, key)
@@ -698,7 +713,7 @@ func directResourceName(value map[string]any, targetKey string) string {
 	// Message rows also commonly contain a sender/group name, which must never
 	// become the attachment filename merely because the row has a resource ID.
 	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
-		firstMessageValue(value, "resourceType", "resource_type"))))
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
 	if resourceType == targetKey && directResourceString(value, "resourceid") != "" {
 		return directResourceString(value, "name")
 	}
@@ -741,7 +756,7 @@ func recordResourceName(
 func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceType", "resource_type")))
+		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceIdType", "resource_id_type", "resourceType", "resource_type")))
 		for key, child := range typed {
 			normalizedKey := normalizeMessageKey(key)
 			if normalizedKey == targetKey ||
@@ -1054,14 +1069,9 @@ func ApplyMessagePagination(payload, data map[string]any, messages []map[string]
 	if !hasMore {
 		return
 	}
-	if len(messages) == 0 {
-		payload["failedCount"] = 1
-		payload["failures"] = []map[string]any{{
-			"stage": "pagination",
-			"error": "下层返回 hasMore=true 但当前页没有消息",
-		}}
-		return
-	}
+	// Empty visible pages may still carry an authoritative advancing cursor
+	// (for example, filtered system messages). Validate the cursor normally;
+	// callers retain bounds and never treat hasMore=true as exhaustion.
 	_, boundary, err := messagePaginationCursorBoundary(page["nextCursor"])
 	if err != nil {
 		payload["failedCount"] = 1
@@ -1282,7 +1292,7 @@ func isKnownRichDecoration(node any) bool {
 }
 
 // richItemTexts walks a decoded DingTalk rich-content blob and returns the
-// readable text carried by its rich-content items (items[].data.text). It only
+// readable text and links carried by its rich-content items. It only
 // harvests item bodies, so decorative fields (card titles, preview URLs, layout
 // config) contribute nothing and are dropped. An empty result means "not a
 // recognised rich-content block".
@@ -1306,10 +1316,21 @@ func richItemTexts(node any) []string {
 					if !ok {
 						continue
 					}
-					if s, ok := data["text"].(string); ok {
-						if s = strings.TrimSpace(s); s != "" {
-							texts = append(texts, s)
+					text, _ := data["text"].(string)
+					text = strings.TrimSpace(text)
+					// Link and image items both use data.url; only link targets
+					// belong alongside the readable label.
+					if mm["type"] == "link" {
+						url, _ := data["url"].(string)
+						url = strings.TrimSpace(url)
+						if text == "" {
+							text = url
+						} else if url != "" && url != text {
+							text += "（" + url + "）"
 						}
+					}
+					if text != "" {
+						texts = append(texts, text)
 					}
 				}
 			}
@@ -1349,4 +1370,30 @@ func IsEncrypted(s string) bool {
 		}
 	}
 	return true
+}
+
+// attachResourceContentType joins only the exact owned resource, never a
+// neighbouring attachment or a quoted child's type.
+func attachResourceContentType(value any, id string, target map[string]any) {
+	switch v := value.(type) {
+	case map[string]any:
+		if fmt.Sprint(v["resourceId"]) == id {
+			if kind, ok := v["resourceType"].(string); ok && kind != "mediaId" && kind != "fileId" && kind != "" {
+				target["contentType"] = kind
+			}
+		}
+		for key, child := range v {
+			if !isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				attachResourceContentType(child, id, target)
+			}
+		}
+	case []any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	case []map[string]any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	}
 }

@@ -25,6 +25,12 @@ type runtimeContextCaller struct {
 	value any
 }
 
+type runtimeOutputFailWriter struct {
+	err error
+}
+
+func (w runtimeOutputFailWriter) Write([]byte) (int, error) { return 0, w.err }
+
 func (c *runtimeContextCaller) CallTool(ctx context.Context, _ string, _ string, _ map[string]any) (*edition.ToolResult, error) {
 	c.value = ctx.Value(runtimeContextKey{})
 	return nil, errors.New("stop after context capture")
@@ -36,10 +42,53 @@ func (*runtimeContextCaller) Fields() string { return "" }
 func (*runtimeContextCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageRuntimeContextForTest(t *testing.T) {
+	helpers.InitDepsForTest(t, &runtimeReadCoverageCaller{text: `{"ok":true}`})
 	cmd := &cobra.Command{Use: "run"}
 	rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
 	if rt == nil || rt.cmd != cmd || rt.shortcut.Service != "sample" {
 		t.Fatalf("RuntimeContextForTest = %#v", rt)
+	}
+	if rt.StrFirst("missing") != "" {
+		t.Fatal("StrFirst empty")
+	}
+	cmd.Flags().Int("limit", 3, "")
+	cmd.Flags().Int("size", 9, "")
+	cmd.Flags().StringSlice("tags", nil, "")
+	if rt.IntFirst("limit", "size") != 3 {
+		t.Fatal("IntFirst primary default")
+	}
+	_ = rt.StrSlice("tags")
+	_ = rt.Yes()
+	_ = rt.Changed("missing")
+	_, _ = rt.CallMCPReadData("sample", "update_records", nil)
+	dry := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
+	cmd.PersistentFlags().Bool("dry-run", true, "")
+	_ = cmd.PersistentFlags().Set("dry-run", "true")
+	_, _ = dry.CallMCPData("sample", "update_records", nil)
+	_, _ = dry.CallMCPData("sample", "get_item", nil)
+	legacy := &cobra.Command{Use: "+legacy"}
+	output.SetCommandRollout(legacy, output.RolloutLegacyOnly)
+	_ = RuntimeContextForTest(legacy, Shortcut{Service: "sample", Command: "+legacy"}).CallMCP("get", nil)
+	_ = All()
+	_ = globalBool(nil, "dry-run")
+	_ = hasNonEmptyString(nil)
+	_ = hasNonEmptyString([]string{"", "x"})
+	_ = FromShortcut(Shortcut{})
+	mounted := &cobra.Command{Use: "tiered"}
+	spec := FromShortcut(Shortcut{
+		HelpTier: HelpTierFeatured,
+		Flags:    []Flag{{Name: "id", Aliases: []string{"identifier"}, AliasesVisible: true}},
+	})
+	if spec.PostMount != nil {
+		spec.PostMount(mounted)
+	}
+	positional := FromShortcut(Shortcut{SinglePositionalAliasFor: "id"})
+	if positional.PostMount != nil {
+		positional.PostMount(mounted)
+		if mounted.Args != nil {
+			_ = mounted.Args(mounted, nil)
+			_ = mounted.Args(mounted, []string{"a", "b"})
+		}
 	}
 }
 
@@ -83,7 +132,7 @@ func TestCrossPlatformCoverageRuntimeMCPCallsPreserveCommandContext(t *testing.T
 	}
 }
 
-func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
+func TestCrossPlatformCoverageShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	result := shortcutCommandResult(map[string]any{"success": "false"})
 	env, err := output.EnvelopeFromResult(result)
 	if err != nil {
@@ -95,7 +144,7 @@ func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	}
 }
 
-func TestGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
+func TestCrossPlatformCoverageGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
 	rt := RuntimeContextForTest(&cobra.Command{Use: "+write"}, Shortcut{
 		Service: "sample",
 		Command: "+write",
@@ -155,7 +204,7 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	}
 }
 
-func TestFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
 	oldCaller := helpers.GetCaller()
 	t.Cleanup(func() { helpers.InitDeps(oldCaller) })
 	ctx, _ := output.WithResultStore(context.Background())
@@ -288,6 +337,91 @@ func TestCrossPlatformCoverageRuntimeOutputForToolRollouts(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), `"id"`) {
 			t.Fatalf("legacy output=%q", stdout.String())
+		}
+	})
+}
+
+func TestCrossPlatformCoverageOutputWithMetaDualValidatesShadowAndPreservesLegacyBytes(t *testing.T) {
+	var validated *output.Envelope
+	testseam.Swap(t, &validateShadowResult, func(result output.CommandResult) error {
+		var err error
+		validated, err = output.EnvelopeFromResult(result)
+		return err
+	})
+	cmd := &cobra.Command{Use: "+paged"}
+	cmd.SetContext(context.Background())
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	output.SetCommandRollout(cmd, output.RolloutDualValidate)
+	rt := RuntimeContextForTest(cmd, Shortcut{
+		Service: "chat", Command: "+paged", Safety: contract.SafetySpec{Effect: "read"},
+	})
+	pagination, err := output.NewPagination(false, "cursor-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagination.Pages = 1
+	pagination.Items = 1
+	if err := rt.OutputWithMeta(
+		map[string]any{"id": "m1"},
+		&output.Meta{Count: output.NewCount(1), Pagination: pagination},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "{\n  \"id\": \"m1\"\n}\n"; got != want {
+		t.Fatalf("dual success bytes = %q, want legacy %q", got, want)
+	}
+	if validated == nil || validated.Meta == nil || validated.Meta.Pagination == nil ||
+		validated.Meta.Pagination.NextToken != "cursor-2" || validated.Meta.Count == nil || *validated.Meta.Count != 1 {
+		t.Fatalf("shadow pagination metadata = %#v", validated)
+	}
+}
+
+func TestCrossPlatformCoverageOutputIncompleteHonorsRolloutContract(t *testing.T) {
+	terminalErr := apperrors.NewAPI("partial read", apperrors.WithReason("incomplete_result"))
+	payload := map[string]any{"complete": false, "items": []string{"item-1"}}
+
+	t.Run("dual validates, writes legacy bytes, and returns terminal error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+partial"}
+		cmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		if err := rt.OutputIncomplete(payload, terminalErr); !errors.Is(err, terminalErr) {
+			t.Fatalf("terminal error = %v", err)
+		}
+		if !strings.Contains(stdout.String(), `"item-1"`) {
+			t.Fatalf("stdout=%q", stdout.String())
+		}
+	})
+
+	t.Run("unified returns only the error envelope input", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+partial"}
+		ctx, _ := output.WithResultStore(context.Background())
+		cmd.SetContext(ctx)
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		if err := rt.OutputIncomplete(payload, terminalErr); err != terminalErr {
+			t.Fatalf("terminal error = %v", err)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("unified incomplete result wrote legacy bytes: %q", stdout.String())
+		}
+	})
+
+	t.Run("legacy output failure keeps historical precedence", func(t *testing.T) {
+		outputErr := errors.New("fixture output failure")
+		cmd := &cobra.Command{Use: "+partial"}
+		cmd.SetContext(context.Background())
+		cmd.SetOut(runtimeOutputFailWriter{err: outputErr})
+		output.SetCommandRollout(cmd, output.RolloutLegacyOnly)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		err := rt.OutputIncomplete(payload, terminalErr)
+		if err != outputErr {
+			t.Fatalf("output error = %v", err)
 		}
 	})
 }

@@ -26,7 +26,25 @@ unrelated work, and use `gofmt` for every modified Go file.
 
 Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
-`internal/app`). There is no
+`internal/app`). Schema identity is **not** produced at compile or release
+time; shipping binaries do not embed binary-pinned cache digests. On
+supported platforms (darwin/linux/windows amd64/arm64) production enables the
+persistent cache: install or the first schema-consuming path generates
+identity from this binary's live declarations, writes authenticated disk
+shards, and later processes load that local identity then verify digests
+before reading protobuf. A missing sidecar generates then uses the cache;
+it is not a permanent live-only mode. Plugins that change the command
+surface still disable cache publication, repair, and prewarm; read-only
+serving of the unchanged reviewed surface continues (plugin commands never
+enter the Schema surface, cached or live). Tests may also inject identity via
+`RegisterSchemaCacheOptions`.
+See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
+local-identity shipping model, complete-tree performance contract, cache
+delivery; no sibling plan/design/performance pages are kept. Telemetry
+delivery is the detached background-process model (see
+`.changes/clitrack-detached-reporting.md`), not the retired in-process
+`NoFlushWait` CLI default.
+There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
 `internal/cli/schema_catalog/`, `internal/cli/schema_meta_index.gob`, and
@@ -43,6 +61,39 @@ Schema contract) keep separate authorities — do not merge them with
 
 ## Command framework declaration
 
+- 第三阶段 CI 门禁覆盖框架拥有的参数校验边界：Cobra `Args`、flag parser、
+  required/group constraint、`corecmd.Spec.Validate` 和 metadata-only
+  `LeafSpec.Validate` 均须保持 `validation` / exit code 3。命令自有的
+  `PreRunE` / `RunE` 不是自动归类边界，其中的参数校验必须显式使用
+  `internal/errors.NewValidation`；框架权威校验阶段可通过
+  `internal/errors.NormalizeValidation` 统一转换。禁止在输出层根据错误文案
+  猜测类别，已分类错误及取消/超时错误必须原样透传。
+- 参数校验执行由 `corecmd.WithValidation(validate, next)` 编排：Validate 失败时
+  不调用 next，next 的业务错误原样透传。Tier1 与 metadata-only Tier2 共用该边界。
+  `corecmd.New` 只构造命令；独立执行前必须在完成挂载后调用一次
+  `corecmd.PrepareCommandTree(root)`，再使用 Cobra `Execute` / `ExecuteC`。
+  app root 工厂已完成准备，不重复准备，也不在其返回后追加命令或替换校验钩子。
+  测试扩展通过组装回调挂载。测试**自行构造**的命令必须通过 `corecmd.*ForTest` 执行辅助函数
+  运行，不得直接调用 Cobra `Execute` / `ExecuteC`：自行构造的树未经准备，裸执行不安装准备
+  阶段的校验适配器，断言会落在未适配路径上，参数校验回归随之静默失效。app 工厂返回的 root
+  （`NewRootCommand` 等）已完成准备，对其直接 `Execute` 走的就是已适配路径，不需要该辅助函数。
+  从 main 合并进来的新测试同样适用，合并后须检查新增的自行构造命令是否仍走该辅助函数。
+  重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
+  错误保留分两种边界，不可混用。**校验边界**（`NormalizeValidation` 及其调用方）用
+  `internal/errors.PreserveClassification`：它额外保留取消/截止错误的身份，避免把超时
+  误判成参数错误。**业务分类边界**（如 `helpers.WrapErrorWithOperation`）必须用
+  `internal/errors.DeclaresClassification`：它只认自带契约的错误（结构化 `*Error` 或
+  `ExitCoder`）。裸 `context.DeadlineExceeded` 不声明任何类别，在业务边界透传会跳过既有的
+  `NETWORK_TIMEOUT` 分类，退化成 internal/退出码 5 并丢掉重试提示。
+- 准备阶段安装 Cobra 原生 `ValidationErrorFunc`，仅在 Args/required/group 失败时分类；
+  延迟生成的 help/completion 命令继承该边界。保留业务 Args/PreRun 钩子和原生约束注解，
+  required/group 由 Cobra 在业务 PreRun 后检查一次，不再安装提前重复检查。
+  手动 Cobra 解析必须经过 prepared `FlagErrorFunc`，并更新手动解析调用清单门禁。
+- Cobra v1.10.2 的本地依赖替换修复 `Traverse` 父级 flag handler、失败节点归属和根级静默行为，
+  并提供原生校验失败回调；
+  来源、补丁和升级约束见 `third_party/cobra/PATCHES.md`。修改依赖或统一校验框架时运行
+  `scripts/policy/check-typed-validation-errors.sh`（包含原始源码完整性与 Cobra 全量测试）。
+  根模块 `go test ./...` 不会覆盖该嵌套模块，不能替代依赖专项门禁。
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
 - Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
 - Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves
@@ -56,6 +107,10 @@ Schema contract) keep separate authorities — do not merge them with
   - homology gates → `internal/cli/homology`
   - Catalog assembly / `ResolveMeta` (`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`); go:embed only for reviewed inputs → `internal/cli` root (package-local aliases for annotate/store APIs live in `runtime_schema_seam.go`; the former `cli/runtimeannotate` / `cli/contractfinal` shim packages are removed — import `corecmd/*` directly)
   - **Hard rule**: `internal/corecmd` (and its subpackages) must **not** import any `internal/cli` package
+- Command metadata must not keep discarded Cobra trees alive. Use framework
+  `commandstore.Map` weak keys for DTO metadata; values must not reference commands.
+  Execution-hook lookups must also use weak values when closures can capture a
+  command; the installed RunE pipeline owns those hooks strongly.
 - Authoring tiers (current, not aspirational):
   - **Tier1** — `corecmd.New` / `helpers.NewLeafCommand` (fully managed declare + execute)
   - **Tier2** — `DeclareLeafMetadata` (helpers migration; **Shortcut may also use this path — acceptable**)
@@ -169,6 +224,21 @@ CI determinism (`check-schema-assembly.sh`) and policy jq gates consume a
 fresh assembly dump; runtime consumes the same `ResolveSchemaBuild` path via
 `RegisterSchemaSourceRoot`. Neither path may reopen annotations, merge source
 records, or use a previous Catalog JSON as a source.
+
+Pure typed consumption lives in `internal/cli/schemaruntime`, with parent-cli
+aliases for compatibility. It must remain independent of cli/Cobra/app/auth.
+The private generated protobuf lives in `internal/cli/schemacachepb`; bounded
+authenticated I/O and atomic publication live in `internal/schemacache` and
+must not call payload parsers. Framework constraint DTO normalization belongs
+to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
+`internal/schemareader` owns the immutable binary identity and composes that
+backend with the same typed decoders used by the CLI. Keep repair and process
+memoization in cli. Every public process invocation constructs the same complete
+Cobra tree before parsing argv, including root help, version, Schema, utilities,
+business commands, and completion. Do not add argv-selected product trees,
+pre-Cobra Schema execution, or a separate root-help projection.
+The startup warning's agent-relative paths are shared through internal/skillpaths.
+Publish the live Catalog pointer only after its Meta projection is complete.
 
 ### Assembly vs consumption
 

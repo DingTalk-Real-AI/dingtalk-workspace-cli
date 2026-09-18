@@ -52,7 +52,8 @@ var AttachmentPut = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "record-id", Type: shortcut.FlagString, Desc: "Record ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "attachment Field ID", Required: true},
-		{Name: "file", Type: shortcut.FlagString, Desc: "本地文件路径", Required: true},
+		{Name: "file", Type: shortcut.FlagString, Desc: "第一个本地文件路径", Required: true},
+		{Name: "additional-files", Type: shortcut.FlagStringSlice, Desc: "同次上传的其他文件，最多合计 10 个；名称须不同，全部上传后一次写入单元格"},
 		{Name: "mode", Type: shortcut.FlagString, Default: "append", Desc: "append 保留现有附件；replace 整体替换", Enum: []string{"append", "replace"}},
 		{Name: "mime-type", Type: shortcut.FlagString, Desc: "覆盖自动推断的 MIME type（可选）"},
 	},
@@ -66,17 +67,17 @@ var AttachmentRemove = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+attachment-remove",
 	Product:     serverMain,
-	Description: "从 attachment 字段清空全部或按文件名移除，写前确保剩余项具有可重写 fileToken，并读回验证",
-	Intent:      "当你要清空附件字段，或按精确文件名移除且安全保留其他附件时使用；读回若不给剩余项 fileToken 会在写前停止并说明服务边界。",
+	Description: "清空 attachment 字段或按文件名解析 resourceId 删除，并读回验证",
+	Intent:      "清空附件或按精确文件名移除时使用；优先按真实 resourceId 删除，回读验证目标移除与其余附件保留，存在服务端并发覆盖窗口。",
 	Risk:        shortcut.RiskHighWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent",
 	},
 	Contract: aitableCompositeContract(
 		"+attachment-remove",
-		"从 attachment 字段清空全部或按文件名移除，写前确保剩余项具有可重写 fileToken，并读回验证",
-		"当你要清空附件字段，或按精确文件名移除且安全保留其他附件时使用；读回若不给剩余项 fileToken 会在写前停止并说明服务边界。",
-		"读回仅有下载 URL 而没有剩余附件 fileToken 时，DWS 无法在覆盖式写接口上安全对齐逐项删除；此时只能 --clear-all 或停止",
+		"清空 attachment 字段或按文件名解析 resourceId 删除，并读回验证",
+		"清空附件或按精确文件名移除时使用；优先按真实 resourceId 删除，回读验证目标移除与其余附件保留，存在服务端并发覆盖窗口。",
+		"已知 resourceId 时可直接用 attachment remove；目标缺 resourceId 时仅在剩余项都有 fileToken 的情况下使用替换路径，否则停止",
 		`dws aitable +attachment-remove --base-id B --table-id T --record-id R --field-id F --clear-all`,
 	),
 	Flags: []shortcut.Flag{
@@ -84,9 +85,13 @@ var AttachmentRemove = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "record-id", Type: shortcut.FlagString, Desc: "Record ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "attachment Field ID", Required: true},
-		{Name: "remove-name", Type: shortcut.FlagString, Desc: "移除精确文件名的所有匹配项；与 --clear-all 二选一"},
-		{Name: "clear-all", Type: shortcut.FlagBool, Desc: "清空该字段全部附件；与 --remove-name 二选一"},
+		{Name: "remove-name", Type: shortcut.FlagString, Desc: "移除精确文件名的所有匹配项；与 --resource-ids 或 --clear-all=true 三选一"},
+		{Name: "resource-ids", Type: shortcut.FlagStringSlice, Desc: "精确 resourceId 列表；与非空 remove-name 或 clear-all=true 互斥"},
+		{Name: "clear-all", Type: shortcut.FlagBool, Desc: "true 时清空该字段全部附件；与 --remove-name 或 --resource-ids 三选一；false 不选择清空"},
 	},
+	// Keep the legacy value-sensitive selector validation in executeAttachmentRemove.
+	// A generic ExactlyOne counts --clear-all=false as selected and rejects
+	// previously valid name-based removals. The resource-ID route is additive.
 	Tips: []string{`dws aitable +attachment-remove --base-id B --table-id T --record-id R --field-id F --clear-all`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return executeAttachmentRemove(rt)
@@ -99,6 +104,31 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 		return err
 	}
 	defer file.Close()
+	type uploadFile struct {
+		file            *os.File
+		info            os.FileInfo
+		mimeType, token string
+	}
+	files := []uploadFile{{file: file, info: info, mimeType: mimeType}}
+	if rt.Changed("additional-files") {
+		paths := rt.StrSlice("additional-files")
+		if len(paths) > 9 {
+			return apperrors.NewValidation("最多同次上传 10 个文件")
+		}
+		seen := map[string]bool{info.Name(): true}
+		for _, path := range paths {
+			f, i, m, e := openAttachmentFile(path, rt.Str("mime-type"))
+			if e != nil {
+				return e
+			}
+			defer f.Close()
+			if seen[i.Name()] {
+				return apperrors.NewValidation("同批附件文件名必须不同，以便独立读回验证")
+			}
+			seen[i.Name()] = true
+			files = append(files, uploadFile{file: f, info: i, mimeType: m})
+		}
+	}
 	baseID, tableID, recordIDValue, fieldID := rt.Str("base-id"), rt.Str("table-id"), rt.Str("record-id"), rt.Str("field-id")
 	record, existing, err := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
 	if err != nil {
@@ -128,48 +158,57 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 		result.Executed = false
 		return rt.Output(result)
 	}
-	prepareData, err := rt.CallMCPWriteDataStrict(serverMain, "prepare_attachment_upload", map[string]any{"baseId": baseID, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType})
-	if err != nil {
-		result.Status = "unknown"
-		return compositeError(result, err, false)
+	for index, item := range files {
+		file, info, mimeType := item.file, item.info, item.mimeType
+		prepareData, err := rt.CallMCPWriteDataStrict(serverMain, "prepare_attachment_upload", map[string]any{"baseId": baseID, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType})
+		if err != nil {
+			result.Status = "unknown"
+			return compositeError(result, err, false)
+		}
+		uploadURL := findStringByKeys(prepareData, "uploadUrl")
+		fileToken := findStringByKeys(prepareData, "fileToken")
+		if uploadURL == "" || fileToken == "" {
+			result.Status = "unknown"
+			return compositeError(result, fmt.Errorf("prepare_attachment_upload response is missing uploadUrl or fileToken"), false)
+		}
+		if err := validateAttachmentUploadURL(uploadURL); err != nil {
+			result.Status = "unknown"
+			return compositeError(result, err, false)
+		}
+		// validateAttachmentUploadURL has already rejected every URL shape for
+		// which NewRequestWithContext can fail; PUT is a fixed valid method.
+		request, _ := http.NewRequestWithContext(rt.Command().Context(), http.MethodPut, uploadURL, file)
+		request.Header.Set("Content-Type", mimeType)
+		request.ContentLength = info.Size()
+		response, err := attachmentHTTPDo(request)
+		if err != nil {
+			result.Status = "partial_success"
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken})
+			return compositeError(result, fmt.Errorf("attachment HTTP PUT failed: %w", err), false)
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		closeErr := response.Body.Close()
+		if response.StatusCode < 200 || response.StatusCode >= 300 || closeErr != nil {
+			result.Status = "partial_success"
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken, "httpStatus": response.StatusCode})
+			return compositeError(result, fmt.Errorf("attachment HTTP PUT returned status %d (close error: %v)", response.StatusCode, closeErr), false)
+		}
+		files[index].token = fileToken
+		desired = append(desired, map[string]any{"fileToken": fileToken})
+		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "HTTP PUT", "fileToken": fileToken, "fileName": info.Name(), "size": info.Size()})
 	}
-	uploadURL := findStringByKeys(prepareData, "uploadUrl")
-	fileToken := findStringByKeys(prepareData, "fileToken")
-	if uploadURL == "" || fileToken == "" {
-		result.Status = "unknown"
-		return compositeError(result, fmt.Errorf("prepare_attachment_upload response is missing uploadUrl or fileToken"), false)
-	}
-	if err := validateAttachmentUploadURL(uploadURL); err != nil {
-		result.Status = "unknown"
-		return compositeError(result, err, false)
-	}
-	// validateAttachmentUploadURL has already rejected every URL shape for
-	// which NewRequestWithContext can fail; PUT is a fixed valid method.
-	request, _ := http.NewRequestWithContext(rt.Command().Context(), http.MethodPut, uploadURL, file)
-	request.Header.Set("Content-Type", mimeType)
-	request.ContentLength = info.Size()
-	response, err := attachmentHTTPDo(request)
-	if err != nil {
-		result.Status = "partial_success"
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken})
-		return compositeError(result, fmt.Errorf("attachment HTTP PUT failed: %w", err), false)
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
-	closeErr := response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 || closeErr != nil {
-		result.Status = "partial_success"
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken, "httpStatus": response.StatusCode})
-		return compositeError(result, fmt.Errorf("attachment HTTP PUT returned status %d (close error: %v)", response.StatusCode, closeErr), false)
-	}
-	desired = append(desired, map[string]any{"fileToken": fileToken})
-	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "HTTP PUT", "fileToken": fileToken, "fileName": info.Name(), "size": info.Size()})
 	_, writeErr := rt.CallMCPWriteDataStrict(serverMain, "update_records", map[string]any{
 		"baseId": baseID, "tableId": tableID,
 		"records": []any{map[string]any{"recordId": recordIDValue, "cells": map[string]any{fieldID: desired}}},
 	})
 	_, readBack, verifyErr := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
 	if verifyErr == nil {
-		verifyErr = verifyAttachmentPut(readBack, len(desired), fileToken, info.Name(), info.Size())
+		for _, item := range files {
+			verifyErr = verifyAttachmentPut(readBack, len(desired), item.token, item.info.Name(), item.info.Size())
+			if verifyErr != nil {
+				break
+			}
+		}
 	}
 	if verifyErr != nil {
 		result.Status = "partial_success"
@@ -179,9 +218,16 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 		}
 		return compositeError(result, verifyErr, false)
 	}
-	result.CompletedCount = 1
+	result.CompletedCount = len(files)
 	result.Verification = map[string]any{"status": "verified", "attachmentCount": len(readBack), "fileName": info.Name(), "size": info.Size()}
-	result.Result = map[string]any{"fileToken": fileToken, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType, "attachmentCount": len(readBack)}
+	result.Result = map[string]any{"fileToken": files[0].token, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType, "attachmentCount": len(readBack)}
+	if len(files) > 1 {
+		uploaded := []map[string]any{}
+		for _, item := range files {
+			uploaded = append(uploaded, map[string]any{"fileToken": item.token, "fileName": item.info.Name(), "size": item.info.Size()})
+		}
+		result.Result["files"] = uploaded
+	}
 	if writeErr != nil {
 		result.Status = "recovered"
 		result.Warnings = append(result.Warnings, "record write response was an error, but the attachment cell was proven by read-back")
@@ -192,32 +238,41 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {
 	removeName := strings.TrimSpace(rt.Str("remove-name"))
 	clearAll := rt.Bool("clear-all")
-	if (removeName == "") == !clearAll {
-		return apperrors.NewValidation("必须且只能提供 --remove-name 或 --clear-all")
+	selectors := 0
+	if removeName != "" {
+		selectors++
 	}
+	if clearAll {
+		selectors++
+	}
+	var requestedIDs []string
+	if rt.Changed("resource-ids") {
+		selectors++
+		var err error
+		requestedIDs, err = parseRecordIDs(rt.StrSlice("resource-ids"))
+		if err != nil {
+			return err
+		}
+	}
+	if selectors != 1 {
+		return apperrors.NewValidation("--remove-name、--clear-all、--resource-ids 必须且只能提供一种")
+	}
+
 	baseID, tableID, recordIDValue, fieldID := rt.Str("base-id"), rt.Str("table-id"), rt.Str("record-id"), rt.Str("field-id")
 	_, existing, err := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
 	if err != nil {
 		return err
 	}
-	desired := make([]any, 0, len(existing))
-	removed := 0
-	if clearAll {
-		removed = len(existing)
+	var plan attachmentRemovalPlan
+	if len(requestedIDs) > 0 {
+		plan, err = planAttachmentRemovalIDs(existing, requestedIDs)
 	} else {
-		for index, item := range existing {
-			if attachmentName(item) == removeName {
-				removed++
-				continue
-			}
-			token := attachmentToken(item)
-			if token == "" {
-				return apperrors.NewValidation(fmt.Sprintf("剩余附件[%d]读回缺少 fileToken，覆盖式写接口无法安全保留后删除；服务端当前不支持按附件增量删除", index),
-					apperrors.WithReason("attachment_tokens_unavailable"), apperrors.WithExecutionStarted(false))
-			}
-			desired = append(desired, map[string]any{"fileToken": token})
-		}
+		plan, err = planAttachmentRemoval(existing, removeName, clearAll)
 	}
+	if err != nil {
+		return err
+	}
+	removed := plan.removed
 	result := newCompositeResult("attachment_remove")
 	result.RequestedCount = removed
 	result.Resolved = map[string]any{"baseId": baseID, "tableId": tableID, "recordId": recordIDValue, "fieldId": fieldID, "removeName": removeName, "clearAll": clearAll}
@@ -227,27 +282,29 @@ func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {
 		result.Verification = map[string]any{"status": "verified", "attachmentCount": len(existing), "removedCount": 0}
 		return rt.Output(result)
 	}
-	result.Plan = []compositeStep{{Index: 1, Name: "replace attachment cell without selected items", Tool: "update_records", Status: "planned", Count: removed}}
+	arguments := map[string]any{"baseId": baseID, "tableId": tableID, "recordId": recordIDValue, "fieldId": fieldID}
+	if plan.tool == "remove_attachments" {
+		if !clearAll {
+			arguments["resourceIds"] = plan.resourceIDs
+		}
+	} else {
+		arguments = map[string]any{"baseId": baseID, "tableId": tableID,
+			"records": []any{map[string]any{"recordId": recordIDValue, "cells": map[string]any{fieldID: plan.replacement}}}}
+	}
+	result.Plan = []compositeStep{{Index: 1, Name: "remove selected attachments", Tool: plan.tool, Status: "planned", Count: removed}}
 	if rt.DryRun() {
 		result.Status = "planned"
 		result.Executed = false
 		return rt.Output(result)
 	}
-	_, writeErr := rt.CallMCPWriteDataStrict(serverMain, "update_records", map[string]any{
-		"baseId": baseID, "tableId": tableID,
-		"records": []any{map[string]any{"recordId": recordIDValue, "cells": map[string]any{fieldID: desired}}},
-	})
-	_, readBack, verifyErr := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
-	if verifyErr == nil && len(readBack) != len(desired) {
-		verifyErr = fmt.Errorf("attachment read-back count is %d, want %d", len(readBack), len(desired))
+	_, writeErr := rt.CallMCPWriteDataStrict(serverMain, plan.tool, arguments)
+	if isRecordWriteInputRejection(writeErr) {
+		result.Status = "failed"
+		return compositeError(result, writeErr, false)
 	}
-	if verifyErr == nil && removeName != "" {
-		for _, item := range readBack {
-			if attachmentName(item) == removeName {
-				verifyErr = fmt.Errorf("attachment %q is still present after removal", removeName)
-				break
-			}
-		}
+	_, readBack, verifyErr := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
+	if verifyErr == nil {
+		verifyErr = verifyAttachmentRemoval(readBack, plan, removeName)
 	}
 	if verifyErr != nil {
 		result.Status = "unknown"

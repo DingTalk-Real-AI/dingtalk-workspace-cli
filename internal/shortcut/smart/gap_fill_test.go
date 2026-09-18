@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -28,7 +29,7 @@ func TestCrossPlatformCoverageAtMeEmptyResultKeepsMessagesAndItemsIterable(t *te
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--format", "json"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -55,15 +56,15 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 		{
 			name:      "chat messages",
 			tool:      "chat/list_conversation_message_v2",
-			response:  `{"result":{"messages":[` + message + `]}}`,
-			args:      []string{"chat", "+chat-messages", "--conversation-id", "cid"},
+			response:  `{"result":{"hasMore":false,"messages":[` + message + `]}}`,
+			args:      []string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid"},
 			resultKey: "messages",
 		},
 		{
 			name:      "search",
 			tool:      "im/search_messages",
 			response:  `{"result":{"messages":[` + message + `],"hasMore":false}}`,
-			args:      []string{"chat", "+search-msg", "--query", "x", "--no-enrich"},
+			args:      []string{"chat", "+search-msg", "--no-reactions", "--query", "x", "--no-enrich"},
 			resultKey: "messages",
 		},
 		{
@@ -76,8 +77,8 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 		{
 			name:      "thread replies",
 			tool:      "chat/list_topic_replies",
-			response:  `{"result":{"messages":[` + message + `]}}`,
-			args:      []string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"},
+			response:  `{"result":{"hasMore":false,"messages":[` + message + `]}}`,
+			args:      []string{"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread"},
 			resultKey: "replies",
 		},
 	}
@@ -93,7 +94,7 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 			args := append([]string{}, tc.args...)
 			args = append(args, "--download-resources", "--output-dir", "./downloads", "--dry-run")
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if caller.counts[tc.tool] != 1 {
@@ -124,15 +125,15 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 
 func TestCrossPlatformCoverageMessageReadShortcutResourceOutputValidation(t *testing.T) {
 	for _, args := range [][]string{
-		{"chat", "+chat-messages", "--conversation-id", "cid"},
-		{"chat", "+search-msg", "--query", "x", "--no-enrich"},
+		{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid"},
+		{"chat", "+search-msg", "--no-reactions", "--query", "x", "--no-enrich"},
 		{"chat", "+at-me"},
-		{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"},
+		{"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread"},
 	} {
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append(args, "--download-resources", "--output-dir", "../outside", "--yes"))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("unsafe output accepted: %v", args)
 		}
 	}
@@ -143,8 +144,8 @@ func TestCrossPlatformCoverageChatMessagesDefaultsToRecentHistory(t *testing.T) 
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	before := time.Now().Add(-2 * time.Second)
-	root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--limit", "5"})
-	if err := root.Execute(); err != nil {
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--limit", "5"})
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	after := time.Now().Add(2 * time.Second)
@@ -180,12 +181,12 @@ func TestCrossPlatformCoverageChatMessagesPreservesExplicitTime(t *testing.T) {
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+chat-messages",
+		"chat", "+chat-messages", "--no-reactions",
 		"--conversation-id", "cid",
 		"--time", "2026-07-01 12:34:56",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 ||

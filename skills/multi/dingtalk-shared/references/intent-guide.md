@@ -428,7 +428,7 @@ dws chat message send --conversation-id <openConversationId> --msg-type location
 
 | 用户动作 | 路由 | 原因 |
 |---|---|---|
-| 查询或创建合同台账、起草、审查、归档、管理合同项目/相对方/账款 | `dingtalk-misc` → `contract` | 法务智能合同正式产品面 |
+| 查询或创建合同台账、起草、归档、管理合同项目/相对方/账款 | `dingtalk-misc` → `contract` | 法务智能合同正式产品面 |
 | 查询、同意、拒绝、撤销或转交已有合同审批实例 | `dingtalk-misc` → `oa` | 动作对象是审批任务或实例，不是合同台账 |
 | 管理经营合约、目标、计分卡或 OKR | `dingtalk-misc` → `agoal` | “经营合约”属于目标管理 |
 | 搜索、上传或下载合同文件 | `dingtalk-drive` | 动作是通用文件存储与传输 |

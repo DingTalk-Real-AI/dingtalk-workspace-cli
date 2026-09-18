@@ -14,12 +14,12 @@
 package corecmd
 
 import (
-	"sync"
-
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore"
 )
 
-var interfaceBoolConstParamsRegistry sync.Map
+var interfaceBoolConstParamsRegistry commandstore.Map
 
 // attachInterfaceBoolConstParams records framework-owned ConstParams evidence.
 // Only a non-empty, entirely boolean declaration is representable in v1;

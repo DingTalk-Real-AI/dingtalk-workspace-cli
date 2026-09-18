@@ -6,6 +6,7 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -416,6 +417,10 @@ func intField(data map[string]any, names ...string) int {
 			return int(value)
 		case float64:
 			return int(value)
+		case json.Number:
+			if v, err := value.Int64(); err == nil {
+				return int(v)
+			}
 		case string:
 			var out int
 			if _, err := fmt.Sscanf(value, "%d", &out); err == nil {

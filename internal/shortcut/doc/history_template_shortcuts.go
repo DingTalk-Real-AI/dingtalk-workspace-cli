@@ -658,5 +658,5 @@ func collectTemplateIDs(value any) []string {
 }
 
 func init() {
-	shortcut.Register(CreateFromTemplate)
+	registerDocShortcuts(CreateFromTemplate)
 }
