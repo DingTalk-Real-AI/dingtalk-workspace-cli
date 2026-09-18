@@ -161,15 +161,18 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 		if err == nil {
 			return m, ok
 		}
-		// Repair acquires locks and publishes; it stays disabled while the
-		// process surface is plugin-uncertain (see readableSchemaCacheRuntime).
-		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+		// Repair acquires locks and uses the isolated builder while the
+		// process surface is plugin-uncertain.
+		if repairable := repairableSchemaCacheRuntime(); repairable != nil {
 			value, _, repairErr := repairSchemaCache(repairable, func() (any, error) {
 				return repairable.readCommandMetaFromPayloadFresh(cliPath)
 			})
 			if repairErr == nil && value != nil {
 				result := value.(resolvedMeta)
 				return result.Meta, result.OK
+			}
+			if repairErr != nil && schemaCacheRuntimeUncertain.Load() {
+				panicIfMetaIndexUnusable(repairErr)
 			}
 		}
 	}
