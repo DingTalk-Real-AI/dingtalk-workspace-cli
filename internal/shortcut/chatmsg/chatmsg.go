@@ -375,6 +375,17 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
 	}
+	// Decrypt evidence written in place by the shared inbound decrypt pipeline;
+	// pass it through so consumers can tell decrypted plaintext from native.
+	if value, ok := m["contentDecrypted"]; ok {
+		row["contentDecrypted"] = value
+	}
+	if value, ok := m["cryptoLayer"]; ok {
+		row["cryptoLayer"] = value
+	}
+	if value, ok := m["dingKeyVersion"]; ok {
+		row["dingKeyVersion"] = value
+	}
 	if includeReactions {
 		if reactions := Reactions(m); len(reactions) > 0 {
 			row["reactions"] = reactions

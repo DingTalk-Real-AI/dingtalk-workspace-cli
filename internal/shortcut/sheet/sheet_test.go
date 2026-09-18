@@ -61,7 +61,7 @@ func runSheetCoverage(t *testing.T, declaration shortcut.Shortcut, caller *sheet
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"sheet", declaration.Command}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageSheetListRejectsFalseEmptySuccess(t *testing.T) {

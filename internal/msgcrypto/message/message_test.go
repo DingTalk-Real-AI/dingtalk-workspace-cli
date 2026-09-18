@@ -6,6 +6,7 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -475,19 +476,36 @@ func TestNewPolicyCacheShouldUseDefaultClockWhenNil(t *testing.T) {
 
 func TestHelpersShouldParseIntegerFieldVariants(t *testing.T) {
 	data := map[string]any{
-		"i":   int(1),
-		"l":   int64(2),
-		"f":   float64(3),
-		"s":   "4",
-		"bad": "x",
+		"i":      int(1),
+		"l":      int64(2),
+		"f":      float64(3),
+		"s":      "4",
+		"j":      json.Number("5"),
+		"badnum": json.Number("x"),
+		"bad":    "x",
 	}
-	for key, want := range map[string]int{"i": 1, "l": 2, "f": 3, "s": 4} {
+	for key, want := range map[string]int{"i": 1, "l": 2, "f": 3, "s": 4, "j": 5} {
 		if got := intField(data, key); got != want {
 			t.Fatalf("intField(%s) = %d, want %d", key, got, want)
 		}
 	}
+	if got := intField(data, "badnum"); got != 0 {
+		t.Fatalf("badnum intField = %d", got)
+	}
 	if got := intField(data, "bad", "missing"); got != 0 {
 		t.Fatalf("bad intField = %d", got)
+	}
+}
+
+func TestParseBatchDecryptResultsShouldParseJsonNumberKeyVersion(t *testing.T) {
+	got := parseBatchDecryptResults(map[string]any{"items": []any{
+		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "hello", "keyVersion": json.Number("3")},
+	}})
+	if len(got) != 1 {
+		t.Fatalf("results = %#v", got)
+	}
+	if got[0].KeyVersion != 3 {
+		t.Fatalf("keyVersion = %d, want 3", got[0].KeyVersion)
 	}
 }
 
@@ -524,6 +542,7 @@ func TestCrossPlatformCoverageMessageCryptoPackage(t *testing.T) {
 		{"cache_expired", TestPolicyCacheShouldDropExpiredAndSkipNonPositiveTTL},
 		{"cache_default_clock", TestNewPolicyCacheShouldUseDefaultClockWhenNil},
 		{"int_variants", TestHelpersShouldParseIntegerFieldVariants},
+		{"int_json_number_key_version", TestParseBatchDecryptResultsShouldParseJsonNumberKeyVersion},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, tc.run)

@@ -31,7 +31,9 @@ func TestCrossPlatformCoverageContractValidationSurvivesGC(t *testing.T) {
 	if validate == nil || validate(cmd, nil) != validationError {
 		t.Fatal("outer confirmation guard lost its validation hook after GC")
 	}
-	if err := cmd.RunE(cmd, nil); err != validationError {
+	// WithValidation normalizes validation errors; the original must still be
+	// identifiable through the wrap chain.
+	if err := cmd.RunE(cmd, nil); !errors.Is(err, validationError) {
 		t.Fatalf("direct RunE validation = %v", err)
 	}
 	runtime.KeepAlive(cmd)

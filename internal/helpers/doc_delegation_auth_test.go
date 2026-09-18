@@ -24,6 +24,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -605,7 +606,7 @@ func TestCrossPlatformCoverageDocDelegationAuthInstallNoFlagKeepsCaller(t *testi
 		return nil
 	})
 	root.SetArgs([]string{"sub"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if seen != edition.ToolCaller(inner) {
@@ -620,7 +621,7 @@ func TestCrossPlatformCoverageDocDelegationAuthInstallDepsNotInitialized(t *test
 		deps = state
 		root := newDocDelegationTestRoot(nil)
 		root.SetArgs([]string{"sub", "--principal-user-id", "u1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var cliErr *CLIError
 		if err == nil || !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
 			t.Fatalf("deps=%#v: Execute() error = %v, want CLIError CodeMCPToolError", state, err)
@@ -638,7 +639,7 @@ func TestCrossPlatformCoverageDocDelegationAuthInstallDryRunStillWraps(t *testin
 		return nil
 	})
 	root.SetArgs([]string{"sub", "--principal-user-id", "u1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	// After removing the dry-run early return, the decorator is always installed.
@@ -663,7 +664,7 @@ func TestCrossPlatformCoverageDocDelegationAuthInstallWrapsAndRestores(t *testin
 		return nil
 	})
 	root.SetArgs([]string{"sub", "--principal-user-id", " u1 "})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	decorated, ok := seen.(*docDelegationAuthCaller)
@@ -690,7 +691,7 @@ func TestCrossPlatformCoverageDocDelegationAuthInstallKeepsReadCapability(t *tes
 		return nil
 	})
 	root.SetArgs([]string{"sub", "--principal-user-id", "u1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if _, ok := seen.(*docDelegationAuthReadCaller); !ok {
@@ -731,7 +732,7 @@ func TestCrossPlatformCoverageDocDelegationAuthChainsRootPersistentPreRunE(t *te
 	for _, name := range groups {
 		rootHookCallCount = 0
 		rootCmd.SetArgs([]string{name, "leaf"})
-		if err := rootCmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(rootCmd); err != nil {
 			t.Fatalf("%s/leaf: Execute() error = %v", name, err)
 		}
 		if rootHookCallCount != 1 {
@@ -765,7 +766,7 @@ func TestCrossPlatformCoverageDocDelegationAuthRootHookErrorPropagates(t *testin
 	rootCmd.AddCommand(group)
 
 	rootCmd.SetArgs([]string{"doc", "leaf"})
-	err := rootCmd.Execute()
+	err := corecmd.ExecuteForTest(rootCmd)
 	if !errors.Is(err, rootErr) {
 		t.Fatalf("Execute() error = %v, want root hook error propagated", err)
 	}

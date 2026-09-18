@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
@@ -39,7 +40,7 @@ func runDevDomainErrorCase(t *testing.T, runner executor.Runner, args ...string)
 	root.SetErr(&errBuf)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return &out, &errBuf, err
 }
 

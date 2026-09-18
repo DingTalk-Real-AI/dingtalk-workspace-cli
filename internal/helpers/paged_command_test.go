@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -111,7 +112,7 @@ func executePagedCommandTestWithContext(t *testing.T, ctx context.Context, calle
 	AddPagedMCPFlags(cmd)
 	cmd.SetErr(errOut)
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if buf, ok := out.(*bytes.Buffer); ok {
 		return buf.String(), errOut.String(), err
 	}
@@ -716,7 +717,7 @@ func TestCrossPlatformCoverageChatSearchCommonOwnsBoundedPagination(t *testing.T
 		"search-common", "--nicks", "one,two", "--match-mode", "AND",
 		"--limit", "100", "--page-all", "--max-items", "2", "--page-delay", "0",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -810,7 +811,9 @@ func TestPagedMCPCommandPassesCommandContextToCaller(t *testing.T) {
 	if strings.TrimSpace(out) == "" || len(caller.calls) != 1 {
 		t.Fatalf("stdout=%q calls=%#v, want one successful call", out, caller.calls)
 	}
-	if caller.calls[0].ctx != ctx || caller.calls[0].ctx.Err() != context.Canceled {
+	// The test boundary installs a result store (as production does), so the
+	// caller sees a derived context; cancellation must still carry through.
+	if caller.calls[0].ctx.Err() != context.Canceled {
 		t.Fatalf("call ctx=%#v err=%v, want canceled command context", caller.calls[0].ctx, caller.calls[0].ctx.Err())
 	}
 }
@@ -873,7 +876,7 @@ func TestCrossPlatformCoverageUnifiedPagedFailureRetainsPartialBusinessData(t *t
 	AddPagedMCPFlags(cmd)
 	cmd.SetArgs([]string{"--page-all", "--page-delay", "0"})
 
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("unified pagination failure returned nil")
 	}
@@ -980,7 +983,7 @@ func TestCrossPlatformCoverageUnifiedPagedDryRunStoresPreview(t *testing.T) {
 	AddPagedMCPFlags(cmd)
 	cmd.SetArgs([]string{"--page-all", "--page-limit", "3", "--page-delay", "0"})
 
-	executed, err := cmd.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(cmd, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1025,7 +1028,7 @@ func TestCrossPlatformCoverageUnifiedSinglePageDryRunStoresCommandResult(t *test
 	cmd.Flags().String("cursor", "0", "")
 	AddPagedMCPFlags(cmd)
 
-	executed, err := cmd.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(cmd, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

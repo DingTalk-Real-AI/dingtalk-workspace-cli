@@ -44,10 +44,10 @@ var RecordBatchCreate = shortcut.Shortcut{
 var FieldCreate = shortcut.Shortcut{
 	Service: "aitable", Command: "+field-create", Product: serverMain,
 	Description: "批量新增字段，15 个分片并核对新字段 ID、类型与配置",
-	Intent:      "已有数据表要新增明确结构的一批字段时使用；名称已存在或重复则停止，避免重试创建重复列。",
+	Intent:      "已有数据表要新增明确结构的一批字段时使用；名称已存在或重复则停止。创建回执明确含 CREATE_FIELD_READBACK_PENDING 且保留 fieldId 时，表示写入已受理但读回尚未验证，不代表未创建；只对这些原 ID 有界读回并核对名称、类型与配置。读回预算耗尽仍保留已知 ID 和未验证状态，不重发创建。仅 fieldId 非空不足以证明任意失败回执已成功。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"},
-	Contract:    aitableCompositeContractWithResult("+field-create", "批量新增字段并核对结构", "已有表新增一批不重名字段时", "已有字段修改用 +field-update；新建整张表用 +table-bootstrap", `dws aitable +field-create --base-id B --table-id T --fields '[{"fieldName":"标题","type":"text"}]'`, parityCompositeResultSpec()),
+	Contract:    aitableCompositeContractWithResult("+field-create", "批量新增字段并核对结构；读回延迟保留原 ID", "已有表新增一批不重名字段，或核对创建后读回延迟的回执时", "已有字段修改用 +field-update；新建整张表用 +table-bootstrap", `dws aitable +field-create --base-id B --table-id T --fields '[{"fieldName":"标题","type":"text"}]'`, parityCompositeResultSpec()),
 	Flags:       []shortcut.Flag{{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true}, {Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true}, {Name: "fields", Type: shortcut.FlagString, Desc: "非空字段结构数组，fieldName/type/config/description/aiConfig，最多 100 个", Required: true}, {Name: "resume-field-ids", Type: shortcut.FlagStringSlice, Desc: "提供 fields 开头已创建字段的 ID；核实名称与结构后按 fields 顺序返回，只创建剩余字段，全部提供时只核实"}},
 	Execute:     executeParityFieldCreate,
 }
@@ -138,6 +138,11 @@ func executeParityFieldCreate(rt *shortcut.RuntimeContext) error {
 		if writeErr == nil {
 			writeErr = receiptErr
 		}
+		if receiptErr == nil && fieldReadbackPendingReceipt(receipt) {
+			// MCP kept the IDs of acknowledged writes whose visibility budget expired.
+			// Continue exact-ID reads; never replay create_fields.
+			writeErr = nil
+		}
 		if writeErr != nil {
 			return compositeError(result, writeErr, false)
 		}
@@ -221,7 +226,7 @@ func parityCreatedFieldIDs(raw map[string]any, expected []any) ([]string, error)
 			continue
 		}
 		delete(names, name)
-		if m["success"] != true {
+		if m["success"] != true && stringValue(m, "errorCode") != "CREATE_FIELD_READBACK_PENDING" {
 			failure = fmt.Errorf("create_fields rejected field %q: %s", name, stringValue(m, "errorMessage", "reason", "errorCode"))
 			continue
 		}
@@ -237,6 +242,29 @@ func parityCreatedFieldIDs(raw map[string]any, expected []any) ([]string, error)
 		failure = fmt.Errorf("create_fields omitted one or more field results")
 	}
 	return ids, failure
+}
+
+// Only this explicit post-write marker permits ignoring a failed receipt while
+// verifying its known IDs. Other failures retain their existing stop boundary.
+func fieldReadbackPendingReceipt(raw map[string]any) bool {
+	rows, ok := parityResponseObject(raw)["results"].([]any)
+	if !ok {
+		return false
+	}
+	pending := false
+	for _, raw := range rows {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			return false
+		}
+		if item["success"] != true {
+			if item["errorCode"] != "CREATE_FIELD_READBACK_PENDING" {
+				return false
+			}
+			pending = true
+		}
+	}
+	return pending
 }
 func readParityCreatedFields(rt *shortcut.RuntimeContext, base, table string, ids []string) ([]map[string]any, error) {
 	all := []map[string]any{}
