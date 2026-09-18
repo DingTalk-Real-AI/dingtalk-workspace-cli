@@ -225,7 +225,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "create",
 		Short:     "创建草稿态数字员工",
-		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。avatar-url 可传公网 HTTP(S) 地址或本地图片路径；本地图片复用 Skill 文件上传封装，在 CLI 内部上传为 OSS 地址后写入草稿。用户传入的主管标识始终是 userId。mainProgramType 仅支持 open_code、local_agent；无特殊要求时默认不传，由 OpenAPI 按 open_code 处理。local_agent 不需要平台模型、人设、Skill 或 MCP 才能创建。",
+		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。avatar-url 可传公网 HTTP(S) 地址或本地图片路径；本地图片复用 Skill 文件上传封装，在 CLI 内部上传为 OSS 地址后写入草稿。用户传入的主管标识始终是 userId。MCP 字段 type 仅支持 open_code、local_agent；无特殊要求时默认不传，由 OpenAPI 按 open_code 处理。local_agent 不需要平台模型、人设、Skill 或 MCP 才能创建。",
 		Tool:      deapAgentCreateTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -235,7 +235,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传时服务端使用操作人主任职部门", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "avatar-url", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片路径（最大 10 MiB）；本地文件由 CLI 自动上传", Bind: "avatarUrl", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；接入本地 Agent/DSH 时传 local_agent", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 		},
 		Safety: contract.SafetySpec{
@@ -273,7 +273,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
-				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.mainProgramType", Enum: deapAgentMainProgramTypeValues, Description: "可选主程序类型；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；明确接入本地 Agent/DSH 时传 local_agent"},
+				{Name: "main-program-type", Property: "type", Enum: deapAgentMainProgramTypeValues, Description: "MCP 字段为 type；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；明确接入本地 Agent/DSH 时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；支持 mention_only、targeted_proactive，或英文逗号分隔的双值组合 mention_only,targeted_proactive"},
 			},
 		},
@@ -326,13 +326,13 @@ func newDeapAgentListCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "list",
 		Short:     "分页查询数字员工",
-		Long:      "分页查询当前身份有权查看的数字员工。管理员可看本组织全部，非管理员只返回本人参与的数字员工；支持按名称或职责等可见信息模糊搜索，不对外提供工号语义。可按 mainProgramType 筛选，取值 open_code、local_agent；不传表示不过滤。page 和 page-size 必须大于等于 1。",
+		Long:      "分页查询当前身份有权查看的数字员工。管理员可看本组织全部，非管理员只返回本人参与的数字员工；支持按名称或职责等可见信息模糊搜索，不对外提供工号语义。可按 type 筛选，取值 open_code、local_agent；不传表示不过滤。page 和 page-size 必须大于等于 1。",
 		Tool:      deapAgentListTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "keyword", Usage: "按名称或职责等可见信息模糊匹配", Bind: "keyword", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "按主程序类型筛选：open_code 或 local_agent；不传表示不过滤", Bind: "mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "main-program-type", Usage: "按主程序类型筛选：open_code 或 local_agent；对应 MCP 字段 type，不传表示不过滤", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "page", Usage: "页码", Bind: "page", Kind: LeafInt, Default: "1", ArgDefault: "1"},
 			{Name: "page-size", Usage: "每页数量", Bind: "pageSize", Kind: LeafInt, Default: "20", ArgDefault: "20"},
 		},
@@ -387,7 +387,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传保持原部门，不支持清空", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "prompt", Usage: "人设/System Prompt（最多 5000 个 Unicode 码点）", Bind: "prompt", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.mainProgramType", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 			{Name: "skills-file", Usage: "Skill 草稿配置 JSON 数组文件，元素为 skillId/enabled/attributes；不传保持原配置，显式空数组才清空", Bind: "skillsFile", Trim: true, OmitEmpty: true},
 			{Name: "mcps-file", Usage: "MCP 草稿配置 JSON 数组文件，元素为 mcpId/enabled/config；不传保持原配置，显式空数组才清空，凭据只允许使用安全引用", Bind: "mcpsFile", Trim: true, OmitEmpty: true},
@@ -430,7 +430,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
-				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.mainProgramType", Enum: deapAgentMainProgramTypeValues, Description: "可选主程序类型；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
+				{Name: "main-program-type", Property: "type", Enum: deapAgentMainProgramTypeValues, Description: "MCP 字段为 type；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；支持 mention_only、targeted_proactive，或英文逗号分隔的双值组合 mention_only,targeted_proactive"},
 				{Name: "skills-file", Property: "skills", InterfaceType: "array"},
 				{Name: "mcps-file", Property: "mcps", InterfaceType: "array"},
@@ -617,7 +617,6 @@ func deapAgentPrepareProfile(args map[string]any) {
 		property string
 	}{
 		{"digitalTagEmployeeProfile.supervisorUserId", "supervisorUserId"},
-		{"digitalTagEmployeeProfile.mainProgramType", "mainProgramType"},
 		{"digitalTagEmployeeProfile.responseMode", "responseMode"},
 	} {
 		if value, ok := args[field.argument]; ok {

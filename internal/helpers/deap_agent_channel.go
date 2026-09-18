@@ -193,9 +193,13 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("query digital employee draft: %w", err)
 	}
-	mainProgramType := findJSONScalar(draft, "mainProgramType")
-	if mainProgramType != "local_agent" {
-		return apperrors.NewValidation("数字员工不是 local_agent；请先完整读取 draft，保留全部配置并将 mainProgramType 修改为 local_agent 后再 connect")
+	agentType := findJSONScalar(draft, "type")
+	if agentType == "" {
+		// 兼容 MCP 映射切换前的历史响应；新契约统一返回 type。
+		agentType = findJSONScalar(draft, "mainProgramType")
+	}
+	if agentType != "local_agent" {
+		return apperrors.NewValidation("数字员工不是 local_agent；请先完整读取 draft，保留全部配置并将 type 修改为 local_agent 后再 connect")
 	}
 	published, err := queryPublishedDigitalEmployee(cmd.Context(), agentUUID)
 	if err != nil {

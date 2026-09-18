@@ -23,7 +23,7 @@ Example:
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
-`mainProgramType` 仅支持 `open_code`、`local_agent`，`a2a` 暂不支持：没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；只有明确接入本地 Agent/DSH 时才传 `local_agent`。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
+MCP 的主程序类型字段为 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数仍是 `--main-program-type`。没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；只有明确接入本地 Agent/DSH 时才传 `local_agent`。详情命令的 `--type draft|published` 表示配置来源，不是主程序类型。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
 
 ## detail / list — 查询
 
@@ -36,7 +36,7 @@ Example:
   dws dingtalk-tag manage list --keyword "周报" --main-program-type local_agent --format json
 ```
 
-`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--main-program-type` 仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
+`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--main-program-type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
 
 `detail` 的 `--type` 默认为 `draft`；需要核对已发布配置时显式传 `--type published`。数字员工详情只有 `draft` / `published` 两种配置来源，不额外返回 `snapshot`；Skill/MCP 资源才有独立 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
 

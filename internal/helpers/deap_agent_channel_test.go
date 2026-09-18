@@ -401,7 +401,7 @@ func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.
 	}{
 		{
 			name:      "non local agent",
-			responses: []string{`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"deap_cloud"}}}`},
+			responses: []string{`{"success":true,"data":{"type":"open_code"}}`},
 			want:      "不是 local_agent",
 		},
 		{
@@ -594,7 +594,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
-			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
+			`{"success":true,"data":{"name":"本地员工","type":"local_agent"}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":         {authResponse},

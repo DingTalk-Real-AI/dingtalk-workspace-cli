@@ -31,7 +31,7 @@ metadata:
 
 ## 自然语言编排硬约束
 
-- `mainProgramType` 仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。创建或更新没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；用户明确要求时可以显式传 `open_code`；只有明确接入本地 Agent/DSH 时才传 `--main-program-type local_agent`。
+- MCP 的主程序类型字段统一为 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 使用语义明确的 `--main-program-type`；创建或更新没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；只有明确接入本地 Agent/DSH 时才传 `--main-program-type local_agent`。不要与详情命令中表示 draft/published 的 `--type` 混淆。
 - 创建只要求名称和描述；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
 - `save-draft` 是按字段更新；只传用户明确修改的基础字段。Skill 与 MCP 必须分别用 `--skills-file` / `--mcps-file` 表达，不传保持原关联，显式 `[]` 只清空对应类别。
 - `local_agent` 发布只要求名称和描述，不向用户追问平台 Prompt、模型、Skill 或 MCP；`open_code` 才按平台运行所需信息补齐。

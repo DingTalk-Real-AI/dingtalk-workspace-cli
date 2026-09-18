@@ -931,9 +931,9 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			wantArgs: map[string]any{
 				"name": "值班助手", "description": "处理值班问题",
 				"deptId": "dept-1",
+				"type":   "local_agent",
 				"digitalTagEmployeeProfile": map[string]any{
-					"supervisorUserId": "supervisor-1", "mainProgramType": "local_agent",
-					"responseMode": "mention_only,targeted_proactive",
+					"supervisorUserId": "supervisor-1", "responseMode": "mention_only,targeted_proactive",
 				},
 			},
 		},
@@ -948,7 +948,7 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 				"keyword": "值班", "main-program-type": "local_agent", "page": "2", "page-size": "101",
 			},
 			wantArgs: map[string]any{
-				"keyword": "值班", "mainProgramType": "local_agent", "page": 2, "pageSize": 101,
+				"keyword": "值班", "type": "local_agent", "page": 2, "pageSize": 101,
 			},
 		},
 		{
@@ -961,9 +961,9 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			},
 			wantArgs: map[string]any{
 				"agentUuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
+				"type": "local_agent",
 				"digitalTagEmployeeProfile": map[string]any{
-					"supervisorUserId": "supervisor-1", "mainProgramType": "local_agent",
-					"responseMode": "targeted_proactive",
+					"supervisorUserId": "supervisor-1", "responseMode": "targeted_proactive",
 				},
 			},
 		},

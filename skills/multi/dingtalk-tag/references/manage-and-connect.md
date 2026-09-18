@@ -55,6 +55,8 @@ dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format j
 
 `save-draft` 只更新显式字段。基础字段不传保持原值；`--skills-file` / `--mcps-file` 不传保持原关联，显式 `[]` 只清空对应类别。头像统一使用 `--avatar-url`；它既可接收公网 HTTP(S)，也可接收本地路径，本地文件由 CLI 复用 Skill 上传封装并回写 OSS URL。
 
+CLI 的 `--main-program-type` 映射到 MCP 顶层字段 `type`；详情响应也以 `type` 返回 `open_code` 或 `local_agent`。详情查询命令自身的 `--type draft|published` 仅选择配置来源。
+
 ## 发布、查询和删除
 
 ```bash
