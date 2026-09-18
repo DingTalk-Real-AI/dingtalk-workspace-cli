@@ -94,6 +94,11 @@ func DeliverySchemaCacheArtifactsForTest() (SchemaCacheArtifacts, error) {
 	return buildSchemaCacheArtifactsFromLoaded(*loaded)
 }
 
+// ResetSchemaCacheRuntimeUncertaintyForTest resets process state between tests.
+func ResetSchemaCacheRuntimeUncertaintyForTest() {
+	schemaCacheRuntimeUncertain.Store(false)
+}
+
 // SchemaCacheReadableIdentityForTest returns the registered identity even when
 // the process is uncertain and therefore prohibited from direct publication.
 func SchemaCacheReadableIdentityForTest() (SchemaCacheIdentity, bool) {
@@ -109,11 +114,13 @@ func SchemaCacheReadableIdentityForTest() (SchemaCacheIdentity, bool) {
 // assembled-delivery stub after a production-assembly exercise. Outside package
 // cli TestMain it clears the factory and resets lazy delivery state.
 func RestorePackageCLISchemaDeliveryForTest() {
+	schemaCacheRuntimeUncertain.Store(false)
 	if restorePackageCLISchemaDeliveryHook != nil {
 		restorePackageCLISchemaDeliveryHook()
 		return
 	}
 	storeSchemaSourceRootFn(nil)
+	schemaCacheRuntimeUncertain.Store(false)
 	assembleDeliverySchemaCatalogFn = assembleSchemaCatalogFromRoot
 	resetSchemaDeliveryState()
 }

@@ -150,6 +150,7 @@ func mergeSchemaCatalogDump(envelopeJSON []byte, toolsDir string) (SchemaCatalog
 }
 
 func restorePackageCLISchemaDeliveryForTest() {
+	schemaCacheRuntimeUncertain.Store(false)
 	if packageCLIAssembledDelivery == nil {
 		return
 	}

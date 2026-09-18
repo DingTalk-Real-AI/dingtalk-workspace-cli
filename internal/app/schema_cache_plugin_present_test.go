@@ -274,6 +274,7 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 	})
 	t.Cleanup(func() {
 		cli.RegisterSchemaCacheIsolatedBuilder(buildSchemaCacheInChild)
+		cli.ResetSchemaCacheRuntimeUncertaintyForTest()
 		_ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{})
 	})
 

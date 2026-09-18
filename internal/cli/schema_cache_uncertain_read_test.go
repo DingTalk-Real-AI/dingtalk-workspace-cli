@@ -185,6 +185,33 @@ func TestCrossPlatformCoverageUncertainRuntimePublishesThroughBuilder(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageRegisterCacheOptionsPreservesUncertainty(t *testing.T) {
+	t.Cleanup(func() {
+		ResetSchemaCacheRuntimeUncertaintyForTest()
+		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
+	})
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	MarkSchemaCacheRuntimeUncertain()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if activeSchemaCacheRuntime() != nil {
+		t.Fatal("cache registration cleared runtime uncertainty")
+	}
+	if readableSchemaCacheRuntime() == nil {
+		t.Fatal("uncertain runtime lost readable cache access")
+	}
+}
+
 // TestCrossPlatformCoverageReadableRuntimeNilGuards covers every nil-return
 // branch of readableSchemaCacheRuntime so the platform coverage gate counts
 // them: no registration, disabled registration, and ineligible runtime.

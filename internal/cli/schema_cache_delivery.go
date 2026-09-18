@@ -91,7 +91,6 @@ var (
 // RegisterSchemaCacheOptions replaces the cache registration. Invalid options
 // fail closed to disabled before schemacache.Open or any filesystem operation.
 func RegisterSchemaCacheOptions(options SchemaCacheOptions) error {
-	schemaCacheRuntimeUncertain.Store(false)
 	if !options.Enabled {
 		schemaCacheRegistrationValue.Store(&schemaCacheRegistration{})
 		return nil
