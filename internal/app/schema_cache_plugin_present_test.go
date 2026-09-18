@@ -275,6 +275,7 @@ func TestCrossPlatformCoverageSchemaCachePublishesWithRuntimePlugins(t *testing.
 	t.Cleanup(func() {
 		cli.RegisterSchemaCacheIsolatedBuilder(buildSchemaCacheInChild)
 		cli.ResetSchemaCacheRuntimeUncertaintyForTest()
+		rootPluginLoadHadSideEffects.Store(false)
 		_ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{})
 	})
 
@@ -436,6 +437,10 @@ func TestCrossPlatformCoveragePluginConfigInjectionMarksRuntimeUncertainWithoutL
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	const canary = "DWS_PLUGIN_CONFIG_WITHOUT_PLUGIN"
+	t.Cleanup(func() {
+		rootPluginLoadHadSideEffects.Store(false)
+		cli.ResetSchemaCacheRuntimeUncertaintyForTest()
+	})
 	_ = os.Unsetenv(canary)
 	t.Cleanup(func() { _ = os.Unsetenv(canary) })
 	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{
