@@ -175,6 +175,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 
 	// Attach timing collector to context for use by child components
 	ctx := WithTimingCollector(context.Background(), timing)
+	ctx = context.WithValue(ctx, authStatusProcessStartupKey{}, true)
 	ctx = contextWithAgentMetadataSnapshot(ctx, agentMetadata)
 	ctx, resultStore = output.WithResultStore(ctx)
 	var signalState *processSignalState
@@ -1035,7 +1036,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			configureLogLevel(flags)
 
 			installOutputSinkRunBoundary(cmd)
-			if fn := edition.Get().AfterPersistentPreRun; fn != nil {
+			if fn := edition.Get().AfterPersistentPreRun; fn != nil && !isAuthStatusReadOnlyCommand(cmd) {
 				if err := fn(cmd, args); err != nil {
 					return err
 				}
@@ -1150,7 +1151,23 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	}
 	root.AddCommand(utilityCommands...)
 
-	if declarationOnly {
+	// The process argv is available before runtime extension initialization.
+	// Read-only status is local: do not let plugin user-context
+	// preloads or edition extension hooks acquire auth locks before its leaf.
+	readonlyStatusInvocation := false
+	processStartup, _ := rootCtx.Value(authStatusProcessStartupKey{}).(bool)
+	if loadRuntimeExtensions && processStartup {
+		if target, args, err := root.Find(os.Args[1:]); err == nil && target.Name() == "status" && target.Parent() != nil && target.Parent().Name() == "auth" {
+			// Parse with Cobra/pflag semantics (including explicit false, last
+			// occurrence wins and --) before choosing the startup path.
+			if authStatusReadOnlyRequested(target, args) {
+				readonlyStatusInvocation = true
+				loadRuntimeExtensions = false
+			}
+		}
+	}
+
+	if declarationOnly || readonlyStatusInvocation {
 		// Schema / surface assembly: mount the reviewed tree only. Do not
 		// injectStaticServers or InitDeps — those mutate process globals and
 		// would clobber a live runtime's caller and plugin endpoints.
@@ -1162,7 +1179,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// PAT authorization commands (open-source core)
 	pat.RegisterCommands(root, patCaller)
 
-	if !presentationOnly {
+	if !presentationOnly && !readonlyStatusInvocation {
 		if fn := edition.Get().RegisterExtraCommands; fn != nil {
 			caller := newToolCallerAdapter(runner, flags)
 			fn(root, caller)

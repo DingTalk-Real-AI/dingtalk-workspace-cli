@@ -551,12 +551,16 @@ func newAuthStatusCommand() *cobra.Command {
 		Short: "查看认证状态",
 		Long: `查看当前或指定组织 profile 的认证状态。
 
-指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。`,
+指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。
+使用 --readonly 只读本地快照，不获取认证锁、不访问认证服务、不刷新、不迁移或修复。
+只读模式与普通模式使用相同输出字段，但不执行刷新，可能返回不同的 token 有效性。
+并发更新时可能读到旧快照或无法判断的状态；系统 Keychain 读取仍可能等待。`,
 		Example: `  dws auth status
   dws auth status --profile <corpId>
   dws auth status --profile <corpId>:<userId>
   dws auth status --profile "钉钉:孙博文"
-  dws auth status --profile <corpId> --format json`,
+  dws auth status --profile <corpId> --format json
+  dws auth status --readonly --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
@@ -565,6 +569,13 @@ func newAuthStatusCommand() *cobra.Command {
 				return apperrors.NewInternal("failed to read --profile")
 			}
 			profileSelector = strings.TrimSpace(profileSelector)
+			readonly, err := cmd.Flags().GetBool("readonly")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --readonly")
+			}
+			if readonly {
+				return runAuthStatusReadOnly(cmd, configDir, profileSelector)
+			}
 			if profileSelector != "" {
 				selected, resolveErr := authpkg.ResolveProfile(configDir, profileSelector)
 				if resolveErr != nil {
@@ -621,51 +632,61 @@ func newAuthStatusCommand() *cobra.Command {
 				diagnostic = authStatusRefreshDiagnostic(refreshFailure)
 			}
 
-			// Check if JSON output is requested
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if strings.EqualFold(strings.TrimSpace(format), "json") {
-				return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
-			}
-
-			// Default table output
-			w := cmd.OutOrStdout()
-			if authenticated {
-				if refreshed {
-					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
-					fmt.Fprintln(w, "Token 已自动刷新")
-				} else {
-					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
-				}
-				if tokenData != nil {
-					if tokenData.CorpName != "" {
-						fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
-					}
-					if tokenData.CorpID != "" {
-						fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
-					}
-					if tokenData.IsRefreshTokenValid() {
-						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
-					} else {
-						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
-					}
-				}
-				if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
-				}
-			} else {
-				fmt.Fprintf(w, "%-16s%s\n", "状态:", "未登录")
-				if diagnostic != nil {
-					fmt.Fprintf(w, "%-16s%s\n", "原因:", diagnostic.Message)
-					fmt.Fprintf(w, "%-16s%s\n", "提示:", diagnostic.Hint)
-				} else if !edition.Get().IsEmbedded {
-					fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
-				}
-			}
-			return nil
+			return writeAuthStatusResult(cmd, authenticated, refreshed, tokenData, diagnostic)
 		},
 	}
 	cmd.Flags().String("profile", "", "指定组织或账号：corpId、corpName、corpId:userId、corpId:userName、corpName:userId、corpName:userName 或本地 profile 名")
+	cmd.Flags().Bool("readonly", false, "只读本地登录态，不获取认证锁、不刷新、不迁移或修复")
 	return cmd
+}
+
+// Both status modes render through the same compatibility-preserving path.
+func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, tokenData *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+	// Check if JSON output is requested
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if strings.EqualFold(strings.TrimSpace(format), "json") {
+		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
+	}
+
+	// Default table output
+	w := cmd.OutOrStdout()
+	if authenticated {
+		if refreshed {
+			fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
+			fmt.Fprintln(w, "Token 已自动刷新")
+		} else {
+			fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
+		}
+		if tokenData != nil {
+			if tokenData.CorpName != "" {
+				fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
+			}
+			if tokenData.CorpID != "" {
+				fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
+			}
+			if tokenData.IsRefreshTokenValid() {
+				fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
+			} else {
+				fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
+			}
+		}
+		if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
+			fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
+		}
+	} else {
+		status := "未登录"
+		if diagnostic != nil && (diagnostic.Reason == "local_state_requires_repair" || diagnostic.Reason == "local_state_unreadable") {
+			status = "无法判断"
+		}
+		fmt.Fprintf(w, "%-16s%s\n", "状态:", status)
+		if diagnostic != nil {
+			fmt.Fprintf(w, "%-16s%s\n", "原因:", diagnostic.Message)
+			fmt.Fprintf(w, "%-16s%s\n", "提示:", diagnostic.Hint)
+		} else if !edition.Get().IsEmbedded {
+			fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
+		}
+	}
+	return nil
 }
 
 func newAuthMigrateKeychainCommand() *cobra.Command {

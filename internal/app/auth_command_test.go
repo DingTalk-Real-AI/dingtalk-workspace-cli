@@ -625,6 +625,57 @@ func TestAuthStatusProfileOverrideDoesNotSwitchCurrentProfile(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAuthStatusReadOnlyReadsWhileAuthLockIsHeld(t *testing.T) {
+	for _, selector := range []string{"", "corp_status_read"} {
+		t.Run("profile="+selector, func(t *testing.T) {
+			configDir := setupAuthLogoutProfiles(t, authLogoutTestToken("corp_status_read"))
+			var out bytes.Buffer
+			args := []string{"--format", "json", "auth", "status", "--readonly"}
+			if selector != "" {
+				args = append(args, "--profile", selector)
+			}
+			previousArgs := os.Args
+			os.Args = append([]string{"dws"}, args...)
+			t.Cleanup(func() { os.Args = previousArgs })
+			lock, err := authpkg.AcquireDualLock(context.Background(), configDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(lock.Release)
+			done := make(chan error, 1)
+			go func() {
+				cmd := NewRootCommand(context.WithValue(context.Background(), authStatusProcessStartupKey{}, true))
+				cmd.SetOut(&out)
+				cmd.SetErr(&out)
+				cmd.SetArgs(args)
+				done <- cmd.Execute()
+			}()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("auth status --readonly error = %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				// Unblock the old locking implementation before reporting failure,
+				// so the test cannot leave a goroutine using global auth state.
+				lock.Release()
+				<-done
+				t.Fatal("auth status --readonly waited for the auth lock during a pure read")
+			}
+			var resp struct {
+				Authenticated bool   `json:"authenticated"`
+				CorpID        string `json:"corp_id"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+				t.Fatalf("decode auth status --readonly: %v", err)
+			}
+			if !resp.Authenticated || resp.CorpID != "corp_status_read" {
+				t.Fatalf("auth status --readonly response = %+v", resp)
+			}
+		})
+	}
+}
+
 func TestAuthStatusRejectsAmbiguousProfileSelector(t *testing.T) {
 	first := authLogoutTestToken("corp_first")
 	first.CorpName = "Shared Org"

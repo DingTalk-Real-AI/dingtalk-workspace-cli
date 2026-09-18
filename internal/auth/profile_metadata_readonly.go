@@ -34,6 +34,24 @@ type ProfileMetadata struct {
 // token stores, Keychain access, migrations, quarantine renames, and writes.
 // A missing metadata file or an empty current profile returns (nil, nil).
 func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadata, error) {
+	cfg, err := loadProfileMetadataReadOnly(configDir)
+	if err != nil || cfg == nil {
+		return nil, err
+	}
+	profile, err := resolveProfileFromSnapshot(cfg, selector)
+	if err != nil || profile == nil {
+		return nil, err
+	}
+	return &ProfileMetadata{
+		UserID:   profile.UserID,
+		UserName: profile.UserName,
+		CorpID:   profile.CorpID,
+	}, nil
+}
+
+// loadProfileMetadataReadOnly never quarantines or repairs the persisted
+// registry. Callers get a private snapshot, not a multi-file transaction.
+func loadProfileMetadataReadOnly(configDir string) (*ProfilesConfig, error) {
 	data, err := profilesReadFile(ProfilesPath(configDir))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -50,7 +68,10 @@ func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadat
 		return nil, fmt.Errorf("profile metadata version %d is newer than supported version %d", cfg.Version, profilesMaxVersion)
 	}
 	normalizeProfilesConfig(&cfg)
+	return &cfg, nil
+}
 
+func resolveProfileFromSnapshot(cfg *ProfilesConfig, selector string) (*Profile, error) {
 	selector = strings.TrimSpace(selector)
 	if selector == "" {
 		selector = strings.TrimSpace(cfg.CurrentProfile)
@@ -58,13 +79,6 @@ func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadat
 			return nil, nil
 		}
 	}
-	profile, _, err := resolveProfileSelection("", &cfg, selector)
-	if err != nil {
-		return nil, err
-	}
-	return &ProfileMetadata{
-		UserID:   profile.UserID,
-		UserName: profile.UserName,
-		CorpID:   profile.CorpID,
-	}, nil
+	profile, _, err := resolveProfileSelection("", cfg, selector)
+	return profile, err
 }
