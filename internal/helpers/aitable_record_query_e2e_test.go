@@ -341,3 +341,25 @@ func TestCrossPlatformCoverageAitableServerDiagSources(t *testing.T) {
 		t.Fatalf("business JSON diag = %q", got)
 	}
 }
+
+func TestRecordQueryRecoveryNonResumableErrorCursor(t *testing.T) {
+	src := apperrors.NewAPI("query failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "NON_RESUMABLE_ERROR_CURSOR"}))
+	var typed *apperrors.Error
+	if !errors.As(RecordQueryRecoveryError(src), &typed) {
+		t.Fatalf("NON_RESUMABLE_ERROR_CURSOR was not classified: %#v", src)
+	}
+	if typed.Retryable {
+		t.Fatal("NON_RESUMABLE_ERROR_CURSOR must not be retryable")
+	}
+	if typed.Reason != "pagination_non_resumable_error" {
+		t.Fatalf("reason = %q", typed.Reason)
+	}
+	if typed.Details["discard_previous_results"] != true ||
+		typed.Details["restart_from_first_page"] != false ||
+		typed.Details["stop_pagination"] != true {
+		t.Fatalf("details = %#v", typed.Details)
+	}
+	if typed.ServerDiag.ServerErrorCode != "NON_RESUMABLE_ERROR_CURSOR" {
+		t.Fatalf("server code lost: %#v", typed.ServerDiag)
+	}
+}
