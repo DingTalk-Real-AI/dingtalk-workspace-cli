@@ -1186,7 +1186,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
 		pluginStart := time.Now()
-		rootPluginLoadHadSideEffects.Store(false)
+		// plugin side effects are monotonic for the process lifetime
 		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
 		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
 		if rootPluginLoadHadSideEffects.Load() || len(pluginCmds) > 0 {
@@ -1895,7 +1895,9 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// variables so that expandPluginVars can resolve ${KEY} references
 	// in plugin.json headers, endpoints, etc. User-set env vars take
 	// precedence (InjectPluginConfigEnv skips already-set keys).
-	rootPluginLoadHadSideEffects.Store(rootPluginInjectConfigEnv(pluginLoader))
+	if rootPluginInjectConfigEnv(pluginLoader) {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 
 	// Resolve the plugin user identity from the profile metadata file only.
 	// Plugin stdio servers need UserID/CorpID as environment identity — never

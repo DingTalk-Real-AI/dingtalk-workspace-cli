@@ -452,6 +452,15 @@ func TestCrossPlatformCoveragePluginConfigInjectionMarksRuntimeUncertainWithoutL
 	if !rootPluginLoadHadSideEffects.Load() {
 		t.Fatal("plugin config environment injection did not mark runtime uncertain")
 	}
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if commands := loadPlugins(&cobra.Command{Use: "dws"}, nil, executor.EchoRunner{}, ""); len(commands) != 0 {
+		t.Fatalf("second plugin load unexpectedly produced %d commands", len(commands))
+	}
+	if !rootPluginLoadHadSideEffects.Load() {
+		t.Fatal("plugin uncertainty was cleared after repeated root construction")
+	}
 }
 
 func TestCrossPlatformCoverageSchemaAssemblyIgnoresRealPluginLoaderSideEffects(t *testing.T) {
