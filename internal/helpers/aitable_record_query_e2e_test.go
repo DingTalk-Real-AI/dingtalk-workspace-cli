@@ -363,3 +363,30 @@ func TestRecordQueryRecoveryNonResumableErrorCursor(t *testing.T) {
 		t.Fatalf("server code lost: %#v", typed.ServerDiag)
 	}
 }
+
+func TestNonResumableCursorResponseError(t *testing.T) {
+	for _, executionStarted := range []bool{false, true} {
+		var typed *apperrors.Error
+		if !errors.As(NonResumableCursorResponseError("error-v1:GUARD", executionStarted), &typed) {
+			t.Fatalf("guard-cursor response error was not structured (executionStarted=%v)", executionStarted)
+		}
+		if typed.Retryable {
+			t.Fatal("guard-cursor response error must not be retryable")
+		}
+		if typed.Reason != "pagination_non_resumable_error" {
+			t.Fatalf("reason = %q", typed.Reason)
+		}
+		if typed.Details["discard_previous_results"] != true ||
+			typed.Details["stop_pagination"] != true ||
+			typed.Details["restart_from_first_page"] != false ||
+			typed.Details["guard_cursor"] != "error-v1:GUARD" {
+			t.Fatalf("details = %#v", typed.Details)
+		}
+		if typed.ServerDiag.ServerErrorCode != "NON_RESUMABLE_ERROR_CURSOR" {
+			t.Fatalf("server code = %#v", typed.ServerDiag)
+		}
+		if typed.ExecutionStarted == nil || *typed.ExecutionStarted != executionStarted {
+			t.Fatalf("executionStarted = %#v, want %v", typed.ExecutionStarted, executionStarted)
+		}
+	}
+}

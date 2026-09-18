@@ -806,3 +806,30 @@ func TestResponseHasMoreIgnoresErrorGuardCursor(t *testing.T) {
 		t.Fatal("nested error-v1: guard must not trigger hasMore")
 	}
 }
+
+func TestResponseGuardCursorShape(t *testing.T) {
+	if responseGuardCursor(nil) != "" {
+		t.Fatal("nil payload must not carry a guard cursor")
+	}
+	if got := responseGuardCursor(map[string]any{"nextCursor": "error-v1:A"}); got != "error-v1:A" {
+		t.Fatalf("nextCursor guard = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"next_cursor": "  error-v1:B  "}); got != "error-v1:B" {
+		t.Fatalf("next_cursor guard must be trimmed = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"cursor": "error-v1:C"}); got != "error-v1:C" {
+		t.Fatalf("cursor guard = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"nextCursor": 123, "cursor": "error-v1:D"}); got != "error-v1:D" {
+		t.Fatalf("non-string cursor must be skipped, then guard found = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"nextCursor": "normal-cursor"}); got != "" {
+		t.Fatalf("normal cursor must not be a guard = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"data": map[string]any{"pagination": map[string]any{"cursor": "error-v1:E"}}}); got != "error-v1:E" {
+		t.Fatalf("nested guard = %q", got)
+	}
+	if got := responseGuardCursor(map[string]any{"data": map[string]any{"nextCursor": "normal"}}); got != "" {
+		t.Fatalf("guard-free nested payload = %q", got)
+	}
+}

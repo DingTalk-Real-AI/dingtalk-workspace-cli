@@ -10,6 +10,13 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
+const (
+	// nonResumableCursorReason 标记服务端不可恢复的 error-v1: 保护游标，供服务端错误码
+	// 路径与成功响应体夹带保护游标的路径共用同一结构化分类。
+	nonResumableCursorReason = "pagination_non_resumable_error"
+	nonResumableCursorHint   = "服务端返回了不可恢复的错误游标（error-v1: 保护游标）；丢弃全部累计结果和旧游标，立即停止分页，禁止将该游标回传。核对查询条件后可尝试不传 --cursor 从第一页重新查询。"
+)
+
 // RecordQueryRecoveryError 仅为记录查询的已知游标错误补充恢复策略，不重试请求或重放写流程。
 // 网络、权限与未知错误保持原样；判断依据为结构化错误码，不能匹配报错文案猜测原因。
 func RecordQueryRecoveryError(err error) error {
@@ -37,8 +44,8 @@ func recordQueryCursorError(err error) *apperrors.Error {
 	details := map[string]any{"discard_previous_results": true, "restart_from_first_page": true}
 	switch code {
 	case "NON_RESUMABLE_ERROR_CURSOR":
-		reason = "pagination_non_resumable_error"
-		hint = "服务端返回了不可恢复的错误游标（error-v1: 保护游标）；丢弃全部累计结果和旧游标，立即停止分页，禁止将该游标回传。核对查询条件后可尝试不传 --cursor 从第一页重新查询。"
+		reason = nonResumableCursorReason
+		hint = nonResumableCursorHint
 		details = map[string]any{"discard_previous_results": true, "restart_from_first_page": false, "stop_pagination": true}
 	case "CURSOR_SNAPSHOT_UNAVAILABLE":
 		reason = "pagination_snapshot_unavailable"
@@ -94,4 +101,29 @@ func aitableServerDiag(err error) apperrors.ServerDiagnostics {
 		}
 	}
 	return diag
+}
+
+// NonResumableCursorResponseError 处理成功响应体中夹带的 error-v1: 保护游标。
+// 服务端可能返回成功却把不可恢复游标放进 nextCursor/cursor，表示本轮分页结果不可续读，
+// 语义与服务端 NON_RESUMABLE_ERROR_CURSOR 错误码一致：必须丢弃全部累计结果、立即停止分页、
+// 禁止回传该游标。executionStarted 供调用方区分只读分页（true）与写前唯一键预检（false）——
+// 预检失败必须声明未开始写入，避免调用方误判可能已产生副作用。
+func NonResumableCursorResponseError(guardCursor string, executionStarted bool) error {
+	return apperrors.NewAPI("record pagination cannot continue: NON_RESUMABLE_ERROR_CURSOR",
+		apperrors.WithOperation("aitable.query_records"),
+		apperrors.WithServerKey("aitable"),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(executionStarted),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "NON_RESUMABLE_ERROR_CURSOR"}),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(nonResumableCursorReason),
+		apperrors.WithHint(nonResumableCursorHint),
+		apperrors.WithDetails(map[string]any{
+			"discard_previous_results": true,
+			"restart_from_first_page":  false,
+			"stop_pagination":          true,
+			"guard_cursor":             guardCursor,
+		}),
+	)
 }

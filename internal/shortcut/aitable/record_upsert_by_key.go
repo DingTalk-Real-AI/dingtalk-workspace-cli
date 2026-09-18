@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -226,6 +227,9 @@ func queryUniqueRecordByKey(rt *shortcut.RuntimeContext, baseID, tableID, fieldI
 	})
 	if err != nil {
 		return nil, err
+	}
+	if guard := responseGuardCursor(data); guard != "" {
+		return nil, helpers.NonResumableCursorResponseError(guard, false)
 	}
 	records, found := findRecords(data)
 	if !found {
