@@ -119,6 +119,9 @@ func TestCrossPlatformCoverageUncertainRuntimeServesCacheReads(t *testing.T) {
 	if level := payload["level"]; level != "product" {
 		t.Fatalf("domain query level = %v, want product", level)
 	}
+	if _, err := queryDeliverySchemaPayload(nil); err != nil {
+		t.Fatalf("uncertain cached no-argument query: %v", err)
+	}
 	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog != 0 {
 		t.Fatalf("uncertain query assembled the catalog: Catalog=%d", counts.Catalog)
 	}
@@ -248,8 +251,12 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
 
-	// Cold cache: both loaders use the isolated builder. Overview runs first
-	// and publishes the detached generation; the following loader reads it.
+	// Cold cache: the no-argument query and overview loader both use the
+	// isolated builder. The following loader reads the detached generation.
+	if _, err := queryDeliverySchemaPayload(nil); err != nil {
+		t.Fatalf("uncertain cold-cache no-argument query: %v", err)
+	}
+	resetDeliverySchemaCatalogStateForTest()
 	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
 		t.Fatalf("uncertain cold-cache overview payload: %v", err)
 	}

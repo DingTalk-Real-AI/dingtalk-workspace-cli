@@ -323,10 +323,7 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 		return schemaPayloadFromLoadedCatalog(*loaded, args)
 	}
 	if len(args) == 0 {
-		if err := deliverySchemaCatalogError(); err != nil {
-			return nil, err
-		}
-		return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
+		return deliverySchemaAllPayload()
 	}
 	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		raw := strings.TrimSpace(args[0])
