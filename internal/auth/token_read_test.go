@@ -717,6 +717,39 @@ func TestCrossPlatformCoverageReadTokenCompoundSelectorNeedsIdentityMigration(t 
 	}
 }
 
+func TestCrossPlatformCoverageReadTokenUnboundLegacyMirror(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	cleanupKeychain(t)
+	dir := t.TempDir()
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) {
+		return &TokenData{AccessToken: "unbound-legacy"}, nil
+	})
+	data, err := ReadTokenDataForProfile(dir, "")
+	if err != nil || data == nil || data.AccessToken != "unbound-legacy" {
+		t.Fatalf("unbound legacy mirror read = %#v, %v", data, err)
+	}
+}
+
+func TestCrossPlatformCoverageReadTokenLegacyRegistryWithProfilesNeedsMigration(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	cleanupKeychain(t)
+	dir := t.TempDir()
+	cfg := &ProfilesConfig{
+		Version:  profilesVersion - 1,
+		Profiles: []Profile{{Name: "historical", CorpID: "legacy-corp"}},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ProfilesPath(dir), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadTokenDataForProfile(dir, ""); !errors.Is(err, ErrTokenMigrationRequired) {
+		t.Fatalf("legacy registry with profiles error = %v, want ErrTokenMigrationRequired", err)
+	}
+}
+
 func TestCrossPlatformCoverageProfileMetadataNeedsMigrationVersionGate(t *testing.T) {
 	if !profileMetadataNeedsMigration(nil) {
 		t.Fatal("nil registry must require migration")
