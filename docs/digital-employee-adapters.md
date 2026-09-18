@@ -31,6 +31,8 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel qoder --daemon --alw
 
 `event consume` 的 `[event] ready` 保留原有 IPC 握手语义；新增 stderr `[event] transport <JSON>` 单独报告上游状态。运行器据此更新 `transportReady`，断线重连期间为 false，`executorReady` 单独反映 Agent 初始化结果。`event status` 与 HelloAck 使用真实 Source 状态快照，包含重连次数和最近事件/重连时间。业务消息是否送达仍需核对消息计数与实际回复。
 
+普通本地 Agent 启动 `event consume` 时不显式传入 `--stream-source-id`，沿用 Event 的来源规则：优先使用 `DWS_STREAM_SOURCE_ID`，未设置或为空时使用 edition 默认值（开源版为 `open`）。宿主环境仍设置 `DWS_STREAM_SOURCE_ID=digital_employee` 时，仍使用该来源。升级后需重启员工 worker 才能生效；来源变化会使用不同的 Event Bus/订阅。这里只取消调用处的显式参数，服务端请求仍携带解析后的 `sourceId`。
+
 旧 Bus 没有 `source_observed`/`observed` 字段，不能视为已验证连接。原生运行器返回 `event_bus_upgrade_required`，需升级并正常停止该员工的旧 Bus 后重试，不会自动停止共享 Bus。DSH 状态同时核对宿主报告与同配置目录、同员工身份的单聊 Bus；缺失、歧义或旧 Bus 返回 `transportReady=false`，并提示 `transport_not_verified`。保留宿主的 `runtimeState`，不把进程运行状态当作业务消息送达证明。
 
 未发布的 `connection` 组已收拢到 `connect`。`connect` 是同时拥有业务执行和子命令的显式 hybrid；CLI、Help 与 Schema 均保留裸 connect。Schema 精确路径优先返回父工具自身，子工具通过产品导航或各自精确路径查询。机器人 `dev connect` 路径不变。

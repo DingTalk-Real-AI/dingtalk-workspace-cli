@@ -493,8 +493,7 @@ func TestCrossPlatformCoverageEmployeeEventConsumerReadyDedupeAndGracefulStop(t 
 					if !ready || fwd.calls != 1 {
 						t.Fatalf("ready=%v calls=%d", ready, fwd.calls)
 					}
-					sourceIndex := slices.Index(gotConsumerArgs, "--stream-source-id")
-					if sourceIndex < 0 || sourceIndex+1 >= len(gotConsumerArgs) || gotConsumerArgs[sourceIndex+1] != "digital_employee" {
+					if len(gotConsumerArgs) == 0 || slices.Contains(gotConsumerArgs, "--stream-source-id") {
 						t.Fatalf("event consumer args = %v", gotConsumerArgs)
 					}
 					return
