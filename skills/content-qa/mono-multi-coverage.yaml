@@ -49,6 +49,14 @@ coverage:
       - references/doc.md
   - mono: drive
     multi_skill: dingtalk-drive
+  - mono: dingtalk-tag
+    multi_skill: dingtalk-tag
+    multi_refs:
+      - references/dingtalk-tag-index.md
+      - references/manage.md
+      - references/manage-and-connect.md
+      - references/capability.md
+      - references/run.md
   - mono: event
     multi_skill: dingtalk-event
     multi_refs:
@@ -202,6 +210,9 @@ paired_files:
 paired_trees:
   - mono: references/products/sheet
     multi: dingtalk-misc/references/sheet
+    mode: identical
+  - mono: references/products/dingtalk-tag
+    multi: dingtalk-tag/references
     mode: identical
 
 # Production scripts under skills/multi/*/scripts not referenced by any .md in

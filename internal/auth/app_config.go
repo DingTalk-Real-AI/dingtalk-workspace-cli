@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	configpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -60,7 +60,7 @@ var (
 var (
 	appConfigStoreSecret             = StoreSecret
 	appConfigMarshalIndent           = json.MarshalIndent
-	appConfigAtomicWrite             = helpers.AtomicWriteJSON
+	appConfigAtomicWrite             = atomicfile.WriteJSON
 	appConfigReadFile                = os.ReadFile
 	appConfigRemove                  = os.Remove
 	appConfigLoad                    = LoadAppConfig

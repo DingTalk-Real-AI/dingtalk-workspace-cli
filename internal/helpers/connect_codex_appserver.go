@@ -41,13 +41,14 @@ var (
 // codexAppServerForwarder uses Codex's official app-server JSON-RPC protocol to
 // keep one Codex thread per DingTalk conversation.
 type codexAppServerForwarder struct {
-	bin      string
-	env      []string
-	timeout  time.Duration
-	workDir  string
-	model    string
-	yolo     bool
-	sessions *codexThreadSessions
+	privateDiagnostics bool
+	bin                string
+	env                []string
+	timeout            time.Duration
+	workDir            string
+	model              string
+	yolo               bool
+	sessions           *codexThreadSessions
 }
 
 func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string) forwarder {
@@ -59,13 +60,14 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		sessions = newCodexThreadSessions(codexThreadStorePath(clientID))
 	}
 	return &codexAppServerForwarder{
-		bin:      bin,
-		env:      env,
-		timeout:  timeout,
-		workDir:  opts.WorkDir,
-		model:    opts.Model,
-		yolo:     opts.Yolo,
-		sessions: sessions,
+		privateDiagnostics: opts.PrivateDiagnostics,
+		bin:                bin,
+		env:                env,
+		timeout:            timeout,
+		workDir:            opts.WorkDir,
+		model:              opts.Model,
+		yolo:               opts.Yolo,
+		sessions:           sessions,
 	}
 }
 
@@ -147,7 +149,9 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 	if threadID != "" {
 		resumed, err := cli.resumeThread(ctx, f.threadParams(threadID))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
+			if !f.privateDiagnostics {
+				fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
+			}
 			threadID = ""
 			f.sessions.setThreadID(convID, "")
 		} else {

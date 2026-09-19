@@ -87,6 +87,19 @@ type FileUpload struct {
 	Reader    io.Reader
 }
 
+// MultipartUploadRequest describes a streaming multipart upload used by
+// narrow helper commands that already own an open file reader.
+type MultipartUploadRequest struct {
+	Path      string
+	FieldName string
+	FileName  string
+	File      io.Reader
+	Fields    map[string]string
+	// BearerAuth sends Token through Authorization: Bearer instead of the
+	// DingTalk OAuth header. It is reserved for scoped upload credentials.
+	BearerAuth bool
+}
+
 // RawAPIResponse encapsulates the raw HTTP response.
 type RawAPIResponse struct {
 	StatusCode int
@@ -103,6 +116,9 @@ type APIClient struct {
 	HTTPClient  *http.Client
 	Token       string
 	DingTalkExt string
+	// TargetValidator defaults to ValidateTargetHost. Tests may replace it to
+	// exercise transport behavior against an in-process HTTP server.
+	TargetValidator func(string) error
 }
 
 // NewClient creates an APIClient with sensible defaults.
@@ -111,8 +127,9 @@ func NewClient(token, baseURL string) *APIClient {
 		baseURL = DefaultBaseURL
 	}
 	return &APIClient{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		Token:   token,
+		BaseURL:         strings.TrimRight(baseURL, "/"),
+		Token:           token,
+		TargetValidator: ValidateTargetHost,
 		HTTPClient: &http.Client{
 			Transport:     defaultTransport(),
 			Timeout:       30 * time.Second,
@@ -134,7 +151,7 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 	}
 
 	// Security: verify target host before sending token.
-	if err := ValidateTargetHost(fullURL); err != nil {
+	if err := c.validateTarget(fullURL); err != nil {
 		return nil, err
 	}
 
@@ -206,6 +223,105 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 		Header:     resp.Header,
 		BodyReader: resp.Body,
 	}, nil
+}
+
+// UploadMultipart streams a file and string form fields to an OpenAPI
+// endpoint. This compatibility surface is used by the dingtalk-tag scoped
+// Skill upload flow, whose credential must be sent as a Bearer token.
+func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequest) (*RawAPIResponse, error) {
+	if c == nil || c.HTTPClient == nil {
+		return nil, fmt.Errorf("OpenAPI HTTP client is not configured")
+	}
+	if req.File == nil {
+		return nil, fmt.Errorf("multipart file is required")
+	}
+	fullURL, err := c.buildURL(req.Path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building request URL: %w", err)
+	}
+	if err := c.validateTarget(fullURL); err != nil {
+		return nil, err
+	}
+
+	pipeReader, pipeWriter := io.Pipe()
+	form := multipart.NewWriter(pipeWriter)
+	writeDone := make(chan error, 1)
+	go func() {
+		writeErr := writeMultipartBody(form, req)
+		if writeErr != nil {
+			_ = pipeWriter.CloseWithError(writeErr)
+		} else {
+			_ = pipeWriter.Close()
+		}
+		writeDone <- writeErr
+	}()
+
+	httpReq, err := newHTTPRequest(ctx, http.MethodPost, fullURL, pipeReader)
+	if err != nil {
+		_ = pipeReader.CloseWithError(err)
+		<-writeDone
+		return nil, fmt.Errorf("creating HTTP request: %w", err)
+	}
+	if req.BearerAuth {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	} else {
+		httpReq.Header.Set(AuthHeader, c.Token)
+	}
+	httpReq.Header.Set("Content-Type", form.FormDataContentType())
+	httpReq.Header.Set("User-Agent", "dws-cli/openapi-upload")
+	if c.DingTalkExt != "" {
+		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
+	}
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		_ = pipeReader.CloseWithError(err)
+		<-writeDone
+		return nil, fmt.Errorf("executing HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, readErr := io.ReadAll(resp.Body)
+	writeErr := <-writeDone
+	if writeErr != nil {
+		return nil, fmt.Errorf("streaming multipart request: %w", writeErr)
+	}
+	if readErr != nil {
+		return nil, fmt.Errorf("reading response body: %w", readErr)
+	}
+	return &RawAPIResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}, nil
+}
+
+func writeMultipartBody(form *multipart.Writer, req MultipartUploadRequest) error {
+	fieldName := strings.TrimSpace(req.FieldName)
+	if fieldName == "" {
+		fieldName = "file"
+	}
+	fieldNames := make([]string, 0, len(req.Fields))
+	for name := range req.Fields {
+		fieldNames = append(fieldNames, name)
+	}
+	sort.Strings(fieldNames)
+	for _, name := range fieldNames {
+		if err := form.WriteField(name, req.Fields[name]); err != nil {
+			return err
+		}
+	}
+	part, err := form.CreateFormFile(fieldName, req.FileName)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, req.File); err != nil {
+		return err
+	}
+	return form.Close()
+}
+
+func (c *APIClient) validateTarget(fullURL string) error {
+	validator := c.TargetValidator
+	if validator == nil {
+		validator = ValidateTargetHost
+	}
+	return validator(fullURL)
 }
 
 func newMultipartBody(upload *FileUpload, fileReader io.Reader, data any) (io.Reader, string, error) {

@@ -29,6 +29,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
 | DING / 紧急通知 / 电话DING / 短信DING / 必达消息 | DING 紧急消息（应用内/短信/电话），个人DING | `dws ding` | [ding.md](references/ding.md) |
 | 开放平台应用 / 企业内部应用 / 应用状态或删除条件 / 应用管理成员 / 应用权限 / 应用版本或版本历史 / agentId / clientId / 应用机器人配置 / 机器人消息模式或在线状态 / 本机机器人连接器 / Stream连接 / 版本发布 / connect / MCP 服务开发 / MCP 工具发布 / MCP 凭证 / OpenAPI或Swagger或Postman或curl转MCP / 接口给Agent用 / 已发布MCP调用 | 开放平台企业内部应用，以及 MCP 服务、工具、鉴权、凭证、协作者和发布后动态调用 | `dws dev` / `dws dev mcp` / `dws mcp published` | 按下方「Dev 直达规则」读取一个 `references/dev/*.md`；意图不明时才读 [dev-index.md](references/dev/dev-index.md) |
+| DEAP 数字员工 / 数字员工 / 人设 / 群感知 / DSH 接入 | 兼容路由；完整自然语言编排只由独立 `dingtalk-tag` skill 维护 | `dws dingtalk-tag` | 切换 [`dingtalk-tag`](../dingtalk-tag/SKILL.md) |
 | 目标管理 / 战略解码 / 经营合约字段 / 计分卡 / OKR / 目标规则周期 / 个人目标 / 目标模板 / 周月报规则统计 / 按时迟交未提交 / 跟催 | Agoal 目标管理与经营目标跟进 | `dws agoal` | [agoal.md](references/agoal.md) |
 | 日报 / 周报 / 月报 / 写日志 / 收件箱日志 / 发件箱日志 | 日志（日报/周报/月报）查询与按模版提交 | `dws report`（别名 `dws log`） | [report.md](references/report.md) |
 | 电子表格 / 工作表 / 单元格读写 / 公式 / 超链接 / 浮动图片 | 电子表格创建/读写/公式/超链接/浮动图片/导出 | `dws sheet` | [sheet.md](references/sheet.md) |
@@ -46,6 +47,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 
 ## 说明
 
+- 命中数字员工时立即切换独立 [`dingtalk-tag`](../dingtalk-tag/SKILL.md)；本 skill 不保留重复参考文档。
 - 命中产品后必须读取其 `references/<product>.md`，不要只凭索引推测命令。Report 只读 [report.md](references/report.md)；Sheet 常见闭环只读 [sheet.md](references/sheet.md)，复杂任务按进入阶段顺序加载子 reference，每阶段最多一份、常规任务最多三份，禁止批量预读或重复读取。
 - **Agoal / Report 边界**：填写、提交或查询普通日报/周报/月报正文走 Report；规则级提交统计、按时/迟交/未提交人数、人员清单和跟催走 Agoal。出现“月报”不能单独判给 Report，必须结合“规则/统计/迟交/未提交/跟催”等业务词判断。
 - **考勤例外**：按索引表直接读取一份最匹配的 `attendance*.md`；不要先读 `attendance.md` 再读排班、报表或假期专项 Reference。只有一个任务确实跨两个独立考勤域时，才加载第二份。

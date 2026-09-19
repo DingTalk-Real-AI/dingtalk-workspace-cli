@@ -349,6 +349,12 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 	}
 	sort.Strings(groups)
 	for _, path := range groups {
+		// 同一路径若同时是显式业务工具与导航父节点，现有查询规则优先返回
+		// 完整 ToolSpec（已在上方逐路径校验）。子工具仍由 product/tools 和
+		// 各自路径检验；不能再要求同一个响应同时等于纯 group summary。
+		if _, runnable := loaded.Index.ResolveQuery(path); runnable {
+			continue
+		}
 		tokens := splitSchemaPathTokens(path)
 		product, ok := loaded.Index.Product(tokens[0])
 		if !ok {
@@ -481,9 +487,8 @@ func walkPublicRunnableLeaves(root *cobra.Command, fn func(*cobra.Command)) {
 	}
 	var walk func(*cobra.Command)
 	walk = func(command *cobra.Command) {
-		if command.Runnable() && !command.HasSubCommands() {
+		if runnableSchemaLeaf(command) {
 			fn(command)
-			return
 		}
 		for _, child := range command.Commands() {
 			if child.Name() == "help" || !child.IsAvailableCommand() {

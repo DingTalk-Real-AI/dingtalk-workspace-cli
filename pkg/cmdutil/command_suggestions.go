@@ -29,7 +29,7 @@ type rankedCommandSuggestion struct {
 // Aliases participate in scoring, but recovery always teaches the canonical
 // command name.
 func SuggestSubcommands(parent *cobra.Command, candidate string) []string {
-	if parent == nil {
+	if parent == nil || parent.DisableSuggestions {
 		return nil
 	}
 	candidate = strings.ToLower(strings.TrimSpace(candidate))
@@ -123,7 +123,7 @@ func SuggestSubcommands(parent *cobra.Command, candidate string) []string {
 // of `sheet range read`). Fuzzy ranking remains a sibling concern so a large
 // subtree cannot drown the user in speculative paths.
 func SuggestDescendantSubcommands(parent *cobra.Command, candidate string) []string {
-	if parent == nil {
+	if parent == nil || parent.DisableSuggestions {
 		return nil
 	}
 	candidate = strings.ToLower(strings.TrimSpace(candidate))
