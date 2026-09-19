@@ -30,10 +30,14 @@ import (
 
 const (
 	defaultSchemaCacheLockTimeout = 250 * time.Millisecond
+
+	// DefaultSchemaCacheBuilderTimeout defines the maximum duration allowed for
+	// isolated schema cache generation before timing out.
+	DefaultSchemaCacheBuilderTimeout = 30 * time.Second
 )
 
 var (
-	defaultSchemaCacheBuilderTimeout = 30 * time.Second
+	defaultSchemaCacheBuilderTimeout = DefaultSchemaCacheBuilderTimeout
 	canonicalJSONMarshal             = json.Marshal
 	compactLeafMarshal               = jsonutil.MarshalIndent
 	// schemaCachePayloadLoadBeforeInnerLock is the test seam between the
@@ -826,8 +830,12 @@ func (r *schemaCacheRuntime) repairCacheBackend() *schemacache.Cache {
 
 func (r *schemaCacheRuntime) setRepairCache(cache *schemacache.Cache) {
 	r.repairCacheMu.Lock()
+	old := r.repairCache
 	r.repairCache = cache
 	r.repairCacheMu.Unlock()
+	if old != nil && old != cache {
+		_ = old.Close()
+	}
 }
 
 func (r *schemaCacheRuntime) userCacheBackend() *schemacache.Cache {
@@ -906,6 +914,9 @@ func (r *schemaCacheRuntime) repairWithIsolatedBuilder(cache *schemacache.Cache,
 }
 
 func (r *schemaCacheRuntime) openRepairBackend() (*schemacache.Cache, error) {
+	if existing := r.repairCacheBackend(); existing != nil {
+		return existing, nil
+	}
 	opts := r.optionsSnapshot()
 	options := []schemacache.Option{}
 	if opts.Counters != nil {
