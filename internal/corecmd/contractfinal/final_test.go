@@ -200,6 +200,13 @@ func TestFrameworkContractFinalDeepCopyAndSafetyConflicts(t *testing.T) {
 		Parameters:  []contract.ParamDecl{{Name: "mode", Enum: []string{"a"}, Required: boolPointer(true)}},
 		Safety:      &contract.SafetySpec{Effect: " read ", EffectSource: " source ", Risk: " low ", Confirmation: " not_required ", Idempotency: " idempotent "},
 		DryRun:      &contract.DryRunSpec{PreviewKind: "plan"},
+		Wait: &contract.WaitSpec{
+			Mode:          contract.WaitModePoll,
+			PollCommand:   "oa approval-instance get",
+			StatusQuery:   "result.status",
+			Terminal:      map[string]contract.ResultOutcome{"COMPLETED": contract.ResultOutcomeSuccess, "REJECTED": contract.ResultOutcomeFailure},
+			PendingValues: []string{"NEW"},
+		},
 		Result: &contract.ResultSpec{
 			Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
 			DataSchema: []byte(`{"type":"object"}`), SensitivePaths: []string{"token"},
@@ -218,12 +225,18 @@ func TestFrameworkContractFinalDeepCopyAndSafetyConflicts(t *testing.T) {
 	if !ok || got.Result == payload.Result || got.Pagination == payload.Pagination || got.Interface == payload.Interface || got.Selection == payload.Selection || got.Identity == payload.Identity {
 		t.Fatalf("payload not deeply cloned: %#v", got)
 	}
+	payload.Wait.Terminal["COMPLETED"] = contract.ResultOutcomeFailure
+	payload.Wait.PendingValues[0] = "mutated"
 	payload.Parameters[0].Enum[0] = "changed"
 	*payload.Parameters[0].Required = false
 	*payload.Selection.ExampleDispositions[0].Index = 9
 	*payload.Selection.Reviewed = false
 	again, _ := RuntimeContractFinal(cmd)
 	if again.Parameters[0].Enum[0] != "a" || !*again.Parameters[0].Required || *again.Selection.ExampleDispositions[0].Index != 1 || !*again.Selection.Reviewed {
+		t.Fatalf("stored payload aliased input: %#v", again)
+	}
+	if again.Wait == payload.Wait || again.Wait.Terminal["COMPLETED"] != contract.ResultOutcomeSuccess || again.Wait.PendingValues[0] != "NEW" {
+		t.Fatalf("wait spec aliased input: %#v", again.Wait)
 		t.Fatalf("stored payload aliased input: %#v", again)
 	}
 
