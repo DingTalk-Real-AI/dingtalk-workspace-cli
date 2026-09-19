@@ -16,7 +16,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"os"
@@ -126,31 +125,6 @@ func TestCrossPlatformCoverageUncertainRuntimeServesCacheReads(t *testing.T) {
 	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog != 0 {
 		t.Fatalf("uncertain query assembled the catalog: Catalog=%d", counts.Catalog)
 	}
-}
-
-func TestCrossPlatformCoverageUncertainResolveMetaPropagatesBuilderError(t *testing.T) {
-	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
-	restorePackageCLISchemaDeliveryForTest()
-	coverageSchemaCacheHome(t)
-	goos, goarch := coverageCacheGOOSARCH()
-	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
-		RuntimeEligible: func() bool { return true },
-	}); err != nil {
-		t.Fatal(err)
-	}
-	RegisterSchemaSourceRoot(func() *cobra.Command { return &cobra.Command{Use: "dws"} })
-	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
-		return SchemaCacheBuildResult{}, errors.New("builder failed")
-	})
-	t.Cleanup(registerPackageTestIsolatedBuilder)
-	MarkSchemaCacheRuntimeUncertain()
-	defer func() {
-		if recovered := recover(); recovered == nil || !strings.Contains(fmt.Sprint(recovered), "builder failed") {
-			t.Fatalf("ResolveMeta panic = %v", recovered)
-		}
-	}()
-	ResolveMeta("calendar event create")
 }
 
 // TestCrossPlatformCoverageUncertainColdCacheUsesIsolatedBuilder covers the

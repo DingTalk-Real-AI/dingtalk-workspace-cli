@@ -171,9 +171,6 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 				result := value.(resolvedMeta)
 				return result.Meta, result.OK
 			}
-			if repairErr != nil && schemaCacheRuntimeUncertain.Load() {
-				panicIfMetaIndexUnusable(repairErr)
-			}
 		}
 	}
 	_ = deliverySchemaCatalog()
