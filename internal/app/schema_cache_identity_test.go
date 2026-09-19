@@ -143,6 +143,8 @@ func TestCrossPlatformCoverageSchemaCacheLocalGenerateWriteHitCorruptRepair(t *t
 
 func isolateSchemaCacheHome(t *testing.T) {
 	t.Helper()
+	cli.ResetSchemaCacheRuntimeUncertaintyForTest()
+	rootPluginLoadHadSideEffects.Store(false)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)

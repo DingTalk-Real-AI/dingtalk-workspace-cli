@@ -85,13 +85,20 @@ func resetSchemaDeliveryState() {
 }
 
 // RegisterSchemaSourceRoot installs the root factory used by runtime Schema
-// delivery (dws schema / ResolveMeta). Production registers from internal/app.
-// Passing nil clears the factory (tests only) and resets lazy delivery / Meta state.
+// delivery (dws schema / ResolveMeta). Production registers from internal/app
+// before runtime plugin discovery, so each registration also captures the
+// pristine child-process environment. Passing nil
+// clears the factory (tests only) and resets lazy delivery / Meta state.
 func RegisterSchemaSourceRoot(factory func() *cobra.Command) {
 	// A new authority must never inherit the previous factory's persistent
 	// identity. Production re-applies local cache options after this clear.
 	_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
 	storeSchemaSourceRootFn(factory)
+	if factory == nil {
+		clearSchemaAssemblyEnviron()
+	} else {
+		CaptureSchemaAssemblyEnviron()
+	}
 	resetSchemaDeliveryState()
 }
 
@@ -151,13 +158,18 @@ func assembleSchemaCatalogFromRoot(root *cobra.Command) (loadedSchemaCatalog, er
 	}, nil
 }
 
-// deliverySchemaCatalog is the sole production Catalog loader. It lazily
-// assembles via ResolveSchemaBuild and caches the ResolveMeta map. Without a
-// factory it fails closed.
+// deliverySchemaCatalog is the sole in-process Catalog loader. Production
+// plugin processes do not reach this path for cache repair; they use the
+// isolated builder and read the resulting cache instead.
 func deliverySchemaCatalog() loadedSchemaCatalog {
 	auditSchemaDeliveryAccess("Catalog loader")
 	runtimeDeliverySchemaCatalogOnce.Do(func() {
 		runtimeDeliverySchemaCatalogLazyCount.Add(1)
+		if schemaCacheRuntimeUncertain.Load() && readableSchemaCacheRuntime() != nil {
+			runtimeDeliverySchemaCatalogErr = fmt.Errorf("Schema assembly requires the isolated builder")
+			installDeliveryCommandMeta(loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr)
+			return
+		}
 		factory := loadSchemaSourceRootFn()
 		if factory == nil {
 			runtimeDeliverySchemaCatalogErr = errSchemaSourceRootNotRegistered

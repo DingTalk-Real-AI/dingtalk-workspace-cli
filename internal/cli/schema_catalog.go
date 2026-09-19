@@ -217,9 +217,9 @@ func deliverySchemaAllPayload() (map[string]any, error) {
 		if payload, err := runtime.loadAllPayload(); err == nil {
 			return payload, nil
 		}
-		// Repair publishes, so it requires a certain runtime; while the surface
-		// is plugin-uncertain the tail below serves live assembly instead.
-		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+		// Repair uses the isolated declaration builder while the process surface
+		// is plugin-uncertain.
+		if repairable := repairableSchemaCacheRuntime(); repairable != nil {
 			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
 				meta, metaErr := repairable.readMeta()
 				if metaErr != nil {
@@ -256,7 +256,7 @@ func deliverySchemaOverviewPayload() (map[string]any, error) {
 		if payload, err := runtime.loadOverviewPayload(); err == nil {
 			return payload, nil
 		}
-		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+		if repairable := repairableSchemaCacheRuntime(); repairable != nil {
 			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
 				meta, metaErr := repairable.readMeta()
 				if metaErr != nil {
@@ -323,17 +323,14 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 		return schemaPayloadFromLoadedCatalog(*loaded, args)
 	}
 	if len(args) == 0 {
-		if err := deliverySchemaCatalogError(); err != nil {
-			return nil, err
-		}
-		return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
+		return deliverySchemaAllPayload()
 	}
 	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		raw := strings.TrimSpace(args[0])
 		if payload, err := runtime.loadQueryPayload(raw); err == nil {
 			return payload, nil
 		}
-		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+		if repairable := repairableSchemaCacheRuntime(); repairable != nil {
 			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
 				return repairable.readQueryPayload(raw)
 			})
