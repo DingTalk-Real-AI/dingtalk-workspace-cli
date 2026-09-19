@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -29,12 +28,12 @@ import (
 
 const (
 	schemaCacheBuilderArgument = "--_dws-schema-builder=1"
-	schemaCacheBuilderTimeout  = 30 * time.Second
 )
 
 var maxSchemaCacheBuilderStderr = 64 << 10
 
 var (
+	schemaCacheBuilderTimeout       = cli.DefaultSchemaCacheBuilderTimeout
 	schemaCacheBuilderCommand       = exec.CommandContext
 	schemaCacheBuilderExecutable    = os.Executable
 	schemaCacheBuilderEnvironment   = cli.SchemaAssemblyEnvironmentSnapshot
@@ -50,13 +49,12 @@ var (
 // RunSchemaCacheBuilder handles only the private declaration-builder process.
 // It must run before normal root construction so plugin discovery is impossible.
 func RunSchemaCacheBuilder(args []string, output io.Writer) (bool, int) {
-	_ = output
 	if len(args) != 1 || args[0] != schemaCacheBuilderArgument {
 		return false, 0
 	}
 	result, err := schemaCacheBuilderAssemble(context.Background())
 	if err != nil {
-		return true, writeSchemaCacheBuilderError(output, err)
+		return true, writeSchemaCacheBuilderError(err)
 	}
 	if err := cli.WriteSchemaCacheBuildResult(output, result); err != nil {
 		return true, 1
@@ -88,7 +86,7 @@ func buildSchemaCacheResult(ctx context.Context) (cli.SchemaCacheBuildResult, er
 	return cli.SchemaCacheBuildResult{Artifacts: artifacts, Identity: identity}, nil
 }
 
-func writeSchemaCacheBuilderError(output io.Writer, err error) int {
+func writeSchemaCacheBuilderError(err error) int {
 	_, _ = fmt.Fprintf(os.Stderr, "Schema cache builder: %v\n", err)
 	return 1
 }
@@ -135,6 +133,8 @@ func buildSchemaCacheInChild(ctx context.Context) (cli.SchemaCacheBuildResult, e
 	if err != nil {
 		return cli.SchemaCacheBuildResult{}, fmt.Errorf("resolve CLI executable: %w", err)
 	}
+	// Ensure child execution is bounded by the builder timeout even if the
+	// caller passes a context without an explicit deadline.
 	ctx, cancel := context.WithTimeout(ctx, schemaCacheBuilderTimeout)
 	defer cancel()
 	cmd := schemaCacheBuilderCommand(ctx, executable, schemaCacheBuilderArgument)

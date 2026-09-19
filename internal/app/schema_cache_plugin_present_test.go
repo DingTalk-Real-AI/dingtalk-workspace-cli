@@ -271,7 +271,7 @@ func TestCrossPlatformCoverageSchemaCacheBuilderOutputLimits(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheBuilderError(t *testing.T) {
-	if code := writeSchemaCacheBuilderError(&bytes.Buffer{}, errors.New("builder failed")); code != 1 {
+	if code := writeSchemaCacheBuilderError(errors.New("builder failed")); code != 1 {
 		t.Fatalf("error exit code = %d, want 1", code)
 	}
 }

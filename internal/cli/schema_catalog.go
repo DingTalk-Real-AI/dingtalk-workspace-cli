@@ -322,6 +322,12 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaPayloadFromLoadedCatalog(*loaded, args)
 	}
+	// Production commands route empty args to deliverySchemaOverviewPayload
+	// (or deliverySchemaAllPayload for --all). When queryDeliverySchemaPayload
+	// is invoked with empty args (e.g. in test assertions exercising the query
+	// loader without targeting a specific path), delegate to deliverySchemaAllPayload
+	// so cache-backed/isolated repair is used instead of in-process live assembly
+	// which is prohibited in plugin-uncertain runtimes.
 	if len(args) == 0 {
 		return deliverySchemaAllPayload()
 	}

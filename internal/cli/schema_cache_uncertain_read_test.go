@@ -752,3 +752,36 @@ func TestCrossPlatformCoverageRepairUncertainLockTimeoutFailsToIsolatedRequired(
 		t.Fatalf("expected requires isolated builder error, got: %v", err)
 	}
 }
+
+func TestCrossPlatformCoverageRepairBackendReuseAndClose(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+
+	home := realHomeCacheDir(t, ".dws-repair-backend-reuse-")
+	schemacache.UseUserCacheDirForTest(t, home)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	r := newSchemaCacheRuntime(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+	})
+	cache1, err := r.openRepairBackend()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache2, err := r.openRepairBackend()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cache1 != cache2 {
+		t.Fatalf("expected reused repair cache, got %v vs %v", cache1, cache2)
+	}
+	cache3, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cache3.Close()
+	r.setRepairCache(cache3)
+	if got := r.repairCacheBackend(); got != cache3 {
+		t.Fatalf("expected updated repair cache, got %v", got)
+	}
+}
