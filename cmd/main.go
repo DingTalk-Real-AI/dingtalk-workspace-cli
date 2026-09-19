@@ -25,6 +25,7 @@ import (
 
 var (
 	appExecute                = app.ExecuteWithTelemetry
+	runSchemaCacheBuilder     = app.RunSchemaCacheBuilder
 	resolveTelemetryIdentity  = app.ResolveTelemetryIdentity
 	submitTelemetry           = telemetry.Submit
 	snapshotTelemetryIdentity = startTelemetryIdentity
@@ -38,7 +39,7 @@ func main() {
 }
 
 func run() int {
-	if handled, code := app.RunSchemaCacheBuilder(os.Args[1:], os.Stdout); handled {
+	if handled, code := runSchemaCacheBuilder(os.Args[1:], os.Stdout); handled {
 		return code
 	}
 	if telemetry.RunWorker(os.Args[1:], os.Stdin) {

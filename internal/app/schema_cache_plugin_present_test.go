@@ -140,6 +140,15 @@ func TestCrossPlatformCoverageSchemaCacheBuilderChildSetupErrors(t *testing.T) {
 	if _, err := buildSchemaCacheInChild(context.Background()); err == nil {
 		t.Fatal("child failure unexpectedly succeeded")
 	}
+	schemaCacheBuilderCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=TestCrossPlatformCoverageSchemaCacheBuilderOutputHelper")
+	}
+	schemaCacheReadResult = func(io.Reader) (cli.SchemaCacheBuildResult, error) {
+		return cli.SchemaCacheBuildResult{}, errors.New("decode failed")
+	}
+	if _, err := buildSchemaCacheInChild(context.Background()); err == nil {
+		t.Fatal("response decode failure unexpectedly succeeded")
+	}
 }
 
 func TestCrossPlatformCoverageSchemaCacheBuilderPrivateProtocol(t *testing.T) {
@@ -154,6 +163,9 @@ func TestCrossPlatformCoverageSchemaCacheBuilderPrivateProtocol(t *testing.T) {
 	}
 	if result.Identity.Edition != "open" || len(result.Artifacts.Registry) == 0 {
 		t.Fatalf("invalid builder result: edition=%q registry=%d", result.Identity.Edition, len(result.Artifacts.Registry))
+	}
+	if inProcess, err := buildSchemaCacheInProcessForTest(context.Background()); err != nil || inProcess.Identity.BuildID != result.Identity.BuildID {
+		t.Fatalf("in-process builder = %x/%v, child protocol = %x", inProcess.Identity.BuildID, err, result.Identity.BuildID)
 	}
 }
 
