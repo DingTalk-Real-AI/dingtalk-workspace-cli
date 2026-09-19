@@ -42,33 +42,21 @@ metadata:
 
 | 用户终点 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| <!-- dws-intent: chat.read.conversation -->读取指定群聊/单聊 | `dws chat +chat-messages --no-reactions` | 全部时加 `--page-all` |
-| <!-- dws-intent: chat.search.filtered --><!-- dws-intent: chat.read.reactions -->按关键词/发送者/@/类型/reaction 过滤 | `dws chat +search-msg`（reaction 加 `--has-reactions`） | 默认 7 天；范围用 `--start/--end` |
-| 跨会话读取/总结/统计 | `dws chat message list-all --start <开始> --end <结束> --page-all --no-reactions` | 不先列会话逐群循环 |
-| <!-- dws-intent: chat.conversation.active-since -->时间后活跃会话 | `dws chat +recent-conversations --start <时间>` | 摘要；查 `complete`；`+active-conversations` 仅兼容 |
-| 查看 @我的消息 | `dws chat +at-me [--group <群名或ID>] --page-all --no-reactions` | 未指定群则跨会话；默认 7 天 |
-| 查看未读消息 | `dws chat +unread-chats` | 需正文时沿 CID 读消息 |
-| 已知消息 ID 批量取详情 | `dws chat +messages-mget` | 看 leaf Schema；保留会话上下文 |
+| <!-- dws-intent: chat.read.conversation -->读取指定群聊/单聊 | `dws chat +chat-messages --no-reactions` | 全部时加 `--page-all`；已知 ID 批量用 `+messages-mget` |
 | <!-- dws-intent: chat.send.dm -->按姓名发文本/Markdown | `dws chat +dm --to <姓名> --content <内容>` | 唯一解析；多候选停止 |
 | <!-- dws-intent: chat.send.group -->按群名/ID 发文本/Markdown | `dws chat +send-to-group --group <群名或ID> --content <内容>` | 多候选停止 |
 | <!-- dws-intent: chat.send.advanced -->文件/Bot/Webhook/复杂 @ | `dws chat +messages-send` | Bot 多群检查逐项 ledger |
-| 全部会话 | `dws chat +conversation-list --page-all` | 含群聊/单聊，非正文 |
-| 查加入/管理的群 | `+my-groups --page-all` / `+chat-list-mine` | 后者无 `--page-all`；flag 不跨 leaf |
-| 搜群或查看全部成员 | `+chat-search --query <词>` / `+chat-members-list --group <群名或ID>` | 多候选停止；检查 buckets/完整性 |
-| 查群资料/Bot/邀请链接 | `+conversation-info` / `+chat-bots` / `+chat-invite-url` | 只读 |
-| <!-- dws-intent: chat.create.group -->创建/清理临时群 | `dws chat +chat-create --name <名称> --member-query <姓名列表>` → 保存 CID → `+chat-dismiss --group <cid>` | 已知 ID 用 `--users`；清理须确认、验证 |
-| 改群资料/设置/禁言/管理员 | `+chat-update` / `+chat-update-settings` / `+chat-mute` / `+chat-mute-member` / `+chat-set-admin` | 用真实群/用户 ID；写后读回 |
-| 管理群身份 | 读 [group-admin](references/chat/group-admin.md) 角色 family | 角色 CRUD、成员绑定/解绑/查询；不切 atomic，写后回读 |
-| <!-- dws-intent: chat.category.list-conversations -->列分类内会话 | `dws chat +category-list-conversations --category-id <ID>` | 分类≠群；先取 ID |
+| 给多人逐一发同一条单聊 | `dws chat +broadcast` | 按姓名逐一解析 userId 发送 |
 | <!-- dws-intent: chat.reply.quote -->引用回复 | `dws chat +messages-reply` | 用真实消息/CID；未知投递状态非成功 |
+| <!-- dws-intent: chat.search.filtered --><!-- dws-intent: chat.read.reactions -->按关键词/发送者/@/类型/reaction 过滤 | `dws chat +search-msg`（reaction 加 `--has-reactions`） | 默认 7 天；范围用 `--start/--end` |
+| 跨会话读取/总结/统计 | `dws chat message list-all --start <开始> --end <结束> --page-all --no-reactions` | 不先列会话逐群循环 |
+| 查看 @我的消息 | `dws chat +at-me [--group <群名或ID>] --page-all --no-reactions` | 未指定群则跨会话；默认 7 天 |
+| 查看未读/活跃会话 | `dws chat +unread-chats` / `dws chat +recent-conversations --start <时间>` | 需正文时沿 CID 读消息 |
 | 撤回/转发 | `+messages-recall`；`+messages-forward` / `+messages-combine-forward` / `+messages-forward-topic` | 不复制正文冒充原生转发 |
-| Pin/消息 Top/Favorite | `+messages-set-pin` / `+messages-unset-pin`；`+messages-set-top` / `+messages-unset-top`；`+flag-create` / `+flag-cancel` | 对象互不替代；用对应查询验证 |
 | 添加/移除 reaction | `+messages-add-emoji` / `+messages-remove-emoji` | 扩展动作读 `message-actions` |
-| 会话置顶/免打扰/隐藏 | [chat-conversation](references/chat/chat-conversation.md) | 用真实 CID；会话 Top 非消息 Top |
-| 已读/未读/清红点/清空 | `+conversation-mark-read` / `+conversation-mark-unread` / `+conversation-clear-red-point` / `+conversation-clear-all-red-point` / `+conversation-clear-messages` | 已读需消息 ID；清空按 Runtime 确认 |
 | 下载消息资源 | 查询加 `--download-resources --output-dir <目录>`；已有引用用 `+messages-resource-download` | 不猜 ID；保留 ledger；临时 URL 不交付 |
-
-次级：Thread `+thread-replies`；<!-- dws-intent: chat.conversation.list-top -->置顶 `dws chat +conversation-list-top`；上传 `conversation-file upload`；IM 事件走 [`dingtalk-event`](../dingtalk-event/SKILL.md)。
+| <!-- dws-intent: chat.create.group -->创建/清理临时群 | `dws chat +chat-create --name <名称> --member-query <姓名列表>` → 保存 CID → `+chat-dismiss --group <cid>` | 已知 ID 用 `--users`；清理须确认、验证 |
+| 搜群/查群资料/成员/改设置/禁言/管理员/群身份 | `+chat-search` / `+chat-members-list` / `+conversation-info` / `+chat-bots` / `+chat-invite-url` / `+chat-update` / `+chat-update-settings` / `+chat-mute` / `+chat-mute-member` / `+chat-set-admin`；群身份读 [group-admin](references/chat/group-admin.md) | 多候选停止；用真实 ID；写后读回 |
 
 ## 关键结果语义
 
