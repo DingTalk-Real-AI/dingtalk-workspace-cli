@@ -168,6 +168,11 @@ dws whiteboard template team create --template-workspace <TEAM_WORKSPACE_ID> \
   --template-id <TEMPLATE_ID> --name "<新白板名称>" \
   --request-id <STABLE_REQUEST_ID> --format json
 
+# 公共模板：仅支持查询和从模板创建，不支持保存
+dws whiteboard template public list --query "<关键词>" --limit 20 --format json
+dws whiteboard template public create --template-id <TEMPLATE_ID> \
+  --name "<新白板名称>" --request-id <STABLE_REQUEST_ID> --format json
+
 # 导出独立白板；--output 是目录，文件名自动使用白板名称
 dws whiteboard export --node <WHITEBOARD_NODE_ID> \
   --export-format png --output ./exports --format json
@@ -177,11 +182,26 @@ dws whiteboard export-get --job-id <JOB_ID> \
   --export-format png --output ./exports --format json
 ```
 
-模板能力只接受独立 `.adraw` 白板，服务端类型固定为 `DRAW(9)`。个人与团队是两个
+模板能力只接受独立 `.adraw` 白板，服务端类型固定为 `DRAW(9)`。个人、团队和公共模板是
 严格隔离的 scope：个人请求不携带 orgId，团队模板不得跨 `template-workspace` 查询或
-创建；找不到模板时不能自动回退到另一 scope 或公开模板。保存模板需要用户确认，执行
+创建，公共模板固定从模板中心公共库查询；找不到模板时不能自动回退到另一 scope。保存模板需要用户确认，执行
 前可用全局 `--dry-run` 做远端只读预检。模板名称允许重复，网络重试必须复用原
 `request-id`；若服务端返回 commit-unknown，禁止换新 request-id 盲目重试。
+
+模板 scope 按模板来源选择，不能按新白板的保存位置推断：
+
+| 用户意图或已有证据 | 命中 scope | 选择规则 |
+|---|---|---|
+| “我的模板”“个人模板”“我保存的模板” | `personal` | 查询使用 personal list；创建必须使用来自 personal list 或已明确为个人模板的 templateId |
+| “团队模板”“知识库模板”“团队共享模板” | `team` | 查询和创建都必须确定模板所属 `template-workspace`；创建沿用查询模板时的同一个 Workspace |
+| “模板中心”“公共模板”“官方/推荐模板” | `public` | 公共模板来自模板中心，仅支持查询和创建，不支持保存 |
+| 只说“找一个白板模板”，没有个人或团队来源限定 | `public` | 按模板发现诉求查询模板中心公共库 |
+| 只说“保存为白板模板”，没有团队共享要求 | `personal` | 默认保存为个人模板；明确要求团队共享时才使用 team save |
+| 只有一个来源不明的 templateId | 暂不调用 create | templateId 本身不能判断 scope，先确认它来自 personal/team/public；不得逐个 scope 试探 |
+
+把白板创建到某个知识库只决定 `--workspace`，不会让个人或公共模板变成团队模板。反过来，
+团队模板也可以把新白板创建到“我的文档”或普通文件夹；`--template-workspace` 表示模板来源，
+`--workspace` / `--folder` 表示新白板去向，两者不能混用。
 
 导出下载仅接受 HTTPS/443 公网地址，每次重定向及实际连接都会校验目标地址；最大文件大小为 512 MiB，超限下载会清理临时文件。
 

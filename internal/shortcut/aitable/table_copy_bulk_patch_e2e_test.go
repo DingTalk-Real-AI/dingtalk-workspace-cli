@@ -104,6 +104,25 @@ func sourceFieldFixture() map[string]any {
 	return map[string]any{"fieldId": "sf1", "fieldName": "状态", "type": "text"}
 }
 
+// 源表分页失效时不建目标表、不写记录，也不自动重启整个复制命令。
+func TestCrossPlatformCoverageTableCopyCursorChangeStopsBeforeWrites(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": []any{sourceFieldFixture()}})},
+		{text: `{"records":[{"recordId":"old-row","cells":{"sf1":"旧"}}],"nextCursor":"stale"}`},
+		{text: `{"status":"error","error":{"code":"CURSOR_SNAPSHOT_CHANGED","message":"version changed","retryable":false}}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
+		"--source-base-id", "base", "--source-table-id", "source",
+		"--target-base-id", "target", "--new-name", "copy", "--include-records", "--yes")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Retryable || typed.Details["discard_previous_results"] != true || out != "" {
+		t.Fatalf("unsafe copy recovery: out=%q err=%#v", out, err)
+	}
+	if len(caller.calls) != 3 || caller.calls[2].tool != "query_records" {
+		t.Fatalf("copy must stop before writes: %#v", caller.calls)
+	}
+}
+
 func sourcePrimaryDocFixture() map[string]any {
 	return map[string]any{"fieldId": "sp0", "fieldName": "主文档", "type": "primaryDoc"}
 }
@@ -289,6 +308,7 @@ func TestCrossPlatformCoverageTableCopyUnknownResponsesAreNotSuccessE2E(t *testi
 			{text: `{"tableId":"target"}`},
 			{text: mustJSONText(t, map[string]any{"fields": []any{targetFieldFixture()}})},
 			{text: `{"data":{"newRecordIds":[]}}`},
+			{text: `{"state":"unknown"}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+table-copy",
 			"--source-base-id", "b1", "--source-table-id", "t1", "--target-base-id", "b2", "--new-name", "copy", "--include-records", "--yes")
@@ -298,6 +318,13 @@ func TestCrossPlatformCoverageTableCopyUnknownResponsesAreNotSuccessE2E(t *testi
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" {
 			t.Fatalf("missing record ids error = %#v", err)
+		}
+		result := typed.Details["result"].(compositeResult)
+		if len(result.KnownEffects) != 1 || result.KnownEffects[0]["tool"] != "create_table" {
+			t.Fatalf("only the target table is a known effect: %#v", result.KnownEffects)
+		}
+		if len(caller.calls) != 6 || caller.calls[5].tool != "get_record_write_result" || typed.Retryable {
+			t.Fatalf("unknown create must reconcile once and stop without replay: calls=%#v error=%#v", caller.calls, typed)
 		}
 	})
 }

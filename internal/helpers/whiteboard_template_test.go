@@ -104,6 +104,7 @@ func TestCrossPlatformCoverageWhiteboardTemplateCommandSurface(t *testing.T) {
 	paths := [][]string{
 		{"template", "personal", "save"}, {"template", "personal", "list"}, {"template", "personal", "create"},
 		{"template", "team", "save"}, {"template", "team", "list"}, {"template", "team", "create"},
+		{"template", "public", "list"}, {"template", "public", "create"},
 	}
 	for _, path := range paths {
 		leaf, _, err := root.Find(path)
@@ -121,6 +122,53 @@ func TestCrossPlatformCoverageWhiteboardTemplateCommandSurface(t *testing.T) {
 		if (workspaceFlag != nil) != wantWorkspace {
 			t.Fatalf("%v template-workspace present=%v, want %v", path, workspaceFlag != nil, wantWorkspace)
 		}
+	}
+	publicGroup, _, err := root.Find([]string{"template", "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, child := range publicGroup.Commands() {
+		if child.Name() == "save" {
+			t.Fatal("public template scope must not expose save")
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardPublicTemplateListAndCreate(t *testing.T) {
+	caller := &whiteboardTestCaller{format: "json", response: func(call whiteboardTestCall, _ int) string {
+		switch call.tool {
+		case whiteboardcore.PublicTemplateListTool:
+			if call.args["query"] != "复盘" {
+				t.Fatalf("public list args=%#v", call.args)
+			}
+			if _, exists := call.args["templateWorkspaceId"]; exists {
+				t.Fatalf("public list leaked template workspace: %#v", call.args)
+			}
+			return `{"success":true,"result":{"templates":[{"templateId":"public-tpl","resourceType":9,"scope":"public"}],"hasMore":false}}`
+		case whiteboardcore.PublicTemplateCreateTool:
+			if _, exists := call.args["templateWorkspaceId"]; exists {
+				t.Fatalf("public create leaked template workspace: %#v", call.args)
+			}
+			return `{"success":true,"result":{"requestId":"public-create-1","nodeId":"wb-public","revision":1,"contentType":"WBD","requestMatched":true,"templateId":"public-tpl","templateScope":"public","resourceType":9,"verified":true}}`
+		default:
+			t.Fatalf("unexpected tool %s", call.tool)
+			return ""
+		}
+	}}
+	installWhiteboardTestCaller(t, caller)
+
+	list := prepareWhiteboardTemplateTestCommand()
+	list.SetArgs([]string{"template", "public", "list", "--query", " 复盘 "})
+	if err := list.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	create := prepareWhiteboardTemplateTestCommand()
+	create.SetArgs([]string{"template", "public", "create", "--template-id", "public-tpl", "--request-id", "public-create-1"})
+	if err := create.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("calls=%#v", caller.calls)
 	}
 }
 

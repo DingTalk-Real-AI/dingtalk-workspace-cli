@@ -383,7 +383,7 @@ func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 				continue
 			}
 			var parsed map[string]any
-			if err := json.Unmarshal([]byte(text), &parsed); err == nil {
+			if err := unmarshalJSONUseNumber([]byte(text), &parsed); err == nil {
 				r.Content = parsed
 				return nil
 			}
