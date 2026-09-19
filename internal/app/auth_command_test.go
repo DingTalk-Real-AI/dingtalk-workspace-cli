@@ -2183,36 +2183,3 @@ func authLogoutTestToken(corpID string) *authpkg.TokenData {
 		ClientID:     "client-" + corpID,
 	}
 }
-
-func TestCrossPlatformCoverageAuthLoginPushDisplayLangDefaultsInternationalToEnglish(t *testing.T) {
-	previous := i18n.Lang()
-	t.Cleanup(func() { i18n.SetLang(previous) })
-
-	// LANG-derived Chinese must not leak into the international login copy.
-	t.Setenv("DWS_LANG", "")
-	i18n.SetLang("zh")
-	restore := authLoginPushDisplayLang(authLoginConfig{International: true})
-	if got := i18n.Lang(); got != "en" {
-		t.Fatalf("international login language = %q, want en", got)
-	}
-	restore()
-	if got := i18n.Lang(); got != "zh" {
-		t.Fatalf("restored language = %q, want zh", got)
-	}
-
-	// An explicit DWS_LANG keeps the user's choice.
-	t.Setenv("DWS_LANG", "zh")
-	restore = authLoginPushDisplayLang(authLoginConfig{International: true})
-	if got := i18n.Lang(); got != "zh" {
-		t.Fatalf("pinned language = %q, want zh", got)
-	}
-	restore()
-
-	// Domestic login keeps the ambient locale.
-	t.Setenv("DWS_LANG", "")
-	restore = authLoginPushDisplayLang(authLoginConfig{})
-	if got := i18n.Lang(); got != "zh" {
-		t.Fatalf("domestic login language = %q, want zh", got)
-	}
-	restore()
-}

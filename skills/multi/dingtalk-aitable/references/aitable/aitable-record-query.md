@@ -1,13 +1,5 @@
 # record query — 查询记录
 
-## 只评审失效游标恢复
-
-用户仅要求核对 Schema、评审分页失败的恢复边界时，沿用用户指定的原子或 Shortcut 入口，只查询一次其 compact Schema，不执行业务读写。回答先用下列三点短结论覆盖全部安全边界，不按单个错误展开长篇推导后才补充另一错误；用户未要求原理或操作细节时，到此结束，不套用下方实际查询流程：
-
-1. `INVALID_CURSOR` / `CURSOR_SNAPSHOT_CHANGED`：丢弃全部累计读取结果（包括此前第一页）和旧 cursor，不原样重试、不拼接或去重合并新旧页；核对原查询条件后，不传 `--cursor` 从第一页只读重查。
-2. `CURSOR_SNAPSHOT_UNAVAILABLE`：同样丢弃累计结果与旧 cursor，但必须先等待服务端版本信息恢复、服务修复或版本稳定，再不传 `--cursor` 从第一页只读重查，不能立即重试。`CURSOR_OFFSET_LIMIT` 则是 offset 已达上限，须先收窄 `--filters`（或改用 `--record-ids`/分段条件）缩小结果集再从第一页重查，直接重查会再次触顶。
-3. 含建表或记录写入的工作流（如 `+table-copy`）不能整条重放；保留已知目标表、recordId、原 token 和回执，仅独立只读核对恢复范围。未知或不完整写入尚未核清前，不根据新旧查询差异推导缺失记录，不建议改发 `record create`、按数量差额补写或删除重建；查询恢复不是写入恢复许可。
-
 ## 命令格式
 
 ```
@@ -55,25 +47,16 @@ Flags:
 - 用户需要导出完整数据时，优先使用 `dws aitable export data`；导出的文件不得被拉回 Agent 上下文用于等价分析。
 - 已获明确许可的非分析完整逐行明细或逐条业务操作可直接使用 `--all`，不需要也不触发 `psql -l`、`psql -t` 或最小查询探测。psql 失败后，只有回看原始意图确认其完全属于该非分析明细场景时，才可丢弃 psql 未完成结果并重新以 `--all` 查询；它不能作为复杂 psql 分析的降级。使用前必须说明字段、范围、预计记录数和体积；即使获准也必须服务端过滤、仅取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--page-limit 0` 时必须再次确认。
 - CLI 首次请求不传 cursor，后续原样使用上一页 `data.nextCursor`，并检测 cursor 循环；页间间隔 200ms。
-- 同一有效分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止无故重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor；失效快照必须按下方例外规则丢弃整轮结果并重新开始。
+- 同一分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor。
 - 只有自动分页输出 `complete=true`，或手动分页时 `data.nextCursor` 为空，才表示完整结束。普通扫描某页恰好返回 `limit` 条时，服务端可能返回 `nextCursor`；用它续页后若调用成功、`records=[]` 且 `nextCursor` 为空，这是正常的末页探测，应正常完成，不能报错、重试或判定漏查。
 - 成功页的 `records=[]` 本身既不是错误也不是结束条件：`nextCursor` 非空就继续，`nextCursor` 为空就正常结束。
-- 达到 page-limit、普通网络错误、缺少 `records` 的空响应、非法响应或 cursor 循环时，命令返回非零结构化错误；错误详情保留已取记录和续传 cursor。必须标记结果不完整，禁止把 partial 当 success 或据此给出全量结论。只有错误未声明快照失效且确实提供有效断点时才可续传；不能自行给所有错误补出恢复 cursor。
-
-### 失效游标例外（优先于普通断点续传）
-
-`INVALID_CURSOR`、`CURSOR_SNAPSHOT_CHANGED`、`CURSOR_SNAPSHOT_UNAVAILABLE` 均返回 `retryable=false`、`discard_previous_results=true`、`restart_from_first_page=true`。丢弃本轮与此前保存的全部记录和旧游标，不提供 `details.incomplete_result.cursor` 恢复点；该对象即使存在也只保留诊断计数，不能凭空假定其中有新 cursor。
-
-- `INVALID_CURSOR` / `CURSOR_SNAPSHOT_CHANGED`：核对原查询条件后，不传 `--cursor` 从第一页发起新的只读查询。禁止保留第一页后用去重方式拼接新快照。
-- `CURSOR_SNAPSHOT_UNAVAILABLE`：服务端缺少排序分页所需版本信息；先等待服务修复或版本稳定，再不传 `--cursor` 从第一页查询。不能原样重试或猜测已生成可续传的新快照。
-- `CURSOR_OFFSET_LIMIT`：排序游标 offset 已达上限（100000）。该码返回 `retryable=false`、`discard_previous_results=true`，但 `restart_from_first_page=false`，另带 `narrow_filters_required=true`。丢弃累计结果与旧游标后，必须先收窄 `--filters`（或改用 `--record-ids`/分段条件）缩小结果集，再从第一页重查；不收窄直接重查会再次触顶。
-- 不重跑含写入步骤的整条命令（如 `+table-copy`、bulk patch）；保留已知写入供独立核对，重新查询不代表允许再次建表、补写或删除重建。
+- 达到 page-limit、网络错误、缺少 `records` 的空响应、非法响应或 cursor 循环时，命令返回非零结构化错误；错误详情保留已取记录和续传 cursor。必须标记结果不完整，禁止把 partial 当 success 或据此给出全量结论。
 
 ```bash
 # 仅限已获明确许可的非分析明细：自动翻页直到 nextCursor 为空
 dws aitable record query --base-id X --table-id Y --all --page-limit 0 --format json
 
-# 仅普通可恢复错误且实际提供有效 details.incomplete_result.cursor 时续传；失效快照禁止使用本例
+# 从结构化错误 details.incomplete_result.cursor 断点续传；其余查询条件必须与原请求完全一致
 dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --sort '<原 sort>' --all --page-limit 0 --cursor '<原样 cursor>' --format json
 ```
 
@@ -83,7 +66,6 @@ dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --so
 2. `nextCursor` 非空时，将其原样作为下一次 `--cursor`；不得使用当前请求 cursor，也不得自行拼接或复用更早页 cursor。
 3. 每一页保持全部查询条件不变并累计记录；如需防御性校验，以 `recordId` 检测重复，但重复 cursor 必须按异常停止，不能静默继续。
 4. `nextCursor` 为空才结束。成功返回的空页是合法结果：若 `records=[]` 且 `nextCursor` 为空，则正常完成；若 `records=[]` 但 `nextCursor` 非空，则继续查询，不能把空页当作异常或自行重试当前 cursor。
-5. 任一步出现上述失效游标错误，立即丢弃整轮累计结果及旧 cursor，并按失效游标例外结束本轮；不得把失败回包中的空 records/空 cursor 当作成功末页。
 
 ## 排序参数规范
 

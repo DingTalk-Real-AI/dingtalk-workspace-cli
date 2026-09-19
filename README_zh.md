@@ -352,7 +352,7 @@ dws todo task list --dry-run                       # 预览操作但不执行
 
 ### 白板
 
-使用 `dws whiteboard` 操作独立白板和文档内嵌白板：查询内容、通过 OpenNodes 创建／更新、使用 `+diff` 预览变更、生成本地 SVG 预览，以及管理个人／团队模板或使用公共模板。
+使用 `dws whiteboard` 操作独立白板和文档内嵌白板：查询内容、通过 OpenNodes 创建／更新、使用 `+diff` 预览变更、生成本地 SVG 预览，以及管理个人／团队模板。
 
 ```bash
 dws whiteboard --help
@@ -360,7 +360,6 @@ dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.sv
 dws whiteboard +diff --help
 dws whiteboard template personal list --format json
 dws whiteboard template team list --template-workspace "<团队空间ID>" --page-all --format json
-dws whiteboard template public list --query "复盘" --format json
 ```
 
 `whiteboard.json` 为 OpenNodes 源文件。SVG 是本地预览，需要查看还原程度和警告，并确认当前预览后再创建白板；更新前使用 `+diff` 检查拟写入内容，再执行 `+update`。模板 `save`／`create` 命令的 `--dry-run` 是可选的服务端预检，不实际保存模板或创建白板。

@@ -27,9 +27,6 @@ func newWhiteboardTemplateCommand() *cobra.Command {
 	team := newDeepGroupCommand(&cobra.Command{
 		Use: "team", Short: "团队独立白板模板", RunE: groupRunE,
 	})
-	public := newDeepGroupCommand(&cobra.Command{
-		Use: "public", Short: "公共独立白板模板", RunE: groupRunE,
-	})
 	personal.AddCommand(
 		newWhiteboardTemplateSaveCommand(whiteboardcore.TemplateScopePersonal),
 		newWhiteboardTemplateListCommand(whiteboardcore.TemplateScopePersonal),
@@ -40,11 +37,7 @@ func newWhiteboardTemplateCommand() *cobra.Command {
 		newWhiteboardTemplateListCommand(whiteboardcore.TemplateScopeTeam),
 		newWhiteboardTemplateCreateCommand(whiteboardcore.TemplateScopeTeam),
 	)
-	public.AddCommand(
-		newWhiteboardTemplateListCommand(whiteboardcore.TemplateScopePublic),
-		newWhiteboardTemplateCreateCommand(whiteboardcore.TemplateScopePublic),
-	)
-	root.AddCommand(personal, team, public)
+	root.AddCommand(personal, team)
 	return root
 }
 
@@ -77,7 +70,12 @@ func newWhiteboardTemplateSaveCommand(scope whiteboardcore.TemplateScope) *cobra
 			Description: "经用户确认后把独立白板保存为" + whiteboardTemplateScopeLabel(scope) + "模板",
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: true},
 			Interface:   whiteboardTemplateCompositeInterface(tool),
-			Selection:   whiteboardTemplateSaveSelection(scope, path),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "把已有独立白板保存为" + whiteboardTemplateScopeLabel(scope) + "模板",
+				UseWhen:      []string{"用户要把已有独立 .adraw 白板保存为" + whiteboardTemplateScopeLabel(scope) + "模板时"},
+				AvoidWhen:    []string{"文档内嵌白板不支持直接保存模板；查询模板使用同 scope 的 list；从模板创建白板使用 create"},
+				Examples:     []string{"dws " + path + " --node <WHITEBOARD_NODE_ID> --name \"项目复盘模板\" --request-id wb-tpl-save-001 --format json"},
+			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "sourceNodeId", Required: boolPtr(true)},
 				{Name: "name", Property: "name", Required: boolPtr(true)},
@@ -99,8 +97,6 @@ func newWhiteboardTemplateListCommand(scope whiteboardcore.TemplateScope) *cobra
 	tool := whiteboardcore.PersonalTemplateListTool
 	if scope == whiteboardcore.TemplateScopeTeam {
 		tool = whiteboardcore.TeamTemplateListTool
-	} else if scope == whiteboardcore.TemplateScopePublic {
-		tool = whiteboardcore.PublicTemplateListTool
 	}
 	path := "whiteboard template " + string(scope) + " list"
 	flags := []LeafFlag{
@@ -135,10 +131,15 @@ func newWhiteboardTemplateListCommand(scope whiteboardcore.TemplateScope) *cobra
 			Identity:    contract.ToolIdentitySpec{ProductID: "whiteboard", Name: tool, CanonicalPath: "whiteboard." + tool, CLIPath: path, PrimaryCLIPath: path},
 			Description: "分页查询" + whiteboardTemplateScopeLabel(scope) + "独立白板模板",
 			Interface:   whiteboardTemplateCompositeInterface(tool),
-			Selection:   whiteboardTemplateListSelection(scope, path),
-			Parameters:  params,
-			Result:      whiteboardTemplateListResultSpec(),
-			Pagination:  &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "浏览或按关键词查询" + whiteboardTemplateScopeLabel(scope) + "独立白板模板",
+				UseWhen:      []string{"需要取得" + whiteboardTemplateScopeLabel(scope) + "白板模板 templateId，或按名称查找模板时"},
+				AvoidWhen:    []string{"保存模板使用 save；已有 templateId 并要新建白板时使用 create；不得改查另一个 scope"},
+				Examples:     []string{"dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --limit 20 --format json"},
+			},
+			Parameters: params,
+			Result:     whiteboardTemplateListResultSpec(),
+			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
 		},
 		ResultCall: whiteboardTemplateResultCall,
 	})
@@ -148,8 +149,6 @@ func newWhiteboardTemplateCreateCommand(scope whiteboardcore.TemplateScope) *cob
 	tool := whiteboardcore.PersonalTemplateCreateTool
 	if scope == whiteboardcore.TemplateScopeTeam {
 		tool = whiteboardcore.TeamTemplateCreateTool
-	} else if scope == whiteboardcore.TemplateScopePublic {
-		tool = whiteboardcore.PublicTemplateCreateTool
 	}
 	path := "whiteboard template " + string(scope) + " create"
 	flags := []LeafFlag{
@@ -172,7 +171,7 @@ func newWhiteboardTemplateCreateCommand(scope whiteboardcore.TemplateScope) *cob
 	}
 	return NewLeafCommand(LeafSpec{
 		Use: "create", Short: "从" + whiteboardTemplateScopeLabel(scope) + "模板创建独立白板",
-		Long:    "从指定" + whiteboardTemplateScopeLabel(scope) + " DRAW(9) 模板幂等创建独立 .adraw 白板；不会回退到其他 scope。",
+		Long:    "从指定" + whiteboardTemplateScopeLabel(scope) + " DRAW(9) 模板幂等创建独立 .adraw 白板；不会回退到公开模板或另一 scope。",
 		Example: "  dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --template-id <TEMPLATE_ID> --name \"项目复盘\" --request-id wb-tpl-create-001 --format json",
 		Server:  whiteboardServerID, Tool: tool, OutputRollout: output.RolloutUnifiedActive,
 		Flags:       flags,
@@ -183,116 +182,22 @@ func newWhiteboardTemplateCreateCommand(scope whiteboardcore.TemplateScope) *cob
 			Description: "从" + whiteboardTemplateScopeLabel(scope) + "模板幂等创建独立白板",
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: true},
 			Interface:   whiteboardTemplateCompositeInterface(tool),
-			Selection:   whiteboardTemplateCreateSelection(scope, path),
-			Parameters:  params,
-			Result:      whiteboardTemplateCreateResultSpec(),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "使用明确的" + whiteboardTemplateScopeLabel(scope) + "模板创建一份新独立白板",
+				UseWhen:      []string{"已有" + whiteboardTemplateScopeLabel(scope) + "模板的 templateId，需要在文件夹、知识库或我的文档创建独立白板时"},
+				AvoidWhen:    []string{"还没有 templateId 时先使用同 scope 的 list；创建空白白板使用普通文件创建；不得跨 scope 猜测模板"},
+				Examples:     []string{"dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --template-id <TEMPLATE_ID> --name \"项目复盘\" --request-id wb-tpl-create-001 --format json"},
+			},
+			Parameters: params,
+			Result:     whiteboardTemplateCreateResultSpec(),
 		},
 		ResultCall: whiteboardTemplateResultCall,
 	})
 }
 
-func whiteboardTemplateSaveSelection(scope whiteboardcore.TemplateScope, path string) contract.SelectionSpec {
-	selection := contract.SelectionSpec{
-		AgentSummary: "把已有独立白板保存为个人模板；用户未指定共享范围时默认保存到个人模板库",
-		UseWhen: []string{
-			"用户明确要保存为个人、我的模板，或只说保存为白板模板且没有团队、知识库或共享范围要求时",
-		},
-		AvoidWhen: []string{
-			"用户要求保存为团队或知识库模板时使用 team save；公共模板中心不支持用户保存；文档内嵌白板不支持直接保存模板",
-		},
-		Examples: []string{"dws " + path + " --node <WHITEBOARD_NODE_ID> --name \"项目复盘模板\" --request-id wb-tpl-save-001 --format json"},
-	}
-	if scope == whiteboardcore.TemplateScopeTeam {
-		selection.AgentSummary = "把已有独立白板保存为指定团队知识库中的共享模板"
-		selection.UseWhen = []string{
-			"用户明确要保存为团队模板、知识库模板或供团队共享的白板模板时；可指定目标 template-workspace，未指定则使用源白板所属知识库",
-		}
-		selection.AvoidWhen = []string{
-			"用户要保存为个人或我的模板，或没有团队共享意图时使用 personal save；公共模板中心不支持用户保存；文档内嵌白板不支持直接保存模板",
-		}
-	}
-	return selection
-}
-
-func whiteboardTemplateListSelection(scope whiteboardcore.TemplateScope, path string) contract.SelectionSpec {
-	example := "dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --limit 20 --format json"
-	switch scope {
-	case whiteboardcore.TemplateScopeTeam:
-		return contract.SelectionSpec{
-			AgentSummary: "浏览或搜索指定团队知识库中的共享白板模板",
-			UseWhen: []string{
-				"用户明确要查团队模板、知识库模板或某个团队空间共享的白板模板，并能确定模板所属 template-workspace 时",
-			},
-			AvoidWhen: []string{
-				"查我的模板使用 personal list；查模板中心、公共或官方模板使用 public list；目标白板要创建到某知识库不能反推模板属于团队 scope",
-			},
-			Examples: []string{example},
-		}
-	case whiteboardcore.TemplateScopePublic:
-		return contract.SelectionSpec{
-			AgentSummary: "浏览或搜索模板中心面向所有用户提供的公共白板模板",
-			UseWhen: []string{
-				"用户要查模板中心、公共、官方或推荐白板模板；用户泛指查找可用白板模板且没有个人或团队来源限定时，也从公共模板中心查询",
-			},
-			AvoidWhen: []string{
-				"查我的、个人或自己保存的模板使用 personal list；查指定团队知识库的共享模板使用 team list；公共模板不支持保存",
-			},
-			Examples: []string{example},
-		}
-	default:
-		return contract.SelectionSpec{
-			AgentSummary: "浏览或搜索当前用户自己保存的个人白板模板",
-			UseWhen: []string{
-				"用户明确要查个人、我的模板或自己保存的白板模板时",
-			},
-			AvoidWhen: []string{
-				"查团队或知识库共享模板使用 team list；查模板中心、公共、官方、推荐模板，或没有来源限定地查找可用模板时使用 public list",
-			},
-			Examples: []string{example},
-		}
-	}
-}
-
-func whiteboardTemplateCreateSelection(scope whiteboardcore.TemplateScope, path string) contract.SelectionSpec {
-	example := "dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --template-id <TEMPLATE_ID> --name \"项目复盘\" --request-id wb-tpl-create-001 --format json"
-	commonAvoid := "只有 templateId 而不知道来源时先确认模板来自个人、团队知识库还是公共模板中心；新白板的目标 folder/workspace 不代表模板 scope；创建空白白板使用普通文件创建"
-	switch scope {
-	case whiteboardcore.TemplateScopeTeam:
-		return contract.SelectionSpec{
-			AgentSummary: "使用已确认属于指定团队知识库的模板创建独立白板",
-			UseWhen: []string{
-				"templateId 来自 team list，或用户明确说明它是某个团队知识库的模板，并且能够沿用同一个 template-workspace 时",
-			},
-			AvoidWhen: []string{commonAvoid + "；个人模板使用 personal create，模板中心公共模板使用 public create"},
-			Examples:  []string{example},
-		}
-	case whiteboardcore.TemplateScopePublic:
-		return contract.SelectionSpec{
-			AgentSummary: "使用已确认来自模板中心的公共模板创建独立白板",
-			UseWhen: []string{
-				"templateId 来自 public list、模板中心，或用户明确说明它是公共、官方或推荐模板时",
-			},
-			AvoidWhen: []string{commonAvoid + "；个人模板使用 personal create，团队知识库模板使用 team create"},
-			Examples:  []string{example},
-		}
-	default:
-		return contract.SelectionSpec{
-			AgentSummary: "使用已确认属于当前用户的个人模板创建独立白板",
-			UseWhen: []string{
-				"templateId 来自 personal list，或用户明确说明它是个人、我的或自己保存的模板时",
-			},
-			AvoidWhen: []string{commonAvoid + "；团队知识库模板使用 team create，模板中心公共模板使用 public create"},
-			Examples:  []string{example},
-		}
-	}
-}
-
 func whiteboardTemplateScopeLabel(scope whiteboardcore.TemplateScope) string {
 	if scope == whiteboardcore.TemplateScopeTeam {
 		return "团队"
-	}
-	if scope == whiteboardcore.TemplateScopePublic {
-		return "公共"
 	}
 	return "个人"
 }
@@ -340,7 +245,7 @@ func validateWhiteboardTemplateList(cmd *cobra.Command, _ []string) error {
 }
 
 func whiteboardTemplateResultCall(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	if tool == whiteboardcore.PersonalTemplateListTool || tool == whiteboardcore.TeamTemplateListTool || tool == whiteboardcore.PublicTemplateListTool {
+	if tool == whiteboardcore.PersonalTemplateListTool || tool == whiteboardcore.TeamTemplateListTool {
 		return callWhiteboardTemplateListResult(cmd, tool, args)
 	}
 	callArgs := cloneWhiteboardTemplateArgs(args)
@@ -372,7 +277,7 @@ func whiteboardTemplateResultCall(cmd *cobra.Command, tool string, args map[stri
 		if err := validateWhiteboardTemplateSaveResult(result, args, tool); err != nil {
 			return nil, invalidWhiteboardTemplateResult(tool, err)
 		}
-	case whiteboardcore.PersonalTemplateCreateTool, whiteboardcore.TeamTemplateCreateTool, whiteboardcore.PublicTemplateCreateTool:
+	case whiteboardcore.PersonalTemplateCreateTool, whiteboardcore.TeamTemplateCreateTool:
 		if err := validateStandaloneWhiteboardCreateResponse(response, whiteboardString(args["requestId"])); err != nil {
 			return nil, err
 		}
@@ -389,7 +294,7 @@ func validateWhiteboardTemplateDryRunResult(result map[string]any, args map[stri
 	}
 	wantScope := whiteboardTemplateScopeForTool(tool)
 	gotScope := strings.TrimSpace(whiteboardString(result["scope"]))
-	if tool == whiteboardcore.PersonalTemplateCreateTool || tool == whiteboardcore.TeamTemplateCreateTool || tool == whiteboardcore.PublicTemplateCreateTool {
+	if tool == whiteboardcore.PersonalTemplateCreateTool || tool == whiteboardcore.TeamTemplateCreateTool {
 		gotScope = strings.TrimSpace(whiteboardString(result["templateScope"]))
 	}
 	if gotScope != wantScope {
@@ -596,9 +501,6 @@ func whiteboardTemplateScopeForTool(tool string) string {
 	if tool == whiteboardcore.TeamTemplateSaveTool || tool == whiteboardcore.TeamTemplateListTool || tool == whiteboardcore.TeamTemplateCreateTool {
 		return "team"
 	}
-	if tool == whiteboardcore.PublicTemplateListTool || tool == whiteboardcore.PublicTemplateCreateTool {
-		return "public"
-	}
 	return "personal"
 }
 
@@ -619,7 +521,7 @@ func whiteboardTemplateDiagnostic(err error, response, result map[string]any) er
 
 func invalidWhiteboardTemplateResult(tool string, err error) error {
 	return &CLIError{Code: CodeMCPToolError, Message: "白板模板服务返回了不符合约定的结果",
-		Suggestion: "不要跨个人、团队或公共 scope 重试；保留 request-id、响应和 trace 信息排查",
+		Suggestion: "不要跨个人/团队 scope 重试；保留 request-id、响应和 trace 信息排查",
 		Operation:  whiteboardServerID + "/" + tool, Cause: err}
 }
 
@@ -647,7 +549,7 @@ func whiteboardTemplateCreateResultSpec() *contract.ResultSpec {
 			"description":"从固定所有权域模板幂等创建独立白板的结果",
 			"properties":{
 				"templateId":{"type":"string","description":"实际使用的模板稳定 ID"},
-				"templateScope":{"type":"string","description":"模板所有权域，personal、team 或 public"},
+				"templateScope":{"type":"string","description":"模板所有权域，personal 或 team"},
 				"templateWorkspaceId":{"type":"string","description":"团队模板所属 Workspace ID"},
 				"resourceType":{"type":"integer","description":"模板资源类型，固定为独立白板 9"},
 				"verified":{"type":"boolean","description":"服务端是否完成 scope、类型和 Workspace 校验"},

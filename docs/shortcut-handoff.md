@@ -221,29 +221,3 @@ DWS_USAGE_TRACKING=0 dws contact +search-user --query <名>   # 投影输出示�
 ## 9. 未提交提醒
 
 所有工作在 `feature/shortcut`，**未 commit**。建议尽快分语义化 commit 留存（框架 / 511封装 / smart层 / 保真度升级 / P2 / 文档）。
-
----
-
-## 10. 三方加密消息解密管线（2026-09 新增）
-
-四个 chat 智能读命令 `+chat-messages`、`+at-me`、`+search-msg`、`+thread-replies` 现在会在投影前自动解密三方加密（SafeChat）消息密文，Agent 不再需要手动调用 `batch_ding_decrypt_messages`。
-
-### 10.1 架构与调用点
-
-- 共享管线：`internal/shortcut/chatmsg/decrypt.go` 的 `DecryptChatMessageItems(ctx, rt, items) map[string]any`，镜像原子路径 `helpers decryptProjectedChatMessagesByPolicy` 的语义（候选收集 → 逐条 PolicyDecision → BatchDecryptInbound → 原地改写 → 台账）。
-- 客户端注入：`internal/app/chat_crypto_wiring.go` 把同一个 `messagecrypto.Client` 同时注入 helpers（原子命令）与 chatmsg（smart 快捷命令）——单实例双注入，策略缓存共享。
-- 命名门：策略读取 `get_message_crypto_policy` 走 `CallMCPReadData`，受 `helpers.IsReadToolName` 前缀白名单放行；批量解密 `batch_ding_decrypt_messages` 走 `CallMCPWriteDataStrict`（写通道，dry-run 拒绝）。
-- 接线点纪律：解密在「原始 items 拿到之后、投影之前」；`+search-msg` 必须在 mget 富化**之后**解密（富化会用密文覆盖 content，先解密会被冲掉）；`MergeDecryptLedger` 必须放在每个既有 `payload["partial"] = ...` 覆盖点**之后**，否则解密 partial 会被聚合失败语义（#1297）覆盖。
-
-### 10.2 输出契约（additive）
-
-- 消息级：解密成功后消息投影带 `contentDecrypted: true`、`cryptoLayer: "ding+safechat"`、`dingKeyVersion`（>0 时）；文本字段渲染明文，不再出现 `[加密消息，无法解码]`。
-- 台账级（仅解密实际运行时出现；短路时整个 payload 与改动前逐字节一致）：`decryptCandidateCount` / `decryptAllowedCount` / `decryptedCount` / `decryptFailedCount` / `decryptFailures[]`（失败形状 `{stage:"message-decrypt", messageId, conversationId?, reason}`，与原子路径逐字一致）。
-- 失败容忍：单条解密失败只进台账 + `partial:true`，**命令退出码不变**；策略关闭（mode=off）保留密文并记 `policy_disabled` 失败项。
-- 短路条件：dry-run、rt 为 nil、ctx 为 nil、stub 构建（BackendReady false）→ 管线直接返回 nil，零 MCP 调用。
-
-### 10.3 关键实现细节
-
-- 密文所在 key 探测顺序是 `content` → `text`，改写落在**密文自己的 key** 上（smart 投影读 text 优先于 content；原子路径固定写 content）。这是与原子路径的一个有意偏差。
-- 投影透传：`chatmsg.ProjectMessageV1` 与 `atMeProjectWithReactions` 会把上述三个消息级字段透传到输出（投影是白名单式，不透传就不可见）。
-- 测试：`chatmsg/decrypt_test.go`（管线单测 + 台账合并）、`smart/chat_decrypt_gate_test.go`（命名门 + dry-run 短路，真 RuntimeContext）、`smart/chat_decrypt_wiring_test.go`（四命令端到端：明文渲染/台账/失败容忍/策略关闭/stub 与 dry-run 字节一致）。

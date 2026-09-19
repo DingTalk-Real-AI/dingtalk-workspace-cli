@@ -232,7 +232,7 @@ var DatasourceSync = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+datasource-sync",
 	Product:     serverMain,
-	Description: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。每张表独立提交，整体仍返回 success；调用方需遍历 tasks[] 按单条 status 判断。同步运行中的表返回 failed 状态（errorCode=SYNC_RUNNING），属幂等冲突，应视为稍后重试而非最终失败。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
+	Description: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。同步运行中（errorCode=4014）属于幂等冲突，会被标记为 failed 并允许调用方稍后重试。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
 	Intent:      "当用户需要手动触发已有数据源表的同步（而非创建或更新配置）时使用。同步任务 ID 可通过 +datasource-sync-status 查询结果。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
@@ -247,14 +247,14 @@ var DatasourceSync = shortcut.Shortcut{
 			CLIPath:        "aitable +datasource-sync",
 			PrimaryCLIPath: "aitable +datasource-sync",
 		},
-		Description: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。每张表独立提交，整体仍返回 success；调用方需遍历 tasks[] 按单条 status 判断。同步运行中的表返回 failed 状态（errorCode=SYNC_RUNNING），属幂等冲突，应视为稍后重试而非最终失败。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
+		Description: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。同步运行中（errorCode=4014）属于幂等冲突，会被标记为 failed 并允许调用方稍后重试。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。每张表独立提交，整体仍返回 success；调用方需遍历 tasks[] 按单条 status 判断。同步运行中的表返回 failed 状态（errorCode=SYNC_RUNNING），属幂等冲突，应视为稍后重试而非最终失败。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
+			AgentSummary: "对指定 AI 表格中的数据源表触发一次手动同步。单次最多 5 张表，每张表独立提交，部分失败不影响其他表。该工具仅触发任务即返回，不会等待同步完成。返回结果包含文档链接，用户可打开文档查看同步进度与最终数据。同步运行中（errorCode=4014）属于幂等冲突，会被标记为 failed 并允许调用方稍后重试。非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。",
 			UseWhen:      []string{"当用户需要手动触发已有数据源表的同步（而非创建或更新配置）时使用。同步任务 ID 可通过 +datasource-sync-status 查询结果。"},
 			AvoidWhen: []string{
 				"需要创建新数据源表时（改用 +datasource-create）",

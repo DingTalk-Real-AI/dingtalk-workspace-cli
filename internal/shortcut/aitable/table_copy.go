@@ -200,25 +200,24 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			batch = append(batch, record)
 			wire = append(wire, record)
 		}
-		writeData, clientToken, writeErr := createRecordsReconciled(rt, targetBase, targetTable, wire)
+		writeData, writeErr := rt.CallMCPWriteDataStrict(serverMain, "create_records", map[string]any{"baseId": targetBase, "tableId": targetTable, "records": wire})
 		createdIDs := createdRecordIDs(writeData)
 		if len(createdIDs) == 0 {
 			if returned, found := findRecords(writeData); found {
 				createdIDs = recordIDs(returned)
 			}
 		}
-		if len(createdIDs) > 0 {
-			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "clientToken": clientToken, "recordIds": createdIDs})
-		}
-		// createRecordsReconciled only succeeds with a complete, unique ID set.
-		if writeErr != nil {
+		if len(createdIDs) != len(batch) {
+			if writeErr == nil {
+				writeErr = fmt.Errorf("create_records returned %d record IDs for %d copied records", len(createdIDs), len(batch))
+			}
 			result.Status = "partial_success"
 			result.CompletedCount = createdCount
 			result.FailedCount = len(sourceRecords) - createdCount
-			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset, "clientToken": clientToken, "createdRecordIds": createdIDs, "nextStep": "reconcile this token; do not rerun table-copy or recreate this batch"}
-			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", targetBase, "--table-id", targetTable, "--client-token", clientToken)
+			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
 			return compositeError(result, writeErr, false)
 		}
+		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "recordIds": createdIDs})
 		verifyErr := verifyTableCopyRecordsEventually(rt, targetBase, targetTable, createdIDs, batch, recordVerifier)
 		if verifyErr != nil {
 			result.Status = "partial_success"
@@ -226,7 +225,6 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			result.FailedCount = len(sourceRecords) - createdCount
 			result.Checkpoint = map[string]any{
 				"targetTableId":    targetTable,
-				"clientToken":      clientToken,
 				"createdRecordIds": createdIDs,
 				"nextRecordOffset": offset,
 				"nextStep":         "verify the created record IDs and cells before copying any remaining records; do not rerun create_records for this batch",

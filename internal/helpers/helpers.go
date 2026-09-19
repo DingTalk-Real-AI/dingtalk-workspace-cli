@@ -588,7 +588,7 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 							}
 						}
 					}
-					return &CLIError{Code: CodeMCPToolError, Message: message, Suggestion: suggestForBusinessError(errBody), ServerCode: businessErrorCode(errBody)}
+					return &CLIError{Code: CodeMCPToolError, Message: message, Suggestion: suggestForBusinessError(errBody)}
 				}
 			}
 

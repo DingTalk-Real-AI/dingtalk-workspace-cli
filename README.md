@@ -358,7 +358,7 @@ dws todo task list --dry-run                       # preview without executing
 
 ### Whiteboards
 
-Use `dws whiteboard` for standalone whiteboards and whiteboards embedded in documents: query content, create / update with OpenNodes, preview changes with `+diff`, render local SVG previews, and manage personal / team templates or use public templates.
+Use `dws whiteboard` for standalone whiteboards and whiteboards embedded in documents: query content, create / update with OpenNodes, preview changes with `+diff`, render local SVG previews, and manage personal / team templates.
 
 ```bash
 dws whiteboard --help
@@ -366,7 +366,6 @@ dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.sv
 dws whiteboard +diff --help
 dws whiteboard template personal list --format json
 dws whiteboard template team list --template-workspace "<workspace-id>" --page-all --format json
-dws whiteboard template public list --query "retrospective" --format json
 ```
 
 `whiteboard.json` is an OpenNodes source file. SVG rendering is a local preview; review its fidelity and warnings, then confirm the current preview before creating the whiteboard. Use `+diff` to inspect the proposed update before `+update`. For template `save` / `create` commands, `--dry-run` performs an optional server-side preflight without saving a template or creating a whiteboard.

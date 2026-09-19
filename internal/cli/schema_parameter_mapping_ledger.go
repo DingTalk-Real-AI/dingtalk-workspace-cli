@@ -64,7 +64,6 @@ var reviewedSchemaParameterMappingExclusions = map[string]string{
 	"aitable.form_update --view-id":                                      "Reviewed unpinned adapter: aitable.form_update has no singular pinned interface_ref; --view-id is a CLI wrapper input and does not publish a direct interface property.",
 	"aitable.query_records --all":                                        "local auto-pagination control; never sent to query_records",
 	"aitable.query_records --page-limit":                                 "local auto-pagination loop limit; never sent to query_records",
-	"aitable.query_records --view-id":                                    "local view→filters/sort compilation: the CLI runs a get_views preflight, restricts the view type to a documented allow-list, then compiles the view's filter/sort into filters/sort; the viewId itself is never sent to query_records.",
 	"aitable.record_create_sub --records-file":                           "CLI-local file adapter: reads and decodes the file into create_sub_records.records; the filesystem path is never sent to MCP.",
 	"aitable.chart_delete --reason":                                      "CLI-local audit note carried in invocation context and recorded in params_summary._local.reason; never sent to delete_chart.",
 	"aitable.datasource_create --field-ids":                              "Rejected compatibility flag: the datasource protocol only supports full synchronization; no fieldIds property is sent.",

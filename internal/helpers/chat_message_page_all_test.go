@@ -325,12 +325,10 @@ func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	// ttlSeconds is parsed since intField accepts json.Number, so the
-	// per-item PolicyDecision hits the PolicyCache for both same-conversation
-	// messages: one policy read, one batch decrypt, after aggregation.
 	wantCalls := []string{
 		"chat/list_conversation_message_v2",
 		"chat/list_conversation_message_v2",
+		"im/get_message_crypto_policy",
 		"im/get_message_crypto_policy",
 		"im/batch_ding_decrypt_messages",
 	}

@@ -340,7 +340,6 @@ func collectOneThreadRepliesPage(rt *shortcut.RuntimeContext, params map[string]
 		return nil, nil, err
 	}
 	items := threadReplyItems(data)
-	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, items)
 	payload := newThreadRepliesPayload(items, !rt.Bool("no-reactions"))
 	applyOneThreadRepliesPagination(payload, data)
 	if payload["complete"] == true {
@@ -350,7 +349,6 @@ func collectOneThreadRepliesPage(rt *shortcut.RuntimeContext, params map[string]
 	} else {
 		payload["stopReason"] = "single_page"
 	}
-	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	return payload, items, nil
 }
 
@@ -491,7 +489,6 @@ func collectAllThreadReplies(rt *shortcut.RuntimeContext, params map[string]any)
 		truncatedByPageLimit = true
 		stopReason = "page_limit"
 	}
-	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, allItems)
 	payload := newThreadRepliesPayload(allItems, !rt.Bool("no-reactions"))
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = paginationKnown
@@ -506,7 +503,6 @@ func collectAllThreadReplies(rt *shortcut.RuntimeContext, params map[string]any)
 	if hasMore && nextPage != nil {
 		payload["nextPage"] = nextPage
 	}
-	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	if len(failures) > 0 {
 		failureStage := "pagination"
 		if stopReason == "read_failure" {

@@ -215,9 +215,8 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 	return rt.Output(result)
 }
 
-// Only trust an explicit, non-retryable MCP input error without recovery evidence.
-// Duplicate tokens and reconciliation hints mean an earlier write may have been
-// accepted; retryable=false forbids replay, but does not prove nothing was written.
+// Only trust an explicit MCP input error with retryable=false. Transport errors
+// and system failures can occur after a write, so they still need verification.
 func isRecordWriteInputRejection(err error) bool {
 	var cliErr *helpers.CLIError
 	var appErr *apperrors.Error
@@ -232,24 +231,12 @@ func isRecordWriteInputRejection(err error) bool {
 	var body struct {
 		Status string `json:"status"`
 		Error  struct {
-			Code      string `json:"code"`
 			Type      string `json:"type"`
 			Retryable *bool  `json:"retryable"`
-			Details   struct {
-				ReconcileTool string `json:"reconcileTool"`
-			} `json:"details"`
 		} `json:"error"`
 	}
-	if json.Unmarshal([]byte(raw), &body) != nil || body.Status != "error" {
-		return false
-	}
-	// Honor the recovery marker even when the lower layer classifies the error
-	// as user/input; the caller reconciles using its own original token/selectors.
-	if body.Error.Code == "DUPLICATE_CLIENT_TOKEN" || body.Error.Code == "REQUEST_ID_CONFLICT" ||
-		body.Error.Details.ReconcileTool == "get_record_write_result" {
-		return false
-	}
-	return (body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
+	return json.Unmarshal([]byte(raw), &body) == nil && body.Status == "error" &&
+		(body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
 		body.Error.Retryable != nil && !*body.Error.Retryable
 }
 
@@ -342,17 +329,7 @@ func executeRecordBatches(
 			wireRecords = append(wireRecords, record)
 		}
 		params := map[string]any{"baseId": baseID, "tableId": tableID, "records": wireRecords}
-		var writeData map[string]any
-		var writeErr error
-		var clientToken string
-		if tool == "create_records" {
-			writeData, clientToken, writeErr = createRecordsReconciled(rt, baseID, tableID, wireRecords)
-			if ids := createdRecordIDs(writeData); len(ids) > 0 {
-				result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "offset": offset, "clientToken": clientToken, "recordIds": ids})
-			}
-		} else {
-			writeData, writeErr = rt.CallMCPWriteDataStrict(product, tool, params)
-		}
+		writeData, writeErr := rt.CallMCPWriteDataStrict(product, tool, params)
 		step := compositeStep{
 			Index: len(result.CompletedSteps) + 1, Name: "write record batch", Tool: tool,
 			Status: "completed", Offset: offset, Count: len(batch), Result: writeData,
@@ -414,12 +391,6 @@ func executeRecordBatches(
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
 			retryable := !isPendingRecordReadback(verifyErr)
-			if tool == "create_records" {
-				retryable = false
-				result.Checkpoint["clientToken"] = clientToken
-				result.Checkpoint["createdRecordIds"] = createdRecordIDs(writeData)
-				result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", baseID, "--table-id", tableID, "--client-token", clientToken)
-			}
 			if tool == "record_upsert" {
 				for _, record := range batch {
 					if recordID(record) == "" {

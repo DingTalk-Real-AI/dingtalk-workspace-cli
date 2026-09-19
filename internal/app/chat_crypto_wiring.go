@@ -12,13 +12,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 func init() {
-	client := newAppMessageCryptoClient()
-	helpers.SetChatCryptoClient(client)
-	chatmsg.SetMessageDecryptClient(client)
+	helpers.SetChatCryptoClient(newAppMessageCryptoClient())
 }
 
 var (

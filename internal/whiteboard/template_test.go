@@ -27,7 +27,7 @@ func TestCrossPlatformCoverageTemplateValidationBoundaries(t *testing.T) {
 			t.Fatal(tc)
 		}
 	}
-	for _, tool := range []string{PersonalTemplateSaveTool, TeamTemplateSaveTool, PersonalTemplateCreateTool, TeamTemplateCreateTool, PublicTemplateCreateTool} {
+	for _, tool := range []string{PersonalTemplateSaveTool, TeamTemplateSaveTool, PersonalTemplateCreateTool, TeamTemplateCreateTool} {
 		if ValidateTemplatePreviewCall(ServerID, tool, map[string]any{"dryRun": true}) != nil {
 			t.Fatal(tool)
 		}

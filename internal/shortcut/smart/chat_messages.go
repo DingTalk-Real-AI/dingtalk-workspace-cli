@@ -235,12 +235,6 @@ type chatMessagesRequest struct {
 	direction              string
 	fallbackConversationID string
 	timeRange              chatMessageTimeRange
-	// deferDecrypt skips the in-collector decrypt pass. The scoped
-	// conversation stream reuses collectAllChatMessages per conversation and
-	// re-fetches message details afterwards, which would overwrite decrypted
-	// plaintext with re-fetched ciphertext; that caller decrypts once itself
-	// after its enrichment and keeps exactly one pipeline call per Execute.
-	deferDecrypt bool
 }
 
 type chatMessagesSenderFilter struct {
@@ -767,14 +761,12 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 	rawItems := chatMessageItems(data)
 	items, terminalReached, rangeFailures := request.timeRange.filter(rawItems)
 	sortMessagesByCreateTimeStable(items, request.timeRange.order)
-	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, items)
 	results := projectChatMessages(items, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(results)
 	chatmsg.ApplyMessagePagination(payload, data, rawItems, request.direction)
 	if metadata := request.timeRange.metadata(); metadata != nil {
 		payload["queryRange"] = metadata
 	}
-	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	if len(rangeFailures) > 0 {
 		failures, _ := payload["failures"].([]map[string]any)
 		failures = append(failures, rangeFailures...)
@@ -996,10 +988,6 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	}
 
 	sortMessagesByCreateTimeStable(allItems, request.timeRange.order)
-	var decryptLedger map[string]any
-	if !request.deferDecrypt {
-		decryptLedger = chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, allItems)
-	}
 	results := projectChatMessages(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(results)
 	if metadata := request.timeRange.metadata(); metadata != nil {
@@ -1019,7 +1007,6 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	if hasMore && nextPage != nil {
 		payload["nextPage"] = nextPage
 	}
-	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	if len(failures) > 0 {
 		failureStage := "pagination"
 		if stopReason == "read_failure" {

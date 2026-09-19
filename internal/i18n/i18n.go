@@ -89,21 +89,6 @@ func SetLang(tag string) {
 	setLangFromRaw(tag)
 }
 
-// LangPinnedByEnv reports whether DWS_LANG explicitly pinned the locale. A
-// locale inherited from LANG is not pinned, so English-first flows may
-// override it.
-func LangPinnedByEnv() bool {
-	return strings.TrimSpace(os.Getenv("DWS_LANG")) != ""
-}
-
-// PushLang overrides the active locale and returns a function restoring the
-// previous one.
-func PushLang(tag string) func() {
-	previous := langStr
-	setLangFromRaw(tag)
-	return func() { setLangFromRaw(previous) }
-}
-
 func setLangFromRaw(raw string) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	switch {

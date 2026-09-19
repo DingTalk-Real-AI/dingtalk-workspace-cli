@@ -116,30 +116,3 @@ func TestAuthLoginSummaryTranslations(t *testing.T) {
 		t.Errorf("Chinese day expiry = %q", got)
 	}
 }
-
-func TestCrossPlatformCoveragePushLangRestoresPreviousLocale(t *testing.T) {
-	previous := Lang()
-	t.Cleanup(func() { SetLang(previous) })
-
-	SetLang("zh")
-	restore := PushLang("en")
-	if Lang() != "en" {
-		t.Fatalf("pushed language = %q", Lang())
-	}
-	restore()
-	if Lang() != "zh" {
-		t.Fatalf("restored language = %q", Lang())
-	}
-}
-
-func TestCrossPlatformCoverageLangPinnedByEnvOnlyHonorsDWSLang(t *testing.T) {
-	t.Setenv("LANG", "zh_CN.UTF-8")
-	t.Setenv("DWS_LANG", "")
-	if LangPinnedByEnv() {
-		t.Fatal("LANG alone must not pin the locale")
-	}
-	t.Setenv("DWS_LANG", "zh")
-	if !LangPinnedByEnv() {
-		t.Fatal("DWS_LANG must pin the locale")
-	}
-}

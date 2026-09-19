@@ -134,7 +134,6 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 区域:
   - 默认使用国内钉钉 .com 登录与服务端点
   - --intl（或 --international）使用国际版 .io 登录；后续业务命令按所选 profile 自动路由
-  - --intl 登录默认输出英文文案与英文授权页；需要中文时显式设置 DWS_LANG=zh
 
 注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
@@ -156,8 +155,6 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			restoreLang := authLoginPushDisplayLang(cfg)
-			defer restoreLang()
 			var preOverrides authLoginEndpointOverrides
 			if cfg.PreURL != "" {
 				var err error
@@ -1070,14 +1067,6 @@ func authLoginFormatExpiry(t time.Time) string {
 		return i18n.T("1 小时后")
 	}
 	return i18n.Tf("%.0f 小时后", hours)
-}
-
-// authLoginPushDisplayLang 让国际版登录默认输出英文文案；DWS_LANG 显式指定时保留用户选择，LANG 推导出的中文不算显式指定。
-func authLoginPushDisplayLang(cfg authLoginConfig) func() {
-	if !cfg.International || i18n.LangPinnedByEnv() {
-		return func() {}
-	}
-	return i18n.PushLang("en")
 }
 
 // authLoginDisplayExpiry 返回用于显示的有效期（优先显示 refresh token 有效期）

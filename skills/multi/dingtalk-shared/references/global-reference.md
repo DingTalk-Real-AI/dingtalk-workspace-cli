@@ -30,7 +30,6 @@ dws auth status --profile <corpId>:<userId> --format json
 - 同一条 IM 链路的目标解析、读取与写入必须使用同一 `--profile`。
 - 用户明确国际版、海外版或 `.io` 登录意图时必须加 `--intl`，不得回退到国内 `.com`。
   `--intl` 只用于 `auth login`；后续业务命令根据当前或 `--profile` 指定的账号自动路由。
-  `--intl` 登录默认英文文案与英文授权页，无需再设 `DWS_LANG=en`；需要中文时显式设置 `DWS_LANG=zh`。
 - `profile list` 本身不刷新 token；`auth status --profile ...` 只检查/刷新选中的 token
   slot，不修改 `currentProfile`。
 - `auth logout` 默认退出全部账号；传 `--profile` 才缩小范围。`auth reset` 会清除本地
