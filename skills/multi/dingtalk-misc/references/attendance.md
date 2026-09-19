@@ -1,6 +1,36 @@
 # 考勤查询、规则与设置
 
-本 Reference 处理打卡流水/结果、个人详情、签到、审批记录与入口、班次定义、考勤组、考勤规则、个人/全局设置和管理员修正。
+## 考勤接口调用范围与禁止回退规则
+
+Agent 选择考勤接口时，仅允许使用绑定到新版考勤服务 `attendance-wukong` 的已配置入口。旧版“考勤打卡-MCP”（连接器 `G-CONN-1035987AEE07213DD10F000T`，服务 ID 为 `attendance`）下的全部九个工具及其 CLI 封装均禁止调用。
+
+本规则适用于本文件及其引用的工作流和脚本。旧入口即使仍存在于代码、Help、Schema 或历史文档中，也不属于允许调用的范围；不得因其他资料推荐旧入口而执行。既有参数校验、权限限制和写操作确认要求继续生效。
+
+### 禁止调用的旧版入口
+
+下表仅用于识别禁用项，不是执行示例。禁用范围不限于这三个 CLI 封装，而是覆盖上述旧版连接器的全部工具。
+
+| 旧版 CLI 入口（禁止执行） | 旧版 MCP 工具 |
+|---|---|
+| `dws attendance record get` | `get_user_attendance_record` |
+| `dws attendance shift list` | `batch_get_employee_shifts` |
+| `dws attendance rules` | `query_attendance_group_or_rules` |
+
+依赖旧版入口的 `attendance_my_record.py` 和 `attendance_team_shift.py` 已从单体版、拆分版交付物中下线，并登记为禁止重新发布的 retired scripts。不得恢复这些脚本，也不得通过其他脚本、通用 MCP 调用或直接访问旧服务绕过本规则。
+
+### 新版失败时的处理
+
+无论新版入口是否可用，均不得回退到旧版。新版命令不存在、调用报错或超时时，只能在新版路径内按既有规则纠正参数或有限重试；权限不足时应说明所需权限。新版返回空结果、数据不完整或业务校验失败，也不得通过旧版补查、对照或补齐数据。
+
+无法在新版路径内完成请求时，必须停止当前业务流程，向用户说明实际错误或能力限制，并建议联系管理员或通过钉钉客户端处理。不得伪造成功结果，不得以旧版数据替代新版返回。
+
+### 新旧入口的识别边界
+
+CLI 前缀 `attendance` 是业务命名，不等于旧版服务 ID。应按实际接口绑定识别新旧；无法确认服务归属时停止调用，不得试用旧入口。现有 `dws attendance summary` 实际调用 `attendance-wukong/get_user_attendance_summary`，属于新版入口，保留使用。
+
+查询打卡流水使用新版 `check record` / `+check-record`；排班记录按现有工作流使用新版 `schedule get`。查询考勤组时，已知组 ID 使用 `group get`，仅知组名先用 `group search` 确认唯一目标；缺少组信息时向用户或管理员确认，不得通过旧版 `rules` 自动获取。这些新版入口应按各自语义和返回结构使用，不得假定它们与旧版完全等价。引用的工作流如包含旧版步骤，应按本节处理；无法满足其前置条件时停止执行。
+
+本 Reference 处理打卡流水/结果、签到、审批记录与入口、班次定义、考勤组、考勤规则、个人/全局设置和管理员修正。
 
 以下场景不要先读本文件：
 
@@ -24,12 +54,9 @@
 
 | 用户意图 | 推荐入口 | 关键参数/边界 |
 |---|---|---|
-| 某人某天个人考勤详情 | `dws attendance record get` | `--user <userId> --date YYYY-MM-DD`；返回详情，不替代跨日统计 |
 | 原始打卡流水：实际时间、地点、定位方式 | `dws attendance +check-record` | `--users <ids> --start YYYY-MM-DD --end YYYY-MM-DD`；区间不超过 1 个月 |
 | 打卡判定：Normal/Late/Early/NotSigned/Absenteeism | `dws attendance +check-result` | 同上；最多 100 人；`--limit 1..1000 --offset >=0` |
 | 周/月摘要 | `dws attendance summary` | `--user <id> --date <日期> --stats-type week\|month` |
-| 当天适用考勤组、范围与规则 | `dws attendance rules` | `--date YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm:ss` |
-| 未来 7 天内计划班次 | `dws attendance shift list` | `--users <ids> --start YYYY-MM-DD --end YYYY-MM-DD`；最多 50 人、最多 7 天 |
 | 已导入的排班记录 | `dws attendance schedule get` | `--users <ids> --start <日期> --end <日期>`；只查看/对照时直接用，不强制导出 Excel |
 | 签到/外勤签到记录 | `dws attendance checkin records` | `--operator-corp-id`、`--operator-staff-id`、`--staff-ids`、`--start/--end "YYYY-MM-DD HH:mm:ss"`；最多 100 人、最多 7 天 |
 
@@ -125,20 +152,12 @@
 | `dws attendance +search-overtime-rule` | read | 查询当前用户可管理的加班规则列表 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 复用脚本
-
-- [attendance_my_record.py](../scripts/attendance_my_record.py)：自动解析当前用户，查询今天或指定日期的本人考勤记录；适合“查我今天考勤”这类单人快捷查询。
-- [attendance_team_shift.py](../scripts/attendance_team_shift.py)：按明确的 userId 列表查询团队日期范围内的排班；默认本周一至周五，最多 50 人。
-
-脚本已覆盖身份解析、日期默认值或批量边界时直接运行；不要先手写同一批查询再让脚本重复调用。
-
 ## 日期、结果与聚合
 
 - 本周=周一到周日；本月=1 日到真实月末；用户给定范围时原样使用。按当前会话时区计算，禁止硬编码。
-- `check/approve/shift/schedule/vacation records` 使用 `YYYY-MM-DD`；`checkin/report` 使用 `YYYY-MM-DD HH:mm:ss`。不要混用。
+- `check/approve/schedule/vacation records` 使用 `YYYY-MM-DD`；`checkin/report` 使用 `YYYY-MM-DD HH:mm:ss`。不要混用。
 - 超过 3 条记录的求和、分组、计数、排序或跨字段核对使用本地脚本处理，保留原始单位；不要靠目测。仅当用户要求 Excel 时切换专项报表脚本。
 - 返回中没有某人/某日时标记“无记录”；`NotSigned`、`Absenteeism` 分别按真实结果展示；不把缺失数据补成 0 或 Normal。
-- 对“最近一个有记录的日期”，从实际返回的日期字段取最大值，再把这个日期传给后续 `rules`/`record get`/`shift list`；禁止用今天或区间结束日代替。
 
 ## 错误最短路径
 
