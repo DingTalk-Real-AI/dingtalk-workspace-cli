@@ -29,13 +29,13 @@ import (
 )
 
 const (
-	defaultSchemaCacheLockTimeout    = 250 * time.Millisecond
-	defaultSchemaCacheBuilderTimeout = 30 * time.Second
+	defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 )
 
 var (
-	canonicalJSONMarshal = json.Marshal
-	compactLeafMarshal   = jsonutil.MarshalIndent
+	defaultSchemaCacheBuilderTimeout = 30 * time.Second
+	canonicalJSONMarshal             = json.Marshal
+	compactLeafMarshal               = jsonutil.MarshalIndent
 	// schemaCachePayloadLoadBeforeInnerLock is the test seam between the
 	// unlocked ready check and the inner lock in loadCommandPayload. Production
 	// leaves it empty; coverage holds the first caller here so a second caller

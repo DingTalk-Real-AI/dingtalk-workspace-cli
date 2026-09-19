@@ -45,6 +45,9 @@ func TestCrossPlatformCoverageSchemaAssemblyEnvironmentSnapshotDoesNotMutatePare
 	if got := SchemaAssemblyEnvironmentSnapshot(); !containsEnvironment(got, canary+"=plugin-injected") {
 		t.Fatalf("snapshot omitted registration-time variable: %v", got)
 	}
+	if dir := SchemaAssemblyWorkingDirectory(); dir == "" {
+		t.Fatal("expected non-empty working dir")
+	}
 }
 
 func containsEnvironment(environment []string, want string) bool {
