@@ -57,7 +57,10 @@ func queryRecordWindow(rt *shortcut.RuntimeContext, params map[string]any, limit
 		}
 		data, err := rt.CallMCPData(serverMain, "query_records", request)
 		if err != nil {
-			return recordQueryWindow{}, err
+			return recordQueryWindow{}, helpers.RecordQueryRecoveryError(err)
+		}
+		if guard := responseGuardCursor(data); guard != "" {
+			return recordQueryWindow{}, helpers.NonResumableCursorResponseError(guard, true)
 		}
 		if !window.HasTotalCount {
 			window.TotalCount, window.HasTotalCount = responseTotalCount(data)
@@ -366,7 +369,10 @@ func queryAllRecords(rt *shortcut.RuntimeContext, params map[string]any, maxReco
 		}
 		data, err := rt.CallMCPData(serverMain, "query_records", request)
 		if err != nil {
-			return nil, err
+			return nil, helpers.RecordQueryRecoveryError(err)
+		}
+		if guard := responseGuardCursor(data); guard != "" {
+			return nil, helpers.NonResumableCursorResponseError(guard, true)
 		}
 		records, found := findRecords(data)
 		if !found {
@@ -421,13 +427,46 @@ func responseCursor(data map[string]any) string {
 	}
 	for _, key := range []string{"nextCursor", "next_cursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "error-v1:") {
+				return ""
+			}
+			return trimmed
 		}
 	}
 	for _, key := range []string{"data", "result", "pagination", "page"} {
 		if nested, ok := data[key].(map[string]any); ok {
 			if cursor := responseCursor(nested); cursor != "" {
 				return cursor
+			}
+		}
+	}
+	return ""
+}
+
+// responseGuardCursor reports the first non-resumable protection cursor
+// (error-v1:) embedded in an otherwise successful query_records response. The
+// service returns success but stamps this guard into nextCursor/cursor to signal
+// that the pagination result cannot be resumed. responseHasMore/responseCursor
+// deliberately ignore the guard, so callers must consult this separately and
+// fail closed: without it, a page carrying only a guard cursor looks like a
+// clean terminal page and would silently drop accumulated records or let a
+// unique-key preflight write against an unverified result set.
+func responseGuardCursor(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	for _, key := range []string{"nextCursor", "next_cursor", "cursor"} {
+		if value, ok := data[key].(string); ok {
+			if trimmed := strings.TrimSpace(value); strings.HasPrefix(trimmed, "error-v1:") {
+				return trimmed
+			}
+		}
+	}
+	for _, key := range []string{"data", "result", "pagination", "page"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			if guard := responseGuardCursor(nested); guard != "" {
+				return guard
 			}
 		}
 	}

@@ -117,10 +117,10 @@ func TestFrameworkExecutePreparseUnifiedErrorAndEmissionFallback(t *testing.T) {
 }
 
 func TestFrameworkPublicRootRequiresResultFromActiveCommand(t *testing.T) {
-	root := NewRootCommand(context.Background())
 	leaf := &cobra.Command{Use: "active-no-result", RunE: func(*cobra.Command, []string) error { return nil }}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"active-no-result"})
 	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "without a CommandResult") {
 		t.Fatalf("ExecuteC error=%v", err)
@@ -500,10 +500,22 @@ func TestCrossPlatformCoverageExecuteDeterministicInterruptionBranches(t *testin
 		})
 	}
 	interrupted := func(primaryCompleted bool) *processSignalState {
-		return &processSignalState{
-			interruption:             &processInterruption{signal: os.Interrupt},
-			primaryCompletedAtSignal: primaryCompleted,
+		state := &processSignalState{}
+		ctx, store := output.WithResultStore(context.Background())
+		if primaryCompleted {
+			cmd := &cobra.Command{Use: "dws"}
+			cmd.SetContext(ctx)
+			cmd.SetOut(io.Discard)
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+			if err := output.StoreResult(ctx, output.Success(nil)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
 		}
+		state.Record(os.Interrupt, processResultCompleted(store))
+		return state
 	}
 
 	t.Run("preparse interruption emits unified failure", func(t *testing.T) {
@@ -598,12 +610,12 @@ func (frameworkPanicWriter) Write([]byte) (int, error) { panic("writer panic") }
 
 func TestCrossPlatformCoverageFrameworkRootHookErrors(t *testing.T) {
 	t.Run("flag group validation", func(t *testing.T) {
-		root := NewRootCommand(context.Background())
 		leaf := &cobra.Command{Use: "exclusive", RunE: func(*cobra.Command, []string) error { return nil }}
 		leaf.Flags().Bool("left", false, "")
 		leaf.Flags().Bool("right", false, "")
 		leaf.MarkFlagsMutuallyExclusive("left", "right")
-		root.AddCommand(leaf)
+		root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs([]string{"exclusive", "--left", "--right"})

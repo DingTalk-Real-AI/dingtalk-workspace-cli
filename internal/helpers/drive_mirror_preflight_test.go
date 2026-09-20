@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +28,7 @@ func runDriveMirrorCommand(t *testing.T, caller *driveScriptCaller, dryRun bool,
 	full := append(append([]string{}, args...), "--yes")
 	testseam.Swap(t, &os.Args, append([]string{"dws", "drive"}, full...))
 	root.SetArgs(append([]string{"drive"}, full...))
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return append([]byte(nil), out.Bytes()...), err
 }
 

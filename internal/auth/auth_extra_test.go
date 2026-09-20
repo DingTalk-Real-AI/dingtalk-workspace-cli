@@ -604,6 +604,12 @@ func TestCrossPlatformCoverageLoginBaseURLOverrideAffectsInternationalRegion(t *
 	}
 }
 
+func TestCrossPlatformCoverageProfileIdentityKey(t *testing.T) {
+	if got := profileIdentityKey("corp", "user"); got == "" {
+		t.Fatal("empty identity key")
+	}
+}
+
 func buildTokenDataFromResponse(resp tokenResponse) *TokenData {
 	if resp.AccessToken == "" {
 		return nil

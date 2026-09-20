@@ -1,0 +1,23 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Agent 测试报告 — event / PR #1402</title><style>
+*{box-sizing:border-box}body{margin:0;padding:38px 48px;background:#f4f6f9;color:#14263d;font:17px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}main{max-width:1180px;margin:auto;background:white;padding:32px 38px;border:1px solid #dae1e9;border-radius:12px}h1{font-size:30px;margin:0 0 6px}h2{font-size:20px;margin:22px 0 8px}p{margin:7px 0}.badge{color:#106344;font-weight:700}.meta{font-size:14px;color:#506175}.summary{display:flex;gap:16px;margin:21px 0}.summary div{flex:1;background:#eef7f2;padding:12px 18px;border-radius:8px}.summary strong{font-size:26px;display:block}table{border-collapse:collapse;width:100%;font-size:15px}th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #dae1e9}th{background:#eef2f7}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef2f7;padding:15px;border-radius:8px;font:12px/1.5 Menlo,monospace}code{font-family:Menlo,monospace;font-size:14px}.scope{border-left:4px solid #e2b451;padding:8px 14px;background:#fffbef;font-size:15px}footer{font-size:13px;color:#506175;margin-top:14px}</style><main>
+<h1>Agent 测试报告 · event</h1><p>PR #1402 · OA 审批事件 flatten 业务字段补全</p>
+<p class="badge">本地确定性验证：全部通过</p>
+<p class="meta">测试代码提交：9deacb29692d5d7f54f429c5cc784e35d7133435<br>执行时间：2026-09-17T16:24:41.389862+08:00</p>
+<div class="summary"><div><strong>9 / 9</strong>顶层测试通过</div><div><strong>149 / 149</strong>子用例通过</div><div><strong>7 / 7</strong>实际 CLI Schema 检查</div></div>
+<p class="scope">验证范围：Agent 选择声明边界、示例契约、OA 消费 dry-run / 合成事件回归及本地 CLI Schema。未运行真实模型语义评测，未触发线上审批或验证真实服务端投递。此图是根据本次日志生成的本地报告页面截图。</p>
+<h2>七类 OA 事件字段检查</h2><table><tr><th>user_oa_approval_…</th><th>staff_id / activity_id / corp_id / business_id</th><th>cc_time</th></tr><tr><td>task_created</td><td>PASS</td><td>不适用</td></tr><tr><td>task_finished</td><td>PASS</td><td>不适用</td></tr><tr><td>task_redirected</td><td>PASS</td><td>不适用</td></tr><tr><td>instance_started</td><td>PASS</td><td>不适用</td></tr><tr><td>instance_cc</td><td>PASS</td><td>PASS · integer / timestamp_ms</td></tr><tr><td>instance_terminated</td><td>PASS</td><td>不适用</td></tr><tr><td>instance_finished</td><td>PASS</td><td>不适用</td></tr></table>
+<p class="meta">实际执行：<code>./dws event schema &lt;event_key&gt; --flatten -f json</code></p>
+<h2>回归覆盖</h2><p>七类事件 × 10 组可选字段输入 × flatten / 原始输出两条路径。覆盖字段存在、单字段、缺失、空串、null、cc_time = 0；校验 body 来源、前导零及原始 data 保留。</p>
+<h2>真实日志摘录</h2><pre>--- PASS: TestPersonalOAEventListAndSchemaCommands (0.00s)
+--- PASS: TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput (0.00s)
+--- PASS: TestPersonalOAEventConsumeDryRunAndValidation (0.00s)
+--- PASS: TestPersonalOAMultiConsumeCreatesIndependentAllSubscriptionsOnSharedBus (0.00s)
+--- PASS: TestPersonalOAReusedSubscriptionRejectsDefinitionOverridesAtRuntime (0.00s)
+--- PASS: TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation (0.00s)
+--- PASS: TestPersonalOAStatusAndStopCommandWiring (0.00s)
+--- PASS: TestCrossPlatformCoverageEventAgentSelectionBoundaries (0.97s)
+    schema_agent_examples_dry_run_test.go:56: Agent example contract: total=1752 contract=1571 dry_run=168 contract_only=13
+--- PASS: TestAgentExamplesContract (0.13s)
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	1.838s</pre>
+<h2>复现命令</h2><pre>DWS_PACKAGE_VERSION=0.0.0-test go test -json -count=1 ./internal/app -run &#x27;^(TestCrossPlatformCoverageEventAgentSelectionBoundaries|TestAgentExamplesContract|TestPersonalOA.*|TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput)$&#x27;</pre>
+<footer>原始证据：agent-tests.jsonl · agent-tests.log · run.json · cli-schema-checks.json<br>本次证据提交不改变已测试的生产代码与测试代码。</footer></main></html>

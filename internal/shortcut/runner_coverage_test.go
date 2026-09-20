@@ -42,10 +42,53 @@ func (*runtimeContextCaller) Fields() string { return "" }
 func (*runtimeContextCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageRuntimeContextForTest(t *testing.T) {
+	helpers.InitDepsForTest(t, &runtimeReadCoverageCaller{text: `{"ok":true}`})
 	cmd := &cobra.Command{Use: "run"}
 	rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
 	if rt == nil || rt.cmd != cmd || rt.shortcut.Service != "sample" {
 		t.Fatalf("RuntimeContextForTest = %#v", rt)
+	}
+	if rt.StrFirst("missing") != "" {
+		t.Fatal("StrFirst empty")
+	}
+	cmd.Flags().Int("limit", 3, "")
+	cmd.Flags().Int("size", 9, "")
+	cmd.Flags().StringSlice("tags", nil, "")
+	if rt.IntFirst("limit", "size") != 3 {
+		t.Fatal("IntFirst primary default")
+	}
+	_ = rt.StrSlice("tags")
+	_ = rt.Yes()
+	_ = rt.Changed("missing")
+	_, _ = rt.CallMCPReadData("sample", "update_records", nil)
+	dry := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
+	cmd.PersistentFlags().Bool("dry-run", true, "")
+	_ = cmd.PersistentFlags().Set("dry-run", "true")
+	_, _ = dry.CallMCPData("sample", "update_records", nil)
+	_, _ = dry.CallMCPData("sample", "get_item", nil)
+	legacy := &cobra.Command{Use: "+legacy"}
+	output.SetCommandRollout(legacy, output.RolloutLegacyOnly)
+	_ = RuntimeContextForTest(legacy, Shortcut{Service: "sample", Command: "+legacy"}).CallMCP("get", nil)
+	_ = All()
+	_ = globalBool(nil, "dry-run")
+	_ = hasNonEmptyString(nil)
+	_ = hasNonEmptyString([]string{"", "x"})
+	_ = FromShortcut(Shortcut{})
+	mounted := &cobra.Command{Use: "tiered"}
+	spec := FromShortcut(Shortcut{
+		HelpTier: HelpTierFeatured,
+		Flags:    []Flag{{Name: "id", Aliases: []string{"identifier"}, AliasesVisible: true}},
+	})
+	if spec.PostMount != nil {
+		spec.PostMount(mounted)
+	}
+	positional := FromShortcut(Shortcut{SinglePositionalAliasFor: "id"})
+	if positional.PostMount != nil {
+		positional.PostMount(mounted)
+		if mounted.Args != nil {
+			_ = mounted.Args(mounted, nil)
+			_ = mounted.Args(mounted, []string{"a", "b"})
+		}
 	}
 }
 
@@ -89,7 +132,7 @@ func TestCrossPlatformCoverageRuntimeMCPCallsPreserveCommandContext(t *testing.T
 	}
 }
 
-func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
+func TestCrossPlatformCoverageShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	result := shortcutCommandResult(map[string]any{"success": "false"})
 	env, err := output.EnvelopeFromResult(result)
 	if err != nil {
@@ -101,7 +144,7 @@ func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	}
 }
 
-func TestGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
+func TestCrossPlatformCoverageGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
 	rt := RuntimeContextForTest(&cobra.Command{Use: "+write"}, Shortcut{
 		Service: "sample",
 		Command: "+write",

@@ -344,13 +344,13 @@ prepare_runtime_archives() {
       *.tar.gz) tar -xzf "$archive" -C "$stage" ;;
       *.zip) unzip -q "$archive" -d "$stage" ;;
     esac
+    case "$target_os" in
+      windows) binary="$stage/dws.exe" ;;
+      *) binary="$stage/dws" ;;
+    esac
+    [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     if [ "$target_os" != darwin ]; then
-      case "$target_os" in
-        windows) binary="$stage/dws.exe" ;;
-        *) binary="$stage/dws" ;;
-      esac
-      [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
       attach_runtime_payload "$binary" "$stage/.dws-runtime/20260909"
       rm -rf "$stage/.dws-runtime"
     fi

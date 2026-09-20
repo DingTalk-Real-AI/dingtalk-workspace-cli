@@ -55,7 +55,7 @@ func runOACoverage(t *testing.T, declaration shortcut.Shortcut, caller *oaCovera
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd, cmd.Execute()
+	return cmd, corecmd.ExecuteForTest(cmd)
 }
 
 func runOAConfirmedCoverage(t *testing.T, caller *oaCoverageCaller, args ...string) error {
@@ -73,7 +73,7 @@ func runOAConfirmedCoverage(t *testing.T, caller *oaCoverageCaller, args ...stri
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(Approve)))
 	root.AddCommand(service)
 	root.SetArgs(append([]string{"oa", "+approve-by"}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageOAContractsAreTypedAndUnified(t *testing.T) {
@@ -214,7 +214,7 @@ func TestCrossPlatformCoverageOAApproveConfirmationAndReadback(t *testing.T) {
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(Approve)))
 	root.AddCommand(service)
 	root.SetArgs([]string{"oa", "+approve-by", "--keyword", "fixture"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("unconfirmed approval unexpectedly succeeded")
 	}
 	if len(unconfirmed.history) != 0 {
@@ -242,7 +242,7 @@ func TestCrossPlatformCoverageOAApproveConfirmationAndReadback(t *testing.T) {
 	confirmedService.AddCommand(corecmd.New(shortcut.FromShortcut(Approve)))
 	confirmedRoot.AddCommand(confirmedService)
 	confirmedRoot.SetArgs([]string{"oa", "+approve-by", "--keyword", "fixture", "--yes"})
-	if err := confirmedRoot.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(confirmedRoot); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(confirmed.history, ","); got != "get_todo_tasks,list_pending_tasks,approve_processInstance,list_pending_tasks" {

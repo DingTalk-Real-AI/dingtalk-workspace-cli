@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -89,7 +90,7 @@ func runUpsertByKeyCLI(t *testing.T, caller *upsertByKeyCaller, extra ...string)
 	}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -172,6 +173,102 @@ func TestCrossPlatformCoverageRecordUpsertByKeyAmbiguousStopsBeforeWriteE2E(t *t
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Reason != "target_ambiguous" || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
 		t.Fatalf("ambiguous error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertByKeyStopsOnNonResumableCursorE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"records":[]},"nextCursor":"error-v1:NON_RESUMABLE_ERROR_CURSOR"}`},
+	}}
+	out, err := runUpsertByKeyCLI(t, caller)
+	if err == nil || out != "" || len(caller.calls) != 1 {
+		t.Fatalf("guard-cursor upsert = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("guard-cursor error = %#v", err)
+	}
+	if typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("guard-cursor preflight must report no write started: %#v", typed.ExecutionStarted)
+	}
+}
+
+func TestCrossPlatformCoverageQueryAllRecordsDiscardsPartialOnNonResumableCursorE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"records":[{"recordId":"r1"}]},"nextCursor":"error-v1:NON_RESUMABLE_ERROR_CURSOR"}`},
+	}}
+	helpers.InitDepsForTest(t, caller)
+	rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+	rows, err := queryAllRecords(rt, map[string]any{"baseId": "b", "tableId": "t"}, 100)
+	if err == nil || len(rows) != 0 {
+		t.Fatalf("queryAllRecords guard = rows:%#v err:%v", rows, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("queryAllRecords guard error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageQueryRecordWindowStopsOnNonResumableCursorE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"records":[{"recordId":"r1"}]},"cursor":"error-v1:NON_RESUMABLE_ERROR_CURSOR"}`},
+	}}
+	helpers.InitDepsForTest(t, caller)
+	rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+	window, err := queryRecordWindow(rt, map[string]any{"baseId": "b", "tableId": "t"}, 100)
+	if err == nil || len(window.Records) != 0 || window.Pages != 0 {
+		t.Fatalf("queryRecordWindow guard = window:%#v err:%v", window, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("queryRecordWindow guard error = %#v", err)
+	}
+}
+
+// emptyEnvelopeGuardCursor 是本次收口的关键波形：无 records 集合、成功空信封，却在顶层夹带保护游标。
+// 收口前 explicitEmptyRecordQuery 会把它当成干净终页而绕过守卫；收口后三条读取路径必须一律失败。
+const emptyEnvelopeGuardCursor = `{"success":true,"status":"success","data":{},"nextCursor":"error-v1:NON_RESUMABLE_ERROR_CURSOR"}`
+
+func TestCrossPlatformCoverageQueryAllRecordsGuardBeatsEmptyEnvelopeE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: emptyEnvelopeGuardCursor}}}
+	helpers.InitDepsForTest(t, caller)
+	rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+	rows, err := queryAllRecords(rt, map[string]any{"baseId": "b", "tableId": "t"}, 100)
+	if err == nil || len(rows) != 0 {
+		t.Fatalf("queryAllRecords empty-envelope guard = rows:%#v err:%v", rows, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("queryAllRecords empty-envelope guard error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageQueryRecordWindowGuardBeatsEmptyEnvelopeE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: emptyEnvelopeGuardCursor}}}
+	helpers.InitDepsForTest(t, caller)
+	rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+	window, err := queryRecordWindow(rt, map[string]any{"baseId": "b", "tableId": "t"}, 100)
+	if err == nil || len(window.Records) != 0 || window.Pages != 0 {
+		t.Fatalf("queryRecordWindow empty-envelope guard = window:%#v err:%v", window, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("queryRecordWindow empty-envelope guard error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertByKeyGuardBeatsEmptyEnvelopeE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: emptyEnvelopeGuardCursor}}}
+	out, err := runUpsertByKeyCLI(t, caller)
+	if err == nil || out != "" || len(caller.calls) != 1 {
+		t.Fatalf("empty-envelope guard upsert = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "pagination_non_resumable_error" || typed.Retryable {
+		t.Fatalf("empty-envelope guard error = %#v", err)
+	}
+	if typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("empty-envelope guard preflight must report no write started: %#v", typed.ExecutionStarted)
 	}
 }
 
@@ -270,7 +367,7 @@ func runRecordBatchCLI(t *testing.T, caller *upsertByKeyCaller, command string, 
 	args := []string{"aitable", command, "--base-id", "base", "--table-id", "table", "--records", string(raw), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err = root.Execute()
+	err = corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -342,7 +439,7 @@ func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit in
 	root.SetErr(&bytes.Buffer{})
 	args := []string{"aitable", "+record-query", "--base-id", "base", "--table-id", "table", "--limit", fmt.Sprint(limit)}
 	root.SetArgs(append(args, extra...))
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if stdout.Len() == 0 {
 		return nil, err
 	}
@@ -1009,7 +1106,7 @@ func runRecordDeleteCLI(t *testing.T, caller *upsertByKeyCaller, ids []string, e
 	args := []string{"aitable", "+record-delete", "--base-id", "base", "--table-id", "table", "--record-ids", strings.Join(ids, ","), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 

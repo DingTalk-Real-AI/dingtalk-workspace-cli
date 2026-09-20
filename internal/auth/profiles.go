@@ -15,16 +15,15 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/google/uuid"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx"
@@ -79,43 +78,22 @@ const (
 	profilesJSONFile                  = "profiles.json"
 	profilesVersion                   = 2
 	profilesUnresolvedSelectorVersion = 3
-	profilesMaxVersion                = profilesUnresolvedSelectorVersion
-	unresolvedProfileSelectorPrefix   = "@legacy/"
+	profilesMaxVersion                = profilemetadata.MaxVersion
+	unresolvedProfileSelectorPrefix   = profilemetadata.UnresolvedSelectorPrefix
 )
 
 const (
-	ProfileStatusActive      = "active"
+	ProfileStatusActive      = profilemetadata.ProfileStatusActive
 	ProfileStatusExpired     = "expired"
 	ProfileStatusRevoked     = "revoked"
 	ProfileStatusUnavailable = "unavailable"
 )
 
 // ProfilesConfig stores non-sensitive profile metadata. Token material stays in keychain.
-type ProfilesConfig struct {
-	Version            int               `json:"version"`
-	PrimaryProfile     string            `json:"primaryProfile,omitempty"`
-	CurrentProfile     string            `json:"currentProfile,omitempty"`
-	PreviousProfile    string            `json:"previousProfile,omitempty"`
-	OrgCurrentProfiles map[string]string `json:"orgCurrentProfiles,omitempty"`
-	Profiles           []Profile         `json:"profiles,omitempty"`
-}
+type ProfilesConfig = profilemetadata.ProfilesConfig
 
 // Profile is a logged-in DingTalk organization identity.
-type Profile struct {
-	Name              string   `json:"name"`
-	CorpID            string   `json:"corpId"`
-	CorpName          string   `json:"corpName,omitempty"`
-	UserID            string   `json:"userId,omitempty"`
-	UserName          string   `json:"userName,omitempty"`
-	ClientID          string   `json:"clientId,omitempty"`
-	Status            string   `json:"status,omitempty"`
-	AuthorizedDomains []string `json:"authorizedDomains,omitempty"`
-	ExpiresAt         string   `json:"expiresAt,omitempty"`
-	RefreshExpAt      string   `json:"refreshExpAt,omitempty"`
-	LastLoginAt       string   `json:"lastLoginAt,omitempty"`
-	LastUsedAt        string   `json:"lastUsedAt,omitempty"`
-	UpdatedAt         string   `json:"updatedAt,omitempty"`
-}
+type Profile = profilemetadata.Profile
 
 // SetRuntimeProfile sets a process-local one-shot profile override.
 func SetRuntimeProfile(profile string) {
@@ -566,9 +544,7 @@ func upsertProfileFromToken(configDir string, cfg *ProfilesConfig, data *TokenDa
 
 // ProfileSelector returns the exact identity selector for a profile when its
 // userId is known, otherwise it returns the historical corpId selector.
-func ProfileSelector(profile Profile) string {
-	return profileSelector(profile.CorpID, profile.UserID)
-}
+func ProfileSelector(profile Profile) string { return profilemetadata.ProfileSelector(profile) }
 
 // storedProfileSelector returns a selector that remains exact inside
 // profiles.json. A blank userId has only an organization selector in the
@@ -576,23 +552,7 @@ func ProfileSelector(profile Profile) string {
 // use the profile's unique local name so current/previous pointers do not
 // accidentally resolve to an exact account through OrgCurrentProfiles.
 func storedProfileSelector(cfg *ProfilesConfig, profile *Profile) string {
-	if profile == nil {
-		return ""
-	}
-	if strings.TrimSpace(profile.UserID) != "" {
-		return ProfileSelector(*profile)
-	}
-	if cfg == nil {
-		return strings.TrimSpace(profile.CorpID)
-	}
-	if len(profilesForCorpID(cfg, profile.CorpID)) <= 1 {
-		return strings.TrimSpace(profile.CorpID)
-	}
-	name := strings.TrimSpace(profile.Name)
-	if localProfileSelectorIsSafe(cfg, profile, name) {
-		return name
-	}
-	return unresolvedProfileSelector(profile.CorpID)
+	return profilemetadata.StoredProfileSelector(cfg, profile)
 }
 
 // ProfileSelectionSelector returns the stable selector used for one profile.
@@ -604,51 +564,15 @@ func ProfileSelectionSelector(profile Profile, cfg *ProfilesConfig) string {
 }
 
 func localProfileSelectorIsSafe(cfg *ProfilesConfig, profile *Profile, name string) bool {
-	if cfg == nil || profile == nil {
-		return false
-	}
-	name = strings.TrimSpace(name)
-	if name == "" || strings.Contains(name, ":") || strings.HasPrefix(name, unresolvedProfileSelectorPrefix) {
-		return false
-	}
-	nameMatches := 0
-	for i := range cfg.Profiles {
-		candidate := &cfg.Profiles[i]
-		if strings.TrimSpace(candidate.Name) == name {
-			nameMatches++
-		}
-		// Organization selectors are resolved before ordinary local names.
-		// Never persist a local selector that can be captured by that grammar.
-		if strings.TrimSpace(candidate.CorpID) == name || strings.TrimSpace(candidate.CorpName) == name {
-			return false
-		}
-	}
-	return nameMatches == 1
+	return profilemetadata.LocalProfileSelectorIsSafe(cfg, profile, name)
 }
 
 func unresolvedProfileSelector(corpID string) string {
-	corpID = strings.TrimSpace(corpID)
-	if corpID == "" {
-		return ""
-	}
-	return unresolvedProfileSelectorPrefix + base64.RawURLEncoding.EncodeToString([]byte(corpID))
+	return profilemetadata.UnresolvedProfileSelector(corpID)
 }
 
 func parseUnresolvedProfileSelector(selector string) (string, bool) {
-	selector = strings.TrimSpace(selector)
-	if !strings.HasPrefix(selector, unresolvedProfileSelectorPrefix) {
-		return "", false
-	}
-	encoded := strings.TrimPrefix(selector, unresolvedProfileSelectorPrefix)
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", false
-	}
-	corpID := strings.TrimSpace(string(decoded))
-	if corpID == "" || unresolvedProfileSelector(corpID) != selector {
-		return "", false
-	}
-	return corpID, true
+	return profilemetadata.ParseUnresolvedProfileSelector(selector)
 }
 
 // TokenProfileSelector returns the exact identity selector for token data when
@@ -689,30 +613,12 @@ func StableTokenProfileSelector(configDir string, data *TokenData) string {
 }
 
 func profileSelector(corpID, userID string) string {
-	corpID = strings.TrimSpace(corpID)
-	userID = strings.TrimSpace(userID)
-	if corpID == "" {
-		return ""
-	}
-	if userID == "" {
-		return corpID
-	}
-	return corpID + ":" + userID
+	return profilemetadata.IdentitySelector(corpID, userID)
 }
 
 // ParseIdentitySelector splits corpId:userId selectors.
 func ParseIdentitySelector(selector string) (corpID, userID string, ok bool) {
-	selector = strings.TrimSpace(selector)
-	idx := strings.Index(selector, ":")
-	if idx <= 0 || idx >= len(selector)-1 {
-		return "", "", false
-	}
-	corpID = strings.TrimSpace(selector[:idx])
-	userID = strings.TrimSpace(selector[idx+1:])
-	if corpID == "" || userID == "" {
-		return "", "", false
-	}
-	return corpID, userID, true
+	return profilemetadata.ParseIdentitySelector(selector)
 }
 
 // ResolveProfile returns a profile selected by name/corpId/identity or by
@@ -1375,60 +1281,7 @@ func loadTokenForProfileIdentity(profile Profile) (*TokenData, error) {
 	return orgData, nil
 }
 
-func normalizeProfilesConfig(cfg *ProfilesConfig) {
-	if cfg == nil {
-		return
-	}
-	if cfg.Version <= 0 {
-		cfg.Version = 1
-	}
-	seen := make(map[string]bool, len(cfg.Profiles))
-	profiles := cfg.Profiles[:0]
-	for _, p := range cfg.Profiles {
-		p.CorpID = strings.TrimSpace(p.CorpID)
-		p.UserID = strings.TrimSpace(p.UserID)
-		identity := profileIdentityKey(p.CorpID, p.UserID)
-		if p.CorpID == "" || seen[identity] {
-			continue
-		}
-		seen[identity] = true
-		p.Name = strings.TrimSpace(p.Name)
-		if p.Name == "" {
-			p.Name = p.CorpID
-		}
-		if corpName := strings.TrimSpace(p.CorpName); p.Name == p.CorpID && corpName != "" && !profileNameTakenByOtherIdentity(cfg, corpName, p.CorpID, p.UserID) {
-			p.Name = corpName
-		}
-		if p.Status == "" {
-			p.Status = ProfileStatusActive
-		}
-		profiles = append(profiles, p)
-	}
-	cfg.Profiles = profiles
-	if len(cfg.OrgCurrentProfiles) > 0 {
-		normalized := make(map[string]string, len(cfg.OrgCurrentProfiles))
-		for corpID, selector := range cfg.OrgCurrentProfiles {
-			corpID = strings.TrimSpace(corpID)
-			if exact := exactProfileSelectorForCorp(cfg, corpID, selector); exact != "" {
-				normalized[corpID] = exact
-			}
-		}
-		if len(normalized) == 0 {
-			cfg.OrgCurrentProfiles = nil
-		} else {
-			cfg.OrgCurrentProfiles = normalized
-		}
-	}
-	if cfg.PrimaryProfile != "" && !profileSelectorReferenceExists(cfg, cfg.PrimaryProfile) {
-		cfg.PrimaryProfile = ""
-	}
-	if cfg.CurrentProfile != "" && !profileSelectorReferenceExists(cfg, cfg.CurrentProfile) {
-		cfg.CurrentProfile = ""
-	}
-	if cfg.PreviousProfile != "" && !profileSelectorReferenceExists(cfg, cfg.PreviousProfile) {
-		cfg.PreviousProfile = ""
-	}
-}
+func normalizeProfilesConfig(cfg *ProfilesConfig) { profilemetadata.Normalize(cfg) }
 
 func chooseProfileName(cfg *ProfilesConfig, data *TokenData) string {
 	base := strings.TrimSpace(data.CorpName)
@@ -1476,115 +1329,14 @@ func shouldRefreshProfileName(p *Profile, data *TokenData) bool {
 }
 
 func profileNameTakenByOtherIdentity(cfg *ProfilesConfig, name, corpID, userID string) bool {
-	name = strings.TrimSpace(name)
-	corpID = strings.TrimSpace(corpID)
-	userID = strings.TrimSpace(userID)
-	for _, p := range cfg.Profiles {
-		if strings.TrimSpace(p.Name) == name && !sameProfileIdentity(p.CorpID, p.UserID, corpID, userID) {
-			return true
-		}
-	}
-	return false
+	return profilemetadata.ProfileNameTakenByOtherIdentity(cfg, name, corpID, userID)
 }
 
 // resolveProfileSelection resolves a user-facing selector to one exact identity.
 // The bool reports whether the selector targets one identity (compound selector
 // or local profile name) rather than an organization as a whole.
 func resolveProfileSelection(_ string, cfg *ProfilesConfig, selector string) (*Profile, bool, error) {
-	if cfg == nil {
-		return nil, false, fmt.Errorf("profile %q not found", strings.TrimSpace(selector))
-	}
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return nil, false, fmt.Errorf("profile selector is empty")
-	}
-	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
-		if profile := unresolvedProfileForCorp(cfg, corpID); profile != nil {
-			return profile, true, nil
-		}
-		return nil, true, fmt.Errorf("historical profile for organization %q not found", corpID)
-	}
-
-	if organization, account, compound := ParseIdentitySelector(selector); compound {
-		corpID, err := resolveOrganizationCorpID(cfg, organization)
-		if err != nil {
-			return nil, true, err
-		}
-		if corpID == "" {
-			return nil, true, fmt.Errorf("organization %q not found", organization)
-		}
-		if p := findExactProfile(cfg, corpID, account); p != nil {
-			return p, true, nil
-		}
-		var matches []*Profile
-		for _, p := range profilesForCorpID(cfg, corpID) {
-			if strings.TrimSpace(p.UserName) == account {
-				matches = append(matches, p)
-			}
-		}
-		switch len(matches) {
-		case 1:
-			return matches[0], true, nil
-		case 0:
-			return nil, true, fmt.Errorf("account %q not found in organization %q", account, organization)
-		default:
-			return nil, true, fmt.Errorf(
-				"account name %q is ambiguous in organization %q; use one of: %s",
-				account,
-				organization,
-				strings.Join(profileSelectorCandidates(matches), ", "),
-			)
-		}
-	}
-
-	if profiles := profilesForCorpID(cfg, selector); len(profiles) > 0 {
-		return resolveOrganizationDefault(cfg, selector, selector, profiles)
-	}
-
-	orgIDs := make(map[string]struct{})
-	for i := range cfg.Profiles {
-		if strings.TrimSpace(cfg.Profiles[i].CorpName) != selector {
-			continue
-		}
-		orgIDs[strings.TrimSpace(cfg.Profiles[i].CorpID)] = struct{}{}
-	}
-	if len(orgIDs) == 1 {
-		for corpID := range orgIDs {
-			return resolveOrganizationDefault(cfg, corpID, selector, profilesForCorpID(cfg, corpID))
-		}
-	}
-	if len(orgIDs) > 1 {
-		candidates := make([]string, 0, len(orgIDs))
-		for corpID := range orgIDs {
-			candidates = append(candidates, corpID)
-		}
-		sort.Strings(candidates)
-		return nil, false, fmt.Errorf(
-			"organization name %q is ambiguous; use one of: %s",
-			selector,
-			strings.Join(candidates, ", "),
-		)
-	}
-
-	var nameMatches []*Profile
-	for i := range cfg.Profiles {
-		if strings.TrimSpace(cfg.Profiles[i].Name) != selector {
-			continue
-		}
-		nameMatches = append(nameMatches, &cfg.Profiles[i])
-	}
-	switch len(nameMatches) {
-	case 1:
-		return nameMatches[0], true, nil
-	case 0:
-		return nil, false, fmt.Errorf("profile %q not found", selector)
-	default:
-		return nil, true, fmt.Errorf(
-			"profile name %q is ambiguous; use one of: %s",
-			selector,
-			strings.Join(profileSelectorCandidates(nameMatches), ", "),
-		)
-	}
+	return profilemetadata.ResolveSelection("", cfg, selector)
 }
 
 func resolveProfileDeletionSelection(cfg *ProfilesConfig, selector string) (*Profile, bool, error) {
@@ -1639,96 +1391,19 @@ func resolveProfileDeletionSelection(cfg *ProfilesConfig, selector string) (*Pro
 }
 
 func resolveOrganizationCorpID(cfg *ProfilesConfig, selector string) (string, error) {
-	if cfg == nil {
-		return "", nil
-	}
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return "", nil
-	}
-	if len(profilesForCorpID(cfg, selector)) > 0 {
-		return selector, nil
-	}
-	orgIDs := make(map[string]struct{})
-	for i := range cfg.Profiles {
-		if strings.TrimSpace(cfg.Profiles[i].CorpName) != selector {
-			continue
-		}
-		orgIDs[strings.TrimSpace(cfg.Profiles[i].CorpID)] = struct{}{}
-	}
-	if len(orgIDs) == 0 {
-		return "", nil
-	}
-	if len(orgIDs) == 1 {
-		for corpID := range orgIDs {
-			return corpID, nil
-		}
-	}
-	candidates := make([]string, 0, len(orgIDs))
-	for corpID := range orgIDs {
-		candidates = append(candidates, corpID)
-	}
-	sort.Strings(candidates)
-	return "", fmt.Errorf(
-		"organization name %q is ambiguous; use one of: %s",
-		selector,
-		strings.Join(candidates, ", "),
-	)
+	return profilemetadata.ResolveOrganizationCorpID(cfg, selector)
 }
 
 func resolveOrganizationDefault(cfg *ProfilesConfig, corpID, displaySelector string, profiles []*Profile) (*Profile, bool, error) {
-	if len(profiles) == 0 {
-		return nil, false, fmt.Errorf("organization %q not found", displaySelector)
-	}
-	if exact := exactProfileSelectorForCorp(cfg, corpID, cfg.OrgCurrentProfiles[corpID]); exact != "" {
-		selectedCorpID, userID, _ := ParseIdentitySelector(exact)
-		if p := findExactProfile(cfg, selectedCorpID, userID); p != nil {
-			return p, false, nil
-		}
-	}
-	if unresolved := unresolvedProfileForCorp(cfg, corpID); unresolved != nil {
-		// With no exact organization-current selection, the organization slot
-		// belongs to the sole unresolved historical account. Do not choose an
-		// arbitrary exact identity merely because it shares the corpId.
-		return unresolved, false, nil
-	}
-	if len(profiles) == 1 {
-		return profiles[0], false, nil
-	}
-	return nil, false, fmt.Errorf(
-		"organization %q has multiple accounts and no current account; use one of: %s",
-		displaySelector,
-		strings.Join(profileSelectorCandidates(profiles), ", "),
-	)
+	return profilemetadata.ResolveOrganizationDefault(cfg, corpID, displaySelector, profiles)
 }
 
 func profileSelectorCandidates(profiles []*Profile) []string {
-	cfg := &ProfilesConfig{Profiles: make([]Profile, 0, len(profiles))}
-	for _, profile := range profiles {
-		if profile != nil {
-			cfg.Profiles = append(cfg.Profiles, *profile)
-		}
-	}
-	candidates := make([]string, 0, len(profiles))
-	for _, p := range profiles {
-		if p == nil {
-			continue
-		}
-		candidates = append(candidates, storedProfileSelector(cfg, p))
-	}
-	sort.Strings(candidates)
-	return candidates
+	return profilemetadata.ProfileSelectorCandidates(profiles)
 }
 
 func exactProfileSelectorForCorp(cfg *ProfilesConfig, corpID, selector string) string {
-	selectedCorpID, userID, exact := ParseIdentitySelector(selector)
-	if !exact || strings.TrimSpace(selectedCorpID) != strings.TrimSpace(corpID) {
-		return ""
-	}
-	if p := findExactProfile(cfg, selectedCorpID, userID); p != nil {
-		return ProfileSelector(*p)
-	}
-	return ""
+	return profilemetadata.ExactProfileSelectorForCorp(cfg, corpID, selector)
 }
 
 func canonicalStoredSelector(cfg *ProfilesConfig, selector string) string {
@@ -1825,15 +1500,7 @@ func uniqueProfileCorpIDs(cfg *ProfilesConfig) []string {
 }
 
 func profileIndexByIdentity(cfg *ProfilesConfig, corpID, userID string) int {
-	if cfg == nil {
-		return -1
-	}
-	for i := range cfg.Profiles {
-		if sameProfileIdentity(cfg.Profiles[i].CorpID, cfg.Profiles[i].UserID, corpID, userID) {
-			return i
-		}
-	}
-	return -1
+	return profilemetadata.ProfileIndexByIdentity(cfg, corpID, userID)
 }
 
 func legacyProfileIndexByCorpID(cfg *ProfilesConfig, corpID string) int {
@@ -1854,62 +1521,19 @@ func legacyProfileIndexByCorpID(cfg *ProfilesConfig, corpID string) int {
 }
 
 func findExactProfile(cfg *ProfilesConfig, corpID, userID string) *Profile {
-	idx := profileIndexByIdentity(cfg, corpID, userID)
-	if idx < 0 {
-		return nil
-	}
-	return &cfg.Profiles[idx]
+	return profilemetadata.FindExactProfile(cfg, corpID, userID)
 }
 
 func profilesForCorpID(cfg *ProfilesConfig, corpID string) []*Profile {
-	if cfg == nil {
-		return nil
-	}
-	corpID = strings.TrimSpace(corpID)
-	result := make([]*Profile, 0)
-	for i := range cfg.Profiles {
-		if strings.TrimSpace(cfg.Profiles[i].CorpID) == corpID {
-			result = append(result, &cfg.Profiles[i])
-		}
-	}
-	return result
+	return profilemetadata.ProfilesForCorpID(cfg, corpID)
 }
 
 func unresolvedProfileForCorp(cfg *ProfilesConfig, corpID string) *Profile {
-	if cfg == nil {
-		return nil
-	}
-	corpID = strings.TrimSpace(corpID)
-	for i := range cfg.Profiles {
-		profile := &cfg.Profiles[i]
-		if strings.TrimSpace(profile.CorpID) == corpID && strings.TrimSpace(profile.UserID) == "" {
-			return profile
-		}
-	}
-	return nil
+	return profilemetadata.UnresolvedProfileForCorp(cfg, corpID)
 }
 
 func unresolvedProfileForLocalName(cfg *ProfilesConfig, name string) *Profile {
-	if cfg == nil {
-		return nil
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil
-	}
-	var match *Profile
-	for i := range cfg.Profiles {
-		profile := &cfg.Profiles[i]
-		if strings.TrimSpace(profile.UserID) != "" || strings.TrimSpace(profile.Name) != name ||
-			len(profilesForCorpID(cfg, profile.CorpID)) <= 1 {
-			continue
-		}
-		if match != nil {
-			return nil
-		}
-		match = profile
-	}
-	return match
+	return profilemetadata.UnresolvedProfileForLocalName(cfg, name)
 }
 
 // When a blank profile coexists with exact accounts, the organization slot is
@@ -1949,51 +1573,15 @@ func validateIdentityOnlyProfileToken(profile Profile) error {
 }
 
 func profileSelectorReferenceExists(cfg *ProfilesConfig, selector string) bool {
-	if cfg == nil {
-		return false
-	}
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return false
-	}
-	if corpID, unresolved := parseUnresolvedProfileSelector(selector); unresolved {
-		return unresolvedProfileForCorp(cfg, corpID) != nil
-	}
-	if unresolvedProfileForLocalName(cfg, selector) != nil {
-		return true
-	}
-	if corpID, userID, exact := ParseIdentitySelector(selector); exact {
-		if findExactProfile(cfg, corpID, userID) != nil {
-			return true
-		}
-		for i := range cfg.Profiles {
-			p := &cfg.Profiles[i]
-			orgMatches := strings.TrimSpace(p.CorpID) == corpID || strings.TrimSpace(p.CorpName) == corpID
-			accountMatches := strings.TrimSpace(p.UserID) == userID || strings.TrimSpace(p.UserName) == userID
-			if orgMatches && accountMatches {
-				return true
-			}
-		}
-		return false
-	}
-	if len(profilesForCorpID(cfg, selector)) > 0 {
-		return true
-	}
-	for i := range cfg.Profiles {
-		if strings.TrimSpace(cfg.Profiles[i].CorpName) == selector ||
-			strings.TrimSpace(cfg.Profiles[i].Name) == selector {
-			return true
-		}
-	}
-	return false
+	return profilemetadata.ProfileSelectorReferenceExists(cfg, selector)
 }
 
 func profileIdentityKey(corpID, userID string) string {
-	return strings.TrimSpace(corpID) + "\x00" + strings.TrimSpace(userID)
+	return profilemetadata.ProfileIdentityKey(corpID, userID)
 }
 
 func sameProfileIdentity(leftCorpID, leftUserID, rightCorpID, rightUserID string) bool {
-	return profileIdentityKey(leftCorpID, leftUserID) == profileIdentityKey(rightCorpID, rightUserID)
+	return profilemetadata.SameProfileIdentity(leftCorpID, leftUserID, rightCorpID, rightUserID)
 }
 
 func shortCorpID(corpID string) string {
