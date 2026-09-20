@@ -279,7 +279,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 				AgentSummary: "创建新的草稿态 DEAP 数字员工",
 				UseWhen:      []string{"需要从零创建数字员工并获得 agentUuid 时"},
 				AvoidWhen:    []string{"已有 agentUuid 只需修改草稿时使用 save-draft", "创建普通开放平台应用时使用 dev app create"},
-				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --avatar-url ./avatar.png --dry-run --format json`},
+				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --avatar-url https://example.com/avatar.png --response-mode mention_only --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
