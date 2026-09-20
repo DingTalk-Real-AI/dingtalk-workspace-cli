@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -62,6 +63,13 @@ func executeAttendanceResponse(t *testing.T, declaration shortcut.Shortcut, valu
 	helpers.InitDepsForTest(t, caller)
 	err := declaration.Execute(attendanceRuntimeForTest(t, declaration, values))
 	return caller, err
+}
+
+func executeAttendanceTransportError(t *testing.T, declaration shortcut.Shortcut, values map[string]string) error {
+	t.Helper()
+	caller := &attendanceCoverageCaller{err: errors.New("transport unavailable")}
+	helpers.InitDepsForTest(t, caller)
+	return declaration.Execute(attendanceRuntimeForTest(t, declaration, values))
 }
 
 func TestCrossPlatformCoverageAttendanceRequestBindingMatrices(t *testing.T) {
@@ -466,6 +474,189 @@ func TestCrossPlatformCoverageAttendanceApprovalCapabilityAdapters(t *testing.T)
 			t.Fatalf("unspecified workDate was sent: %#v", caller.arguments[0])
 		}
 	})
+
+	t.Run("complex overtime maps readable work date", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, GetComplexOvertimeSetting, map[string]string{"users": "u1", "work-date": "2026-08-31"}, `{"success":true,"result":{"interactMode":3,"overtimeSettingVO":{}}}`)
+		if err != nil || caller.calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+		want, _ := flexMillis("2026-08-31")
+		if caller.arguments[0]["workDate"] != want {
+			t.Fatalf("workDate=%#v want=%v", caller.arguments[0]["workDate"], want)
+		}
+	})
+
+	t.Run("calculate maps full optional payload", func(t *testing.T) {
+		values := map[string]string{
+			"biz-type":         "3",
+			"duration-mode":    "2",
+			"start":            "2026-09-01 09:00:00",
+			"end":              "2026-09-01 18:00:00",
+			"approve-biz-type": "attendance.goout",
+			"half-start":       "AM",
+			"half-end":         "PM",
+			"push-tag":         "tag-1",
+			"request-id":       "req-1",
+			"new-overtime":     "true",
+			"nature-day":       "true",
+			"principal-users":  "u1,u2",
+			"duration-in-day":  "1",
+			"modified-date":    "2026-09-01 12:00:00",
+			"detail-list":      `[{"workDate":"2026-09-01 00:00:00","durationInDay":"1"}]`,
+		}
+		caller, err := executeAttendanceResponse(t, CalculateApproveDuration, values, `{"success":true,"result":{"durationInDay":1}}`)
+		if err != nil || caller.calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+		arguments := caller.arguments[0]
+		if arguments["approveBizType"] != "attendance.goout" || arguments["halfFromDate"] != "AM" || arguments["halfToDate"] != "PM" || arguments["pushTag"] != "tag-1" || arguments["requestId"] != "req-1" {
+			t.Fatalf("optional strings missing: %#v", arguments)
+		}
+		if arguments["natureDay"] != true {
+			t.Fatalf("natureDay=%#v", arguments["natureDay"])
+		}
+		if arguments["durationInDay"] != "1" || arguments["modifiedDate"] != "2026-09-01 12:00:00" {
+			t.Fatalf("proposed duration/modified date missing: %#v", arguments)
+		}
+	})
+
+	t.Run("calculate passes through hour duration and skips non-object detail items", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CalculateApproveDuration, map[string]string{
+			"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00",
+			"duration-in-hour": "8", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"4"},"junk",42]`,
+		}, `{"success":true,"result":{"durationInHour":8}}`)
+		if err != nil || caller.calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+		arguments := caller.arguments[0]
+		if arguments["durationInHour"] != "8" {
+			t.Fatalf("durationInHour=%#v", arguments["durationInHour"])
+		}
+		dl, ok := arguments["detailList"].([]any)
+		if !ok || len(dl) != 3 {
+			t.Fatalf("detailList=%#v", arguments["detailList"])
+		}
+		if _, isObject := dl[1].(map[string]any); isObject {
+			t.Fatalf("non-object detail item was converted: %#v", dl[1])
+		}
+	})
+
+	t.Run("calculate execute rejects malformed detail-list json", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CalculateApproveDuration, map[string]string{
+			"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `not-json`,
+		}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("companion rejects non-object result", func(t *testing.T) {
+		_, err := executeAttendanceResponse(t, CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "2026-08-31 09:00:00", "ends": "2026-08-31 18:00:00", "duration-unit": "HOUR",
+		}, `{"success":true,"result":[]}`)
+		if err == nil {
+			t.Fatal("non-object result accepted")
+		}
+	})
+
+	t.Run("companion rejects non-bool valid", func(t *testing.T) {
+		_, err := executeAttendanceResponse(t, CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "2026-08-31 09:00:00", "ends": "2026-08-31 18:00:00", "duration-unit": "HOUR",
+		}, `{"success":true,"result":{"valid":"yes"}}`)
+		if err == nil {
+			t.Fatal("non-bool valid accepted")
+		}
+	})
+
+	t.Run("companion execute rejects malformed starts", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "not-a-date", "ends": "2026-08-31 18:00:00", "duration-unit": "HOUR",
+		}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("companion execute rejects malformed ends", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "2026-08-31 09:00:00", "ends": "not-a-date", "duration-unit": "HOUR",
+		}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("companion surfaces transport failure", func(t *testing.T) {
+		err := executeAttendanceTransportError(t, CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "2026-08-31 09:00:00", "ends": "2026-08-31 18:00:00", "duration-unit": "HOUR",
+		})
+		if err == nil {
+			t.Fatal("transport failure swallowed")
+		}
+	})
+
+	t.Run("calculate execute rejects malformed start", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CalculateApproveDuration, map[string]string{
+			"biz-type": "1", "duration-mode": "3", "start": "not-a-date", "end": "2026-09-02 07:00:00",
+		}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("calculate execute rejects malformed end", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, CalculateApproveDuration, map[string]string{
+			"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "not-a-date",
+		}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("complex overtime execute rejects malformed work date", func(t *testing.T) {
+		caller, err := executeAttendanceResponse(t, GetComplexOvertimeSetting, map[string]string{"users": "u1", "work-date": "not-a-date"}, `{"success":true}`)
+		if err == nil || caller.calls != 0 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAttendanceApprovalValidationAcceptsValidPayloads(t *testing.T) {
+	valid := []struct {
+		name        string
+		declaration shortcut.Shortcut
+		values      map[string]string
+	}{
+		{"calculate full half-day payload", CalculateApproveDuration, map[string]string{
+			"biz-type": "3", "duration-mode": "2", "start": "2026-09-01 09:00:00", "end": "2026-09-01 18:00:00",
+			"half-start": "AM", "half-end": "PM", "principal-users": "u1,u2",
+			"duration-in-day": "1", "modified-date": "2026-09-01 12:00:00",
+			"detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInDay":"1"},{"workDate":1788278400000,"durationInDay":0.5}]`,
+		}},
+		{"calculate hour payload", CalculateApproveDuration, map[string]string{
+			"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00",
+			"duration-in-hour": "8", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}]`,
+		}},
+		{"companion ranges", CheckCompanionSchedules, map[string]string{
+			"approve-type": "2", "starts": "2026-08-31 09:00:00,2026-09-01 09:00:00", "ends": "2026-08-31 18:00:00,2026-09-01 18:00:00",
+			"duration-unit": "HOUR",
+		}},
+		{"complex overtime with work date", GetComplexOvertimeSetting, map[string]string{"users": "u1,u2", "work-date": "2026-08-31"}},
+	}
+	for _, tc := range valid {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &attendanceCoverageCaller{text: `{"success":true,"result":{}}`}
+			helpers.InitDepsForTest(t, caller)
+			rt := attendanceRuntimeForTest(t, tc.declaration, tc.values)
+			if err := tc.declaration.Validate(rt); err != nil {
+				t.Fatalf("valid values rejected for %s: %v", tc.declaration.Command, err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("%s made %d downstream calls during validation", tc.declaration.Command, caller.calls)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageAttendanceRuntimeConstraintsFailBeforeCall(t *testing.T) {
@@ -497,20 +688,39 @@ func TestCrossPlatformCoverageAttendanceRuntimeConstraintsFailBeforeCall(t *test
 		{"calculate duration-in-hour Inf", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-01-01 19:00:00", "end": "2026-01-02 07:00:00", "duration-in-hour": "Inf"}},
 		{"calculate duration-in-day zero for day mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "1", "start": "2026-01-01 09:00:00", "end": "2026-01-01 18:00:00", "duration-in-day": "0"}},
 		{"calculate duration-in-hour rejected for day mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "1", "start": "2026-01-01 09:00:00", "end": "2026-01-01 18:00:00", "duration-in-hour": "8"}},
-		{"calculate detail-list negative duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"-4"}`}},
-		{"calculate detail-list zero duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":0}`}},
-		{"calculate detail-list NaN duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"NaN"}`}},
-		{"calculate detail-list null duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":null}`}},
-		{"calculate detail-list object duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":{}}`}},
-		{"calculate detail-list non-numeric string duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"abc"}`}},
-		{"calculate detail-list missing duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00"}`}},
-		{"calculate detail-list hour and day together", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"4","durationInDay":"1"}`}},
-		{"calculate detail-list durationInDay rejected for hour mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInDay":"1"}`}},
-		{"calculate detail-list durationInHour rejected for day mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "1", "start": "2026-09-01 09:00:00", "end": "2026-09-02 18:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}`}},
-		{"calculate detail-list fractional workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":1788278400000.5,"durationInHour":"4"}`}},
-		{"calculate detail-list second-granularity workDate", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":1788278400,"durationInHour":"4"}`}},
-		{"calculate detail-list tiny workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":1000,"durationInHour":"4"}`}},
-		{"calculate detail-list oversized workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":10000000000000000000,"durationInHour":"4"}`}},
+		{"calculate biz-type out of range", CalculateApproveDuration, map[string]string{"biz-type": "0", "duration-mode": "3", "start": "2026-01-01", "end": "2026-01-02"}},
+		{"calculate duration-mode out of range", CalculateApproveDuration, map[string]string{"biz-type": "3", "duration-mode": "0", "start": "2026-01-01", "end": "2026-01-02"}},
+		{"calculate start malformed", CalculateApproveDuration, map[string]string{"biz-type": "3", "duration-mode": "3", "start": "not-a-date", "end": "2026-01-02 07:00:00"}},
+		{"calculate end malformed", CalculateApproveDuration, map[string]string{"biz-type": "3", "duration-mode": "3", "start": "2026-01-01 19:00:00", "end": "not-a-date"}},
+		{"calculate half-start without half mode", CalculateApproveDuration, map[string]string{"biz-type": "3", "duration-mode": "3", "start": "2026-01-01 19:00:00", "end": "2026-01-02 07:00:00", "half-start": "AM"}},
+		{"calculate principal-users duplicate", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-01-01 19:00:00", "end": "2026-01-02 07:00:00", "principal-users": "u1,u1"}},
+		{"calculate modified-date malformed", CalculateApproveDuration, map[string]string{"biz-type": "3", "duration-mode": "3", "start": "2026-01-01 19:00:00", "end": "2026-01-02 07:00:00", "modified-date": "2026-01-01"}},
+		{"calculate detail-list not an array", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}`}},
+		{"calculate detail-list empty array", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[]`}},
+		{"calculate detail-list item missing workDate", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"durationInHour":"4"}]`}},
+		{"calculate detail-list blank workDate", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"","durationInHour":"4"}]`}},
+		{"calculate detail-list bad workDate format", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01","durationInHour":"4"}]`}},
+		{"calculate detail-list negative duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"-4"}]`}},
+		{"calculate detail-list zero duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":0}]`}},
+		{"calculate detail-list NaN duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"NaN"}]`}},
+		{"calculate detail-list null duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":null}]`}},
+		{"calculate detail-list object duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":{}}]`}},
+		{"calculate detail-list non-numeric string duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"abc"}]`}},
+		{"calculate detail-list missing duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00"}]`}},
+		{"calculate detail-list hour and day together", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"4","durationInDay":"1"}]`}},
+		{"calculate detail-list durationInDay rejected for hour mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInDay":"1"}]`}},
+		{"calculate detail-list durationInHour rejected for day mode", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "1", "start": "2026-09-01 09:00:00", "end": "2026-09-02 18:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}]`}},
+		{"calculate detail-list negative day duration", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "1", "start": "2026-09-01 09:00:00", "end": "2026-09-02 18:00:00", "detail-list": `[{"workDate":"2026-09-01 00:00:00","durationInDay":"-1"}]`}},
+		{"calculate detail-list fractional workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":1788278400000.5,"durationInHour":"4"}]`}},
+		{"calculate detail-list second-granularity workDate", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":1788278400,"durationInHour":"4"}]`}},
+		{"calculate detail-list tiny workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":1000,"durationInHour":"4"}]`}},
+		{"calculate detail-list oversized workDate millis", CalculateApproveDuration, map[string]string{"biz-type": "1", "duration-mode": "3", "start": "2026-09-01 19:00:00", "end": "2026-09-02 07:00:00", "detail-list": `[{"workDate":10000000000000000000,"durationInHour":"4"}]`}},
+		{"companion approve-type out of range", CheckCompanionSchedules, map[string]string{"approve-type": "3", "starts": "2026-01-01 09:00:00", "ends": "2026-01-01 18:00:00", "duration-unit": "HOUR"}},
+		{"companion starts item malformed", CheckCompanionSchedules, map[string]string{"approve-type": "2", "starts": "2026-01-01 09:00:00,not-a-date", "ends": "2026-01-01 18:00:00,2026-01-01 19:00:00", "duration-unit": "HOUR"}},
+		{"companion ends item malformed", CheckCompanionSchedules, map[string]string{"approve-type": "2", "starts": "2026-01-01 09:00:00", "ends": "not-a-date", "duration-unit": "HOUR"}},
+		{"companion end before start", CheckCompanionSchedules, map[string]string{"approve-type": "2", "starts": "2026-01-02 09:00:00", "ends": "2026-01-02 08:00:00", "duration-unit": "HOUR"}},
+		{"companion principal-users duplicate", CheckCompanionSchedules, map[string]string{"approve-type": "2", "starts": "2026-01-01 09:00:00", "ends": "2026-01-01 18:00:00", "principal-users": "u1,u1", "duration-unit": "HOUR"}},
+		{"complex overtime work-date malformed", GetComplexOvertimeSetting, map[string]string{"users": "u1", "work-date": "not-a-date"}},
 		{"companion mismatched ranges", CheckCompanionSchedules, map[string]string{"approve-type": "2", "starts": "2026-01-01,2026-01-02", "ends": "2026-01-01", "duration-unit": "HOUR"}},
 		{"complex overtime duplicate users", GetComplexOvertimeSetting, map[string]string{"users": "u1,u1"}},
 		{"schedule empty users", GetSchedule, map[string]string{"users": ",", "start": "2026-01-01", "end": "2026-01-31"}},
