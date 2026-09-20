@@ -215,7 +215,7 @@ func fingerprintSkillPathInto(h hash.Hash, path string) error {
 			}
 		}
 		return nil
-	case info.Mode()&os.ModeSymlink != 0:
+	case isSkillPathLink(info.Mode()):
 		target, err := skillPathReadlink(path)
 		if err != nil {
 			return err
