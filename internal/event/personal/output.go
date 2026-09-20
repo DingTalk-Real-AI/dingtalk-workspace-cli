@@ -34,6 +34,9 @@ type MessageEventOutput struct {
 	SubscribeID          string                `json:"subscribe_id" description:"订阅 ID"`
 	MessageID            string                `json:"message_id" description:"开放消息 ID" format:"open_message_id"`
 	ConversationID       string                `json:"conversation_id" description:"会话 ID" format:"open_conversation_id"`
+	ThreadID             string                `json:"thread_id,omitempty" description:"上游提供的话题子会话 ID；缺失时省略，不从父群推断"`
+	ParentConversationID string                `json:"parent_conversation_id,omitempty" description:"上游明确提供的话题父会话 ID；缺失时省略"`
+	RootMessageID        string                `json:"root_message_id,omitempty" description:"上游提供的话题根消息 ID；缺失时省略"`
 	Sender               string                `json:"sender" description:"发送人展示名"`
 	SenderOpenDingTalkID string                `json:"sender_open_dingtalk_id" description:"发送人开放 ID" format:"open_dingtalk_id"`
 	Content              string                `json:"content" description:"消息正文"`
@@ -588,6 +591,9 @@ type personalMessagePayload struct {
 		OpenMessageID        string                   `json:"openMessageId"`
 		SenderOpenDingTalkID string                   `json:"senderOpenDingTalkId"`
 		OpenConversationID   string                   `json:"openConversationId"`
+		OpenConvThreadID     string                   `json:"openConvThreadId"`
+		ParentConversationID string                   `json:"parentConversationId"`
+		RootMessageID        string                   `json:"rootMessageId"`
 		Content              string                   `json:"content"`
 		QuotedMessage        *personalMessageContext  `json:"quotedMessage"`
 		ForwardMessages      []personalMessageContext `json:"forwardMessages"`
@@ -859,6 +865,9 @@ func ProjectOutput(ev transport.Event) (any, error) {
 			SubscribeID:          subscribeID,
 			MessageID:            payload.Body.OpenMessageID,
 			ConversationID:       payload.Body.OpenConversationID,
+			ThreadID:             payload.Body.OpenConvThreadID,
+			ParentConversationID: payload.Body.ParentConversationID,
+			RootMessageID:        payload.Body.RootMessageID,
 			Sender:               payload.Body.Sender,
 			SenderOpenDingTalkID: payload.Body.SenderOpenDingTalkID,
 			Content:              payload.Body.Content,

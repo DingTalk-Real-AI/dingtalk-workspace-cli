@@ -497,6 +497,7 @@ func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
 				"type", "event_id", "timestamp", "subscribe_id", "message_id",
 				"conversation_id", "sender", "sender_open_dingtalk_id", "content",
 				"create_time", "event_time", "quoted_message", "forward_messages",
+				"thread_id", "parent_conversation_id", "root_message_id",
 			}
 			if len(props) != len(wantProperties) {
 				t.Fatalf("schema.properties = %#v, want exactly %d DTO fields", props, len(wantProperties))
