@@ -291,6 +291,22 @@ Credentials are securely persisted after first login (Keychain). Subsequent runs
 
 `dws` can stay logged in to several DingTalk accounts at once, including multiple accounts in the same organization. A profile is uniquely identified by `corpId:userId`; the current profile decides which identity a command runs as.
 
+Business commands automatically check and refresh local OAuth credentials as needed;
+there is no need to run `auth status` before each request. `auth status` retains
+refresh, migration and repair behavior and may wait for the authentication lock.
+For concurrent polling, use `dws auth status --readonly --format json` (optionally with
+`--profile`): it reads a local snapshot without the authentication lock, network
+validation, refresh, migration or credential writes. System Keychain reads can
+still wait. Both modes use the same output fields. A read-only result with a
+non-empty `reason` is inconclusive and must not be treated as a confirmed logout;
+`local_state_requires_repair` signals migration/repair and `local_state_unreadable`
+signals a failed local read. Use `auth status` without `--readonly` with the same
+profile for refresh or repair. Read-only mode never reports a refresh and may
+report an expired access token that normal mode would refresh.
+Concurrent updates may yield an older snapshot or an inconclusive result.
+In both modes, `authenticated` is true when either the access or refresh
+credential is valid; `token_valid` separately describes access-token usability.
+
 ```bash
 dws auth login                              # add or refresh one account
 dws profile list                            # list every logged-in account

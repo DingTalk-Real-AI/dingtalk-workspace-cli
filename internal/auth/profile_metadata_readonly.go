@@ -13,12 +13,65 @@
 
 package auth
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
+)
 
 type ProfileMetadata = profilemetadata.ProfileMetadata
 
 // ResolveProfileMetadataReadOnly reads only non-sensitive profiles.json metadata.
 // Keep selection and normalization pure so startup checks do not initialize auth.
 func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadata, error) {
-	return profilemetadata.ResolveReadOnlyWithReader(configDir, selector, profilesReadFile)
+	cfg, err := loadProfileMetadataReadOnly(configDir)
+	if err != nil || cfg == nil {
+		return nil, err
+	}
+	profile, err := resolveProfileFromSnapshot(cfg, selector)
+	if err != nil || profile == nil {
+		return nil, err
+	}
+	return &ProfileMetadata{
+		UserID:   profile.UserID,
+		UserName: profile.UserName,
+		CorpID:   profile.CorpID,
+	}, nil
+}
+
+// loadProfileMetadataReadOnly never quarantines or repairs the persisted
+// registry. Callers get a private snapshot, not a multi-file transaction.
+func loadProfileMetadataReadOnly(configDir string) (*ProfilesConfig, error) {
+	data, err := profilesReadFile(ProfilesPath(configDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read profile metadata: %w", err)
+	}
+
+	var cfg ProfilesConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse profile metadata: %w", err)
+	}
+	if cfg.Version > profilesMaxVersion {
+		return nil, fmt.Errorf("profile metadata version %d is newer than supported version %d", cfg.Version, profilesMaxVersion)
+	}
+	normalizeProfilesConfig(&cfg)
+	return &cfg, nil
+}
+
+func resolveProfileFromSnapshot(cfg *ProfilesConfig, selector string) (*Profile, error) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		selector = strings.TrimSpace(cfg.CurrentProfile)
+		if selector == "" {
+			return nil, nil
+		}
+	}
+	profile, _, err := resolveProfileSelection("", cfg, selector)
+	return profile, err
 }

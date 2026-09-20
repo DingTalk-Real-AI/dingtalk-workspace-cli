@@ -115,7 +115,7 @@ func runAisearchPerson(cmd *cobra.Command, _ []string) error {
 		return validateRequiredFlags(cmd, "query")
 	}
 	dimensions := parseDimensions(flagValue(cmd, "dimension"))
-	return callMCPTool("enterprise_person_search", map[string]any{
+	return runAisearchPersonWithEvidence(cmd, map[string]any{
 		"keyword":   keyword,
 		"dimension": dimensions,
 	})
@@ -137,7 +137,7 @@ func runAisearchEnterprise(cmd *cobra.Command, _ []string) error {
 	if v := aisearchFlagOrFallback(cmd, "time-range", "timeRange"); v != "" {
 		toolArgs["timeRange"] = v
 	}
-	return callMCPTool("search_enterprise", toolArgs)
+	return runAisearchWithEvidence(cmd, "search_enterprise", toolArgs)
 }
 
 // runAisearchBehavior 调用企业内部行为记录搜索工具。该能力和 person 同属
@@ -166,7 +166,7 @@ func runAisearchBehavior(cmd *cobra.Command, _ []string) error {
 	if v := flagValue(cmd, "direction"); v != "" {
 		toolArgs["direction"] = v
 	}
-	return callMCPTool("search_enterprise_behavior", toolArgs)
+	return runAisearchWithEvidence(cmd, "search_enterprise_behavior", toolArgs)
 }
 
 func normalizeAisearchSearchTypes(values []string) []string {
@@ -197,6 +197,10 @@ func newAisearchCommand() *cobra.Command {
 			AgentSummary: "企业内智能搜人、搜知识内容与搜行为记录",
 			UseWhen: []string{
 				"需要语义找人、跨来源按主题发现企业知识，或查询当前用户参与的发送/接收及创建/分享行为轨迹",
+				"用户不确定对象位于文档、消息、邮件、待办、日程等哪种来源，或要求先跨来源定位再读取唯一对象",
+				"需要从会议、议题、项目等内容中定位负责人或职责线索，而非枚举已知部门成员",
+				"按某个人和时间查其发来的消息或文件线索并做摘要，且不要求完整消息分页终态",
+				"在资料与邮件、待办与消息、日程与消息之间查找同名对象并按唯一稳定 ID 补充详情",
 			},
 			AvoidWhen: []string{
 				"资源范围仅为 IM、答案形态是逐条消息记录且带结构化消息谓词时使用 chat；已有明确资源 ID 要读写时改用对应产品",
@@ -386,7 +390,7 @@ func newAisearchCommand() *cobra.Command {
 	behaviorCmd := &cobra.Command{
 		Use:   "behavior",
 		Short: "搜索明确的发送/创建/接收等行为记录",
-		Long: `仅当用户询问当前用户参与的发送/接收，或当前用户创建、分享、编辑过什么等行为动作时，检索企业内部行为记录。
+		Long: `当用户询问当前用户参与的发送/接收，或当前用户创建、分享、编辑过什么等行为动作时，检索企业内部行为记录。按人物、时间和主题查消息线索并总结时也优先使用本命令；只有用户明确要求完整逐条消息集合或分页终态才切 chat。
 
 普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的方向描述行为关系，不定义某个人的完整消息发送集合；当资源范围仅为 IM 且答案必须是可枚举消息记录时，应使用 chat +search-msg。queries 只放内容关键词；时间放到 --time-range，类型放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。`,
 		Example: `  dws aisearch behavior --types mail --behavior-type send --direction "我->汐峰"
@@ -417,15 +421,18 @@ func newAisearchCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "搜索发送/创建/分享/编辑/接收等明确行为记录",
-				UseWhen:      []string{"用户询问当前用户参与的发送/接收行为，或当前用户创建、分享、编辑过什么，并接受行为轨迹而非完整消息集合"},
+				UseWhen: []string{
+					"用户询问当前用户参与的发送/接收行为，或当前用户创建、分享、编辑过什么",
+					"按某人、时间和主题定位其发来的消息或文件线索，并只需找到候选或做摘要",
+				},
 				AvoidWhen: []string{
 					"只按主题找内容本身时用 aisearch enterprise",
-					"仅限 IM 且答案要求逐条消息、稳定发送者范围或完整分页时用 chat +search-msg；行为方向不能替代消息集合过滤",
+					"仅当用户明确要求完整逐条消息集合、稳定发送者范围或完整分页终态时用 chat +search-msg",
 					"没有行为动作词时不要选用本工具",
 				},
 				Examples: []string{
-					"dws aisearch behavior --types mail --behavior-type send --direction \"我->汐峰\" --format json",
-					"dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json",
+					"dws aisearch behavior --queries \"Word 文件\" --types im --behavior-type receive --direction \"陈邦杰->我\" --format json",
+					"dws aisearch behavior --types im --behavior-type receive --direction \"瑞达->我\" --time-range \"今天\" --format json",
 				},
 			},
 			Parameters: []contract.ParamDecl{
