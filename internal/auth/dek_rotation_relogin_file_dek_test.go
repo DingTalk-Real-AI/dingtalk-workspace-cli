@@ -141,4 +141,8 @@ func TestCrossPlatformCoverageV1ExplicitProfileMissingDEKRequestsRetry(t *testin
 	if err := SaveLoginTokenData(configDir, &fresh); err != nil {
 		t.Fatalf("second SaveLoginTokenData() error = %v", err)
 	}
+	stored, err := LoadTokenDataForProfile(configDir, TokenProfileSelector(&fresh))
+	if err != nil || stored == nil || stored.AccessToken != fresh.AccessToken {
+		t.Fatalf("stored token after retry = %#v, %v; want access token %q", stored, err, fresh.AccessToken)
+	}
 }

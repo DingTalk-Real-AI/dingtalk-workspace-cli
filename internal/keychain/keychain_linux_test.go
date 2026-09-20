@@ -49,3 +49,22 @@ func TestCrossPlatformCoverageLinuxAuthInventoryUsesMismatchClassification(t *te
 		t.Fatalf("ValidateAuthTokenEntries() error = %v, want ciphertext key mismatch", err)
 	}
 }
+
+func TestCrossPlatformCoverageLinuxMissingDEKRemainsMissing(t *testing.T) {
+	t.Setenv(StorageDirEnv, t.TempDir())
+	service := "linux-missing-dek-" + t.Name()
+
+	if err := Set(service, AccountToken, "old-secret"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(StorageDir(service), "dek")); err != nil {
+		t.Fatalf("remove DEK: %v", err)
+	}
+
+	if _, err := Get(service, AccountToken); !IsDEKMissing(err) || IsCiphertextKeyMismatch(err) {
+		t.Fatalf("Get() error = %v, want DEK missing only", err)
+	}
+	if err := ValidateAuthTokenEntries(service); !IsDEKMissing(err) || IsCiphertextKeyMismatch(err) {
+		t.Fatalf("ValidateAuthTokenEntries() error = %v, want DEK missing only", err)
+	}
+}
