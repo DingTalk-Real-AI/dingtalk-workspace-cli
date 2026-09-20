@@ -300,6 +300,7 @@ func TestCrossPlatformCoverageSkillSetupCanonicalCopyFallbackMessage(t *testing.
 func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
+		mode         string
 		failStat     bool
 		notDir       bool
 		skillStatErr bool
@@ -307,7 +308,9 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 		failOpen     bool
 		failTemp     bool
 		failPrep     bool
+		failSecond   bool
 	}{
+		{name: "mono stat error", mode: skillSetupModeMono, failStat: true},
 		{name: "stat error", failStat: true},
 		{name: "link not a directory", notDir: true},
 		{name: "skill.md stat error", skillStatErr: true},
@@ -315,24 +318,35 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 		{name: "skill entry read", failOpen: true},
 		{name: "staging temp error", failTemp: true},
 		{name: "staging prep error", failPrep: true},
+		{name: "staging cleanup second link error", failSecond: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
 			canonical := filepath.Join(home, ".agents", "skills")
 			claude := filepath.Join(home, ".claude", "skills")
 			src := t.TempDir()
-			skillSrc := filepath.Join(src, "dingtalk-chat")
-			if err := os.MkdirAll(skillSrc, 0o755); err != nil {
-				t.Fatal(err)
+			for _, name := range []string{"dingtalk-chat", "dingtalk-shared"} {
+				skillSrc := filepath.Join(src, name)
+				if err := os.MkdirAll(skillSrc, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte(name), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
-			if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("mono"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
 			testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
 
 			var stagedPath string
+			calls := 0
 			testseam.Swap(t, &skillSetupSymlink, func(_, link string) error {
+				calls++
+				if tc.failSecond && calls == 2 {
+					return errors.New("second link failed")
+				}
 				stagedPath = link
 				return nil
 			})
@@ -383,22 +397,52 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 					}
 					return originalOpen(path)
 				})
+			} else {
+				originalOpen := skillSetupOpen
+				testseam.Swap(t, &skillSetupOpen, func(path string) (*os.File, error) {
+					if stagedPath != "" && path == filepath.Join(stagedPath, "SKILL.md") {
+						return os.Open(filepath.Join(src, "dingtalk-chat", "SKILL.md"))
+					}
+					return originalOpen(path)
+				})
 			}
 
-			plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
+			mode := skillSetupModeMulti
+			if tc.mode != "" {
+				mode = tc.mode
+			}
+			canonicalDest := canonical
+			if mode == skillSetupModeMono {
+				canonicalDest = filepath.Join(canonical, "dws")
+			}
+			destClaude := claude
+			if mode == skillSetupModeMono {
+				destClaude = filepath.Join(claude, "dws")
+			}
+			plan, err := buildSkillSetupPlan(mode, src, []string{canonicalDest, destClaude}, []string{"dingtalk-chat", "dingtalk-shared"}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var out, errOut bytes.Buffer
 			installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
-			if err != nil || installed != 2 || skipped != 0 {
+			expectedInstalled := 4
+			if mode == skillSetupModeMono {
+				expectedInstalled = 2
+			}
+			if err != nil || installed != expectedInstalled || skipped != 0 {
 				t.Fatalf("execute = installed %d skipped %d err %v", installed, skipped, err)
 			}
 			if !strings.Contains(errOut.String(), "自动改用兼容安装") {
 				t.Fatalf("fallback message missing: %s", errOut.String())
 			}
-			body, err := os.ReadFile(filepath.Join(claude, "dingtalk-chat", "SKILL.md"))
-			if err != nil || string(body) != "chat" {
+			skillFile := filepath.Join(claude, "dingtalk-chat", "SKILL.md")
+			expectedContent := "dingtalk-chat"
+			if mode == skillSetupModeMono {
+				skillFile = filepath.Join(claude, "dws", "SKILL.md")
+				expectedContent = "mono"
+			}
+			body, err := os.ReadFile(skillFile)
+			if err != nil || string(body) != expectedContent {
 				t.Fatalf("fallback Skill unreadable: %q, %v", body, err)
 			}
 		})

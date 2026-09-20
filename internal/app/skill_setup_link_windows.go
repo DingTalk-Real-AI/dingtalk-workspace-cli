@@ -79,16 +79,25 @@ func junctionSubstituteName(target string) (string, error) {
 	if target == "" {
 		return "", fmt.Errorf("junction target is empty")
 	}
+	var prefix, clean string
 	if strings.HasPrefix(target, `\\?\UNC\`) {
-		return `\??\UNC\` + strings.TrimPrefix(target, `\\?\UNC\`), nil
+		prefix = `\??\UNC\`
+		clean = strings.TrimPrefix(target, `\\?\UNC\`)
+	} else if strings.HasPrefix(target, `\\?\`) {
+		prefix = `\??\`
+		clean = strings.TrimPrefix(target, `\\?\`)
+	} else if strings.HasPrefix(target, `\\`) {
+		prefix = `\??\UNC\`
+		clean = strings.TrimPrefix(target, `\\`)
+	} else {
+		prefix = `\??\`
+		clean = target
 	}
-	if strings.HasPrefix(target, `\\?\`) {
-		return `\??\` + strings.TrimPrefix(target, `\\?\`), nil
+	result := prefix + clean
+	if !strings.HasSuffix(result, `\`) {
+		result += `\`
 	}
-	if strings.HasPrefix(target, `\\`) {
-		return `\??\UNC\` + strings.TrimPrefix(target, `\\`), nil
-	}
-	return `\??\` + target, nil
+	return result, nil
 }
 
 func mountPointReparseBuffer(substitute, printName string) ([]byte, error) {
