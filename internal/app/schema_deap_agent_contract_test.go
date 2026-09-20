@@ -78,13 +78,18 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 		"dingtalk-tag.create_digital_employee": {
 			"dingtalk-tag manage create", "create_digital_employee", "write", "medium", "not_required",
 			map[string]string{
-				"name": "name", "description": "description", "dept-id": "deptId", "dept-name": "deptName",
-				"icon": "icon", "profile-json": "digitalTagEmployeeProfile",
-				"employee-no":       "digitalTagEmployeeProfile.employeeNo",
-				"position-name":     "digitalTagEmployeeProfile.positionName",
-				"supervisor-uid":    "digitalTagEmployeeProfile.directSupervisorUid",
-				"main-program-type": "digitalTagEmployeeProfile.mainProgramType",
-				"response-mode":     "digitalTagEmployeeProfile.responseMode",
+				"name": "name", "description": "description", "dept-id": "deptId",
+				"avatar-url":         "avatarUrl",
+				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
+				"main-program-type":  "type",
+				"response-mode":      "digitalTagEmployeeProfile.responseMode",
+			},
+		},
+		"dingtalk-tag.set_visibility": {
+			"dingtalk-tag manage set-visibility", "set_visibility", "write", "high", "user_required",
+			map[string]string{
+				"agent-uuid": "agentUuid", "visibility": "visibility",
+				"staff-ids": "staffIds", "dept-ids": "deptIds",
 			},
 		},
 		"dingtalk-tag.get_digital_employee_detail": {
@@ -94,7 +99,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 		"dingtalk-tag.list_digital_employees": {
 			"dingtalk-tag manage list", "list_digital_employees", "read", "low", "not_required",
 			map[string]string{
-				"keyword": "keyword", "main-program-type": "mainProgramType",
+				"keyword": "keyword", "main-program-type": "type",
 				"page": "page", "page-size": "pageSize",
 			},
 		},
@@ -106,13 +111,11 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			"dingtalk-tag manage save-draft", "update_digital_employee_draft", "write", "high", "user_required",
 			map[string]string{
 				"agent-uuid": "agentUuid", "name": "name", "description": "description", "dept-id": "deptId",
-				"dept-name": "deptName", "icon": "icon", "prompt": "prompt", "profile-json": "digitalTagEmployeeProfile",
-				"employee-no":       "digitalTagEmployeeProfile.employeeNo",
-				"position-name":     "digitalTagEmployeeProfile.positionName",
-				"supervisor-uid":    "digitalTagEmployeeProfile.directSupervisorUid",
-				"main-program-type": "digitalTagEmployeeProfile.mainProgramType",
-				"response-mode":     "digitalTagEmployeeProfile.responseMode",
-				"skills-file":       "skills", "mcps-file": "mcps",
+				"avatar-url": "avatarUrl", "prompt": "prompt",
+				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
+				"main-program-type":  "type",
+				"response-mode":      "digitalTagEmployeeProfile.responseMode",
+				"skills-file":        "skills", "mcps-file": "mcps",
 			},
 		},
 		"dingtalk-tag.publish_digital_employee": {
@@ -292,7 +295,7 @@ func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing
 	for surface, description := range map[string]string{
 		"help": help.String(), "final schema": schemaContractString(tool["description"]),
 	} {
-		for _, want := range []string{"自动追加", "selectedSkills", "保留已有选择", "不克隆", "不自动发布", "stage=query_created_mcp", "stage=mount_draft", "禁止重复 create", "串行", "仅升级 CLI"} {
+		for _, want := range []string{"自动挂载", "回读确认", "保留已有选择", "不克隆", "不自动发布", "stage=query_created_mcp", "stage=mount_draft", "禁止重复 create", "串行", "仅升级 CLI"} {
 			if !strings.Contains(description, want) {
 				t.Errorf("%s missing %q", surface, want)
 			}
