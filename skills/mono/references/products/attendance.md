@@ -267,7 +267,7 @@ Flags:
       --half-end string      半天模式结束时段：AM 或 PM（--duration-mode 2 时必填）
       --principal-users strings  出差、外出等场景的同行人员工 userId，逗号分隔
       --new-overtime           是否使用新版加班规则；加班链路必传（正文见下）
-      --detail-list string     多日逐日明细 JSON 数组，如 [{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}]；跨天窗口必传
+      --detail-list string     多日逐日明细 JSON 数组，如 [{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}]；跨天/歧义窗口在两阶段确认的二阶段携带，首阶段省略以获取服务端逐日骨架
       --duration-in-hour string  提议总时长（小时，数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3
       --duration-in-day string   提议总时长（天，数字）；歧义窗口携带，仅 --duration-mode 1/2
       --modified-date string   明细修改日，格式 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带

@@ -661,7 +661,7 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		{Name: "nature-day", Type: shortcut.FlagBool, Desc: "是否按自然日计算；不传时沿用业务默认规则"},
 		{Name: "duration-in-hour", Type: shortcut.FlagString, Desc: "提议总时长（小时，大于 0 的数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3"},
 		{Name: "duration-in-day", Type: shortcut.FlagString, Desc: "提议总时长（天，大于 0 的数字）；歧义窗口携带，仅 --duration-mode 1/2"},
-		{Name: "detail-list", Type: shortcut.FlagString, Desc: "多日逐日明细 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss 或 13 位毫秒时间戳整数）与大于 0 的 durationInHour 或 durationInDay（互斥且与单位匹配），如 [{\"workDate\":\"2026-09-01 00:00:00\",\"durationInHour\":\"4\"}]；跨天窗口必传"},
+		{Name: "detail-list", Type: shortcut.FlagString, Desc: "多日逐日明细 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss 或 13 位毫秒时间戳整数）与大于 0 的 durationInHour 或 durationInDay（互斥且与单位匹配），如 [{\"workDate\":\"2026-09-01 00:00:00\",\"durationInHour\":\"4\"}]；跨天/歧义窗口在两阶段确认的二阶段携带，首阶段省略以获取服务端逐日骨架"},
 		{Name: "modified-date", Type: shortcut.FlagString, Desc: "明细修改日，--modified-date 格式为 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带"},
 	},
 	Constraints: []shortcut.Constraint{
