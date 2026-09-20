@@ -49,7 +49,7 @@ metadata:
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
 | `aitable` | 126 | `dingtalk-aitable` |
-| `attendance` | 8 | `dingtalk-misc` |
+| `attendance` | 11 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 102 | `dingtalk-chat` |
 | `contact` | 13 | `dingtalk-contact` |

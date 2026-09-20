@@ -287,6 +287,15 @@ dws auth login --client-id <your-app-key> --client-secret <your-app-secret>
 
 `dws` 可以同时登录多个钉钉账号，同一组织也能保留多个账号。一个 profile 由 `corpId + userId` 唯一确定。
 
+业务命令会检查本地 OAuth token 并按需自动刷新，无需先执行认证状态查询。
+`dws auth status` 保留刷新、迁移和修复能力，可能等待认证锁。
+并发轮询请使用 `dws auth status --readonly --format json`（支持 `--profile`）：只读本地快照，不获取认证锁、不刷新、不迁移或写入凭证；系统 Keychain 读取仍可能等待。
+两种模式返回相同字段，但只读模式不会报告刷新成功，可能返回普通模式会刷新掉的过期 token 状态。
+只读结果的 `reason` 非空时表示无法判断，不能仅凭 `authenticated: false` 当作已确认未登录；`local_state_requires_repair` 表示需要迁移或修复，`local_state_unreadable` 表示读取失败。
+需要刷新或修复时使用相同 profile 运行 `auth status`（不加 `--readonly`）。
+两种模式的 `authenticated` 判断一致：access token 或 refresh token 任一个有效即为已认证；`token_valid` 单独表示 access token 是否可用。
+本地快照不验证服务端状态，并发更新时可能读到旧值或无法确定的结果。
+
 ```bash
 dws auth login                              # 新增或刷新一个账号
 dws profile list                            # 列出全部账号，profile 字段是稳定的 corpId:userId
@@ -352,7 +361,7 @@ dws todo task list --dry-run                       # 预览操作但不执行
 
 ### 白板
 
-使用 `dws whiteboard` 操作独立白板和文档内嵌白板：查询内容、通过 OpenNodes 创建／更新、使用 `+diff` 预览变更、生成本地 SVG 预览，以及管理个人／团队模板。
+使用 `dws whiteboard` 操作独立白板和文档内嵌白板：查询内容、通过 OpenNodes 创建／更新、使用 `+diff` 预览变更、生成本地 SVG 预览，以及管理个人／团队模板或使用公共模板。
 
 ```bash
 dws whiteboard --help
@@ -360,6 +369,7 @@ dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.sv
 dws whiteboard +diff --help
 dws whiteboard template personal list --format json
 dws whiteboard template team list --template-workspace "<团队空间ID>" --page-all --format json
+dws whiteboard template public list --query "复盘" --format json
 ```
 
 `whiteboard.json` 为 OpenNodes 源文件。SVG 是本地预览，需要查看还原程度和警告，并确认当前预览后再创建白板；更新前使用 `+diff` 检查拟写入内容，再执行 `+update`。模板 `save`／`create` 命令的 `--dry-run` 是可选的服务端预检，不实际保存模板或创建白板。

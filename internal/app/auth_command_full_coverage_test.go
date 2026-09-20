@@ -1100,7 +1100,7 @@ func TestCrossPlatformCoverageAuthCoverageStatusAndLogout(t *testing.T) {
 		return nil, keychain.NewUnavailableError("read", errors.New("status"))
 	}
 	edition.Override(&edition.Hooks{})
-	if out, err := runStatus("table"); err != nil || !strings.Contains(out, "未登录") {
+	if out, err := runStatus("table"); err != nil || !strings.Contains(out, "无法判断") {
 		t.Fatalf("status error = %q, %v", out, err)
 	}
 	if out, err := runStatus("json"); err != nil || !strings.Contains(out, `"authenticated": false`) {

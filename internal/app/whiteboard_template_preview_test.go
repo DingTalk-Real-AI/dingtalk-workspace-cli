@@ -19,7 +19,7 @@ func TestCrossPlatformCoverageWhiteboardTemplatePreviewBoundary(t *testing.T) {
 		edition.ToolCaller
 		edition.WhiteboardTemplatePreviewCaller
 	})
-	for _, tool := range []string{whiteboard.PersonalTemplateSaveTool, whiteboard.TeamTemplateSaveTool, whiteboard.PersonalTemplateCreateTool, whiteboard.TeamTemplateCreateTool} {
+	for _, tool := range []string{whiteboard.PersonalTemplateSaveTool, whiteboard.TeamTemplateSaveTool, whiteboard.PersonalTemplateCreateTool, whiteboard.TeamTemplateCreateTool, whiteboard.PublicTemplateCreateTool} {
 		before := fallback.calls.Load()
 		if _, err := caller.CallWhiteboardTemplatePreview(ctx, tool, map[string]any{"dryRun": true}); err != nil {
 			t.Fatal(err)

@@ -134,6 +134,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 区域:
   - 默认使用国内钉钉 .com 登录与服务端点
   - --intl（或 --international）使用国际版 .io 登录；后续业务命令按所选 profile 自动路由
+  - --intl 登录默认输出英文文案与英文授权页；需要中文时显式设置 DWS_LANG=zh
 
 注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
@@ -155,6 +156,8 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			restoreLang := authLoginPushDisplayLang(cfg)
+			defer restoreLang()
 			var preOverrides authLoginEndpointOverrides
 			if cfg.PreURL != "" {
 				var err error
@@ -551,12 +554,16 @@ func newAuthStatusCommand() *cobra.Command {
 		Short: "查看认证状态",
 		Long: `查看当前或指定组织 profile 的认证状态。
 
-指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。`,
+指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。
+使用 --readonly 只读本地快照，不获取认证锁、不访问认证服务、不刷新、不迁移或修复。
+只读模式与普通模式使用相同输出字段，但不执行刷新，可能返回不同的 token 有效性。
+并发更新时可能读到旧快照或无法判断的状态；系统 Keychain 读取仍可能等待。`,
 		Example: `  dws auth status
   dws auth status --profile <corpId>
   dws auth status --profile <corpId>:<userId>
   dws auth status --profile "钉钉:孙博文"
-  dws auth status --profile <corpId> --format json`,
+  dws auth status --profile <corpId> --format json
+  dws auth status --readonly --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := defaultConfigDir()
@@ -565,6 +572,13 @@ func newAuthStatusCommand() *cobra.Command {
 				return apperrors.NewInternal("failed to read --profile")
 			}
 			profileSelector = strings.TrimSpace(profileSelector)
+			readonly, err := cmd.Flags().GetBool("readonly")
+			if err != nil {
+				return apperrors.NewInternal("failed to read --readonly")
+			}
+			if readonly {
+				return runAuthStatusReadOnly(cmd, configDir, profileSelector)
+			}
 			if profileSelector != "" {
 				selected, resolveErr := authpkg.ResolveProfile(configDir, profileSelector)
 				if resolveErr != nil {
@@ -621,51 +635,61 @@ func newAuthStatusCommand() *cobra.Command {
 				diagnostic = authStatusRefreshDiagnostic(refreshFailure)
 			}
 
-			// Check if JSON output is requested
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if strings.EqualFold(strings.TrimSpace(format), "json") {
-				return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
-			}
-
-			// Default table output
-			w := cmd.OutOrStdout()
-			if authenticated {
-				if refreshed {
-					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
-					fmt.Fprintln(w, "Token 已自动刷新")
-				} else {
-					fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
-				}
-				if tokenData != nil {
-					if tokenData.CorpName != "" {
-						fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
-					}
-					if tokenData.CorpID != "" {
-						fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
-					}
-					if tokenData.IsRefreshTokenValid() {
-						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
-					} else {
-						fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
-					}
-				}
-				if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
-					fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
-				}
-			} else {
-				fmt.Fprintf(w, "%-16s%s\n", "状态:", "未登录")
-				if diagnostic != nil {
-					fmt.Fprintf(w, "%-16s%s\n", "原因:", diagnostic.Message)
-					fmt.Fprintf(w, "%-16s%s\n", "提示:", diagnostic.Hint)
-				} else if !edition.Get().IsEmbedded {
-					fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
-				}
-			}
-			return nil
+			return writeAuthStatusResult(cmd, authenticated, refreshed, tokenData, diagnostic)
 		},
 	}
 	cmd.Flags().String("profile", "", "指定组织或账号：corpId、corpName、corpId:userId、corpId:userName、corpName:userId、corpName:userName 或本地 profile 名")
+	cmd.Flags().Bool("readonly", false, "只读本地登录态，不获取认证锁、不刷新、不迁移或修复")
 	return cmd
+}
+
+// Both status modes render through the same compatibility-preserving path.
+func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, tokenData *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+	// Check if JSON output is requested
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if strings.EqualFold(strings.TrimSpace(format), "json") {
+		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
+	}
+
+	// Default table output
+	w := cmd.OutOrStdout()
+	if authenticated {
+		if refreshed {
+			fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
+			fmt.Fprintln(w, "Token 已自动刷新")
+		} else {
+			fmt.Fprintf(w, "%-16s%s\n", "状态:", "已登录 ✅")
+		}
+		if tokenData != nil {
+			if tokenData.CorpName != "" {
+				fmt.Fprintf(w, "%-16s%s\n", "企业:", tokenData.CorpName)
+			}
+			if tokenData.CorpID != "" {
+				fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
+			}
+			if tokenData.IsRefreshTokenValid() {
+				fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "有效 ✅")
+			} else {
+				fmt.Fprintf(w, "%-16s%s\n", "Refresh Token:", "缺失或已过期 ⚠️")
+			}
+		}
+		if updatedAt := authStatusUpdatedAt(tokenData); updatedAt != "" {
+			fmt.Fprintf(w, "%-16s%s\n", "有效期:", updatedAt)
+		}
+	} else {
+		status := "未登录"
+		if diagnostic != nil && authStatusInconclusive(diagnostic.Reason) {
+			status = "无法判断"
+		}
+		fmt.Fprintf(w, "%-16s%s\n", "状态:", status)
+		if diagnostic != nil {
+			fmt.Fprintf(w, "%-16s%s\n", "原因:", diagnostic.Message)
+			fmt.Fprintf(w, "%-16s%s\n", "提示:", diagnostic.Hint)
+		} else if !edition.Get().IsEmbedded {
+			fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
+		}
+	}
+	return nil
 }
 
 func newAuthMigrateKeychainCommand() *cobra.Command {
@@ -1007,6 +1031,14 @@ func authLoginFormatExpiry(t time.Time) string {
 		return i18n.T("1 小时后")
 	}
 	return i18n.Tf("%.0f 小时后", hours)
+}
+
+// authLoginPushDisplayLang 让国际版登录默认输出英文文案；DWS_LANG 显式指定时保留用户选择，LANG 推导出的中文不算显式指定。
+func authLoginPushDisplayLang(cfg authLoginConfig) func() {
+	if !cfg.International || i18n.LangPinnedByEnv() {
+		return func() {}
+	}
+	return i18n.PushLang("en")
 }
 
 // authLoginDisplayExpiry 返回用于显示的有效期（优先显示 refresh token 有效期）
@@ -1884,6 +1916,20 @@ func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
 		Reason:  "keychain_unavailable",
 		Message: "无法读取 macOS Keychain 中的登录密钥，无法判断登录状态",
 		Hint:    "检查 macOS 默认钥匙串是否存在且已解锁；修复后重试，或在测试环境设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+	}
+}
+
+// authStatusInconclusive reports whether a diagnostic reason means the login
+// state cannot be determined from local credentials rather than a confirmed
+// logout. Unreadable, decrypt-impossible, or repair-pending local state is
+// inconclusive and must not render as 未登录.
+func authStatusInconclusive(reason string) bool {
+	switch reason {
+	case "local_state_requires_repair", "local_state_unreadable",
+		"ciphertext_key_mismatch", "dek_missing", "keychain_unavailable":
+		return true
+	default:
+		return false
 	}
 }
 
