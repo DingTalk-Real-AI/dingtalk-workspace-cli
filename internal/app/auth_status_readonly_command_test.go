@@ -14,6 +14,8 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -102,6 +104,9 @@ func TestCrossPlatformCoverageAuthStatusReadOnlySkipsRuntimeCredentialHooks(t *t
 	hooks := *previousHooks
 	hooks.RegisterExtraCommands = func(*cobra.Command, edition.ToolCaller) { t.Fatal("readonly registered runtime extensions") }
 	hooks.AfterPersistentPreRun = func(*cobra.Command, []string) error { t.Fatal("readonly invoked credential hooks"); return nil }
+	hooks.VisibleProducts = func() []string { t.Fatal("readonly invoked edition visibility hooks"); return nil }
+	hooks.StaticServers = func() []edition.ServerInfo { t.Fatal("readonly invoked edition server hooks"); return nil }
+	hooks.SupplementServers = func() []edition.ServerInfo { t.Fatal("readonly invoked edition server hooks"); return nil }
 	edition.Override(&hooks)
 	t.Cleanup(func() { edition.Override(previousHooks) })
 	testseam.Swap(t, &rootAuthLoadTokenData, func(string) (*authpkg.TokenData, error) {
@@ -241,19 +246,77 @@ func TestCrossPlatformCoverageAuthStatusReadOnlyMissingFlagInternalError(t *test
 	}
 }
 
+// Normal startup must keep consulting the edition visibility/server hooks:
+// the read-only guard above only skips hideNonDirectRuntimeCommands for the
+// detected readonly invocation. An over-broad guard would silently drop
+// edition product visibility on every normal run.
+func TestCrossPlatformCoverageAuthStatusNormalStartupConsultsVisibilityHooks(t *testing.T) {
+	previousArgs := os.Args
+	os.Args = []string{"dws", "auth", "status"}
+	t.Cleanup(func() { os.Args = previousArgs })
+	previousHooks := edition.Get()
+	hooks := *previousHooks
+	visibleCalls, staticCalls, supplementCalls := 0, 0, 0
+	hooks.VisibleProducts = func() []string { visibleCalls++; return nil }
+	hooks.StaticServers = func() []edition.ServerInfo { staticCalls++; return nil }
+	hooks.SupplementServers = func() []edition.ServerInfo { supplementCalls++; return nil }
+	edition.Override(&hooks)
+	t.Cleanup(func() { edition.Override(previousHooks) })
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
+		return nil
+	})
+	testseam.Swap(t, &rootAuthLoadTokenData, func(string) (*authpkg.TokenData, error) { return nil, nil })
+	NewRootCommand(context.WithValue(context.Background(), authStatusProcessStartupKey{}, true))
+	if visibleCalls == 0 || staticCalls == 0 || supplementCalls == 0 {
+		t.Fatalf("normal startup skipped edition hooks: visible=%d static=%d supplement=%d", visibleCalls, staticCalls, supplementCalls)
+	}
+}
+
+func TestAuthStatusInconclusiveClassification(t *testing.T) {
+	for _, reason := range []string{
+		"local_state_requires_repair",
+		"local_state_unreadable",
+		"ciphertext_key_mismatch",
+		"dek_missing",
+		"keychain_unavailable",
+	} {
+		if !authStatusInconclusive(reason) {
+			t.Fatalf("reason %q must render 无法判断", reason)
+		}
+	}
+	// token_refresh_failed is deliberately not inconclusive: after a failed
+	// refresh the local token was purged or marked expired, so 未登录 stays
+	// accurate. Unknown and empty reasons stay a confirmed logout too.
+	for _, reason := range []string{"", "token_refresh_failed", "unknown_reason"} {
+		if authStatusInconclusive(reason) {
+			t.Fatalf("reason %q must render 未登录", reason)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageAuthStatusTableInconclusiveState(t *testing.T) {
-	cmd := newAuthStatusCommand()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	diagnostic := &authStatusDiagnostic{
-		Reason:  "local_state_unreadable",
-		Message: "无法安全读取所选身份的本地登录态，无法判断登录状态",
-		Hint:    "检查 --profile 和本地凭证存储",
-	}
-	if err := writeAuthStatusResult(cmd, false, false, nil, diagnostic); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "无法判断") {
-		t.Fatalf("inconclusive table output = %q, want 无法判断", out.String())
+	for _, reason := range []string{
+		"local_state_requires_repair",
+		"local_state_unreadable",
+		"ciphertext_key_mismatch",
+		"dek_missing",
+		"keychain_unavailable",
+	} {
+		t.Run(reason, func(t *testing.T) {
+			cmd := newAuthStatusCommand()
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			diagnostic := &authStatusDiagnostic{
+				Reason:  reason,
+				Message: "无法安全读取所选身份的本地登录态，无法判断登录状态",
+				Hint:    "检查 --profile 和本地凭证存储",
+			}
+			if err := writeAuthStatusResult(cmd, false, false, nil, diagnostic); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out.String(), "无法判断") || strings.Contains(out.String(), "未登录") {
+				t.Fatalf("inconclusive table output = %q, want 无法判断", out.String())
+			}
+		})
 	}
 }

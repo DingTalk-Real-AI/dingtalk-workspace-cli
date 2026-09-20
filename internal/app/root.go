@@ -1208,7 +1208,13 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}
-	if !presentationOnly {
+	// Read-only status must not invoke edition visibility/server hooks either:
+	// hideNonDirectRuntimeCommands resolves visible products through
+	// VisibleProducts / StaticServers / SupplementServers, and nothing
+	// constrains those overlay hooks from touching credentials or acquiring
+	// the auth lock before the read-only leaf runs. The read-only tree loads
+	// no dynamic products, so the visibility pass has no effect on it.
+	if !presentationOnly && !readonlyStatusInvocation {
 		hideNonDirectRuntimeCommands(root)
 	}
 	for _, mount := range assemble {

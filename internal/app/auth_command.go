@@ -678,7 +678,7 @@ func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, to
 		}
 	} else {
 		status := "未登录"
-		if diagnostic != nil && (diagnostic.Reason == "local_state_requires_repair" || diagnostic.Reason == "local_state_unreadable") {
+		if diagnostic != nil && authStatusInconclusive(diagnostic.Reason) {
 			status = "无法判断"
 		}
 		fmt.Fprintf(w, "%-16s%s\n", "状态:", status)
@@ -2063,6 +2063,20 @@ func authStatusDiagnosticFromError(err error) *authStatusDiagnostic {
 		Reason:  "keychain_unavailable",
 		Message: "无法读取 macOS Keychain 中的登录密钥，无法判断登录状态",
 		Hint:    "检查 macOS 默认钥匙串是否存在且已解锁；修复后重试，或在测试环境设置 DWS_DISABLE_KEYCHAIN=1 后重新登录。",
+	}
+}
+
+// authStatusInconclusive reports whether a diagnostic reason means the login
+// state cannot be determined from local credentials rather than a confirmed
+// logout. Unreadable, decrypt-impossible, or repair-pending local state is
+// inconclusive and must not render as 未登录.
+func authStatusInconclusive(reason string) bool {
+	switch reason {
+	case "local_state_requires_repair", "local_state_unreadable",
+		"ciphertext_key_mismatch", "dek_missing", "keychain_unavailable":
+		return true
+	default:
+		return false
 	}
 }
 
