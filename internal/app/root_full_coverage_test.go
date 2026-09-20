@@ -311,7 +311,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	p1 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "one"}}
 	p2 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "two"}}
 	p3 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "three"}}
-	rootPluginInjectConfigEnv = func(*plugin.Loader) {}
+	rootPluginInjectConfigEnv = func(*plugin.Loader) bool { return false }
 	rootPluginLoadUser = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p1, p2} }
 	rootPluginLoadDev = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p3} }
 	resolvedProfileSelector := "unset"

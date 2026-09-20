@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -60,6 +61,7 @@ var (
 	rootRunPreParse                 = pipeline.RunPreParse
 	rootStopAllStdioClients         = StopAllStdioClients
 	rootLoadPlugins                 = loadPlugins
+	rootPluginLoadHadSideEffects    atomic.Bool
 	rootMkdirAll                    = os.MkdirAll
 	rootCreateTemp                  = os.CreateTemp
 	rootSyncFile                    = (*os.File).Sync
@@ -1201,9 +1203,13 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
 		pluginStart := time.Now()
+		// plugin side effects are monotonic for the process lifetime
 		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
 		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
-		if len(pluginCmds) > 0 {
+		if rootPluginLoadHadSideEffects.Load() || len(pluginCmds) > 0 {
+			// Plugin discovery changes process-global runtime state. Keep the
+			// parent process read-only with respect to persistent Schema cache;
+			// cache repair is delegated to the isolated declaration builder.
 			cli.MarkSchemaCacheRuntimeUncertain()
 			addPluginCommandsSafe(root, pluginCmds)
 		}
@@ -1912,7 +1918,9 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// variables so that expandPluginVars can resolve ${KEY} references
 	// in plugin.json headers, endpoints, etc. User-set env vars take
 	// precedence (InjectPluginConfigEnv skips already-set keys).
-	rootPluginInjectConfigEnv(pluginLoader)
+	if rootPluginInjectConfigEnv(pluginLoader) {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 
 	// Resolve the plugin user identity from the profile metadata file only.
 	// Plugin stdio servers need UserID/CorpID as environment identity — never
@@ -1941,6 +1949,9 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	sortPluginsForRegistration(devPlugins)
 
 	allPlugins := append(userPlugins, devPlugins...)
+	if len(allPlugins) > 0 {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 	descriptorsByPlugin := make(map[*plugin.Plugin][]mcptypes.ServerDescriptor, len(allPlugins))
 
 	// 3. Resolve every descriptor once, then choose identity winners before

@@ -42,6 +42,7 @@ func poisonSchemaCacheIdentity(r *schemaCacheRuntime, mutate func(*SchemaCacheId
 }
 
 func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing.T) {
+	ResetSchemaCacheRuntimeUncertaintyForTest()
 	if schemaRaceInstrumentation {
 		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
 	}
@@ -91,6 +92,7 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	PrewarmSchemaCache()
 	MarkSchemaCacheRuntimeUncertain()
 	PrewarmSchemaCache()
+	ResetSchemaCacheRuntimeUncertaintyForTest()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
 		Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch,
 		RuntimeEligible: func() bool { return true },

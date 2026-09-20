@@ -21,6 +21,7 @@ import (
 )
 
 func TestCrossPlatformCoverageProductionSchemaCacheOptionsRemaining(t *testing.T) {
+	cli.ResetSchemaCacheRuntimeUncertaintyForTest()
 	t.Setenv(schemaCacheTestEnv, "1")
 	testseam.Swap(t, &schemaCacheGOOS, "windows")
 	testseam.Swap(t, &schemaCacheGOARCH, "386")
@@ -57,6 +58,7 @@ func TestCrossPlatformCoverageProductionSchemaCacheOptionsRemaining(t *testing.T
 }
 
 func TestCrossPlatformCoverageApplyProductionSchemaCachePrewarm(t *testing.T) {
+	cli.ResetSchemaCacheRuntimeUncertaintyForTest()
 	t.Setenv(schemaCacheTestEnv, "1")
 	t.Setenv(schemaCacheDisableEnv, "")
 	testseam.Swap(t, &schemaCacheGOOS, "linux")
