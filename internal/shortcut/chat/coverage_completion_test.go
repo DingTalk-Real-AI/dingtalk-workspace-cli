@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -37,13 +38,13 @@ func TestCrossPlatformCoverageConversationValidationAndTypeVariants(t *testing.T
 		"--conversation-ids", strings.Join(tooMany, ","),
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("more than ten conversation IDs were accepted")
 	}
 
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+category-create", "--title", "   ", "--yes"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("blank category title was accepted")
 	}
 	shortcut.Register(shortcut.Shortcut{
@@ -55,7 +56,7 @@ func TestCrossPlatformCoverageConversationValidationAndTypeVariants(t *testing.T
 	})
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+coverage-category-title", "--title", "   "})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "不能为空") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "不能为空") {
 		t.Fatalf("direct blank category validation error = %v", err)
 	}
 
@@ -94,7 +95,7 @@ func TestCrossPlatformCoverageConversationAndGroupListExecution(t *testing.T) {
 	} {
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
@@ -161,7 +162,7 @@ func TestCrossPlatformCoverageCategoryListExecutionAndFailureBranches(t *testing
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+category-list"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any
@@ -183,7 +184,7 @@ func TestCrossPlatformCoverageCategoryListExecutionAndFailureBranches(t *testing
 			helpers.InitDeps(tc.caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs([]string{"chat", "+category-list"})
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("category list failure branch succeeded")
 			}
 		})
@@ -197,7 +198,7 @@ func TestCrossPlatformCoverageCategoryListExecutionAndFailureBranches(t *testing
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("category output failed")})
 		root.SetArgs([]string{"chat", "+category-list"})
-		if err := root.Execute(); err == nil || err.Error() != "category output failed" {
+		if err := corecmd.ExecuteForTest(root); err == nil || err.Error() != "category output failed" {
 			t.Fatalf("category output error = %v", err)
 		}
 	})
@@ -208,7 +209,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRejectsUnknownEnvelope(t 
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 		t.Fatalf("unknown category envelope error = %#v", err)
@@ -221,7 +222,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("category conversation read failure succeeded")
 		}
 	})
@@ -233,7 +234,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any
@@ -254,7 +255,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 			t.Fatalf("partial pagination error = %#v", err)
@@ -266,7 +267,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 			t.Fatalf("non-boolean pagination error = %#v", err)
@@ -278,7 +279,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 			t.Fatalf("conflicting pagination error = %#v", err)
@@ -290,7 +291,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 			t.Fatalf("conflicting envelope pagination error = %#v", err)
@@ -304,7 +305,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_pagination_incomplete" || typed.Retryable {
 			t.Fatalf("incomplete pagination error = %#v", err)
@@ -320,7 +321,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePaginati
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("category output failed")})
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
-		if err := root.Execute(); err == nil || err.Error() != "category output failed" {
+		if err := corecmd.ExecuteForTest(root); err == nil || err.Error() != "category output failed" {
 			t.Fatalf("category output error = %v", err)
 		}
 	})
@@ -374,7 +375,7 @@ func TestCrossPlatformCoverageFeedGroupQueryRejectsUnknownConversationEnvelope(t
 			root.SetArgs([]string{
 				"chat", "+feed-group-query-item", "--category-id", "1", "--conversation-ids", "cid-a,cid-later",
 			})
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			var typed *apperrors.Error
 			if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
 				t.Fatalf("feed group invalid response error = %#v", err)
@@ -396,7 +397,7 @@ func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
 	} {
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+conversation-list"}, tail...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid conversation args succeeded: %v", tail)
 		}
 	}
@@ -421,7 +422,7 @@ func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
 			helpers.InitDeps(tc.caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(append([]string{"chat", "+conversation-list"}, tc.args...))
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)
 			}
@@ -452,7 +453,7 @@ func TestCrossPlatformCoverageConversationListIncompleteProjectionBoundaries(t *
 		var stdout bytes.Buffer
 		root.SetOut(&stdout)
 		root.SetArgs(append([]string{"chat", "+conversation-list"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var payload map[string]any
 		if stdout.Len() > 0 {
 			if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
@@ -626,7 +627,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 			helpers.InitDeps(tc.caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 				t.Fatalf("error = %v, want containing %q", err, tc.wantError)
 			}
@@ -637,7 +638,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 	helpers.InitDeps(dry)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-create", "--name", "群", "--users", "u1", "--dry-run", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(dry.calls) != 2 ||
@@ -652,7 +653,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 	helpers.InitDeps(external)
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-create", "--name", "群", "--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--member-query", "外部联系人", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -662,7 +663,7 @@ func TestCrossPlatformCoverageNaturalGroupReadFailures(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{"im/search_groups": `{"result":[]}`}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", command, "--group", "missing"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("%s missing natural group unexpectedly resolved", command)
 		}
 	}
@@ -715,7 +716,7 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	for _, args := range cases {
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid args unexpectedly succeeded: %v", args)
 		}
 	}
@@ -724,7 +725,7 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "msg", "--yes"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("mget lower error was swallowed")
 	}
 }
@@ -746,7 +747,7 @@ func TestCrossPlatformCoverageRecallCardAndLedgerBoundaries(t *testing.T) {
 			helpers.InitDeps(tc.caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("failure boundary unexpectedly succeeded")
 			}
 		})
@@ -757,7 +758,7 @@ func TestCrossPlatformCoverageRecallCardAndLedgerBoundaries(t *testing.T) {
 	}})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+messages-update-card", "--biz-id", "b", "--content", "x", "--flow-status", "3", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 
@@ -782,7 +783,7 @@ func TestCrossPlatformCoverageFeedCompleteAndExcludeMuted(t *testing.T) {
 		"--conversation-ids", "cid",
 		"--exclude-muted",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].args["excludeMuted"] != true {
@@ -827,7 +828,7 @@ func TestCrossPlatformCoverageUnifiedSendValidationMatrix(t *testing.T) {
 		args := append([]string{"chat", "+messages-send"}, tail...)
 		args = append(args, "--yes")
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid unified send unexpectedly succeeded: %v", tail)
 		}
 		if len(fake.calls) != 0 {
@@ -876,7 +877,7 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 			args := append([]string{"chat", "+messages-send"}, tc.args...)
 			args = append(args, "--yes")
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			call := fake.calls[len(fake.calls)-1]
@@ -892,7 +893,7 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+messages-send", "--identity", "user", "--group", "cid", "--text", "x", "--dry-run", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 0 {
@@ -903,7 +904,7 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	helpers.InitDeps(fake)
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+messages-send", "--identity", "user", "--group", "cid", "--text", "x", "--yes"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("unified send write error was swallowed")
 	}
 
@@ -964,7 +965,7 @@ func TestCrossPlatformCoverageMessagesSendRejectsMismatchedCurrentUserMentions(t
 				args = append(args, "--at-all")
 			}
 			root.SetArgs(args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)
 			}
@@ -990,7 +991,7 @@ func TestCrossPlatformCoverageUnifiedSendUnsupportedIdentityGuard(t *testing.T) 
 	})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+coverage-unified-send", "--identity", "unsupported", "--text", "x"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "unsupported identity") {
 		t.Fatalf("unsupported identity error = %v", err)
 	}
@@ -1013,7 +1014,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+messages-send"}, append(tail, "--yes")...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid unified send args succeeded: %v", tail)
 		}
 	}
@@ -1039,7 +1040,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+messages-send", "--identity", "bot", "--robot-code", "r", "--groups-file", path, "--text", "x", "--yes"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid group file %q succeeded", path)
 		}
 	}
@@ -1052,7 +1053,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 		"--groups", "c1,c2", "--text", "x", "--at-user-ids", "u1",
 		"--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--at-all", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -1075,7 +1076,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 		"chat", "+coverage-unified-execute-error", "--identity", "bot", "--robot-code", "r",
 		"--groups-file", "missing-again.txt", "--text", "x",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("execute-time group file error was swallowed")
 	}
 }
@@ -1101,7 +1102,7 @@ func TestCrossPlatformCoverageMuteMemberResolutionFailures(t *testing.T) {
 			helpers.InitDeps(tc.caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs([]string{"chat", "+chat-mute-member", "--group", "cid", "--users", "user-1", "--off", "--yes"})
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("resolution failure scenario unexpectedly succeeded")
 			}
 		})

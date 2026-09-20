@@ -1,6 +1,6 @@
 # 钉钉白板（独立与文档内嵌）
 
-本页是 Whiteboard 的默认入口。未提供 `--part-id` 时，`whiteboard query/update`
+本页是 Whiteboard 的默认入口。未提供 `--part-id` 时，`whiteboard query/+diff/+update`
 默认操作独立 `.adraw` 白板；显式提供非空 `--part-id` 时操作文档内嵌白板。
 接口失败后不得自动切换类型。Doc 只负责普通文件生命周期以及插入、定位、删除文档内
 白板卡片容器。已知命令直接执行；仅真实 `unknown command` / `unknown flag` 时读一次
@@ -12,9 +12,50 @@ leaf Help，契约不确定时读一次 compact leaf Schema。
   [compose.md](./whiteboard/compose.md)
 - 已上传或本地 SVG/Vector 资源：[vector.md](./whiteboard/vector.md)
 - 整页替换或清空：[replace.md](./whiteboard/replace.md)
+- 写入前预览节点、媒体和删除风险：[diff.md](./whiteboard/diff.md)
+- 创建前把 OpenNodes 本地预渲染为 SVG：[render.md](./whiteboard/render.md)
 
 读取已有白板或普通定位不需要额外 Reference。每个普通任务最多读取一份操作
 Reference；只有操作页仍缺少具体字段时，才读取一份精确协议章节。
+
+## Agent 带内容创建：先预览，再确认
+
+用户要求新建日历、课表、流程图等需要 Agent 编排 OpenNodes 的白板时，
+预渲染是默认必经步骤，不以用户是否提到“预览”为条件：
+
+1. 准备 OpenNodes source，再执行 `dws whiteboard render`。进入此阶段必读
+   [render.md](./whiteboard/render.md)；即使此前读过 compose 等操作页，也不能因
+   Reference 数量预算省略预览步骤。
+2. 展示实际 SVG、近似渲染提示、fidelity 和全部 warnings，然后停止，等待用户
+   明确确认当前版本。不能在首次创建请求的同一轮直接提交；Agent 自检、摘要匹配、
+   dry-run 或创建后内容回读都不能代替用户看过预览后的确认。
+3. 修改 source 后重新渲染、展示并再次确认。确认后使用同一 source 和
+   `sourceDigest` 调用 `create-with-content --expected-source-digest`，
+   此时才可添加 `--yes`，并按原有结果契约做写后验证。
+4. render 不可用、渲染失败或无法向用户展示预览时，报告阻塞并保留草稿，
+   不自动降级为直接创建或换写入入口绕过。
+
+此规则限定 Agent 使用 OpenNodes 带内容创建；不新增 CLI 运行时强制拦截，
+不改变 MCP 入参回参。空白创建、直接套用模板、已有白板更新仍遵循各自流程。
+
+## Agent 更新：先 diff，再确认
+
+对已有白板追加、修改、删除或清空内容，必须在提交前执行 `+diff`：
+先读取所需当前内容并准备 source，再按 [diff.md](./whiteboard/diff.md) 比较同一目标。
+即使已读 compose、replace 等操作页，也必须读取 diff 指引；文档数量预算不能省略此步骤。
+
+展示新增、修改、删除、媒体变化、warnings、blockers 和 overwrite 的实际影响，
+然后停止，等待用户明确确认当前差异。最初的“删除这些内容”等请求、render、
+dry-run、Agent 自检和写后回读都不替代差异确认。
+
+确认后只提交同一目标和 source，将 `sourceDigest` 传给
+`+update --expected-source-digest`；独立白板另传 diff 的 `target.revision`。
+目标、revision、source 或写入模式变化时重新 diff、展示和确认。
+diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过。
+内嵌预览是尽力而为，须披露预览与提交间可能漂移，不承诺原子保证。
+
+删除部分内容若需 overwrite，完整终态必须保留其余内容，并说明旧节点删除重建影响。
+此规则是 Agent 工作流要求，不新增 CLI 强制拦截、不改变 MCP 接口。
 
 ## 执行契约
 
@@ -24,6 +65,9 @@ Reference；只有操作页仍缺少具体字段时，才读取一份精确协�
 - `--part-id` 完全未提供时默认独立白板；显式提供空值或纯空白会报错，不能借此
   切换类型。权限、网络、Feature Switch、revision 冲突等失败均不得跨接口回退。
 - Runtime 确认后执行层才添加 `--yes`；存储示例不得预置确认。
+- Agent 更新前必须执行 `+diff` 并等待差异确认。独立白板把 diff 返回的 `target.revision` 传给
+  `+update --expected-revision`，两类白板都把 `sourceDigest` 传给
+  `+update --expected-source-digest`；任一值或 source 变化都重新 diff 和确认。
 - 成功须同时满足终态 receipt、请求节点映射和同板读回；`verified=false`、partial、
   commit-unknown 不得报成功或盲重试。
 - `+update` 内部仍使用完整同板 query 校验：内嵌分支调用
@@ -67,6 +111,7 @@ insert 返回 `whiteboardId` 后直接使用；若为 null，只 fetch 一次并
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
+| `dws whiteboard +diff` | read | 读取当前白板并预览 proposed OpenNodes 更新的节点、媒体与风险变化 |
 | `dws whiteboard +query` | read | 严格读取文档内嵌或独立白板的 OpenNodes 快照 |
 | `dws whiteboard +update` | high-risk-write | 确认后更新文档内嵌或独立白板并精确读回 |
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -85,18 +130,48 @@ dws doc whiteboard insert --node <DOC_ID> \
 
 # 读取与更新
 dws whiteboard +query --node <DOC_ID> --part-id <PART_ID> --format json
+dws whiteboard +diff --node <DOC_ID> --part-id <PART_ID> \
+  --source @whiteboard.json --format json
 dws whiteboard +update --node <DOC_ID> --part-id <PART_ID> \
+  --expected-source-digest <DIFF_SOURCE_DIGEST> \
   --source @whiteboard.json --format json
 
 # 独立白板（无 part-id，默认独立）
 dws whiteboard +query --node <WHITEBOARD_NODE_ID> --view all --format json
+dws whiteboard +diff --node <WHITEBOARD_NODE_ID> --page-id <PAGE_ID> \
+  --source @whiteboard.json --format json
 dws whiteboard +update --node <WHITEBOARD_NODE_ID> \
   --expected-revision <REVISION> --request-id <STABLE_REQUEST_ID> \
+  --expected-source-digest <DIFF_SOURCE_DIGEST> \
   --source @whiteboard.json --format json
 
 # 使用 OpenNodes V1 初始内容创建独立白板
+dws whiteboard render --source @whiteboard.json \
+  --output ./whiteboard-preview.svg --format json
 dws whiteboard create-with-content --name "<白板名称>" \
-  --source ./whiteboard.json --request-id <STABLE_REQUEST_ID> --format json
+  --source ./whiteboard.json --request-id <STABLE_REQUEST_ID> \
+  --expected-source-digest <RENDER_SOURCE_DIGEST> --format json
+
+# 个人模板：保存、查询、从模板创建
+dws whiteboard template personal save --node <WHITEBOARD_NODE_ID> \
+  --name "<模板名称>" --request-id <STABLE_REQUEST_ID> --format json
+dws whiteboard template personal list --query "<关键词>" --limit 20 --format json
+dws whiteboard template personal create --template-id <TEMPLATE_ID> \
+  --name "<新白板名称>" --request-id <STABLE_REQUEST_ID> --format json
+
+# 团队模板：保存可用 --template-workspace 指定目标，未传默认源白板所属知识库；需源白板及目标知识库编辑权限。查询和创建必须显式指定模板 Workspace
+dws whiteboard template team save --node <WHITEBOARD_NODE_ID> \
+  --name "<模板名称>" --request-id <STABLE_REQUEST_ID> --format json
+dws whiteboard template team list --template-workspace <TEAM_WORKSPACE_ID> \
+  --query "<关键词>" --limit 20 --format json
+dws whiteboard template team create --template-workspace <TEAM_WORKSPACE_ID> \
+  --template-id <TEMPLATE_ID> --name "<新白板名称>" \
+  --request-id <STABLE_REQUEST_ID> --format json
+
+# 公共模板：仅支持查询和从模板创建，不支持保存
+dws whiteboard template public list --query "<关键词>" --limit 20 --format json
+dws whiteboard template public create --template-id <TEMPLATE_ID> \
+  --name "<新白板名称>" --request-id <STABLE_REQUEST_ID> --format json
 
 # 导出独立白板；--output 是目录，文件名自动使用白板名称
 dws whiteboard export --node <WHITEBOARD_NODE_ID> \
@@ -106,6 +181,27 @@ dws whiteboard export --node <WHITEBOARD_NODE_ID> \
 dws whiteboard export-get --job-id <JOB_ID> \
   --export-format png --output ./exports --format json
 ```
+
+模板能力只接受独立 `.adraw` 白板，服务端类型固定为 `DRAW(9)`。个人、团队和公共模板是
+严格隔离的 scope：个人请求不携带 orgId，团队模板不得跨 `template-workspace` 查询或
+创建，公共模板固定从模板中心公共库查询；找不到模板时不能自动回退到另一 scope。保存模板需要用户确认，执行
+前可用全局 `--dry-run` 做远端只读预检。模板名称允许重复，网络重试必须复用原
+`request-id`；若服务端返回 commit-unknown，禁止换新 request-id 盲目重试。
+
+模板 scope 按模板来源选择，不能按新白板的保存位置推断：
+
+| 用户意图或已有证据 | 命中 scope | 选择规则 |
+|---|---|---|
+| “我的模板”“个人模板”“我保存的模板” | `personal` | 查询使用 personal list；创建必须使用来自 personal list 或已明确为个人模板的 templateId |
+| “团队模板”“知识库模板”“团队共享模板” | `team` | 查询和创建都必须确定模板所属 `template-workspace`；创建沿用查询模板时的同一个 Workspace |
+| “模板中心”“公共模板”“官方/推荐模板” | `public` | 公共模板来自模板中心，仅支持查询和创建，不支持保存 |
+| 只说“找一个白板模板”，没有个人或团队来源限定 | `public` | 按模板发现诉求查询模板中心公共库 |
+| 只说“保存为白板模板”，没有团队共享要求 | `personal` | 默认保存为个人模板；明确要求团队共享时才使用 team save |
+| 只有一个来源不明的 templateId | 暂不调用 create | templateId 本身不能判断 scope，先确认它来自 personal/team/public；不得逐个 scope 试探 |
+
+把白板创建到某个知识库只决定 `--workspace`，不会让个人或公共模板变成团队模板。反过来，
+团队模板也可以把新白板创建到“我的文档”或普通文件夹；`--template-workspace` 表示模板来源，
+`--workspace` / `--folder` 表示新白板去向，两者不能混用。
 
 导出下载仅接受 HTTPS/443 公网地址，每次重定向及实际连接都会校验目标地址；最大文件大小为 512 MiB，超限下载会清理临时文件。
 
@@ -117,6 +213,12 @@ dws whiteboard export-get --job-id <JOB_ID> \
 创建时 `source.nodes` 允许 `[]`，表示创建空白独立白板；字段仍必填，不接受 null。
 这不改变更新规则：append 仍要求至少一个节点。普通空白创建仍优先使用文档创建能力。
 CLI 校验后只向 `create_whiteboard` 发送 `source` JSON 字符串，不接受或暴露 checkpoint。
+
+创建前视觉确认使用纯本地 `whiteboard render`。它不访问网络、不创建白板，只写入
+SVG artifact，并返回规范化 `sourceDigest`、`fidelity` 和逐节点 warnings。Agent 必须
+展示 SVG、“近似预览”提示和 warnings 后停止执行，等待用户明确确认当前版本，不能在同一轮自动创建。最初的创建请求、Agent 自检和摘要匹配都不代表看过预览后的确认。用户要求修改时重新渲染、展示并再次等待确认；只有确认后才可添加 --yes，并把同一摘要传给
+`create-with-content --expected-source-digest`。摘要不一致时停止创建并重新渲染，不能
+绕过。图片、Vector 和未知节点使用占位框，不会在预览阶段拉取外链资源。
 
 `--source` 接受 JSON、`@relative-file.json` 或 stdin；本地文件必须加 `@`，裸路径
 会被当作 JSON。白板 shortcut 不支持 `--jq` / `--fields`。
@@ -151,3 +253,5 @@ CLI 校验后只向 `create_whiteboard` 发送 `source` JSON 字符串，不接�
 | 非托管 Vector、Icon、Path | [06-vector-icon-path.md](./whiteboard/open-nodes-v1/06-vector-icon-path.md) |
 | query 快照转换和错误语义 | [07-examples-errors-write-support.md](./whiteboard/open-nodes-v1/07-examples-errors-write-support.md) |
 | 新 geometry / icon catalog 值 | [08-catalogs.md](./whiteboard/open-nodes-v1/08-catalogs.md) |
+
+独立查询兼容服务省略 `view` 回显：page/all 必须有通过身份、版本、页数/节点数和目标页面校验的完整内联快照；summary 必须是完整摘要。明确返回错误 view、错误页面或仅下载链接而未回显 view 时仍拒绝，不能据此绕过失败的 Diff 改用普通更新写入。

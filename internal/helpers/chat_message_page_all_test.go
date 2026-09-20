@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -109,7 +110,7 @@ func executeChatMessagePageAllCommandRaw(t *testing.T, caller edition.ToolCaller
 	root.SetOut(out)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	err := root.ExecuteContext(ctx)
+	err := corecmd.ExecuteContextForTest(root, ctx)
 	buffer, _ := out.(*bytes.Buffer)
 	if buffer == nil || buffer.Len() == 0 {
 		return nil, err
@@ -324,10 +325,12 @@ func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *
 	if err != nil {
 		t.Fatal(err)
 	}
+	// ttlSeconds is parsed since intField accepts json.Number, so the
+	// per-item PolicyDecision hits the PolicyCache for both same-conversation
+	// messages: one policy read, one batch decrypt, after aggregation.
 	wantCalls := []string{
 		"chat/list_conversation_message_v2",
 		"chat/list_conversation_message_v2",
-		"im/get_message_crypto_policy",
 		"im/get_message_crypto_policy",
 		"im/batch_ding_decrypt_messages",
 	}

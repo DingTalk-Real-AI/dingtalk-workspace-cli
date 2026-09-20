@@ -1,1 +1,3 @@
 internal/runtimepayload/assets/*.payload binary
+# Preserve the upstream README byte-for-byte for Cobra provenance checks.
+third_party/cobra/README.md whitespace=-blank-at-eol

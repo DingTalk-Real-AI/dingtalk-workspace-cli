@@ -27,11 +27,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // serverMain is the primary aitable MCP server id.
@@ -184,7 +184,7 @@ var BaseList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"count": len(bases), "bases": bases})
+		return outputBasePage(rt, bases, data)
 	},
 }
 
@@ -289,15 +289,7 @@ var BaseSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		out := map[string]any{"count": len(bases), "bases": bases}
-		nextCursor, hasMore, hasMoreKnown := aitabletarget.Pagination(data)
-		if hasMoreKnown {
-			out["hasMore"] = hasMore
-		}
-		if nextCursor != "" && (!hasMoreKnown || hasMore) {
-			out["nextCursor"] = nextCursor
-		}
-		return rt.Output(out)
+		return outputBasePage(rt, bases, data)
 	},
 }
 
@@ -615,7 +607,7 @@ var FieldUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+field-update",
 	Product:     serverMain,
-	Description: "更新字段名称 / 配置 / AI 配置（类型不可改）",
+	Description: "更新字段名称 / 说明 / 配置 / AI 配置（类型不可改）",
 	Intent:      "当你要改字段名，或调整字段配置/AI 配置（注意字段类型本身不可改）时使用；会实际更新指定字段。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
@@ -623,6 +615,7 @@ var FieldUpdate = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "Field ID", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新字段名（可选）"},
+		{Name: "description", Type: shortcut.FlagString, Desc: "字段说明；显式空字符串清除说明，省略保留"},
 		{Name: "config", Type: shortcut.FlagString, Desc: "字段配置 JSON（可选）"},
 		{Name: "ai-config", Type: shortcut.FlagString, Desc: "AI 配置 JSON（可选）"},
 	},
@@ -638,6 +631,9 @@ var FieldUpdate = shortcut.Shortcut{
 				return fmt.Errorf("--name: %w", err)
 			}
 			params["newFieldName"] = rt.Str("name")
+		}
+		if rt.Changed("description") {
+			params["description"], _ = rt.Command().Flags().GetString("description")
 		}
 		if rt.Changed("config") {
 			cfg, err := parseJSONObject("config", rt.Str("config"))
@@ -687,11 +683,12 @@ var FieldDelete = shortcut.Shortcut{
 // ─────────────────────────────────────────────────────────────
 
 const (
-	recordQueryDescription = "查询单表记录（按 ID / 条件 / 关键词，并支持字段投影和分页）"
-	recordQueryIntent      = "用于单张表的单页行数据读取：按 recordId、已归一化字段条件或关键词查询，支持字段投影和 nextCursor 显式续页；filters 中字段和值必须先按字段类型解析。" +
-		"完整读取全表时不要使用本 Shortcut，改用 dws aitable record query --all --page-limit 0。多表关联、跨表分析或 SQL 聚合/窗口计算使用 psql；两者不是同一结果模型，禁止相互拼接、转换或混合推导。"
-	recordQueryAvoidPsql = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
-	recordQueryAvoidAll  = "需要全部、完整、汇总、统计、导出或逐条处理全表数据时，改用 dws aitable record query --all --page-limit 0；不要手写 cursor 循环或把当前页当全量。"
+	recordQueryDescription = "查询单表记录，支持准确 ID、视图、条件、全量分页与 NDJSON 文件"
+	recordQueryIntent      = "字段和值必须先按字段类型解析。读取单表明细；默认返回一页及续页信息，--all 在 max-records 上限内完整读取，--export-output 输出 NDJSON 及行数、哈希、列信息。view-id 的筛选/排序可由显式 filters/sort 覆盖；复杂视图条件无法转换时明确失败。"
+	recordQueryAvoidPsql   = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
+	recordQueryAvoidAll    = "数据量超过 10000 行时，本入口不会截断冒充完整；需要更大规模读取请使用有明确范围的原子 record query。"
+	recordQueryAvoidStats  = "只需要标量或分组统计时使用 +data-query 或 record stats/group-stats，不拉明细做汇总。"
+	recordQueryAvoidExport = "需要 CSV/Excel 原生文件格式时使用 aitable export data；本入口只输出 NDJSON。"
 )
 
 // RecordQuery 获取行记录（query_records）。
@@ -723,7 +720,7 @@ var RecordQuery = shortcut.Shortcut{
 		Selection: contract.SelectionSpec{
 			AgentSummary: recordQueryDescription,
 			UseWhen:      []string{recordQueryIntent},
-			AvoidWhen:    []string{recordQueryAvoidPsql, recordQueryAvoidAll},
+			AvoidWhen:    []string{recordQueryAvoidPsql, recordQueryAvoidAll, recordQueryAvoidStats, recordQueryAvoidExport},
 			Examples: []string{
 				"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50",
 				"dws aitable +record-query --base-id B --table-id T --record-ids R1,R2 --field-ids F_NAME,F_STATUS",
@@ -738,8 +735,16 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "filters", Type: shortcut.FlagString, Desc: "结构化过滤条件 JSON（可选）；先用 field get 完整读一遍表头，确定用户条件对应的字段和类型后再传值。日期值用日期字符串或毫秒数，不接受 View relative/exact Scheme。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
 		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "单次最大记录数，默认 100（可选）"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
+		{Name: "view-id", Type: shortcut.FlagString, Desc: "准确视图 ID；读取其筛选/排序，显式 filters/sort 覆盖；与 record-ids 互斥"},
+		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},
+		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "--all 最多返回的记录数量，1-10000，超限明确失败"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造。INVALID_CURSOR/CURSOR_SNAPSHOT_CHANGED 必须丢弃累计结果与旧游标，不传 --cursor 从第一页只读重查；CURSOR_SNAPSHOT_UNAVAILABLE 先等待服务修复；CURSOR_OFFSET_LIMIT 表示排序 offset 已达上限（100000），须先收窄 --filters（或改用 --record-ids/分段条件）再从第一页重查，直接重查会再次触顶。失效快照不提供续传 cursor，不按 recordId 去重拼接新旧页，也不重跑含写入的整条命令"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"record-ids", "view-id"}, Description: "按准确 ID 读取与按视图查询互斥"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"all", "cursor"}, Description: "全量查询必须从第一页开始，不能指定续页游标"},
 	},
 	Tips: []string{
 		`dws aitable +record-query --base-id B --table-id T --query "关键词" --limit 50`,
@@ -1320,8 +1325,8 @@ var ViewUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+view-update",
 	Product:     serverMain,
-	Description: "更新视图名称 / 描述 / 配置（visibleFieldIds、sort、group 等；筛选除外）",
-	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；筛选条件必须走 view update filter，以执行字段类型校验和日期/人员协议归一化。",
+	Description: "更新视图名称 / 描述 / 配置（含类型校验后的筛选）",
+	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；config.filter 复用原子入口的字段类型校验、日期/人员协议归一化并读回核对。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -1354,11 +1359,11 @@ var ViewUpdate = shortcut.Shortcut{
 				return err
 			}
 			if _, hasFilter := c["filter"]; hasFilter {
-				return fmt.Errorf("--config.filter 不支持通过 +view-update 写入；请使用 dws aitable view update filter --json '<FILTER_JSON>'，以执行字段类型校验和日期/人员协议归一化")
+				return executeFilteredViewUpdate(rt, params, c)
 			}
 			params["config"] = c
 		}
-		return rt.CallMCP("update_view", params)
+		return helpers.AnnotateViewUpdateError(rt.CallMCP("update_view", params))
 	},
 }
 
@@ -1942,12 +1947,13 @@ var FormFieldHide = shortcut.Shortcut{
 
 // FormShareGet 获取表单分享配置（get_share_form_config，server: aitable）。
 var FormShareGet = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+form-share-get",
-	Product:     serverHelper,
-	Description: "读取视图当前的分享表单配置",
-	Intent:      "当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+form-share-get",
+	Product:       serverHelper,
+	Description:   "读取表单分享配置及服务端真实 UUID、状态和封面",
+	Intent:        "当你要查看某视图是否已分享，或诊断 shareFormUuid、status、formCover 时使用；该命令只读，不修改 CP。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -1960,18 +1966,19 @@ var FormShareGet = shortcut.Shortcut{
 			CLIPath:        "aitable +form-share-get",
 			PrimaryCLIPath: "aitable +form-share-get",
 		},
-		Description: "读取视图当前的分享表单配置",
+		Description: "读取表单分享配置及服务端真实 UUID、状态和封面",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "读取视图当前的分享表单配置",
-			UseWhen:      []string{"当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。"},
+			AgentSummary: "读取表单分享配置及服务端真实 UUID、状态和封面",
+			UseWhen:      []string{"当你要查看某视图是否已分享，或诊断 shareFormUuid、status、formCover 时使用；该命令只读，不修改 CP。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +form-share-get --base-id B --table-id T --view-id V"},
 		},
+		Result: helpers.AitableFormShareGetResultSpec(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -1980,22 +1987,49 @@ var FormShareGet = shortcut.Shortcut{
 	},
 	Tips: []string{`dws aitable +form-share-get --base-id B --table-id T --view-id V`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_share_form_config", map[string]any{
+		return executeFormShareMCP(rt, "get_share_form_config", map[string]any{
 			"baseId":  rt.Str("base-id"),
 			"tableId": rt.Str("table-id"),
 			"viewId":  rt.Str("view-id"),
-		})
+		}, false)
 	},
 }
 
 // FormShareUpdate 更新分享表单配置（update_share_form，server: aitable）。
 var FormShareUpdate = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+form-share-update",
-	Product:     serverHelper,
-	Description: "部分更新分享表单的开关、访问范围、有效期和通知等配置",
-	Intent:      "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。",
-	Risk:        shortcut.RiskWrite,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+form-share-update",
+	Product:       serverHelper,
+	Description:   "部分更新分享表单配置，并返回经服务端回读和 CP 投影校验的真实终态",
+	Intent:        "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；仅当存在占位符时第二行才说明需要替换的占位符，已知短 ID 也不能要求替换。最终只输出两行纯文本，无标题或代码围栏；第一行必须保留 --format json；所有 ID 已知时第二行原样为：未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。仅询问写法时唯一允许的查询是 dws schema --cli-path \"aitable +form-share-update\" --compact --format json，成功后不再查询 help/schema。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。成功后检查 shareFormUuid、status、formCover、cpSynced，只有 cpSynced=true 才表示闭环完成；cpSynced=false/缺失/类型错误或其他必需字段无效时返回 partial_failure 和退出码7；原始回执在 data.succeeded[0].response，失败信息在 data.failed[0].error，含 execution_started=true，不自动重放写入；部分失败不得当作成功；DWS 不自行调用第二个 View 更新命令补偿 CP。get 不返回 cpSynced，不能用 get 回读该字段或确认 CP 已恢复；只能诊断分享配置，CP 未确认时需服务端诊断。即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。",
+	Risk:          shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_form_share_update",
+			CanonicalPath:  "aitable.shortcut_form_share_update",
+			CLIPath:        "aitable +form-share-update",
+			PrimaryCLIPath: "aitable +form-share-update",
+		},
+		Description: "部分更新分享表单配置，并返回经服务端回读和 CP 投影校验的真实终态",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "部分更新表单分享配置，并返回真实 UUID、状态、封面及 CP 同步结果",
+			UseWhen:      []string{"需要通过内置 +form-share-update Shortcut 开启、关闭或调整表单分享配置时；成功后检查 shareFormUuid、status、formCover、cpSynced，新建表单已知标题时同一次调用传入 --form-name"},
+			AvoidWhen:    []string{"只查询用 +form-share-get；DWS 不自行调用第二个 View 更新命令补偿 CP"},
+			Examples:     []string{`dws aitable +form-share-update --base-id B --table-id T --view-id V --enabled true --form-name "活动报名" --format json`},
+		},
+		Result: helpers.AitableFormShareUpdateResultSpec(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -2060,8 +2094,39 @@ var FormShareUpdate = shortcut.Shortcut{
 				params[property] = rt.Str(name)
 			}
 		}
-		return rt.CallMCP("update_share_form", params)
+		return executeFormShareMCP(rt, "update_share_form", params, true)
 	},
+}
+
+func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[string]any, write bool) error {
+	if rt.DryRun() {
+		return rt.CallMCP(tool, params)
+	}
+	// CallMCPData/CallMCPWriteDataStrict return the raw MCP envelope
+	// {"success":..,"data":..} (see runner.callMCPData/callMCPWriteData: plain
+	// json.Unmarshal, no envelope stripping). Extracting envelope["data"] here is
+	// the single required unwrap, mirroring the atomic path in helpers/aitable.go;
+	// it is not a double-unwrap.
+	var (
+		envelope map[string]any
+		err      error
+	)
+	if write {
+		envelope, err = rt.CallMCPWriteDataStrict(serverHelper, tool, params)
+	} else {
+		envelope, err = rt.CallMCPData(serverHelper, tool, params)
+	}
+	if err != nil {
+		return err
+	}
+	if write {
+		return output.StoreResult(rt.Command().Context(), helpers.AitableFormShareUpdateResult(envelope["data"], params))
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok || data == nil {
+		return apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值缺少 JSON 对象 data", serverHelper, tool))
+	}
+	return rt.Output(data)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2142,27 +2207,13 @@ var WorkflowList = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 20，最大 100（可选）"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "有界遍历全部工作流"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "全量遍历页数上限，1-1000"},
+		{Name: "status", Type: shortcut.FlagString, Desc: "在完整集合中过滤状态，必须 --all", Enum: []string{"enabled", "disabled"}},
 		{Name: "offset", Type: shortcut.FlagInt, Desc: "分页偏移量，默认 0（可选）"},
 	},
-	Tips: []string{`dws aitable +workflow-list --base-id B`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"baseId": rt.Str("base-id")}
-		if rt.Changed("limit") {
-			params["limit"] = rt.Int("limit")
-		}
-		if rt.Changed("offset") {
-			params["offset"] = rt.Int("offset")
-		}
-		data, err := rt.CallMCPData(serverHelper, "list_workflows", params)
-		if err != nil {
-			return err
-		}
-		workflows, err := workflowListProject(data)
-		if err != nil {
-			return err
-		}
-		return rt.Output(map[string]any{"count": len(workflows), "workflows": workflows})
-	},
+	Tips:    []string{`dws aitable +workflow-list --base-id B`},
+	Execute: executeWorkflowList,
 }
 
 // workflowListProject reshapes the raw list_workflows response into a clean
@@ -3216,9 +3267,14 @@ var SectionListNodes = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
+		{Name: "type", Type: shortcut.FlagString, Desc: "仅返回指定 nodeType；使用目录实际返回的类型值"},
+		{Name: "parent-id", Type: shortcut.FlagString, Desc: "仅返回该父分区直接子项；显式空值筛根目录"},
 	},
 	Tips: []string{`dws aitable +section-list-nodes --base-id B`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("type") || rt.Changed("parent-id") {
+			return outputFilteredBaseNodes(rt)
+		}
 		return rt.CallMCP("list_nsheet_nodes", map[string]any{"baseId": rt.Str("base-id")})
 	},
 }

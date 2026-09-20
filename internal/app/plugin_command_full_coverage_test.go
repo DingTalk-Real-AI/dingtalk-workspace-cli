@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +21,7 @@ func pluginCoverageRun(cmd *cobra.Command, args ...string) (string, error) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return out.String(), err
 }
 

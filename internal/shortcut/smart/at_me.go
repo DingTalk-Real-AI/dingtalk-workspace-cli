@@ -165,9 +165,11 @@ func executeAtMe(rt *shortcut.RuntimeContext) error {
 			return err
 		}
 		items = atMeMessageItems(data)
+		decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, items)
 		payload = atMePayload(items, !rt.Bool("no-reactions"))
 		chatmsg.ApplyPagination(payload, data)
 		payload["pagesFetched"] = 1
+		chatmsg.MergeDecryptLedger(payload, decryptLedger)
 		if payload["complete"] == true {
 			payload["stopReason"] = "source_complete"
 		} else {
@@ -341,6 +343,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 		stopReason = "page_limit"
 	}
 
+	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, allItems)
 	payload := atMePayload(allItems, !rt.Bool("no-reactions"))
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = true
@@ -356,6 +359,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 	if hasMore && nextCursor != "" {
 		payload["nextCursor"] = nextCursor
 	}
+	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	if len(failures) == 0 {
 		return payload, allItems, nil
 	}
@@ -529,6 +533,15 @@ func atMeProjectWithReactions(m map[string]any, includeReactions bool) map[strin
 	}
 	if updateTime := chatmsg.UpdateTime(m); updateTime != nil {
 		row["updateTime"] = updateTime
+	}
+	if value, ok := m["contentDecrypted"]; ok {
+		row["contentDecrypted"] = value
+	}
+	if value, ok := m["cryptoLayer"]; ok {
+		row["cryptoLayer"] = value
+	}
+	if value, ok := m["dingKeyVersion"]; ok {
+		row["dingKeyVersion"] = value
 	}
 	if includeReactions {
 		if reactions := chatmsg.Reactions(m); len(reactions) > 0 {

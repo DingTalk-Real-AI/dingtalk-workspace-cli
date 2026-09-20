@@ -321,66 +321,6 @@ func calendarSmartSuggestedSlots(data map[string]any) ([]map[string]any, error) 
 	return out, nil
 }
 
-func calendarSmartAttendees(data map[string]any) (map[string]bool, error) {
-	data, err := calendarSmartRequireSuccess(data, "calendar/get_calendar_participants")
-	if err != nil {
-		return nil, err
-	}
-	var raw any
-	result, present := data["result"]
-	if !present {
-		return nil, calendarSmartError("calendar/get_calendar_participants", "missing_result", "参会人响应缺少 result")
-	}
-	switch typed := result.(type) {
-	case []any:
-		raw = typed
-	case map[string]any:
-		found := false
-		for _, key := range []string{"attendees", "participants", "items", "list"} {
-			if raw, found = typed[key]; found {
-				break
-			}
-		}
-		if !found {
-			return nil, calendarSmartError("calendar/get_calendar_participants", "missing_attendees", "响应缺少显式参会人数组")
-		}
-	default:
-		return nil, calendarSmartError("calendar/get_calendar_participants", "malformed_result", "参会人响应 result 既不是数组也不是含参会人数组的对象")
-	}
-	items, ok := raw.([]any)
-	if !ok {
-		return nil, calendarSmartError("calendar/get_calendar_participants", "malformed_attendees", "参会人字段不是数组")
-	}
-	identities := map[string]bool{}
-	for index, item := range items {
-		attendee, ok := item.(map[string]any)
-		if !ok || len(attendee) == 0 {
-			return nil, calendarSmartError("calendar/get_calendar_participants", "malformed_attendee", fmt.Sprintf("参会人第 %d 项不是非空对象", index))
-		}
-		id := calendarSmartFirstString(attendee, "userId", "user_id", "id", "staffId")
-		name := calendarSmartFirstString(attendee, "displayName", "display_name", "name", "userName")
-		if id == "" && name == "" {
-			return nil, calendarSmartError("calendar/get_calendar_participants", "missing_attendee_identity", fmt.Sprintf("参会人第 %d 项既无 userId 也无 displayName", index))
-		}
-		if id != "" {
-			identities[id] = true
-		}
-		if name != "" {
-			identities[name] = true
-		}
-		if rawSelf, present := attendee["self"]; present {
-			isSelf, ok := rawSelf.(bool)
-			if !ok {
-				return nil, calendarSmartError("calendar/get_calendar_participants", "malformed_attendee_self", fmt.Sprintf("参会人第 %d 项 self 不是布尔值", index))
-			}
-			if isSelf {
-				identities["__self__"] = true
-			}
-		}
-	}
-	return identities, nil
-}
-
 func calendarSmartVerifyEventTimes(event map[string]any, start, end string) error {
 	startValue, startOK := calendarSmartEventTime(event["start"])
 	if !startOK {
@@ -451,35 +391,6 @@ func calendarSmartVerifyCreatedEvent(event map[string]any, eventID, title, start
 		return calendarSmartError("calendar/get_calendar_detail", "readback_title_mismatch", "创建后读回的日程标题与请求不一致")
 	}
 	return calendarSmartVerifyEventTimes(event, start, end)
-}
-
-func calendarSmartVerifyAttendees(present map[string]bool, expectedIDs, expectedNames []string, currentUserID string) error {
-	for index, id := range expectedIDs {
-		name := ""
-		if index < len(expectedNames) {
-			name = expectedNames[index]
-		}
-		isCurrentUser := currentUserID != "" && id == currentUserID && present["__self__"]
-		if !present[id] && (name == "" || !present[name]) && !isCurrentUser {
-			return calendarSmartError("calendar/get_calendar_participants", "readback_attendee_missing", "写后读回未找到请求添加的参会人")
-		}
-	}
-	return nil
-}
-
-func calendarSmartCurrentUserID(rt *shortcut.RuntimeContext, attendees map[string]bool) (string, error) {
-	if !attendees["__self__"] {
-		return "", nil
-	}
-	profile, err := rt.CallMCPData("contact", "get_current_user_profile", nil)
-	if err != nil {
-		return "", err
-	}
-	userID := myAttendanceCurrentUserID(profile)
-	if userID == "" {
-		return "", calendarSmartError("contact/get_current_user_profile", "missing_current_user_id", "参会人读回只标记 self，但无法解析当前用户 userId")
-	}
-	return userID, nil
 }
 
 func calendarSmartDeleteAndVerify(rt *shortcut.RuntimeContext, eventID string) error {

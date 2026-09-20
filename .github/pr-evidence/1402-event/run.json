@@ -1,0 +1,7 @@
+{
+  "command": "DWS_PACKAGE_VERSION=0.0.0-test go test -json -count=1 ./internal/app -run '^(TestCrossPlatformCoverageEventAgentSelectionBoundaries|TestAgentExamplesContract|TestPersonalOA.*|TestCrossPlatformCoveragePersonalOAOptionalBusinessFieldsOutput)$'",
+  "started": "2026-09-17T16:24:41.389862+08:00",
+  "tested_sha": "9deacb29692d5d7f54f429c5cc784e35d7133435",
+  "scope": "Local deterministic Agent routing/contract and OA regression tests; no live model or DingTalk server event evaluation.",
+  "exit_code": 0
+}

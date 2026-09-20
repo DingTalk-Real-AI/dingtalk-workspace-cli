@@ -51,7 +51,7 @@ func TestPersonalConsumeCleanupOwnershipRuntimeMatrix(t *testing.T) {
 							personalConsumeRun = oldConsumeRun
 						})
 
-						personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+						personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 							return personal.Identity{
 								AccessToken:  "token",
 								ClientID:     "client",
@@ -156,7 +156,7 @@ func TestPersonalConsumeCleanupOwnershipOnRunStateFailure(t *testing.T) {
 			t.Cleanup(restore)
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
-			personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+			personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 				return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open"}, nil
 			}
 			personalEnsureSubscription = func(
@@ -302,7 +302,7 @@ func TestPersonalReusedSubscriptionMismatchStopsDryRunAndRuntime(t *testing.T) {
 				personalConsumeRun = oldConsumeRun
 			})
 
-			personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+			personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 				return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open"}, nil
 			}
 			personalEnsureSubscription = ensurePersonalSubscription
@@ -374,7 +374,7 @@ func TestPersonalReusedSubscriptionUsesActualKeyInDryRunAndRuntime(t *testing.T)
 				personalConsumeRun = oldConsumeRun
 			})
 
-			personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+			personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 				return personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open"}, nil
 			}
 			personalEnsureSubscription = ensurePersonalSubscription

@@ -581,7 +581,8 @@ func (l *Loader) ListPluginConfig(pluginName string) map[string]string {
 // in plugin.json headers, endpoints, etc.
 //
 // Environment variables already set by the user take precedence — only
-// keys not already present in the environment are injected.
+// keys not already present in the environment are injected. The return value
+// reports whether at least one value was injected.
 // dangerousEnvVars contains environment variable names that must never be
 // set from plugin config because they can alter process behavior in
 // security-critical ways (library injection, executable search path, etc.).
@@ -595,10 +596,11 @@ var dangerousEnvVars = map[string]bool{
 	"http_proxy": true, "https_proxy": true, "all_proxy": true, "no_proxy": true,
 }
 
-func (l *Loader) InjectPluginConfigEnv() {
+func (l *Loader) InjectPluginConfigEnv() bool {
 	settings := l.loadSettings()
+	injected := false
 	if len(settings.PluginConfigs) == 0 {
-		return
+		return false
 	}
 	for _, pluginCfg := range settings.PluginConfigs {
 		for key, val := range pluginCfg {
@@ -617,8 +619,10 @@ func (l *Loader) InjectPluginConfigEnv() {
 				continue
 			}
 			_ = os.Setenv(key, strVal)
+			injected = true
 		}
 	}
+	return injected
 }
 
 // LoadDev loads dev plugins registered via `dws plugin dev`.

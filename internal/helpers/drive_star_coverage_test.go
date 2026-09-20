@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageDriveStarCommands(t *testing.T) {
@@ -159,7 +161,7 @@ func TestCrossPlatformCoverageDriveStarAddScriptedSuccess(t *testing.T) {
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs([]string{"star", "add", "--node", "node-1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("star add returned error: %v", err)
 	}
 	if caller.calls != 1 {

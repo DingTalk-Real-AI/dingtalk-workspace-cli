@@ -215,8 +215,9 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 	return rt.Output(result)
 }
 
-// Only trust an explicit MCP input error with retryable=false. Transport errors
-// and system failures can occur after a write, so they still need verification.
+// Only trust an explicit, non-retryable MCP input error without recovery evidence.
+// Duplicate tokens and reconciliation hints mean an earlier write may have been
+// accepted; retryable=false forbids replay, but does not prove nothing was written.
 func isRecordWriteInputRejection(err error) bool {
 	var cliErr *helpers.CLIError
 	var appErr *apperrors.Error
@@ -231,12 +232,24 @@ func isRecordWriteInputRejection(err error) bool {
 	var body struct {
 		Status string `json:"status"`
 		Error  struct {
+			Code      string `json:"code"`
 			Type      string `json:"type"`
 			Retryable *bool  `json:"retryable"`
+			Details   struct {
+				ReconcileTool string `json:"reconcileTool"`
+			} `json:"details"`
 		} `json:"error"`
 	}
-	return json.Unmarshal([]byte(raw), &body) == nil && body.Status == "error" &&
-		(body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
+	if json.Unmarshal([]byte(raw), &body) != nil || body.Status != "error" {
+		return false
+	}
+	// Honor the recovery marker even when the lower layer classifies the error
+	// as user/input; the caller reconciles using its own original token/selectors.
+	if body.Error.Code == "DUPLICATE_CLIENT_TOKEN" || body.Error.Code == "REQUEST_ID_CONFLICT" ||
+		body.Error.Details.ReconcileTool == "get_record_write_result" {
+		return false
+	}
+	return (body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
 		body.Error.Retryable != nil && !*body.Error.Retryable
 }
 
@@ -329,7 +342,17 @@ func executeRecordBatches(
 			wireRecords = append(wireRecords, record)
 		}
 		params := map[string]any{"baseId": baseID, "tableId": tableID, "records": wireRecords}
-		writeData, writeErr := rt.CallMCPWriteDataStrict(product, tool, params)
+		var writeData map[string]any
+		var writeErr error
+		var clientToken string
+		if tool == "create_records" {
+			writeData, clientToken, writeErr = createRecordsReconciled(rt, baseID, tableID, wireRecords)
+			if ids := createdRecordIDs(writeData); len(ids) > 0 {
+				result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "offset": offset, "clientToken": clientToken, "recordIds": ids})
+			}
+		} else {
+			writeData, writeErr = rt.CallMCPWriteDataStrict(product, tool, params)
+		}
 		step := compositeStep{
 			Index: len(result.CompletedSteps) + 1, Name: "write record batch", Tool: tool,
 			Status: "completed", Offset: offset, Count: len(batch), Result: writeData,
@@ -391,6 +414,12 @@ func executeRecordBatches(
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
 			retryable := !isPendingRecordReadback(verifyErr)
+			if tool == "create_records" {
+				retryable = false
+				result.Checkpoint["clientToken"] = clientToken
+				result.Checkpoint["createdRecordIds"] = createdRecordIDs(writeData)
+				result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", baseID, "--table-id", tableID, "--client-token", clientToken)
+			}
 			if tool == "record_upsert" {
 				for _, record := range batch {
 					if recordID(record) == "" {
@@ -513,17 +542,34 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func queryRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
-	window, err := queryRecordWindow(rt, map[string]any{
-		"baseId": baseID, "tableId": tableID, "recordIds": ids,
-	}, len(ids))
-	if err != nil {
-		return nil, err
+	return queryRecordsByIDParams(rt, map[string]any{"baseId": baseID, "tableId": tableID}, ids)
+}
+
+func queryRecordsByIDParams(rt *shortcut.RuntimeContext, params map[string]any, ids []string) ([]map[string]any, error) {
+	// The service limits exact-ID responses to one 20-row page and may not
+	// publish continuation for omitted IDs. Partition the IDs themselves;
+	// retrying a cursor with the same 100 IDs cannot prove all rows.
+	result := make([]map[string]any, 0, len(ids))
+	chunkSize := recordQueryServicePageSize
+	if limit, ok := params["limit"].(int); ok && limit > 0 && limit < chunkSize {
+		chunkSize = limit
 	}
-	// Exact-ID verification below compares every requested ID with the returned
-	// records. The service can publish a continuation even after all requested
-	// IDs are present, so hasMore is not evidence that this bounded read-back is
-	// incomplete.
-	return window.Records, nil
+	for offset := 0; offset < len(ids); offset += chunkSize {
+		end := minInt(offset+chunkSize, len(ids))
+		chunk := ids[offset:end]
+		request := cloneAnyMap(params)
+		request["recordIds"] = chunk
+		delete(request, "cursor")
+		window, err := queryRecordWindow(rt, request, len(chunk))
+		if err != nil {
+			return nil, err
+		}
+		if _, err = validateExactRecordQuery(window.Records, chunk); err != nil {
+			return nil, err
+		}
+		result = append(result, window.Records...)
+	}
+	return result, nil
 }
 
 func queryDeletedRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {

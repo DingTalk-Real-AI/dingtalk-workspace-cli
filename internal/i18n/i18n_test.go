@@ -71,7 +71,7 @@ func TestCrossPlatformCoverageLoadCatalogHandlesValidAndInvalidResources(t *test
 		t.Fatalf("parseCatalog(valid) = %#v", catalog)
 	}
 	SetLang(strings.Repeat(" ", 2))
-	if Lang() != "en" {
+	if Lang() != "zh" {
 		t.Fatalf("blank language = %q", Lang())
 	}
 }
@@ -114,5 +114,32 @@ func TestAuthLoginSummaryTranslations(t *testing.T) {
 	}
 	if got := Tf("%.0f 天后", 30.0); got != "30 天后" {
 		t.Errorf("Chinese day expiry = %q", got)
+	}
+}
+
+func TestCrossPlatformCoveragePushLangRestoresPreviousLocale(t *testing.T) {
+	previous := Lang()
+	t.Cleanup(func() { SetLang(previous) })
+
+	SetLang("zh")
+	restore := PushLang("en")
+	if Lang() != "en" {
+		t.Fatalf("pushed language = %q", Lang())
+	}
+	restore()
+	if Lang() != "zh" {
+		t.Fatalf("restored language = %q", Lang())
+	}
+}
+
+func TestCrossPlatformCoverageLangPinnedByEnvOnlyHonorsDWSLang(t *testing.T) {
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	t.Setenv("DWS_LANG", "")
+	if LangPinnedByEnv() {
+		t.Fatal("LANG alone must not pin the locale")
+	}
+	t.Setenv("DWS_LANG", "zh")
+	if !LangPinnedByEnv() {
+		t.Fatal("DWS_LANG must pin the locale")
 	}
 }

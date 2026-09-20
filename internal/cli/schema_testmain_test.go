@@ -14,6 +14,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -93,7 +94,22 @@ func installAssembledSchemaDeliveryForPackageCLITests() (func(), error) {
 	packageCLIAssembledDelivery = &loaded
 	restorePackageCLISchemaDeliveryHook = restorePackageCLISchemaDeliveryForTest
 	restorePackageCLISchemaDeliveryForTest()
+	registerPackageTestIsolatedBuilder()
 	return cleanup, nil
+}
+
+func registerPackageTestIsolatedBuilder() {
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		artifacts, err := buildSchemaCacheArtifactsFromLoaded(*packageCLIAssembledDelivery)
+		if err != nil {
+			return SchemaCacheBuildResult{}, err
+		}
+		identity, err := IdentityFromArtifacts("open", artifacts)
+		if err != nil {
+			return SchemaCacheBuildResult{}, err
+		}
+		return SchemaCacheBuildResult{Artifacts: artifacts, Identity: identity}, nil
+	})
 }
 
 // mergeSchemaCatalogDump re-merges a cmd_schema_catalog dump (catalog.json
@@ -134,6 +150,7 @@ func mergeSchemaCatalogDump(envelopeJSON []byte, toolsDir string) (SchemaCatalog
 }
 
 func restorePackageCLISchemaDeliveryForTest() {
+	schemaCacheRuntimeUncertain.Store(false)
 	if packageCLIAssembledDelivery == nil {
 		return
 	}

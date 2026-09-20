@@ -6,6 +6,9 @@ replace gitlab.alibaba-inc.com/aes/aem-go-sdk => ./third_party/aem-go-sdk
 
 replace safechat-go-sdk => ./third_party/safechat-go-sdk
 
+// v1.10.2 with a Traverse flag-error fix; see third_party/cobra/PATCHES.md.
+replace github.com/spf13/cobra => ./third_party/cobra
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/RealAlexandreAI/json-repair v0.0.15
@@ -21,6 +24,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.5
 	github.com/zalando/go-keyring v0.2.8
@@ -29,6 +33,7 @@ require (
 	golang.org/x/image v0.31.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
+	google.golang.org/protobuf v1.36.12
 	safechat-go-sdk v0.0.0
 )
 

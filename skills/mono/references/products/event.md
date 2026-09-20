@@ -9,6 +9,12 @@
 - 一个组织一个 bus，互不干扰、可同时跑；同组织内多个 consume 共享一个 bus。
 - 非默认组织加全局 `--profile <corpId 或 profile 名>`；漏传会退回默认 profile 而失败。
 
+## AppKey 与认证排障
+
+开源版默认 `normal` 模式只需要用户 token 和 AppKey，不要求用户提供 AppSecret。已有 AppKey 沿用本地身份；本地元数据缺失时，CLI 从当前事件 MCP 的 `/cli/clientId` 自动获取，仅用于本次调用并传给后台 bus，不写入 token/profile/app 配置。`custom` 模式和定制版不使用此兜底；取得 AppKey 不代表已验证 token 的应用归属，仍由服务端校验。
+
+自动获取失败时按结构化 `reason` 和 `retryable` 处理；网络暂时失败、429、5xx 可按预算重试，取消、拒绝或无效数据不盲目重试。不要引导默认模式用户提供 AppSecret。排查云端差异时只记录配置目录及字段存在性，不输出凭据；`auth status` 不能证明 AppKey 完整，`event list` 是本地目录，不能证明远端事件连接正常。
+
 ## Core commands
 
 | Command | Purpose |
@@ -283,7 +289,7 @@ dws event stop --all --yes
 - 表情回应事件直接读取 `operator/operator_open_dingtalk_id/reaction_name/reaction_text/operation_type/operation_time`。
 - 群成员加入/退出事件读取 `conversation_id/operator/operator_open_dingtalk_id/members/event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组，成员项包含 `nick/open_dingtalk_id`；系统操作或成员自行退出时操作人字段可能为空。
 - 群标题变更和群解散当前只承诺 `type/event_id/timestamp/subscribe_id/payload`；以实际 `payload` 为准，不猜测群标题、操作者等字段。
-- OA 事件读取顶层 `process_instance_id/process_code/title/status/create_time/event_time`；任务事件另有 `task_id`，完成、转交或终止事件按对应 schema 提供 `finish_time`，任务完成、任务转交和实例完成还提供 `result`。`status/result` 保留服务端实际值，不推断完整枚举；缺少稳定 ID 或 payload 非法时 stderr 会输出 warning，stdout 回退为原始 transport envelope。
+- OA 事件读取顶层 `process_instance_id/process_code/title/status/create_time/event_time`；七类事件还支持可选字符串 `staff_id`、`activity_id`、`corp_id`、`business_id`，仅在服务端提供对应非空值时输出；抄送事件还可提供毫秒时间戳 `cc_time`；任务事件另有 `task_id`，完成、转交或终止事件按对应 schema 提供 `finish_time`，任务完成、任务转交和实例完成还提供 `result`。`status/result` 保留服务端实际值，不推断完整枚举；缺少稳定 ID 或 payload 非法时 stderr 会输出 warning，stdout 回退为原始 transport envelope。
 - VoIP 事件读取顶层 `biz_id/corp_id/org_id/target_uid/call_id/caller_uid/callee_uid/call_type/room_id/create_time/event_time`。`caller_uid/callee_uid` 是字符串标识，保留前导 `0`、连字符等原始内容，不转换为数字；`biz_id` 是重试稳定的业务去重 ID。敏感入会码不进入 `--flatten` 输出，默认非扁平 transport envelope 的 `.data` 也会移除 `roomCode`；只有显式 `--debug-raw-events` 才输出原始值，且不得记录或转发。
 - Todo 事件读取顶层 `task_id/subject/creator_id/create_time`；创建和更新事件还提供角色列表、优先级、状态阶段、计划/实际时间、来源与场景字段，更新额外提供 `old_status_stage/update_time`，删除提供 `delete_time`。空的可选时间和 `parent_id` 省略；缺少 `task_id` 或 payload 非法时回退为原始 transport envelope。
 - 互动卡片事件保持顶层 `type/event_id/timestamp/subscribe_id/payload`，结构化上下文优先读取 `payload.body.actionData.context`。通过 `questions[].id` 关联 `answers[question_id]`，`selected` 中的选项 ID 再按同一问题的 `options[].id` 转换为标签；空数组是合法未选择状态，`custom` 独立保留。操作者使用整数 `operatorDTO.uid`，`createUid/orgId` 保持字符串；`bizInfoDTO.bizId`、`sourceTurnId`、`spaceId`、`conversationContextDTO.cid` 均按不透明 ID 关联。`timestamp/event_time/triggerTimestamp` 分别保留且不假设相等；字符串化的 `body.context` 和 `extension` 只作兼容或诊断回退。各层继续保留未知字段；注册时传递 `filterRule={}`，且不接受用户、群、角色或消息 Filter 参数。

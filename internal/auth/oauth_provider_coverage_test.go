@@ -19,7 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 type oauthLoginFixture struct {
@@ -422,33 +424,41 @@ func TestCrossPlatformCoverageOAuthLoginEarlyAndListenerEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageOAuthLoginTimeoutAndServerError(t *testing.T) {
-	oldTimeout := oauthLoginTimeout
-	oldListen := oauthListen
-	t.Cleanup(func() {
-		oauthLoginTimeout = oldTimeout
-		oauthListen = oldListen
-	})
-	oauthLoginTimeout = time.Millisecond
-	f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
-		return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}
-	})
-	close(f.exchangeRelease)
-	close(f.statusRelease)
-	if _, err := f.provider.Login(context.Background(), true); err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
-		t.Fatalf("login timeout = %v", err)
-	}
+	// Language and OAuth seams are process-global; keep locale cases sequential.
+	for _, locale := range []struct {
+		lang        string
+		wantTimeout string
+	}{
+		{"zh", "授权超时（5分钟），请重试"},
+		{"en", "Authorization timeout (5 minutes), please retry"},
+	} {
+		t.Run(locale.lang, func(t *testing.T) {
+			previousLang := i18n.Lang()
+			t.Cleanup(func() { i18n.SetLang(previousLang) })
+			i18n.SetLang(locale.lang)
+			testseam.Swap(t, &oauthLoginTimeout, time.Millisecond)
+			f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
+				return CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}}
+			})
+			close(f.exchangeRelease)
+			close(f.statusRelease)
+			if _, err := f.provider.Login(context.Background(), true); err == nil || err.Error() != locale.wantTimeout {
+				t.Fatalf("login timeout = %v, want %q", err, locale.wantTimeout)
+			}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := listener.Close(); err != nil {
-		t.Fatal(err)
-	}
-	oauthLoginTimeout = time.Second
-	oauthListen = func(string, string) (net.Listener, error) { return listener, nil }
-	if _, err := f.provider.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "callback server") {
-		t.Fatalf("callback server failure = %v", err)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := listener.Close(); err != nil {
+				t.Fatal(err)
+			}
+			testseam.Swap(t, &oauthLoginTimeout, time.Second)
+			testseam.Swap(t, &oauthListen, func(string, string) (net.Listener, error) { return listener, nil })
+			if _, err := f.provider.Login(context.Background(), true); err == nil || !strings.Contains(err.Error(), "callback server") {
+				t.Fatalf("callback server failure = %v", err)
+			}
+		})
 	}
 }
 
