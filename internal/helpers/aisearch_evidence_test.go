@@ -2,11 +2,16 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+type aisearchTestStringer struct{ value string }
+
+func (s aisearchTestStringer) String() string { return s.value }
 
 func TestEnrichAisearchResponseExposesSourceAndCandidateEvidence(t *testing.T) {
 	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
@@ -336,4 +341,181 @@ func TestAisearchNaturalRangeCommonChineseRanges(t *testing.T) {
 			t.Fatalf("%s = %v %s..%s", tc.raw, ok, start, end)
 		}
 	}
+}
+
+func TestAisearchEvidenceEdgeBranches(t *testing.T) {
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+
+	if got := resolveAisearchBehaviorMessages(context.Background(), "raw", map[string]any{"searchTypes": []string{"im"}}, now); got != "raw" {
+		t.Fatalf("non-map behavior result = %#v", got)
+	}
+	if got := resolveAisearchBehaviorMessages(context.Background(), map[string]any{}, map[string]any{"searchTypes": []string{"document"}, "direction": "甲->我"}, now); got == nil {
+		t.Fatal("non-IM behavior result is nil")
+	}
+	if got := resolveAisearchBehaviorMessages(context.Background(), map[string]any{}, map[string]any{"searchTypes": []string{"im"}, "direction": "我->甲"}, now); got == nil {
+		t.Fatal("outbound behavior result is nil")
+	}
+
+	t.Run("person lookup error and ambiguity", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("person failed")}}}
+		installScriptedCaller(t, caller)
+		root := map[string]any{}
+		if got := resolveAisearchBehaviorMessages(context.Background(), root, map[string]any{"searchTypes": []string{"im"}, "direction": "甲->我"}, now); got == nil {
+			t.Fatal("lookup error result is nil")
+		}
+	})
+	t.Run("ambiguous person", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[]}`}}}
+		installScriptedCaller(t, caller)
+		root := map[string]any{}
+		resolveAisearchBehaviorMessages(context.Background(), root, map[string]any{"searchTypes": []string{"im"}, "direction": "甲->我"}, now)
+	})
+	t.Run("message error", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("chat failed")}}}
+		installScriptedCaller(t, caller)
+		out := resolveAisearchBehaviorMessages(context.Background(), map[string]any{}, map[string]any{"searchTypes": []string{"im"}, "direction": "某人->我"}, now).(map[string]any)
+		if nestedValue(out, "resolvedMessageEvidence", "status") != "failed" {
+			t.Fatalf("out=%#v", out)
+		}
+	})
+	t.Run("word dedupe and truncation", func(t *testing.T) {
+		rows := make([]string, 0, 24)
+		for i := 0; i < 22; i++ {
+			rows = append(rows, fmt.Sprintf(`{"sender":"甲","text":"f%d.docx","time":"2026-09-20 10:00:00"}`, i))
+		}
+		rows = append(rows, `{"sender":"甲","text":"f0.docx","time":"2026-09-20 10:00:00"}`, `{"sender":"甲","text":"","time":"2026-09-20 10:00:00"}`)
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":{"messages":[` + strings.Join(rows, ",") + `]}}`}}}
+		installScriptedCaller(t, caller)
+		out := resolveAisearchBehaviorMessages(context.Background(), map[string]any{}, map[string]any{"queries": []string{"Word 文件"}, "searchTypes": []string{"im"}, "direction": "某人->我", "timeRange": "今天"}, now).(map[string]any)
+		if nestedValue(out, "resolvedMessageEvidence", "messageCount") != 20 || nestedValue(out, "resolvedMessageEvidence", "truncatedTo20") != true {
+			t.Fatalf("out=%#v", out)
+		}
+	})
+
+	filtered := filterAisearchMessagesByTime([]map[string]any{{"time": "2026-09-19 10:00:00"}, {"time": "bad"}}, now.Add(-time.Hour), now)
+	if len(filtered) != 1 {
+		t.Fatalf("filtered=%#v", filtered)
+	}
+	if got := dedupeAisearchMessagesByText([]map[string]any{{"text": "A"}, {"text": "a"}, {"text": ""}}); len(got) != 1 {
+		t.Fatalf("dedupe=%#v", got)
+	}
+	if aliases, ok := uniquePersonAliases(map[string]any{"result": []any{map[string]any{"title": "甲"}, map[string]any{"title": "乙"}}}); ok || aliases != nil {
+		t.Fatalf("aliases=%#v ok=%v", aliases, ok)
+	}
+
+	messageTree := map[string]any{"messages": []any{map[string]any{"sender": "甲", "text": "主题", "children": []any{map[string]any{"sender": "甲", "text": "主题"}}}}}
+	if got := collectAisearchMessages(messageTree, nil, []string{"主题"}); len(got) != 1 {
+		t.Fatalf("messages=%#v", got)
+	}
+}
+
+func TestAisearchExactCandidateEdgeBranches(t *testing.T) {
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	if got := resolveAisearchExactCandidates(context.Background(), "raw", nil, now); got != "raw" {
+		t.Fatalf("got=%#v", got)
+	}
+
+	tests := []struct {
+		name, source string
+		item         map[string]any
+		response     scriptedToolStep
+	}{
+		{"document adoc", "document", map[string]any{"sourceType": "document", "title": "标题", "nodeId": "n1", "meta": map[string]any{"doc_type": "adoc"}}, scriptedToolStep{text: `{"result":{"body":"正文"}}`}},
+		{"document file", "document", map[string]any{"sourceType": "document", "title": "标题", "nodeId": "n2"}, scriptedToolStep{text: `{"result":{"name":"标题"}}`}},
+		{"detail failure", "todo", map[string]any{"sourceType": "todo", "title": "标题", "taskId": "t1"}, scriptedToolStep{err: errors.New("read failed")}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{tc.response}}
+			installScriptedCaller(t, caller)
+			out := resolveAisearchExactCandidates(context.Background(), map[string]any{"result": []any{tc.item}}, map[string]any{"queries": []string{"标题"}, "searchTypes": []string{tc.source}}, now).(map[string]any)
+			if out["result"] == nil {
+				t.Fatalf("out=%#v", out)
+			}
+		})
+	}
+
+	minute := map[string]any{"sourceType": "minute", "title": "标题", "meta": map[string]any{"summary": "摘要"}}
+	out := resolveAisearchExactCandidates(context.Background(), map[string]any{"result": []any{minute}}, map[string]any{"queries": []string{"标题"}, "searchTypes": []string{"minute"}}, now).(map[string]any)
+	if nestedValue(out["result"].([]any)[0].(map[string]any), "resolvedDetail", "status") != "resolved_from_search_payload" {
+		t.Fatalf("out=%#v", out)
+	}
+
+	for _, item := range []map[string]any{
+		{"sourceType": "document", "title": "标题"}, {"sourceType": "todo", "title": "标题"}, {"sourceType": "calendar", "title": "标题"}, {"sourceType": "unknown", "title": "标题"},
+	} {
+		resolveAisearchExactCandidates(context.Background(), map[string]any{"result": []any{item}}, map[string]any{"queries": []string{"标题"}, "searchTypes": []string{item["sourceType"].(string)}}, now)
+	}
+	resolveAisearchExactCandidates(context.Background(), map[string]any{"result": []any{map[string]any{"sourceType": "todo", "title": "标题", "taskId": "1"}, map[string]any{"sourceType": "todo", "title": "标题", "taskId": "2"}}}, map[string]any{"queries": []string{"标题"}, "searchTypes": []string{"todo"}}, now)
+
+	t.Run("calendar existing and fallback error", func(t *testing.T) {
+		items := []any{map[string]any{"sourceType": "calendar", "title": "标题"}}
+		if got := appendExactCalendarCandidate(context.Background(), items, map[string]any{"queries": []string{"标题"}, "timeRange": "今天"}, now); len(got) != 1 {
+			t.Fatalf("got=%#v", got)
+		}
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("calendar failed")}}}
+		installScriptedCaller(t, caller)
+		if got := appendExactCalendarCandidate(context.Background(), nil, map[string]any{"queries": []string{"标题"}, "searchTypes": []string{"calendar"}, "timeRange": "今天"}, now); len(got) != 0 {
+			t.Fatalf("got=%#v", got)
+		}
+	})
+}
+
+func TestAisearchPersonAndValueEdgeBranches(t *testing.T) {
+	base := map[string]any{"keyword": "甲的直属上级", "dimension": []string{"supervisor"}}
+	for _, step := range []scriptedToolStep{{err: errors.New("person failed")}, {text: `{"result":[]}`}, {text: `{"result":[{"title":"甲"}]}`}} {
+		t.Run(fmt.Sprint(step.err, step.text), func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{step}}
+			installScriptedCaller(t, caller)
+			resolveAisearchPersonRelation(context.Background(), map[string]any{}, base)
+		})
+	}
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"title":"甲","meta":{"supervisor":"乙"}}]}`}}}
+	installScriptedCaller(t, caller)
+	if got := resolveAisearchPersonRelation(context.Background(), "raw", base); got != "raw" {
+		t.Fatalf("got=%#v", got)
+	}
+
+	if got := enrichAisearchPersonResponse("raw", nil).(map[string]any)["result"]; got != "raw" {
+		t.Fatalf("got=%#v", got)
+	}
+	enrichAisearchPersonResponse(map[string]any{"result": []any{"raw"}}, nil)
+	enrichAisearchResponse("raw", nil, time.Now())
+	enrichAisearchResponse(map[string]any{"result": []any{"raw"}}, nil, time.Now())
+
+	items := []any{"raw", map[string]any{"sourceType": "doc", "_searchEvidence": map[string]any{"queryMatch": "text_evidence_present"}}, map[string]any{"sourceType": "doc", "_searchEvidence": map[string]any{"queryMatch": "no_text_evidence"}}}
+	compactAisearchItems(items)
+
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	for _, tc := range []struct{ date, rng, status string }{{"x", "", "not_requested"}, {"x", "今天", "unparseable_result_time"}, {"2026-09-20 10:00:00", "以后", "range_not_machine_verifiable"}} {
+		_, status := aisearchTimeRangeStatus(tc.date, tc.rng, now)
+		if status != tc.status {
+			t.Fatalf("%v status=%s", tc, status)
+		}
+	}
+	for _, raw := range []string{"今天", "昨天", "本周", "本月", "最近七天", "未来7天", "近3天", "近三天", "近零天"} {
+		aisearchNaturalRange(raw, now)
+	}
+	if got := splitAisearchQueryTerms("甲 乙"); len(got) != 2 {
+		t.Fatalf("got=%#v", got)
+	}
+	for _, raw := range []string{"3", "三", "零"} {
+		chineseOrArabicNumber(raw)
+	}
+	for _, raw := range []string{"", "bad%zz?taskId=fallback", "https://x.invalid/?taskId=ok", "https://x.invalid/?x=1&taskId=regex%zz", "https://x.invalid/?x=1"} {
+		taskIDFromURL(raw)
+	}
+	for _, value := range []any{[]string{"a"}, []any{"a", 1, nil}, "", "a", true} {
+		stringSlice(value)
+	}
+	for _, value := range []any{"a", float64(1.5), 1, int64(2), aisearchTestStringer{"s"}, true} {
+		aisearchStringValue(value)
+	}
+	if matchesExactAisearchTitle("", []string{"a"}) {
+		t.Fatal("empty title matched")
+	}
+	if aisearchSourceType(map[string]any{"sourceType": "doc"}) != "document" {
+		t.Fatal("doc source not normalized")
+	}
+	buildAisearchCandidateEvidence(map[string]any{"sourceType": "im", "title": "风险复盘", "snippet": "风险", "resolvedDetail": map[string]any{"status": "resolved"}, "date": "bad"}, map[string]any{"queries": []string{"发版风险"}, "timeRange": "今天"}, now)
 }
