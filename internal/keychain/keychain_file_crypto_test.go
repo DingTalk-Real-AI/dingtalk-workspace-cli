@@ -23,3 +23,10 @@ func TestFileKeychainGCMConstructionErrors(t *testing.T) {
 		t.Fatalf("decrypt GCM error = %v", err)
 	}
 }
+
+func TestCrossPlatformCoverageFileDEKDecryptErrorClassification(t *testing.T) {
+	err := fileDEKCiphertextMismatchError()
+	if !IsCiphertextKeyMismatch(err) {
+		t.Fatalf("fileDEKCiphertextMismatchError() = %v, want ciphertext key mismatch", err)
+	}
+}
