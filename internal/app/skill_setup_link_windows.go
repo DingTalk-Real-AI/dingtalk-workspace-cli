@@ -13,6 +13,9 @@ import (
 )
 
 func createSkillSetupDirLink(target, link string) error {
+	if target == "" {
+		return fmt.Errorf("junction target is empty")
+	}
 	if err := os.Mkdir(link, 0o755); err != nil {
 		return err
 	}
