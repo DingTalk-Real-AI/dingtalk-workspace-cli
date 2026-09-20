@@ -150,6 +150,12 @@ func TestWaitTimeoutFlagDefaultsComeFromDeclaration(t *testing.T) {
 	if got := waitTimeoutSecs(fallback); got != 0 {
 		t.Fatalf("waitTimeoutSecs=%d, want explicit zero", got)
 	}
+
+	implicit := &cobra.Command{}
+	implicit.Flags().Int(waitTimeoutFlagName, 0, "")
+	if got := waitTimeoutSecs(implicit); got != DefaultWaitTimeoutSecs {
+		t.Fatalf("waitTimeoutSecs=%d, want framework %d for an unchanged zero value", got, DefaultWaitTimeoutSecs)
+	}
 }
 
 func TestWaitTimeoutDurationRejectsOverflowingSeconds(t *testing.T) {
