@@ -28,7 +28,7 @@ metadata:
 | 姓名、工号、部门、职位、职责、上下级或手机号线索找人 | `dws aisearch person` |
 | 按主题跨文档、消息、邮件、待办、日程、听记等找内容 | `dws aisearch enterprise` |
 | 以我为端点的发送/接收，或我创建、编辑、分享过什么 | `dws aisearch behavior` |
-| 仅 IM 且需逐条消息谓词过滤 | `dws chat +search-msg` |
+| <!-- dws-intent: chat.search.filtered -->仅 IM 且需逐条消息谓词过滤 | `dws chat +search-msg` |
 | 无主题地列最近访问/编辑文档 | `dws drive +recent` |
 | 枚举部门完整成员 | `dingtalk-contact` |
 | 完整手机号精确反查 | `dws contact user search-mobile --mobile "<手机号>" --format json` |
