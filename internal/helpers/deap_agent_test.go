@@ -1235,7 +1235,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 	}
 	want := map[string]any{
 		"name": "值班助手", "description": "处理值班问题",
-		"deptId": "dept-1",
+		"deptId":                    "dept-1",
 		"digitalTagEmployeeProfile": map[string]any{"responseMode": "mention_only"},
 	}
 	if !reflect.DeepEqual(call.args, want) {

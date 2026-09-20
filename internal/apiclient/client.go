@@ -242,6 +242,11 @@ func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequ
 	if err := c.validateTarget(fullURL); err != nil {
 		return nil, err
 	}
+	// 在创建 pipe 和 goroutine 前统一校验名称，避免用户可控的字段名/文件名
+	// 注入额外 MIME 头或字段；与非流式 newMultipartBody 保持一致。
+	if err := validateMultipartNames(req.FieldName, req.FileName, req.Fields); err != nil {
+		return nil, err
+	}
 
 	pipeReader, pipeWriter := io.Pipe()
 	form := multipart.NewWriter(pipeWriter)
@@ -289,6 +294,21 @@ func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequ
 		return nil, fmt.Errorf("reading response body: %w", readErr)
 	}
 	return &RawAPIResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}, nil
+}
+
+// validateMultipartNames 拒绝字段名、文件名和字段键中的 CR/LF，避免用户可控
+// 的名称向 multipart 报文注入额外 MIME 头或字段。流式 UploadMultipart 与非流式
+// newMultipartBody 必须一致校验，否则后者已加固而前者仍可被注入。
+func validateMultipartNames(fieldName, fileName string, fields map[string]string) error {
+	if strings.ContainsAny(fieldName, "\r\n") || strings.ContainsAny(fileName, "\r\n") {
+		return fmt.Errorf("multipart field 或 filename 不能包含换行符")
+	}
+	for key := range fields {
+		if strings.ContainsAny(key, "\r\n") {
+			return fmt.Errorf("multipart 字段名 %q 不能包含换行符", key)
+		}
+	}
+	return nil
 }
 
 func writeMultipartBody(form *multipart.Writer, req MultipartUploadRequest) error {

@@ -75,6 +75,37 @@ func TestCrossPlatformCoverageMultipartValidationAndFailures(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageUploadMultipartRejectsCRLFInNames(t *testing.T) {
+	// The streaming UploadMultipart path must reject CR/LF in field keys, the file
+	// field name and the file name before creating the pipe/goroutine, matching the
+	// non-streaming newMultipartBody guard. Otherwise user-controlled names could
+	// inject extra MIME headers or fields into the multipart body.
+	ctx := context.Background()
+	client := NewClient("fixture-token", "https://api-deap.dingtalk.com")
+	client.TargetValidator = func(string) error { return nil }
+	client.HTTPClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("name carrying CR/LF reached the HTTP transport")
+		return nil, errors.New("unexpected request")
+	})
+	for _, tc := range []struct {
+		name string
+		req  MultipartUploadRequest
+	}{
+		{"field key", MultipartUploadRequest{Path: "/upload", FileName: "skill.zip",
+			File: strings.NewReader("data"), Fields: map[string]string{"bad\r\nX-Injected: 1": "v"}}},
+		{"file field name", MultipartUploadRequest{Path: "/upload", FieldName: "file\r\nX-Injected: 1",
+			FileName: "skill.zip", File: strings.NewReader("data")}},
+		{"file name", MultipartUploadRequest{Path: "/upload", FileName: "skill.zip\r\nX-Injected: 1",
+			File: strings.NewReader("data")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := client.UploadMultipart(ctx, tc.req); err == nil || !strings.Contains(err.Error(), "换行符") {
+				t.Fatalf("CRLF-bearing name not rejected before side effects: err=%v", err)
+			}
+		})
+	}
+}
+
 type multipartFailWriter struct{ writes, failAt int }
 
 func (w *multipartFailWriter) Write(p []byte) (int, error) {

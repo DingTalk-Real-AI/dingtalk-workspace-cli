@@ -54,6 +54,64 @@ func TestCrossPlatformCoverageExternalExchangeReviewConfigDirectoryAndSource(t *
 	}
 }
 
+func TestCrossPlatformCoverageExternalExchangeReviewExplicitLaterCandidateReusesSecret(t *testing.T) {
+	// The runtime candidate is first and managed (no reusable secret). Selecting a
+	// later app/env candidate via --client-id must still reuse that candidate's
+	// unmanaged secret. Before the fix the reuse loop was gated on
+	// clientID == configured.id (configured is only the first valid candidate), so an
+	// explicitly selected later candidate fell through to an empty-secret managed
+	// exchange and broke that app's normal OAuth authorization-code login.
+	for _, tc := range []struct {
+		name       string
+		setup      func(t *testing.T, dir string)
+		requestID  string
+		wantSecret string
+		wantSource string
+	}{
+		{
+			name: "env candidate",
+			setup: func(t *testing.T, _ string) {
+				t.Setenv("DWS_CLIENT_ID", "env-app")
+				t.Setenv("DWS_CLIENT_SECRET", "env-secret")
+			},
+			requestID:  "env-app",
+			wantSecret: "env-secret",
+			wantSource: "env",
+		},
+		{
+			name: "app candidate",
+			setup: func(t *testing.T, dir string) {
+				if err := os.WriteFile(GetAppConfigPath(dir),
+					[]byte(`{"clientId":"app-later","clientSecret":"app-secret"}`), 0600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			requestID:  "app-later",
+			wantSecret: "app-secret",
+			wantSource: "app",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := externalExchangeTestConfig(t)
+			// Make the runtime candidate the first valid (managed, secret-less) one so the
+			// explicitly requested later candidate differs from configured.id.
+			testseam.Swap(t, &runtimeClientID, "runtime-app")
+			testseam.Swap(t, &runtimeClientSecret, "")
+			testseam.Swap(t, &clientIDFromMCP, true)
+			tc.setup(t, dir)
+
+			id, secret, source, err := resolveExternalExchangeClient(context.Background(), dir, tc.requestID, "")
+			if err != nil {
+				t.Fatalf("resolve failed: %v", err)
+			}
+			if id != tc.requestID || secret != tc.wantSecret || source != tc.wantSource {
+				t.Fatalf("explicit later candidate secret not reused: id=%q secret=%q source=%q, want id=%q secret=%q source=%q",
+					id, secret, source, tc.requestID, tc.wantSecret, tc.wantSource)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageExternalExchangeReviewDirectProvenanceSurvivesPersistence(t *testing.T) {
 	for _, source := range []string{"app", "env", "default", "flag"} {
 		t.Run(source, func(t *testing.T) {

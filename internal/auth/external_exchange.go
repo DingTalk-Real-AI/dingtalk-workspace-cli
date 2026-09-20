@@ -116,11 +116,13 @@ func resolveExternalExchangeClient(ctx context.Context, configDir, requestedID, 
 	if explicitSecret != "" {
 		return clientID, explicitSecret, "flag", nil
 	}
-	if clientID == configured.id && !configured.managed {
-		for _, c := range candidates {
-			if strings.TrimSpace(c.id) == clientID && c.secret != "" && !strings.HasPrefix(c.secret, "<") && !c.managed {
-				return clientID, c.secret, c.source, nil
-			}
+	// 按最终选定的 clientID 遍历全部候选复用密钥：configured 仅是候选列表里第一个
+	// 有效应用，用户用 --client-id 显式选中后续 app/env 候选时也必须复用其同 ID 的
+	// 非托管 secret；否则会以空 secret 落入托管 MCP 换票，破坏该应用正常的 OAuth
+	// 授权码登录。是否托管由每个候选自身的 managed 标记判定，与首个候选无关。
+	for _, c := range candidates {
+		if strings.TrimSpace(c.id) == clientID && c.secret != "" && !strings.HasPrefix(c.secret, "<") && !c.managed {
+			return clientID, c.secret, c.source, nil
 		}
 	}
 	return clientID, "", "mcp", nil
