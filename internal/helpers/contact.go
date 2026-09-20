@@ -1675,7 +1675,7 @@ func newContactCommand() *cobra.Command {
 		Use:     "get-by-dingtalk-id",
 		Aliases: []string{"search-dingtalk"},
 		Short:   "按钉钉号获取用户ID",
-		Long: `根据钉钉号（dingtalkId）查询组织内员工，返回其 userId、uid 与姓名。
+		Long: `根据钉钉号（dingtalkId）查询组织内员工，返回其 userId。
 
 钉钉号是员工在钉钉内的唯一短标识（如 zhangsan），与手机号、userId 不同。`,
 		Example: `  dws contact user get-by-dingtalk-id --id zhangsan
