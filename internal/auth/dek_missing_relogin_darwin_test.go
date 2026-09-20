@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -147,5 +148,80 @@ func TestCrossPlatformCoverageMissingDEKDeviceStartsAuthorization(t *testing.T) 
 	_, err := provider.Login(context.Background())
 	if calls == 0 || !errors.Is(err, requestErr) {
 		t.Fatalf("device authorization calls = %d, error = %v", calls, err)
+	}
+}
+
+// TestCrossPlatformCoverageMissingDEKV1MultiProfileReloginPersists reproduces
+// the v1 dual-profile registry blocker: after the shared DEK is lost, the v1
+// migration runs during persistence and reads the non-target organization's
+// slot. That read must not strand the fresh login, and the non-target
+// ciphertext must stay intact.
+func TestCrossPlatformCoverageMissingDEKV1MultiProfileReloginPersists(t *testing.T) {
+	cleanupKeychain(t)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	configDir := t.TempDir()
+
+	target := testToken("old-target", "corp-target", "Target Org")
+	other := testToken("old-other", "corp-other", "Other Org")
+	if err := SaveTokenData(configDir, target); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTokenData(configDir, other); err != nil {
+		t.Fatal(err)
+	}
+	// Rewrite the registry as a valid v1 dual-profile install that still has
+	// global/organization/identity ciphertext for both organizations.
+	raw := `{
+  "version": 1,
+  "currentProfile": "corp-target",
+  "profiles": [
+    {"name":"Target Org","corpId":"corp-target","corpName":"Target Org","userId":"user_corp-target"},
+    {"name":"Other Org","corpId":"corp-other","corpName":"Other Org","userId":"user_corp-other"}
+  ]
+}`
+	if err := os.WriteFile(ProfilesPath(configDir), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Delete the shared DEK.
+	if err := os.Remove(filepath.Join(keychain.StorageDir(keychain.Service), "dek")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadTokenDataKeychain(); !keychain.IsDEKMissing(err) {
+		t.Fatalf("legacy read = %v, want missing DEK", err)
+	}
+
+	// Snapshot the non-target organization's ciphertext before the fresh login.
+	otherOrgPath := profileCiphertextPathForTest(other.CorpID)
+	otherIdentityPath := filepath.Join(keychain.StorageDir(keychain.Service),
+		strings.ReplaceAll(TokenAccountForIdentity(other.CorpID, other.UserID), ":", "_")+".enc")
+	orgBefore, err := os.ReadFile(otherOrgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityBefore, err := os.ReadFile(otherIdentityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := *target
+	fresh.AccessToken = "new-access"
+	if err := SaveLoginTokenData(configDir, &fresh); err != nil {
+		t.Fatalf("fresh login = %v", err)
+	}
+
+	// The v1 migration must not touch non-target ciphertext.
+	orgAfter, err := os.ReadFile(otherOrgPath)
+	if err != nil || !bytes.Equal(orgAfter, orgBefore) {
+		t.Fatalf("non-target org slot changed: %v", err)
+	}
+	identityAfter, err := os.ReadFile(otherIdentityPath)
+	if err != nil || !bytes.Equal(identityAfter, identityBefore) {
+		t.Fatalf("non-target identity slot changed: %v", err)
+	}
+
+	// The fresh credential is persisted and readable.
+	stored, err := LoadTokenDataForProfile(configDir, "")
+	if err != nil || stored == nil || stored.AccessToken != "new-access" {
+		t.Fatalf("saved login unreadable: %v", err)
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/google/uuid"
 
@@ -229,7 +230,13 @@ func ensureProfilesMigrationLocked(configDir string) error {
 		orgToken, loaded := orgTokens[corpID]
 		if !loaded {
 			token, loadErr := profilesLoadCorp(corpID)
-			if legacySelectionState && loadErr != nil && !errors.Is(loadErr, ErrTokenDataNotFound) {
+			// A lost DEK leaves the slot ciphertext permanently unreadable. The
+			// migration cannot extract its identity, but must not block a fresh
+			// login for another profile: leave the slot intact and skip it. That
+			// organization's next fresh login replaces the slot (creating a new
+			// DEK) through repairLoginCiphertextMismatchTargets.
+			if legacySelectionState && loadErr != nil &&
+				!errors.Is(loadErr, ErrTokenDataNotFound) && !keychain.IsDEKMissing(loadErr) {
 				return loadErr
 			}
 			if loadErr != nil {
@@ -263,7 +270,11 @@ func ensureProfilesMigrationLocked(configDir string) error {
 					legacyToken, legacyTokenErr = profilesLoadLegacy()
 					legacyTokenLoaded = true
 				}
-				if legacyTokenErr != nil && !errors.Is(legacyTokenErr, ErrTokenDataNotFound) {
+				// Same lost-DEK rule as organization slots above: an unreadable
+				// global mirror cannot supply migration credentials, but must not
+				// block the reauthorization of a different profile.
+				if legacyTokenErr != nil &&
+					!errors.Is(legacyTokenErr, ErrTokenDataNotFound) && !keychain.IsDEKMissing(legacyTokenErr) {
 					return legacyTokenErr
 				}
 				legacyMatchesProfile := legacySelectionState ||
