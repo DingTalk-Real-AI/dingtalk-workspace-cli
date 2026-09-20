@@ -66,9 +66,10 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	installed, skipped, err := executeSkillSetupPlan(plan, &bytes.Buffer{}, &bytes.Buffer{})
+	var out, errOut bytes.Buffer
+	installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
 	if err != nil || skipped != 0 || installed != 6 { // canonical + two linked Agents, two Skills each
-		t.Fatalf("execute = installed %d skipped %d err %v", installed, skipped, err)
+		t.Fatalf("execute = installed %d skipped %d err %v; stdout:\n%s\nstderr:\n%s", installed, skipped, err, out.String(), errOut.String())
 	}
 	if _, err := os.Lstat(oldCodex); !os.IsNotExist(err) {
 		t.Fatalf("Codex duplicate remains: %v", err)
