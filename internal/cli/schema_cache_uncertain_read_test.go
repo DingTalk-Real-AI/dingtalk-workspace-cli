@@ -14,13 +14,19 @@
 package cli
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -116,17 +122,29 @@ func TestCrossPlatformCoverageUncertainRuntimeServesCacheReads(t *testing.T) {
 	if level := payload["level"]; level != "product" {
 		t.Fatalf("domain query level = %v, want product", level)
 	}
+	if _, err := queryDeliverySchemaPayload(nil); err != nil {
+		t.Fatalf("uncertain cached no-argument query: %v", err)
+	}
 	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog != 0 {
 		t.Fatalf("uncertain query assembled the catalog: Catalog=%d", counts.Catalog)
 	}
 }
 
-// TestCrossPlatformCoverageUncertainColdCacheStillAssembles covers the tier-2
-// fallback leg: with no populated cache, uncertainty must not wedge schema
-// queries — the live catalog still assembles and answers.
-func TestCrossPlatformCoverageUncertainColdCacheStillAssembles(t *testing.T) {
+// TestCrossPlatformCoverageUncertainColdCacheUsesIsolatedBuilder covers the
+// cold-cache path: uncertainty must use the isolated builder rather than
+// assembling the catalog in the plugin process.
+func TestCrossPlatformCoverageUncertainColdCacheUsesIsolatedBuilder(t *testing.T) {
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	MarkSchemaCacheRuntimeUncertain()
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
@@ -134,15 +152,14 @@ func TestCrossPlatformCoverageUncertainColdCacheStillAssembles(t *testing.T) {
 	if _, err := DeliverySchemaQueryPayloadForTest("definitely-not-a-schema-path"); err == nil {
 		t.Fatal("unknown path unexpectedly resolved")
 	}
-	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog == 0 {
-		t.Fatal("cold uncertain query never assembled the live catalog")
+	if counts := RuntimeSchemaMetadataLoadCounts(); counts.Catalog != 0 {
+		t.Fatalf("cold uncertain query assembled the parent catalog: %#v", counts)
 	}
 }
 
-// TestCrossPlatformCoverageUncertainRuntimeNeverPublishes covers the tier-2
-// write gate: a query served under uncertainty must not create or rewrite any
-// cache artifact, including the per-user fallback publication.
-func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
+// TestCrossPlatformCoverageUncertainRuntimePublishesThroughBuilder covers the
+// tier-2 write gate: uncertainty may publish only the isolated builder result.
+func TestCrossPlatformCoverageUncertainRuntimePublishesThroughBuilder(t *testing.T) {
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 	coverageSchemaCacheHome(t)
@@ -166,8 +183,35 @@ func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
 		t.Fatal("unknown path unexpectedly resolved")
 	}
 	marker := filepath.Join(home, "dws")
-	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
-		t.Fatalf("uncertain query wrote cache state: %v", statErr)
+	if _, statErr := os.Stat(marker); statErr != nil {
+		t.Fatalf("isolated builder did not publish cache state: %v", statErr)
+	}
+}
+
+func TestCrossPlatformCoverageRegisterCacheOptionsPreservesUncertainty(t *testing.T) {
+	t.Cleanup(func() {
+		ResetSchemaCacheRuntimeUncertaintyForTest()
+		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
+	})
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	MarkSchemaCacheRuntimeUncertain()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if activeSchemaCacheRuntime() != nil {
+		t.Fatal("cache registration cleared runtime uncertainty")
+	}
+	if readableSchemaCacheRuntime() == nil {
+		t.Fatal("uncertain runtime lost readable cache access")
 	}
 }
 
@@ -237,10 +281,12 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
 
-	// Cold cache: both loaders fall through to live assembly. Overview runs
-	// first because the first successful assembly publishes the live catalog,
-	// after which the loaders answer from it at the top and never reach their
-	// cache-fallback branch.
+	// Cold cache: the no-argument query and overview loader both use the
+	// isolated builder. The following loader reads the detached generation.
+	if _, err := queryDeliverySchemaPayload(nil); err != nil {
+		t.Fatalf("uncertain cold-cache no-argument query: %v", err)
+	}
+	resetDeliverySchemaCatalogStateForTest()
 	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
 		t.Fatalf("uncertain cold-cache overview payload: %v", err)
 	}
@@ -249,11 +295,15 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 		t.Fatalf("uncertain cold-cache all payload: %v", err)
 	}
 
-	// A failing assembly must surface instead of degrading silently. The
-	// source-root registration resets cache options, so re-register them and
-	// keep the uncertainty marker to stay on the read-only fallback path.
+	// A failing isolated builder must surface instead of degrading silently.
+	// The source-root registration resets cache options, so re-register them
+	// and keep the uncertainty marker.
 	RegisterSchemaSourceRoot(nil)
 	register()
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{}, errors.New("isolated builder failed")
+	})
+	t.Cleanup(registerPackageTestIsolatedBuilder)
 	MarkSchemaCacheRuntimeUncertain()
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
@@ -266,5 +316,472 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	if _, err := DeliverySchemaQueryPayloadForTest("calendar"); err == nil {
 		t.Fatal("uncertain query ignored a failing assembly")
+	}
+}
+
+func TestCrossPlatformCoverageReadableIdentityNilGuards(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	schemaCacheRegistrationValue.Store(nil)
+	if _, ok := SchemaCacheReadableIdentityForTest(); ok {
+		t.Fatal("expected ok=false when registration is nil")
+	}
+	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{})
+	if _, ok := SchemaCacheReadableIdentityForTest(); ok {
+		t.Fatal("expected ok=false when runtime is nil")
+	}
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	if _, _ = SchemaCacheReadableIdentityForTest(); false {
+	}
+}
+
+func TestCrossPlatformCoverageDeliveryCatalogUnderUncertainty(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+
+	loaded := deliverySchemaCatalog()
+	if runtimeDeliverySchemaCatalogErr == nil {
+		t.Fatal("expected error from deliverySchemaCatalog under uncertainty")
+	}
+	if len(loaded.Registry.Products) != 0 {
+		t.Fatal("expected empty catalog")
+	}
+}
+
+func TestCrossPlatformCoverageRepairableRuntimeNil(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	ResetSchemaCacheRuntimeUncertaintyForTest()
+	_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
+	if r := repairableSchemaCacheRuntime(); r != nil {
+		t.Fatal("expected nil repairable runtime")
+	}
+}
+
+func TestCrossPlatformCoverageWaitForPublishedGeneration(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	runtime := activeSchemaCacheRuntime()
+	home := realHomeCacheDir(t, ".dws-wait-gen-")
+	schemacache.UseUserCacheDirForTest(t, home)
+	cache, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+
+	id := coverageSchemaCacheIdentity()
+	_ = persistLocalSchemaCacheIdentity(cache.Directory(), id)
+
+	val, err := runtime.waitForPublishedGeneration(cache, func() (any, error) {
+		return "ok", nil
+	})
+	if err != nil || val != "ok" {
+		t.Fatalf("unexpected result: val=%v, err=%v", val, err)
+	}
+
+	testseam.Swap(t, &defaultSchemaCacheBuilderTimeout, 120*time.Millisecond)
+	loops := 0
+	_, err = runtime.waitForPublishedGeneration(cache, func() (any, error) {
+		loops++
+		return nil, errors.New("timeout expected")
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected DeadlineExceeded, got: %v", err)
+	}
+	if loops < 2 {
+		t.Fatalf("expected multiple loops through ticker, got %d", loops)
+	}
+}
+
+func TestCrossPlatformCoveragePublishGeneratedResultBranches(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	runtime := activeSchemaCacheRuntime()
+	home := realHomeCacheDir(t, ".dws-pub-branches-")
+	schemacache.UseUserCacheDirForTest(t, home)
+	cache, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+
+	if err := runtime.publishGeneratedResult(nil, SchemaCacheBuildResult{}); err == nil {
+		t.Fatal("expected nil cache error")
+	}
+
+	if err := runtime.publishGeneratedResult(cache, SchemaCacheBuildResult{}); err == nil {
+		t.Fatal("expected validation error on empty result")
+	}
+
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := IdentityFromArtifacts("open", artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validResult := SchemaCacheBuildResult{
+		Identity:  identity,
+		Artifacts: artifacts,
+	}
+
+	mismatchIdentity, err := IdentityFromArtifacts("other", artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mismatchResult := SchemaCacheBuildResult{
+		Identity:  mismatchIdentity,
+		Artifacts: artifacts,
+	}
+	if err := runtime.publishGeneratedResult(cache, mismatchResult); err == nil {
+		t.Fatal("expected edition mismatch error")
+	}
+
+	testseam.Swap(t, &createLocalIdentityTempFile, func(dir, pattern string) (localIdentityTempFile, error) {
+		return nil, errors.New("persist fail")
+	})
+	if err := runtime.publishGeneratedResult(cache, validResult); err == nil {
+		t.Fatal("expected persist identity error")
+	}
+	testseam.Swap(t, &createLocalIdentityTempFile, func(dir, pattern string) (localIdentityTempFile, error) {
+		return os.CreateTemp(dir, pattern)
+	})
+
+	if err := runtime.publishGeneratedResult(cache, validResult); err != nil {
+		t.Fatalf("unexpected publish error: %v", err)
+	}
+
+	closedCache, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = closedCache.Close()
+	if err := runtime.publishGeneratedResult(closedCache, validResult); err == nil {
+		t.Fatal("expected error on closed cache")
+	}
+}
+
+func TestCrossPlatformCoverageRepairWithIsolatedBuilderBranches(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	runtime := activeSchemaCacheRuntime()
+	home := realHomeCacheDir(t, ".dws-isolated-repair-")
+	schemacache.UseUserCacheDirForTest(t, home)
+	cache, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{
+			Identity: SchemaCacheIdentity{Edition: "mismatch"},
+		}, nil
+	})
+	t.Cleanup(registerPackageTestIsolatedBuilder)
+
+	if _, _, err := runtime.repairWithIsolatedBuilder(cache, func() (any, error) { return "ok", nil }); err == nil {
+		t.Fatal("expected publish error")
+	}
+
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := IdentityFromArtifacts("open", artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{
+			Identity:  identity,
+			Artifacts: artifacts,
+		}, nil
+	})
+	if _, _, err := runtime.repairWithIsolatedBuilder(cache, func() (any, error) { return nil, errors.New("recheck failed") }); err == nil {
+		t.Fatal("expected recheck error")
+	}
+
+	val, _, err := runtime.repairWithIsolatedBuilder(cache, func() (any, error) { return "recheck-ok", nil })
+	if err != nil || val != "recheck-ok" {
+		t.Fatalf("unexpected: val=%v err=%v", val, err)
+	}
+}
+
+func TestCrossPlatformCoverageRepairUncertainSwitchesToUserCacheOnOpenError(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	home := realHomeCacheDir(t, ".dws-user-switch-")
+	schemacache.UseUserCacheDirForTest(t, home)
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "/nonexistent_root_dir_dws_test/dws")
+
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := IdentityFromArtifacts("open", artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{
+			Identity:  identity,
+			Artifacts: artifacts,
+		}, nil
+	})
+	t.Cleanup(registerPackageTestIsolatedBuilder)
+
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+
+	r := repairableSchemaCacheRuntime()
+	if r == nil {
+		t.Fatal("expected repairable runtime")
+	}
+
+	val, _, err := repairSchemaCache(r, func() (any, error) {
+		return "repaired", nil
+	})
+	if err != nil || val != "repaired" {
+		t.Fatalf("expected repair success: val=%v, err=%v", val, err)
+	}
+}
+
+func TestCrossPlatformCoverageRepairUncertainLockTimeoutWaitsForPublished(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	home := realHomeCacheDir(t, ".dws-lock-timeout-")
+	schemacache.UseUserCacheDirForTest(t, home)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		LockTimeout:     10 * time.Millisecond,
+		RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+	holder, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Close() })
+	lock, err := holder.AcquireLock(context.Background(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+
+	MarkSchemaCacheRuntimeUncertain()
+	r := repairableSchemaCacheRuntime()
+	if r == nil {
+		t.Fatal("expected repairable runtime")
+	}
+
+	val, _, err := repairSchemaCache(r, func() (any, error) {
+		return "published-val", nil
+	})
+	if err != nil || val != "published-val" {
+		t.Fatalf("expected success from waitForPublishedGeneration: val=%v, err=%v", val, err)
+	}
+}
+
+func TestCrossPlatformCoverageRepairUncertainFallsBackToUserCacheBuilder(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+
+	edition := "open"
+	digest := sha256.Sum256([]byte(edition))
+	editionHex := hex.EncodeToString(digest[:])
+
+	sharedBase := realHomeCacheDir(t, ".dws-shared-fallback-unc-")
+	sharedV1 := seedCorruptSharedCache(t, sharedBase, editionHex)
+	denySharedV1Writes(t, sharedV1)
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", sharedBase)
+
+	userBase := realHomeCacheDir(t, ".dws-user-fallback-unc-")
+	schemacache.UseUserCacheDirForTest(t, userBase)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	options := SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+	}
+	if err := RegisterSchemaCacheOptions(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := IdentityFromArtifacts("open", artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterSchemaCacheIsolatedBuilder(func(context.Context) (SchemaCacheBuildResult, error) {
+		return SchemaCacheBuildResult{
+			Identity:  identity,
+			Artifacts: artifacts,
+		}, nil
+	})
+	t.Cleanup(registerPackageTestIsolatedBuilder)
+
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+
+	r := repairableSchemaCacheRuntime()
+	if r == nil {
+		t.Fatal("expected repairable runtime")
+	}
+
+	val, _, err := repairSchemaCache(r, func() (any, error) {
+		if identity, ok := peekLocalSchemaCacheIdentity(filepath.Join(userBase, "dws", "schema", editionHex, "v1")); ok && identity.Edition == "open" {
+			return "user-repaired", nil
+		}
+		return nil, errors.New("not yet repaired")
+	})
+	if err != nil || val != "user-repaired" {
+		t.Fatalf("expected user cache repair success: val=%v, err=%v", val, err)
+	}
+}
+
+func TestCrossPlatformCoverageRepairUncertainLockTimeoutFailsToIsolatedRequired(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	testseam.Swap(t, &defaultSchemaCacheBuilderTimeout, 10*time.Millisecond)
+	home := realHomeCacheDir(t, ".dws-lock-timeout-fail-")
+	schemacache.UseUserCacheDirForTest(t, home)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		LockTimeout:     10 * time.Millisecond,
+		RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+	holder, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Close() })
+	lock, err := holder.AcquireLock(context.Background(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+
+	MarkSchemaCacheRuntimeUncertain()
+	r := repairableSchemaCacheRuntime()
+	if r == nil {
+		t.Fatal("expected repairable runtime")
+	}
+
+	_, _, err = repairSchemaCache(r, func() (any, error) {
+		return nil, errors.New("never ready")
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires the isolated builder") {
+		t.Fatalf("expected requires isolated builder error, got: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageRepairBackendReuseAndClose(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+
+	home := realHomeCacheDir(t, ".dws-repair-backend-reuse-")
+	schemacache.UseUserCacheDirForTest(t, home)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	r := newSchemaCacheRuntime(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+	})
+	cache1, err := r.openRepairBackend()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache2, err := r.openRepairBackend()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cache1 != cache2 {
+		t.Fatalf("expected reused repair cache, got %v vs %v", cache1, cache2)
+	}
+	cache3, err := schemacache.Open("open", schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cache3.Close()
+	r.setRepairCache(cache3)
+	if got := r.repairCacheBackend(); got != cache3 {
+		t.Fatalf("expected updated repair cache, got %v", got)
 	}
 }

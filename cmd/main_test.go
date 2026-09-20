@@ -15,6 +15,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -138,6 +139,15 @@ func TestCrossPlatformCoverageIdentitySnapshotOwnsArgumentsAndRecovers(t *testin
 				t.Fatal("identity did not finish")
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoveragePrivateSchemaBuilderBypassesApp(t *testing.T) {
+	testseam.Swap(t, &os.Args, []string{"dws", "--_dws-schema-builder=1"})
+	testseam.Swap(t, &runSchemaCacheBuilder, func([]string, io.Writer) (bool, int) { return true, 7 })
+	testseam.Swap(t, &appExecute, func() (int, string, string) { t.Fatal("builder entered app"); return 0, "", "" })
+	if code := run(); code != 7 {
+		t.Fatalf("builder exit=%d", code)
 	}
 }
 

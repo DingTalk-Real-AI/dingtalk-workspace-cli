@@ -54,6 +54,11 @@ func registerSchemaRuntimeDelivery() {
 		cli.RegisterSchemaSourceRoot(func() *cobra.Command {
 			return NewSchemaSourceRootCommand()
 		})
+		builder := cli.SchemaCacheIsolatedBuilder(buildSchemaCacheInChild)
+		if testing.Testing() {
+			builder = buildSchemaCacheInProcessForTest
+		}
+		cli.RegisterSchemaCacheIsolatedBuilder(builder)
 	})
 	applyProductionSchemaCache()
 }

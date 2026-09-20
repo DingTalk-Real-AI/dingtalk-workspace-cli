@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -227,6 +228,9 @@ func queryUniqueRecordByKey(rt *shortcut.RuntimeContext, baseID, tableID, fieldI
 	if err != nil {
 		return nil, err
 	}
+	if guard := responseGuardCursor(data); guard != "" {
+		return nil, helpers.NonResumableCursorResponseError(guard, false)
+	}
 	records, found := findRecords(data)
 	if !found {
 		return nil, apperrors.NewAPI("query_records response is missing the records collection",
@@ -304,6 +308,10 @@ func responseHasMore(data map[string]any) bool {
 	}
 	for _, key := range []string{"nextCursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "error-v1:") {
+				continue
+			}
 			return true
 		}
 	}
