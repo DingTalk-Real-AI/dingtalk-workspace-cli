@@ -377,6 +377,32 @@ func TestCrossPlatformCoverageRepairRemovesMismatchedLoginSlots(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageV1MigrationHardFailsOnNonDEKOrgSlotError(t *testing.T) {
+	configDir := t.TempDir()
+	corpID := "corp_v1_hardfail"
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version: 1,
+		Profiles: []Profile{{
+			Name:     "V1 Hardfail Org",
+			CorpID:   corpID,
+			CorpName: "V1 Hardfail Org",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	// A v1 migration must keep failing closed on an org-slot read error that is
+	// neither NotFound nor a lost DEK (the lost-DEK case is skipped so a fresh
+	// login for another profile can proceed).
+	stub := newStubbedKeychain()
+	stub.errs[TokenAccountForCorpID(corpID)] = errors.New("keychain read boom")
+	swapKeychainStub(t, stub)
+
+	err := EnsureProfilesMigration(configDir)
+	if err == nil || !strings.Contains(err.Error(), "keychain read boom") {
+		t.Fatalf("EnsureProfilesMigration() error = %v, want keychain read boom", err)
+	}
+}
+
 func TestCrossPlatformCoverageRepairAbortsOnTransientReadError(t *testing.T) {
 	SetRuntimeProfile("")
 	defer SetRuntimeProfile("")
