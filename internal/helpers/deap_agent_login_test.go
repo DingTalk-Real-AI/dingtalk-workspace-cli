@@ -96,13 +96,13 @@ func TestCrossPlatformCoverageDingTalkTagManageLoginRejectsMissingOrWrongIdentit
 			name:       "robot uid mismatch",
 			published:  successfulPublishedDetail(),
 			authorized: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:       "profile.robotUid 不一致",
+			want:       "机器人身份与已发布配置不一致",
 		},
 		{
 			name:       "staff user id mismatch",
 			published:  successfulPublishedDetail(),
 			authorized: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:       "profile.staffId 不一致",
+			want:       "userId 与已发布配置不一致",
 		},
 	}
 	for _, tc := range tests {

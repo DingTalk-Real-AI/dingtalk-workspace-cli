@@ -26,7 +26,7 @@ dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
 
 支持 `qoder/qoderwork/workbuddy/claudecode/codebuddy/codex/gemini/opencode/custom`；custom 使用 `--agent-cmd`，问题作为最后一个参数、stdout 作为答案。模型、工作目录、会话和权限参数沿用 dev connect，模型推理是否远端执行由 Agent 自身决定。
 
-默认仅主管可用；`--allowed-users` 接收精确 userId 并在员工上下文解析，`--allowed-groups` 接收该上下文的群会话 ID，群消息仍需满足用户白名单。不要把机器人 staffId 直接当作员工事件开放 ID。
+默认仅主管可用；`--allowed-users` 接收精确 userId 并在员工上下文解析，`--allowed-groups` 接收该上下文的群会话 ID，群消息仍需满足用户白名单。不要向用户索要其它内部人员标识。
 
 DSH 注册后由正在运行的宿主员工级启动；宿主不可用时返回 `restartRequired=true`。不接受普通 Agent 的 `--daemon/--alwayson` 参数。旧 DSH binding 向后兼容，不自动迁移到其他 Adapter。
 
@@ -41,20 +41,23 @@ DSH 注册后由正在运行的宿主员工级启动；宿主不可用时返回 
 dws dingtalk-tag manage create \
   --name "<名称>" --description "<职责>" \
   --main-program-type local_agent \
-  --position-name "<岗位>" --response-mode mention_only \
   --dry-run --format json
 ```
 
-create 只创建草稿并返回 `agentUuid`。发布还需要头像、部门、岗位、响应模式和 Prompt 等服务端要求的完整配置。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
+create 只创建草稿并返回 `agentUuid`。名称和描述必填；部门可不传，由服务端补操作人的主任职部门。`local_agent` 发布不要求平台 Prompt、模型、Skill 或 MCP。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
 
-## 修改：先读后全量保存
+## 修改：按字段更新
 
 ```bash
 dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type draft --format json
 dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format json
 ```
 
-`save-draft` 不是 patch。必须回填所有仍需保留的字段，包括 `digitalTagEmployeeProfile.mainProgramType`、`skills` 和 `mcps`。不要把临时签名的 `iconUrl` 当长期 `icon` 回填。
+`save-draft` 只更新显式字段。基础字段不传保持原值；`--skills-file` / `--mcps-file` 不传保持原关联，显式 `[]` 只清空对应类别。头像统一使用 `--avatar-url`；它既可接收公网 HTTP(S)，也可接收本地路径，本地文件由 CLI 复用 Skill 上传封装并回写 OSS URL。
+
+CLI 的 `--main-program-type` 映射到 MCP 顶层字段 `type`；详情响应也以 `type` 返回 `open_code` 或 `local_agent`。详情查询命令自身的 `--type draft|published` 仅选择配置来源。
+
+`open_code` 必须至少配置一个响应模式；`local_agent` 可省略。创建 `open_code` 或从其它类型切换到 `open_code` 时同时传 `--response-mode`。
 
 ## 发布、查询和删除
 

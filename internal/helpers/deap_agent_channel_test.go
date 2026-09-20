@@ -401,7 +401,7 @@ func TestCrossPlatformCoverageDingTalkTagConnectRejectsInvalidPrerequisitesBefor
 	}{
 		{
 			name:      "non local agent",
-			responses: []string{`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"deap_cloud"}}}`},
+			responses: []string{`{"success":true,"data":{"type":"open_code"}}`},
 			want:      "不是 local_agent",
 		},
 		{
@@ -426,7 +426,7 @@ func TestCrossPlatformCoverageDingTalkTagConnectRejectsInvalidPrerequisitesBefor
 				`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 				`{"success":true,"data":{"status":"online"}}`,
 			},
-			want: "缺少 profile.corpId",
+			want: "缺少登录所需的内部身份信息",
 		},
 	}
 	for _, tc := range tests {
@@ -560,12 +560,12 @@ func TestCrossPlatformCoverageDingTalkTagConnectRejectsAuthorizationIdentityMism
 		{
 			name:          "robot uid mismatch",
 			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "uid 与发布详情 profile.robotUid 不一致",
+			want:          "机器人身份与已发布配置不一致",
 		},
 		{
 			name:          "staff id mismatch",
 			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "staffId 与发布详情 profile.staffId 不一致",
+			want:          "userId 与已发布配置不一致",
 		},
 	}
 	for _, tc := range tests {
@@ -594,7 +594,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
-			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
+			`{"success":true,"data":{"name":"本地员工","type":"local_agent"}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":         {authResponse},

@@ -65,7 +65,7 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 	}
 	publishedIdentity, ok := publishedDigitalEmployeeIdentity(published)
 	if !ok {
-		return nil, apperrors.NewInternal("数字员工发布详情缺少 profile.corpId、profile.robotUid 或 profile.staffId，无法校验身份")
+		return nil, apperrors.NewInternal("数字员工发布详情缺少登录所需的内部身份信息")
 	}
 
 	authArgs := map[string]any{"agentUuid": agentUUID}
@@ -83,13 +83,13 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 	dwsAuthCode := requiredJSONScalar(authData, "dwsAuthCode")
 	authorizationOrgID := requiredJSONScalar(authData, "orgId")
 	if dwsClientID == "" || authorizedRobotUID == "" || authorizedStaffID == "" || dwsAuthCode == "" || authorizationOrgID == "" {
-		return nil, apperrors.NewInternal("数字员工授权响应缺少 dwsClientId、uid、staffId、dwsAuthCode 或 orgId")
+		return nil, apperrors.NewInternal("数字员工授权响应缺少登录所需的内部身份或凭证信息")
 	}
 	if authorizedRobotUID != publishedIdentity.RobotUID {
-		return nil, apperrors.NewInternal("数字员工授权响应 uid 与发布详情 profile.robotUid 不一致")
+		return nil, apperrors.NewInternal("数字员工授权的机器人身份与已发布配置不一致")
 	}
 	if authorizedStaffID != publishedIdentity.StaffID {
-		return nil, apperrors.NewInternal("数字员工授权响应 staffId 与发布详情 profile.staffId 不一致")
+		return nil, apperrors.NewInternal("数字员工授权的 userId 与已发布配置不一致")
 	}
 	// orgId 是授权响应的上下文字段，不是 corpId；corpId 只信任发布详情。
 	token, err := deapConnectManagedExchange(ctx, configDir, auth.ManagedExchangeRequest{

@@ -28,7 +28,7 @@ dws dingtalk-tag capability mcp query --agent-uuid <agentUuid> --mcp-id <mcpId> 
 
 MCP 敏感配置必须放在本地 JSON 文件，不要直接拼进命令行或提交代码库。创建命令 `confirmation=user_required`；确认摘要须包含“创建资源并修改员工草稿”。dry-run 不调用远端、不写草稿、不输出配置值，查询结果只返回脱敏信息。
 
-`create` 由服务端依次 check → create → query → 读取草稿 → 追加原 `mcpId` 到 `selectedSkills` → saveDraft → 回读确认，成功后无需再手动保存一次挂载。保留已有 Skill、MCP 和其他选择，不克隆、不自动发布。create/list/query 均针对同一员工域；list/query 只证明资源存在，不证明当前仍被选中或已发布。
+`create` 由服务端依次 check → create → query → 读取草稿 → 在 MCP 选择中追加原 `mcpId` → saveDraft → 回读确认，成功后无需再手动保存一次挂载。用户侧只感知分开的 `skills` / `mcps`；OpenAPI 内部再合并成下游引用。保留已有 Skill、MCP 和其他选择，不克隆、不自动发布。create/list/query 均针对同一员工域；list/query 只证明资源存在，不证明当前仍被选中或已发布。
 
 失败恢复：若错误含 `stage=query_created_mcp` 或 `stage=mount_draft`，从返回 data 或错误信息保留已创建 `mcpId`，先 query 资源及 `manage detail --type draft`，必要时按原 ID save-draft 恢复；禁止重复 create。超时或缺少 ID 时也先核查，不盲目重试。同一员工的创建、保存、发布串行执行，当前跨应用读改写不是原子事务。
 
@@ -44,6 +44,6 @@ dws dingtalk-tag manage publish --agent-uuid <agentUuid> --yes --format json
 dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type published --format json
 ```
 
-创建后核验 draft 的 `selectedSkills` 包含原 mcpId、`mcps` 有对应回显；只有用户要求上线才执行 publish。运行时可用还须验证已发布配置和真实工具挂载，不能把创建成功当成运行态验收。
+创建后核验 draft 的 `mcps` 有对应 `mcpId` 回显；只有用户要求上线才执行 publish。运行时可用还须验证已发布配置和真实工具挂载，不能把创建成功当成运行态验收。用户侧只使用 `skills` / `mcps` 两类字段。
 
-需要调整已有资源选择、配置或恢复部分失败时，使用 `dws dingtalk-tag manage save-draft`，按类型传 `--skills-file` 或 `--mcps-file`。基础与档案字段仍是全量覆写，执行前必须先查完整 draft 并保留所有仍需配置的字段；两个文件不传时保持对应关联，显式 `[]` 清空，非空数组覆写该类选择，不能只传新增一项而丢掉原有项目。
+需要调整已有资源选择、配置或恢复部分失败时，使用 `dws dingtalk-tag manage save-draft`，按类型传 `--skills-file` 或 `--mcps-file`。基础字段按显式字段更新；两个文件不传时保持对应关联，显式 `[]` 清空，非空数组覆写该类选择，不能只传新增一项而丢掉原有项目。
