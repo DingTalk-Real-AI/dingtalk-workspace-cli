@@ -836,7 +836,7 @@ func TestCrossPlatformCoverageDeapCommandTreeUsesManageRunAndCapability(t *testi
 
 	wantGroups := map[string][]string{
 		"connect": {"status", "list", "stop", "restart", "unbind"},
-		"manage":  {"create", "detail", "list", "login", "save-draft", "publish", "delete"},
+		"manage":  {"create", "detail", "list", "login", "save-draft", "set-visibility", "publish", "delete"},
 		"run":     {"run-status", "trace"},
 	}
 	if got := len(root.Commands()); got != len(wantGroups)+2 {
@@ -1217,7 +1217,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 
 	for name, value := range map[string]string{
 		"name": "值班助手", "description": "处理值班问题",
-		"dept-id": "dept-1",
+		"dept-id": "dept-1", "response-mode": "mention_only",
 	} {
 		if setErr := create.Flags().Set(name, value); setErr != nil {
 			t.Fatal(setErr)
@@ -1236,6 +1236,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 	want := map[string]any{
 		"name": "值班助手", "description": "处理值班问题",
 		"deptId": "dept-1",
+		"digitalTagEmployeeProfile": map[string]any{"responseMode": "mention_only"},
 	}
 	if !reflect.DeepEqual(call.args, want) {
 		t.Fatalf("create args = %#v, want %#v", call.args, want)

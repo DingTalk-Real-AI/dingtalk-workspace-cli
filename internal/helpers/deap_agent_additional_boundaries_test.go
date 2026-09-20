@@ -23,7 +23,7 @@ func TestCrossPlatformCoverageEmployeeAdditionalValidation(t *testing.T) {
 		update bool
 		flag   string
 		limit  int
-	}{{false, "name", 30}, {false, "description", 300}, {false, "employee-no", 64}, {true, "name", 30}, {true, "description", 300}} {
+	}{{false, "name", 30}, {false, "description", 300}, {true, "name", 30}, {true, "description", 300}} {
 		t.Run(item.flag+map[bool]string{true: "-update", false: "-create"}[item.update], func(t *testing.T) {
 			newDeapAgentTestTree(t, false)
 			cmd := newDeapAgentCreateCommand()

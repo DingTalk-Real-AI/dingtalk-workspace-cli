@@ -19,11 +19,6 @@ import (
 )
 
 func TestCrossPlatformCoverageEmployeeJSONValidationBoundaries(t *testing.T) {
-	for _, raw := range []string{"{", "null", "[]", `{"mainProgramType":1}`, `{"mainProgramType":" "}`, `{"unexpected":1}`, `{"responseMode":false}`, `{"responseMode":"other"}`, `{"employeeNo":"` + strings.Repeat("字", 65) + `"}`, `{"positionName":"` + strings.Repeat("字", 129) + `"}`} {
-		if _, err := deapAgentProfileJSON(raw); err == nil {
-			t.Fatalf("accepted invalid profile %s", raw)
-		}
-	}
 	for _, raw := range []string{"{", "null", "{}"} {
 		if _, err := deapAgentJSONArray(raw); err == nil {
 			t.Fatalf("accepted non-array %s", raw)

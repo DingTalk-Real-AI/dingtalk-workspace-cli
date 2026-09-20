@@ -87,7 +87,7 @@ func TestCrossPlatformCoverageDigitalEmployeePublishedResponseBoundaries(t *test
 			{"invalid_json", `{invalid`, "invalid MCP JSON response", false},
 			{"invalid_data", `{"success":true,"data":"invalid"}`, "响应格式无效", false},
 			{"missing_success", `{"data":null}`, "缺少成功状态", false},
-			{"missing_data", `{"success":true}`, "缺少 profile.corpId", false},
+			{"missing_data", `{"success":true}`, "缺少登录所需的内部身份信息", false},
 		} {
 			t.Run(route+"/"+tc.name, func(t *testing.T) {
 				responses := []string{tc.response}

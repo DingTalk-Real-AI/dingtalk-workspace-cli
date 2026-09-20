@@ -23,15 +23,16 @@ const (
 	// 契约要求 CanonicalPath 严格等于 <ProductID>.<Name>。
 	dingtalkTagProductID = "dingtalk-tag"
 
-	deapAgentCreateTool    = "create_digital_employee"
-	deapAgentDetailTool    = "get_digital_employee_detail"
-	deapAgentListTool      = "list_digital_employees"
-	deapAgentAuthCodeTool  = "get_dws_auth_code"
-	deapAgentSaveDraftTool = "update_digital_employee_draft"
-	deapAgentPublishTool   = "publish_digital_employee"
-	deapAgentDeleteTool    = "delete_digital_employee"
-	deapAgentRunStatusTool = "query_de_run_status"
-	deapAgentTraceTool     = "query_de_trace"
+	deapAgentCreateTool        = "create_digital_employee"
+	deapAgentDetailTool        = "get_digital_employee_detail"
+	deapAgentListTool          = "list_digital_employees"
+	deapAgentAuthCodeTool      = "get_dws_auth_code"
+	deapAgentSaveDraftTool     = "update_digital_employee_draft"
+	deapAgentPublishTool       = "publish_digital_employee"
+	deapAgentDeleteTool        = "delete_digital_employee"
+	deapAgentSetVisibilityTool = "set_visibility"
+	deapAgentRunStatusTool     = "query_de_run_status"
+	deapAgentTraceTool         = "query_de_trace"
 
 	deapAgentResponseModeMentionOnly       = "mention_only"
 	deapAgentResponseModeTargetedProactive = "targeted_proactive"
@@ -147,6 +148,7 @@ func newDeapManageCommand() *cobra.Command {
 		newDeapAgentListCommand(),
 		newDeapAgentLoginCommand(),
 		newDeapAgentSaveDraftCommand(),
+		newDeapAgentSetVisibilityCommand(),
 		newDeapAgentPublishCommand(),
 		newDeapAgentDeleteCommand(),
 	)
@@ -445,6 +447,52 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；切换为 open_code 时必须至少提供一个，local_agent 可省略；未修改类型和响应模式时由 OpenAPI 按当前草稿校验"},
 				{Name: "skills-file", Property: "skills", InterfaceType: "array"},
 				{Name: "mcps-file", Property: "mcps", InterfaceType: "array"},
+			},
+		},
+	})
+}
+
+func newDeapAgentSetVisibilityCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use:       "set-visibility",
+		Short:     "设置数字员工可见范围",
+		Long:      "设置指定数字员工草稿的可见范围，全量替换草稿中现有范围，不修改其他草稿字段。visibility=ALL 表示本企业全员可见，此时无需传成员或部门；仅指定成员、部门可见时按服务端约定传 visibility，并用 --staff-ids 传成员 userId、--dept-ids 传部门 ID。staff-ids 与 dept-ids 均为全量替换：本次未提供则清空对应维度。人员标识统一使用 userId。这是高影响写操作，先 --dry-run 检查参数，再加 --yes。",
+		Tool:      deapAgentSetVisibilityTool,
+		Server:    deapAgentServerID,
+		PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{
+			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；仅指定成员/部门可见时按服务端约定取值", Bind: "visibility", Required: true, Trim: true},
+			{Name: "staff-ids", Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
+			{Name: "dept-ids", Usage: "指定可见部门 ID，可重复或用英文逗号分隔；全量替换，未提供则清空部门维度", Bind: "deptIds", Kind: LeafStringSlice},
+		},
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: dingtalkTagProductID, Name: "set_visibility",
+				CanonicalPath: "dingtalk-tag.set_visibility",
+				CLIPath:       "dingtalk-tag manage set-visibility", PrimaryCLIPath: "dingtalk-tag manage set-visibility",
+				Group: "manage",
+			},
+			Description: "设置数字员工草稿的可见范围，全量替换现有范围。visibility=ALL 表示本企业全员可见；仅指定成员/部门可见时通过 staffIds、deptIds 提供，均为全量替换。",
+			DryRun:      deapAgentDryRun,
+			Interface:   deapAgentMCPInterface(deapAgentSetVisibilityTool),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "设置数字员工草稿的可见范围，全量替换现有范围",
+				UseWhen:      []string{"需要设置或调整数字员工草稿的可见范围，如切换为全员可见或指定成员、部门可见时"},
+				AvoidWhen:    []string{"只更新名称、职责或 Skill/MCP 等草稿字段时使用 save-draft", "未确认目标 agentUuid 与可见范围影响时不要执行"},
+				Examples: []string{
+					"dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility ALL --dry-run --format json",
+					`dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PART --staff-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "visibility", Property: "visibility", Description: "可见范围：ALL 表示本企业全员可见；仅指定成员/部门可见时按服务端约定取值"},
+				{Name: "staff-ids", Property: "staffIds", InterfaceType: "array"},
+				{Name: "dept-ids", Property: "deptIds", InterfaceType: "array"},
 			},
 		},
 	})
