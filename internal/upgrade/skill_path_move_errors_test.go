@@ -420,6 +420,26 @@ func TestCrossPlatformCoverageSkillPathVerificationErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("link type mismatch", func(t *testing.T) {
+		base := t.TempDir()
+		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+		if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(dst, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillPathLstat, func(path string) (os.FileInfo, error) {
+			if path == src {
+				return skillPathFakeInfo{mode: os.ModeSymlink}, nil
+			}
+			return os.Lstat(path)
+		})
+		if err := verifySkillPathCopy(src, dst); err == nil || !strings.Contains(err.Error(), "类型") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
 	t.Run("symlink reads", func(t *testing.T) {
 		base := t.TempDir()
 		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
