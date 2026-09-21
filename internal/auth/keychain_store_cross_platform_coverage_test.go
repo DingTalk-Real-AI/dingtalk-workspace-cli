@@ -389,6 +389,23 @@ func TestCrossPlatformCoverageProfileMigrationLoginRetryErrorNilUnwrap(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageLoginRetryGuidanceErrorForTestConstructor(t *testing.T) {
+	// The app-package guidance test that constructs this error is partitioned
+	// outside the CI coverage shards, so this in-package call keeps the
+	// constructor statement covered on every platform.
+	cause := errors.New("underlying retry cause")
+	got := NewLoginRetryGuidanceErrorForTest(cause)
+	if got == nil {
+		t.Fatal("NewLoginRetryGuidanceErrorForTest() = nil, want retry error")
+	}
+	if got.Error() != profileLoginRetryGuidance {
+		t.Fatalf("NewLoginRetryGuidanceErrorForTest() = %q, want %q", got.Error(), profileLoginRetryGuidance)
+	}
+	if !errors.Is(got, cause) {
+		t.Fatalf("errors.Is(NewLoginRetryGuidanceErrorForTest(cause), cause) = false, want true")
+	}
+}
+
 func TestCrossPlatformCoverageV1ExplicitProfileMissingDEKRetryOnStubbedKeychain(t *testing.T) {
 	configDir := t.TempDir()
 	first := testToken("old-first", "corp_v1_stub_retry", "First Org")
