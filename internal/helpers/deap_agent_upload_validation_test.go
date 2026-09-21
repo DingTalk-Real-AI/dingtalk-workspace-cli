@@ -122,6 +122,99 @@ func TestCrossPlatformCoverageEmployeeSkillFacadeBoundaries(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageEmployeeSkillUpdateBoundaries(t *testing.T) {
+	for _, scenario := range []string{"command-invalid", "direct-invalid", "dry-run", "upload", "staged-upload"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			path := employeeZIPFixture(t, zip.FileHeader{Name: "SKILL.md"})
+			caller, _ := newDeapAgentTestTree(t, scenario == "dry-run")
+			stub := &deapAgentSkillUploaderStub{fileURL: "https://fixture.invalid/updated.zip"}
+			switch scenario {
+			case "command-invalid", "direct-invalid":
+				path = "missing.zip"
+			case "upload":
+				stub.err = errors.New("upload failed")
+			case "staged-upload":
+				stub.err = &deapAgentSkillStageError{Stage: "upload", Err: errors.New("failure")}
+			}
+			testseam.Swap(t, &deapAgentSkillUploader, deapAgentSkillPackageUploader(stub))
+			cmd := newDeapAgentSkillUpdateCommand()
+			cmd.SetContext(context.Background())
+			var err error
+			if scenario == "command-invalid" {
+				cmd.Flags().Bool("yes", false, "test confirmation")
+				for name, value := range map[string]string{
+					"agent-uuid": "agent", "skill-id": "skill", "file": path, "yes": "true",
+				} {
+					if setErr := cmd.Flags().Set(name, value); setErr != nil {
+						t.Fatal(setErr)
+					}
+				}
+				err = cmd.RunE(cmd, nil)
+			} else {
+				err = deapAgentCallSkillUpdate(cmd, deapAgentSkillUpdateTool, map[string]any{
+					"agentUuid": "agent", "skillId": "skill", "file": path,
+				})
+			}
+			if (err == nil) != (scenario == "dry-run") {
+				t.Fatalf("skill update=%v calls=%#v", err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeMCPWriteBoundaries(t *testing.T) {
+	t.Run("create-check-failure", func(t *testing.T) {
+		caller, _ := newDeapAgentTestTree(t, false)
+		caller.resultText = `{"success":false}`
+		t.Chdir(t.TempDir())
+		if err := os.WriteFile("mcp.json", []byte(`{"name":"weather","configString":"{}"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := newDeapAgentMCPCreateCommand()
+		cmd.SetContext(context.Background())
+		err := deapAgentCallMCPCreateFromFile(cmd, deapAgentMCPCreateTool, map[string]any{
+			"agentUuid": "agent", "configFile": "mcp.json",
+		})
+		if err == nil || len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentMCPCheckTool {
+			t.Fatalf("create check failure err=%v calls=%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("update-invalid-config", func(t *testing.T) {
+		caller, _ := newDeapAgentTestTree(t, false)
+		t.Chdir(t.TempDir())
+		if err := os.WriteFile("mcp.json", []byte(`{"name":"weather"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := newDeapAgentMCPUpdateCommand()
+		cmd.SetContext(context.Background())
+		err := deapAgentCallMCPUpdate(cmd, deapAgentMCPUpdateTool, map[string]any{
+			"agentUuid": "agent", "mcpId": "mcp", "configFile": "mcp.json",
+		})
+		if err == nil || len(caller.calls) != 0 {
+			t.Fatalf("invalid update config err=%v calls=%#v", err, caller.calls)
+		}
+	})
+
+	for name, response := range map[string]string{
+		"invalid-json":    "{",
+		"missing-success": `{}`,
+		"is-error":        `{"success":true,"isError":true}`,
+	} {
+		t.Run("check-"+name, func(t *testing.T) {
+			caller, _ := newDeapAgentTestTree(t, false)
+			caller.resultText = response
+			err := deapAgentCheckMCP(context.Background(), "agent", map[string]any{
+				"name": "weather", "configString": `{"url":"https://mcp.example.test"}`,
+			})
+			if err == nil || len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentMCPCheckTool {
+				t.Fatalf("check response %q err=%v calls=%#v", response, err, caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageEmployeeSkillCredentialAndReadBoundaries(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	t.Run("no caller", func(t *testing.T) {
