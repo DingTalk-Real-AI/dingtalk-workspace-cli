@@ -456,13 +456,13 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "set-visibility",
 		Short:     "设置数字员工可见范围",
-		Long:      "设置指定数字员工草稿的可见范围，全量替换草稿中现有范围，不修改其他草稿字段。visibility=ALL 表示本企业全员可见，此时无需传成员或部门；仅指定成员、部门可见时按服务端约定传 visibility，并用 --staff-ids 传成员 userId、--dept-ids 传部门 ID。staff-ids 与 dept-ids 均为全量替换：本次未提供则清空对应维度。人员标识统一使用 userId。这是高影响写操作，先 --dry-run 检查参数，再加 --yes。",
+		Long:      "设置指定数字员工草稿的可见范围，全量替换草稿中现有范围，不修改其他草稿字段。visibility=ALL 表示本企业全员可见，此时无需传成员或部门；visibility=PARTIAL 表示仅指定成员或部门可见，用 --staff-ids 传成员 userId、--dept-ids 传部门 ID（两类列表至少一项非空，可混选）。staff-ids 与 dept-ids 均为全量替换：本次未提供则清空对应维度。人员标识统一使用 userId。这是高影响写操作，先 --dry-run 检查参数，再加 --yes。",
 		Tool:      deapAgentSetVisibilityTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
-			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；仅指定成员/部门可见时按服务端约定取值", Bind: "visibility", Required: true, Trim: true},
+			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见（配合 --staff-ids/--dept-ids）", Bind: "visibility", Required: true, Trim: true},
 			{Name: "staff-ids", Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
 			{Name: "dept-ids", Usage: "指定可见部门 ID，可重复或用英文逗号分隔；全量替换，未提供则清空部门维度", Bind: "deptIds", Kind: LeafStringSlice},
 		},
@@ -477,7 +477,7 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage set-visibility", PrimaryCLIPath: "dingtalk-tag manage set-visibility",
 				Group: "manage",
 			},
-			Description: "设置数字员工草稿的可见范围，全量替换现有范围。visibility=ALL 表示本企业全员可见；仅指定成员/部门可见时通过 staffIds、deptIds 提供，均为全量替换。",
+			Description: "设置数字员工草稿的可见范围，全量替换现有范围。visibility=ALL 表示本企业全员可见；visibility=PARTIAL 表示仅指定成员/部门可见，通过 staffIds、deptIds 提供，均为全量替换。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentSetVisibilityTool),
 			Selection: contract.SelectionSpec{
@@ -486,11 +486,11 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 				AvoidWhen:    []string{"只更新名称、职责或 Skill/MCP 等草稿字段时使用 save-draft", "未确认目标 agentUuid 与可见范围影响时不要执行"},
 				Examples: []string{
 					"dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility ALL --dry-run --format json",
-					`dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PART --staff-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json`,
+					`dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PARTIAL --staff-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json`,
 				},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "visibility", Property: "visibility", Description: "可见范围：ALL 表示本企业全员可见；仅指定成员/部门可见时按服务端约定取值"},
+				{Name: "visibility", Property: "visibility", Description: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见"},
 				{Name: "staff-ids", Property: "staffIds", InterfaceType: "array"},
 				{Name: "dept-ids", Property: "deptIds", InterfaceType: "array"},
 			},
