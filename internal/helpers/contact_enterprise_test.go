@@ -6,6 +6,7 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"reflect"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -211,6 +213,10 @@ func TestCrossPlatformCoverageContactGetByDingtalkIdRejectsBlankID(t *testing.T)
 	)
 	if err == nil || !strings.Contains(err.Error(), "不能为空") {
 		t.Fatalf("error = %v, want blank id validation", err)
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("error = %T %v, want validation error", err, err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))

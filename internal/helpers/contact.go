@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 
@@ -1686,7 +1687,7 @@ func newContactCommand() *cobra.Command {
 			}
 			dingtalkId := strings.TrimSpace(flagOrFallback(cmd, "id", "dingtalk-id", "dingtalkId"))
 			if dingtalkId == "" {
-				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "id", "dingtalk-id", "dingtalkId"))
+				return apperrors.NewValidation(fmt.Sprintf("--%s 不能为空", contactFirstSetFlagName(cmd, "id", "dingtalk-id", "dingtalkId")))
 			}
 			return callMCPTool("get_user_id_by_dingtalk_id", map[string]any{
 				"dingtalk_id": dingtalkId,
@@ -1722,7 +1723,7 @@ func newContactCommand() *cobra.Command {
 				Examples: []string{"dws contact user get-by-dingtalk-id --id zhangsan --format json"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "id", Property: "dingtalk_id"},
+				{Name: "id", Property: "dingtalk_id", Required: boolPtr(true)},
 				{Name: "dingtalk-id", Property: "dingtalk_id", Required: boolPtr(false)},
 				{Name: "dingtalkId", Property: "dingtalk_id", Required: boolPtr(false)},
 			},
