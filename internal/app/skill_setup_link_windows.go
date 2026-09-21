@@ -115,6 +115,8 @@ func junctionSubstituteName(target string) string {
 	return result
 }
 
+const maxMountPointReparseDataLength = 16*1024 - 8 // MAXIMUM_REPARSE_DATA_BUFFER_SIZE (16384) minus header (8)
+
 func mountPointReparseBuffer(substitute, printName string) ([]byte, error) {
 	substituteUTF16, err := windows.UTF16FromString(substitute)
 	if err != nil {
@@ -125,28 +127,32 @@ func mountPointReparseBuffer(substitute, printName string) ([]byte, error) {
 		return nil, fmt.Errorf("encode junction print name: %w", err)
 	}
 
-	substituteNameLength := uint16(2 * (len(substituteUTF16) - 1))
-	printNameOffset := uint16(2 * len(substituteUTF16))
-	printNameLength := uint16(2 * (len(printUTF16) - 1))
+	substituteNameLength := 2 * (len(substituteUTF16) - 1)
+	printNameOffset := 2 * len(substituteUTF16)
+	printNameLength := 2 * (len(printUTF16) - 1)
 
-	pathBufferLength := 2*len(substituteUTF16) + 2*len(printUTF16)
-	reparseDataLength := uint16(8 + pathBufferLength)
-	buffer := make([]byte, 8+int(reparseDataLength))
+	pathBufferLength := printNameOffset + 2*len(printUTF16)
+	reparseDataLength := 8 + pathBufferLength
+	if reparseDataLength > maxMountPointReparseDataLength {
+		return nil, fmt.Errorf("junction path too long: reparse data length %d exceeds maximum %d", reparseDataLength, maxMountPointReparseDataLength)
+	}
+
+	buffer := make([]byte, 8+reparseDataLength)
 
 	binary.LittleEndian.PutUint32(buffer[0:], windows.IO_REPARSE_TAG_MOUNT_POINT)
-	binary.LittleEndian.PutUint16(buffer[4:], reparseDataLength)
+	binary.LittleEndian.PutUint16(buffer[4:], uint16(reparseDataLength))
 	binary.LittleEndian.PutUint16(buffer[6:], 0) // Reserved
 	binary.LittleEndian.PutUint16(buffer[8:], 0) // SubstituteNameOffset
-	binary.LittleEndian.PutUint16(buffer[10:], substituteNameLength)
-	binary.LittleEndian.PutUint16(buffer[12:], printNameOffset)
-	binary.LittleEndian.PutUint16(buffer[14:], printNameLength)
+	binary.LittleEndian.PutUint16(buffer[10:], uint16(substituteNameLength))
+	binary.LittleEndian.PutUint16(buffer[12:], uint16(printNameOffset))
+	binary.LittleEndian.PutUint16(buffer[14:], uint16(printNameLength))
 
 	pathBuffer := buffer[16:]
 	for i, value := range substituteUTF16 {
 		binary.LittleEndian.PutUint16(pathBuffer[i*2:], value)
 	}
 	for i, value := range printUTF16 {
-		binary.LittleEndian.PutUint16(pathBuffer[int(printNameOffset)+i*2:], value)
+		binary.LittleEndian.PutUint16(pathBuffer[printNameOffset+i*2:], value)
 	}
 	return buffer, nil
 }

@@ -70,12 +70,20 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 		}
 	}
 
-	// 3. mountPointReparseBuffer NUL byte error branches
+	// 3. mountPointReparseBuffer NUL byte and oversized path error branches
 	if _, err := mountPointReparseBuffer("bad\x00sub", "print"); err == nil {
 		t.Fatal("expected error for NUL in substitute")
 	}
 	if _, err := mountPointReparseBuffer("sub", "bad\x00print"); err == nil {
 		t.Fatal("expected error for NUL in printName")
+	}
+	longPath := strings.Repeat("a", 20000)
+	if _, err := mountPointReparseBuffer(longPath, "print"); err == nil || !strings.Contains(err.Error(), "junction path too long") {
+		t.Fatalf("expected path too long error for oversized substitute, got %v", err)
+	}
+	hugePath := strings.Repeat("b", 70000)
+	if _, err := mountPointReparseBuffer(hugePath, "print"); err == nil || !strings.Contains(err.Error(), "junction path too long") {
+		t.Fatalf("expected path too long error for >64k path without panic, got %v", err)
 	}
 
 	// 4. createSkillSetupDirLink error branches isolated via t.Run
