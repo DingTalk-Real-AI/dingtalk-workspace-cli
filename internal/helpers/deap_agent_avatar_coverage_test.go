@@ -54,7 +54,9 @@ func TestCrossPlatformCoverageDeapAgentAvatarURLInputBranches(t *testing.T) {
 		{"", false, ""},
 		{"https://cdn.example/a.png", false, ""},
 		{"http://", false, "完整的 HTTP(S)"},
-		{"/abs/path.png", true, "路径不安全"},
+		// A NUL control character is rejected by SafeInputPath on every platform;
+		// an "/abs/..." path is only absolute on Unix, so it is not portable here.
+		{"invalid\x00.png", true, "路径不安全"},
 		{"bad.txt", true, "只支持"},
 		{"missing.png", true, "不可读"},
 		{"dir.png", true, "普通文件"},
