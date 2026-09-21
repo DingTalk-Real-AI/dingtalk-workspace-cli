@@ -149,6 +149,62 @@ func TestCrossPlatformCoverageEmployeeTaskFailureStates(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageEmployeeCapacityRejectionAllowsRedelivery(t *testing.T) {
+	// A capacity rejection must not leave a dedup record behind; otherwise the
+	// Event Bus redelivery of the same event would be short-circuited as
+	// already handled and the user's message would be permanently lost.
+	t.Run("queue-capacity", func(t *testing.T) {
+		r, e := employeeLedgerFixture(t)
+		r.ctx = context.Background()
+		// Occupy the only queue slot with an unrelated event so the target
+		// event is rejected purely on single-queue capacity.
+		q := make(chan employeeEvent, 1)
+		other := e
+		other.MessageID = "other"
+		q <- other
+		r.queues[e.ConversationID] = q
+		if err := r.enqueue(e); err == nil {
+			t.Fatal("expected queue_capacity rejection")
+		}
+		if _, err := os.Stat(r.recordPath(e)); !os.IsNotExist(err) {
+			t.Fatalf("rejected event must not leave a dedup record: %v", err)
+		}
+		// Drain to relieve backpressure, then redeliver: the event must now be
+		// accepted and persisted rather than silently deduped away.
+		<-q
+		if err := r.enqueue(e); err != nil {
+			t.Fatalf("redelivery after capacity relief must be accepted: %v", err)
+		}
+		if _, err := os.Stat(r.recordPath(e)); err != nil {
+			t.Fatalf("redelivered event must persist a dedup record: %v", err)
+		}
+	})
+	t.Run("conversation-capacity", func(t *testing.T) {
+		r, e := employeeLedgerFixture(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		r.ctx = ctx
+		defer func() { cancel(); r.wg.Wait() }()
+		for i := 0; i < 128; i++ {
+			r.queues[fmt.Sprint(i)] = make(chan employeeEvent, 1)
+		}
+		if err := r.enqueue(e); err == nil {
+			t.Fatal("expected conversation_capacity rejection")
+		}
+		if _, err := os.Stat(r.recordPath(e)); !os.IsNotExist(err) {
+			t.Fatalf("rejected event must not leave a dedup record: %v", err)
+		}
+		// Free a conversation slot, then redeliver: the event must now be
+		// accepted and persisted rather than silently deduped away.
+		delete(r.queues, "0")
+		if err := r.enqueue(e); err != nil {
+			t.Fatalf("redelivery after capacity relief must be accepted: %v", err)
+		}
+		if _, err := os.Stat(r.recordPath(e)); err != nil {
+			t.Fatalf("redelivered event must persist a dedup record: %v", err)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageEmployeeMachinePayloadAndAuditEncoding(t *testing.T) {
 	for _, payload := range []any{make(chan int), strings.Repeat("x", digitalEmployeeStdinLimit+1)} {
 		if _, err := employeeMachineCall(context.Background(), "corp:employee", payload); err == nil || err.Error() != "invalid_payload" {

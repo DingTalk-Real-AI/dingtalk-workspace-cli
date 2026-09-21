@@ -240,6 +240,22 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	} else if !os.IsNotExist(err) {
 		return employeeTerminal("ledger_unavailable")
 	}
+	// Reject on capacity BEFORE committing any ledger state. enqueue holds
+	// r.mu and is the sole producer, so a queue that currently has room can
+	// never fill up before the send below; that lets us persist the dedup
+	// record only once the event is guaranteed to be accepted. Writing the
+	// record first (as the old order did) meant a transient backpressure
+	// rejection left an "accepted" task file that made the Event Bus
+	// redelivery short-circuit as already handled, permanently swallowing
+	// the user's message.
+	q := r.queues[e.ConversationID]
+	if q == nil {
+		if len(r.queues) >= 128 {
+			return employeeTerminal("conversation_capacity")
+		}
+	} else if len(q) >= cap(q) {
+		return employeeTerminal("queue_capacity")
+	}
 	key := sha256.Sum256([]byte(r.cfg.Binding.DWSProfile + "\x00" + e.ConversationID + "\x00" + e.MessageID))
 	record := employeeTaskRecord{EventID: e.EventID, MessageID: e.MessageID, ConversationID: e.ConversationID, Status: "accepted", IdempotencyKey: fmt.Sprintf("%x", key[:16]), UpdatedAt: time.Now()}
 	if err := r.audit(record); err != nil {
@@ -248,11 +264,7 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if err := writeEmployeeJSON(path, record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
-	q := r.queues[e.ConversationID]
 	if q == nil {
-		if len(r.queues) >= 128 {
-			return employeeTerminal("conversation_capacity")
-		}
 		q = make(chan employeeEvent, 32)
 		r.queues[e.ConversationID] = q
 		r.wg.Add(1)
@@ -274,12 +286,10 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 			}
 		}()
 	}
-	select {
-	case q <- e:
-		return nil
-	default:
-		return employeeTerminal("queue_capacity")
-	}
+	// Pre-checked above while holding r.mu as the sole producer, so this send
+	// always has room and never blocks.
+	q <- e
+	return nil
 }
 
 func (r *employeeRuntime) process(e employeeEvent) error {
