@@ -4,6 +4,7 @@ package app
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,13 +18,14 @@ var (
 	windowsUTF16PtrFromString = windows.UTF16PtrFromString
 	windowsCreateFile         = windows.CreateFile
 	windowsDeviceIoControl    = windows.DeviceIoControl
+	windowsOsRemove           = os.Remove
 )
 
-func createSkillSetupDirLink(target, link string) error {
+func createSkillSetupDirLink(target, link string) (err error) {
 	if target == "" {
 		return fmt.Errorf("junction target is empty")
 	}
-	target, err := filepathAbs(target)
+	target, err = filepathAbs(target)
 	if err != nil {
 		return fmt.Errorf("resolve junction target: %w", err)
 	}
@@ -43,11 +45,22 @@ func createSkillSetupDirLink(target, link string) error {
 	removeLink := true
 	defer func() {
 		if removeLink {
-			_ = os.Remove(link)
+			if rmErr := windowsOsRemove(link); rmErr != nil && !os.IsNotExist(rmErr) {
+				cleanupErr := &skillSetupStagingCleanupError{
+					Path: link,
+					Err:  fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr),
+				}
+				if err != nil {
+					err = errors.Join(err, cleanupErr)
+				} else {
+					err = cleanupErr
+				}
+			}
 		}
 	}()
 
-	handle, err := windowsCreateFile(
+	var handle windows.Handle
+	handle, err = windowsCreateFile(
 		linkPath,
 		windows.GENERIC_WRITE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
@@ -57,12 +70,13 @@ func createSkillSetupDirLink(target, link string) error {
 		0,
 	)
 	if err != nil {
-		return fmt.Errorf("open junction: %w", err)
+		err = fmt.Errorf("open junction: %w", err)
+		return err
 	}
 	defer windows.CloseHandle(handle)
 
 	var returned uint32
-	if err := windowsDeviceIoControl(
+	if devErr := windowsDeviceIoControl(
 		handle,
 		windows.FSCTL_SET_REPARSE_POINT,
 		&buffer[0],
@@ -71,8 +85,9 @@ func createSkillSetupDirLink(target, link string) error {
 		0,
 		&returned,
 		nil,
-	); err != nil {
-		return fmt.Errorf("set junction reparse point: %w", err)
+	); devErr != nil {
+		err = fmt.Errorf("set junction reparse point: %w", devErr)
+		return err
 	}
 	removeLink = false
 	return nil

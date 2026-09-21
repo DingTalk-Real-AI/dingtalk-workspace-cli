@@ -604,15 +604,15 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			t.Fatal(err)
 		}
 		var out, errOut bytes.Buffer
-		installed, _, err := executeSkillSetupPlan(plan, &out, &errOut)
-		if err != nil {
-			t.Fatalf("unexpected fatal plan error: %v", err)
+		_, _, err = executeSkillSetupPlan(plan, &out, &errOut)
+		if err == nil {
+			t.Fatal("expected executeSkillSetupPlan to return error when post-publish staging cleanup fails")
 		}
-		if installed != 2 {
-			t.Fatalf("installed = %d, want 2", installed)
+		if !strings.Contains(err.Error(), "mock post-publish staged item cleanup error") {
+			t.Fatalf("expected post-publish cleanup error in returned error, got: %v", err)
 		}
 		if !strings.Contains(errOut.String(), "mock post-publish staged item cleanup error") {
-			t.Fatalf("post-publish cleanup error must be reported as warning, got: %s", errOut.String())
+			t.Fatalf("post-publish cleanup error must be reported in errOut, got: %s", errOut.String())
 		}
 	})
 }

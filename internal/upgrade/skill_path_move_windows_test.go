@@ -198,6 +198,42 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		}
 	})
 
+	t.Run("create_file_error_and_remove_placeholder_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &windowsCreateFile, func(path *uint16, access uint32, shareMode uint32, sa *windows.SecurityAttributes, creationDisposition uint32, flagsAndAttributes uint32, templateFile windows.Handle) (windows.Handle, error) {
+			return windows.InvalidHandle, errors.New("mock create file error")
+		})
+		testseam.Swap(t, &windowsSkillPathRemove, func(path string) error {
+			return errors.New("mock remove placeholder error")
+		})
+		linkPath := filepath.Join(tempDir, "link-create-fail-remove-fail")
+		err := createSkillPathDirJunction(tempDir, linkPath)
+		if err == nil {
+			t.Fatal("expected error when windowsCreateFile and windowsSkillPathRemove fail")
+		}
+		if !strings.Contains(err.Error(), "open junction") || !strings.Contains(err.Error(), "清理 junction 占位目录失败") {
+			t.Fatalf("expected joined error containing create and cleanup errors, got: %v", err)
+		}
+	})
+
+	t.Run("device_io_control_error_and_remove_placeholder_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &windowsDeviceIoControl, func(handle windows.Handle, ioControlCode uint32, inBuffer *byte, inBufferSize uint32, outBuffer *byte, outBufferSize uint32, bytesReturned *uint32, overlapped *windows.Overlapped) error {
+			return errors.New("mock device io control error")
+		})
+		testseam.Swap(t, &windowsSkillPathRemove, func(path string) error {
+			return errors.New("mock remove placeholder error")
+		})
+		linkPath := filepath.Join(tempDir, "link-ioctl-fail-remove-fail")
+		err := createSkillPathDirJunction(tempDir, linkPath)
+		if err == nil {
+			t.Fatal("expected error when windowsDeviceIoControl and windowsSkillPathRemove fail")
+		}
+		if !strings.Contains(err.Error(), "set junction reparse point") || !strings.Contains(err.Error(), "清理 junction 占位目录失败") {
+			t.Fatalf("expected joined error containing device io control and cleanup errors, got: %v", err)
+		}
+	})
+
 	t.Run("copy_skill_path_link_symlink_branch", func(t *testing.T) {
 		tempDir := t.TempDir()
 		symlinkCalled := false

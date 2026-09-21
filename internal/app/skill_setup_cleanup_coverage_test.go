@@ -568,7 +568,7 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			})
 			var stderr bytes.Buffer
 			installed, skipped, err := executeSkillSetupPlan(plan, io.Discard, &stderr)
-			if err != nil || installed != 1 || skipped != 0 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
+			if err == nil || installed != 1 || skipped != 0 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
 				t.Fatalf("success cleanup = installed %d, skipped %d, err %v, stderr %q", installed, skipped, err, stderr.String())
 			}
 		})

@@ -2047,6 +2047,7 @@ func publishSkillSetupTarget(staged []skillSetupStagedDir, backups []skillSetupB
 }
 
 func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (installed, skipped int, err error) {
+	var setupErr error
 	home, homeErr := skillSetupUserHomeDir()
 	hasCanonicalDependents := false
 	for _, candidate := range plan.Targets {
@@ -2152,13 +2153,14 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		}
 		if cleanupErr != nil {
 			fmt.Fprintf(errOut, "  ⚠️  Skill staging 清理失败 %s: %v\n", stageRoot, cleanupErr)
+			setupErr = errors.Join(setupErr, cleanupErr)
 		}
 		for _, item := range staged {
 			fmt.Fprintf(out, "  ✓ %s\n", item.dest)
 		}
 		installed += perTarget
 	}
-	return installed, skipped, nil
+	return installed, skipped, setupErr
 }
 
 // staleMultiSkillVictims lists proven DWS-managed directories under dest that

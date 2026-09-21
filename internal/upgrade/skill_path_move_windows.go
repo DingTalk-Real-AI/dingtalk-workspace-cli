@@ -18,6 +18,7 @@ var (
 	windowsUTF16PtrFromString = windows.UTF16PtrFromString
 	windowsCreateFile         = windows.CreateFile
 	windowsDeviceIoControl    = windows.DeviceIoControl
+	windowsSkillPathRemove    = skillPathRemove
 )
 
 func isCrossDeviceError(err error) bool {
@@ -35,11 +36,11 @@ func copySkillPathLink(target, dst string, mode os.FileMode) error {
 	return createSkillPathDirJunction(target, dst)
 }
 
-func createSkillPathDirJunction(target, link string) error {
+func createSkillPathDirJunction(target, link string) (err error) {
 	if target == "" {
 		return fmt.Errorf("junction target is empty")
 	}
-	target, err := skillPathAbs(target)
+	target, err = skillPathAbs(target)
 	if err != nil {
 		return fmt.Errorf("resolve junction target: %w", err)
 	}
@@ -59,11 +60,19 @@ func createSkillPathDirJunction(target, link string) error {
 	removeLink := true
 	defer func() {
 		if removeLink {
-			_ = skillPathRemove(link)
+			if rmErr := windowsSkillPathRemove(link); rmErr != nil && !os.IsNotExist(rmErr) {
+				cleanErr := fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr)
+				if err != nil {
+					err = errors.Join(err, cleanErr)
+				} else {
+					err = cleanErr
+				}
+			}
 		}
 	}()
 
-	handle, err := windowsCreateFile(
+	var handle windows.Handle
+	handle, err = windowsCreateFile(
 		linkPath,
 		windows.GENERIC_WRITE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
@@ -73,12 +82,13 @@ func createSkillPathDirJunction(target, link string) error {
 		0,
 	)
 	if err != nil {
-		return fmt.Errorf("open junction: %w", err)
+		err = fmt.Errorf("open junction: %w", err)
+		return err
 	}
 	defer windows.CloseHandle(handle)
 
 	var returned uint32
-	if err := windowsDeviceIoControl(
+	if devErr := windowsDeviceIoControl(
 		handle,
 		windows.FSCTL_SET_REPARSE_POINT,
 		&buffer[0],
@@ -87,8 +97,9 @@ func createSkillPathDirJunction(target, link string) error {
 		0,
 		&returned,
 		nil,
-	); err != nil {
-		return fmt.Errorf("set junction reparse point: %w", err)
+	); devErr != nil {
+		err = fmt.Errorf("set junction reparse point: %w", devErr)
+		return err
 	}
 	removeLink = false
 	return nil
