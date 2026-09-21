@@ -40,7 +40,7 @@ func TestCrossPlatformCoverageEmployeeUploadFailuresAreRedacted(t *testing.T) {
 			}))
 			defer server.Close()
 			u := deapAgentOpenAPISkillUploader{baseURL: server.URL, httpClient: server.Client(), validateTarget: func(string) error { return nil }, resolveCredential: func(context.Context, string) (string, error) { return "fixture-private-credential", nil }}
-			got, err := u.Upload(context.Background(), "agent", file)
+			got, err := u.Upload(context.Background(), "agent", file, strings.NewReader("fixture bytes"))
 			if (err == nil) != tc.ok {
 				t.Fatalf("url=%q err=%v", got, err)
 			}
@@ -54,19 +54,19 @@ func TestCrossPlatformCoverageEmployeeUploadFailuresAreRedacted(t *testing.T) {
 	}
 	t.Run("credential failure", func(t *testing.T) {
 		u := deapAgentOpenAPISkillUploader{baseURL: "https://fixture.invalid", resolveCredential: func(context.Context, string) (string, error) { return "", errors.New("credential-secret") }}
-		if _, err := u.Upload(context.Background(), "agent", file); err == nil || strings.Contains(err.Error(), "credential-secret") {
+		if _, err := u.Upload(context.Background(), "agent", file, strings.NewReader("fixture bytes")); err == nil || strings.Contains(err.Error(), "credential-secret") {
 			t.Fatalf("error=%v", err)
 		}
 	})
 	t.Run("missing package", func(t *testing.T) {
 		u := deapAgentOpenAPISkillUploader{baseURL: "https://fixture.invalid", resolveCredential: func(context.Context, string) (string, error) { return "fixture", nil }}
-		if _, err := u.Upload(context.Background(), "agent", file+".missing"); err == nil {
+		if _, err := u.uploadFile(context.Background(), "agent", file+".missing", deapAgentAvatarUploadPath); err == nil {
 			t.Fatal("missing package accepted")
 		}
 	})
 	t.Run("transport rejected before upload", func(t *testing.T) {
 		u := deapAgentOpenAPISkillUploader{baseURL: "https://fixture.invalid", validateTarget: func(string) error { return errors.New("rejected") }, resolveCredential: func(context.Context, string) (string, error) { return "fixture", nil }}
-		if _, err := u.Upload(context.Background(), "agent", file); err == nil {
+		if _, err := u.Upload(context.Background(), "agent", file, strings.NewReader("fixture bytes")); err == nil {
 			t.Fatal("target rejection ignored")
 		}
 	})
@@ -76,7 +76,7 @@ func TestCrossPlatformCoverageEmployeeUploadFailuresAreRedacted(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://fixture.invalid"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := (deapAgentOpenAPISkillUploader{}).Upload(context.Background(), "agent", file); err == nil {
+		if _, err := (deapAgentOpenAPISkillUploader{}).Upload(context.Background(), "agent", file, strings.NewReader("fixture bytes")); err == nil {
 			t.Fatal("unknown environment accepted")
 		}
 	})

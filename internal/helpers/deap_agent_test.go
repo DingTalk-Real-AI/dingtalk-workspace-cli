@@ -168,7 +168,7 @@ func deapAgentSameFile(t *testing.T, left, right string) bool {
 	return os.SameFile(leftInfo, rightInfo)
 }
 
-func (s *deapAgentSkillUploaderStub) Upload(_ context.Context, agentUUID, filePath string) (string, error) {
+func (s *deapAgentSkillUploaderStub) Upload(_ context.Context, agentUUID, filePath string, _ io.Reader) (string, error) {
 	s.gotPath = filePath
 	s.gotAgentUUID = agentUUID
 	return s.fileURL, s.err
@@ -471,7 +471,12 @@ func TestCrossPlatformCoverageDeapAgentOpenAPISkillUploaderStreamsMultipartAndRe
 			return "sk-upload", nil
 		},
 	}
-	fileURL, err := uploader.Upload(context.Background(), "agent-1", filePath)
+	file, err = os.Open(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	fileURL, err := uploader.Upload(context.Background(), "agent-1", filePath, file)
 	if err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}

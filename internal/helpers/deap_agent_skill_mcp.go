@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	pathpkg "path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -59,6 +61,7 @@ var deapAgentOpenZIPEntry = func(entry *zip.File) (io.ReadCloser, error) { retur
 type deapAgentSkillPackage struct {
 	path string
 	size int64
+	file *os.File
 }
 
 type deapAgentSkillCreated struct {
@@ -70,7 +73,7 @@ type deapAgentSkillCreated struct {
 }
 
 type deapAgentSkillPackageUploader interface {
-	Upload(ctx context.Context, agentUUID, filePath string) (string, error)
+	Upload(ctx context.Context, agentUUID, fileName string, file io.Reader) (string, error)
 }
 
 type deapAgentOpenAPISkillUploader struct {
@@ -127,8 +130,8 @@ type deapAgentSkillUploadCredentialEnvelope struct {
 	Content         *deapAgentSkillUploadCredentialPayload `json:"content"`
 }
 
-func (u deapAgentOpenAPISkillUploader) Upload(ctx context.Context, agentUUID, filePath string) (string, error) {
-	fileURL, err := u.uploadFile(ctx, agentUUID, filePath, deapAgentSkillUploadPath)
+func (u deapAgentOpenAPISkillUploader) Upload(ctx context.Context, agentUUID, fileName string, file io.Reader) (string, error) {
+	fileURL, err := u.uploadReader(ctx, agentUUID, fileName, deapAgentSkillUploadPath, file)
 	if err != nil {
 		return "", &deapAgentSkillStageError{Stage: "upload", Err: err}
 	}
@@ -138,6 +141,23 @@ func (u deapAgentOpenAPISkillUploader) Upload(ctx context.Context, agentUUID, fi
 func (u deapAgentOpenAPISkillUploader) uploadFile(
 	ctx context.Context, agentUUID, filePath, uploadPath string,
 ) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("本地文件不可读")
+	}
+	defer file.Close()
+	return u.uploadReader(ctx, agentUUID, filepath.Base(filePath), uploadPath, file)
+}
+
+func (u deapAgentOpenAPISkillUploader) uploadReader(
+	ctx context.Context, agentUUID, fileName, uploadPath string, file io.Reader,
+) (fileURL string, err error) {
+	started := time.Now()
+	slog.DebugContext(ctx, "dingtalk_tag.file_upload", "stage", "start", "target_path", uploadPath)
+	defer func() {
+		slog.DebugContext(ctx, "dingtalk_tag.file_upload", "stage", "complete", "target_path", uploadPath,
+			"success", err == nil, "duration_ms", time.Since(started).Milliseconds())
+	}()
 	baseURL, err := u.uploadBaseURL()
 	if err != nil {
 		return "", fmt.Errorf("OpenAPI 环境解析失败")
@@ -148,12 +168,6 @@ func (u deapAgentOpenAPISkillUploader) uploadFile(
 		// temporaryCredential 内脱敏），不再统一吞成无信息的“认证失败”。
 		return "", fmt.Errorf("OpenAPI 认证失败: %w", err)
 	}
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("本地文件不可读")
-	}
-	defer file.Close()
-
 	client := apiclient.NewClient(credential, baseURL)
 	if u.httpClient != nil {
 		client.HTTPClient = u.httpClient
@@ -164,7 +178,7 @@ func (u deapAgentOpenAPISkillUploader) uploadFile(
 	response, err := client.UploadMultipart(ctx, apiclient.MultipartUploadRequest{
 		Path:       uploadPath,
 		FieldName:  "file",
-		FileName:   filepath.Base(filePath),
+		FileName:   filepath.Base(fileName),
 		File:       file,
 		BearerAuth: true,
 	})
@@ -336,6 +350,17 @@ func (e *deapAgentSkillStageError) Unwrap() error {
 var deapAgentSkillUploader deapAgentSkillPackageUploader = deapAgentOpenAPISkillUploader{}
 
 func deapAgentValidateSkillPackage(rawPath string) (deapAgentSkillPackage, error) {
+	pkg, err := deapAgentOpenSkillPackage(rawPath)
+	if err == nil {
+		pkg.file.Close()
+		pkg.file = nil
+	}
+	return pkg, err
+}
+
+// The caller owns the returned file until upload completes. ZIP validation uses
+// ReadAt on this handle, so it cannot validate one inode and upload another.
+func deapAgentOpenSkillPackage(rawPath string) (deapAgentSkillPackage, error) {
 	if !strings.EqualFold(filepath.Ext(strings.TrimSpace(rawPath)), ".zip") {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("参数 --file 必须使用 .zip 扩展名")
 	}
@@ -343,7 +368,24 @@ func deapAgentValidateSkillPackage(rawPath string) (deapAgentSkillPackage, error
 	if err != nil {
 		return deapAgentSkillPackage{}, apperrors.NewValidation(fmt.Sprintf("参数 --file 路径不安全: %v", err))
 	}
-	info, err := os.Stat(resolved)
+	// Reject special files before a potentially blocking open. The handle is
+	// checked again below; path metadata is not used to validate the ZIP bytes.
+	if info, err := os.Stat(resolved); err == nil && !info.Mode().IsRegular() {
+		return deapAgentSkillPackage{}, apperrors.NewValidation("参数 --file 必须是普通文件")
+	}
+	file, err := os.Open(resolved)
+	if err != nil {
+		return deapAgentSkillPackage{}, apperrors.NewValidation("参数 --file 文件不可读")
+	}
+	pkg, err := deapAgentValidateOpenedSkillPackage(file, resolved)
+	if err != nil {
+		file.Close()
+	}
+	return pkg, err
+}
+
+func deapAgentValidateOpenedSkillPackage(file *os.File, resolved string) (deapAgentSkillPackage, error) {
+	info, err := file.Stat()
 	if err != nil {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("参数 --file 文件不可读")
 	}
@@ -353,11 +395,10 @@ func deapAgentValidateSkillPackage(rawPath string) (deapAgentSkillPackage, error
 	if info.Size() > deapAgentSkillMaxPackageSize {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("Skill ZIP 不能超过 50 MiB")
 	}
-	reader, err := zip.OpenReader(resolved)
+	reader, err := zip.NewReader(file, info.Size())
 	if err != nil {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("参数 --file 不是有效 ZIP 文件")
 	}
-	defer reader.Close()
 	if len(reader.File) > deapAgentSkillMaxEntries {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("Skill ZIP 文件条目过多")
 	}
@@ -405,7 +446,8 @@ func deapAgentValidateSkillPackage(rawPath string) (deapAgentSkillPackage, error
 	if !foundSkill {
 		return deapAgentSkillPackage{}, apperrors.NewValidation("Skill ZIP 中缺少 SKILL.md")
 	}
-	return deapAgentSkillPackage{path: resolved, size: info.Size()}, nil
+	slog.Debug("dingtalk_tag.skill_package_validated", "file_size", info.Size())
+	return deapAgentSkillPackage{path: resolved, size: info.Size(), file: file}, nil
 }
 
 func newDeapCapabilityCommand() *cobra.Command {
@@ -488,10 +530,11 @@ func newDeapAgentSkillCreateCommand() *cobra.Command {
 func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any) error {
 	agentUUID, _ := args["agentUuid"].(string)
 	rawPath, _ := args["file"].(string)
-	pkg, err := deapAgentValidateSkillPackage(rawPath)
+	pkg, err := deapAgentOpenSkillPackage(rawPath)
 	if err != nil {
 		return &deapAgentSkillStageError{Stage: "validate", Err: err}
 	}
+	defer pkg.file.Close()
 	if deps.Caller.DryRun() {
 		return deps.Out.PrintJSON(map[string]any{
 			"dryRun":       true,
@@ -504,7 +547,7 @@ func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any)
 			"fileSize":     pkg.size,
 		})
 	}
-	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, pkg.path)
+	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, filepath.Base(pkg.path), io.NewSectionReader(pkg.file, 0, pkg.size))
 	if err != nil {
 		if staged, ok := err.(*deapAgentSkillStageError); ok {
 			return staged
@@ -575,17 +618,18 @@ func deapAgentCallSkillUpdate(cmd *cobra.Command, tool string, args map[string]a
 	if strings.TrimSpace(rawPath) == "" {
 		return callMCPToolOnServer(deapAgentServerID, tool, args)
 	}
-	pkg, err := deapAgentValidateSkillPackage(rawPath)
+	pkg, err := deapAgentOpenSkillPackage(rawPath)
 	if err != nil {
 		return &deapAgentSkillStageError{Operation: "update", Stage: "validate", Err: err}
 	}
+	defer pkg.file.Close()
 	if deps.Caller.DryRun() {
 		// 干跑只预览占位，不上传、不生成签名 URL。
 		args["fileUrl"] = map[string]any{"localFile": filepath.Base(pkg.path), "upload": true, "redacted": true}
 		return callMCPToolOnServer(deapAgentServerID, tool, args)
 	}
 	agentUUID, _ := args["agentUuid"].(string)
-	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, pkg.path)
+	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, filepath.Base(pkg.path), io.NewSectionReader(pkg.file, 0, pkg.size))
 	if err != nil {
 		if staged, ok := err.(*deapAgentSkillStageError); ok {
 			return &deapAgentSkillStageError{Operation: "update", Stage: staged.Stage, Err: staged.Err}
