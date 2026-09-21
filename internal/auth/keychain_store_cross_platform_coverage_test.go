@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -375,6 +376,118 @@ func TestCrossPlatformCoverageRepairRemovesMismatchedLoginSlots(t *testing.T) {
 			t.Fatalf("repair(org removal failure) = %v, want org removal wrap", err)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageProfileMigrationLoginRetryErrorNilUnwrap(t *testing.T) {
+	// A nil receiver must stay safe when the retry error is unwrapped through
+	// errors.Unwrap or errors.As on an absent target.
+	var retryErr *profileMigrationLoginRetryError
+	if got := retryErr.Unwrap(); got != nil {
+		t.Fatalf("nil retryErr.Unwrap() = %v, want nil", got)
+	}
+	if got := errors.Unwrap(retryErr); got != nil {
+		t.Fatalf("errors.Unwrap(nil retryErr) = %v, want nil", got)
+	}
+}
+
+func TestCrossPlatformCoverageLoginRetryGuidanceErrorForTestConstructor(t *testing.T) {
+	// The app-package guidance test that constructs this error is partitioned
+	// outside the CI coverage shards, so this in-package call keeps the
+	// constructor statement covered on every platform. The display copy is
+	// locale-aware: zh renders the Chinese catalog entry and en the English
+	// translation used by --intl logins.
+	cause := errors.New("underlying retry cause")
+	got := NewLoginRetryGuidanceErrorForTest(cause)
+	if got == nil {
+		t.Fatal("NewLoginRetryGuidanceErrorForTest() = nil, want retry error")
+	}
+	for _, locale := range []struct {
+		lang string
+		want string
+	}{
+		{lang: "zh", want: "请保持 --profile 参数不变，并重新执行 dws auth login"},
+		{lang: "en", want: "Please keep the --profile flag unchanged and run dws auth login again"},
+	} {
+		restore := i18n.PushLang(locale.lang)
+		t.Cleanup(restore)
+
+		if got.Error() != locale.want {
+			t.Fatalf("NewLoginRetryGuidanceErrorForTest() = %q, want %q", got.Error(), locale.want)
+		}
+	}
+	if !errors.Is(got, cause) {
+		t.Fatalf("errors.Is(NewLoginRetryGuidanceErrorForTest(cause), cause) = false, want true")
+	}
+}
+
+func TestCrossPlatformCoverageV1ExplicitProfileMissingDEKRetryOnStubbedKeychain(t *testing.T) {
+	configDir := t.TempDir()
+	first := testToken("old-first", "corp_v1_stub_retry", "First Org")
+	second := testToken("old-second", "corp_v1_stub_retry_second", "Second Org")
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version:        1,
+		CurrentProfile: first.CorpID,
+		Profiles: []Profile{
+			{Name: first.CorpName, CorpID: first.CorpID, CorpName: first.CorpName, UserID: first.UserID},
+			{Name: second.CorpName, CorpID: second.CorpID, CorpName: second.CorpName, UserID: second.UserID},
+		},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	SetRuntimeProfile(TokenProfileSelector(first))
+	t.Cleanup(func() { SetRuntimeProfile("") })
+
+	// The organization slot is unreadable because the DEK is gone. The v1
+	// migration must skip it, and the first org-slot write after the registry
+	// reached v2 must surface the profile-stable retry guidance instead of a
+	// raw technical error. This mirrors the file-DEK scenario without depending
+	// on the darwin/linux-only backend, so the branch stays covered on Windows.
+	stub := newStubbedKeychain()
+	stub.errs[TokenAccountForCorpID(first.CorpID)] = keychain.ErrDEKMissing
+	swapKeychainStub(t, stub)
+
+	fresh := *first
+	fresh.AccessToken = "new-first"
+	err := SaveLoginTokenData(configDir, &fresh)
+	if err == nil {
+		t.Fatal("SaveLoginTokenData() error = nil, want DEK-missing retry error")
+	}
+	if !keychain.IsDEKMissing(err) {
+		t.Fatalf("SaveLoginTokenData() error = %v, want DEK missing in chain", err)
+	}
+	wantGuidance := i18n.T(profileLoginRetryGuidance)
+	if err.Error() != wantGuidance {
+		t.Fatalf("SaveLoginTokenData() error = %q, want %q", err, wantGuidance)
+	}
+	if got, ok := LoginRetryGuidance(err); !ok || got != wantGuidance {
+		t.Fatalf("LoginRetryGuidance() = %q, %v; want %q, true", got, ok, wantGuidance)
+	}
+}
+
+func TestCrossPlatformCoverageV1MigrationHardFailsOnNonDEKOrgSlotError(t *testing.T) {
+	configDir := t.TempDir()
+	corpID := "corp_v1_hardfail"
+	if err := SaveProfiles(configDir, &ProfilesConfig{
+		Version: 1,
+		Profiles: []Profile{{
+			Name:     "V1 Hardfail Org",
+			CorpID:   corpID,
+			CorpName: "V1 Hardfail Org",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveProfiles() error = %v", err)
+	}
+	// A v1 migration must keep failing closed on an org-slot read error that is
+	// neither NotFound nor a lost DEK (the lost-DEK case is skipped so a fresh
+	// login for another profile can proceed).
+	stub := newStubbedKeychain()
+	stub.errs[TokenAccountForCorpID(corpID)] = errors.New("keychain read boom")
+	swapKeychainStub(t, stub)
+
+	err := EnsureProfilesMigration(configDir)
+	if err == nil || !strings.Contains(err.Error(), "keychain read boom") {
+		t.Fatalf("EnsureProfilesMigration() error = %v, want keychain read boom", err)
+	}
 }
 
 func TestCrossPlatformCoverageRepairAbortsOnTransientReadError(t *testing.T) {

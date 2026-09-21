@@ -211,7 +211,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				}
 				tokenData, err = authDeviceLogin(provider, loginCtx)
 				if err != nil {
-					return apperrors.NewAuth(fmt.Sprintf("device authorization failed: %v", err))
+					return authLoginFlowError("device authorization failed", err)
 				}
 			default:
 				loginCtx, cancel := context.WithTimeout(cmd.Context(), config.OAuthFlowTimeout)
@@ -233,7 +233,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = authOAuthLogin(provider, loginCtx, authLoginForcesAuthorization(cfg))
 				if err != nil {
-					return apperrors.NewAuth(fmt.Sprintf("dingtalk login failed: %v", err))
+					return authLoginFlowError("dingtalk login failed", err)
 				}
 			}
 
@@ -361,6 +361,13 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("refresh-url")
 	_ = cmd.Flags().MarkHidden("login-timeout")
 	return cmd
+}
+
+func authLoginFlowError(prefix string, err error) error {
+	if guidance, ok := authpkg.LoginRetryGuidance(err); ok {
+		return apperrors.NewAuth(guidance)
+	}
+	return apperrors.NewAuth(fmt.Sprintf("%s: %v", prefix, err))
 }
 
 var (
