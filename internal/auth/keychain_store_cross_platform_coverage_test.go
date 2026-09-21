@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -392,14 +393,27 @@ func TestCrossPlatformCoverageProfileMigrationLoginRetryErrorNilUnwrap(t *testin
 func TestCrossPlatformCoverageLoginRetryGuidanceErrorForTestConstructor(t *testing.T) {
 	// The app-package guidance test that constructs this error is partitioned
 	// outside the CI coverage shards, so this in-package call keeps the
-	// constructor statement covered on every platform.
+	// constructor statement covered on every platform. The display copy is
+	// locale-aware: zh renders the Chinese catalog entry and en the English
+	// translation used by --intl logins.
 	cause := errors.New("underlying retry cause")
 	got := NewLoginRetryGuidanceErrorForTest(cause)
 	if got == nil {
 		t.Fatal("NewLoginRetryGuidanceErrorForTest() = nil, want retry error")
 	}
-	if got.Error() != profileLoginRetryGuidance {
-		t.Fatalf("NewLoginRetryGuidanceErrorForTest() = %q, want %q", got.Error(), profileLoginRetryGuidance)
+	for _, locale := range []struct {
+		lang string
+		want string
+	}{
+		{lang: "zh", want: "请保持 --profile 参数不变，并重新执行 dws auth login"},
+		{lang: "en", want: "Please keep the --profile flag unchanged and run dws auth login again"},
+	} {
+		restore := i18n.PushLang(locale.lang)
+		t.Cleanup(restore)
+
+		if got.Error() != locale.want {
+			t.Fatalf("NewLoginRetryGuidanceErrorForTest() = %q, want %q", got.Error(), locale.want)
+		}
 	}
 	if !errors.Is(got, cause) {
 		t.Fatalf("errors.Is(NewLoginRetryGuidanceErrorForTest(cause), cause) = false, want true")
@@ -441,7 +455,7 @@ func TestCrossPlatformCoverageV1ExplicitProfileMissingDEKRetryOnStubbedKeychain(
 	if !keychain.IsDEKMissing(err) {
 		t.Fatalf("SaveLoginTokenData() error = %v, want DEK missing in chain", err)
 	}
-	const wantGuidance = "请保持 --profile 参数不变，并重新执行 dws auth login"
+	wantGuidance := i18n.T(profileLoginRetryGuidance)
 	if err.Error() != wantGuidance {
 		t.Fatalf("SaveLoginTokenData() error = %q, want %q", err, wantGuidance)
 	}

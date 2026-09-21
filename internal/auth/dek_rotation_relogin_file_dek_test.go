@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
 
@@ -103,7 +104,9 @@ func TestCrossPlatformCoverageV1ExplicitProfileMissingDEKRequestsRetry(t *testin
 	if err == nil || !keychain.IsDEKMissing(err) {
 		t.Fatalf("first SaveLoginTokenData() error = %v, want missing DEK", err)
 	}
-	const wantGuidance = "请保持 --profile 参数不变，并重新执行 dws auth login"
+	// The guidance copy is locale-aware, so compare against the active catalog
+	// entry instead of hard-coding the Chinese text.
+	wantGuidance := i18n.T(profileLoginRetryGuidance)
 	if err.Error() != wantGuidance {
 		t.Fatalf("first SaveLoginTokenData() error = %q, want %q", err, wantGuidance)
 	}

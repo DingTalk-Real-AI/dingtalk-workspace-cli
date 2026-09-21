@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 )
 
@@ -45,9 +46,20 @@ func TestCrossPlatformCoverageLoginRetryGuidanceFindsNestedRetryCondition(t *tes
 	retryErr := &profileMigrationLoginRetryError{cause: cause}
 	nested := fmt.Errorf("provider persistence: %w", fmt.Errorf("save token: %w", retryErr))
 
-	guidance, ok := LoginRetryGuidance(nested)
-	if !ok || guidance != profileLoginRetryGuidance {
-		t.Fatalf("LoginRetryGuidance() = %q, %v; want %q, true", guidance, ok, profileLoginRetryGuidance)
+	for _, locale := range []struct {
+		lang string
+		want string
+	}{
+		{lang: "zh", want: "请保持 --profile 参数不变，并重新执行 dws auth login"},
+		{lang: "en", want: "Please keep the --profile flag unchanged and run dws auth login again"},
+	} {
+		restore := i18n.PushLang(locale.lang)
+		t.Cleanup(restore)
+
+		guidance, ok := LoginRetryGuidance(nested)
+		if !ok || guidance != locale.want {
+			t.Fatalf("LoginRetryGuidance() = %q, %v; want %q, true", guidance, ok, locale.want)
+		}
 	}
 	if !errors.Is(nested, keychain.ErrDEKMissing) {
 		t.Fatalf("nested retry error lost original cause: %v", nested)

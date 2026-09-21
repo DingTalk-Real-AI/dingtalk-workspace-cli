@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -120,10 +121,13 @@ type profileMigrationLoginRetryError struct {
 	cause error
 }
 
+// profileLoginRetryGuidance is the user-facing recovery instruction key. The
+// display copy is resolved through i18n so --intl logins render the English
+// catalog entry while the default flow keeps the Chinese instruction.
 const profileLoginRetryGuidance = "请保持 --profile 参数不变，并重新执行 dws auth login"
 
 func (e *profileMigrationLoginRetryError) Error() string {
-	return profileLoginRetryGuidance
+	return i18n.T(profileLoginRetryGuidance)
 }
 
 func (e *profileMigrationLoginRetryError) Unwrap() error {

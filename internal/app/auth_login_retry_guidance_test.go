@@ -23,11 +23,11 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageAuthLoginRetryShowsOnlyActionableGuidance(t *testing.T) {
-	const want = "请保持 --profile 参数不变，并重新执行 dws auth login"
 	technicalCause := errors.New("DEKMissing after profiles v1 to v2 migration")
 	retryErr := authpkg.NewLoginRetryGuidanceErrorForTest(technicalCause)
 	const profileSelector = "retry-profile"
@@ -35,12 +35,16 @@ func TestCrossPlatformCoverageAuthLoginRetryShowsOnlyActionableGuidance(t *testi
 
 	for _, tc := range []struct {
 		name  string
+		lang  string
 		flags map[string]string
+		want  string
 		stub  func(t *testing.T)
 	}{
 		{
-			name:  "oauth",
+			name:  "oauth-zh",
+			lang:  "zh",
 			flags: map[string]string{"profile": profileSelector},
+			want:  "请保持 --profile 参数不变，并重新执行 dws auth login",
 			stub: func(t *testing.T) {
 				t.Helper()
 				testseam.Swap(t, &authOAuthLogin, func(provider *authpkg.OAuthProvider, _ context.Context, _ bool) (*authpkg.TokenData, error) {
@@ -52,8 +56,10 @@ func TestCrossPlatformCoverageAuthLoginRetryShowsOnlyActionableGuidance(t *testi
 			},
 		},
 		{
-			name:  "device",
+			name:  "device-zh",
+			lang:  "zh",
 			flags: map[string]string{"device": "true", "profile": profileSelector},
+			want:  "请保持 --profile 参数不变，并重新执行 dws auth login",
 			stub: func(t *testing.T) {
 				t.Helper()
 				testseam.Swap(t, &authDeviceLogin, func(*authpkg.DeviceFlowProvider, context.Context) (*authpkg.TokenData, error) {
@@ -61,8 +67,30 @@ func TestCrossPlatformCoverageAuthLoginRetryShowsOnlyActionableGuidance(t *testi
 				})
 			},
 		},
+		{
+			// --intl 登录默认输出英文契约：重试提示也必须渲染英文目录条目。
+			name:  "oauth-intl-en",
+			lang:  "en",
+			flags: map[string]string{"profile": profileSelector, "intl": "true"},
+			want:  "Please keep the --profile flag unchanged and run dws auth login again",
+			stub: func(t *testing.T) {
+				t.Helper()
+				testseam.Swap(t, &authOAuthLogin, func(provider *authpkg.OAuthProvider, _ context.Context, _ bool) (*authpkg.TokenData, error) {
+					if provider.TargetCorpID != corpID {
+						t.Errorf("OAuth target corp = %q, want %q", provider.TargetCorpID, corpID)
+					}
+					return nil, fmt.Errorf("保存 token 失败: %w", retryErr)
+				})
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			restore := i18n.PushLang(tc.lang)
+			t.Cleanup(restore)
+			if tc.lang == "en" {
+				// 解除环境语言 pin，确保 --intl 的英文 push 真正生效。
+				t.Setenv("DWS_LANG", "")
+			}
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			testseam.Swap(t, &authLoginInteractiveTerminal, func() bool { return false })
 			testseam.Swap(t, &authResolveProfile, func(_ string, selector string) (*authpkg.Profile, error) {
@@ -77,8 +105,8 @@ func TestCrossPlatformCoverageAuthLoginRetryShowsOnlyActionableGuidance(t *testi
 			if err == nil {
 				t.Fatal("auth login error = nil")
 			}
-			if err.Error() != want {
-				t.Fatalf("auth login error = %q, want %q", err, want)
+			if err.Error() != tc.want {
+				t.Fatalf("auth login error = %q, want %q", err, tc.want)
 			}
 			if errors.Is(err, technicalCause) {
 				t.Fatalf("auth login error still exposes its technical cause: %v", err)
