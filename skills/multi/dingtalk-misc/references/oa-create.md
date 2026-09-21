@@ -10,6 +10,7 @@
 - [表单值与能力边界](#表单值与能力边界)
 - [考勤审批套件](#考勤审批套件)
 - [流程预测与选人](#流程预测与选人)
+- [交互优化原则](#交互优化原则)
 - [执行前确认](#执行前确认)
 - [创建与写后验证](#创建与写后验证)
 - [错误收敛](#错误收敛)
@@ -21,6 +22,8 @@
 | 常规表单与自选审批节点 | 只使用本文件与 `scripts/oa_create_preflight.py` 的紧凑输出，不再加载控件/节点全集 |
 | 请假审批 | 先用 `dws attendance +get-approve-template --type leave` 定位模板，再按本文件“请假”闭环执行 |
 | 补卡审批 | 先用 `dws attendance +get-approve-template --type repair-check` 定位模板，再按本文件“补卡”闭环执行 |
+| 外出审批 | 先用 `dws attendance +get-approve-template --type travel` 定位模板，再按本文件“外出”闭环执行 |
+| 加班审批 | 先用 `dws attendance +get-approve-template --type overtime` 定位模板，再按本文件“加班”闭环执行 |
 | 紧凑表单输出出现 `needsComponentReference=true` | 只在 [oa-form-components.md](oa/oa-form-components.md) 中定位对应 `componentName` 小节 |
 | 紧凑预测输出出现 `needsNodeReference=true`，或用户明确要求覆盖模板默认流程 | 只读取 [oa-process-nodes.md](oa/oa-process-nodes.md) 的对应节点或参数映射小节 |
 | 表单包含本地附件 | [oa-attachments.md](oa-attachments.md) |
@@ -90,9 +93,20 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 - 必填：停止并说明当前 Skill 无法安全自动提交，请用户改用钉钉客户端或等待能力补齐。
 - 非必填：取得用户同意后才可跳过，并在创建摘要中显式列出。
 
-`DDHolidayField` 和 `DDBizSuite · attendance.supply` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通日期控件。其他 `DDBizSuite` 没有 CLI 已公开的稳定容器契约，停止创建；不能把套件子控件当普通顶层字段提交。
+`DDHolidayField` 与 `DDBizSuite · attendance.supply/goout/batchovertime` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通日期控件。其他 `DDBizSuite` 没有 CLI 已公开的稳定容器契约，停止创建；不能把套件子控件当普通顶层字段提交。
 
 ### 明细与核心字段
+
+`valueKind=table_rows_json_string` 表示 **JSON 序列化的二维 name/value 数组字符串**：每行是子控件对象数组，`name` 使用子控件 label，`value` 为按控件格式编码的字符串。下面示例展示两行明细：
+
+```json
+{
+  "name": "采购明细",
+  "value": "[[{\"name\":\"商品名\",\"value\":\"笔记本\"},{\"name\":\"数量\",\"value\":\"2\"}],[{\"name\":\"商品名\",\"value\":\"钢笔\"},{\"name\":\"数量\",\"value\":\"1\"}]]"
+}
+```
+
+简单模式把上述 `value` 字符串放入 `--form-values` 的“采购明细”键；高级模式把上述控件对象放入 `--request` 的 `formComponentValues` 列表。**两种入口均不自动转换以 label 为 key 的行对象数组**，应使用 JSON 序列化器构造正确结构。不要把明细 `value` 内的二维数组与 `forecast-process` 外层 `formComponentValues` 的额外包装混淆。格式依据：[官方创建审批实例文档](https://open.dingtalk.com/document/orgapp/create-an-approval-instance.md)。
 
 `TableField` 的每一行必须包含用户要求的核心子字段。创建前逐项对照原始需求，特别检查物品名称、数量、金额、日期、费用类型和备注；不能因为接口接受 payload 就认为业务字段完整。
 
@@ -102,7 +116,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 
 ## 考勤审批套件
 
-请假与补卡沿用本文件的单次写入、最终预测、摘要确认和写后回读规则。模板不支持 CLI 时，展示 `+get-approve-template` 返回的全部可用模板及 `[formName](submitUrl)`，由用户在客户端提交；不得只给一个猜测的推荐项。
+请假、补卡、外出与加班沿用本文件的单次写入、最终预测、摘要确认和写后回读规则。模板不支持 CLI 时，展示 `+get-approve-template` 返回的全部可用模板及 `[formName](submitUrl)`，由用户在客户端提交；不得只给一个猜测的推荐项。
 
 ### 请假：DDHolidayField
 
@@ -124,7 +138,26 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 5. 按 [补卡套件](oa/oa-form-components.md#ddbizsuite--attendancesupply补卡套件) 组装子控件 `id/name/value/extValue`。`value` 按 Schema 的 format 格式化；`extValue` 使用选定计划的 `planId/planTip/planText/workDate/supplyDate`，不得猜测班次数据。
 6. 用最终 `--request` 重新预测，处理自选节点；展示摘要后停止，得到对当前摘要的明确确认才执行同一条创建调用，并在执行时动态追加确认参数。
 
-请假、补卡任一最终字段、部门或人员发生变化，都必须重新 `forecast-process`。写成功后的验收只读 `detail/tasks/records`，不能再次创建。
+请假、补卡、外出、加班任一最终字段、部门或人员发生变化，都必须重新 `forecast-process`。写成功后的验收只读 `detail/tasks/records`，不能再次创建。
+请假与补卡的详细规则（类型澄清、时间格式、班次匹配、payload 组装细则、话术与确认硬约束）见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」与 [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」；本文件浓缩闭环与详细工作流冲突时以详细版为准。
+
+### 外出：DDBizSuite · attendance.goout
+
+1. `dws attendance +get-approve-template --type travel --format json` 获取模板（出差是 `--type out`，注意分流）；多模板时全量展示并让用户选。
+2. `form-schema` 下钻 `DDBizSuite`（`bizType=attendance.goout`）子控件；外出类型 option 的 `extension.unit` 决定有效单位与时长格式。
+3. 有同行人时先经 `dws attendance +check-companion-schedules --approve-type 2` 校验班次（`valid=false` 原样转告并停止）。
+4. `dws attendance +calculate-approve-duration --biz-type 2 --approve-biz-type attendance.goout` 计算服务端权威时长；返回值原样保留，不得本地估算。
+5. 按 [外出套件](oa/oa-form-components.md#ddbizsuite--attendancegoout外出套件) 的展平形态与映射表组装子控件条目（traveler value 用 userId JSON 数组字符串）。
+6. 完整工作流、有效单位判定与组装细则见 [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」。
+
+### 加班：DDBizSuite · attendance.batchovertime
+
+1. `dws attendance +get-approve-template --type overtime --format json` 获取模板；无 `everyDayDuration` 的旧版模板降级 `submitUrl` 链接引导。
+2. `attendance +get-complex-overtime-setting --users <加班人>` 校验动态单位（`reason` 非空即停止转告）；`interactMode` 决定 `--duration-mode`。
+3. `dws attendance +calculate-approve-duration --biz-type 1 --new-overtime` 计算时长；歧义窗口（班中起始/跨天）按两阶段确认传逐日明细，**时长结果须经用户手动确认后方可组装发起**。
+4. 按 [加班套件](oa/oa-form-components.md#ddbizsuite--attendancebatchovertime加班套件) 的容器包裹形态组装子控件条目（与外出/补卡的展平形态相反）。
+5. 完整工作流、时长计算口径与组装细则见 [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」。
+
 
 ## 流程预测与选人
 
@@ -154,6 +187,29 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":12
 `approvers` 与简单模式 `--approvers` 的 CLI 映射一致；仅在用户指定审批人且预测没有对应的自选审批节点时放入高级请求。预测已有固定审批人且用户没有要求覆盖时，不额外传 `approvers`。
 
 若不需要高级字段，优先使用 `--process-code`、`--form-values` 和可选 `--approvers`、`--cc-list`，减少手写请求结构。
+
+## 交互优化原则
+
+> **核心目标：流程清晰，步骤有序，避免重复询问。**
+
+1. **先查 Schema 再收集表单值：** `form-schema` 后先展示控件列表，再一次性收集全部表单值；未拿到 Schema 前不得问用户填什么。
+
+2. **流程预测后再选自选审批人：** `forecast-process` 后先展示完整流程路径（各节点与处理人）；对 `targetSelect: true` 节点提示「节点「{activityName}」需要您自选{actorType}人」，用 `dws aisearch person --query "<姓名>" --dimension name --format json` 帮用户查找并选人；多个自选节点一次性收集，禁止逐个询问。
+
+3. **单次汇总确认：** 发起前一次性展示模板名称、各控件值、预测审批路径、各节点审批人/抄送人（含自选选人结果），并遵守：
+   - **单选确认**：一个单选问题（如「确认发起 / 取消发起」），完整汇总置于问题或选项描述中一并展示；附属决策（如非必填自选节点是否留空）须在确认前收集或按默认值并入汇总，禁止拆成多个并列问题。
+   - **零括号主干形态**：汇总主干只写字段名与核心值，禁止括号内描述——模板编码、userId、多选/服务端裁决/窗口类型/通道验收等技术细节不入正文，选项描述同样不加括号尾注（写「加 --yes 真实提交」不写「加 --yes 真实提交（服务端已验证）」）；技术证据留档于命令字符串、临时文件或技术报告。示例：「模板：加班-new / 加班人：文疏、公 元yt / 时间：2026-09-01 21:00 → 23:00 / 时长：每人 2.00 小时」
+   - **空条目控件不进汇总**：汇总只展示有业务值的控件；服务端自动处理、以空条目组装的控件（如加班补偿自动配置）不展示该字段，技术结论需告知时另用说明句，不与表单值并列
+
+4. **开放信息统一收集（请假/外出起止范围，请假/补卡/外出/加班事由）：**
+   - **时间范围（请假与外出；补卡时刻由意图词与班次推导，不走此交互）**：按天计 → 日期即全天，无需此问；按半天/小时计且用户未限定上/下午/时刻时，问「全天 / 仅上午 / 仅下午」，按有效单位展示口径（小时计 → 全天 09:00→18:00、仅上午 09:00→12:00、仅下午 12:00→18:00；半天计 → 全天上午至下午、仅上午/仅下午），须保留自定义起止时刻通道；跨多天时起止日分别确定口径；选项时刻仅为示意，以用户实际班次为准；禁止默认全天。
+   - **事由/理由**：常见快捷选项 + **必须有自由输入通道**（不得只给选项变相预筛），命中即用、未命中自由输入。常见选项：请假（身体不适/家中有事/处理私事）、补卡（忘记打卡/考勤设备故障/外出办公未打卡）、外出（拜访客户/参加会议/外勤办事）、加班（赶项目进度/客户需求/临时任务）。
+   - **纯对话环境**（无选择组件）：退化为文本提问并结束回合等用户输入，属合规模式；但半天/小时计的时间范围仍须明确问，禁止默认全天。
+   - **话术硬约束**：选项与提问一律纯中文，技术字段与英文枚举不进入用户可见文案。
+
+5. **选择澄清优先（交互形态硬约束）：** 凡有离散选项或预设取值的澄清与确认（模板、类型/班次、时间范围、加班逐日时长、事由等），宿主有选择交互组件时必须用**选择澄清**（快捷预设 + 「其他」自由输入），禁止退化为纯文本 `___` 填空；仅纯对话宿主才用文本提问。快捷预设只是加速项，不得变相预筛或替代用户裁决。
+
+**反例（禁止）：** 未查 Schema 就问表单值；预测后逐个节点询问选人；确认前直接发起；半天/小时计未问时间范围默认全天；发起确认拆成多个并列问题；汇总或选项描述夹带括号内技术描述（如「加班人（userId）」）；宿主有选择组件时把时长/事由等离散澄清退化为纯文本填空。
 
 ## 执行前确认
 

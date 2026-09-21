@@ -222,5 +222,6 @@
   "授权成功": "Authorization successful",
   "请返回终端继续操作。此页面可以关闭。": "Return to the terminal to continue. You may close this page.",
   "钉钉 CLI": "DingTalk CLI",
-  "🔐 登录钉钉": "🔐 Login to DingTalk"
+  "🔐 登录钉钉": "🔐 Login to DingTalk",
+  "请保持 --profile 参数不变，并重新执行 dws auth login": "Please keep the --profile flag unchanged and run dws auth login again"
 }

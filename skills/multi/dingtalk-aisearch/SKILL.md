@@ -12,102 +12,104 @@ metadata:
 # 钉钉 AI 搜问 Skill
 
 <!-- DWS_RUNTIME_CONTRACT_START -->
-## 最小 DWS 执行契约
+## 最小执行契约
 
-- 只通过 `dws` CLI 操作钉钉；每条命令带 `--format json`，只按真实结构化返回下结论。
-- `person/enterprise/behavior` 按本页直调，不预读 shared、Reference、Schema、Help 或下游 Skill。
-- 不猜命令、字段、ID、profile 或事实；缺失可选时间则省略；多候选不取首项，ID 不混域。
-- 空结果结束搜索，同条件核验见第 5 节；失败或不完整不能说“没有”，候选不等于全量。
+- 只用 `dws` 操作钉钉，每条命令带 `--format json`，只按结构化返回下结论。
+- `person/enterprise/behavior` 直接调用，不预读 shared、Reference、Schema、Help 或下游 Skill。
+- 不猜命令、字段、ID、profile 或事实；多候选不取首项，不混用不同 `domain` 的 ID。
+- 空结果结束本次搜索；失败、不完整或候选结果不能表述成“对象不存在”、全量或唯一。
+- 来源不确定或用户列出多个来源时，第一条业务命令必须是一次合并 `--types` 的 `aisearch enterprise`，不能先逐产品搜索。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
-## Golden Route
+## 选路
 
-| 意图 | 唯一首选入口 | 关键槽位 |
-|---|---|---|
-| 姓名/工号/部门/职位/职责/上下级/手机号线索找人 | `dws aisearch person` | `--query` + `--dimension` |
-| 按主题找文档、消息、邮件、待办、听记等内容 | `dws aisearch enterprise` | `--queries` + `--types` + 可选 `--time-range` |
-| 以我为关系端点的发送/接收，或我创建、编辑、分享过什么 | `dws aisearch behavior` | 上述内容槽位 + `--behavior-type` + 可选 `--direction/--chat-scope` |
-| <!-- dws-intent: chat.search.filtered -->资源只限 IM，答案是逐条消息并带结构化消息谓词 | `dws chat +search-msg` | 发送者、会话、关键词、@、类型、reaction、时间和完整分页由 Chat 负责 |
-| 按时间列最近访问/编辑文档，无主题或行为条件 | `dws drive +recent` | 文档集合排序；其他对象用所属产品 recent/list |
-| 枚举部门成员、完整人员名单 | `dingtalk-contact` | 部门定位 → 成员列表 → 按需详情，不把人员搜索候选当全量 |
-| 完整手机号精确反查 | `dws contact user search-mobile --mobile "<完整手机号>" --format json` | `--mobile` |
-| 已知稳定 ID 后读取/修改原对象 | 对应产品 Skill | 不再用 AISearch 重搜 |
+| 意图 | 入口 |
+|---|---|
+| 姓名、工号、部门、职位、职责、上下级或手机号线索找人 | `dws aisearch person` |
+| 按主题跨文档、消息、邮件、待办、日程、听记等找内容 | `dws aisearch enterprise` |
+| 以我为端点的发送/接收，或我创建、编辑、分享过什么 | `dws aisearch behavior` |
+| <!-- dws-intent: chat.search.filtered -->仅 IM 且需逐条消息谓词过滤 | `dws chat +search-msg` |
+| 无主题地列最近访问/编辑文档 | `dws drive +recent` |
+| 枚举部门完整成员 | `dingtalk-contact` |
+| 完整手机号精确反查 | `dws contact user search-mobile --mobile "<手机号>" --format json` |
+| 已知稳定 ID 后读取/修改 | 对应产品 Skill |
 
-选路顺序：资源范围 → 答案形态 → 原生谓词。
+顺序：资源范围 → 答案形态 → 原生谓词。
 
 ## 1. 人员搜索
 
-维度映射：姓名→`name`，部门→`department`，职位/岗位→`position`，职责/技能/负责人→`duty`，上级→`supervisor`，下属→`subordinate`，工号→`jobNumber`，手机号线索→`phone`；确实无法判断维度时才用 `all`。
+维度：姓名=`name`，部门=`department`，职位=`position`，职责/负责人=`duty`，上级=`supervisor`，下属=`subordinate`，工号=`jobNumber`，手机号线索=`phone`；确实无法判断才用 `all`。
 
 ```bash
 dws aisearch person --query "<用户原始目标>" --dimension <维度> --format json
 ```
 
-- 独立条件分别查询、汇报；保留完整目标，不截名、改昵称或扩同音词。
-- 正确维度返回空结果就结束该组，不换 `all` 或缩词扩搜；同条件核验见第 5 节。仅维度选错时改正一次，空结果不等于路由错误。
-- 保留全部候选的姓名、真实 ID 和人员链接。用户要详情才切 Contact： `dws contact user get --ids <userId> --format json`。
-- 同一人的多条件须核对交集；姓名、部门、职位不互相替代。
-- 无分页完成证据时，只称“本次返回 N 个候选”。
+- 保留完整目标；独立条件分别查。正确维度为空就结束，不换 `all`、缩词或扩同音词。
+- 用 `searchEvidence.returnedCandidateCount` 报告本次候选数；无分页完成证据只称“本次返回”。
+- 姓名/花名包含查询只交付 `_searchEvidence.exactAliasContainsQuery=true`；`exactAliasContainsCount=0` 即无精确包含项，语义近似不能替代。
+- `resolvedRelation.status=resolved` 时直接使用 `target/supervisor/relation` 回答直属上级，不再搜索，也不把上级的上级当直属上级。
+- 产品归属与负责人用一次 `dimension=duty`，保留产品名和“负责”；仅职责证据明确者可称负责人，多候选就列候选及部门，共同上级不等于负责人。
+- 姓名与花名可由同一候选的 `aliases` 关联；不同域 ID 不可直接比较。需要更多人员详情时才用真实 `userId` 切 Contact。
 
 ## 2. 跨源内容搜索
 
-先从原句拆槽：时间词只进 `--time-range`，类型词只进 `--types`，剩余主题只进 `--queries`。类型枚举：`document,im,mail,calendar,todo,minute,report,image,link,notable,baike`。
+时间词只进 `--time-range`，类型词只进 `--types`，其余主题进 `--queries`。
 
 ```bash
-dws aisearch enterprise --queries "<主题>" --types <类型CSV> [--time-range "<用户原始时间词>"] --format json
+dws aisearch enterprise --queries "<主题>" --types <类型CSV> [--time-range "<原时间词>"] --format json
 ```
 
-- 按用户要求分组调用，组内类型合并为 CSV；不按底层产品细拆或重复搜索。
-- 精确标题原样传给 `--queries`，只接受精确匹配；未命中就停止，不拿近似标题、最近项或首项替代。同条件原生核验见第 5 节。
-- “唯一才读取”须先证实指定来源覆盖、分页结束且仅一个精确匹配；否则报告唯一性未核实，不读正文。正文 `complete=true` 不代表搜索完整。
-- 只要候选摘要或链接就不读原文。需要正文或缺必需证据时，满足读取前置条件后才按真实 ID 切对应产品；核验不能绕过“唯一才读取”。
-- 空结果或无精确目标均报告本次未命中，不自行缩词或扩时间。
+类型：文档/普通文件=`document`，消息=`im`，邮件=`mail`，日程=`calendar`，待办=`todo`，听记=`minute`，日志=`report`，AI表格=`notable`，知识内容=`baike`；用户列出的来源合并到一次调用。
+
+- `requestConstraints` 回显实际条件，`sources` 给出各来源数量；`no_returned_items` 仅表示本次未命中，`coverage.status=unknown` 不能证明完整。
+- `_searchEvidence.queryMatch=text_evidence_present` 才有文本主题证据；`no_text_evidence` 仅是语义候选，标为未核实。
+- 只交付 `result` 保留项并说明 `delivery.omitted`；`doNotRetryOrExpand=true` 时停止，不改词、逐产品补搜或读 Help。
+- 唯一精确标题可能附带 `resolvedDetail`。其状态为 `resolved` 或 `resolved_from_search_payload` 且字段足够时直接回答；`failed` 才报告补充读取失败。
+- 日程空命中时接口可按原时间调用日历，`meta.nativeFallback=true` 仍属本次 AISearch 证据，无需 Agent 再查日历。
+- 精确标题未命中不拿近似标题、最近项或首项替代。“唯一才读取”须有指定来源覆盖、分页结束和唯一精确匹配；正文 `complete=true` 不代表搜索完整。
+- 用户只要候选摘要或链接时不读原文；确需正文且同次结果缺字段，才按真实稳定 ID 读取对应产品。
 
 ## 3. 行为回溯
 
 ```bash
-dws aisearch behavior --queries "<主题>" --types <类型CSV> --behavior-type <all|send|receive|create|edit|share> [--time-range "<时间>"] [--direction "我->某人|某人->我|我<->某人"] [--chat-scope "<完整群名>"] --format json
+dws aisearch behavior --queries "<主题>" --types <类型CSV> --behavior-type <all|send|receive|create|edit|share> [--time-range "<原时间词>"] [--direction "我->某人|某人->我|我<->某人"] [--chat-scope "<完整群名>"] --format json
 ```
 
-- 每组“动作＋方向＋时间”调用一次，类型用 CSV 合并。`chat-scope` 仅用于 `im`；方向用原姓名，不先查邮箱或 userId。行为方向不代表发送者全部消息。
-- 动作按当前用户视角选择，适用于所有内容类型：“我发给某人”＝`behavior-type=send, direction=我->某人`；“某人发给我”＝`behavior-type=receive, direction=某人->我`。不能因原句有“发”就选 `send`。“我在某群发过”另加 `types=im, chat-scope=<完整群名>`。
-- 仅 IM 逐条过滤走 Chat，复用已解析的稳定身份。
-- 空结果只表示本次未命中；不删除主题、不追加同义词、不缩短群名重搜，不用 recent 列表替代行为证据。需补充查询时按第 5 节保留原条件执行。
-- 返回已足够回答就停止；缺少必需信息时才查询原对象。
+- 每组动作、方向、时间调用一次并合并类型。方向按当前用户视角：“我发给某人”=`send`；“某人发给我”=`receive`。`chat-scope` 仅用于 IM，方向保留原姓名。
+- 成功空数组就交付“已查询，本次 0 条”，按来源列 0；不再用 `enterprise` 拼行为证据，不删主题、扩时间、缩群名或用 recent 代替。
+- `timeEvidence.withinRequestedRange=false` 排除；为 `null` 则标时间未核实。`messageEvidence.perMessageVerified=false` 时不能把混合会话 snippet 全归给目标人。
+- “某人发过 Word 文件”或“某人今天发给我的消息”只调用一次 behavior：`types=im`、`receive`、人物方向及原时间词；不切 Chat、猜 sender 或扩大年份。
+- `resolvedMessageEvidence.status=resolved` 时直接使用 `messages`，即使为空也不再调用 Chat；`identity.match=returned_alias` 只证明展示名匹配返回别名。
+- 发送者未知的“谁给我发过某主题文件”用 `direction="某人->我"`，按 `identity.match=any_returned_sender` 的 `messages.sender` 汇总，不先猜人或拆两次搜索。
 
-## 4. 结果核验与交付
+## 4. 核验与交付
 
-- **时间**：原时间词传给 `--time-range`，按当前日期、时区确定核验区间；“本周”不等于近七天。数值时间先确认秒/毫秒单位，再用程序换算。已知越界记录排除；只有聚合日期或缺少逐条时间时标为时间未核实。创建行为须有创建时间，不能用修改时间或会议开始时间代替。
-- **身份**：核对实际发送者、收件关系和创建者；群内可见不等于发给我。Contact `userId` 与 Ding uid 等不同域 ID 不能直接比较；没有明确映射时，既不能认定同一人，也不能因值不同就排除本人。
-- **主题与类型**：候选须有内容证据支持主题关联；搜索命中、群名相关或流程上“可能有关”都不足以确认。无关联证据时标为相关性未核实，不自行选成“最相关”。文本、标题或普通链接不能充当文件证据。
-- **唯一与全量**：检查指定来源和分页终态；缺完整性字段就不声称唯一或全量。按稳定 ID 去重，交付清单与已核实的 ID、数量核对，避免读到却漏列。只问“有没有”时，有效命中即可回答。
-- **忠实总结**：不补写未返回事实，不把“建议、待确认”改成已发生；分清搜索片段与正文、接口总数与已读取条数。部分结果伴随错误或未完分页时保留说明，不能据此说“没有其他结果”。
+- **时间**：保留原时间词；“本周”不等于近七天。确认数值时间单位。创建行为用创建时间，不能用修改时间或会议开始时间代替。
+- **身份**：核对发送者、收件关系和创建者；群内可见不等于发给我。优先用 `stableRefs/identityRefs`，仅同 `domain` 的 ID 可直接比较。
+- **主题/类型**：须有文本、附件或对象类型证据；群名、普通链接和搜索命中本身不能证明主题或文件属性。
+- **唯一/全量**：检查来源和分页终态，按稳定 ID 去重；只问“有没有”时，有效正向命中即可。
+- **摘要**：不补写未返回字段，不把建议写成事实，不把 snippet 称正文；分别报告命中、空结果、失败和未核实项。
 
-## 5. 按原条件转用对应产品查询
+## 5. 同条件原生核验与多跳
 
-- 需要详情、成员清单或核验时，用返回的真实 ID，或原生产品支持的精确标题、部门等条件查询；只加载对应产品 Skill，按其参数调用。
-- 保持主题、身份、方向、时间和权限，不猜 ID、不跨组织、不扩大扫库。无精确条件、失败或无权限即说明限制并停止，不自动申请权限。
+路径：**AISearch 定位 → 确认目标 → 优先使用同次 `resolvedDetail` → 缺必需字段才按真实 ID 调用一个对应产品。**
 
-## 6. 多跳证据链
+- 仅在需要详情、完整成员或证据核验，且已有稳定 ID 或原生可执行的相同精确标题/部门/范围时转用对应产品；保持主题、身份、方向、时间和权限，不扩大扫库。
+- 跨来源第一步固定为 enterprise。无稳定 ID 时不能用原生重搜替代；目标不明、身份矛盾、失败或无权限时说明限制并停止。
+- 人员用 `userId`，文档用 `nodeId`，听记用 `taskUuid`，待办用真实 `taskId`；Ding uid 不能当 Contact userId，snippet 不能当正文。
+- 用户的“唯一才读取”等前置条件仍须满足。ID 域或下一跳不明确时才读 [多跳短流程](references/lite-recipes.md)。
 
-**定位候选 → 确认目标 → 提取真实 ID → 调用对应产品。**目标不明、身份不符或读取失败时停止依赖该对象的后续操作。
+## 6. 禁止本地兜底
 
-- 下游复用本跳真实 ID；人员用 `userId`，文档用 `nodeId`，听记用 `taskUuid`，待办用实际 `taskId`。Ding uid 不能当 Contact userId，snippet 不能当正文。
-- 用户的读取前置条件必须满足；只加载下一跳所需 Skill，读取完整性以该次返回为准。ID 提取细节见 [多跳短流程](references/lite-recipes.md)。
+钉钉对象只用 DWS 返回作业务证据；未命中时不得用 `find`、`rg`、`mdfind` 或评测 fixture 回答。会议议题负责人用一次 `person --dimension duty` 保留会议与职责原词；只有内容能提供职责原文时才改用一次 `enterprise --types calendar,im,document`，二者不都跑。
 
-## 错误与成本最短路径
+## 错误与成本
 
-1. 失败且 `retryable=true`：原调用最多重试一次；否则停止，不换身份或绕过权限。
-2. 成功但为空或无精确目标：不重复、改词或扩时间；必要的同条件核验见第 5 节。
-3. `unknown flag`：查看一次该命令 Help 修正。API、权限和空结果不靠 Help 或猜参数解决。
-4. 独立来源继续查询，依赖失败结果的步骤停止。保留标题、来源、链接、ID、数量、范围和错误；长 snippet 可外置，完整性字段不能删。
+1. `retryable=true` 时原调用最多重试一次；否则停止，不换身份或绕权限。
+2. 成功但为空或无精确目标：不重复、改词或扩时间。
+3. `unknown flag` 才查看一次该命令 Help；API、权限和空结果不靠 Help 解决。
+4. 独立来源可继续；依赖失败结果的后续停止。保留来源、链接、ID、范围、数量、完整性和错误。
 
 ## 按需 Reference
 
-常用路径不读 Reference。
-
-| 仅当 | 读取 |
-|---|---|
-| 低频枚举、返回字段或兼容参数确实无法由本页判断 | [完整命令参考](references/aisearch.md) |
-| 搜索与已知对象读取的产品边界仍不明确 | [局部意图消歧](references/intent-guide.md) |
-| 多跳结果已有候选，但其稳定 ID 域或下一跳衔接不明确 | [多跳短流程](references/lite-recipes.md) |
+常用路径不读 Reference。低频枚举或兼容参数不明才读 [完整命令参考](references/aisearch.md)；产品边界不明读 [局部意图消歧](references/intent-guide.md)；稳定 ID 域或下一跳不明读 [多跳短流程](references/lite-recipes.md)。
