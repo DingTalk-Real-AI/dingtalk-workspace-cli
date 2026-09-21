@@ -322,7 +322,7 @@ Selectors support `corpId:userId`, `corpId:userName`, `corpName:userId`, and `co
 
 Cross-org reads are orchestrated by the agent rather than a built-in `--all-orgs`: list profiles, group by `corpId`, and use the unique `isOrgCurrent=true` account for each organization. If a multi-account organization has no default, ask the user to choose an account first. Writes default to the current account — confirm both organization and account before cross-org writes.
 
-On macOS, an unreadable registered token slot blocks a new OAuth login rather than risking a mixed Keychain/file-DEK state. If normal terminal commands can still read the login while a sandbox using `DWS_DISABLE_KEYCHAIN=1` cannot, migrate the legacy and profile auth entries without exposing tokens:
+On macOS, transient or unclassified Keychain read failures block a new OAuth login rather than risking a mixed Keychain/file-DEK state. A confirmed missing DEK or ciphertext/DEK mismatch is preserved through authorization and replaced only for the slots targeted by the fresh login. If normal terminal commands can still read the login while a sandbox using `DWS_DISABLE_KEYCHAIN=1` cannot, migrate the legacy and profile auth entries without exposing tokens:
 
 ```bash
 env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json

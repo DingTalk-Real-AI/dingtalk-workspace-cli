@@ -311,7 +311,7 @@ dws --profile <corpId:userId> contact user search --query "..." # 单次精确�
 
 跨组织读取由 agent 编排，而非内置 `--all-orgs`：先 `dws profile list`，每个组织使用唯一的 `isOrgCurrent=true` 账号；若多账号组织没有默认账号，先让用户指定账号。写操作默认只在当前账号执行——跨组织写之前先确认目标组织和账号。
 
-macOS 下，如果已登记的 token slot 无法解密，为避免把系统 Keychain 和 file-DEK 写成混合状态，新的 OAuth 登录会直接拒绝。如果普通终端仍能读取登录态、只有设置 `DWS_DISABLE_KEYCHAIN=1` 的沙箱读不到，可在不暴露 token 的情况下迁移 legacy 与各 profile 的认证条目：
+macOS 下，瞬态或未分类的 Keychain 读取失败仍会拒绝新的 OAuth 登录，避免把系统 Keychain 和 file-DEK 写成混合状态。已确认的 DEK 缺失或密文/DEK 不匹配会保留到授权完成，并且只替换本次新登录实际写入的 token slot。如果普通终端仍能读取登录态、只有设置 `DWS_DISABLE_KEYCHAIN=1` 的沙箱读不到，可在不暴露 token 的情况下迁移 legacy 与各 profile 的认证条目：
 
 ```bash
 env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json

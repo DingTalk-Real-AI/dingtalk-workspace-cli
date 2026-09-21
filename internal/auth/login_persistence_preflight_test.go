@@ -794,6 +794,18 @@ func TestPrepareLoginPersistenceUnreadableGlobalFailsClosedBeforeRemote(t *testi
 	}
 }
 
+func TestCrossPlatformCoveragePrepareLoginPersistenceCiphertextMismatchDefersRepairUntilFreshLogin(t *testing.T) {
+	fixture := newHalfMigratedLoginFixture(t)
+	fixture.store.setReadError(keychain.AccountToken, keychain.ErrCiphertextKeyMismatch)
+
+	if err := prepareLoginPersistence(fixture.configDir); err != nil {
+		t.Fatalf("prepareLoginPersistence() error = %v, want deferred fresh-login repair", err)
+	}
+	if _, err := fixture.store.token(keychain.AccountToken); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("legacy token after preparation error = %v, want preserved ciphertext mismatch", err)
+	}
+}
+
 func TestPrepareLoginPersistenceV3UnresolvedProfileRepair(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
