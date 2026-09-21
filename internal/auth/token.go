@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -114,6 +115,38 @@ type TokenData struct {
 	// refresh_token the server has already rotated; the marker forces the
 	// rotated credential back into that slot.
 	RepairOrganizationMirror bool `json:"-"`
+}
+
+type profileMigrationLoginRetryError struct {
+	cause error
+}
+
+// profileLoginRetryGuidance is the user-facing recovery instruction key. The
+// display copy is resolved through i18n so --intl logins render the English
+// catalog entry while the default flow keeps the Chinese instruction.
+const profileLoginRetryGuidance = "请保持 --profile 参数不变，并重新执行 dws auth login"
+
+func (e *profileMigrationLoginRetryError) Error() string {
+	return i18n.T(profileLoginRetryGuidance)
+}
+
+func (e *profileMigrationLoginRetryError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+// LoginRetryGuidance returns the user-facing recovery instruction for login
+// errors that require the same profile-scoped authorization to be repeated.
+// Technical causes remain available through the original error chain for logs
+// and diagnostics, but must not be included in the command's display message.
+func LoginRetryGuidance(err error) (string, bool) {
+	var retryErr *profileMigrationLoginRetryError
+	if !errors.As(err, &retryErr) || retryErr == nil {
+		return "", false
+	}
+	return retryErr.Error(), true
 }
 
 // tokenPersistenceWritePlan is the single source of truth for deciding which
@@ -387,6 +420,8 @@ func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, 
 		if err != nil {
 			return err
 		}
+		initialProfilesVersion := cfg.Version
+		preMigrationPlan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
 		// A login may be the first operation after upgrading. Finish a v1
 		// registry migration before an upsert can raise profiles.json to v2;
 		// otherwise untouched organizations would permanently lose their chance
@@ -435,6 +470,24 @@ func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, 
 			plan.WriteOrganization,
 		)
 		if err != nil {
+			if data.FreshAuthorization &&
+				initialProfilesVersion < profilesVersion &&
+				cfg.Version >= profilesVersion &&
+				strings.TrimSpace(plan.RuntimeSelector) != "" &&
+				!preMigrationPlan.WriteOrganization &&
+				plan.WriteOrganization &&
+				keychain.IsDEKMissing(err) {
+				logging.AuthDebug(
+					"auth.token.persist.retry_after_profile_migration",
+					"from_version", initialProfilesVersion,
+					"to_version", cfg.Version,
+					"runtime_profile", plan.RuntimeSelector,
+					"corp_id", corpID,
+					"identity_selector", plan.ExactSelector,
+					"reason", "organization_slot_dek_missing",
+				)
+				return &profileMigrationLoginRetryError{cause: err}
+			}
 			return err
 		}
 		if clientSecret != "" {

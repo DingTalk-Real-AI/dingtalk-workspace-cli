@@ -209,7 +209,13 @@ func repairHalfMigratedGlobalTokenLocked(cfg *ProfilesConfig) error {
 	}
 
 	global, err := profilesLoadLegacy()
-	if errors.Is(err, ErrTokenDataNotFound) {
+	if errors.Is(err, ErrTokenDataNotFound) ||
+		keychain.IsDEKMissing(err) ||
+		keychain.IsCiphertextKeyMismatch(err) {
+		// Missing or mismatched key material cannot supply migration credentials,
+		// but must not prevent reauthorization. Leave the ciphertext intact until
+		// a fresh token is available; repairLoginCiphertextMismatchTargets clears
+		// only the slots selected by that login's persistence plan.
 		return nil
 	}
 	if err != nil {
@@ -465,11 +471,12 @@ func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 // repairLoginCiphertextMismatchTargets is called after a fresh login (OAuth/
 // device/PAT/--token) and before persistence. The incoming token is already
 // in hand — the function exists to clear write-plan target slots whose
-// ciphertext cannot be decrypted with the current DEK, because those slots
-// would otherwise fail preflightTokenWritePersistence and strand a completed
-// authentication. All three slot kinds (global legacy mirror, identity, org)
-// are treated equally: a mismatch slot is removed, and the new token will
-// overwrite the empty slot during persistence.
+// ciphertext cannot be decrypted with the current DEK or whose DEK is missing.
+// Those slots would otherwise fail preflightTokenWritePersistence and strand a
+// completed authentication. All three slot kinds (global legacy mirror,
+// identity, org) are treated equally: an unrecoverable slot is removed, and the
+// new token will overwrite the empty slot during persistence, creating a DEK
+// if needed.
 //
 // The whole read-classify-remove sequence runs under the profiles lock, so
 // the removal cannot interleave with another writer. Every target slot is
@@ -501,28 +508,29 @@ func repairLoginCiphertextMismatchTargets(configDir string, data *TokenData) err
 		var removeGlobal, removeIdentity, removeOrganization bool
 		var globalErr, identityErr, organizationErr error
 		if plan.WriteGlobal {
-			if _, err := LoadTokenDataKeychain(); keychain.IsCiphertextKeyMismatch(err) {
+			if _, err := LoadTokenDataKeychain(); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
 				removeGlobal, globalErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 		if plan.WriteIdentity {
-			if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); keychain.IsCiphertextKeyMismatch(err) {
+			if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
 				removeIdentity, identityErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 		if plan.WriteOrganization {
-			if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); keychain.IsCiphertextKeyMismatch(err) {
+			if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
 				removeOrganization, organizationErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 
-		// Remove phase: every slot above was readable, missing, or mismatch.
+		// Remove phase: every slot above was readable, absent, or had a
+		// confirmed missing DEK or ciphertext mismatch.
 		if removeGlobal {
 			if err := removeMismatchedLoginSlot("legacy", keychain.AccountToken, globalErr, DeleteTokenDataKeychain); err != nil {
 				return err
@@ -549,7 +557,7 @@ func repairLoginCiphertextMismatchTargets(configDir string, data *TokenData) err
 }
 
 // removeMismatchedLoginSlot logs and removes one login target slot after its
-// ciphertext mismatch was confirmed by the check phase.
+// ciphertext mismatch or missing DEK was confirmed by the check phase.
 func removeMismatchedLoginSlot(kind, account string, mismatchErr error, remove func() error) error {
 	logging.AuthDebug("auth.keychain.login_repair.ciphertext_mismatch",
 		"account_kind", authTokenAccountKind(account),
