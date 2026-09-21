@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -77,67 +78,84 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 		t.Fatal("expected error for NUL in printName")
 	}
 
-	// 4. createSkillSetupDirLink error branches
-	tempDir := t.TempDir()
-
-	// 4a. empty target
-	linkPath1 := filepath.Join(tempDir, "link-empty-target")
-	if err := createSkillSetupDirLink("", linkPath1); err == nil {
-		t.Fatal("expected error when target is empty")
-	}
-	if _, err := os.Stat(linkPath1); !os.IsNotExist(err) {
-		t.Fatalf("link path should not exist, got %v", err)
-	}
-
-	// 4b. filepathAbs error
-	testseam.Swap(t, &filepathAbs, func(string) (string, error) {
-		return "", errors.New("abs error")
+	// 4. createSkillSetupDirLink error branches isolated via t.Run
+	t.Run("empty_target", func(t *testing.T) {
+		linkPath := filepath.Join(t.TempDir(), "link-empty-target")
+		err := createSkillSetupDirLink("", linkPath)
+		if err == nil || !strings.Contains(err.Error(), "junction target is empty") {
+			t.Fatalf("expected empty target error, got %v", err)
+		}
+		if _, err := os.Stat(linkPath); !os.IsNotExist(err) {
+			t.Fatalf("link path should not exist, got %v", err)
+		}
 	})
-	if err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link-abs-err")); err == nil {
-		t.Fatal("expected error when filepathAbs fails")
-	}
 
-	// 4c. mountPointReparseBuffer error via target with NUL byte
-	testseam.Swap(t, &filepathAbs, func(s string) (string, error) { return s, nil })
-	if err := createSkillSetupDirLink("C:\\bad\x00target", filepath.Join(tempDir, "link-bad-target")); err == nil {
-		t.Fatal("expected error when target has NUL byte")
-	}
-
-	// 4d. link path has NUL byte
-	if err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link\x00bad")); err == nil {
-		t.Fatal("expected error when link path has NUL byte")
-	}
-
-	// 4e. link cannot be created because a file exists at that path (os.Mkdir fails)
-	existingFile := filepath.Join(tempDir, "existing-file")
-	if err := os.WriteFile(existingFile, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := createSkillSetupDirLink(tempDir, existingFile); err == nil {
-		t.Fatal("expected error when link path is an existing file")
-	}
-
-	// 4f. windowsCreateFile fails (exercises removeLink defer cleanup)
-	testseam.Swap(t, &windowsCreateFile, func(path *uint16, access uint32, shareMode uint32, sa *windows.SecurityAttributes, creationDisposition uint32, flagsAndAttributes uint32, templateFile windows.Handle) (windows.Handle, error) {
-		return windows.InvalidHandle, errors.New("mock create file error")
+	t.Run("filepath_abs_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &filepathAbs, func(string) (string, error) {
+			return "", errors.New("mock abs error")
+		})
+		err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link-abs-err"))
+		if err == nil || !strings.Contains(err.Error(), "resolve junction target") {
+			t.Fatalf("expected resolve junction target error, got %v", err)
+		}
 	})
-	linkPathCreateFail := filepath.Join(tempDir, "link-create-fail")
-	if err := createSkillSetupDirLink(tempDir, linkPathCreateFail); err == nil {
-		t.Fatal("expected error when windowsCreateFile fails")
-	}
-	if _, err := os.Stat(linkPathCreateFail); !os.IsNotExist(err) {
-		t.Fatalf("link path should be cleaned up on windowsCreateFile error, got %v", err)
-	}
 
-	// 4g. windowsDeviceIoControl fails (exercises removeLink defer cleanup)
-	testseam.Swap(t, &windowsDeviceIoControl, func(handle windows.Handle, ioControlCode uint32, inBuffer *byte, inBufferSize uint32, outBuffer *byte, outBufferSize uint32, bytesReturned *uint32, overlapped *windows.Overlapped) error {
-		return errors.New("mock device io control error")
+	t.Run("mount_point_buffer_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &filepathAbs, func(s string) (string, error) { return s, nil })
+		err := createSkillSetupDirLink("C:\\bad\x00target", filepath.Join(tempDir, "link-bad-target"))
+		if err == nil || !strings.Contains(err.Error(), "encode junction substitute name") {
+			t.Fatalf("expected encode junction substitute name error, got %v", err)
+		}
 	})
-	linkPathIoctlFail := filepath.Join(tempDir, "link-ioctl-fail")
-	if err := createSkillSetupDirLink(tempDir, linkPathIoctlFail); err == nil {
-		t.Fatal("expected error when windowsDeviceIoControl fails")
-	}
-	if _, err := os.Stat(linkPathIoctlFail); !os.IsNotExist(err) {
-		t.Fatalf("link path should be cleaned up on windowsDeviceIoControl error, got %v", err)
-	}
+
+	t.Run("link_path_nul_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link\x00bad"))
+		if err == nil || !strings.Contains(err.Error(), "encode junction path") {
+			t.Fatalf("expected encode junction path error, got %v", err)
+		}
+	})
+
+	t.Run("mkdir_existing_file_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		existingFile := filepath.Join(tempDir, "existing-file")
+		if err := os.WriteFile(existingFile, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := createSkillSetupDirLink(tempDir, existingFile); err == nil {
+			t.Fatal("expected error when link path is an existing file")
+		}
+	})
+
+	t.Run("create_file_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &windowsCreateFile, func(path *uint16, access uint32, shareMode uint32, sa *windows.SecurityAttributes, creationDisposition uint32, flagsAndAttributes uint32, templateFile windows.Handle) (windows.Handle, error) {
+			return windows.InvalidHandle, errors.New("mock create file error")
+		})
+		linkPath := filepath.Join(tempDir, "link-create-fail")
+		err := createSkillSetupDirLink(tempDir, linkPath)
+		if err == nil || !strings.Contains(err.Error(), "open junction") {
+			t.Fatalf("expected open junction error, got %v", err)
+		}
+		if _, err := os.Stat(linkPath); !os.IsNotExist(err) {
+			t.Fatalf("link path should be cleaned up on windowsCreateFile error, got %v", err)
+		}
+	})
+
+	t.Run("device_io_control_error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testseam.Swap(t, &windowsDeviceIoControl, func(handle windows.Handle, ioControlCode uint32, inBuffer *byte, inBufferSize uint32, outBuffer *byte, outBufferSize uint32, bytesReturned *uint32, overlapped *windows.Overlapped) error {
+			return errors.New("mock device io control error")
+		})
+		linkPath := filepath.Join(tempDir, "link-ioctl-fail")
+		err := createSkillSetupDirLink(tempDir, linkPath)
+		if err == nil || !strings.Contains(err.Error(), "set junction reparse point") {
+			t.Fatalf("expected set junction reparse point error, got %v", err)
+		}
+		if _, err := os.Stat(linkPath); !os.IsNotExist(err) {
+			t.Fatalf("link path should be cleaned up on windowsDeviceIoControl error, got %v", err)
+		}
+	})
 }
