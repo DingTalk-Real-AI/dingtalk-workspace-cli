@@ -19,6 +19,7 @@ type forgedResult struct {
 
 func (r forgedResult) Outcome() Outcome    { return r.env.Outcome }
 func (r forgedResult) ExitCode() int       { return r.exit }
+func (r forgedResult) Data() any           { return r.env.Data }
 func (r forgedResult) envelope() *Envelope { copy := r.env; return &copy }
 
 type cloneNode struct {
