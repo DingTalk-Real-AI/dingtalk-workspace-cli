@@ -96,8 +96,24 @@ func TestCrossPlatformCoverageOATableFieldDocumentedPayloads(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageOATableFieldDocumentedPayloadsAcceptCRLF(t *testing.T) {
+	doc := "```json\r\n" +
+		`{"name":"采购明细","value":"[[{\"name\":\"商品名\",\"value\":\"笔记本\"}]]"}` +
+		"\r\n```\r\n"
+
+	component := documentedOATableField(t, doc, false)
+	want := map[string]string{
+		"name":  "采购明细",
+		"value": `[[{"name":"商品名","value":"笔记本"}]]`,
+	}
+	if !reflect.DeepEqual(component, want) {
+		t.Fatalf("documented component = %#v, want %#v", component, want)
+	}
+}
+
 func documentedOATableField(t *testing.T, doc string, summary bool) map[string]string {
 	t.Helper()
+	doc = strings.ReplaceAll(doc, "\r\n", "\n")
 	if summary {
 		for _, line := range strings.Split(doc, "\n") {
 			cells := strings.Split(line, "|")
