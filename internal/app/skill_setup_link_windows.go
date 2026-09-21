@@ -12,10 +12,31 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var (
+	filepathAbs               = filepath.Abs
+	windowsUTF16PtrFromString = windows.UTF16PtrFromString
+	windowsCreateFile         = windows.CreateFile
+	windowsDeviceIoControl    = windows.DeviceIoControl
+)
+
 func createSkillSetupDirLink(target, link string) error {
 	if target == "" {
 		return fmt.Errorf("junction target is empty")
 	}
+	target, err := filepathAbs(target)
+	if err != nil {
+		return fmt.Errorf("resolve junction target: %w", err)
+	}
+	targetPath := junctionSubstituteName(target)
+	buffer, err := mountPointReparseBuffer(targetPath, target)
+	if err != nil {
+		return err
+	}
+	linkPath, err := windowsUTF16PtrFromString(link)
+	if err != nil {
+		return fmt.Errorf("encode junction path: %w", err)
+	}
+
 	if err := os.Mkdir(link, 0o755); err != nil {
 		return err
 	}
@@ -26,24 +47,7 @@ func createSkillSetupDirLink(target, link string) error {
 		}
 	}()
 
-	target, err := filepath.Abs(target)
-	if err != nil {
-		return fmt.Errorf("resolve junction target: %w", err)
-	}
-	linkPath, err := windows.UTF16PtrFromString(link)
-	if err != nil {
-		return fmt.Errorf("encode junction path: %w", err)
-	}
-	targetPath, err := junctionSubstituteName(target)
-	if err != nil {
-		return err
-	}
-	buffer, err := mountPointReparseBuffer(targetPath, target)
-	if err != nil {
-		return err
-	}
-
-	handle, err := windows.CreateFile(
+	handle, err := windowsCreateFile(
 		linkPath,
 		windows.GENERIC_WRITE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
@@ -58,7 +62,7 @@ func createSkillSetupDirLink(target, link string) error {
 	defer windows.CloseHandle(handle)
 
 	var returned uint32
-	if err := windows.DeviceIoControl(
+	if err := windowsDeviceIoControl(
 		handle,
 		windows.FSCTL_SET_REPARSE_POINT,
 		&buffer[0],
@@ -78,10 +82,7 @@ func skillSetupLinkTarget(realTarget, relativeTarget string) string {
 	return realTarget
 }
 
-func junctionSubstituteName(target string) (string, error) {
-	if target == "" {
-		return "", fmt.Errorf("junction target is empty")
-	}
+func junctionSubstituteName(target string) string {
 	var prefix, clean string
 	if strings.HasPrefix(target, `\\?\UNC\`) {
 		prefix = `\??\UNC\`
@@ -100,7 +101,7 @@ func junctionSubstituteName(target string) (string, error) {
 	if !strings.HasSuffix(result, `\`) {
 		result += `\`
 	}
-	return result, nil
+	return result
 }
 
 func mountPointReparseBuffer(substitute, printName string) ([]byte, error) {

@@ -3,9 +3,13 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"golang.org/x/sys/windows"
 )
 
 func TestCrossPlatformCoverageSkillSetupWindowsJunctionReadable(t *testing.T) {
@@ -49,9 +53,6 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 	}
 
 	// 2. junctionSubstituteName edge cases
-	if _, err := junctionSubstituteName(""); err == nil {
-		t.Fatal("expected error for empty target")
-	}
 	for _, tc := range []struct {
 		input string
 		want  string
@@ -62,9 +63,9 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 		{`C:\dir\`, `\??\C:\dir\`},
 		{`C:\dir`, `\??\C:\dir\`},
 	} {
-		got, err := junctionSubstituteName(tc.input)
-		if err != nil || got != tc.want {
-			t.Fatalf("junctionSubstituteName(%q) = (%q, %v), want %q", tc.input, got, err, tc.want)
+		got := junctionSubstituteName(tc.input)
+		if got != tc.want {
+			t.Fatalf("junctionSubstituteName(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 
@@ -79,7 +80,35 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 	// 4. createSkillSetupDirLink error branches
 	tempDir := t.TempDir()
 
-	// 4a. link cannot be created because a file exists at that path
+	// 4a. empty target
+	linkPath1 := filepath.Join(tempDir, "link-empty-target")
+	if err := createSkillSetupDirLink("", linkPath1); err == nil {
+		t.Fatal("expected error when target is empty")
+	}
+	if _, err := os.Stat(linkPath1); !os.IsNotExist(err) {
+		t.Fatalf("link path should not exist, got %v", err)
+	}
+
+	// 4b. filepathAbs error
+	testseam.Swap(t, &filepathAbs, func(string) (string, error) {
+		return "", errors.New("abs error")
+	})
+	if err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link-abs-err")); err == nil {
+		t.Fatal("expected error when filepathAbs fails")
+	}
+
+	// 4c. mountPointReparseBuffer error via target with NUL byte
+	testseam.Swap(t, &filepathAbs, func(s string) (string, error) { return s, nil })
+	if err := createSkillSetupDirLink("C:\\bad\x00target", filepath.Join(tempDir, "link-bad-target")); err == nil {
+		t.Fatal("expected error when target has NUL byte")
+	}
+
+	// 4d. link path has NUL byte
+	if err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link\x00bad")); err == nil {
+		t.Fatal("expected error when link path has NUL byte")
+	}
+
+	// 4e. link cannot be created because a file exists at that path (os.Mkdir fails)
 	existingFile := filepath.Join(tempDir, "existing-file")
 	if err := os.WriteFile(existingFile, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -88,39 +117,27 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 		t.Fatal("expected error when link path is an existing file")
 	}
 
-	// 4b. link path has NUL byte (exercises linkPath encode error and removeLink defer)
-	if err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link\x00bad")); err == nil {
-		t.Fatal("expected error when link path has NUL byte")
+	// 4f. windowsCreateFile fails (exercises removeLink defer cleanup)
+	testseam.Swap(t, &windowsCreateFile, func(path *uint16, access uint32, shareMode uint32, sa *windows.SecurityAttributes, creationDisposition uint32, flagsAndAttributes uint32, templateFile windows.Handle) (windows.Handle, error) {
+		return windows.InvalidHandle, errors.New("mock create file error")
+	})
+	linkPathCreateFail := filepath.Join(tempDir, "link-create-fail")
+	if err := createSkillSetupDirLink(tempDir, linkPathCreateFail); err == nil {
+		t.Fatal("expected error when windowsCreateFile fails")
+	}
+	if _, err := os.Stat(linkPathCreateFail); !os.IsNotExist(err) {
+		t.Fatalf("link path should be cleaned up on windowsCreateFile error, got %v", err)
 	}
 
-	// 4c. empty target (exercises junctionSubstituteName error and removeLink defer)
-	linkPath1 := filepath.Join(tempDir, "link-empty-target")
-	if err := createSkillSetupDirLink("", linkPath1); err == nil {
-		t.Fatal("expected error when target is empty")
+	// 4g. windowsDeviceIoControl fails (exercises removeLink defer cleanup)
+	testseam.Swap(t, &windowsDeviceIoControl, func(handle windows.Handle, ioControlCode uint32, inBuffer *byte, inBufferSize uint32, outBuffer *byte, outBufferSize uint32, bytesReturned *uint32, overlapped *windows.Overlapped) error {
+		return errors.New("mock device io control error")
+	})
+	linkPathIoctlFail := filepath.Join(tempDir, "link-ioctl-fail")
+	if err := createSkillSetupDirLink(tempDir, linkPathIoctlFail); err == nil {
+		t.Fatal("expected error when windowsDeviceIoControl fails")
 	}
-	if _, err := os.Stat(linkPath1); !os.IsNotExist(err) {
-		t.Fatalf("link path should be cleaned up on error, got %v", err)
-	}
-
-	// 4d. target has NUL byte (exercises mountPointReparseBuffer error and removeLink defer)
-	linkPath2 := filepath.Join(tempDir, "link-bad-target")
-	if err := createSkillSetupDirLink("C:\\bad\x00target", linkPath2); err == nil {
-		t.Fatal("expected error when target has NUL byte")
-	}
-	if _, err := os.Stat(linkPath2); !os.IsNotExist(err) {
-		t.Fatalf("link path should be cleaned up on error, got %v", err)
-	}
-
-	// 4e. target is a file instead of directory (DeviceIoControl fails, exercises removeLink defer)
-	targetFile := filepath.Join(tempDir, "target-is-file")
-	if err := os.WriteFile(targetFile, []byte("file"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	linkPath3 := filepath.Join(tempDir, "link-to-file")
-	if err := createSkillSetupDirLink(targetFile, linkPath3); err == nil {
-		t.Fatal("expected error when junction target is a file")
-	}
-	if _, err := os.Stat(linkPath3); !os.IsNotExist(err) {
-		t.Fatalf("link path should be cleaned up on error, got %v", err)
+	if _, err := os.Stat(linkPathIoctlFail); !os.IsNotExist(err) {
+		t.Fatalf("link path should be cleaned up on windowsDeviceIoControl error, got %v", err)
 	}
 }
