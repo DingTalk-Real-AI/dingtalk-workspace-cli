@@ -62,11 +62,7 @@ func createSkillPathDirJunction(target, link string) (err error) {
 		if removeLink {
 			if rmErr := windowsSkillPathRemove(link); rmErr != nil && !os.IsNotExist(rmErr) {
 				cleanErr := fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr)
-				if err != nil {
-					err = errors.Join(err, cleanErr)
-				} else {
-					err = cleanErr
-				}
+				err = errors.Join(err, cleanErr)
 			}
 		}
 	}()

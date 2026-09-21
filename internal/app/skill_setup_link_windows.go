@@ -50,11 +50,7 @@ func createSkillSetupDirLink(target, link string) (err error) {
 					Path: link,
 					Err:  fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr),
 				}
-				if err != nil {
-					err = errors.Join(err, cleanupErr)
-				} else {
-					err = cleanupErr
-				}
+				err = errors.Join(err, cleanupErr)
 			}
 		}
 	}()
