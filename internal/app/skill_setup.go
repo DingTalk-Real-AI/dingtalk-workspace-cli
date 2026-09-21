@@ -106,6 +106,19 @@ type skillSetupStagedDir struct {
 	dest   string
 }
 
+type skillSetupStagingCleanupError struct {
+	Path string
+	Err  error
+}
+
+func (e *skillSetupStagingCleanupError) Error() string {
+	return fmt.Sprintf("清理 Skill staging 失败 %s: %v", e.Path, e.Err)
+}
+
+func (e *skillSetupStagingCleanupError) Unwrap() error {
+	return e.Err
+}
+
 type skillSetupBackedUpDir struct {
 	original string
 	backup   string
@@ -1867,10 +1880,12 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 			return
 		}
 		if cleanupErr := skillSetupRemoveAll(stageRoot); cleanupErr != nil {
-			err = errors.Join(err, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
+			err = errors.Join(err, &skillSetupStagingCleanupError{Path: stageRoot, Err: cleanupErr})
 		}
 		for _, item := range staged {
-			_ = skillSetupRemoveAll(item.staged)
+			if cleanupErr := skillSetupRemoveAll(item.staged); cleanupErr != nil {
+				err = errors.Join(err, &skillSetupStagingCleanupError{Path: item.staged, Err: cleanupErr})
+			}
 		}
 	}()
 	realStageParent, realParentErr := skillSetupEvalSymlinks(stageParent)
@@ -1905,7 +1920,12 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 				return fmt.Errorf("创建 Skill 链接失败 %s -> %s: %w", stagedDir, linkTarget, linkErr)
 			}
 			if validateErr := validateSkillSetupLink(stagedDir); validateErr != nil {
-				_ = skillSetupRemoveAll(stagedDir)
+				if cleanupErr := skillSetupRemoveAll(stagedDir); cleanupErr != nil {
+					return &skillSetupStagingCleanupError{
+						Path: stagedDir,
+						Err:  errors.Join(validateErr, cleanupErr),
+					}
+				}
 				return validateErr
 			}
 			staged = append(staged, skillSetupStagedDir{staged: stagedDir, dest: dest})
@@ -2068,7 +2088,8 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		}
 
 		stageRoot, staged, stageErr := stageSkillSetupTarget(plan, target)
-		if stageErr != nil && target.LinkCanonical {
+		var stagingCleanupErr *skillSetupStagingCleanupError
+		if stageErr != nil && target.LinkCanonical && !errors.As(stageErr, &stagingCleanupErr) {
 			fmt.Fprintf(errOut, "  ℹ️  %s 无法使用共享安装方式，正在自动改用兼容安装\n", target.Destination)
 			fallback := target
 			fallback.LinkCanonical = false
@@ -2088,7 +2109,9 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 				backupErr = errors.Join(backupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
 			}
 			for _, item := range staged {
-				_ = skillSetupRemoveAll(item.staged)
+				if cleanupErr := skillSetupRemoveAll(item.staged); cleanupErr != nil {
+					backupErr = errors.Join(backupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", item.staged, cleanupErr))
+				}
 			}
 			if isCanonical && hasCanonicalDependents {
 				return installed, skipped + perTarget, fmt.Errorf("canonical Skill 备份失败，已执行回滚 %s: %w", target.Destination, backupErr)
@@ -2098,13 +2121,18 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 			continue
 		}
 		publishErr := publishSkillSetupTarget(staged, backups)
-		cleanupErr := skillSetupRemoveAll(stageRoot)
+		var cleanupErr error
+		if rmErr := skillSetupRemoveAll(stageRoot); rmErr != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, rmErr))
+		}
 		for _, item := range staged {
-			_ = skillSetupRemoveAll(item.staged)
+			if rmErr := skillSetupRemoveAll(item.staged); rmErr != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", item.staged, rmErr))
+			}
 		}
 		if publishErr != nil {
 			if cleanupErr != nil {
-				publishErr = errors.Join(publishErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
+				publishErr = errors.Join(publishErr, cleanupErr)
 			}
 			if isCanonical && hasCanonicalDependents {
 				if errors.Is(publishErr, upgrade.ErrSkillPathPublicationUncertain) {
