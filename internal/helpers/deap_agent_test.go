@@ -47,7 +47,7 @@ func (s *deapAgentAvatarUploaderStub) Upload(
 	return s.fileURL, s.err
 }
 
-func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
@@ -91,7 +91,7 @@ func TestDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	uploader := &deapAgentAvatarUploaderStub{err: errors.New("must not upload")}
 	testseam.Swap(t, &deapAgentAvatarFileUploader, deapAgentAvatarUploader(uploader))
@@ -120,7 +120,7 @@ func TestDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
@@ -1080,7 +1080,7 @@ func TestCrossPlatformCoverageDeapAgentResponseModeNormalization(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentCreateAllowsLocalAgentWithoutResponseMode(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentCreateAllowsLocalAgentWithoutResponseMode(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	create := deapFindLeaf(t, root, "create")

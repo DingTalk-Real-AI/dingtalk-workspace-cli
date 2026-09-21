@@ -139,7 +139,9 @@ func (u deapAgentOpenAPISkillUploader) uploadFile(
 	}
 	credential, err := u.temporaryCredential(ctx, agentUUID)
 	if err != nil {
-		return "", fmt.Errorf("OpenAPI 认证失败")
+		// 保留底层阶段原因与服务端 code/trace 以便定位（凭证解析失败已在
+		// temporaryCredential 内脱敏），不再统一吞成无信息的“认证失败”。
+		return "", fmt.Errorf("OpenAPI 认证失败: %w", err)
 	}
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -214,7 +216,12 @@ func deapAgentParseSkillCreated(body []byte) (deapAgentSkillCreated, error) {
 
 func (u deapAgentOpenAPISkillUploader) temporaryCredential(ctx context.Context, agentUUID string) (string, error) {
 	if u.resolveCredential != nil {
-		return u.resolveCredential(ctx, agentUUID)
+		credential, resolveErr := u.resolveCredential(ctx, agentUUID)
+		if resolveErr != nil {
+			// 注入式解析器的错误可能携带凭证材料，绝不外泄，只保留阶段语义。
+			return "", fmt.Errorf("OpenAPI 凭证解析失败")
+		}
+		return credential, nil
 	}
 	if deps == nil || deps.Caller == nil {
 		return "", fmt.Errorf("OpenAPI credential resolver is not configured")
@@ -222,7 +229,8 @@ func (u deapAgentOpenAPISkillUploader) temporaryCredential(ctx context.Context, 
 	responseText, err := callMCPToolReturnTextOnServer(ctx, deapAgentServerID,
 		deapAgentSkillUploadCredentialTool, map[string]any{"agentUuid": agentUUID})
 	if err != nil {
-		return "", fmt.Errorf("requesting temporary upload credential")
+		// 凭证尚未取得，调用错误只含服务端 code/trace、不含密钥；保留以便定位预发/线上抖动。
+		return "", fmt.Errorf("获取上传凭证失败: %w", err)
 	}
 	return deapAgentParseSkillUploadCredential(responseText)
 }
