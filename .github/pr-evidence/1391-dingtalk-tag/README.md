@@ -1,7 +1,7 @@
 # PR #1391 测试证据
 
-测试代码 SHA：`c0392a044d0a04de3322b883435035ea0b1a80c0`。本目录仅增加测试证据，不修改被测生产代码或测试代码。
-执行时间：`2026-09-21T15:09:23.784742+00:00`；环境：`go1.26.1 darwin/arm64`。
+测试代码 SHA：`e1520768a39e414311ee99a272be058c93b7a055`。本目录仅增加测试证据，不修改被测生产代码或测试代码。
+执行时间：`2026-09-21T15:38:01.846234+00:00`；环境：`go1.26.1 darwin/arm64`。
 
 ## Agent 测试报告：dingtalk、tag
 
@@ -13,7 +13,7 @@
 
 ## 指令 CI 集成测试：atomicwrite、connect、deap、devapp
 
-633 个顶层测试、1246 个子用例全部通过，0 失败、0 跳过。
+637 个顶层测试、1250 个子用例全部通过，0 失败、0 跳过。
 测试包：`internal/helpers`、`internal/shortcut/devapp`。选定相关文件中的测试并执行命令层、mock 服务与边界回归。
 
 ![指令 CI 集成测试 atomicwrite connect deap devapp](command-ci.png)
@@ -27,3 +27,5 @@
 - 本地报告不替代远端 CI，也不声称本 PR 已获自动 CR 或人工评审通过。
 
 复现时在仓库根目录读取 `run.json` 的 `commands`，配合其中 `env` 逐一执行。测试自身使用隔离配置和 mock；Agent dry-run 测试主动阻断外部代理。
+
+CR 历史意见、修复与回归验证见 [CR 核对记录](cr-resolution.md)。
