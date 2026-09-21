@@ -75,6 +75,9 @@ func TestCrossPlatformCoverageDingTalkTagManageLoginPersistsExactProfileWithoutD
 	if len(caller.calls) != 2 || caller.calls[0].toolName != deapAgentDetailTool || caller.calls[1].toolName != deapAgentAuthCodeTool {
 		t.Fatalf("ordinary calls = %#v", caller.calls)
 	}
+	if args := caller.calls[0].args; args["snapshot"] != "published" || args["type"] != nil {
+		t.Fatalf("published detail args = %#v", args)
+	}
 	if len(caller.tokenCalls) != 1 || caller.tokenCalls[0].toolName != "get_current_user_profile" {
 		t.Fatalf("token-scoped calls = %#v", caller.tokenCalls)
 	}
@@ -93,16 +96,16 @@ func TestCrossPlatformCoverageDingTalkTagManageLoginRejectsMissingOrWrongIdentit
 			authorized: successfulAuthResponse(), want: "发布详情缺少",
 		},
 		{
-			name:       "robot uid mismatch",
+			name:       "missing client id",
 			published:  successfulPublishedDetail(),
-			authorized: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:       "机器人身份与已发布配置不一致",
+			authorized: `{"success":true,"data":{"dwsAuthCode":"one-time-secret"}}`,
+			want:       "授权响应缺少",
 		},
 		{
-			name:       "staff user id mismatch",
+			name:       "missing auth code",
 			published:  successfulPublishedDetail(),
-			authorized: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:       "userId 与已发布配置不一致",
+			authorized: `{"success":true,"data":{"dwsClientId":"returned-client"}}`,
+			want:       "授权响应缺少",
 		},
 	}
 	for _, tc := range tests {
@@ -191,7 +194,7 @@ func newSuccessfulLoginCaller(count int) *digitalEmployeeProtocolCaller {
 }
 
 func successfulPublishedDetail() string {
-	return `{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`
+	return `{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user"}}}`
 }
 
 func newManageLoginTestCommand(t *testing.T, dryRun bool) *cobra.Command {

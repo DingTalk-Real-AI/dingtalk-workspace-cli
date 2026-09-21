@@ -685,6 +685,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	authToken := ""
 	if hasRequestToken {
 		authToken = requestToken
+		// Login enriches identity before the new profile and MCP URL are saved.
+		// Apply its temporary endpoint without resolving the previous profile.
+		if !hasPluginAuth && !hasDirectRuntimeEndpointOverride(invocation.CanonicalProduct) &&
+			isDingTalkMCPGatewayEndpoint(endpoint) && authpkg.MCPBaseURLOverride() != "" {
+			endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, authpkg.LoginRegionDefault)
+		}
 	} else if hasPluginAuth {
 		authToken = pluginAuth.Token
 	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {

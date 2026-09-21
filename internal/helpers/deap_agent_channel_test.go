@@ -551,21 +551,18 @@ func TestCrossPlatformCoverageDingTalkTagConnectFailureBoundaries(t *testing.T) 
 	})
 }
 
-func TestCrossPlatformCoverageDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectIgnoresRetiredAuthorizationIdentityFields(t *testing.T) {
 	tests := []struct {
 		name          string
 		authorization string
-		want          string
 	}{
 		{
 			name:          "robot uid mismatch",
-			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "机器人身份与已发布配置不一致",
+			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret"}}`,
 		},
 		{
 			name:          "staff id mismatch",
-			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
-			want:          "userId 与已发布配置不一致",
+			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret"}}`,
 		},
 	}
 	for _, tc := range tests {
@@ -573,18 +570,21 @@ func TestCrossPlatformCoverageDingTalkTagConnectRejectsAuthorizationIdentityMism
 			caller := newSuccessfulConnectCaller(tc.authorization,
 				`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
 			InitDepsForTest(t, caller)
-			setupConnectSupervisorSeams(t)
+			setupSuccessfulConnectSeams(t)
 			exchanged := false
-			testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {
+			testseam.Swap(t, &deapConnectManagedExchange, func(_ context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
 				exchanged = true
-				return nil, errors.New("unexpected exchange")
+				if request.ExpectedCorpID != "employee-corp" || request.ExpectedUserID != "employee-user" {
+					t.Fatalf("exchange identity = %s:%s", request.ExpectedCorpID, request.ExpectedUserID)
+				}
+				return nil, errors.New("exchange reached")
 			})
 			leaf := newConnectTestCommand(t, false)
-			if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("connect error = %v, want %q", err, tc.want)
+			if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), "exchange reached") {
+				t.Fatalf("connect error = %v, want exchange reached", err)
 			}
-			if exchanged {
-				t.Fatal("authorization identity mismatch reached managed exchange")
+			if !exchanged {
+				t.Fatal("legacy fields blocked managed exchange")
 			}
 		})
 	}
@@ -595,7 +595,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","type":"local_agent"}}`,
-			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":         {authResponse},
 		"contact/search_contact_by_key_word": {contactResponse},
@@ -603,7 +603,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 }
 
 func successfulAuthResponse() string {
-	return `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`
+	return `{"success":true,"data":{"dwsClientId":"returned-client","dwsAuthCode":"one-time-secret"}}`
 }
 
 func setupConnectSupervisorSeams(t *testing.T) {
@@ -675,9 +675,9 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
-			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user"}}}`,
 		},
-		"deap-dev/get_dws_auth_code":         {`{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`},
+		"deap-dev/get_dws_auth_code":         {`{"success":true,"data":{"dwsClientId":"returned-client","dwsAuthCode":"one-time-secret"}}`},
 		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-supervisor-scope"}]}`},
 	}, tokenResponses: map[string][]string{
 		"contact/get_current_user_profile":   {`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`},
@@ -708,7 +708,7 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 			return nil, fmt.Errorf("managed exchange expected organization = %q, want published corpId", request.ExpectedCorpID)
 		}
 		if request.ExpectedUserID != "employee-user" {
-			return nil, fmt.Errorf("managed exchange expected user = %q, want authorization staffId", request.ExpectedUserID)
+			return nil, fmt.Errorf("managed exchange expected user = %q, want published userId", request.ExpectedUserID)
 		}
 		if request.ResolveIdentity == nil {
 			return nil, errors.New("managed identity resolver is missing")
@@ -762,6 +762,12 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 	if err := leaf.RunE(leaf, nil); err != nil {
 		t.Fatalf("connect RunE() error = %v", err)
 	}
+	for i, snapshot := range []string{"draft", "published"} {
+		if len(caller.calls) <= i || caller.calls[i].args["snapshot"] != snapshot || caller.calls[i].args["type"] != nil {
+			t.Fatalf("detail calls = %#v, want snapshot %s at %d", caller.calls, snapshot, i)
+		}
+	}
+
 	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
 		t.Fatalf("managed exchange = %#v", exchange)
 	}

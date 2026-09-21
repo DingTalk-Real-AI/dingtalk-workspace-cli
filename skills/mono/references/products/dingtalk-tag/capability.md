@@ -32,20 +32,32 @@ dws dingtalk-tag capability mcp query --agent-uuid <agentUuid> --mcp-id <mcpId> 
 
 `mcp.json` 根节点必填非空字符串 `name`、`configString`，可选 `description`、`detailIntro`、`userQuestionTips`、`configType`、`envs`、`toolsDisabled`；文件最大 1 MiB。`configString` 是配置 JSON 的字符串，不是 JSON 对象；不要再包装一层 `config`。CLI 将这些字段直接展开到 MCP 工具根节点。文件不能放 `agentUuid` 或 `identity`；员工域只由必填的 `--agent-uuid` 指定，调用人身份仍来自所选 Profile。
 
+创建或替换配置时，必须在 `configString` 内的 `mcpServers.<名称>.type` **显式填写传输类型**：Streamable HTTP 使用 `streamable-http`，SSE 使用 `sse`。同时填写对应协议的 `url`；只有 URL、缺少 `type` 的配置无法通过服务端校验。`configType: "JSON"` 表示配置格式，不能代替传输类型。仅更新 `--enabled` 时不需要重新提交配置。
+
+例如，下面的文件使用 [DeepWiki 官方公开 MCP](https://docs.devin.ai/work-with-devin/deepwiki-mcp)：
+
+```json
+{
+  "name": "DeepWiki",
+  "configType": "JSON",
+  "configString": "{\"mcpServers\":{\"deepwiki\":{\"type\":\"streamable-http\",\"url\":\"https://mcp.deepwiki.com/mcp\"}}}"
+}
+```
+
 MCP 敏感配置必须放在本地 JSON 文件，不要直接拼进命令行或提交代码库。create 和带 `--config-file` 的 update 会先在 CLI 内部调用 `check_mcp`，校验通过才写入；`check_mcp` 不暴露为 CLI 命令。update 至少传 `--enabled=true|false` 或 `--config-file` 之一，省略字段保持原值。create/update/delete 均需确认；dry-run 不调用远端、不写草稿、不输出配置值，查询结果只返回脱敏信息。
 
 create 成功后自动挂载草稿并保留已有选择；update 不改变挂载关系，也不会重新挂回已移除资源；delete 删除资源并清理草稿挂载。三者都不自动发布。list/query 只证明资源存在，不证明当前仍被选中或已发布。
 
-失败恢复：若错误含 `stage=query_created_mcp` 或 `stage=mount_draft`，从返回 data 或错误信息保留已创建 `mcpId`，先 query 资源及 `manage detail --type draft`，禁止重复 create。普通用户不通过 `manage save-draft` 手工拼装完整 Skill/MCP 数组；挂载部分失败交由服务端运维链路恢复。超时或缺少 ID 时也先核查，不盲目重试。同一员工的创建、更新、删除和发布串行执行，当前跨应用读改写不是原子事务。
+失败恢复：若错误含 `stage=query_created_mcp` 或 `stage=mount_draft`，从返回 data 或错误信息保留已创建 `mcpId`，先 query 资源及 `manage detail --snapshot draft`，禁止重复 create。普通用户不通过 `manage save-draft` 手工拼装完整 Skill/MCP 数组；挂载部分失败交由服务端运维链路恢复。超时或缺少 ID 时也先核查，不盲目重试。同一员工的创建、更新、删除和发布串行执行，当前跨应用读改写不是原子事务。
 
 ## 核验草稿与发布
 
 ```text
-dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type draft --format json
+dws dingtalk-tag manage detail --agent-uuid <agentUuid> --snapshot draft --format json
 dws dingtalk-tag manage publish --agent-uuid <agentUuid> --dry-run --format json
 # 用户确认发布后：
 dws dingtalk-tag manage publish --agent-uuid <agentUuid> --yes --format json
-dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type published --format json
+dws dingtalk-tag manage detail --agent-uuid <agentUuid> --snapshot published --format json
 ```
 
 创建后核验 draft 已挂载，update 后核对内容或启停状态，delete 后确认草稿挂载已清理；只有用户要求上线才执行 publish。运行时可用还须验证已发布配置和真实工具挂载，不能把资源写成功当成运行态验收。`manage save-draft` 仅更新基础草稿字段，不接受 Skill/MCP 完整数组。

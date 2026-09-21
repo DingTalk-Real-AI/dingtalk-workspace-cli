@@ -20,7 +20,7 @@ type publishedQueryErrorCaller struct {
 }
 
 func (c *publishedQueryErrorCaller) CallTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
-	if tool == deapAgentDetailTool && args["type"] == "published" {
+	if tool == deapAgentDetailTool && args["snapshot"] == "published" {
 		c.calls = append(c.calls, deapAgentCall{productID: product, toolName: tool, args: args})
 		return nil, c.queryError
 	}

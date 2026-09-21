@@ -6,7 +6,9 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -58,7 +60,13 @@ func runDeapAgentLogin(cmd *cobra.Command, _ []string) error {
 // loginDigitalEmployee 是 manage login 与 connect 共用的安全登录内核。它只做
 // 授权码换票、在线身份核验和精确 Profile 落盘，不包含 local_agent、DSH 或
 // Bridge 逻辑，并始终保留发起操作的主管 Profile 为当前 Profile。
-func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedClientID string, published map[string]any) (*digitalEmployeeLoginSession, error) {
+func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedClientID string, published map[string]any) (_ *digitalEmployeeLoginSession, resultErr error) {
+	started := time.Now()
+	stage := "published_identity"
+	slog.DebugContext(ctx, "dingtalk_tag_login_started", "hasClientHint", requestedClientID != "")
+	defer func() {
+		slog.DebugContext(ctx, "dingtalk_tag_login_completed", "stage", stage, "success", resultErr == nil, "durationMs", time.Since(started).Milliseconds())
+	}()
 	supervisorSelector, supervisor, err := currentSupervisorProfile(ctx, configDir)
 	if err != nil {
 		return nil, err
@@ -72,29 +80,24 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 	if requestedClientID != "" {
 		authArgs["clientId"] = requestedClientID
 	}
+	stage = "request_auth_code"
 	authorization, err := callDeapJSON(ctx, deapAgentAuthCodeTool, authArgs, true)
 	if err != nil {
 		return nil, fmt.Errorf("request digital employee authorization: %w", err)
 	}
+	stage = "authorization_response"
 	authData := businessDataMap(authorization)
 	dwsClientID := requiredJSONScalar(authData, "dwsClientId")
-	authorizedRobotUID := requiredJSONScalar(authData, "uid")
-	authorizedStaffID := requiredJSONScalar(authData, "staffId")
 	dwsAuthCode := requiredJSONScalar(authData, "dwsAuthCode")
-	authorizationOrgID := requiredJSONScalar(authData, "orgId")
-	if dwsClientID == "" || authorizedRobotUID == "" || authorizedStaffID == "" || dwsAuthCode == "" || authorizationOrgID == "" {
+	if dwsClientID == "" || dwsAuthCode == "" {
 		return nil, apperrors.NewInternal("数字员工授权响应缺少登录所需的内部身份或凭证信息")
 	}
-	if authorizedRobotUID != publishedIdentity.RobotUID {
-		return nil, apperrors.NewInternal("数字员工授权的机器人身份与已发布配置不一致")
-	}
-	if authorizedStaffID != publishedIdentity.StaffID {
-		return nil, apperrors.NewInternal("数字员工授权的 userId 与已发布配置不一致")
-	}
-	// orgId 是授权响应的上下文字段，不是 corpId；corpId 只信任发布详情。
+	// 当前详情公开 corpId/userId；授权工具仅提供换票凭证。在线身份核验仍须
+	// 与发布详情一致，不再依赖旧 uid/staffId/orgId 字段。
+	stage = "managed_exchange"
 	token, err := deapConnectManagedExchange(ctx, configDir, auth.ManagedExchangeRequest{
 		ClientID: dwsClientID, AuthCode: dwsAuthCode,
-		ExpectedUserID: authorizedStaffID, ExpectedCorpID: publishedIdentity.CorpID,
+		ExpectedUserID: publishedIdentity.UserID, ExpectedCorpID: publishedIdentity.CorpID,
 		PreserveProfile: supervisorSelector, ResolveIdentity: resolveDigitalEmployeeManagedIdentity,
 	})
 	// 尽早清空本地变量，后续错误和输出都不再接触授权码。
@@ -102,10 +105,12 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 	if err != nil {
 		return nil, err
 	}
+	stage = "profile_identity"
 	digitalProfile := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
-	if digitalProfile == "" || token.UserID != authorizedStaffID || token.CorpID != publishedIdentity.CorpID {
+	if digitalProfile == "" || token.UserID != publishedIdentity.UserID || token.CorpID != publishedIdentity.CorpID {
 		return nil, apperrors.NewInternal("数字员工 Profile 身份校验失败")
 	}
+	stage = "profile_saved"
 	return &digitalEmployeeLoginSession{
 		DigitalProfile: digitalProfile, DigitalToken: token,
 		SupervisorProfile: supervisorSelector, SupervisorToken: supervisor,

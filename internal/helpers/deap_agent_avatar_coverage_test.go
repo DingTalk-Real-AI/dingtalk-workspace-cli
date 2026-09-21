@@ -158,29 +158,7 @@ func TestCrossPlatformCoverageDeapAgentProfileHelpersAndInvalidType(t *testing.T
 	}
 }
 
-func TestCrossPlatformCoverageDeapAgentSaveDraftResponseModeAndAvatarValidate(t *testing.T) {
-	ok := &cobra.Command{}
-	ok.Flags().String("main-program-type", "", "")
-	ok.Flags().String("response-mode", "", "")
-	if err := ok.Flags().Set("main-program-type", "open_code"); err != nil {
-		t.Fatal(err)
-	}
-	if err := ok.Flags().Set("response-mode", "mention_only"); err != nil {
-		t.Fatal(err)
-	}
-	if err := deapAgentValidateSaveDraftResponseMode(ok); err != nil {
-		t.Fatalf("open_code with response-mode must pass, got %v", err)
-	}
-	missing := &cobra.Command{}
-	missing.Flags().String("main-program-type", "", "")
-	missing.Flags().String("response-mode", "", "")
-	if err := missing.Flags().Set("main-program-type", "open_code"); err != nil {
-		t.Fatal(err)
-	}
-	if err := deapAgentValidateSaveDraftResponseMode(missing); err == nil {
-		t.Fatal("open_code without response-mode must fail")
-	}
-
+func TestCrossPlatformCoverageDeapAgentSaveDraftAvatarValidate(t *testing.T) {
 	// save-draft leaf Validate rejects an invalid avatar-url before any write.
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})

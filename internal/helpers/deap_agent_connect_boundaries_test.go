@@ -35,7 +35,7 @@ func TestCrossPlatformCoverageEmployeeConnectCommitBoundaries(t *testing.T) {
 			_ = cmd.Flags().Set("agent-cmd", "fixture")
 			b := digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent-1", DWSProfile: "employee-corp:employee-user", OperatorOpenDingTalkID: "owner", Channel: channel, BindingRevision: 1, BindingState: "bound", DesiredState: "running"}
 			if scenario != "missing-self" {
-				caller.responses["deap-dev/get_digital_employee_detail"][1] = strings.Replace(caller.responses["deap-dev/get_digital_employee_detail"][1], `"staffId":"employee-user"`, `"staffId":"employee-user","openDingTalkId":"self"`, 1)
+				caller.responses["deap-dev/get_digital_employee_detail"][1] = strings.Replace(caller.responses["deap-dev/get_digital_employee_detail"][1], `"userId":"employee-user"`, `"userId":"employee-user","openDingTalkId":"self"`, 1)
 			}
 			if channel == "dsh" {
 				_ = cmd.Flags().Set("agent-cmd", "")

@@ -701,22 +701,22 @@ func newDeapAgentSkillQueryCommand() *cobra.Command {
 func newDeapAgentMCPCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "create", Short: "创建 MCP 并自动挂载到员工草稿",
-		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP。CLI 先内部调用 check_mcp 做只读连通性校验，通过后服务端依次创建、查询，再将原 mcpId 自动挂载到草稿的 MCP 列表并回读确认，保留已有选择，不克隆、不自动发布。文件根节点必须包含 name 和 configString；CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。若失败信息含 stage=query_created_mcp 或 stage=mount_draft，保留已创建的 mcpId，先查询资源和 draft 并按 trace 排查挂载，禁止重复 create。同一员工的创建、保存和发布应串行执行。此语义依赖已部署自动挂载实现的 OpenAPI 与保留未传字段的 Studio saveDraft；仅升级 CLI 不会改变旧服务端行为。",
+		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP。CLI 先内部调用 check_mcp 做只读连通性校验，通过后服务端依次创建、查询，再将原 mcpId 自动挂载到草稿的 MCP 列表并回读确认，保留已有选择，不克隆、不自动发布。文件根节点必须包含 name 和 configString；configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse，不能只填 URL。CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。若失败信息含 stage=query_created_mcp 或 stage=mount_draft，保留已创建的 mcpId，先查询资源和 draft 并按 trace 排查挂载，禁止重复 create。同一员工的创建、保存和发布应串行执行。此语义依赖已部署自动挂载实现的 OpenAPI 与保留未传字段的 Studio saveDraft；仅升级 CLI 不会改变旧服务端行为。",
 		Tool: deapAgentMCPCreateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
-			{Name: "config-file", Usage: "配置 JSON 对象文件（最大 1 MiB；根节点 name/configString 必填；敏感值放 configString/envs）", Bind: "configFile", Required: true, Trim: true},
+			{Name: "config-file", Usage: "配置 JSON 对象文件（最大 1 MiB；根节点 name/configString 必填；configString 内 mcpServers.<名称>.type 必填 streamable-http 或 sse；敏感值放 configString/envs）", Bind: "configFile", Required: true, Trim: true},
 		},
 		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 		Call:   deapAgentCallMCPCreateFromFile,
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPCreateTool, CanonicalPath: "dingtalk-tag.create_mcp", CLIPath: "dingtalk-tag capability mcp create", PrimaryCLIPath: "dingtalk-tag capability mcp create", Group: "capability.mcp"},
-			Description: "通过本地 JSON 文件传入 name/configString，CLI 内部先 check_mcp 校验，再在 agentUuid 员工域创建 MCP 并自动挂载到草稿 MCP 列表；保留已有选择，不克隆、不自动发布。失败时按 stage 和已创建 mcpId 查询资源与草稿、按 trace 排查挂载，禁止重复 create。",
+			Description: "通过本地 JSON 文件传入 name/configString；configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse。CLI 内部先 check_mcp 校验，再在 agentUuid 员工域创建 MCP 并自动挂载到草稿 MCP 列表；保留已有选择，不克隆、不自动发布。失败时按 stage 和已创建 mcpId 查询资源与草稿、按 trace 排查挂载，禁止重复 create。",
 			DryRun:      deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "先调用 check_mcp 校验，再调用 create_mcp 创建并自动挂载草稿"},
 			Selection: contract.SelectionSpec{AgentSummary: "为指定数字员工创建 MCP 并自动挂载草稿，不自动发布", UseWhen: []string{"已知 agentUuid，需要新增 MCP 定义和鉴权配置、取得 mcpId 并加入员工草稿时"}, AvoidWhen: []string{"只需查询现有 MCP 时使用 capability mcp list 或 capability mcp query", "已创建资源但草稿挂载未确认时先查询资源与草稿并按 trace 排查，不要重复 create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
-				{Name: "config-file", Description: "本地 JSON 文件，字段展开到工具根节点，不对应单个 config 属性"},
+				{Name: "config-file", Description: "本地 JSON 文件；configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse；字段展开到工具根节点，不对应单个 config 属性"},
 			},
 		},
 	})
@@ -725,7 +725,7 @@ func newDeapAgentMCPCreateCommand() *cobra.Command {
 func newDeapAgentMCPListCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "list", Short: "查询 MCP 资源列表",
-		Long: "查询目标数字员工 agentUuid 资源域的 MCP 列表和服务端脱敏配置，不是企业公共资源列表。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --type draft/published。任何凭据都不得出现在响应中。",
+		Long: "查询目标数字员工 agentUuid 资源域的 MCP 列表和服务端脱敏配置，不是企业公共资源列表。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --snapshot draft/published。任何凭据都不得出现在响应中。",
 		Tool: deapAgentMCPListTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -746,7 +746,7 @@ func newDeapAgentMCPListCommand() *cobra.Command {
 func newDeapAgentMCPQueryCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "query", Short: "查询 MCP 资源详情",
-		Long: "按 agentUuid 和该员工域的 mcpId 查询 MCP 定义、工具解析结果和服务端脱敏配置，不跨员工或企业资源域回退。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --type draft/published。响应不得包含密钥、Token 或临时签名地址。",
+		Long: "按 agentUuid 和该员工域的 mcpId 查询 MCP 定义、工具解析结果和服务端脱敏配置，不跨员工或企业资源域回退。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --snapshot draft/published。响应不得包含密钥、Token 或临时签名地址。",
 		Tool: deapAgentMCPQueryTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -765,13 +765,13 @@ func newDeapAgentMCPQueryCommand() *cobra.Command {
 func newDeapAgentMCPUpdateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "update", Short: "更新 MCP 启停状态或替换配置",
-		Long: "按 mcpId 更新草稿中的 MCP，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--config-file 提供新配置时，CLI 先内部调 check_mcp 只读连通性校验，通过才提交 update_mcp。文件根节点包含 name/configString 等 MCP 配置字段，凭据不进入命令行。--enabled 与 --config-file 至少提供一项。先 --dry-run 检查参数，再加 --yes。",
+		Long: "按 mcpId 更新草稿中的 MCP，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--config-file 提供新配置时，CLI 先内部调 check_mcp 只读连通性校验，通过才提交 update_mcp。文件根节点包含 name/configString 等 MCP 配置字段；configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse，不能只填 URL。凭据不进入命令行。--enabled 与 --config-file 至少提供一项。先 --dry-run 检查参数，再加 --yes。",
 		Tool: deapAgentMCPUpdateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
 			{Name: "mcp-id", Usage: "MCP ID", Bind: "mcpId", Required: true, Trim: true},
 			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）", Bind: "enabled", Kind: LeafBool},
-			{Name: "config-file", Usage: "可选配置 JSON 对象文件（最大 1 MiB；根节点 name/configString 必填；敏感值放 configString/envs）；提供时替换配置", Bind: "configFile", Trim: true, OmitEmpty: true},
+			{Name: "config-file", Usage: "可选配置 JSON 对象文件（最大 1 MiB；根节点 name/configString 必填；configString 内 mcpServers.<名称>.type 必填 streamable-http 或 sse；敏感值放 configString/envs）；提供时替换配置", Bind: "configFile", Trim: true, OmitEmpty: true},
 		},
 		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
 		Validate: func(cmd *cobra.Command, _ []string) error {
@@ -785,14 +785,14 @@ func newDeapAgentMCPUpdateCommand() *cobra.Command {
 		Call: deapAgentCallMCPUpdate,
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPUpdateTool, CanonicalPath: "dingtalk-tag.update_mcp", CLIPath: "dingtalk-tag capability mcp update", PrimaryCLIPath: "dingtalk-tag capability mcp update", Group: "capability.mcp"},
-			Description: "按 mcpId 更新草稿 MCP 的启停状态或配置；提供新配置时 CLI 内部先 check_mcp 校验通过才提交，保持现有挂载，不自动发布。",
+			Description: "按 mcpId 更新草稿 MCP 的启停状态或配置；提供新配置时，configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse；CLI 内部先 check_mcp 校验通过才提交，保持现有挂载，不自动发布。",
 			DryRun:      deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "提供配置时先调用 check_mcp 校验，再调用 update_mcp；仅改 enabled 时直接更新"},
 			Selection: contract.SelectionSpec{AgentSummary: "更新草稿 MCP 启停状态或配置", UseWhen: []string{"需要在不重建的前提下启用/禁用或修改已有 MCP 配置时"}, AvoidWhen: []string{"需要新增 MCP 时使用 capability mcp create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp update --agent-uuid <agentUuid> --mcp-id <mcpId> --config-file ./mcp.json --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
 				{Name: "mcp-id", Property: "mcpId", InterfaceType: "string"},
 				{Name: "enabled", Property: "enabled", InterfaceType: "boolean"},
-				{Name: "config-file", Description: "可选本地 JSON 文件，字段展开到工具根节点，不对应单个 config 属性"},
+				{Name: "config-file", Description: "可选本地 JSON 文件；configString 内 mcpServers.<名称>.type 必须显式填写 streamable-http 或 sse；字段展开到工具根节点，不对应单个 config 属性"},
 			},
 		},
 	})

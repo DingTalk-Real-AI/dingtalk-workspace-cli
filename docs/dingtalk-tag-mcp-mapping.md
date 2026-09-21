@@ -57,9 +57,11 @@ CLI 配置文件只包含上表配置字段，不能包含 agentUuid/identity/co
 {
   "name": "示例 MCP",
   "configType": "JSON",
-  "configString": "{\"mcpServers\":{\"example\":{\"url\":\"https://example.invalid/mcp\"}}}"
+  "configString": "{\"mcpServers\":{\"example\":{\"type\":\"streamable-http\",\"url\":\"https://example.invalid/mcp\"}}}"
 }
 ```
+
+创建或替换配置时，`configString` 内的 `mcpServers.<名称>.type` 必须显式填写 `streamable-http` 或 `sse`，并使用对应协议的 `url`。仅填 URL 无法通过校验；外层 `configType=JSON` 只表示配置格式，不是传输类型。
 
 CLI 发送的 tools/call.arguments 为
 `{agentUuid, name, configType, configString, ...}`；

@@ -81,7 +81,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				"name": "name", "description": "description", "dept-id": "deptId",
 				"avatar-url":         "avatarUrl",
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
-				"main-program-type":  "type",
+				"main-program-type":  "digitalTagEmployeeProfile.type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
 			},
 		},
@@ -94,7 +94,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 		},
 		"dingtalk-tag.get_digital_employee_detail": {
 			"dingtalk-tag manage detail", "get_digital_employee_detail", "read", "low", "not_required",
-			map[string]string{"agent-uuid": "agentUuid", "type": "type"},
+			map[string]string{"agent-uuid": "agentUuid", "snapshot": "snapshot"},
 		},
 		"dingtalk-tag.list_digital_employees": {
 			"dingtalk-tag manage list", "list_digital_employees", "read", "low", "not_required",
@@ -113,7 +113,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				"agent-uuid": "agentUuid", "name": "name", "description": "description", "dept-id": "deptId",
 				"avatar-url": "avatarUrl", "prompt": "prompt",
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
-				"main-program-type":  "type",
+				"main-program-type":  "digitalTagEmployeeProfile.type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
 			},
 		},
@@ -181,7 +181,22 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			if got := schemaContractString(parameter["property"]); got != property {
 				t.Errorf("%s parameter %s property = %q, want %q", canonical, flagName, got, property)
 			}
+			if flagName == "main-program-type" {
+				wantRequired := canonical == "dingtalk-tag.create_digital_employee"
+				gotRequired, _ := parameter["required"].(bool)
+				if gotRequired != wantRequired {
+					t.Errorf("%s main-program-type required=%t, want %t", canonical, gotRequired, wantRequired)
+				}
+			}
 			if flagName == "response-mode" {
+				defaultMode := schemaContractString(parameter["default"])
+				wantDefault := ""
+				if canonical == "dingtalk-tag.create_digital_employee" {
+					wantDefault = "mention_only"
+				}
+				if defaultMode != wantDefault {
+					t.Errorf("%s response-mode default=%q, want %q", canonical, defaultMode, wantDefault)
+				}
 				got := schemaContractStringSlice(parameter["enum"])
 				wantModes := []string{"mention_only", "targeted_proactive", "mention_only,targeted_proactive"}
 				if !reflect.DeepEqual(got, wantModes) {

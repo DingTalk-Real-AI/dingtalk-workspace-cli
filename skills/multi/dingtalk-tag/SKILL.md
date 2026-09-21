@@ -31,11 +31,12 @@ metadata:
 
 ## 自然语言编排硬约束
 
-- MCP 的主程序类型字段统一为 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 使用语义明确的 `--main-program-type`；创建或更新没有特殊要求时默认不传，由 OpenAPI 按 `open_code` 处理；只有明确接入本地 Agent/DSH 时才传 `--main-program-type local_agent`。不要与详情命令中表示 draft/published 的 `--type` 混淆。
-- `open_code` 必须至少配置一个响应模式：创建时必须传 `--response-mode`；切换到 `open_code` 时也必须同时传。`local_agent` 可省略。普通部分更新不重复回填未修改字段，最终有效类型与响应模式由 OpenAPI 按当前草稿合并校验。
-- 创建只要求名称和描述；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
+- 创建/更新的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，列表过滤使用顶层 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 使用语义明确的 `--main-program-type`；创建时必须显式传 `--main-program-type open_code|local_agent`，缺失或空值由 DWS 本地拦截；应告知调用方选择主程序类型，不能省略或发送空值。更新时未传则保持原值；明确接入本地 Agent/DSH 时传 `--main-program-type local_agent`。不要与详情命令中表示 draft/published 的 `--snapshot` 混淆。
+- 创建时未提供 `--response-mode` 或值为空，CLI 默认发送 `mention_only`，包括 `local_agent`。更新时不传就不更新该字段，显式值保持不变；最终有效配置由服务端按当前草稿校验。
+- 创建要求名称、描述和主程序类型；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
 - `save-draft` 只更新用户明确修改的基础草稿字段，不接受 Skill/MCP 完整数组。Skill/MCP 生命周期统一使用 `capability skill|mcp create|update|delete|list|query`；不设计 attach/detach，`check_mcp` 只在 create 和带配置的 update 内部调用。
-- `local_agent` 发布只要求名称和描述，不向用户追问平台 Prompt、模型、Skill 或 MCP；`open_code` 才按平台运行所需信息补齐。
+- 创建或替换 MCP 配置时，须告知并显式填写 `configString.mcpServers.<名称>.type`（`streamable-http` 或 `sse`）以及对应 `url`；不能只填 URL，`configType=JSON` 也不能代替传输类型。仅更新 enabled 不重新提交配置。
+- 发布所需配置由服务端校验；创建时默认响应模式为 `mention_only`。历史草稿缺少响应模式时先通过 `save-draft` 补齐，不以发布命令隐式改写草稿。
 - 同一自然语言请求里的连续写操作只做一次汇总确认；确认后才加 `--yes`。先用 `--dry-run --format json` 展示计划。
 - 创建成功后若保存或发布失败，必须返回已创建的 `agentUuid` 和恢复命令；重试禁止再次执行 create。
 - “创建并落盘 Profile”可顺序执行创建/发布与 `manage login`；“创建并接入 DSH”则使用 `connect --channel dsh`。创建/发布与 connect 是独立事务，connect 绝不创建、修改或发布数字员工。

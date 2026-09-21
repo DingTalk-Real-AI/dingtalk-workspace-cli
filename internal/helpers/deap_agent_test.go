@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -64,7 +66,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试本地头像", "avatar-url": avatarInput,
-		"response-mode": "mention_only",
+		"response-mode": "mention_only", "main-program-type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -100,7 +102,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUplo
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试公网头像",
-		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only",
+		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only", "main-program-type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -697,7 +699,7 @@ func TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContract
 		{path: []string{"capability", "mcp", "delete"}, tool: "delete_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1"}, confirmed: true},
 		{path: []string{"capability", "mcp", "list"}, tool: "list_mcps", flags: map[string]string{"agent-uuid": "agent-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "keywords": "", "page": 1, "pageSize": 20}},
 		{path: []string{"capability", "mcp", "query"}, tool: "query_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1"}},
-		{path: []string{"manage", "detail"}, tool: "get_digital_employee_detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "type": "published"}},
+		{path: []string{"manage", "detail"}, tool: "get_digital_employee_detail", flags: map[string]string{"agent-uuid": "agent-1", "snapshot": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "snapshot": "published"}},
 		{path: []string{"manage", "save-draft"}, tool: "update_digital_employee_draft", flags: map[string]string{"agent-uuid": "agent-1", "name": "值班助手"}, wantArgs: map[string]any{"agentUuid": "agent-1", "name": "值班助手"}, confirmed: true},
 	}
 
@@ -1038,16 +1040,16 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			wantArgs: map[string]any{
 				"name": "值班助手", "description": "处理值班问题",
 				"deptId": "dept-1",
-				"type":   "local_agent",
 				"digitalTagEmployeeProfile": map[string]any{
+					"type":             "local_agent",
 					"supervisorUserId": "supervisor-1", "responseMode": "mention_only,targeted_proactive",
 				},
 			},
 		},
 		{
 			leaf: "detail", tool: "get_digital_employee_detail",
-			flags:    map[string]string{"agent-uuid": "agent-1", "type": "published"},
-			wantArgs: map[string]any{"agentUuid": "agent-1", "type": "published"},
+			flags:    map[string]string{"agent-uuid": "agent-1", "snapshot": "published"},
+			wantArgs: map[string]any{"agentUuid": "agent-1", "snapshot": "published"},
 		},
 		{
 			leaf: "list", tool: "list_digital_employees",
@@ -1068,8 +1070,8 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			},
 			wantArgs: map[string]any{
 				"agentUuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
-				"type": "local_agent",
 				"digitalTagEmployeeProfile": map[string]any{
+					"type":             "local_agent",
 					"supervisorUserId": "supervisor-1", "responseMode": "targeted_proactive",
 				},
 			},
@@ -1143,7 +1145,7 @@ func TestCrossPlatformCoverageDeapDetailDefaultsToDraft(t *testing.T) {
 		t.Fatalf("RunE() error = %v", err)
 	}
 
-	want := map[string]any{"agentUuid": "agent-1", "type": "draft"}
+	want := map[string]any{"agentUuid": "agent-1", "snapshot": "draft"}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("detail call = %#v, want args %#v", caller.calls, want)
 	}
@@ -1186,27 +1188,87 @@ func TestCrossPlatformCoverageDeapAgentResponseModeNormalization(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageDevDeapAgentCreateAllowsLocalAgentWithoutResponseMode(t *testing.T) {
-	caller, _ := newDeapAgentTestTree(t, false)
-	root := deapHandler{}.Command(&captureRunner{})
-	create := deapFindLeaf(t, root, "create")
-	for name, value := range map[string]string{
-		"name": "本地助手", "description": "连接本地 Agent", "main-program-type": "local_agent",
-	} {
-		if err := create.Flags().Set(name, value); err != nil {
-			t.Fatal(err)
+func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testing.T) {
+	for _, leaf := range []string{"create", "save-draft"} {
+		for _, tc := range []struct {
+			name        string
+			flags       []string
+			wantProfile map[string]any
+		}{
+			{
+				name:        "local_agent_without_response_mode",
+				flags:       []string{"--main-program-type", "local_agent"},
+				wantProfile: map[string]any{"type": "local_agent"},
+			},
+			{
+				name:        "open_code_with_response_mode",
+				flags:       []string{"--main-program-type", "open_code", "--response-mode", "mention_only"},
+				wantProfile: map[string]any{"type": "open_code", "responseMode": "mention_only"},
+			},
+		} {
+			for _, dryRun := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/dry_run=%t", leaf, tc.name, dryRun), func(t *testing.T) {
+					caller, out := newDeapAgentTestTree(t, dryRun)
+					root := deapHandler{}.Command(&captureRunner{})
+					root.PersistentFlags().Bool("yes", false, "test confirmation")
+					root.PersistentFlags().Bool("dry-run", false, "test preview")
+					argv := []string{"manage", leaf}
+					if dryRun {
+						argv = append(argv, "--dry-run")
+					}
+					profile := make(map[string]any, len(tc.wantProfile)+1)
+					for key, value := range tc.wantProfile {
+						profile[key] = value
+					}
+					if leaf == "create" && profile["responseMode"] == nil {
+						profile["responseMode"] = "mention_only"
+					}
+					want := map[string]any{"digitalTagEmployeeProfile": profile}
+					tool := deapAgentCreateTool
+					if leaf == "create" {
+						argv = append(argv, "--name", "测试助手", "--description", "验证主程序类型")
+						want["name"] = "测试助手"
+						want["description"] = "验证主程序类型"
+					} else {
+						argv = append(argv, "--agent-uuid", "agent-1")
+						want["agentUuid"] = "agent-1"
+						tool = deapAgentSaveDraftTool
+						if !dryRun {
+							argv = append(argv, "--yes")
+						}
+					}
+					root.SetArgs(append(argv, tc.flags...))
+					if err := corecmd.ExecuteForTest(root); err != nil {
+						t.Fatal(err)
+					}
+					var got map[string]any
+					if dryRun {
+						if len(caller.calls) != 0 {
+							t.Fatalf("dry-run made %d MCP calls", len(caller.calls))
+						}
+						var preview struct {
+							Tool      string         `json:"tool"`
+							Arguments map[string]any `json:"arguments"`
+						}
+						if err := json.Unmarshal(out.Bytes(), &preview); err != nil {
+							t.Fatalf("decode dry-run: %v; output=%s", err, out.String())
+						}
+						if preview.Tool != tool {
+							t.Fatalf("dry-run tool = %q, want %q", preview.Tool, tool)
+						}
+						got = preview.Arguments
+					} else {
+						if len(caller.calls) != 1 || caller.calls[0].toolName != tool || caller.calls[0].productID != deapAgentServerID {
+							t.Fatalf("MCP calls = %#v, want one %s/%s call", caller.calls, deapAgentServerID, tool)
+						}
+						got = caller.calls[0].args
+					}
+					if !reflect.DeepEqual(got, want) {
+						t.Fatalf("arguments = %#v, want %#v", got, want)
+					}
+				})
+			}
 		}
-	}
-
-	if err := create.RunE(create, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-	if len(caller.calls) != 1 || caller.calls[0].args["type"] != "local_agent" {
-		t.Fatalf("create calls = %#v, want local_agent without responseMode", caller.calls)
-	}
-	profile, _ := caller.calls[0].args["digitalTagEmployeeProfile"].(map[string]any)
-	if _, exists := profile["responseMode"]; exists {
-		t.Fatalf("responseMode unexpectedly sent: %#v", profile)
 	}
 }
 
@@ -1226,15 +1288,15 @@ func TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP(t *testing.T)
 		{leaf: "list", flags: map[string]string{"page": "0"}, wantErr: "--page 不能小于 1"},
 		{leaf: "list", flags: map[string]string{"page-size": "0"}, wantErr: "--page-size 不能小于 1"},
 		{leaf: "list", flags: map[string]string{"main-program-type": "a2a"}, wantErr: "--main-program-type"},
-		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "merged"}, wantErr: "--type"},
+		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "snapshot": "merged"}, wantErr: "--snapshot"},
 		{leaf: "login", flags: map[string]string{}, wantErr: "agent-uuid"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "always_reply",
+			"response-mode": "always_reply", "main-program-type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "mention_only,always_reply",
+			"response-mode": "mention_only,always_reply", "main-program-type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
@@ -1242,17 +1304,8 @@ func TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP(t *testing.T)
 		}, wantErr: "--main-program-type"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "avatar-url": "avatar.bmp",
-			"response-mode": "mention_only",
+			"response-mode": "mention_only", "main-program-type": "open_code",
 		}, wantErr: "本地文件只支持"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题",
-		}, wantErr: "open_code 类型必须至少提供一个 --response-mode"},
-		{leaf: "create", flags: map[string]string{
-			"name": "值班助手", "description": "处理值班问题", "main-program-type": "open_code",
-		}, wantErr: "open_code 类型必须至少提供一个 --response-mode"},
-		{leaf: "save-draft", flags: map[string]string{
-			"agent-uuid": "agent-1", "main-program-type": "open_code",
-		}, wantErr: "切换为 open_code 时必须至少提供一个 --response-mode"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),
 		}, wantErr: "最多允许 5000"},
@@ -1323,7 +1376,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 
 	for name, value := range map[string]string{
 		"name": "值班助手", "description": "处理值班问题",
-		"dept-id": "dept-1", "response-mode": "mention_only",
+		"dept-id": "dept-1", "response-mode": "mention_only", "main-program-type": "open_code",
 	} {
 		if setErr := create.Flags().Set(name, value); setErr != nil {
 			t.Fatal(setErr)
@@ -1342,7 +1395,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 	want := map[string]any{
 		"name": "值班助手", "description": "处理值班问题",
 		"deptId":                    "dept-1",
-		"digitalTagEmployeeProfile": map[string]any{"responseMode": "mention_only"},
+		"digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "mention_only"},
 	}
 	if !reflect.DeepEqual(call.args, want) {
 		t.Fatalf("create args = %#v, want %#v", call.args, want)

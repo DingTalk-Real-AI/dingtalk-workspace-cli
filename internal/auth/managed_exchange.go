@@ -15,7 +15,7 @@ import (
 type ManagedExchangeRequest struct {
 	ClientID string
 	AuthCode string
-	// ExpectedUserID 是 DEAP 授权响应 staffId 对应的钉钉 Profile userId。
+	// ExpectedUserID 来自已发布数字员工的 profile.userId。
 	ExpectedUserID string
 	// ExpectedCorpID 来自已发布数字员工的 profile.corpId。
 	ExpectedCorpID  string

@@ -42,8 +42,7 @@ type digitalEmployeeConnectResult struct {
 
 type digitalEmployeePublishedIdentity struct {
 	CorpID         string
-	RobotUID       string
-	StaffID        string
+	UserID         string
 	OpenDingTalkID string
 }
 
@@ -189,7 +188,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 
 	configDir := deapConnectConfigDir()
-	draft, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "draft"}, false)
+	draft, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "snapshot": "draft"}, false)
 	if err != nil {
 		return fmt.Errorf("query digital employee draft: %w", err)
 	}
@@ -209,7 +208,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	if !ok {
 		return apperrors.NewInternal("数字员工发布详情缺少登录所需的内部身份信息")
 	}
-	profile := auth.ProfileSelector(auth.Profile{CorpID: publishedIdentity.CorpID, UserID: publishedIdentity.StaffID})
+	profile := auth.ProfileSelector(auth.Profile{CorpID: publishedIdentity.CorpID, UserID: publishedIdentity.UserID})
 	// 同一员工的检查、换票、binding 和 Adapter 提交必须在同一注册事务内。
 	lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(digitalEmployeeRuntimeDir(profile), "operation"))
 	if err != nil {
@@ -688,16 +687,15 @@ func publishedDigitalEmployeeIdentity(value map[string]any) (digitalEmployeePubl
 	}
 	identity := digitalEmployeePublishedIdentity{
 		CorpID:         jsonScalar(profile["corpId"]),
-		RobotUID:       jsonScalar(profile["robotUid"]),
-		StaffID:        jsonScalar(profile["staffId"]),
+		UserID:         jsonScalar(profile["userId"]),
 		OpenDingTalkID: jsonScalar(profile["openDingTalkId"]),
 	}
-	return identity, identity.CorpID != "" && identity.RobotUID != "" && identity.StaffID != ""
+	return identity, identity.CorpID != "" && identity.UserID != ""
 }
 
 // 发布状态只由成功查询的数据判定；请求失败保留原始错误分类和恢复建议。
 func queryPublishedDigitalEmployee(ctx context.Context, agentUUID string) (map[string]any, error) {
-	value, err := callDeapJSON(ctx, deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "published"}, false)
+	value, err := callDeapJSON(ctx, deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "snapshot": "published"}, false)
 	if err != nil {
 		return nil, fmt.Errorf("查询数字员工发布详情失败: %w", err)
 	}
