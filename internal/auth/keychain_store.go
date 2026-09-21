@@ -209,10 +209,13 @@ func repairHalfMigratedGlobalTokenLocked(cfg *ProfilesConfig) error {
 	}
 
 	global, err := profilesLoadLegacy()
-	if errors.Is(err, ErrTokenDataNotFound) || keychain.IsDEKMissing(err) {
-		// A lost DEK cannot supply migration credentials, but must not prevent
-		// reauthorization. Leave the ciphertext intact until a fresh token is
-		// available; repairLoginCiphertextMismatchTargets clears only its targets.
+	if errors.Is(err, ErrTokenDataNotFound) ||
+		keychain.IsDEKMissing(err) ||
+		keychain.IsCiphertextKeyMismatch(err) {
+		// Missing or mismatched key material cannot supply migration credentials,
+		// but must not prevent reauthorization. Leave the ciphertext intact until
+		// a fresh token is available; repairLoginCiphertextMismatchTargets clears
+		// only the slots selected by that login's persistence plan.
 		return nil
 	}
 	if err != nil {
