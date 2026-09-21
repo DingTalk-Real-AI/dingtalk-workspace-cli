@@ -7,15 +7,17 @@ import (
 )
 
 func TestCrossPlatformCoverageDeapAgentMCPRequiresEmployeeForEveryResourceCommand(t *testing.T) {
-	for _, operation := range []string{"create", "list", "query"} {
+	for _, operation := range []string{"create", "update", "delete", "list", "query"} {
 		t.Run(operation, func(t *testing.T) {
 			caller, _ := newDeapAgentTestTree(t, false)
 			root := deapHandler{}.Command(&captureRunner{})
 			args := []string{"capability", "mcp", operation}
-			if operation == "create" {
+			switch operation {
+			case "create":
 				args = append(args, "--config-file", "./not-read.json")
-			}
-			if operation == "query" {
+			case "update":
+				args = append(args, "--mcp-id", "mcp-1", "--enabled=false")
+			case "delete", "query":
 				args = append(args, "--mcp-id", "mcp-1")
 			}
 			root.SetArgs(args)

@@ -30,10 +30,15 @@ const (
 	deapAgentSkillListTool             = "list_skills"
 	deapAgentSkillQueryTool            = "query_skill"
 	deapAgentSkillQueryIdentity        = "get_skill_detail"
+	deapAgentSkillUpdateTool           = "update_skill"
+	deapAgentSkillDeleteTool           = "delete_skill"
 	deapAgentMCPCreateTool             = "create_mcp"
 	deapAgentMCPListTool               = "list_mcps"
 	deapAgentMCPQueryTool              = "query_mcp"
 	deapAgentMCPQueryIdentity          = "get_mcp_detail"
+	deapAgentMCPUpdateTool             = "update_mcp"
+	deapAgentMCPDeleteTool             = "delete_mcp"
+	deapAgentMCPCheckTool              = "check_mcp"
 	deapAgentSkillUploadPath           = "/v1.0/assistant/skills/upload"
 	deapAgentSkillUploadProdBase       = "https://api-deap.dingtalk.com"
 	deapAgentSkillUploadPreBase        = "https://pre-api-deap.dingtalk.com"
@@ -291,13 +296,18 @@ func deapAgentSkillStageFromResponse(body []byte, fallback string) string {
 }
 
 type deapAgentSkillStageError struct {
-	Stage string
-	Err   error
+	Operation string
+	Stage     string
+	Err       error
 }
 
 func (e *deapAgentSkillStageError) Error() string {
 	if e == nil {
 		return "skill create 阶段失败"
+	}
+	operation := strings.TrimSpace(e.Operation)
+	if operation == "" {
+		operation = "create"
 	}
 	detail := ""
 	if e.Err != nil {
@@ -311,9 +321,9 @@ func (e *deapAgentSkillStageError) Error() string {
 		}
 	}
 	if detail == "" {
-		return fmt.Sprintf("skill create %s 阶段失败", e.Stage)
+		return fmt.Sprintf("skill %s %s 阶段失败", operation, e.Stage)
 	}
-	return fmt.Sprintf("skill create %s 阶段失败: %s", e.Stage, detail)
+	return fmt.Sprintf("skill %s %s 阶段失败: %s", operation, e.Stage, detail)
 }
 
 func (e *deapAgentSkillStageError) Unwrap() error {
@@ -402,7 +412,7 @@ func newDeapCapabilityCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "capability",
 		Short:             "数字员工能力资源管理",
-		Long:              "创建和查询目标数字员工的 Skill/MCP 能力资源。MCP create 成功会自动挂载到草稿的 MCP 列表，不自动发布；manage save-draft 用于调整已有资源的选择、启用状态和配置。",
+		Long:              "管理目标数字员工的 Skill/MCP 能力资源，统一 create|update|delete|list|query 五个动作。create 内部完成校验并把资源自动挂载到草稿；update 修改资源内容或启停状态并保持现有挂载（MCP 更新前内部先 check_mcp 校验、Skill 替换 ZIP 时 CLI 内部完成上传）；delete 删除资源并清理草稿挂载。以上写操作都只改草稿、不自动发布，发布另行执行 manage publish。list/query 只读，不改变挂载或发布状态。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -417,14 +427,14 @@ func newDeapAgentSkillCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "skill",
 		Short:             "管理数字员工 Skill",
-		Long:              "创建和查询目标数字员工域的 Skill 资源及引用。创建后查询 draft 确认回显；save-draft skills 可调整选择和配置，不自动发布。",
+		Long:              "管理目标数字员工域的 Skill 资源：create 从本地 ZIP 校验并创建、自动挂载到草稿；update 按 skillId 改启停状态（--enabled=true|false）或替换 ZIP（--file，CLI 内部完成上传），保持现有挂载；delete 删除 Skill 并清理草稿挂载；list/query 只读查询 draft/published 快照。写操作只改草稿、不自动发布。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
 	newGroupCommand(cmd)
-	cmd.AddCommand(newDeapAgentSkillCreateCommand(), newDeapAgentSkillListCommand(), newDeapAgentSkillQueryCommand())
+	cmd.AddCommand(newDeapAgentSkillCreateCommand(), newDeapAgentSkillUpdateCommand(), newDeapAgentSkillDeleteCommand(), newDeapAgentSkillListCommand(), newDeapAgentSkillQueryCommand())
 	return cmd
 }
 
@@ -432,21 +442,21 @@ func newDeapAgentMCPCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "mcp",
 		Short:             "管理数字员工 MCP",
-		Long:              "创建和查询目标数字员工域的 MCP。create 成功会把原 mcpId 自动挂载到草稿的 MCP 列表，保留已有选择，不克隆、不自动发布。敏感配置通过本地 JSON 文件传入。",
+		Long:              "管理目标数字员工域的 MCP：create 从本地 JSON 校验并创建、把原 mcpId 自动挂载到草稿；update 按 mcpId 改启停状态（--enabled=true|false）或替换配置（--config-file，更新前 CLI 内部先 check_mcp 校验通过才提交），保持现有挂载；delete 删除 MCP 并清理草稿挂载；list/query 只读查询。写操作只改草稿、不自动发布，敏感配置通过本地 JSON 文件传入、不进入命令行。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
 	newGroupCommand(cmd)
-	cmd.AddCommand(newDeapAgentMCPCreateCommand(), newDeapAgentMCPListCommand(), newDeapAgentMCPQueryCommand())
+	cmd.AddCommand(newDeapAgentMCPCreateCommand(), newDeapAgentMCPUpdateCommand(), newDeapAgentMCPDeleteCommand(), newDeapAgentMCPListCommand(), newDeapAgentMCPQueryCommand())
 	return cmd
 }
 
 func newDeapAgentSkillCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "create", Short: "从本地 ZIP 创建 Skill 资源",
-		Long: "校验本地 Skill ZIP 后，先通过 OpenAPI multipart 接口上传，再调用 create_skill_by_url 完成 Skill Center create 与 query。ZIP 不进入 MCP JSON，临时签名 URL 不落盘、不输出。",
+		Long: "校验本地 Skill ZIP 后，先通过 OpenAPI multipart 接口上传，再调用 create_skill_by_url 完成 Skill Center create、query 并自动挂载到员工草稿，不自动发布。ZIP 不进入 MCP JSON，临时签名 URL 不落盘、不输出。",
 		Tool: deapAgentSkillCreateFileTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（Skill Center V2 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -463,10 +473,10 @@ func newDeapAgentSkillCreateCommand() *cobra.Command {
 		Call: deapAgentCallSkillCreate,
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentSkillCreateFileTool, CanonicalPath: "dingtalk-tag.create_skill_from_file", CLIPath: "dingtalk-tag capability skill create", PrimaryCLIPath: "dingtalk-tag capability skill create", Group: "capability.skill"},
-			Description: "校验本地 ZIP，依次调用 OpenAPI upload 与 create_skill_by_url，并只输出安全创建结果。",
+			Description: "校验本地 ZIP，依次调用 OpenAPI upload 与 create_skill_by_url，自动挂载员工草稿但不发布，并只输出安全创建结果。",
 			DryRun:      deapAgentPlanDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "本地 ZIP 校验后串联 OpenAPI multipart upload 与 create_skill_by_url"},
-			Selection:   contract.SelectionSpec{AgentSummary: "从本地 ZIP 创建 Skill 资源", UseWhen: []string{"已有合法 Skill ZIP，需要为目标数字员工创建并取得 skillId 时"}, AvoidWhen: []string{"只有远程 URL 的纯 MCP 场景使用 create_skill_by_url"}, Examples: []string{"dws dingtalk-tag capability skill create --agent-uuid <agentUuid> --file ./my-skill.zip --dry-run --format json"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "从本地 ZIP 创建 Skill 并自动挂载草稿，不自动发布", UseWhen: []string{"已有合法 Skill ZIP，需要为目标数字员工创建、挂载并取得 skillId 时"}, AvoidWhen: []string{"已有 skillId 需要升级 ZIP 时使用 capability skill update"}, Examples: []string{"dws dingtalk-tag capability skill create --agent-uuid <agentUuid> --file ./my-skill.zip --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
 				{Name: "file", Property: "file", InterfaceType: "binary"},
@@ -517,6 +527,94 @@ func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any)
 	return deps.Out.PrintJSON(result)
 }
 
+func newDeapAgentSkillUpdateCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use: "update", Short: "更新 Skill 启停状态或替换 ZIP",
+		Long: "按 skillId 更新草稿中的 Skill，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--file 提供新 ZIP 时，CLI 先本地校验再通过 OpenAPI multipart 上传，签名 URL 不落盘、不输出。--enabled 与 --file 至少提供一项。先 --dry-run 检查参数，再加 --yes。",
+		Tool: deapAgentSkillUpdateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{
+			{Name: "agent-uuid", Usage: "目标数字员工 UUID（Skill Center V2 tenant）", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "skill-id", Usage: "Skill ID", Bind: "skillId", Required: true, Trim: true},
+			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）", Bind: "enabled", Kind: LeafBool},
+			{Name: "file", Usage: "可选本地 Skill ZIP（相对当前目录、最大 50 MiB、必须包含 SKILL.md）；提供时替换 Skill 包", Bind: "file", Trim: true, OmitEmpty: true},
+		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			hasEnabled := cmd.Flags().Changed("enabled")
+			rawPath, _ := cmd.Flags().GetString("file")
+			hasFile := strings.TrimSpace(rawPath) != ""
+			if !hasEnabled && !hasFile {
+				return apperrors.NewValidation("update 至少需要提供 --enabled 或 --file 之一")
+			}
+			if hasFile {
+				if _, err := deapAgentValidateSkillPackage(rawPath); err != nil {
+					return &deapAgentSkillStageError{Operation: "update", Stage: "validate", Err: err}
+				}
+			}
+			return nil
+		},
+		Call: deapAgentCallSkillUpdate,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentSkillUpdateTool, CanonicalPath: "dingtalk-tag.update_skill", CLIPath: "dingtalk-tag capability skill update", PrimaryCLIPath: "dingtalk-tag capability skill update", Group: "capability.skill"},
+			Description: "按 skillId 更新草稿 Skill 的启停状态或替换 ZIP（CLI 内部上传），保持现有挂载，不自动发布。",
+			DryRun:      deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "可选本地 ZIP 校验上传后调用 update_skill"},
+			Selection: contract.SelectionSpec{AgentSummary: "更新草稿 Skill 启停状态或替换 ZIP", UseWhen: []string{"需要在不重建的前提下启用/禁用或升级已有 Skill 时"}, AvoidWhen: []string{"需要新增 Skill 时使用 capability skill create", "只查看现有 Skill 时使用 capability skill list/query"}, Examples: []string{"dws dingtalk-tag capability skill update --agent-uuid <agentUuid> --skill-id <skillId> --enabled=false --dry-run --format json"}},
+			Parameters: []contract.ParamDecl{
+				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
+				{Name: "skill-id", Property: "skillId", InterfaceType: "string"},
+				{Name: "enabled", Property: "enabled", InterfaceType: "boolean"},
+				{Name: "file", Property: "fileUrl", InterfaceType: "binary", Description: "可选本地 ZIP；CLI 上传后以 fileUrl 下发，ZIP 不进入 MCP JSON"},
+			},
+		},
+	})
+}
+
+func deapAgentCallSkillUpdate(cmd *cobra.Command, tool string, args map[string]any) error {
+	rawPath, _ := args["file"].(string)
+	delete(args, "file")
+	if strings.TrimSpace(rawPath) == "" {
+		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	}
+	pkg, err := deapAgentValidateSkillPackage(rawPath)
+	if err != nil {
+		return &deapAgentSkillStageError{Operation: "update", Stage: "validate", Err: err}
+	}
+	if deps.Caller.DryRun() {
+		// 干跑只预览占位，不上传、不生成签名 URL。
+		args["fileUrl"] = map[string]any{"localFile": filepath.Base(pkg.path), "upload": true, "redacted": true}
+		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	}
+	agentUUID, _ := args["agentUuid"].(string)
+	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, pkg.path)
+	if err != nil {
+		if staged, ok := err.(*deapAgentSkillStageError); ok {
+			return &deapAgentSkillStageError{Operation: "update", Stage: staged.Stage, Err: staged.Err}
+		}
+		return &deapAgentSkillStageError{Operation: "update", Stage: "upload", Err: err}
+	}
+	args["fileUrl"] = fileURL
+	return callMCPToolOnServer(deapAgentServerID, tool, args)
+}
+
+func newDeapAgentSkillDeleteCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use: "delete", Short: "删除 Skill 并清理草稿挂载",
+		Long: "按 skillId 删除草稿中的 Skill 资源并清理其草稿挂载，不自动发布。这是不可逆写操作，先 --dry-run 检查参数，再加 --yes。",
+		Tool: deapAgentSkillDeleteTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{
+			{Name: "agent-uuid", Usage: "目标数字员工 UUID（Skill Center V2 tenant）", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "skill-id", Usage: "Skill ID", Bind: "skillId", Required: true, Trim: true},
+		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentSkillDeleteTool, CanonicalPath: "dingtalk-tag.delete_skill", CLIPath: "dingtalk-tag capability skill delete", PrimaryCLIPath: "dingtalk-tag capability skill delete", Group: "capability.skill"},
+			Description: "按 skillId 删除草稿 Skill 资源并清理草稿挂载，不自动发布。",
+			DryRun:      deapAgentDryRun, Interface: deapAgentMCPInterface(deapAgentSkillDeleteTool),
+			Selection: contract.SelectionSpec{AgentSummary: "删除草稿 Skill 并清理挂载", UseWhen: []string{"确认不再需要某个 Skill，需要从资源和草稿挂载中移除时"}, AvoidWhen: []string{"只需临时禁用时用 capability skill update --enabled=false"}, Examples: []string{"dws dingtalk-tag capability skill delete --agent-uuid <agentUuid> --skill-id <skillId> --dry-run --format json"}},
+		},
+	})
+}
+
 func newDeapAgentSkillListCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "list", Short: "查询 Skill 资源列表",
@@ -559,7 +657,7 @@ func newDeapAgentSkillQueryCommand() *cobra.Command {
 func newDeapAgentMCPCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "create", Short: "创建 MCP 并自动挂载到员工草稿",
-		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP。服务端依次校验、创建、查询，再将原 mcpId 自动挂载到草稿的 MCP 列表并回读确认，保留已有选择，不克隆、不自动发布。文件根节点必须包含 name 和 configString；CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。若失败信息含 stage=query_created_mcp 或 stage=mount_draft，保留已创建的 mcpId，先查询资源和 draft，必要时按原 ID save-draft 恢复，禁止重复 create。同一员工的创建、保存和发布应串行执行。此语义依赖已部署自动挂载实现的 OpenAPI 与保留未传字段的 Studio saveDraft；仅升级 CLI 不会改变旧服务端行为。",
+		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP。CLI 先内部调用 check_mcp 做只读连通性校验，通过后服务端依次创建、查询，再将原 mcpId 自动挂载到草稿的 MCP 列表并回读确认，保留已有选择，不克隆、不自动发布。文件根节点必须包含 name 和 configString；CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。若失败信息含 stage=query_created_mcp 或 stage=mount_draft，保留已创建的 mcpId，先查询资源和 draft 并按 trace 排查挂载，禁止重复 create。同一员工的创建、保存和发布应串行执行。此语义依赖已部署自动挂载实现的 OpenAPI 与保留未传字段的 Studio saveDraft；仅升级 CLI 不会改变旧服务端行为。",
 		Tool: deapAgentMCPCreateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -569,9 +667,9 @@ func newDeapAgentMCPCreateCommand() *cobra.Command {
 		Call:   deapAgentCallMCPCreateFromFile,
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPCreateTool, CanonicalPath: "dingtalk-tag.create_mcp", CLIPath: "dingtalk-tag capability mcp create", PrimaryCLIPath: "dingtalk-tag capability mcp create", Group: "capability.mcp"},
-			Description: "通过本地 JSON 文件传入 name/configString，在 agentUuid 员工域创建 MCP 并自动挂载到草稿 MCP 列表；保留已有选择，不克隆、不自动发布。失败时按 stage 和已创建 mcpId 查询恢复，禁止重复 create。",
-			DryRun:      deapAgentDryRun, Interface: deapAgentMCPInterface(deapAgentMCPCreateTool),
-			Selection: contract.SelectionSpec{AgentSummary: "为指定数字员工创建 MCP 并自动挂载草稿，不自动发布", UseWhen: []string{"已知 agentUuid，需要新增 MCP 定义和鉴权配置、取得 mcpId 并加入员工草稿时"}, AvoidWhen: []string{"只需查询现有 MCP 时使用 capability mcp list 或 capability mcp query", "已创建资源但草稿挂载未确认时先查询并按原 mcpId 恢复，不要重复 create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json"}},
+			Description: "通过本地 JSON 文件传入 name/configString，CLI 内部先 check_mcp 校验，再在 agentUuid 员工域创建 MCP 并自动挂载到草稿 MCP 列表；保留已有选择，不克隆、不自动发布。失败时按 stage 和已创建 mcpId 查询资源与草稿、按 trace 排查挂载，禁止重复 create。",
+			DryRun:      deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "先调用 check_mcp 校验，再调用 create_mcp 创建并自动挂载草稿"},
+			Selection: contract.SelectionSpec{AgentSummary: "为指定数字员工创建 MCP 并自动挂载草稿，不自动发布", UseWhen: []string{"已知 agentUuid，需要新增 MCP 定义和鉴权配置、取得 mcpId 并加入员工草稿时"}, AvoidWhen: []string{"只需查询现有 MCP 时使用 capability mcp list 或 capability mcp query", "已创建资源但草稿挂载未确认时先查询资源与草稿并按 trace 排查，不要重复 create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
 				{Name: "config-file", Description: "本地 JSON 文件，字段展开到工具根节点，不对应单个 config 属性"},
@@ -620,7 +718,62 @@ func newDeapAgentMCPQueryCommand() *cobra.Command {
 	})
 }
 
-func deapAgentCallMCPCreateFromFile(_ *cobra.Command, tool string, args map[string]any) error {
+func newDeapAgentMCPUpdateCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use: "update", Short: "更新 MCP 启停状态或替换配置",
+		Long: "按 mcpId 更新草稿中的 MCP，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--config-file 提供新配置时，CLI 先内部调 check_mcp 只读连通性校验，通过才提交 update_mcp。文件根节点包含 name/configString 等 MCP 配置字段，凭据不进入命令行。--enabled 与 --config-file 至少提供一项。先 --dry-run 检查参数，再加 --yes。",
+		Tool: deapAgentMCPUpdateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{
+			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "mcp-id", Usage: "MCP ID", Bind: "mcpId", Required: true, Trim: true},
+			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）", Bind: "enabled", Kind: LeafBool},
+			{Name: "config-file", Usage: "可选配置 JSON 对象文件（最大 1 MiB；根节点 name/configString 必填；敏感值放 configString/envs）；提供时替换配置", Bind: "configFile", Trim: true, OmitEmpty: true},
+		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			hasEnabled := cmd.Flags().Changed("enabled")
+			rawPath, _ := cmd.Flags().GetString("config-file")
+			if !hasEnabled && strings.TrimSpace(rawPath) == "" {
+				return apperrors.NewValidation("update 至少需要提供 --enabled 或 --config-file 之一")
+			}
+			return nil
+		},
+		Call: deapAgentCallMCPUpdate,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPUpdateTool, CanonicalPath: "dingtalk-tag.update_mcp", CLIPath: "dingtalk-tag capability mcp update", PrimaryCLIPath: "dingtalk-tag capability mcp update", Group: "capability.mcp"},
+			Description: "按 mcpId 更新草稿 MCP 的启停状态或配置；提供新配置时 CLI 内部先 check_mcp 校验通过才提交，保持现有挂载，不自动发布。",
+			DryRun:      deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "提供配置时先调用 check_mcp 校验，再调用 update_mcp；仅改 enabled 时直接更新"},
+			Selection: contract.SelectionSpec{AgentSummary: "更新草稿 MCP 启停状态或配置", UseWhen: []string{"需要在不重建的前提下启用/禁用或修改已有 MCP 配置时"}, AvoidWhen: []string{"需要新增 MCP 时使用 capability mcp create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp update --agent-uuid <agentUuid> --mcp-id <mcpId> --config-file ./mcp.json --dry-run --format json"}},
+			Parameters: []contract.ParamDecl{
+				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
+				{Name: "mcp-id", Property: "mcpId", InterfaceType: "string"},
+				{Name: "enabled", Property: "enabled", InterfaceType: "boolean"},
+				{Name: "config-file", Description: "可选本地 JSON 文件，字段展开到工具根节点，不对应单个 config 属性"},
+			},
+		},
+	})
+}
+
+func newDeapAgentMCPDeleteCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use: "delete", Short: "删除 MCP 并清理草稿挂载",
+		Long: "按 mcpId 删除草稿中的 MCP 资源并清理其草稿挂载，不自动发布。这是不可逆写操作，先 --dry-run 检查参数，再加 --yes。",
+		Tool: deapAgentMCPDeleteTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{
+			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "mcp-id", Usage: "MCP ID", Bind: "mcpId", Required: true, Trim: true},
+		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPDeleteTool, CanonicalPath: "dingtalk-tag.delete_mcp", CLIPath: "dingtalk-tag capability mcp delete", PrimaryCLIPath: "dingtalk-tag capability mcp delete", Group: "capability.mcp"},
+			Description: "按 mcpId 删除草稿 MCP 资源并清理草稿挂载，不自动发布。",
+			DryRun:      deapAgentDryRun, Interface: deapAgentMCPInterface(deapAgentMCPDeleteTool),
+			Selection: contract.SelectionSpec{AgentSummary: "删除草稿 MCP 并清理挂载", UseWhen: []string{"确认不再需要某个 MCP，需要从资源和草稿挂载中移除时"}, AvoidWhen: []string{"只需临时禁用时用 capability mcp update --enabled=false"}, Examples: []string{"dws dingtalk-tag capability mcp delete --agent-uuid <agentUuid> --mcp-id <mcpId> --dry-run --format json"}},
+		},
+	})
+}
+
+func deapAgentCallMCPCreateFromFile(cmd *cobra.Command, tool string, args map[string]any) error {
 	rawPath, _ := args["configFile"].(string)
 	config, err := deapAgentReadJSONObjectFile(rawPath, "config-file")
 	if err != nil {
@@ -637,6 +790,9 @@ func deapAgentCallMCPCreateFromFile(_ *cobra.Command, tool string, args map[stri
 			args[key] = "[redacted]"
 		}
 		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	}
+	if err := deapAgentCheckMCP(cmd.Context(), stringArgument(args, "agentUuid"), config); err != nil {
+		return err
 	}
 	for key, value := range config {
 		args[key] = value
@@ -662,39 +818,60 @@ func deapAgentValidateMCPCreateConfig(config map[string]any) error {
 	return nil
 }
 
-func deapAgentCallWithProfileAndDraftFiles(cmd *cobra.Command, tool string, args map[string]any) error {
-	if err := deapAgentPrepareDraftFiles(cmd, args); err != nil {
+func deapAgentCallMCPUpdate(cmd *cobra.Command, tool string, args map[string]any) error {
+	rawPath, _ := args["configFile"].(string)
+	delete(args, "configFile")
+	if strings.TrimSpace(rawPath) == "" {
+		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	}
+	config, err := deapAgentReadJSONObjectFile(rawPath, "config-file")
+	if err != nil {
 		return err
 	}
-	return deapAgentCallWithProfile(cmd, tool, args)
+	if err := deapAgentValidateMCPCreateConfig(config); err != nil {
+		return err
+	}
+	if deps.Caller.DryRun() {
+		// Preview only field names with redacted placeholders; never pass secrets
+		// to the runner, which also logs dry-run arguments to stderr. check_mcp is
+		// skipped in dry-run so no live probe or credential leaves the machine.
+		for key := range config {
+			args[key] = "[redacted]"
+		}
+		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	}
+	if err := deapAgentCheckMCP(cmd.Context(), stringArgument(args, "agentUuid"), config); err != nil {
+		return err
+	}
+	for key, value := range config {
+		args[key] = value
+	}
+	return callMCPToolOnServer(deapAgentServerID, tool, args)
 }
 
-func deapAgentPrepareDraftFiles(cmd *cobra.Command, args map[string]any) error {
-	summaries := map[string]any{}
-	for _, item := range []struct {
-		argument string
-		flagName string
-		property string
-	}{
-		{"skillsFile", "skills-file", "skills"},
-		{"mcpsFile", "mcps-file", "mcps"},
-	} {
-		rawPath, ok := args[item.argument].(string)
-		if !ok || strings.TrimSpace(rawPath) == "" {
-			continue
+// deapAgentCheckMCP runs the read-only check_mcp probe before create/update commits.
+// It forwards only the connectivity-relevant fields and blocks the write when
+// the server reports the config invalid or unreachable.
+func deapAgentCheckMCP(ctx context.Context, agentUUID string, config map[string]any) error {
+	checkArgs := map[string]any{"agentUuid": agentUUID}
+	for _, key := range []string{"name", "configType", "configString", "envs"} {
+		if value, ok := config[key]; ok {
+			checkArgs[key] = value
 		}
-		value, err := deapAgentReadJSONArrayFile(rawPath, item.flagName)
-		if err != nil {
-			return err
-		}
-		delete(args, item.argument)
-		args[item.property] = value
-		summaries[item.property] = map[string]any{"provided": true, "count": len(value), "redacted": true}
 	}
-	if deps.Caller.DryRun() && len(summaries) > 0 {
-		for property, summary := range summaries {
-			args[property] = summary
-		}
+	responseText, err := callMCPToolReturnTextOnServer(ctx, deapAgentServerID, deapAgentMCPCheckTool, checkArgs)
+	if err != nil {
+		return fmt.Errorf("check_mcp 连通性校验失败: %w", err)
+	}
+	var envelope struct {
+		Success *bool `json:"success"`
+		IsError *bool `json:"isError"`
+	}
+	if err := json.Unmarshal([]byte(responseText), &envelope); err != nil {
+		return fmt.Errorf("check_mcp 响应格式非法，已阻止写入")
+	}
+	if envelope.Success == nil || !*envelope.Success || (envelope.IsError != nil && *envelope.IsError) {
+		return fmt.Errorf("check_mcp 连通性校验未通过，已阻止写入")
 	}
 	return nil
 }
@@ -709,18 +886,6 @@ func deapAgentReadJSONObjectFile(rawPath, flagName string) (map[string]any, erro
 		return nil, apperrors.NewValidation(fmt.Sprintf("参数 --%s 必须指向 JSON 对象文件", flagName))
 	}
 	return object, nil
-}
-
-func deapAgentReadJSONArrayFile(rawPath, flagName string) ([]any, error) {
-	value, err := deapAgentReadJSONFile(rawPath, flagName)
-	if err != nil {
-		return nil, err
-	}
-	array, ok := value.([]any)
-	if !ok {
-		return nil, apperrors.NewValidation(fmt.Sprintf("参数 --%s 必须指向 JSON 数组文件", flagName))
-	}
-	return array, nil
 }
 
 func deapAgentReadJSONFile(rawPath, flagName string) (any, error) {

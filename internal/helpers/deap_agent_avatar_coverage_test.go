@@ -153,11 +153,8 @@ func TestCrossPlatformCoverageDeapAgentProfileHelpersAndInvalidType(t *testing.T
 	if err := deapAgentCallWithProfile(cmd, deapAgentDetailTool, map[string]any{"agentUuid": "a-1"}); err != nil {
 		t.Fatalf("CallWithProfile err=%v", err)
 	}
-	if err := deapAgentCallWithProfileAndDraftFiles(cmd, deapAgentSaveDraftTool, map[string]any{"agentUuid": "a-1"}); err != nil {
-		t.Fatalf("CallWithProfileAndDraftFiles err=%v", err)
-	}
-	if len(caller.calls) != 2 {
-		t.Fatalf("calls = %d, want 2", len(caller.calls))
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(caller.calls))
 	}
 }
 
@@ -264,19 +261,6 @@ func TestCrossPlatformCoverageDeapAgentCreateAvatarCallBranches(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageDeapAgentSaveAvatarCallBranches(t *testing.T) {
-	t.Run("prepare draft files error", func(t *testing.T) {
-		dir := t.TempDir()
-		t.Chdir(dir)
-		if err := os.WriteFile("bad.json", []byte("{"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		newDeapAgentTestTree(t, false)
-		cmd := &cobra.Command{}
-		cmd.SetContext(context.Background())
-		if err := deapAgentCallSaveWithAvatar(cmd, deapAgentSaveDraftTool, map[string]any{"skillsFile": "./bad.json"}); err == nil {
-			t.Fatal("malformed skills file must fail prepareDraftFiles")
-		}
-	})
 	t.Run("validate error", func(t *testing.T) {
 		newDeapAgentTestTree(t, false)
 		cmd := &cobra.Command{}

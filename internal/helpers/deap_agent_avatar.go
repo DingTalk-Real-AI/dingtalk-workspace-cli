@@ -154,9 +154,6 @@ func deapAgentCallCreateWithAvatar(cmd *cobra.Command, tool string, args map[str
 }
 
 func deapAgentCallSaveWithAvatar(cmd *cobra.Command, tool string, args map[string]any) error {
-	if err := deapAgentPrepareDraftFiles(cmd, args); err != nil {
-		return err
-	}
 	deapAgentPrepareProfile(args)
 	avatarURL, local, err := deapAgentValidateAvatarURLInput(stringArgument(args, "avatarUrl"))
 	if err != nil {

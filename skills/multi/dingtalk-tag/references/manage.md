@@ -69,29 +69,15 @@ Flags:
   --prompt           人设 / System Prompt（≤5000 码点）
   其余可更新字段：name / description / avatar-url / dept-id /
   supervisor-user-id / main-program-type / response-mode
-  --skills-file      Skill 草稿配置 JSON 数组；不传保持原关联，显式 [] 才清空
-  --mcps-file        MCP 草稿配置 JSON 数组；不传保持原关联，显式 [] 才清空
 ```
 
-`save-draft` 是按字段更新：未传基础字段保持草稿原值。Skill 和 MCP 使用分开的 `skills` / `mcps` 用户契约；对应文件不传时保持原关联，显式空数组只清空该类别。成功响应与 `detail --type draft` 结构一致，用于立即确认保存结果。
+`save-draft` 只按字段更新数字员工基础草稿：未传字段保持原值。Skill/MCP 的创建、更新、删除统一使用 `dws dingtalk-tag capability skill|mcp ...`，本命令不接受完整 Skill/MCP 数组。成功响应与 `detail --type draft` 结构一致，用于立即确认保存结果。
 
 响应模式规则按合并后的草稿判断：`open_code` 必须至少有一个合法 `responseMode`，`local_agent` 可以没有。显式切换为 `open_code` 时 CLI 要求同时传 `--response-mode`；没有修改类型或响应模式时不要求用户重复回填，OpenAPI 会结合当前草稿做最终校验。
 
 `--avatar-url` 可传可公开访问的 HTTP(S) 地址，也可传本地图片路径。传本地文件时 CLI 复用 Skill 上传封装，自动取得临时上传凭证、完成 multipart 上传，再将 OSS URL 作为 `avatarUrl` 保存；不输出临时凭证，用户无需手工编排上传步骤。
 
-写操作，需用户确认：先 `--dry-run`，确认后加 `--yes`。
-
-关联文件格式示例：
-
-```json
-[{"skillId":"<skillId>","enabled":true,"attributes":{}}]
-```
-
-```json
-[{"mcpId":"<mcpId>","enabled":true,"config":{}}]
-```
-
-MCP 凭据只允许通过服务端支持的安全引用传入，不要把明文密钥写进关联文件或提交到代码库。
+写操作，需用户确认：先 `--dry-run`，确认后加 `--yes`。MCP 敏感配置只通过 capability MCP 的本地 `--config-file` 传入，不要拼进命令行或提交到代码库。
 
 ## publish — 发布
 
@@ -115,7 +101,7 @@ Usage:
 
 ## 硬约束
 
-- `save-draft` 只更新显式字段；`skills-file` / `mcps-file` 不传则保持原关联，显式 `[]` 只清空对应类别。
+- `save-draft` 只更新显式基础字段，不负责 Skill/MCP 挂载或资源生命周期。
 - `save-draft` / `publish` / `delete` 必须 `--dry-run` + 用户确认后再 `--yes`。
 - 不要传 `--org-id` / `--user-id`：identity 由可信登录态注入，不对 CLI 暴露。
 

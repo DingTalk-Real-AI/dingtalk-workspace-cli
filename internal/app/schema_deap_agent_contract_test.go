@@ -115,7 +115,6 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
 				"main-program-type":  "type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
-				"skills-file":        "skills", "mcps-file": "mcps",
 			},
 		},
 		"dingtalk-tag.publish_digital_employee": {
@@ -209,6 +208,14 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 			"dingtalk-tag capability skill create", "", "available",
 			map[string]string{"agent-uuid": "agentUuid", "file": "file"},
 		},
+		"dingtalk-tag.update_skill": {
+			"dingtalk-tag capability skill update", "", "available",
+			map[string]string{"agent-uuid": "agentUuid", "skill-id": "skillId", "enabled": "enabled", "file": "fileUrl"},
+		},
+		"dingtalk-tag.delete_skill": {
+			"dingtalk-tag capability skill delete", "delete_skill", "available",
+			map[string]string{"agent-uuid": "agentUuid", "skill-id": "skillId"},
+		},
 		"dingtalk-tag.list_skills": {
 			"dingtalk-tag capability skill list", "list_skills", "available",
 			map[string]string{"agent-uuid": "agentUuid", "snapshot": "snapshot"},
@@ -218,8 +225,16 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 			map[string]string{"agent-uuid": "agentUuid", "skill-id": "skillId", "snapshot": "snapshot"},
 		},
 		"dingtalk-tag.create_mcp": {
-			"dingtalk-tag capability mcp create", "create_mcp", "available",
+			"dingtalk-tag capability mcp create", "", "available",
 			map[string]string{"agent-uuid": "agentUuid", "config-file": ""},
+		},
+		"dingtalk-tag.update_mcp": {
+			"dingtalk-tag capability mcp update", "", "available",
+			map[string]string{"agent-uuid": "agentUuid", "mcp-id": "mcpId", "enabled": "enabled", "config-file": "configFile"},
+		},
+		"dingtalk-tag.delete_mcp": {
+			"dingtalk-tag capability mcp delete", "delete_mcp", "available",
+			map[string]string{"agent-uuid": "agentUuid", "mcp-id": "mcpId"},
 		},
 		"dingtalk-tag.list_mcps": {
 			"dingtalk-tag capability mcp list", "list_mcps", "available",

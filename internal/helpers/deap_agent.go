@@ -385,7 +385,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "save-draft",
 		Short:     "更新数字员工草稿",
-		Long:      "更新指定数字员工草稿但不发布。只更新显式传入的字段，未传字段保持不变；skills-file 和 mcps-file 分开表达 Skill/MCP，只有显式提供空数组文件才清空对应类别。dept-id 不传时保持原部门；avatar-url 可传公网 HTTP(S) 地址或本地图片，本地图片由 CLI 自动上传。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
+		Long:      "更新指定数字员工的基础信息草稿但不发布，只更新显式传入的字段，未传字段保持不变。Skill/MCP 的创建、内容更新、启停和删除统一使用 capability skill|mcp create|update|delete，CLI 会维护草稿挂载；普通用户无需在 save-draft 中手工拼完整 skills/mcps 数组。dept-id 不传时保持原部门；avatar-url 可传公网 HTTP(S) 地址或本地图片，本地图片由 CLI 自动上传。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
 		Tool:      deapAgentSaveDraftTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -399,8 +399,6 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
 			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；无特殊要求时省略（OpenAPI 默认 open_code），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；切换为 open_code 时至少提供一个，local_agent 可省略", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
-			{Name: "skills-file", Usage: "Skill 草稿配置 JSON 数组文件，元素为 skillId/enabled/attributes；不传保持原配置，显式空数组才清空", Bind: "skillsFile", Trim: true, OmitEmpty: true},
-			{Name: "mcps-file", Usage: "MCP 草稿配置 JSON 数组文件，元素为 mcpId/enabled/config；不传保持原配置，显式空数组才清空，凭据只允许使用安全引用", Bind: "mcpsFile", Trim: true, OmitEmpty: true},
 		},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high",
@@ -432,21 +430,19 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage save-draft", PrimaryCLIPath: "dingtalk-tag manage save-draft",
 				Group: "manage",
 			},
-			Description: "按显式参数更新数字员工草稿，未传字段保持不变；skills 和 mcps 分开输入，OpenAPI 合并下游关联；成功返回 detail 同构的完整草稿。",
+			Description: "按显式参数更新数字员工基础信息草稿，未传字段保持不变；Skill/MCP 资源及草稿挂载由 capability skill|mcp 生命周期命令管理；成功返回 detail 同构的完整草稿。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentSaveDraftTool),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "更新数字员工草稿并回读完整详情",
-				UseWhen:      []string{"需要更新基础信息或分别保存 Skill/MCP 草稿关联时"},
-				AvoidWhen:    []string{"准备直接上线时仍需另行执行 publish"},
+				AgentSummary: "更新数字员工基础信息草稿并回读完整详情",
+				UseWhen:      []string{"需要更新名称、职责、头像、部门、人设或运行配置时"},
+				AvoidWhen:    []string{"需要管理 Skill/MCP 资源或挂载时使用 capability skill|mcp", "准备直接上线时仍需另行执行 publish"},
 				Examples:     []string{`dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --name "值班助手" --description "处理值班问题" --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
 				{Name: "main-program-type", Property: "type", Enum: deapAgentMainProgramTypeValues, Description: "MCP 字段为 type；无特殊要求时省略（OpenAPI 默认 open_code），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；切换为 open_code 时必须至少提供一个，local_agent 可省略；未修改类型和响应模式时由 OpenAPI 按当前草稿校验"},
-				{Name: "skills-file", Property: "skills", InterfaceType: "array"},
-				{Name: "mcps-file", Property: "mcps", InterfaceType: "array"},
 			},
 		},
 	})

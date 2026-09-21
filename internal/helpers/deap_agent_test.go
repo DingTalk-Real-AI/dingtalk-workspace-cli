@@ -251,6 +251,60 @@ func TestCrossPlatformCoverageDevDeapAgentSkillCreateUsesUploadFacadeAndSafeOutp
 	}
 }
 
+func TestCrossPlatformCoverageDevDeapAgentSkillUpdateUploadsReplacementZIP(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	t.Chdir(t.TempDir())
+	file, err := os.Create("skill.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(file)
+	entry, err := writer.Create("SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("# Updated Weather")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	fileURL := "https://signed.example/replacement-secret"
+	uploader := &deapAgentSkillUploaderStub{fileURL: fileURL}
+	testseam.Swap(t, &deapAgentSkillUploader, deapAgentSkillPackageUploader(uploader))
+	deap := deapHandler{}.Command(&captureRunner{})
+	update, rest, err := deap.Find([]string{"capability", "skill", "update"})
+	if err != nil || len(rest) != 0 {
+		t.Fatalf("find skill update: command=%v rest=%v err=%v", update, rest, err)
+	}
+	update.Flags().Bool("yes", false, "test confirmation")
+	for name, value := range map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1", "file": "./skill.zip", "yes": "true"} {
+		if err := update.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := update.RunE(update, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+	if uploader.gotAgentUUID != "agent-1" || !strings.HasSuffix(uploader.gotPath, "skill.zip") {
+		t.Fatalf("upload facade agent=%q file=%q", uploader.gotAgentUUID, uploader.gotPath)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("local ZIP update made %d MCP calls, want 1", len(caller.calls))
+	}
+	call := caller.calls[0]
+	if call.toolName != deapAgentSkillUpdateTool || call.args["fileUrl"] != fileURL {
+		t.Fatalf("update call = %#v", call)
+	}
+	if _, ok := call.args["enabled"]; ok {
+		t.Fatalf("omitted --enabled unexpectedly changed state: %#v", call.args)
+	}
+}
+
 func TestCrossPlatformCoverageDevDeapAgentSkillCreateLabelsStagesAndRedactsURLs(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
@@ -588,8 +642,24 @@ type deapAgentCall struct {
 	args      map[string]any
 }
 
+func TestCrossPlatformCoverageDevDeapAgentCapabilityLifecycleSurface(t *testing.T) {
+	root := deapHandler{}.Command(&captureRunner{})
+	for _, resource := range []string{"skill", "mcp"} {
+		for _, operation := range []string{"create", "update", "delete", "list", "query"} {
+			command, rest, err := root.Find([]string{"capability", resource, operation})
+			if err != nil || len(rest) != 0 || command.Name() != operation {
+				t.Errorf("%s %s resolution: command=%v rest=%v err=%v", resource, operation, command, rest, err)
+			}
+		}
+	}
+	if command, rest, err := root.Find([]string{"capability", "mcp", "check"}); err == nil && len(rest) == 0 && command.Name() == "check" {
+		t.Fatal("check_mcp must remain internal and must not be exposed as a CLI command")
+	}
+}
+
 func TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
+	caller.resultText = `{"success":true,"isError":false}`
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
 	if err != nil {
@@ -602,27 +672,28 @@ func TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContract
 	if err := os.WriteFile("mcp.json", []byte(`{"name":"weather","description":"查询天气","detailIntro":"天气 MCP","userQuestionTips":["请输入城市"],"configType":"JSON","configString":"{\"url\":\"https://mcp.example.test\",\"token\":\"secret\"}","envs":{"API_TOKEN":"env-secret"},"toolsDisabled":{"search":false}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("skills.json", []byte(`[{"skillId":"skill-1","enabled":true,"attributes":{"configDefinitions":{"city":"hangzhou"}}}]`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile("mcps.json", []byte(`[{"mcpId":"mcp-1","enabled":true,"config":{"credentialRef":"cred-1"}}]`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
+	checkArgs := map[string]any{"agentUuid": "agent-1", "name": "weather", "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}}
 	cases := []struct {
 		path      []string
 		tool      string
+		preTool   string
 		flags     map[string]string
 		wantArgs  map[string]any
+		preArgs   map[string]any
 		confirmed bool
 	}{
+		{path: []string{"capability", "skill", "update"}, tool: "update_skill", flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1", "enabled": "false"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skillId": "skill-1", "enabled": false}, confirmed: true},
+		{path: []string{"capability", "skill", "delete"}, tool: "delete_skill", flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skillId": "skill-1"}, confirmed: true},
 		{path: []string{"capability", "skill", "list"}, tool: "list_skills", flags: map[string]string{"agent-uuid": "agent-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "snapshot": "draft"}},
 		{path: []string{"capability", "skill", "query"}, tool: "query_skill", flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1", "snapshot": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skillId": "skill-1", "snapshot": "published"}},
-		{path: []string{"capability", "mcp", "create"}, tool: "create_mcp", flags: map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "name": "weather", "description": "查询天气", "detailIntro": "天气 MCP", "userQuestionTips": []any{"请输入城市"}, "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}, "toolsDisabled": map[string]any{"search": false}}, confirmed: true},
+		{path: []string{"capability", "mcp", "create"}, tool: "create_mcp", preTool: "check_mcp", flags: map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "name": "weather", "description": "查询天气", "detailIntro": "天气 MCP", "userQuestionTips": []any{"请输入城市"}, "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}, "toolsDisabled": map[string]any{"search": false}}, preArgs: checkArgs, confirmed: true},
+		{path: []string{"capability", "mcp", "update"}, tool: "update_mcp", preTool: "check_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1", "config-file": "./mcp.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1", "name": "weather", "description": "查询天气", "detailIntro": "天气 MCP", "userQuestionTips": []any{"请输入城市"}, "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}, "toolsDisabled": map[string]any{"search": false}}, preArgs: checkArgs, confirmed: true},
+		{path: []string{"capability", "mcp", "update"}, tool: "update_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1", "enabled": "false"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1", "enabled": false}, confirmed: true},
+		{path: []string{"capability", "mcp", "delete"}, tool: "delete_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1"}, confirmed: true},
 		{path: []string{"capability", "mcp", "list"}, tool: "list_mcps", flags: map[string]string{"agent-uuid": "agent-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "keywords": "", "page": 1, "pageSize": 20}},
 		{path: []string{"capability", "mcp", "query"}, tool: "query_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1"}},
 		{path: []string{"manage", "detail"}, tool: "get_digital_employee_detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "type": "published"}},
-		{path: []string{"manage", "save-draft"}, tool: "update_digital_employee_draft", flags: map[string]string{"agent-uuid": "agent-1", "skills-file": "./skills.json", "mcps-file": "./mcps.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skills": []any{map[string]any{"skillId": "skill-1", "enabled": true, "attributes": map[string]any{"configDefinitions": map[string]any{"city": "hangzhou"}}}}, "mcps": []any{map[string]any{"mcpId": "mcp-1", "enabled": true, "config": map[string]any{"credentialRef": "cred-1"}}}}, confirmed: true},
+		{path: []string{"manage", "save-draft"}, tool: "update_digital_employee_draft", flags: map[string]string{"agent-uuid": "agent-1", "name": "值班助手"}, wantArgs: map[string]any{"agentUuid": "agent-1", "name": "值班助手"}, confirmed: true},
 	}
 
 	for _, tc := range cases {
@@ -646,10 +717,23 @@ func TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContract
 			if runErr := leaf.RunE(leaf, nil); runErr != nil {
 				t.Fatalf("RunE() error = %v", runErr)
 			}
-			if len(caller.calls) != 1 {
-				t.Fatalf("MCP call count = %d, want 1", len(caller.calls))
+			wantCalls := 1
+			if tc.preTool != "" {
+				wantCalls++
 			}
-			call := caller.calls[0]
+			if len(caller.calls) != wantCalls {
+				t.Fatalf("MCP call count = %d, want %d", len(caller.calls), wantCalls)
+			}
+			if tc.preTool != "" {
+				preCall := caller.calls[0]
+				if preCall.productID != deapAgentServerID || preCall.toolName != tc.preTool {
+					t.Fatalf("pre-route = %s/%s, want %s/%s", preCall.productID, preCall.toolName, deapAgentServerID, tc.preTool)
+				}
+				if !reflect.DeepEqual(preCall.args, tc.preArgs) {
+					t.Fatalf("pre-args = %#v, want %#v", preCall.args, tc.preArgs)
+				}
+			}
+			call := caller.calls[len(caller.calls)-1]
 			if call.productID != deapAgentServerID || call.toolName != tc.tool {
 				t.Fatalf("route = %s/%s, want %s/%s", call.productID, call.toolName, deapAgentServerID, tc.tool)
 			}
@@ -672,9 +756,7 @@ func TestCrossPlatformCoverageDevDeapAgentConfigFilesStayRedactedInDryRun(t *tes
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldDir) })
 	files := map[string]string{
-		"mcp.json":    `{"name":"weather","description":"查询天气","userQuestionTips":["请输入城市"],"configType":"JSON","configString":"{\"token\":\"mcp-secret\"}","envs":{"API_TOKEN":"env-secret"},"toolsDisabled":{"search":false}}`,
-		"skills.json": `[{"skillId":"skill-1","attributes":{"configDefinitions":{"apiToken":"skill-secret"}}}]`,
-		"mcps.json":   `[{"mcpId":"mcp-1","credential":{"password":"draft-secret"}}]`,
+		"mcp.json": `{"name":"weather","description":"查询天气","userQuestionTips":["请输入城市"],"configType":"JSON","configString":"{\"token\":\"mcp-secret\"}","envs":{"API_TOKEN":"env-secret"},"toolsDisabled":{"search":false}}`,
 	}
 	for name, body := range files {
 		if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
@@ -703,10 +785,10 @@ func TestCrossPlatformCoverageDevDeapAgentConfigFilesStayRedactedInDryRun(t *tes
 		return output.String()
 	}
 
-	mcpOutput := run([]string{"capability", "mcp", "create"}, map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"})
-	draftOutput := run([]string{"manage", "save-draft"}, map[string]string{"agent-uuid": "agent-1", "skills-file": "./skills.json", "mcps-file": "./mcps.json"})
-	for label, got := range map[string]string{"mcp create": mcpOutput, "save-draft": draftOutput} {
-		for _, secret := range []string{"mcp-secret", "env-secret", "skill-secret", "draft-secret"} {
+	createOutput := run([]string{"capability", "mcp", "create"}, map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"})
+	updateOutput := run([]string{"capability", "mcp", "update"}, map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1", "config-file": "./mcp.json"})
+	for label, got := range map[string]string{"mcp create": createOutput, "mcp update": updateOutput} {
+		for _, secret := range []string{"mcp-secret", "env-secret"} {
 			if strings.Contains(got, secret) {
 				t.Fatalf("%s dry-run leaked %q: %s", label, secret, got)
 			}
@@ -720,58 +802,77 @@ func TestCrossPlatformCoverageDevDeapAgentConfigFilesStayRedactedInDryRun(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageDevDeapAgentSaveDraftDistinguishesAbsentAndExplicitEmptyConfigs(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentMCPCheckFailureBlocksUpdate(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
-	tempDir := t.TempDir()
-	oldDir, err := os.Getwd()
+	caller.resultText = `{"success":false}`
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("mcp.json", []byte(`{"name":"weather","configType":"JSON","configString":"{\"url\":\"https://mcp.example.test\"}"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deap := deapHandler{}.Command(&captureRunner{})
+	update, _, err := deap.Find([]string{"capability", "mcp", "update"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(oldDir) })
-	if err := os.WriteFile("empty.json", []byte(`[]`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	run := func(flags map[string]string) map[string]any {
-		t.Helper()
-		caller.calls = nil
-		deap := deapHandler{}.Command(&captureRunner{})
-		save, _, findErr := deap.Find([]string{"manage", "save-draft"})
-		if findErr != nil {
-			t.Fatal(findErr)
+	update.Flags().Bool("yes", false, "test confirmation")
+	for name, value := range map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1", "config-file": "./mcp.json", "yes": "true"} {
+		if err := update.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
 		}
-		save.Flags().Bool("yes", false, "test confirmation")
-		flags["yes"] = "true"
-		for name, value := range flags {
-			if setErr := save.Flags().Set(name, value); setErr != nil {
-				t.Fatal(setErr)
+	}
+	runErr := update.RunE(update, nil)
+	if runErr == nil || !strings.Contains(runErr.Error(), "check_mcp") {
+		t.Fatalf("check failure error = %v", runErr)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentMCPCheckTool {
+		t.Fatalf("failed check must block update: %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange(t *testing.T) {
+	for _, tc := range []struct {
+		path  []string
+		flags map[string]string
+	}{
+		{path: []string{"capability", "skill", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1"}},
+		{path: []string{"capability", "mcp", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}},
+	} {
+		t.Run(strings.Join(tc.path, "_"), func(t *testing.T) {
+			caller, _ := newDeapAgentTestTree(t, false)
+			deap := deapHandler{}.Command(&captureRunner{})
+			update, _, err := deap.Find(tc.path)
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
-		if runErr := save.RunE(save, nil); runErr != nil {
-			t.Fatal(runErr)
-		}
-		if len(caller.calls) != 1 {
-			t.Fatalf("MCP call count = %d, want 1", len(caller.calls))
-		}
-		return caller.calls[0].args
+			for name, value := range tc.flags {
+				if err := update.Flags().Set(name, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			runErr := update.RunE(update, nil)
+			if runErr == nil || !strings.Contains(runErr.Error(), "至少需要提供") {
+				t.Fatalf("missing change error = %v", runErr)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid update made remote calls: %#v", caller.calls)
+			}
+		})
 	}
+}
 
-	absent := run(map[string]string{"agent-uuid": "agent-1"})
-	if _, ok := absent["skills"]; ok {
-		t.Fatalf("omitted --skills-file unexpectedly changed skills: %#v", absent)
+func TestCrossPlatformCoverageDevDeapAgentSaveDraftDoesNotExposeCapabilityArrays(t *testing.T) {
+	deap := deapHandler{}.Command(&captureRunner{})
+	save, _, err := deap.Find([]string{"manage", "save-draft"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := absent["mcps"]; ok {
-		t.Fatalf("omitted --mcps-file unexpectedly changed mcps: %#v", absent)
+	for _, name := range []string{"skills-file", "mcps-file"} {
+		if save.Flags().Lookup(name) != nil {
+			t.Fatalf("save-draft unexpectedly exposes --%s", name)
+		}
 	}
-	empty := run(map[string]string{"agent-uuid": "agent-1", "skills-file": "./empty.json", "mcps-file": "./empty.json"})
-	if skills, ok := empty["skills"].([]any); !ok || len(skills) != 0 {
-		t.Fatalf("explicit empty skills = %#v, want []", empty["skills"])
-	}
-	if mcps, ok := empty["mcps"].([]any); !ok || len(mcps) != 0 {
-		t.Fatalf("explicit empty mcps = %#v, want []", empty["mcps"])
+	if !strings.Contains(save.Long, "capability skill|mcp") {
+		t.Fatalf("save-draft help does not direct capability management: %s", save.Long)
 	}
 }
 
@@ -1303,9 +1404,9 @@ func TestCrossPlatformCoverageDevDeapAgentHelpExplainsFullReplacementAndTraceAut
 	if helpErr := save.Help(); helpErr != nil {
 		t.Fatal(helpErr)
 	}
-	if !strings.Contains(save.Long, "未传字段保持不变") || !strings.Contains(save.Long, "skills-file") ||
-		!strings.Contains(save.Long, "mcps-file") || !strings.Contains(save.Long, "detail 一致") {
-		t.Fatalf("save-draft help does not explain patch and complete response semantics: %q", save.Long)
+	if !strings.Contains(save.Long, "未传字段保持不变") || !strings.Contains(save.Long, "capability skill|mcp") ||
+		!strings.Contains(save.Long, "无需") || !strings.Contains(save.Long, "detail 一致") {
+		t.Fatalf("save-draft help does not explain patch, capability, and complete response semantics: %q", save.Long)
 	}
 	trace := deapFindLeaf(t, root, "trace")
 	final, ok := contractfinal.RuntimeContractFinal(trace)

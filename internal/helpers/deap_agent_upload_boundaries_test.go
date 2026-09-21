@@ -110,9 +110,8 @@ func TestCrossPlatformCoverageEmployeeConfigFileShapeAndSize(t *testing.T) {
 			}
 		}
 		_, objectErr := deapAgentReadJSONObjectFile(name, "config-file")
-		_, arrayErr := deapAgentReadJSONArrayFile(name, "skills-file")
-		if (objectErr == nil) != (name == "object.json") || (arrayErr == nil) != (name == "array.json") {
-			t.Fatalf("%s object=%v array=%v", name, objectErr, arrayErr)
+		if (objectErr == nil) != (name == "object.json") {
+			t.Fatalf("%s object=%v", name, objectErr)
 		}
 	}
 	if _, err := deapAgentReadJSONFile("invalid\x00.json", "config-file"); err == nil {

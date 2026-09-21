@@ -157,12 +157,12 @@ func TestCrossPlatformCoverageEmployeeSkillCredentialAndReadBoundaries(t *testin
 		t.Fatal(err)
 	}
 	testseam.Swap(t, &deapAgentReadFile, func(string) ([]byte, error) { return nil, errors.New("file replaced") })
-	if _, err := deapAgentReadJSONFile("config.json", "skills-file"); err == nil {
+	if _, err := deapAgentReadJSONFile("config.json", "config-file"); err == nil {
 		t.Fatal("read failure accepted")
 	}
-	cmd := newDeapAgentSkillCreateCommand()
+	cmd := newDeapAgentMCPUpdateCommand()
 	cmd.SetContext(context.Background())
-	if err := deapAgentCallWithProfileAndDraftFiles(cmd, "fixture", map[string]any{"skillsFile": "missing.json"}); err == nil {
-		t.Fatal("unreadable draft accepted")
+	if err := deapAgentCallMCPUpdate(cmd, deapAgentMCPUpdateTool, map[string]any{"configFile": "missing.json"}); err == nil {
+		t.Fatal("unreadable MCP update config accepted")
 	}
 }
