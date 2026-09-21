@@ -15,6 +15,7 @@ var (
 	skillPathRenameNoReplace  = renameSkillPathNoReplace
 	skillPathCopy             = copySkillPathLexically
 	skillPathVerify           = verifySkillPathCopy
+	skillPathCopyLink         = copySkillPathLink
 	skillPathRemoveAll        = os.RemoveAll
 	skillPathMkdirAll         = os.MkdirAll
 	skillPathMkdirTemp        = os.MkdirTemp
@@ -85,7 +86,7 @@ func moveSkillPathRecoverably(src, dst string) (err error) {
 	if err != nil {
 		return fmt.Errorf("检查跨设备 Skill staging 失败 %s: %w", stage, err)
 	}
-	if stageInfo.IsDir() {
+	if stageInfo.IsDir() && !isSkillPathLink(stageInfo.Mode()) {
 		// Darwin refuses to rename a read-only directory even when both parent
 		// directories are writable. The exact source mode was verified above;
 		// temporarily add owner access for publication, then restore it before
@@ -99,7 +100,7 @@ func moveSkillPathRecoverably(src, dst string) (err error) {
 	if _, err := skillPathRenameNoReplace(stage, dst); err != nil {
 		return fmt.Errorf("发布跨设备 Skill 备份失败 %s: %w", dst, err)
 	}
-	if stageInfo.IsDir() {
+	if stageInfo.IsDir() && !isSkillPathLink(stageInfo.Mode()) {
 		if err := skillPathChmod(dst, stageInfo.Mode().Perm()); err != nil {
 			return fmt.Errorf("恢复已发布 Skill 目录权限失败 %s: %w", dst, err)
 		}
@@ -146,7 +147,7 @@ func prepareSkillPathTreeRemoval(root string) ([]skillPathDirMode, error) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() || isSkillPathLink(entry.Type()) {
 			return nil
 		}
 		info, err := entry.Info()
@@ -210,6 +211,12 @@ func copySkillPathLexically(src, dst string) error {
 		return err
 	}
 	switch {
+	case isSkillPathLink(info.Mode()):
+		target, err := skillPathReadlink(src)
+		if err != nil {
+			return err
+		}
+		return skillPathCopyLink(target, dst, info.Mode())
 	case info.IsDir():
 		// Staging must remain writable while children are copied. Restore the
 		// source mode only after the directory is complete so read-only Skill
@@ -227,12 +234,6 @@ func copySkillPathLexically(src, dst string) error {
 			}
 		}
 		return os.Chmod(dst, info.Mode().Perm())
-	case info.Mode()&os.ModeSymlink != 0:
-		target, err := skillPathReadlink(src)
-		if err != nil {
-			return err
-		}
-		return skillPathSymlink(target, dst)
 	case info.Mode().IsRegular():
 		return copyRegularSkillFile(src, dst, info.Mode().Perm())
 	default:
@@ -269,6 +270,23 @@ func verifySkillPathCopy(src, dst string) error {
 	if err != nil {
 		return err
 	}
+	if isSkillPathLink(srcInfo.Mode()) || isSkillPathLink(dstInfo.Mode()) {
+		if !isSkillPathLink(srcInfo.Mode()) || !isSkillPathLink(dstInfo.Mode()) {
+			return fmt.Errorf("路径类型不一致: %s (%s) != %s (%s)", src, srcInfo.Mode(), dst, dstInfo.Mode())
+		}
+		srcTarget, err := skillPathReadlink(src)
+		if err != nil {
+			return err
+		}
+		dstTarget, err := skillPathReadlink(dst)
+		if err != nil {
+			return err
+		}
+		if srcTarget != dstTarget {
+			return fmt.Errorf("符号链接目标不一致: %q != %q", srcTarget, dstTarget)
+		}
+		return nil
+	}
 	if srcInfo.Mode()&os.ModeType != dstInfo.Mode()&os.ModeType {
 		return fmt.Errorf("路径类型不一致: %s (%s) != %s (%s)", src, srcInfo.Mode(), dst, dstInfo.Mode())
 	}
@@ -295,19 +313,6 @@ func verifySkillPathCopy(src, dst string) error {
 			if err := verifySkillPathCopy(filepath.Join(src, name), filepath.Join(dst, name)); err != nil {
 				return err
 			}
-		}
-		return nil
-	case srcInfo.Mode()&os.ModeSymlink != 0:
-		srcTarget, err := skillPathReadlink(src)
-		if err != nil {
-			return err
-		}
-		dstTarget, err := skillPathReadlink(dst)
-		if err != nil {
-			return err
-		}
-		if srcTarget != dstTarget {
-			return fmt.Errorf("符号链接目标不一致: %q != %q", srcTarget, dstTarget)
 		}
 		return nil
 	case srcInfo.Mode().IsRegular():
