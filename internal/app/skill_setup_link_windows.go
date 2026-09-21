@@ -93,6 +93,20 @@ func skillSetupLinkTarget(realTarget, relativeTarget string) string {
 	return realTarget
 }
 
+func isSkillSetupCurrentCanonicalAdapter(path, canonicalTarget string) bool {
+	if !samePhysicalSkillSetupPath(path, canonicalTarget) {
+		return false
+	}
+	info, err := skillSetupLstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular == 0 {
+		return false
+	}
+	if _, err := skillSetupReadlink(path); err != nil {
+		return false
+	}
+	return validateSkillSetupLink(path) == nil
+}
+
 func junctionSubstituteName(target string) string {
 	var prefix, clean string
 	if strings.HasPrefix(target, `\\?\UNC\`) {

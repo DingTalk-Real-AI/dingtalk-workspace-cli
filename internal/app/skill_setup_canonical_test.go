@@ -86,6 +86,12 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 				t.Fatalf("link %s lstat failed: %v", link, err)
 			}
 			if runtime.GOOS == "windows" {
+				if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular == 0 {
+					t.Fatalf("windows link %s mode = %v, want junction (irregular, non-symlink)", link, info.Mode())
+				}
+				if _, err := os.Readlink(link); err != nil {
+					t.Fatalf("windows junction %s readlink error = %v", link, err)
+				}
 				statInfo, err := os.Stat(link)
 				if err != nil || !statInfo.IsDir() {
 					t.Fatalf("windows junction %s stat = %#v, %v", link, statInfo, err)
@@ -115,6 +121,12 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 			t.Fatalf("idempotent setup %s lstat failed: %v", agent, err)
 		}
 		if runtime.GOOS == "windows" {
+			if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular == 0 {
+				t.Fatalf("idempotent setup windows link %s mode = %v, want junction", agent, info.Mode())
+			}
+			if _, err := os.Readlink(link); err != nil {
+				t.Fatalf("idempotent setup windows junction %s readlink error = %v", agent, err)
+			}
 			statInfo, err := os.Stat(link)
 			if err != nil || !statInfo.IsDir() {
 				t.Fatalf("idempotent setup windows junction %s stat = %#v, %v", link, statInfo, err)
@@ -309,7 +321,6 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 		skillIsDir   bool
 		failOpen     bool
 		failTemp     bool
-		failPrep     bool
 		failSecond   bool
 	}{
 		{name: "mono stat error", mode: skillSetupModeMono, failStat: true},
@@ -319,7 +330,6 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 		{name: "skill.md is directory", skillIsDir: true},
 		{name: "skill entry read", failOpen: true},
 		{name: "staging temp error", failTemp: true},
-		{name: "staging prep error", failPrep: true},
 		{name: "staging cleanup second link error", failSecond: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -358,15 +368,6 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 						return "", errors.New("temp error")
 					}
 					return os.MkdirTemp(dir, pattern)
-				})
-			}
-			if tc.failPrep {
-				originalRemoveAll := skillSetupRemoveAll
-				testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
-					if strings.Contains(path, "staging-") && stagedPath == "" {
-						return errors.New("prep error")
-					}
-					return originalRemoveAll(path)
 				})
 			}
 			originalStat := skillSetupStat
@@ -567,7 +568,100 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		}
 	})
 
-	t.Run("post-publish staged cleanup warning", func(t *testing.T) {
+	t.Run("staging placeholder prep error blocks fallback", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		skillSrc := filepath.Join(src, "dingtalk-chat")
+		if err := os.MkdirAll(skillSrc, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		origRemoveAll := skillSetupRemoveAll
+		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			if strings.Contains(path, "staging-") {
+				return errors.New("mock prep error")
+			}
+			return origRemoveAll(path)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil {
+			t.Fatalf("unexpected fatal plan error: %v", err)
+		}
+		if installed != 1 || skipped != 1 {
+			t.Fatalf("execute = installed %d, skipped %d; want 1, 1", installed, skipped)
+		}
+		if strings.Contains(errOut.String(), "自动改用兼容安装") {
+			t.Fatalf("prep failure must NOT enter compatibility fallback, got: %s", errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "准备 Skill staging 路径失败") || !strings.Contains(errOut.String(), "mock prep error") {
+			t.Fatalf("prep error must be visible in output, got: %s", errOut.String())
+		}
+	})
+
+	t.Run("un-published staged item cleanup failure on publish error", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		for _, name := range []string{"dingtalk-chat", "dingtalk-shared"} {
+			s := filepath.Join(src, name)
+			if err := os.MkdirAll(s, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(s, "SKILL.md"), []byte(name), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		publishStarted := false
+		origPublish := skillSetupPublishPath
+		testseam.Swap(t, &skillSetupPublishPath, func(staged, dest string) (upgrade.SkillPathPublication, error) {
+			if strings.Contains(dest, ".claude") {
+				publishStarted = true
+				if strings.Contains(dest, "dingtalk-chat") {
+					return upgrade.SkillPathPublication{}, errors.New("mock publish error")
+				}
+			}
+			return origPublish(staged, dest)
+		})
+		origRemoveAll := skillSetupRemoveAll
+		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			if publishStarted && strings.Contains(path, "dingtalk-shared.staging-") {
+				return errors.New("mock un-published cleanup error")
+			}
+			return origRemoveAll(path)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat", "dingtalk-shared"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		_, _, err = executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil {
+			t.Fatalf("unexpected plan fatal error: %v", err)
+		}
+		if !strings.Contains(errOut.String(), "mock un-published cleanup error") {
+			t.Fatalf("un-published cleanup error must be in errOut, got: %s", errOut.String())
+		}
+	})
+
+	t.Run("successful publish does not delete staged paths", func(t *testing.T) {
 		home := t.TempDir()
 		canonical := filepath.Join(home, ".agents", "skills")
 		claude := filepath.Join(home, ".claude", "skills")
@@ -591,10 +685,12 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			}
 			return res, err
 		})
+
+		var postPublishRemovals []string
 		origRemoveAll := skillSetupRemoveAll
 		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
-			if publishDone && strings.Contains(path, "staging-") {
-				return errors.New("mock post-publish staged item cleanup error")
+			if publishDone {
+				postPublishRemovals = append(postPublishRemovals, path)
 			}
 			return origRemoveAll(path)
 		})
@@ -604,15 +700,142 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			t.Fatal(err)
 		}
 		var out, errOut bytes.Buffer
-		_, _, err = executeSkillSetupPlan(plan, &out, &errOut)
-		if err == nil {
-			t.Fatal("expected executeSkillSetupPlan to return error when post-publish staging cleanup fails")
+		installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil || installed != 2 || skipped != 0 {
+			t.Fatalf("execute = installed %d, skipped %d, err %v", installed, skipped, err)
 		}
-		if !strings.Contains(err.Error(), "mock post-publish staged item cleanup error") {
-			t.Fatalf("expected post-publish cleanup error in returned error, got: %v", err)
+		for _, call := range postPublishRemovals {
+			if strings.Contains(call, "dingtalk-chat.staging-") {
+				t.Fatalf("successfully published staged path must NOT be removed via RemoveAll: %s", call)
+			}
 		}
-		if !strings.Contains(errOut.String(), "mock post-publish staged item cleanup error") {
-			t.Fatalf("post-publish cleanup error must be reported in errOut, got: %s", errOut.String())
+	})
+
+	t.Run("staging cleanup identity mismatch refuses removal", func(t *testing.T) {
+		item := skillSetupStagedDir{
+			staged:   filepath.Join(t.TempDir(), "dummy"),
+			identity: &skillSetupFileInfo{name: "dummy"},
+			fileID:   "id1",
+		}
+		if err := os.WriteFile(item.staged, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool {
+			return false
+		})
+		err := cleanSkillSetupStagedItem(item)
+		if err == nil || !strings.Contains(err.Error(), "staging 对象身份已变化") {
+			t.Fatalf("expected identity mismatch error, got: %v", err)
+		}
+		if _, err := os.Stat(item.staged); os.IsNotExist(err) {
+			t.Fatal("file must not be deleted on identity mismatch")
+		}
+	})
+
+	t.Run("upgrades legacy canonical adapter", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		skillSrc := filepath.Join(src, "dingtalk-chat")
+		if err := os.MkdirAll(skillSrc, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		canonicalSkill := filepath.Join(canonical, "dingtalk-chat")
+		if err := os.MkdirAll(canonicalSkill, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(canonicalSkill, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		claudeSkill := filepath.Join(claude, "dingtalk-chat")
+		if err := os.MkdirAll(claude, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(canonicalSkill, claudeSkill); err != nil {
+			t.Fatal(err)
+		}
+
+		upgraded := false
+		origAdapter := skillSetupCurrentCanonicalAdapter
+		testseam.Swap(t, &skillSetupCurrentCanonicalAdapter, func(path, target string) bool {
+			if path == claudeSkill && !upgraded {
+				return false
+			}
+			return origAdapter(path, target)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundClaude := false
+		for _, target := range plan.Targets {
+			if target.Destination == claude {
+				foundClaude = true
+				if len(target.Backups) != 1 || target.Backups[0].Path != claudeSkill {
+					t.Fatalf("claude backups = %#v, want replacement of %s", target.Backups, claudeSkill)
+				}
+			}
+		}
+		if !foundClaude {
+			t.Fatal("claude target not found in plan")
+		}
+
+		upgraded = true
+		var out, errOut bytes.Buffer
+		installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil || installed != 2 || skipped != 0 {
+			t.Fatalf("execute = installed %d, skipped %d, err %v", installed, skipped, err)
+		}
+	})
+
+	t.Run("cleanSkillSetupStagedItem edge cases", func(t *testing.T) {
+		// 1. Empty staged path
+		if err := cleanSkillSetupStagedItem(skillSetupStagedDir{}); err != nil {
+			t.Fatalf("cleanSkillSetupStagedItem empty = %v", err)
+		}
+
+		// 2. lstat error (non-NotExist)
+		testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) {
+			return nil, errors.New("mock lstat error")
+		})
+		item := skillSetupStagedDir{
+			staged:   "some/path",
+			identity: &skillSetupFileInfo{name: "some"},
+		}
+		if err := cleanSkillSetupStagedItem(item); err == nil || !strings.Contains(err.Error(), "mock lstat error") {
+			t.Fatalf("expected lstat error, got: %v", err)
+		}
+	})
+
+	t.Run("current canonical adapter rejects non-symlink", func(t *testing.T) {
+		tempDir := t.TempDir()
+		canonical := filepath.Join(tempDir, "canonical")
+		if err := os.MkdirAll(canonical, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(canonical, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		nonSymlink := filepath.Join(tempDir, "non-symlink")
+		if err := os.MkdirAll(nonSymlink, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(nonSymlink, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupEvalSymlinks, func(string) (string, error) {
+			return canonical, nil
+		})
+		if isSkillSetupCurrentCanonicalAdapter(nonSymlink, canonical) {
+			t.Fatal("non-symlink must not be current canonical adapter")
 		}
 	})
 }

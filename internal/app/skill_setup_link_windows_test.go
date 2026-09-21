@@ -211,3 +211,58 @@ func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testin
 		}
 	})
 }
+
+func TestCrossPlatformCoverageSkillSetupWindowsCurrentCanonicalAdapter(t *testing.T) {
+	tempDir := t.TempDir()
+	canonical := filepath.Join(tempDir, "canonical")
+	if err := os.MkdirAll(canonical, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(canonical, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Nonexistent path
+	if isSkillSetupCurrentCanonicalAdapter(filepath.Join(tempDir, "nonexistent"), canonical) {
+		t.Fatal("nonexistent path must not be current canonical adapter")
+	}
+
+	// 2. Ordinary directory (not a junction)
+	normalDir := filepath.Join(tempDir, "normal-dir")
+	if err := os.MkdirAll(normalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if isSkillSetupCurrentCanonicalAdapter(normalDir, canonical) {
+		t.Fatal("normal directory must not be current canonical adapter")
+	}
+
+	// 3. Valid junction pointing to canonical
+	junctionPath := filepath.Join(tempDir, "junction-link")
+	if err := createSkillSetupDirLink(canonical, junctionPath); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(junctionPath)
+	if !isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+		t.Fatal("valid junction pointing to canonical must be current canonical adapter")
+	}
+
+	// 4. Junction pointing to wrong target
+	otherDir := filepath.Join(tempDir, "other")
+	if err := os.MkdirAll(otherDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if isSkillSetupCurrentCanonicalAdapter(junctionPath, otherDir) {
+		t.Fatal("junction pointing to different target must not be current canonical adapter")
+	}
+
+	// 5. Simulated legacy symlink (ModeSymlink set)
+	testseam.Swap(t, &skillSetupLstat, func(path string) (os.FileInfo, error) {
+		if path == junctionPath {
+			return skillSetupFileInfo{name: filepath.Base(junctionPath), mode: os.ModeSymlink | 0o777}, nil
+		}
+		return os.Lstat(path)
+	})
+	if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+		t.Fatal("legacy symlink with ModeSymlink must not be current canonical adapter")
+	}
+}

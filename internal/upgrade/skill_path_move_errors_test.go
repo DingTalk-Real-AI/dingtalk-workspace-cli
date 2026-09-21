@@ -440,6 +440,20 @@ func TestCrossPlatformCoverageSkillPathVerificationErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("link target mismatch", func(t *testing.T) {
+		base := t.TempDir()
+		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+		if err := os.Symlink("one", src); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		if err := os.Symlink("two", dst); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySkillPathCopy(src, dst); err == nil || !strings.Contains(err.Error(), "符号链接目标不一致") {
+			t.Fatalf("expected link target mismatch error, got: %v", err)
+		}
+	})
+
 	t.Run("symlink reads", func(t *testing.T) {
 		base := t.TempDir()
 		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")

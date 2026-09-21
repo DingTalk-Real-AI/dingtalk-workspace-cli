@@ -31,51 +31,54 @@ const (
 )
 
 var (
-	skillSetupResolveMode           = resolveSkillSetupMode
-	skillSetupResolveSource         = resolveSkillSetupSourceOrEmbedded
-	skillSetupResolveTargets        = resolveSkillSetupTargets
-	skillSetupListMulti             = listMultiSkillNames
-	skillSetupFilterMulti           = filterMultiSkillNames
-	skillSetupBuildPlan             = buildSkillSetupPlan
-	skillSetupConfirmPlan           = confirmSkillSetupPlan
-	skillSetupExecutePlan           = executeSkillSetupPlan
-	skillSetupCopyDir               = copyDir
-	skillSetupInstallMulti          = installMultiSkillToHomes
-	skillSetupPublishTemp           = os.MkdirTemp
-	skillSetupPublishRename         = os.Rename
-	skillSetupMkdirTemp             = os.MkdirTemp
-	skillSetupRename                = os.Rename
-	skillSetupRunForm               = (*huh.Form).Run
-	skillSetupInteractive           = isInteractiveTerminal
-	skillSetupReadDir               = os.ReadDir
-	skillSetupStat                  = os.Stat
-	skillSetupLstat                 = os.Lstat
-	skillSetupGetenv                = os.Getenv
-	skillSetupSymlink               = createSkillSetupDirLink
-	skillSetupLinkTargetForPlatform = skillSetupLinkTarget
-	skillSetupExecutable            = os.Executable
-	skillSetupGetwd                 = os.Getwd
-	skillSetupUserHomeDir           = os.UserHomeDir
-	skillSetupRemoveAll             = os.RemoveAll
-	skillSetupBackupAndRemove       = upgrade.BackupAndRemoveSkillDir
-	skillSetupRestoreBackup         = upgrade.RestoreSkillPath
-	skillSetupMkdirAll              = os.MkdirAll
-	skillSetupWalk                  = filepath.Walk
-	skillSetupRel                   = filepath.Rel
-	skillSetupReadlink              = os.Readlink
-	skillSetupEvalSymlinks          = filepath.EvalSymlinks
-	skillSetupOpen                  = os.Open
-	skillSetupOpenFile              = os.OpenFile
-	skillSetupWriteFile             = os.WriteFile
-	skillSetupBuildProvenance       = skillprovenance.Build
-	skillSetupCopy                  = io.Copy
-	skillSetupReadState             = skillstate.Read
-	skillSetupWriteState            = skillstate.Write
-	skillSetupRemoveState           = skillstate.Remove
-	skillSetupPublishPath           = upgrade.PublishSkillPathNoReplace
-	skillSetupRollbackPaths         = upgrade.RollbackSkillPathPublications
-	skillSetupNow                   = time.Now
-	skillSetupFoldPathCase          = runtime.GOOS == "windows"
+	skillSetupResolveMode             = resolveSkillSetupMode
+	skillSetupResolveSource           = resolveSkillSetupSourceOrEmbedded
+	skillSetupResolveTargets          = resolveSkillSetupTargets
+	skillSetupListMulti               = listMultiSkillNames
+	skillSetupFilterMulti             = filterMultiSkillNames
+	skillSetupBuildPlan               = buildSkillSetupPlan
+	skillSetupConfirmPlan             = confirmSkillSetupPlan
+	skillSetupExecutePlan             = executeSkillSetupPlan
+	skillSetupCopyDir                 = copyDir
+	skillSetupInstallMulti            = installMultiSkillToHomes
+	skillSetupPublishTemp             = os.MkdirTemp
+	skillSetupPublishRename           = os.Rename
+	skillSetupMkdirTemp               = os.MkdirTemp
+	skillSetupRename                  = os.Rename
+	skillSetupRunForm                 = (*huh.Form).Run
+	skillSetupInteractive             = isInteractiveTerminal
+	skillSetupReadDir                 = os.ReadDir
+	skillSetupStat                    = os.Stat
+	skillSetupLstat                   = os.Lstat
+	skillSetupGetenv                  = os.Getenv
+	skillSetupSymlink                 = createSkillSetupDirLink
+	skillSetupLinkTargetForPlatform   = skillSetupLinkTarget
+	skillSetupExecutable              = os.Executable
+	skillSetupGetwd                   = os.Getwd
+	skillSetupUserHomeDir             = os.UserHomeDir
+	skillSetupRemoveAll               = os.RemoveAll
+	skillSetupBackupAndRemove         = upgrade.BackupAndRemoveSkillDir
+	skillSetupRestoreBackup           = upgrade.RestoreSkillPath
+	skillSetupMkdirAll                = os.MkdirAll
+	skillSetupWalk                    = filepath.Walk
+	skillSetupRel                     = filepath.Rel
+	skillSetupReadlink                = os.Readlink
+	skillSetupEvalSymlinks            = filepath.EvalSymlinks
+	skillSetupOpen                    = os.Open
+	skillSetupOpenFile                = os.OpenFile
+	skillSetupWriteFile               = os.WriteFile
+	skillSetupBuildProvenance         = skillprovenance.Build
+	skillSetupCopy                    = io.Copy
+	skillSetupReadState               = skillstate.Read
+	skillSetupWriteState              = skillstate.Write
+	skillSetupRemoveState             = skillstate.Remove
+	skillSetupPublishPath             = upgrade.PublishSkillPathNoReplace
+	skillSetupRollbackPaths           = upgrade.RollbackSkillPathPublications
+	skillSetupNow                     = time.Now
+	skillSetupFoldPathCase            = runtime.GOOS == "windows"
+	skillSetupCurrentCanonicalAdapter = isSkillSetupCurrentCanonicalAdapter
+	skillSetupFileIdentity            = upgrade.SkillPathFileIdentity
+	skillSetupIdentityProven          = upgrade.SkillPathIdentityProven
 )
 
 type skillSetupBackup struct {
@@ -102,8 +105,30 @@ type skillSetupPlan struct {
 }
 
 type skillSetupStagedDir struct {
-	staged string
-	dest   string
+	staged   string
+	dest     string
+	identity os.FileInfo
+	fileID   string
+}
+
+func cleanSkillSetupStagedItem(item skillSetupStagedDir) error {
+	if item.staged == "" {
+		return nil
+	}
+	if item.identity != nil {
+		info, err := skillSetupLstat(item.staged)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		liveFileID := skillSetupFileIdentity(item.staged)
+		if !skillSetupIdentityProven(item.identity, info, item.fileID, liveFileID) {
+			return fmt.Errorf("staging 对象身份已变化 %s（拒绝删除非本事务路径）", item.staged)
+		}
+	}
+	return skillSetupRemoveAll(item.staged)
 }
 
 type skillSetupStagingCleanupError struct {
@@ -1261,7 +1286,7 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 			}
 		}
 		for _, path := range replacements {
-			if target.LinkCanonical && samePhysicalSkillSetupPath(path, filepath.Join(target.CanonicalBase, filepath.Base(path))) {
+			if target.LinkCanonical && skillSetupCurrentCanonicalAdapter(path, filepath.Join(target.CanonicalBase, filepath.Base(path))) {
 				continue
 			}
 			_, statErr := skillSetupLstat(path)
@@ -1883,7 +1908,7 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 			err = errors.Join(err, &skillSetupStagingCleanupError{Path: stageRoot, Err: cleanupErr})
 		}
 		for _, item := range staged {
-			if cleanupErr := skillSetupRemoveAll(item.staged); cleanupErr != nil {
+			if cleanupErr := cleanSkillSetupStagedItem(item); cleanupErr != nil {
 				err = errors.Join(err, &skillSetupStagingCleanupError{Path: item.staged, Err: cleanupErr})
 			}
 		}
@@ -1896,7 +1921,7 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 	stageOne := func(src, dest string) error {
 		if target.LinkCanonical {
 			canonicalTarget := filepath.Join(target.CanonicalBase, filepath.Base(dest))
-			if samePhysicalSkillSetupPath(dest, canonicalTarget) {
+			if skillSetupCurrentCanonicalAdapter(dest, canonicalTarget) {
 				return nil
 			}
 			realCanonicalTarget, realTargetErr := skillSetupEvalSymlinks(canonicalTarget)
@@ -1911,16 +1936,22 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 			if tmpErr != nil {
 				return fmt.Errorf("创建 Skill staging 失败 %s: %w", stageParent, tmpErr)
 			}
-			if err := skillSetupRemoveAll(tmpDir); err != nil {
-				return fmt.Errorf("准备 Skill staging 路径失败 %s: %w", tmpDir, err)
+			if rmErr := skillSetupRemoveAll(tmpDir); rmErr != nil {
+				return &skillSetupStagingCleanupError{
+					Path: tmpDir,
+					Err:  fmt.Errorf("准备 Skill staging 路径失败 %s: %w", tmpDir, rmErr),
+				}
 			}
 			stagedDir := tmpDir
 			linkTarget := skillSetupLinkTargetForPlatform(realCanonicalTarget, relTarget)
 			if linkErr := skillSetupSymlink(linkTarget, stagedDir); linkErr != nil {
 				return fmt.Errorf("创建 Skill 链接失败 %s -> %s: %w", stagedDir, linkTarget, linkErr)
 			}
+			identity, _ := skillSetupLstat(stagedDir)
+			fileID := skillSetupFileIdentity(stagedDir)
+			stagedItem := skillSetupStagedDir{staged: stagedDir, dest: dest, identity: identity, fileID: fileID}
 			if validateErr := validateSkillSetupLink(stagedDir); validateErr != nil {
-				if cleanupErr := skillSetupRemoveAll(stagedDir); cleanupErr != nil {
+				if cleanupErr := cleanSkillSetupStagedItem(stagedItem); cleanupErr != nil {
 					return &skillSetupStagingCleanupError{
 						Path: stagedDir,
 						Err:  errors.Join(validateErr, cleanupErr),
@@ -1928,7 +1959,7 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 				}
 				return validateErr
 			}
-			staged = append(staged, skillSetupStagedDir{staged: stagedDir, dest: dest})
+			staged = append(staged, stagedItem)
 			return nil
 		}
 		stagedDir := filepath.Join(stageRoot, filepath.Base(dest))
@@ -1938,7 +1969,9 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 		if err := skillSetupCopyDir(src, stagedDir); err != nil {
 			return fmt.Errorf("拷贝 Skill staging 失败 %s: %w", stagedDir, err)
 		}
-		staged = append(staged, skillSetupStagedDir{staged: stagedDir, dest: dest})
+		identity, _ := skillSetupLstat(stagedDir)
+		fileID := skillSetupFileIdentity(stagedDir)
+		staged = append(staged, skillSetupStagedDir{staged: stagedDir, dest: dest, identity: identity, fileID: fileID})
 		return nil
 	}
 
@@ -2032,12 +2065,17 @@ func backupSkillSetupTarget(home string, planned []skillSetupBackup, out io.Writ
 
 func publishSkillSetupTarget(staged []skillSetupStagedDir, backups []skillSetupBackedUpDir) error {
 	published := make([]upgrade.SkillPathPublication, 0, len(staged))
-	for _, item := range staged {
+	for i, item := range staged {
 		publication, err := skillSetupPublishPath(item.staged, item.dest)
 		if err != nil {
 			publishErr := fmt.Errorf("发布 Skill 失败 %s: %w", item.dest, err)
 			if restoreErr := restoreSkillSetupTarget(published, backups); restoreErr != nil {
-				return errors.Join(publishErr, fmt.Errorf("Skill setup 回滚不完整: %w", restoreErr))
+				publishErr = errors.Join(publishErr, fmt.Errorf("Skill setup 回滚不完整: %w", restoreErr))
+			}
+			for _, unpub := range staged[i:] {
+				if cleanupErr := cleanSkillSetupStagedItem(unpub); cleanupErr != nil {
+					publishErr = errors.Join(publishErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", unpub.staged, cleanupErr))
+				}
 			}
 			return publishErr
 		}
@@ -2110,7 +2148,7 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 				backupErr = errors.Join(backupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
 			}
 			for _, item := range staged {
-				if cleanupErr := skillSetupRemoveAll(item.staged); cleanupErr != nil {
+				if cleanupErr := cleanSkillSetupStagedItem(item); cleanupErr != nil {
 					backupErr = errors.Join(backupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", item.staged, cleanupErr))
 				}
 			}
@@ -2125,11 +2163,6 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		var cleanupErr error
 		if rmErr := skillSetupRemoveAll(stageRoot); rmErr != nil {
 			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, rmErr))
-		}
-		for _, item := range staged {
-			if rmErr := skillSetupRemoveAll(item.staged); rmErr != nil {
-				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", item.staged, rmErr))
-			}
 		}
 		if publishErr != nil {
 			if cleanupErr != nil {

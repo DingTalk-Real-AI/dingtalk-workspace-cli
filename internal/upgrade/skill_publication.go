@@ -239,3 +239,13 @@ func writeFingerprintField(h hash.Hash, value string) {
 	_, _ = fmt.Fprintf(h, "%d:", len(value))
 	_, _ = h.Write([]byte(value))
 }
+
+// SkillPathFileIdentity reports a stable file identity across renames for supported platforms.
+func SkillPathFileIdentity(path string) string {
+	return skillPathFileIdentity(path)
+}
+
+// SkillPathIdentityProven proves that actual matches the recorded identity of expected.
+func SkillPathIdentityProven(expected, actual os.FileInfo, expectedFileID, actualFileID string) bool {
+	return skillPathIdentityProven(expected, actual, expectedFileID, actualFileID)
+}
