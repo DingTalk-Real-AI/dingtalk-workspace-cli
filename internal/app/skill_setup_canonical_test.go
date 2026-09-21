@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 )
 
 func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *testing.T) {
@@ -451,66 +452,169 @@ func TestCrossPlatformCoverageSkillSetupLinkValidationFallback(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *testing.T) {
-	home := t.TempDir()
-	canonical := filepath.Join(home, ".agents", "skills")
-	claude := filepath.Join(home, ".claude", "skills")
-	src := t.TempDir()
-	skillSrc := filepath.Join(src, "dingtalk-chat")
-	if err := os.MkdirAll(skillSrc, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
-	testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
-
-	var stagedPath string
-	testseam.Swap(t, &skillSetupSymlink, func(_, link string) error {
-		stagedPath = link
-		return nil
-	})
-	testseam.Swap(t, &skillSetupStat, func(path string) (os.FileInfo, error) {
-		if stagedPath != "" && path == stagedPath {
-			return nil, errors.New("EPERM")
-		}
-		return os.Stat(path)
-	})
-	origRemoveAll := skillSetupRemoveAll
-	testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
-		if stagedPath != "" && path == stagedPath {
-			return errors.New("mock cleanup staged link failure")
-		}
-		return origRemoveAll(path)
-	})
-
-	plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out, errOut bytes.Buffer
-	installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
-	if err != nil {
-		t.Fatalf("unexpected fatal plan error: %v", err)
-	}
-	if installed != 1 || skipped != 1 {
-		t.Fatalf("execute = installed %d, skipped %d; want 1, 1", installed, skipped)
-	}
-	if strings.Contains(errOut.String(), "自动改用兼容安装") {
-		t.Fatalf("cleanup failure must NOT enter compatibility fallback, got: %s", errOut.String())
-	}
-	if !strings.Contains(errOut.String(), "清理 Skill staging 失败") || !strings.Contains(errOut.String(), "mock cleanup staged link failure") {
-		t.Fatalf("cleanup error must be visible in output, got: %s", errOut.String())
-	}
-	if _, err := os.Lstat(filepath.Join(claude, "dingtalk-chat")); !os.IsNotExist(err) {
-		t.Fatalf("claude destination must not exist after failed staging cleanup: %v", err)
-	}
-
 	// Also exercise skillSetupStagingCleanupError Unwrap
 	cleanupErr := &skillSetupStagingCleanupError{Path: "test", Err: errors.New("underlying")}
 	if !errors.Is(cleanupErr, cleanupErr.Err) {
 		t.Fatal("expected skillSetupStagingCleanupError to unwrap underlying error")
 	}
+
+	t.Run("cleanup failure blocks fallback", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		skillSrc := filepath.Join(src, "dingtalk-chat")
+		if err := os.MkdirAll(skillSrc, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		var stagedPath string
+		testseam.Swap(t, &skillSetupSymlink, func(_, link string) error {
+			stagedPath = link
+			return nil
+		})
+		testseam.Swap(t, &skillSetupStat, func(path string) (os.FileInfo, error) {
+			if stagedPath != "" && path == stagedPath {
+				return nil, errors.New("EPERM")
+			}
+			return os.Stat(path)
+		})
+		origRemoveAll := skillSetupRemoveAll
+		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			if stagedPath != "" && path == stagedPath {
+				return errors.New("mock cleanup staged link failure")
+			}
+			return origRemoveAll(path)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil {
+			t.Fatalf("unexpected fatal plan error: %v", err)
+		}
+		if installed != 1 || skipped != 1 {
+			t.Fatalf("execute = installed %d, skipped %d; want 1, 1", installed, skipped)
+		}
+		if strings.Contains(errOut.String(), "自动改用兼容安装") {
+			t.Fatalf("cleanup failure must NOT enter compatibility fallback, got: %s", errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "清理 Skill staging 失败") || !strings.Contains(errOut.String(), "mock cleanup staged link failure") {
+			t.Fatalf("cleanup error must be visible in output, got: %s", errOut.String())
+		}
+		if _, err := os.Lstat(filepath.Join(claude, "dingtalk-chat")); !os.IsNotExist(err) {
+			t.Fatalf("claude destination must not exist after failed staging cleanup: %v", err)
+		}
+	})
+
+	t.Run("staged items cleanup error in stage defer", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		for _, name := range []string{"dingtalk-chat", "dingtalk-shared"} {
+			s := filepath.Join(src, name)
+			if err := os.MkdirAll(s, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(s, "SKILL.md"), []byte(name), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		linkCalls := 0
+		firstStaged := ""
+		testseam.Swap(t, &skillSetupSymlink, func(target, link string) error {
+			linkCalls++
+			if linkCalls == 1 {
+				firstStaged = link
+				return os.Symlink(target, link)
+			}
+			return errors.New("second link failure")
+		})
+		origRemoveAll := skillSetupRemoveAll
+		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			if firstStaged != "" && path == firstStaged {
+				return errors.New("mock cleanup error for first staged item")
+			}
+			return origRemoveAll(path)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat", "dingtalk-shared"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		_, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil {
+			t.Fatalf("unexpected fatal plan error: %v", err)
+		}
+		if skipped != 2 {
+			t.Fatalf("skipped = %d, want 2", skipped)
+		}
+		if !strings.Contains(errOut.String(), "mock cleanup error for first staged item") {
+			t.Fatalf("staged item cleanup error must be in errOut, got: %s", errOut.String())
+		}
+	})
+
+	t.Run("post-publish staged cleanup warning", func(t *testing.T) {
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		claude := filepath.Join(home, ".claude", "skills")
+		src := t.TempDir()
+		skillSrc := filepath.Join(src, "dingtalk-chat")
+		if err := os.MkdirAll(skillSrc, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+
+		publishDone := false
+		origPublish := skillSetupPublishPath
+		testseam.Swap(t, &skillSetupPublishPath, func(staged, dest string) (upgrade.SkillPathPublication, error) {
+			res, err := origPublish(staged, dest)
+			if strings.Contains(dest, ".claude") {
+				publishDone = true
+			}
+			return res, err
+		})
+		origRemoveAll := skillSetupRemoveAll
+		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			if publishDone && strings.Contains(path, "staging-") {
+				return errors.New("mock post-publish staged item cleanup error")
+			}
+			return origRemoveAll(path)
+		})
+
+		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		installed, _, err := executeSkillSetupPlan(plan, &out, &errOut)
+		if err != nil {
+			t.Fatalf("unexpected fatal plan error: %v", err)
+		}
+		if installed != 2 {
+			t.Fatalf("installed = %d, want 2", installed)
+		}
+		if !strings.Contains(errOut.String(), "mock post-publish staged item cleanup error") {
+			t.Fatalf("post-publish cleanup error must be reported as warning, got: %s", errOut.String())
+		}
+	})
 }
 
 func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testing.T) {
