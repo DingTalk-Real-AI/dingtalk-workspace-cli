@@ -296,6 +296,7 @@ func Run(ctx context.Context, cfg Config) error {
 		// ready contract.
 		fmt.Fprintf(cfg.Stderr, "[event] bus source=%s state=%s idle_timeout=%ds\n",
 			ack.StateSource, ack.SourceState, ack.IdleTimeoutSecs)
+		writeTransportState(cfg.Stderr, ack.SourceState, ack.StateSource, ack.SourceObserved, 0)
 	}
 
 	// Watch stdin for EOF → graceful shutdown (AI-subprocess contract).
@@ -388,6 +389,7 @@ func Run(ctx context.Context, cfg Config) error {
 				var s transport.SourceState
 				_ = json.Unmarshal(raw, &s)
 				fmt.Fprintf(cfg.Stderr, "source state: %s (source=%s, attempt=%d)\n", s.State, s.StateSource, s.Attempt)
+				writeTransportState(cfg.Stderr, s.State, s.StateSource, s.Observed, s.Attempt)
 			}
 		case transport.FrameTypeHeartbeat:
 			// silent
@@ -395,6 +397,12 @@ func Run(ctx context.Context, cfg Config) error {
 			// future frame types: ignored for forward compat
 		}
 	}
+}
+
+// IPC ready 和上游连接状态分开输出；旧总线未提供观测标记时保持未知。
+func writeTransportState(w io.Writer, state, source string, observed bool, attempts int) {
+	b, _ := json.Marshal(transport.StatusSource{State: state, Source: source, Observed: observed, ReconnectCount: attempts})
+	fmt.Fprintf(w, "[event] transport %s\n", b)
 }
 
 func negotiateRuntimeToken(w *transport.Writer, r *transport.Reader, ack transport.HelloAck, token string) error {

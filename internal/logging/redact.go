@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -41,7 +42,26 @@ var sensitiveKeys = map[string]bool{
 	"api_key":                     true,
 	"api-key":                     true,
 	"access_token":                true,
+	"dwsauthcode":                 true,
+	"dws_auth_code":               true,
+	"dws-auth-code":               true,
+	"auth_code":                   true,
+	"auth-code":                   true,
 	"credential":                  true,
+	"configstring":                true,
+	"config_string":               true,
+	"config-string":               true,
+	"envs":                        true,
+	"headers":                     true,
+	"fileurl":                     true,
+	"file_url":                    true,
+	"file-url":                    true,
+	"uploadurl":                   true,
+	"upload_url":                  true,
+	"upload-url":                  true,
+	// 消息正文可能来自 stdin 机器协议；传输日志不得记录正文或审批内容。
+	"content": true,
+	"text":    true,
 }
 
 // sensitiveSubstrings are substrings that mark a key as sensitive.
@@ -94,11 +114,7 @@ func SanitizeArguments(args map[string]any, maxBytes int) string {
 	if len(args) == 0 {
 		return "{}"
 	}
-	sanitized := make(map[string]any, len(args))
-	for k, v := range args {
-		sanitized[k] = v
-	}
-	redactMapValues(sanitized)
+	sanitized, _ := sanitizeArgumentValue(args).(map[string]any)
 	data, err := json.Marshal(sanitized)
 	if err != nil {
 		return "{}"
@@ -108,14 +124,44 @@ func SanitizeArguments(args map[string]any, maxBytes int) string {
 
 // redactMapValues replaces values of sensitive keys with "***" in-place.
 func redactMapValues(m map[string]any) {
-	for k, v := range m {
-		if IsSensitiveKey(k) {
-			m[k] = "***"
-			continue
+	sanitized, _ := sanitizeArgumentValue(m).(map[string]any)
+	for key := range m {
+		delete(m, key)
+	}
+	for key, value := range sanitized {
+		m[key] = value
+	}
+}
+
+func sanitizeArgumentValue(value any) any {
+	if value == nil {
+		return nil
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Map:
+		if reflected.Type().Key().Kind() != reflect.String {
+			return value
 		}
-		if nested, ok := v.(map[string]any); ok {
-			redactMapValues(nested)
+		result := make(map[string]any, reflected.Len())
+		iterator := reflected.MapRange()
+		for iterator.Next() {
+			key := iterator.Key().String()
+			if IsSensitiveKey(key) {
+				result[key] = "***"
+				continue
+			}
+			result[key] = sanitizeArgumentValue(iterator.Value().Interface())
 		}
+		return result
+	case reflect.Slice, reflect.Array:
+		result := make([]any, reflected.Len())
+		for index := 0; index < reflected.Len(); index++ {
+			result[index] = sanitizeArgumentValue(reflected.Index(index).Interface())
+		}
+		return result
+	default:
+		return value
 	}
 }
 

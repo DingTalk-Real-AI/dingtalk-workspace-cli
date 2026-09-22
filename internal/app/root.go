@@ -904,6 +904,9 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	cleanup := func() {
 		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
 		discardRootVersionInvocationFlag(root, versionRequested)
+		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
+			resetAuthExchangeInvocationFlags(exchange)
+		}
 	}
 
 	// Cobra handles --help before PersistentPreRunE. Wrap the inherited help
@@ -977,7 +980,12 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// boundary instead.
 		Version: "",
 		RunE:    runRootHelp,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			defer func() {
+				if preRunErr != nil {
+					resetAuthExchangeInvocationFlags(cmd)
+				}
+			}()
 			rootVersionShortCircuit = false
 			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
 			if rootVersionRequested && cmd == cmd.Root() {
@@ -993,7 +1001,16 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// bound flag's value and Changed bit after ExecuteC returns, so consume
 			// credential flags at the execution boundary before any validation or
 			// hook can observe state left by a previous invocation.
-			consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			if isAuthExchangeCommand(cmd) {
+				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
+				// 清除前次调用安装的全局凭据；本次 flags 在 RunE 或早退时清理。
+				if credentialInvocationSeen {
+					authpkg.SetClientCredentials("", "")
+				}
+				credentialInvocationSeen = true
+			} else {
+				consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			}
 
 			// A public root may be reused by embedding callers through multiple
 			// ExecuteC invocations. Begin each invocation with an empty result
@@ -1697,6 +1714,8 @@ func installOutputSinkRunBoundary(cmd *cobra.Command) {
 	}
 	openSinkAndRun := func(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
+			// 输出初始化也可能早退；它必须处于一次性授权参数的清理边界内。
+			defer resetAuthExchangeInvocationFlags(cmd)
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}

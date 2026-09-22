@@ -408,6 +408,12 @@ func preflightTokenPersistence(configDir string) error {
 // refresh so both paths stay aligned with the same identity/org/global mirror
 // isolation rules.
 func preflightTokenWritePersistence(configDir string, data *TokenData) error {
+	return preflightTokenWritePersistenceForSelector(configDir, data, RuntimeProfile())
+}
+
+// preflightTokenWritePersistenceForSelector 与最终写入使用同一个显式选择器，
+// 避免受管身份换票必须临时修改进程级 RuntimeProfile。
+func preflightTokenWritePersistenceForSelector(configDir string, data *TokenData, runtimeSelector string) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
 	}
@@ -419,7 +425,7 @@ func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 		return err
 	}
 
-	plan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
+	plan := planTokenPersistenceWrites(cfg, data, runtimeSelector)
 	if err := validateTokenPersistenceWritePlan(cfg, data, plan); err != nil {
 		return err
 	}
@@ -658,6 +664,15 @@ func legacyClientSecretAccountKey(clientID string) string {
 // SaveClientSecret stores the client secret for a specific client ID.
 // This is called during login to snapshot the credentials used.
 func SaveClientSecret(clientID, clientSecret string) error {
+	return saveClientSecret(clientID, clientSecret, false)
+}
+
+// 换票事务由调用方持有快照并回滚，旧槽清理失败不能降级为成功。
+func saveClientSecretTransactional(clientID, clientSecret string) error {
+	return saveClientSecret(clientID, clientSecret, true)
+}
+
+func saveClientSecret(clientID, clientSecret string, strictCleanup bool) error {
 	clientID = strings.TrimSpace(clientID)
 	clientSecret = strings.TrimSpace(clientSecret)
 	if clientID == "" || clientSecret == "" {
@@ -668,6 +683,9 @@ func SaveClientSecret(clientID, clientSecret string) error {
 		return fmt.Errorf("save client secret: %w", err)
 	}
 	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		if strictCleanup {
+			return fmt.Errorf("remove legacy client secret: %w", err)
+		}
 		slog.Warn("auth: failed to remove legacy Client Secret slot after save", "client_id", clientID, "error", err)
 	}
 	return nil

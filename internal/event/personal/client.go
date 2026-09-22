@@ -114,6 +114,30 @@ type dwsSubListResult struct {
 	PageNo   int               `json:"pageNo,omitempty"`
 	PageSize int               `json:"pageSize,omitempty"`
 	Items    []dwsSubscription `json:"items"`
+	List     []dwsSubscription `json:"list"`
+}
+
+// timestampText 保留服务端原值，兼容字符串时间与整数毫秒时间戳。
+type timestampText string
+
+func (s *timestampText) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(data, []byte("null")) {
+		*s = ""
+		return nil
+	}
+	var text string
+	if len(data) > 0 && data[0] == '"' {
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+	} else {
+		if _, err := strconv.ParseInt(string(data), 10, 64); err != nil {
+			return fmt.Errorf("personal event: invalid timestamp")
+		}
+		text = string(data)
+	}
+	*s = timestampText(text)
+	return nil
 }
 
 type dwsSubscription struct {
@@ -128,8 +152,8 @@ type dwsSubscription struct {
 	SourceIDSnake string          `json:"source_id"`
 	DeliveryPref  string          `json:"deliveryPref,omitempty"`
 	Status        json.RawMessage `json:"status,omitempty"`
-	GmtCreate     string          `json:"gmtCreate,omitempty"`
-	CreatedAt     string          `json:"created_at,omitempty"`
+	GmtCreate     timestampText   `json:"gmtCreate,omitempty"`
+	CreatedAt     timestampText   `json:"created_at,omitempty"`
 }
 
 func (s dwsSubscription) toSubscription() Subscription {
@@ -139,7 +163,7 @@ func (s dwsSubscription) toSubscription() Subscription {
 		RuleType:    firstNonEmpty(s.RuleType, s.RuleTypeSnake),
 		Status:      dwsStatusString(s.Status),
 		SourceID:    firstNonEmpty(s.SourceID, s.SourceIDSnake),
-		CreatedAt:   firstNonEmpty(s.GmtCreate, s.CreatedAt),
+		CreatedAt:   firstNonEmpty(string(s.GmtCreate), string(s.CreatedAt)),
 	}
 }
 
@@ -234,7 +258,13 @@ func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Sub
 		if err := c.do(ctx, http.MethodGet, "/event/sublist", q, nil, &result); err != nil {
 			return nil, err
 		}
+		if result.Items == nil {
+			result.Items = result.List
+		}
 		if len(result.Items) == 0 {
+			if result.Total > len(all) {
+				return nil, fmt.Errorf("personal event: incomplete subscription list at page %d", pageNo)
+			}
 			break
 		}
 		effectivePageSize := subscriptionListPageSize

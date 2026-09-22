@@ -540,6 +540,9 @@ func (d *daemon) handleConnection(ctx context.Context, conn net.Conn) {
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		last := transport.SourceState{Type: transport.FrameTypeSourceState, State: ack.SourceState, StateSource: ack.StateSource, Observed: ack.SourceObserved}
 		for {
 			// Give an already-queued targeted stop priority over buffered
 			// events. The second select still handles a stop that arrives
@@ -552,6 +555,16 @@ func (d *daemon) handleConnection(ctx context.Context, conn net.Conn) {
 			default:
 			}
 			select {
+			case <-ticker.C:
+				s := d.sourceStatus()
+				next := transport.SourceState{Type: transport.FrameTypeSourceState, State: s.State, StateSource: s.Source, Observed: s.Observed, Attempt: s.ReconnectCount}
+				if next != last {
+					if err := w.WriteJSON(next); err != nil {
+						_ = conn.Close()
+						return
+					}
+					last = next
+				}
 			case frame, ok := <-c.SendCh:
 				if !ok {
 					return
@@ -605,11 +618,13 @@ func (d *daemon) handleConnection(ctx context.Context, conn net.Conn) {
 }
 
 func (d *daemon) helloAck() transport.HelloAck {
+	s := d.sourceStatus()
 	ack := transport.HelloAck{
 		Type:            transport.FrameTypeHelloAck,
 		BusPID:          os.Getpid(),
-		SourceState:     "connected", // best-effort; full state machine pushed via SourceState frames
-		StateSource:     "inferred",
+		SourceState:     s.State,
+		StateSource:     s.Source,
+		SourceObserved:  s.Observed,
 		IdleTimeoutSecs: int(d.cfg.IdleTimeout / time.Second),
 	}
 	if d.cfg.CredentialBroker != nil {
@@ -618,6 +633,13 @@ func (d *daemon) helloAck() transport.HelloAck {
 	}
 	ack.TerminalReason = d.getTerminalReason()
 	return ack
+}
+
+func (d *daemon) sourceStatus() transport.StatusSource {
+	if s, ok := d.cfg.Source.(interface{ SourceStatus() transport.StatusSource }); ok {
+		return s.SourceStatus()
+	}
+	return transport.StatusSource{State: "unknown", Source: "unknown"}
 }
 
 func (d *daemon) setTerminalReason(reason string) {
@@ -712,10 +734,7 @@ func (d *daemon) handleStatusRPC(w *transport.Writer, r *transport.Reader) {
 			IdentityHash:   d.cfg.IdentityHash,
 			SourceID:       d.cfg.SourceID,
 		},
-		SourceState: transport.StatusSource{
-			State:  "connected", // v1: source state plumbed in P3+
-			Source: "inferred",
-		},
+		SourceState:          d.sourceStatus(),
 		Consumers:            d.hub.Snapshot(),
 		PerEventTypeCounters: d.hub.Counters().Snapshot(),
 	}
