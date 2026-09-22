@@ -277,4 +277,19 @@ func TestCrossPlatformCoverageSkillSetupWindowsCurrentCanonicalAdapter(t *testin
 	if isSkillSetupCurrentCanonicalAdapter(dangling, canonical) {
 		t.Fatal("junction with unresolvable target must not be current canonical adapter")
 	}
+
+	// 7. Reparse entry whose target cannot be read must be rebuilt
+	t.Run("readlink_failure", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupReadlink, func(string) (string, error) {
+			return "", errors.New("mock readlink error")
+		})
+		if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+			t.Fatal("reparse entry with unreadable target must not be current canonical adapter")
+		}
+	})
+
+	// 8. Canonical target that no longer exists must be rebuilt
+	if isSkillSetupCurrentCanonicalAdapter(junctionPath, filepath.Join(tempDir, "gone-canonical")) {
+		t.Fatal("adapter check against missing canonical target must not be current")
+	}
 }
