@@ -487,12 +487,12 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			}
 			return os.Stat(path)
 		})
-		origRemoveAll := skillSetupRemoveAll
-		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+		origRemove := skillSetupRemove
+		testseam.Swap(t, &skillSetupRemove, func(path string) error {
 			if stagedPath != "" && path == stagedPath {
 				return errors.New("mock cleanup staged link failure")
 			}
-			return origRemoveAll(path)
+			return origRemove(path)
 		})
 
 		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
@@ -545,12 +545,12 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			}
 			return errors.New("second link failure")
 		})
-		origRemoveAll := skillSetupRemoveAll
-		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+		origRemove := skillSetupRemove
+		testseam.Swap(t, &skillSetupRemove, func(path string) error {
 			if firstStaged != "" && path == firstStaged {
 				return errors.New("mock cleanup error for first staged item")
 			}
-			return origRemoveAll(path)
+			return origRemove(path)
 		})
 
 		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat", "dingtalk-shared"}, false)
@@ -641,12 +641,12 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 			}
 			return origPublish(staged, dest)
 		})
-		origRemoveAll := skillSetupRemoveAll
-		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+		origRemove := skillSetupRemove
+		testseam.Swap(t, &skillSetupRemove, func(path string) error {
 			if publishStarted && strings.Contains(path, "dingtalk-shared.staging-") {
 				return errors.New("mock un-published cleanup error")
 			}
-			return origRemoveAll(path)
+			return origRemove(path)
 		})
 
 		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat", "dingtalk-shared"}, false)
@@ -941,7 +941,31 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		}
 	})
 
-	t.Run("cleanSkillSetupStagedSet removes items before root", func(t *testing.T) {
+	t.Run("cleanSkillSetupStagedSet removes links before root", func(t *testing.T) {
+		liveDir := filepath.Join(t.TempDir(), "stage-root")
+		target := filepath.Join(t.TempDir(), "target")
+		itemDir := filepath.Join(liveDir, "dingtalk-a")
+		if err := os.MkdirAll(liveDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, itemDir); err != nil {
+			t.Fatal(err)
+		}
+		root := skillSetupStagedRoot{path: liveDir, identity: &skillSetupFileInfo{name: "stage-root"}, fileID: "id1"}
+		item := skillSetupStagedDir{staged: itemDir, dest: "dest", identity: &skillSetupFileInfo{name: "dingtalk-a"}, fileID: "id2"}
+		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool { return true })
+		if err := cleanSkillSetupStagedSet(root, []skillSetupStagedDir{item}); err != nil {
+			t.Fatalf("cleanSkillSetupStagedSet with links = %v", err)
+		}
+		if _, err := os.Stat(liveDir); !os.IsNotExist(err) {
+			t.Fatalf("root must be removed after links: %v", err)
+		}
+	})
+
+	t.Run("cleanSkillSetupStagedSet preserves non-empty copied staging", func(t *testing.T) {
 		liveDir := filepath.Join(t.TempDir(), "stage-root")
 		itemDir := filepath.Join(liveDir, "dingtalk-a")
 		if err := os.MkdirAll(itemDir, 0o755); err != nil {
@@ -952,17 +976,14 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		}
 		root := skillSetupStagedRoot{path: liveDir, identity: &skillSetupFileInfo{name: "stage-root"}, fileID: "id1"}
 		item := skillSetupStagedDir{staged: itemDir, dest: "dest", identity: &skillSetupFileInfo{name: "dingtalk-a"}, fileID: "id2"}
-		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool {
-			return true
-		})
-		if err := cleanSkillSetupStagedSet(root, []skillSetupStagedDir{item}); err != nil {
-			t.Fatalf("cleanSkillSetupStagedSet with items = %v", err)
+		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool { return true })
+		if err := cleanSkillSetupStagedSet(root, []skillSetupStagedDir{item}); err == nil {
+			t.Fatal("non-empty copied staging must fail closed")
 		}
-		if _, err := os.Stat(liveDir); !os.IsNotExist(err) {
-			t.Fatalf("root must be removed after items: %v", err)
+		if _, err := os.Stat(filepath.Join(itemDir, "SKILL.md")); err != nil {
+			t.Fatalf("copied staging must be preserved: %v", err)
 		}
 	})
-
 	t.Run("staging root identity read failure", func(t *testing.T) {
 		src := writeMultiSkillSource(t, []string{"dingtalk-a"})
 		dest := t.TempDir()

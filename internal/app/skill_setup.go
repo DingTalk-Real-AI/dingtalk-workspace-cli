@@ -156,7 +156,11 @@ func cleanSkillSetupStagedItem(item skillSetupStagedDir) error {
 	if !skillSetupIdentityProven(item.identity, info, item.fileID, skillSetupFileIdentity(item.staged)) {
 		return fmt.Errorf("staging 对象身份已变化 %s（拒绝删除非本事务路径）", item.staged)
 	}
-	return skillSetupRemoveAll(item.staged)
+	// A staged directory may contain entries written by another process after
+	// the identity check. Remove is intentionally non-recursive: links and
+	// empty directories can be retired, while non-empty copied staging is
+	// retained rather than sweeping unknown contents.
+	return skillSetupRemove(item.staged)
 }
 
 // cleanSkillSetupStagedSet removes a failed staging set without ever letting a

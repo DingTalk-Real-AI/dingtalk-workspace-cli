@@ -524,7 +524,7 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return t.TempDir(), nil })
 			testseam.Swap(t, &skillSetupBackupAndRemove, func(string, string) (string, error) { return "", failure })
 			cleanupErr := errors.New("cleanup after backup failure")
-			testseam.Swap(t, &skillSetupRemoveAll, func(string) error { return cleanupErr })
+			testseam.Swap(t, &skillSetupRemove, func(string) error { return cleanupErr })
 			var stderr bytes.Buffer
 			_, skipped, err := executeSkillSetupPlan(plan, io.Discard, &stderr)
 			if err != nil || skipped != 1 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
