@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -202,6 +203,35 @@ func TestCrossPlatformCoverageDeapAgentPublishReportsPartialState(t *testing.T) 
 			}
 			if len(caller.calls) != tc.wantCalls {
 				t.Fatalf("unexpected operations: %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDeapAgentPublishPreservesFailureWithoutDefaulting(t *testing.T) {
+	for _, agentType := range []string{"local_agent", "open_code"} {
+		t.Run(agentType, func(t *testing.T) {
+			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+				"deap-dev/get_digital_employee_detail": {fmt.Sprintf(`{"success":true,"data":{"agentUuid":"agent-1","type":%q,"prompt":"existing persona"}}`, agentType)},
+				"deap-dev/publish_digital_employee":    {`{"success":false,"errorCode":"INVALID_PARAM","errorMsg":"publish rejected"}`},
+			}}
+			InitDepsForTest(t, caller)
+			root := deapHandler{}.Command(&captureRunner{})
+			root.PersistentFlags().Bool("yes", false, "confirmation")
+			root.SetArgs([]string{"manage", "publish", "--agent-uuid", "agent-1", "--yes"})
+			err := corecmd.ExecuteForTest(root)
+			var apiErr *CLIError
+			if !errors.As(err, &apiErr) || !strings.Contains(err.Error(), "publish rejected") {
+				t.Fatalf("publish failure must retain its API error: %v", err)
+			}
+			if apiErr.Code != CodeMCPToolError || !strings.Contains(apiErr.Message, "INVALID_PARAM") {
+				t.Fatalf("upstream failure classification changed: %+v", apiErr)
+			}
+			if strings.Contains(err.Error(), "默认人设已保存") {
+				t.Fatalf("failure incorrectly reports a draft modification: %v", err)
+			}
+			if len(caller.calls) != 2 || caller.calls[0].toolName != deapAgentDetailTool || caller.calls[1].toolName != deapAgentPublishTool {
+				t.Fatalf("an existing prompt must not be saved or retried after publish fails: %#v", caller.calls)
 			}
 		})
 	}
