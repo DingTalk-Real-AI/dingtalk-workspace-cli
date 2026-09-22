@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin || linux
+//go:build darwin || linux || openharmony
 
 package keychain
 
@@ -36,7 +36,7 @@ var (
 
 // fileDEK retrieves or generates a Data Encryption Key stored as a plain
 // file under the platform storage directory. Shared by Linux (default) and
-// the macOS sandbox fallback path (DWS_DISABLE_KEYCHAIN=1).
+// the macOS sandbox fallback path (DWS_DISABLE_KEYCHAIN=1) and OpenHarmony.
 func fileDEK(service string) ([]byte, error) {
 	dir := StorageDir(service)
 	keyPath := filepath.Join(dir, "dek")

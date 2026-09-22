@@ -30,7 +30,7 @@ const (
 	AccountToken = "auth-token"
 
 	// StorageDirEnv overrides the on-disk keychain storage root on
-	// platforms that use file-backed storage (macOS, Linux). It is
+	// platforms that use file-backed storage (macOS, Linux, OpenHarmony). It is
 	// intended for tests that need to isolate keychain state from the
 	// real user environment and from sibling test packages running in
 	// parallel. When empty, the platform default applies.

@@ -97,7 +97,7 @@ reporting altogether.
 ### Reproduce local packaging and installation checks
 
 The following recipe is for macOS arm64 with Xcode command-line tools, Go
-1.25.9, Python 3.9+, Node.js/npm, Homebrew, `tar`, `zip`, and `unzip` on PATH.
+1.26.7, Python 3.9+, Node.js/npm, Homebrew, `tar`, `zip`, and `unzip` on PATH.
 Run from a clean repository checkout. The host must permit executing local
 ad-hoc-signed binaries; a valid `codesign --verify` result alone does not
 establish that the host trust policy permits execution. Record an AMFI refusal
@@ -114,7 +114,7 @@ set -eu
 export DWS_REPRO_ROOT="$(pwd)/.tmp/codex/install-review-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$DWS_REPRO_ROOT/tmp" "$DWS_REPRO_ROOT/dist"
 export TMPDIR="$DWS_REPRO_ROOT/tmp" GOTMPDIR="$DWS_REPRO_ROOT/tmp"
-export GOTOOLCHAIN=go1.25.9 CC=/usr/bin/clang CXX=/usr/bin/clang++
+export GOTOOLCHAIN=go1.26.7 CC=/usr/bin/clang CXX=/usr/bin/clang++
 export DWS_PACKAGE_DIST_DIR="$DWS_REPRO_ROOT/dist"
 export DWS_PACKAGE_VERSION=0.0.0-review DO_NOT_TRACK=1
 export DWS_APPLE_CERTIFICATE_P12= DWS_APPLE_CERTIFICATE_PASSWORD_FILE=
