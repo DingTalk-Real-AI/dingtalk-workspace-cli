@@ -1,4 +1,4 @@
 schema_agent_examples_dry_run_test.go:58: Agent example contract: total=1799 contract=1590 dry_run=196 contract_only=13
 schema_agent_examples_dry_run_test.go:139: Agent examples: total=1799 contract=1590 dry_run_selected=196 planned_dry_run=196 contract_only=13 reviewed_manual=13
 PASS
-ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	5.448s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	5.482s
