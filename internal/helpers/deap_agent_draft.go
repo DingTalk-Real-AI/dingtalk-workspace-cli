@@ -15,7 +15,7 @@ import (
 const deapAgentLocalDefaultPrompt = "你是由本地 Agent 驱动的数字员工。请依据用户明确授权的任务与本地 Agent 配置提供帮助，遵守所在组织的安全和权限要求；信息不足时先澄清，不编造执行结果。"
 
 func deapAgentValidateDraftText(cmd *cobra.Command) error {
-	for _, name := range []string{"name", "description", "dept-id", "prompt", "avatar-url", "supervisor-user-id", "type", "response-mode"} {
+	for _, name := range []string{"name", "description", "dept-id", "prompt", "avatar-url", "supervisor-user-id", "type", "main-program-type", "response-mode"} {
 		if !cmd.Flags().Changed(name) {
 			continue
 		}
@@ -28,6 +28,8 @@ func deapAgentValidateDraftText(cmd *cobra.Command) error {
 }
 
 func deapAgentCallPublish(cmd *cobra.Command, tool string, args map[string]any) error {
+	// Retain parsing compatibility without sending the retired field upstream.
+	delete(args, "allowJoinGroup")
 	if commandDryRun(cmd) || deps.Caller.DryRun() {
 		return deps.Out.PrintJSON(map[string]any{
 			"dry_run": true, "executed": false, "tool": tool, "arguments": args,

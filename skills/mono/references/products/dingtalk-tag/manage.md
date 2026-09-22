@@ -23,7 +23,7 @@ Example:
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
-`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数为 `--type`。创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。注意：`create` / `list` / `save-draft` 的 `--type` 表示主程序类型，而 `detail` 的 `--type` 是 `--snapshot draft|published`（配置来源）的兼容别名，分属不同子命令，不要混淆。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
+`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数为 `--type`。创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。注意：`create` / `list` / `save-draft` 的 `--type` 表示主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，分属不同子命令，不要混淆。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
 
 ## detail / list — 查询
 
@@ -38,7 +38,7 @@ Example:
 
 `--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
 
-`detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段；旧 `--type` 参数作为兼容别名，也发送 `snapshot`。响应中的 `snapshot` 明确本次配置来源（draft/published），与生命周期 `status` 独立；未成功发布的员工查询 published 返回 `NOT_FOUND`，不回退到 dev 对象。曾发布后下架的员工仍可读取保留的 published 配置，`status=offline` 不代表本地 Agent 正在运行。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
+`detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段。响应中的 `snapshot` 明确本次配置来源（draft/published），与生命周期 `status` 独立；未成功发布的员工查询 published 返回 `NOT_FOUND`，不回退到 dev 对象。曾发布后下架的员工仍可读取保留的 published 配置，`status=offline` 不代表本地 Agent 正在运行。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
 
 ## login — 登录数字员工 DWS
 
@@ -78,6 +78,21 @@ Flags:
 `--avatar-url` 可传可公开访问的 HTTP(S) 地址，也可传本地图片路径。传本地文件时 CLI 复用 Skill 上传封装，自动取得临时上传凭证、完成 multipart 上传，再将 OSS URL 作为 `avatarUrl` 保存；不输出临时凭证，用户无需手工编排上传步骤。
 
 写操作，需用户确认：先 `--dry-run`，确认后加 `--yes`。MCP 敏感配置只通过 capability MCP 的本地 `--config-file` 传入，不要拼进命令行或提交到代码库。
+
+## set-visibility — 设置草稿可见范围
+
+```sh
+# 企业全员可见
+dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility ALL --dry-run --format json
+# 仅指定成员和部门可见
+dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PARTIAL --user-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json
+```
+
+- `--agent-uuid`、`--visibility` 必填；`ALL` 表示本企业全员，`PARTIAL` 表示指定成员或部门。
+- `PARTIAL` 的 `--user-ids`、`--dept-ids` 至少一项非空；两项均支持英文逗号分隔或重复传入。
+- 这是**全量替换草稿可见范围**，不会自动发布。未传某一维度会清空该维度，不能把本次输入当作增量追加；`ALL` 无需成员/部门列表。
+- `--user-ids` 接收当前组织内的 userId，MCP 请求字段仍是 `staffIds`。
+- 先预览并让用户确认替换范围，再执行带 `--yes` 的命令。其他草稿字段保持不变。
 
 ## publish — 发布
 

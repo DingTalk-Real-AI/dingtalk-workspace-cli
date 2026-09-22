@@ -242,7 +242,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传时服务端使用操作人主任职部门", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "avatar-url", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片路径（最大 10 MiB）；本地文件由 CLI 自动上传", Bind: "avatarUrl", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "type", Usage: "必填主程序类型：open_code 或 local_agent；必须显式填写且不能为空；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Required: true, Trim: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Aliases: []string{"main-program-type"}, Usage: "必填主程序类型：open_code 或 local_agent；必须显式填写且不能为空；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Required: true, Trim: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；未提供或空值时默认 mention_only", Bind: "digitalTagEmployeeProfile.responseMode", Default: deapAgentResponseModeMentionOnly, ArgDefault: deapAgentResponseModeMentionOnly, Trim: true, Transform: deapAgentResponseMode},
 		},
 		Safety: contract.SafetySpec{
@@ -291,13 +291,13 @@ func newDeapAgentDetailCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "detail",
 		Short:     "查询数字员工管理态详情",
-		Long:      "按 agentUuid 查询数字员工详情。--snapshot draft 读取当前草稿，published 读取已发布配置，默认 draft；MCP 字段为 snapshot，兼容旧参数 --type。返回 status 是发布/生命周期状态，不代表本地 Agent 正在运行。人员标识统一为 userId。Skill/MCP 能力资源也通过 snapshot 选择草稿或已发布配置。详情的 avatarUrl 仅按当前接口结果使用；修改头像请重新传公网 URL 或本地文件路径。",
+		Long:      "按 agentUuid 查询数字员工详情。--snapshot draft 读取当前草稿，published 读取已发布配置，默认 draft；MCP 字段为 snapshot。返回 status 是发布/生命周期状态，不代表本地 Agent 正在运行。人员标识统一为 userId。Skill/MCP 能力资源也通过 snapshot 选择草稿或已发布配置。详情的 avatarUrl 仅按当前接口结果使用；修改头像请重新传公网 URL 或本地文件路径。",
 		Tool:      deapAgentDetailTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
-			{Name: "snapshot", Aliases: []string{"type"}, Usage: "详情快照：draft（未发布草稿）或 published（已发布配置）；--type 为兼容别名", Bind: "snapshot", Default: "draft", ArgDefault: "draft", Trim: true, Enum: []string{"draft", "published"}},
+			{Name: "snapshot", Aliases: []string{"type"}, Usage: "详情快照：draft（未发布草稿）或 published（已发布配置）", Bind: "snapshot", Default: "draft", ArgDefault: "draft", Trim: true, Enum: []string{"draft", "published"}},
 		},
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
@@ -339,7 +339,7 @@ func newDeapAgentListCommand() *cobra.Command {
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "keyword", Usage: "按名称或职责等可见信息模糊匹配", Bind: "keyword", Trim: true, OmitEmpty: true},
-			{Name: "type", Usage: "按主程序类型筛选：open_code 或 local_agent；对应 MCP 字段 type，不传表示不过滤", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Aliases: []string{"main-program-type"}, Usage: "按主程序类型筛选：open_code 或 local_agent；对应 MCP 字段 type，不传表示不过滤", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "page", Usage: "页码", Bind: "page", Kind: LeafInt, Default: "1", ArgDefault: "1"},
 			{Name: "page-size", Usage: "每页数量", Bind: "pageSize", Kind: LeafInt, Default: "20", ArgDefault: "20"},
 		},
@@ -394,7 +394,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传保持原部门，不支持清空", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "prompt", Usage: "人设/System Prompt（最多 5000 个 Unicode 码点）", Bind: "prompt", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "type", Usage: "可选主程序类型：open_code 或 local_agent；未修改时省略（保持草稿原值），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Aliases: []string{"main-program-type"}, Usage: "可选主程序类型：open_code 或 local_agent；未修改时省略（保持草稿原值），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；未传时保持草稿原值", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 		},
 		Safety: contract.SafetySpec{
@@ -456,7 +456,7 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
 			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见（配合 --user-ids/--dept-ids）", Bind: "visibility", Required: true, Trim: true},
-			{Name: "user-ids", Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
+			{Name: "user-ids", Aliases: []string{"staff-ids"}, Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
 			{Name: "dept-ids", Usage: "指定可见部门 ID，可重复或用英文逗号分隔；全量替换，未提供则清空部门维度", Bind: "deptIds", Kind: LeafStringSlice},
 		},
 		Safety: contract.SafetySpec{
@@ -501,6 +501,7 @@ func newDeapAgentPublishCommand() *cobra.Command {
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
+			{Name: "allow-join-group", Usage: "已废弃，仅兼容旧脚本；值会被忽略，不修改入群设置", Kind: LeafBool, Bind: "allowJoinGroup", Hidden: true},
 		},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high",

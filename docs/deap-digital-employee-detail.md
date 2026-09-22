@@ -8,8 +8,7 @@ dws dingtalk-tag manage detail --agent-uuid <agentUuid> --snapshot published
 ```
 
 `--snapshot` 只接受 `draft` 或 `published`，默认 `draft`。CLI 映射到
-`get_digital_employee_detail` 的 `snapshot` 字段。旧 `--type` 保留为兼容别名，
-也发送 `snapshot`；登录和连接内部的详情查询使用相同字段。
+`get_digital_employee_detail` 的 `snapshot` 字段。登录和连接内部的详情查询使用相同字段。
 
 详情响应中的 `type` 表示主程序类型（`open_code` / `local_agent`）。
 响应的 `snapshot` 表示本次读取的配置来源（`draft` / `published`）。
