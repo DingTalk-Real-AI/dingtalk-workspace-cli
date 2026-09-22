@@ -31,7 +31,7 @@ metadata:
 
 ## 自然语言编排硬约束
 
-- 创建/更新的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，列表过滤使用顶层 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 参数为 `--type`；创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截；应告知调用方选择主程序类型，不能省略或发送空值。更新时未传则保持原值；明确接入本地 Agent/DSH 时传 `--type local_agent`。注意 `create`/`list`/`save-draft` 的 `--type` 是主程序类型，而 `detail` 的 `--type` 是 `--snapshot draft|published` 的兼容别名，不要混淆。
+- 创建/更新的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，列表过滤使用顶层 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 参数为 `--type`；创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截；应告知调用方选择主程序类型，不能省略或发送空值。更新时未传则保持原值；明确接入本地 Agent/DSH 时传 `--type local_agent`。注意 `create`/`list`/`save-draft` 的 `--type` 是主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，不要混淆。
 - 创建时未提供 `--response-mode` 或值为空，CLI 默认发送 `mention_only`，包括 `local_agent`。更新时不传就不更新该字段，显式值保持不变；最终有效配置由服务端按当前草稿校验。
 - 创建要求名称、描述和主程序类型；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
 - `save-draft` 只更新用户明确修改的基础草稿字段，不接受 Skill/MCP 完整数组。Skill/MCP 生命周期统一使用 `capability skill|mcp create|update|delete|list|query`；不设计 attach/detach，`check_mcp` 只在 create 和带配置的 update 内部调用。

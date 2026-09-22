@@ -1453,8 +1453,8 @@ func TestCrossPlatformCoverageDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing
 	}
 
 	publish := deapFindLeaf(t, root, "publish")
-	if flag := publish.Flags().Lookup("allow-join-group"); flag != nil {
-		t.Fatalf("retired publish flag --allow-join-group is still exposed: %v", flag)
+	if flag := publish.Flags().Lookup("allow-join-group"); flag == nil || !flag.Hidden {
+		t.Fatalf("retired publish flag must remain a hidden compatibility input: %v", flag)
 	}
 	for _, leafName := range []string{"create", "list", "save-draft"} {
 		command := deapFindLeaf(t, root, leafName)

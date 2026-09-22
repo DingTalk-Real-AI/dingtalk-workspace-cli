@@ -2,5 +2,5 @@
 category: Fixed
 ---
 
-- local_agent 发布前自动为缺失的人设补齐默认值，保留已有配置；预览展示条件补齐计划，读取或保存失败时停止发布。
-- save-draft 区分未传字段与显式空字符串，空白参数在预览和执行阶段均返回校验错误；说明空更新和 draft/published 快照回执语义。
+- Initialize a missing platform prompt before publishing a local_agent employee, preserving existing prompts and stopping publication when draft lookup or initialization fails. Dry-run retains its request preview contract and includes the conditional steps without remote calls.
+- Reject explicitly empty or whitespace-only save-draft text fields in both preview and execution, while preserving omitted fields. Clarify the coordinated server contracts for no-op draft saves and draft/published snapshot responses.
