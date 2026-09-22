@@ -867,6 +867,30 @@ func TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageDevDeapAgentSkillUpdateRejectsFileWithEnabled(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	deap := deapHandler{}.Command(&captureRunner{})
+	update, _, err := deap.Find([]string{"capability", "skill", "update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{
+		"agent-uuid": "agent-1", "skill-id": "skill-1",
+		"file": "./skill.zip", "enabled": "true",
+	} {
+		if err := update.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runErr := update.RunE(update, nil)
+	if runErr == nil || !strings.Contains(runErr.Error(), "互斥") {
+		t.Fatalf("file+enabled mutual-exclusion error = %v", runErr)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("mutually exclusive update made remote calls: %#v", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageDevDeapAgentSaveDraftDoesNotExposeCapabilityArrays(t *testing.T) {
 	deap := deapHandler{}.Command(&captureRunner{})
 	save, _, err := deap.Find([]string{"manage", "save-draft"})
