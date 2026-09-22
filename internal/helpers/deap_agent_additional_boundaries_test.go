@@ -34,7 +34,7 @@ func TestCrossPlatformCoverageEmployeeAdditionalValidation(t *testing.T) {
 			_ = cmd.Flags().Set("name", "fixture")
 			_ = cmd.Flags().Set("description", "fixture")
 			if !item.update {
-				_ = cmd.Flags().Set("main-program-type", "open_code")
+				_ = cmd.Flags().Set("type", "open_code")
 			}
 			if cmd.Flags().Lookup("agent-uuid") != nil {
 				_ = cmd.Flags().Set("agent-uuid", "agent")
