@@ -10,16 +10,17 @@ Usage:
 Flags:
   --name             必填，同组织内唯一（≤30 Unicode 码点）
   --description      必填，职责描述（≤300 码点）
+  --prompt           可选人设/System Prompt（≤5000 码点）；local_agent 省略时使用默认人设，其他类型省略时提醒补齐
   --dept-id          归属部门 ID；可选，省略时服务端补操作人主任职部门
   --avatar-url       公网 HTTP(S) 头像地址，或本地图片路径（≤10 MiB）
   --supervisor-user-id 直属上级 userId
   --type             必填：open_code | local_agent；必须显式填写且不能为空
   --response-mode    mention_only | targeted_proactive | mention_only,targeted_proactive；未提供或空值时默认 mention_only
 Example:
-  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --type open_code --avatar-url ./avatar.png --dry-run --format json
+  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --type open_code --prompt "你是周报助手，负责汇总团队进展。" --avatar-url ./avatar.png --dry-run --format json
 ```
 
-只建草稿，不会上线。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
+只建草稿，不会上线。`--prompt` 对所有当前支持的类型均可选；显式空字符串或纯空白会被拒绝。`local_agent` 省略时自动保存默认人设；其他类型（当前为 `open_code`）省略时仅提醒发布前补齐，不阻断创建，也不套用本地 Agent 的默认人设。DWS 在同一次命令中先创建草稿，再保存人设及本地头像；后续保存失败时保留 `agentUuid`，使用 detail / save-draft 恢复，禁止重复创建。`--dry-run` 会展示待保存的人设且不调用远端。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 

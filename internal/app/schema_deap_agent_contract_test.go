@@ -80,6 +80,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			map[string]string{
 				"name": "name", "description": "description", "dept-id": "deptId",
 				"avatar-url":         "avatarUrl",
+				"prompt":             "prompt",
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
 				"type":               "digitalTagEmployeeProfile.type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
@@ -180,6 +181,9 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			}
 			if got := schemaContractString(parameter["property"]); got != property {
 				t.Errorf("%s parameter %s property = %q, want %q", canonical, flagName, got, property)
+			}
+			if flagName == "prompt" && parameter["required"] == true {
+				t.Errorf("%s prompt must remain optional", canonical)
 			}
 			if flagName == "type" {
 				wantRequired := canonical == "dingtalk-tag.create_digital_employee"
