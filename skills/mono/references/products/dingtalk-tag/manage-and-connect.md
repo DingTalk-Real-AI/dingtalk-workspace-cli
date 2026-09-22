@@ -44,7 +44,7 @@ dws dingtalk-tag manage create \
   --dry-run --format json
 ```
 
-create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
+create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。local_agent 发布时由 DWS 自动补齐缺失的平台人设，用户无需配置；已有非空人设保持不变。其他发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
 
 ## 修改：按字段更新
 
