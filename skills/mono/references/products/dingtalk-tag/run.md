@@ -18,6 +18,7 @@ Example:
 
 - `run-status` 返回 `result`（1 成功 / -1 失败 / 0 运行中 / 2 中止）、`execStatus`、`runId`、`messageId`
 - `trace` 返回 Langfuse 原始 trace JSON，**含完整对话与模型输入输出**；服务端先做管理者 / 触发人两级授权，无权返回 `NO_PERMISSION`
+- `trace` 输出为 `null`（无 data）**不是报错**，而是该来源暂无可用 trace：可能 trace 尚未就绪（异步写入有延迟）、来源 ID/类型不匹配，或该来源无对应执行；可稍后重试，或先用 `run-status` 确认执行是否存在
 
 **不接 `--run-id`**：调用方手上只会有来源侧原始 ID，拿不到 runId。runId 是**出参**，只用于人工去 SLS / Langfuse 控制台比对。
 
