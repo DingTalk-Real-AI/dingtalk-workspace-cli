@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
+  <img src="https://img.shields.io/badge/Go-1.26+-green?logo=go&logoColor=white" alt="Go 1.26+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -139,7 +139,7 @@ Static endpoint data is generated from the Wukong baseline and committed in this
 repository under `internal/syncdata`, so source builds do not require a sibling
 data checkout.
 
-> Requires Go 1.25+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
+> Requires Go 1.26+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
 > the default CGO build includes the SafeChat backend without a build tag and
 > therefore requires a working C compiler. Set `CGO_ENABLED=0` only when a stub
 > build is intentional. Use `make package` with Docker to build all six release

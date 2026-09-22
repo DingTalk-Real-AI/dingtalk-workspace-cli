@@ -10,13 +10,14 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build check-safechat test-aem test-safechat rebuild test test-plan test-auth-legacy-compat typed-validation-errors shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build build-openharmony check-safechat test-aem test-safechat rebuild test test-plan test-auth-legacy-compat typed-validation-errors shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make build         - Build the dws CLI binary\n"
+	@printf "  make build-openharmony - Build the OpenHarmony arm64 CLI binary\n"
 	@printf "  make test          - Run the Go test suite\n"
 	@printf "  make check-safechat - Compile and vet the SafeChat message-crypto backend (needs CGO)\n"
 	@printf "  make test-safechat - Run the message-crypto tests against the SafeChat backend\n"
@@ -52,6 +53,9 @@ help:
 
 build:
 	@./scripts/dev/build.sh
+
+build-openharmony:
+	@./scripts/dev/build-openharmony.sh
 
 rebuild:
 	@./scripts/dev/build.sh

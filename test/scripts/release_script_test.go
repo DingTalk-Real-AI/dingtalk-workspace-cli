@@ -34,7 +34,7 @@ func releaseArtifactVerificationEnv(t *testing.T) []string {
 	shimDir := t.TempDir()
 	shim := fmt.Sprintf(`#!/bin/sh
 if [ "$#" -ge 2 ] && [ "$1" = "version" ] && [ "$2" = "-m" ]; then
-  printf '%%s: go1.25.9\n' "${3:-dws}"
+  printf '%%s: go1.26.7\n' "${3:-dws}"
   printf '\tdep\tsafechat-go-sdk\tv0.0.0\n'
   printf '\tbuild\tCGO_ENABLED=1\n'
   exit 0

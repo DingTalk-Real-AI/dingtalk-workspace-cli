@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
+  <img src="https://img.shields.io/badge/Go-1.26+-green?logo=go&logoColor=white" alt="Go 1.26+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -135,7 +135,7 @@ go build -o dws ./cmd       # 编译到当前目录
 cp dws ~/.local/bin/         # 安装到 PATH
 ```
 
-> 需要 Go 1.25+。在支持的 macOS、Linux、Windows amd64/arm64 平台上，默认
+> 需要 Go 1.26+。在支持的 macOS、Linux、Windows amd64/arm64 平台上，默认
 > CGO 构建无需 build tag 即包含 SafeChat 后端，因此本机构建需要可用的 C 编译器。
 > 只有明确需要 stub 时才设置 `CGO_ENABLED=0`。使用 `make package` 和 Docker
 > 可通过仓库固定的交叉编译工具链构建全部六个平台产物。
