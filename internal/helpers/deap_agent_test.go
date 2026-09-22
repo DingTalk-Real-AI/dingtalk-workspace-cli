@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试本地头像", "avatar-url": avatarInput,
-		"response-mode": "mention_only", "main-program-type": "open_code",
+		"response-mode": "mention_only", "type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -102,7 +102,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUplo
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试公网头像",
-		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only", "main-program-type": "open_code",
+		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only", "type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -1034,7 +1034,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 				"name": "值班助手", "description": "处理值班问题",
 				"dept-id":            "dept-1",
 				"supervisor-user-id": "supervisor-1",
-				"main-program-type":  "local_agent",
+				"type":               "local_agent",
 				"response-mode":      "targeted_proactive, mention_only",
 			},
 			wantArgs: map[string]any{
@@ -1054,7 +1054,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 		{
 			leaf: "list", tool: "list_digital_employees",
 			flags: map[string]string{
-				"keyword": "值班", "main-program-type": "local_agent", "page": "2", "page-size": "101",
+				"keyword": "值班", "type": "local_agent", "page": "2", "page-size": "101",
 			},
 			wantArgs: map[string]any{
 				"keyword": "值班", "type": "local_agent", "page": 2, "pageSize": 101,
@@ -1065,7 +1065,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			flags: map[string]string{
 				"agent-uuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
 				"supervisor-user-id": "supervisor-1",
-				"main-program-type":  "local_agent",
+				"type":               "local_agent",
 				"response-mode":      "targeted_proactive",
 			},
 			wantArgs: map[string]any{
@@ -1197,12 +1197,12 @@ func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testin
 		}{
 			{
 				name:        "local_agent_without_response_mode",
-				flags:       []string{"--main-program-type", "local_agent"},
+				flags:       []string{"--type", "local_agent"},
 				wantProfile: map[string]any{"type": "local_agent"},
 			},
 			{
 				name:        "open_code_with_response_mode",
-				flags:       []string{"--main-program-type", "open_code", "--response-mode", "mention_only"},
+				flags:       []string{"--type", "open_code", "--response-mode", "mention_only"},
 				wantProfile: map[string]any{"type": "open_code", "responseMode": "mention_only"},
 			},
 		} {
@@ -1287,24 +1287,24 @@ func TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP(t *testing.T)
 		{leaf: "trace", flags: map[string]string{"agent-uuid": "agent-1", "source-id": "src-1"}, wantErr: "source-type"},
 		{leaf: "list", flags: map[string]string{"page": "0"}, wantErr: "--page 不能小于 1"},
 		{leaf: "list", flags: map[string]string{"page-size": "0"}, wantErr: "--page-size 不能小于 1"},
-		{leaf: "list", flags: map[string]string{"main-program-type": "a2a"}, wantErr: "--main-program-type"},
+		{leaf: "list", flags: map[string]string{"type": "a2a"}, wantErr: "--type"},
 		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "snapshot": "merged"}, wantErr: "--snapshot"},
 		{leaf: "login", flags: map[string]string{}, wantErr: "agent-uuid"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "always_reply", "main-program-type": "open_code",
+			"response-mode": "always_reply", "type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "mention_only,always_reply", "main-program-type": "open_code",
+			"response-mode": "mention_only,always_reply", "type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"main-program-type": "a2a",
-		}, wantErr: "--main-program-type"},
+			"type": "a2a",
+		}, wantErr: "--type"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "avatar-url": "avatar.bmp",
-			"response-mode": "mention_only", "main-program-type": "open_code",
+			"response-mode": "mention_only", "type": "open_code",
 		}, wantErr: "本地文件只支持"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),
@@ -1376,7 +1376,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 
 	for name, value := range map[string]string{
 		"name": "值班助手", "description": "处理值班问题",
-		"dept-id": "dept-1", "response-mode": "mention_only", "main-program-type": "open_code",
+		"dept-id": "dept-1", "response-mode": "mention_only", "type": "open_code",
 	} {
 		if setErr := create.Flags().Set(name, value); setErr != nil {
 			t.Fatal(setErr)
@@ -1421,13 +1421,13 @@ func TestCrossPlatformCoverageDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing
 	}
 
 	publish := deapFindLeaf(t, root, "publish")
-	if flag := publish.Flags().Lookup("allow-join-group"); flag == nil || flag.DefValue != "false" {
-		t.Fatalf("allow-join-group default = %v, current MCP declares an optional boolean without a default", flag)
+	if flag := publish.Flags().Lookup("allow-join-group"); flag != nil {
+		t.Fatalf("retired publish flag --allow-join-group is still exposed: %v", flag)
 	}
 	for _, leafName := range []string{"create", "list", "save-draft"} {
 		command := deapFindLeaf(t, root, leafName)
-		if flag := command.Flags().Lookup("main-program-type"); flag == nil {
-			t.Fatalf("%s is missing --main-program-type", leafName)
+		if flag := command.Flags().Lookup("type"); flag == nil {
+			t.Fatalf("%s is missing --type", leafName)
 		}
 	}
 	for _, leafName := range []string{"create", "save-draft"} {

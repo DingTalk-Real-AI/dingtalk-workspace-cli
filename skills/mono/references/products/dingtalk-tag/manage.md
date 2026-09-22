@@ -6,37 +6,37 @@
 
 ```
 Usage:
-  dws dingtalk-tag manage create --name <名称> --description <职责描述> --main-program-type <open_code|local_agent> [flags]
+  dws dingtalk-tag manage create --name <名称> --description <职责描述> --type <open_code|local_agent> [flags]
 Flags:
   --name             必填，同组织内唯一（≤30 Unicode 码点）
   --description      必填，职责描述（≤300 码点）
   --dept-id          归属部门 ID；可选，省略时服务端补操作人主任职部门
   --avatar-url       公网 HTTP(S) 头像地址，或本地图片路径（≤10 MiB）
   --supervisor-user-id 直属上级 userId
-  --main-program-type 必填：open_code | local_agent；必须显式填写且不能为空
+  --type             必填：open_code | local_agent；必须显式填写且不能为空
   --response-mode    mention_only | targeted_proactive | mention_only,targeted_proactive；未提供或空值时默认 mention_only
 Example:
-  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --main-program-type open_code --avatar-url ./avatar.png --dry-run --format json
+  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --type open_code --avatar-url ./avatar.png --dry-run --format json
 ```
 
 只建草稿，不会上线。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
-`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数仍是 `--main-program-type`。创建时必须显式传 `--main-program-type open_code|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。详情命令的 `--snapshot draft|published` 表示配置来源，不是主程序类型。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
+`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数为 `--type`。创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。注意：`create` / `list` / `save-draft` 的 `--type` 表示主程序类型，而 `detail` 的 `--type` 是 `--snapshot draft|published`（配置来源）的兼容别名，分属不同子命令，不要混淆。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
 
 ## detail / list — 查询
 
 ```
 Usage:
   dws dingtalk-tag manage detail --agent-uuid <agentUuid> [--snapshot draft|published]
-  dws dingtalk-tag manage list [--keyword <关键词>] [--main-program-type open_code|local_agent] [--page 1] [--page-size 20]
+  dws dingtalk-tag manage list [--keyword <关键词>] [--type open_code|local_agent] [--page 1] [--page-size 20]
 Example:
   dws dingtalk-tag manage detail --agent-uuid <agentUuid> --format json
-  dws dingtalk-tag manage list --keyword "周报" --main-program-type local_agent --format json
+  dws dingtalk-tag manage list --keyword "周报" --type local_agent --format json
 ```
 
-`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--main-program-type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
+`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
 
 `detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段；旧 `--type` 参数作为兼容别名，也发送 `snapshot`。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
 
@@ -68,7 +68,7 @@ Flags:
   --agent-uuid       必填
   --prompt           人设 / System Prompt（≤5000 码点）
   其余可更新字段：name / description / avatar-url / dept-id /
-  supervisor-user-id / main-program-type / response-mode
+  supervisor-user-id / type / response-mode
 ```
 
 `save-draft` 只按字段更新数字员工基础草稿：未传字段保持原值。Skill/MCP 的创建、更新、删除统一使用 `dws dingtalk-tag capability skill|mcp ...`，本命令不接受完整 Skill/MCP 数组。成功响应与 `detail --snapshot draft` 结构一致，用于立即确认保存结果。
@@ -83,12 +83,10 @@ Flags:
 
 ```
 Usage:
-  dws dingtalk-tag manage publish --agent-uuid <agentUuid> [--allow-join-group]
+  dws dingtalk-tag manage publish --agent-uuid <agentUuid>
 ```
 
 **不携带任何配置**，只发布当前已保存的完整草稿。发布所需配置由服务端校验。创建默认发送 `mention_only`；历史草稿缺少响应模式时，先通过 `save-draft --response-mode mention_only` 补齐。
-
-`--allow-join-group` 是可选布尔，控制是否允许加入群聊。
 
 ## delete — 删除
 

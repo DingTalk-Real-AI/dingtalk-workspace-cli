@@ -232,7 +232,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "create",
 		Short:     "创建草稿态数字员工",
-		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。avatar-url 可传公网 HTTP(S) 地址或本地图片路径；本地图片复用 Skill 文件上传封装，在 CLI 内部上传为 OSS 地址后写入草稿。用户传入的主管标识始终是 userId。必须显式传入 --main-program-type open_code 或 local_agent，对应 MCP 字段 digitalTagEmployeeProfile.type；缺失或空值由 CLI 拦截，不自动选择类型。未提供 response-mode 或值为空时，CLI 默认发送 mention_only。",
+		Long:      "创建数字员工草稿并返回 agentUuid，不自动发布。name 和 description 必填；dept-id 可选，不传时由 OpenAPI 补齐操作人主任职部门。avatar-url 可传公网 HTTP(S) 地址或本地图片路径；本地图片复用 Skill 文件上传封装，在 CLI 内部上传为 OSS 地址后写入草稿。用户传入的主管标识始终是 userId。必须显式传入 --type open_code 或 local_agent，对应 MCP 字段 digitalTagEmployeeProfile.type；缺失或空值由 CLI 拦截，不自动选择类型。未提供 response-mode 或值为空时，CLI 默认发送 mention_only。",
 		Tool:      deapAgentCreateTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -242,7 +242,7 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传时服务端使用操作人主任职部门", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "avatar-url", Usage: "公网 HTTP(S) 头像地址，或本地 jpg/jpeg/png/gif/webp 图片路径（最大 10 MiB）；本地文件由 CLI 自动上传", Bind: "avatarUrl", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "必填主程序类型：open_code 或 local_agent；必须显式填写且不能为空；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Required: true, Trim: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Usage: "必填主程序类型：open_code 或 local_agent；必须显式填写且不能为空；接入本地 Agent/DSH 时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Required: true, Trim: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；未提供或空值时默认 mention_only", Bind: "digitalTagEmployeeProfile.responseMode", Default: deapAgentResponseModeMentionOnly, ArgDefault: deapAgentResponseModeMentionOnly, Trim: true, Transform: deapAgentResponseMode},
 		},
 		Safety: contract.SafetySpec{
@@ -269,18 +269,18 @@ func newDeapAgentCreateCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage create", PrimaryCLIPath: "dingtalk-tag manage create",
 				Group: "manage",
 			},
-			Description: "创建数字员工草稿并返回 agentUuid。必须显式填写 main-program-type（open_code 或 local_agent），不可为空；部门可由服务端按操作人主任职部门补齐；本地头像由 CLI 上传后回写；不自动发布。",
+			Description: "创建数字员工草稿并返回 agentUuid。必须显式填写 type（open_code 或 local_agent），不可为空；部门可由服务端按操作人主任职部门补齐；本地头像由 CLI 上传后回写；不自动发布。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentCreateTool),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建新的草稿态 DEAP 数字员工",
 				UseWhen:      []string{"需要从零创建数字员工并获得 agentUuid 时"},
 				AvoidWhen:    []string{"已有 agentUuid 只需修改草稿时使用 save-draft", "创建普通开放平台应用时使用 dev app create"},
-				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --main-program-type open_code --avatar-url https://example.com/avatar.png --response-mode mention_only --dry-run --format json`},
+				Examples:     []string{`dws dingtalk-tag manage create --name "值班助手" --description "处理值班问题" --type open_code --avatar-url https://example.com/avatar.png --response-mode mention_only --dry-run --format json`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
-				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.type", Enum: deapAgentMainProgramTypeValues, Description: "必填且不能为空，对应 MCP 字段 digitalTagEmployeeProfile.type；显式选择 open_code 或 local_agent，接入本地 Agent/DSH 时传 local_agent"},
+				{Name: "type", Property: "digitalTagEmployeeProfile.type", Enum: deapAgentMainProgramTypeValues, Description: "必填且不能为空，对应 MCP 字段 digitalTagEmployeeProfile.type；显式选择 open_code 或 local_agent，接入本地 Agent/DSH 时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；未提供或空值时默认 mention_only；支持 mention_only、targeted_proactive 或双值组合"},
 			},
 		},
@@ -339,7 +339,7 @@ func newDeapAgentListCommand() *cobra.Command {
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "keyword", Usage: "按名称或职责等可见信息模糊匹配", Bind: "keyword", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "按主程序类型筛选：open_code 或 local_agent；对应 MCP 字段 type，不传表示不过滤", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Usage: "按主程序类型筛选：open_code 或 local_agent；对应 MCP 字段 type，不传表示不过滤", Bind: "type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "page", Usage: "页码", Bind: "page", Kind: LeafInt, Default: "1", ArgDefault: "1"},
 			{Name: "page-size", Usage: "每页数量", Bind: "pageSize", Kind: LeafInt, Default: "20", ArgDefault: "20"},
 		},
@@ -372,7 +372,7 @@ func newDeapAgentListCommand() *cobra.Command {
 				AgentSummary: "分页查找当前用户可管理或参与的数字员工",
 				UseWhen:      []string{"需要按名称或职责等可见信息查找数字员工，或尚不知道 agentUuid 时"},
 				AvoidWhen:    []string{"已知 agentUuid 需要完整配置时使用 detail", "需要查询运行记录时使用 run-status"},
-				Examples:     []string{`dws dingtalk-tag manage list --keyword "值班" --main-program-type local_agent --page 1 --page-size 20 --format json`},
+				Examples:     []string{`dws dingtalk-tag manage list --keyword "值班" --type local_agent --page 1 --page-size 20 --format json`},
 			},
 		},
 	})
@@ -394,7 +394,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			{Name: "dept-id", Usage: "归属部门 ID；不传保持原部门，不支持清空", Bind: "deptId", Trim: true, OmitEmpty: true},
 			{Name: "prompt", Usage: "人设/System Prompt（最多 5000 个 Unicode 码点）", Bind: "prompt", Trim: true, OmitEmpty: true},
 			{Name: "supervisor-user-id", Usage: "直属上级 userId", Bind: "digitalTagEmployeeProfile.supervisorUserId", Trim: true, OmitEmpty: true},
-			{Name: "main-program-type", Usage: "可选主程序类型：open_code 或 local_agent；未修改时省略（保持草稿原值），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
+			{Name: "type", Usage: "可选主程序类型：open_code 或 local_agent；未修改时省略（保持草稿原值），也可显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent", Bind: "digitalTagEmployeeProfile.type", Trim: true, OmitEmpty: true, Enum: deapAgentMainProgramTypeValues},
 			{Name: "response-mode", Usage: "响应模式：mention_only、targeted_proactive，或英文逗号分隔的组合 mention_only,targeted_proactive；未传时保持草稿原值", Bind: "digitalTagEmployeeProfile.responseMode", Trim: true, OmitEmpty: true, Transform: deapAgentResponseMode},
 		},
 		Safety: contract.SafetySpec{
@@ -435,7 +435,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "supervisor-user-id", Property: "digitalTagEmployeeProfile.supervisorUserId", Description: "直属上级 userId；输入与详情、列表输出统一使用 supervisorUserId"},
-				{Name: "main-program-type", Property: "digitalTagEmployeeProfile.type", Enum: deapAgentMainProgramTypeValues, Description: "MCP 字段为 digitalTagEmployeeProfile.type；未修改时省略（保持草稿原值），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
+				{Name: "type", Property: "digitalTagEmployeeProfile.type", Enum: deapAgentMainProgramTypeValues, Description: "MCP 字段为 digitalTagEmployeeProfile.type；未修改时省略（保持草稿原值），也允许显式传 open_code；保持或切换为本地 Agent/DSH 模式时传 local_agent"},
 				{Name: "response-mode", Property: "digitalTagEmployeeProfile.responseMode", Enum: deapAgentResponseModeValues, Description: "响应模式；未传时保持草稿原值；传值时支持 mention_only、targeted_proactive 或双值组合"},
 			},
 		},
@@ -446,14 +446,14 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "set-visibility",
 		Short:     "设置数字员工可见范围",
-		Long:      "设置指定数字员工草稿的可见范围，全量替换草稿中现有范围，不修改其他草稿字段。visibility=ALL 表示本企业全员可见，此时无需传成员或部门；visibility=PARTIAL 表示仅指定成员或部门可见，用 --staff-ids 传成员 userId、--dept-ids 传部门 ID（两类列表至少一项非空，可混选）。staff-ids 与 dept-ids 均为全量替换：本次未提供则清空对应维度。人员标识统一使用 userId。这是高影响写操作，先 --dry-run 检查参数，再加 --yes。",
+		Long:      "设置指定数字员工草稿的可见范围，全量替换草稿中现有范围，不修改其他草稿字段。visibility=ALL 表示本企业全员可见，此时无需传成员或部门；visibility=PARTIAL 表示仅指定成员或部门可见，用 --user-ids 传成员 userId、--dept-ids 传部门 ID（两类列表至少一项非空，可混选）。user-ids 与 dept-ids 均为全量替换：本次未提供则清空对应维度。人员标识统一使用 userId。这是高影响写操作，先 --dry-run 检查参数，再加 --yes。",
 		Tool:      deapAgentSetVisibilityTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
-			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见（配合 --staff-ids/--dept-ids）", Bind: "visibility", Required: true, Trim: true},
-			{Name: "staff-ids", Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
+			{Name: "visibility", Usage: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见（配合 --user-ids/--dept-ids）", Bind: "visibility", Required: true, Trim: true},
+			{Name: "user-ids", Usage: "指定可见成员 userId，可重复或用英文逗号分隔；全量替换，未提供则清空成员维度", Bind: "staffIds", Kind: LeafStringSlice},
 			{Name: "dept-ids", Usage: "指定可见部门 ID，可重复或用英文逗号分隔；全量替换，未提供则清空部门维度", Bind: "deptIds", Kind: LeafStringSlice},
 		},
 		Safety: contract.SafetySpec{
@@ -476,12 +476,12 @@ func newDeapAgentSetVisibilityCommand() *cobra.Command {
 				AvoidWhen:    []string{"只更新名称、职责或 Skill/MCP 等草稿字段时使用 save-draft", "未确认目标 agentUuid 与可见范围影响时不要执行"},
 				Examples: []string{
 					"dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility ALL --dry-run --format json",
-					`dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PARTIAL --staff-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json`,
+					`dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PARTIAL --user-ids user-1,user-2 --dept-ids 100,200 --dry-run --format json`,
 				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "visibility", Property: "visibility", Description: "可见范围：ALL 表示本企业全员可见；PARTIAL 表示仅指定成员/部门可见"},
-				{Name: "staff-ids", Property: "staffIds", InterfaceType: "array"},
+				{Name: "user-ids", Property: "staffIds", InterfaceType: "array"},
 				{Name: "dept-ids", Property: "deptIds", InterfaceType: "array"},
 			},
 		},
@@ -498,7 +498,6 @@ func newDeapAgentPublishCommand() *cobra.Command {
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
-			{Name: "allow-join-group", Usage: "可选，是否允许加入群聊", Bind: "allowJoinGroup", Kind: LeafBool},
 		},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high",
