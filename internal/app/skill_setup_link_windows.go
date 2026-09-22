@@ -94,14 +94,24 @@ func skillSetupLinkTarget(realTarget, relativeTarget string) string {
 }
 
 func isSkillSetupCurrentCanonicalAdapter(path, canonicalTarget string) bool {
-	if !samePhysicalSkillSetupPath(path, canonicalTarget) {
-		return false
-	}
 	info, err := skillSetupLstat(path)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular == 0 {
+		// Junctions report ModeIrregular; symlinks report ModeSymlink and must
+		// be upgraded; ordinary directories are not adapters.
 		return false
 	}
-	if _, err := skillSetupReadlink(path); err != nil {
+	linkTarget, err := skillSetupReadlink(path)
+	if err != nil {
+		return false
+	}
+	// filepath.EvalSymlinks does not follow junctions (they surface as
+	// ModeIrregular, not ModeSymlink), so physical equality must be checked
+	// on the junction's stored target instead of on path itself.
+	realCanonical, err := skillSetupEvalSymlinks(canonicalTarget)
+	if err != nil {
+		return false
+	}
+	if !sameSkillSetupPath(filepath.Clean(linkTarget), realCanonical) {
 		return false
 	}
 	return validateSkillSetupLink(path) == nil
