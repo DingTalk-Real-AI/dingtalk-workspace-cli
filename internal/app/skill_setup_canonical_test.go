@@ -585,12 +585,12 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
 		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
 
-		origRemoveAll := skillSetupRemoveAll
-		testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+		origRemove := skillSetupRemove
+		testseam.Swap(t, &skillSetupRemove, func(path string) error {
 			if strings.Contains(path, "staging-") {
 				return errors.New("mock prep error")
 			}
-			return origRemoveAll(path)
+			return origRemove(path)
 		})
 
 		plan, err := buildSkillSetupPlan(skillSetupModeMulti, src, []string{canonical, claude}, []string{"dingtalk-chat"}, false)
@@ -830,10 +830,10 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		}
 	})
 
-	t.Run("cleanSkillSetupStagedRoot ownership branches", func(t *testing.T) {
-		// 1. Empty root path
-		if err := cleanSkillSetupStagedRoot(skillSetupStagedRoot{}); err != nil {
-			t.Fatalf("cleanSkillSetupStagedRoot empty = %v", err)
+	t.Run("cleanSkillSetupStagedSet ownership branches", func(t *testing.T) {
+		// 1. Empty root with no items
+		if err := cleanSkillSetupStagedSet(skillSetupStagedRoot{}, nil); err != nil {
+			t.Fatalf("cleanSkillSetupStagedSet empty = %v", err)
 		}
 
 		liveDir := filepath.Join(t.TempDir(), "stage-root")
@@ -842,7 +842,7 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		}
 
 		// 2. Missing creation identity refuses removal
-		if err := cleanSkillSetupStagedRoot(skillSetupStagedRoot{path: liveDir}); err == nil || !strings.Contains(err.Error(), "缺少创建身份") {
+		if err := cleanSkillSetupStagedSet(skillSetupStagedRoot{path: liveDir}, nil); err == nil || !strings.Contains(err.Error(), "缺少创建身份") {
 			t.Fatalf("expected missing identity error, got: %v", err)
 		}
 		if _, err := os.Stat(liveDir); err != nil {
@@ -854,22 +854,112 @@ func TestCrossPlatformCoverageSkillSetupStagingCleanupFailureBlocksFallback(t *t
 		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool {
 			return false
 		})
-		if err := cleanSkillSetupStagedRoot(root); err == nil || !strings.Contains(err.Error(), "身份已变化") {
+		if err := cleanSkillSetupStagedSet(root, nil); err == nil || !strings.Contains(err.Error(), "身份已变化") {
 			t.Fatalf("expected identity mismatch error, got: %v", err)
 		}
 		if _, err := os.Stat(liveDir); err != nil {
 			t.Fatalf("root must survive refused cleanup: %v", err)
 		}
 
-		// 4. Proven identity removes the root
+		// 4. A concurrent entry planted inside the root blocks non-recursive removal
 		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool {
 			return true
 		})
-		if err := cleanSkillSetupStagedRoot(root); err != nil {
-			t.Fatalf("cleanSkillSetupStagedRoot proven = %v", err)
+		foreign := filepath.Join(liveDir, "foreign.txt")
+		if err := os.WriteFile(foreign, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := cleanSkillSetupStagedSet(root, nil); err == nil || !strings.Contains(err.Error(), "清理 Skill staging 失败") {
+			t.Fatalf("expected non-empty root removal failure, got: %v", err)
+		}
+		if _, err := os.Stat(liveDir); err != nil {
+			t.Fatalf("root must survive blocked cleanup: %v", err)
+		}
+		if _, err := os.Stat(foreign); err != nil {
+			t.Fatalf("concurrent entry must survive blocked cleanup: %v", err)
+		}
+
+		// 5. A proven empty root is removed non-recursively
+		if err := os.Remove(foreign); err != nil {
+			t.Fatal(err)
+		}
+		if err := cleanSkillSetupStagedSet(root, nil); err != nil {
+			t.Fatalf("cleanSkillSetupStagedSet proven = %v", err)
 		}
 		if _, err := os.Stat(liveDir); !os.IsNotExist(err) {
 			t.Fatalf("proven root must be removed: %v", err)
+		}
+
+		// 6. Root vanished between verify and removal is already clean
+		goneDir := filepath.Join(t.TempDir(), "stage-root-gone")
+		if err := os.MkdirAll(goneDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		goneRoot := skillSetupStagedRoot{path: goneDir, identity: &skillSetupFileInfo{name: "stage-root-gone"}, fileID: "id2"}
+		origRemove := skillSetupRemove
+		testseam.Swap(t, &skillSetupRemove, func(path string) error {
+			if path == goneDir {
+				return os.ErrNotExist
+			}
+			return origRemove(path)
+		})
+		if err := cleanSkillSetupStagedSet(goneRoot, nil); err != nil {
+			t.Fatalf("vanished root = %v", err)
+		}
+
+		// 7. Root vanished before cleanup: verification sees it as already clean
+		vanishDir := filepath.Join(t.TempDir(), "stage-root-vanished")
+		if err := os.MkdirAll(vanishDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		vanishRoot := skillSetupStagedRoot{path: vanishDir, identity: &skillSetupFileInfo{name: "stage-root-vanished"}, fileID: "id3"}
+		if err := os.Remove(vanishDir); err != nil {
+			t.Fatal(err)
+		}
+		if err := cleanSkillSetupStagedSet(vanishRoot, nil); err != nil {
+			t.Fatalf("vanished root before cleanup = %v", err)
+		}
+
+		// 8. Root lstat failure during cleanup surfaces
+		errDir := filepath.Join(t.TempDir(), "stage-root-err")
+		if err := os.MkdirAll(errDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		errRoot := skillSetupStagedRoot{path: errDir, identity: &skillSetupFileInfo{name: "stage-root-err"}, fileID: "id4"}
+		origLstat := skillSetupLstat
+		testseam.Swap(t, &skillSetupLstat, func(path string) (os.FileInfo, error) {
+			if path == errDir {
+				return nil, errors.New("mock root cleanup lstat error")
+			}
+			return origLstat(path)
+		})
+		if err := cleanSkillSetupStagedSet(errRoot, nil); err == nil || !strings.Contains(err.Error(), "mock root cleanup lstat error") {
+			t.Fatalf("expected root cleanup lstat error, got: %v", err)
+		}
+		if _, statErr := os.Stat(errDir); statErr != nil {
+			t.Fatalf("root must survive lstat failure: %v", statErr)
+		}
+	})
+
+	t.Run("cleanSkillSetupStagedSet removes items before root", func(t *testing.T) {
+		liveDir := filepath.Join(t.TempDir(), "stage-root")
+		itemDir := filepath.Join(liveDir, "dingtalk-a")
+		if err := os.MkdirAll(itemDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(itemDir, "SKILL.md"), []byte("a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		root := skillSetupStagedRoot{path: liveDir, identity: &skillSetupFileInfo{name: "stage-root"}, fileID: "id1"}
+		item := skillSetupStagedDir{staged: itemDir, dest: "dest", identity: &skillSetupFileInfo{name: "dingtalk-a"}, fileID: "id2"}
+		testseam.Swap(t, &skillSetupIdentityProven, func(_, _ os.FileInfo, _, _ string) bool {
+			return true
+		})
+		if err := cleanSkillSetupStagedSet(root, []skillSetupStagedDir{item}); err != nil {
+			t.Fatalf("cleanSkillSetupStagedSet with items = %v", err)
+		}
+		if _, err := os.Stat(liveDir); !os.IsNotExist(err) {
+			t.Fatalf("root must be removed after items: %v", err)
 		}
 	})
 
