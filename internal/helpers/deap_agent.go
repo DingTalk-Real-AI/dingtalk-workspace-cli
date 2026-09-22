@@ -610,7 +610,7 @@ func newDeapAgentTraceCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "trace",
 		Short:     "查询数字员工执行 Trace",
-		Long:      "查询指定数字员工的执行 Trace。--agent-uuid、--source-id、--source-type 均必填（与 run-status 一致）。返回内容可能包含完整对话和模型输入输出；服务端会先执行管理者/触发人两级授权，无权时返回 NO_PERMISSION。",
+		Long:      "查询指定数字员工的执行 Trace。--agent-uuid、--source-id、--source-type 均必填（与 run-status 一致）。返回内容可能包含完整对话和模型输入输出；服务端会先执行管理者/触发人两级授权，无权时返回 NO_PERMISSION。输出为 null（无 data）不是报错，而是该来源暂无可用 trace：可能 trace 尚未就绪（异步写入有延迟）、来源 ID/类型不匹配，或该来源无对应执行；可稍后重试，或先用 run-status 确认该来源是否存在执行记录。",
 		Tool:      deapAgentTraceTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
