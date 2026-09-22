@@ -32,13 +32,18 @@ func TestCrossPlatformCoverageDeapAgentLegacyNamesKeepRequestMeaning(t *testing.
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caller, _ := newDeapAgentTestTree(t, false)
+			caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1"}}`
 			root := deapHandler{}.Command(&captureRunner{})
 			root.PersistentFlags().Bool("yes", false, "confirmation")
 			root.SetArgs(append([]string{"manage"}, tc.argv...))
 			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 {
+			wantCalls := 1
+			if tc.name == "create" {
+				wantCalls = 2
+			}
+			if len(caller.calls) != wantCalls {
 				t.Fatalf("unexpected calls: %#v", caller.calls)
 			}
 			args := caller.calls[0].args

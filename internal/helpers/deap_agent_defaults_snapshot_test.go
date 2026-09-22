@@ -82,6 +82,7 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 			}
 			t.Run(tc.name+suffix, func(t *testing.T) {
 				caller, out := newDeapAgentTestTree(t, dryRun)
+				caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1"}}`
 				root := deapHandler{}.Command(&captureRunner{})
 				root.PersistentFlags().Bool("yes", false, "test confirmation")
 				root.PersistentFlags().Bool("dry-run", false, "test preview")
@@ -112,7 +113,11 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 					}
 					got = preview.Arguments
 				} else {
-					if len(caller.calls) != 1 || caller.calls[0].toolName != tc.tool || caller.calls[0].productID != deapAgentServerID {
+					wantCalls := 1
+					if tc.name == "create_local_default" {
+						wantCalls = 2
+					}
+					if len(caller.calls) != wantCalls || caller.calls[0].toolName != tc.tool || caller.calls[0].productID != deapAgentServerID {
 						t.Fatalf("unexpected calls: %#v", caller.calls)
 					}
 					got = caller.calls[0].args

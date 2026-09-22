@@ -1146,10 +1146,17 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 					t.Fatal("publish must read the saved draft before dispatch")
 				}
 			}
+			if tc.leaf == "create" {
+				wantCalls = 2
+			}
 			if len(caller.calls) != wantCalls {
 				t.Fatalf("MCP call count = %d, want %d", len(caller.calls), wantCalls)
 			}
-			call := caller.calls[wantCalls-1]
+			callIndex := wantCalls - 1
+			if tc.leaf == "create" {
+				callIndex = 0
+			}
+			call := caller.calls[callIndex]
 			if call.productID != "deap-dev" || call.toolName != tc.tool {
 				t.Fatalf("route = %s/%s, want deap-dev/%s", call.productID, call.toolName, tc.tool)
 			}
@@ -1241,6 +1248,7 @@ func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testin
 			for _, dryRun := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/dry_run=%t", leaf, tc.name, dryRun), func(t *testing.T) {
 					caller, out := newDeapAgentTestTree(t, dryRun)
+					caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1"}}`
 					root := deapHandler{}.Command(&captureRunner{})
 					root.PersistentFlags().Bool("yes", false, "test confirmation")
 					root.PersistentFlags().Bool("dry-run", false, "test preview")
@@ -1290,7 +1298,11 @@ func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testin
 						}
 						got = preview.Arguments
 					} else {
-						if len(caller.calls) != 1 || caller.calls[0].toolName != tool || caller.calls[0].productID != deapAgentServerID {
+						wantCalls := 1
+						if leaf == "create" && profile["type"] == "local_agent" {
+							wantCalls = 2
+						}
+						if len(caller.calls) != wantCalls || caller.calls[0].toolName != tool || caller.calls[0].productID != deapAgentServerID {
 							t.Fatalf("MCP calls = %#v, want one %s/%s call", caller.calls, deapAgentServerID, tool)
 						}
 						got = caller.calls[0].args
