@@ -1,0 +1,47 @@
+{
+  "sha": "59cf3f7df1d9299d3d23ea20d3b505ec1faa1ef7",
+  "started_at": "2026-09-22T09:01:34.458619+00:00",
+  "environment": "macOS arm64, Go 1.26.1",
+  "evidence_kind": "Actual local Go tests with mock MCP and schema dry-run. Not live backend, model evaluation, or GitHub Actions screenshots.",
+  "suites": {
+    "command": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "./internal/helpers",
+        "-run",
+        "Test.*(DeapAgent|DigitalEmployee|DingTalkTag)"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "top_level_pass": 65,
+        "subtest_pass": 212,
+        "fail": 0,
+        "skip": 0
+      },
+      "raw_jsonl_sha256": "e9ff6082375835d6ed1b2f6a74044555aeaddddfe998f7e95339115c796ebf00"
+    },
+    "agent": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "./internal/app",
+        "-run",
+        "^(TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema|TestAgentExamplesContract|TestAgentExamplesDryRun|TestAgentSelectionScenariosCoverEveryExecutableSchemaTool)$"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "top_level_pass": 4,
+        "subtest_pass": 196,
+        "fail": 0,
+        "skip": 0
+      },
+      "raw_jsonl_sha256": "a7e1e583ff4f1f1791bce64054eaa34f29f0a121712d15e5368ebcb12d6f5274"
+    }
+  },
+  "completed_at": "2026-09-22T09:02:18.165896+00:00"
+}
