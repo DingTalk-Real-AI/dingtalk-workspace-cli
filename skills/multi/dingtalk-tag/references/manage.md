@@ -38,7 +38,7 @@ Example:
 
 `--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
 
-`detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段；旧 `--type` 参数作为兼容别名，也发送 `snapshot`。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
+`detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段；旧 `--type` 参数作为兼容别名，也发送 `snapshot`。响应中的 `snapshot` 明确本次配置来源（draft/published），与生命周期 `status` 独立；未成功发布的员工查询 published 返回 `NOT_FOUND`，不回退到 dev 对象。曾发布后下架的员工仍可读取保留的 published 配置，`status=offline` 不代表本地 Agent 正在运行。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
 
 ## login — 登录数字员工 DWS
 
@@ -71,7 +71,7 @@ Flags:
   supervisor-user-id / type / response-mode
 ```
 
-`save-draft` 只按字段更新数字员工基础草稿：未传字段保持原值。Skill/MCP 的创建、更新、删除统一使用 `dws dingtalk-tag capability skill|mcp ...`，本命令不接受完整 Skill/MCP 数组。成功响应与 `detail --snapshot draft` 结构一致，用于立即确认保存结果。
+`save-draft` 只按字段更新数字员工基础草稿：未传字段保持原值；只传 `agent-uuid` 是空更新，服务端只回读草稿，不修改配置。显式空字符串或纯空白（包括 name、dept-id、prompt）会报参数错误，不表示清空；字段可缺省与允许空字符串是两种不同语义。Skill/MCP 的创建、更新、删除统一使用 `dws dingtalk-tag capability skill|mcp ...`，本命令不接受完整 Skill/MCP 数组。成功响应与 `detail --snapshot draft` 结构一致，用于立即确认保存结果。
 
 更新时未传 `--response-mode` 就不发送该字段，保留草稿原值；不会补写创建时的默认值。显式传入时按合法响应模式更新，服务端结合当前草稿校验。
 
@@ -86,7 +86,7 @@ Usage:
   dws dingtalk-tag manage publish --agent-uuid <agentUuid>
 ```
 
-**不携带任何配置**，只发布当前已保存的完整草稿。发布所需配置由服务端校验。创建默认发送 `mention_only`；历史草稿缺少响应模式时，先通过 `save-draft --response-mode mention_only` 补齐。
+发布当前已保存的完整草稿。`local_agent` 无需用户配置平台人设；DWS 在发布前读取草稿，仅在人设缺失时自动保存默认人设，已有非空人设不会被覆盖。`open_code` 不自动补人设。预览只列出条件补齐与发布计划，不访问远端。若默认人设保存成功而发布失败，默认值保留在草稿，查询草稿后再重试。其他发布所需配置由服务端校验。创建默认发送 `mention_only`；历史草稿缺少响应模式时，先通过 `save-draft --response-mode mention_only` 补齐。
 
 ## delete — 删除
 

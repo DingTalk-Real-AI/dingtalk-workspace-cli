@@ -310,7 +310,7 @@ func newDeapAgentDetailCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage detail", PrimaryCLIPath: "dingtalk-tag manage detail",
 				Group: "manage",
 			},
-			Description: "按 agentUuid 查询数字员工 draft 或 published 详情及其 Skill/MCP 引用配置。snapshot 默认 draft；返回 status 中 online 表示已发布，dev/offline 表示未发布。",
+			Description: "按 agentUuid 查询数字员工 draft 或 published 详情及其 Skill/MCP 引用配置。snapshot 默认 draft；返回 snapshot 标明配置来源，status 是独立的生命周期状态；尚未成功发布时读取 published 返回不存在错误。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentDetailTool),
 			Selection: contract.SelectionSpec{
@@ -382,7 +382,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "save-draft",
 		Short:     "更新数字员工草稿",
-		Long:      "更新指定数字员工的基础信息草稿但不发布，只更新显式传入的字段，未传字段保持不变。Skill/MCP 的创建、内容更新、启停和删除统一使用 capability skill|mcp create|update|delete，CLI 会维护草稿挂载；普通用户无需在 save-draft 中手工拼完整 skills/mcps 数组。dept-id 不传时保持原部门；avatar-url 可传公网 HTTP(S) 地址或本地图片，本地图片由 CLI 自动上传。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
+		Long:      "更新指定数字员工的基础信息草稿但不发布，只更新显式传入的字段，未传字段保持不变；显式空字符串或纯空白会报参数错误，不能用来清空字段。Skill/MCP 的创建、内容更新、启停和删除统一使用 capability skill|mcp create|update|delete，CLI 会维护草稿挂载；普通用户无需在 save-draft 中手工拼完整 skills/mcps 数组。dept-id 不传时保持原部门；avatar-url 可传公网 HTTP(S) 地址或本地图片，本地图片由 CLI 自动上传。主管只接受 userId。成功返回与 detail 一致的完整草稿结构。请先 --dry-run 检查参数，再加 --yes。",
 		Tool:      deapAgentSaveDraftTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -402,6 +402,9 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 			Confirmation: "user_required", Idempotency: "idempotent",
 		},
 		Validate: func(cmd *cobra.Command, args []string) error {
+			if err := deapAgentValidateDraftText(cmd); err != nil {
+				return err
+			}
 			if err := deapAgentMaxRunes(cmd, "name", 30); err != nil {
 				return err
 			}
@@ -492,7 +495,7 @@ func newDeapAgentPublishCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "publish",
 		Short:     "发布数字员工",
-		Long:      "发布指定数字员工当前已保存的完整草稿，本命令不携带或修改草稿内容。发布前应已配置 responseMode；create 默认 mention_only，历史草稿缺失时先通过 save-draft 补齐，其他必填配置由服务端校验。这是高影响操作，真实执行前必须确认。",
+		Long:      "发布指定数字员工当前已保存的完整草稿。local_agent 无需用户配置平台人设；发布前读取草稿，仅在人设缺失时自动保存默认人设，已有内容保持不变。默认人设保存成功但发布失败时，草稿仍保留该默认值。发布前应已配置 responseMode；create 默认 mention_only，历史草稿缺失时先通过 save-draft 补齐，其他必填配置由服务端校验。这是高影响操作，真实执行前必须确认。",
 		Tool:      deapAgentPublishTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -503,6 +506,7 @@ func newDeapAgentPublishCommand() *cobra.Command {
 			Effect: "write", Risk: "high",
 			Confirmation: "user_required", Idempotency: "unknown",
 		},
+		Call: deapAgentCallPublish,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID: dingtalkTagProductID, Name: "publish_digital_employee",
@@ -510,7 +514,7 @@ func newDeapAgentPublishCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage publish", PrimaryCLIPath: "dingtalk-tag manage publish",
 				Group: "manage",
 			},
-			Description: "发布当前完整草稿，由服务端校验发布所需配置；本命令不补写草稿。",
+			Description: "发布当前完整草稿；仅为人设缺失的 local_agent 自动补齐默认平台人设，保留已有配置，其余发布要求由服务端校验。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentPublishTool),
 			Selection: contract.SelectionSpec{
