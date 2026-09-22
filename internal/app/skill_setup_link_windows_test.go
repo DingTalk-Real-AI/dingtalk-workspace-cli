@@ -256,13 +256,25 @@ func TestCrossPlatformCoverageSkillSetupWindowsCurrentCanonicalAdapter(t *testin
 	}
 
 	// 5. Simulated legacy symlink (ModeSymlink set)
-	testseam.Swap(t, &skillSetupLstat, func(path string) (os.FileInfo, error) {
-		if path == junctionPath {
-			return skillSetupFileInfo{name: filepath.Base(junctionPath), mode: os.ModeSymlink | 0o777}, nil
+	t.Run("legacy_symlink_mode", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupLstat, func(path string) (os.FileInfo, error) {
+			if path == junctionPath {
+				return skillSetupFileInfo{name: filepath.Base(junctionPath), mode: os.ModeSymlink | 0o777}, nil
+			}
+			return os.Lstat(path)
+		})
+		if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+			t.Fatal("legacy symlink with ModeSymlink must not be current canonical adapter")
 		}
-		return os.Lstat(path)
 	})
-	if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
-		t.Fatal("legacy symlink with ModeSymlink must not be current canonical adapter")
+
+	// 6. Junction whose stored target no longer resolves must be rebuilt
+	dangling := filepath.Join(tempDir, "dangling-link")
+	if err := createSkillSetupDirLink(filepath.Join(tempDir, "gone-target"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(dangling)
+	if isSkillSetupCurrentCanonicalAdapter(dangling, canonical) {
+		t.Fatal("junction with unresolvable target must not be current canonical adapter")
 	}
 }

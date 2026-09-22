@@ -106,12 +106,18 @@ func isSkillSetupCurrentCanonicalAdapter(path, canonicalTarget string) bool {
 	}
 	// filepath.EvalSymlinks does not follow junctions (they surface as
 	// ModeIrregular, not ModeSymlink), so physical equality must be checked
-	// on the junction's stored target instead of on path itself.
+	// on the junction's stored target. Both sides resolve through EvalSymlinks
+	// so 8.3 short path components and symlinked parents normalize identically.
 	realCanonical, err := skillSetupEvalSymlinks(canonicalTarget)
 	if err != nil {
 		return false
 	}
-	if !sameSkillSetupPath(filepath.Clean(linkTarget), realCanonical) {
+	realLink, err := skillSetupEvalSymlinks(filepath.Clean(linkTarget))
+	if err != nil {
+		// The stored target no longer resolves; the junction must be rebuilt.
+		return false
+	}
+	if !sameSkillSetupPath(realLink, realCanonical) {
 		return false
 	}
 	return validateSkillSetupLink(path) == nil
