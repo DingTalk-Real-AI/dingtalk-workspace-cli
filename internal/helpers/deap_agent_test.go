@@ -1124,6 +1124,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 	for _, tc := range cases {
 		t.Run(tc.leaf, func(t *testing.T) {
 			caller.calls = nil
+			caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1","type":"open_code"}}`
 			root := deapHandler{}.Command(&captureRunner{})
 			leaf := deapFindLeaf(t, root, tc.leaf)
 			if tc.confirmed {
@@ -1138,10 +1139,17 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			if runErr := leaf.RunE(leaf, nil); runErr != nil {
 				t.Fatalf("RunE() error = %v", runErr)
 			}
-			if len(caller.calls) != 1 {
-				t.Fatalf("MCP call count = %d, want 1", len(caller.calls))
+			wantCalls := 1
+			if tc.leaf == "publish" {
+				wantCalls = 2
+				if len(caller.calls) < 1 || caller.calls[0].toolName != deapAgentDetailTool {
+					t.Fatal("publish must read the saved draft before dispatch")
+				}
 			}
-			call := caller.calls[0]
+			if len(caller.calls) != wantCalls {
+				t.Fatalf("MCP call count = %d, want %d", len(caller.calls), wantCalls)
+			}
+			call := caller.calls[wantCalls-1]
 			if call.productID != "deap-dev" || call.toolName != tc.tool {
 				t.Fatalf("route = %s/%s, want deap-dev/%s", call.productID, call.toolName, tc.tool)
 			}
