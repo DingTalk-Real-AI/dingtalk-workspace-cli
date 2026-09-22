@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试本地头像", "avatar-url": avatarInput,
-		"response-mode": "mention_only", "main-program-type": "open_code",
+		"response-mode": "mention_only", "type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -102,7 +102,7 @@ func TestCrossPlatformCoverageDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUplo
 	create := deapFindLeaf(t, root, "create")
 	for name, value := range map[string]string{
 		"name": "头像助手", "description": "测试公网头像",
-		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only", "main-program-type": "open_code",
+		"avatar-url": "https://cdn.example/avatar.png", "response-mode": "mention_only", "type": "open_code",
 	} {
 		if err := create.Flags().Set(name, value); err != nil {
 			t.Fatal(err)
@@ -867,6 +867,30 @@ func TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageDevDeapAgentSkillUpdateRejectsFileWithEnabled(t *testing.T) {
+	caller, _ := newDeapAgentTestTree(t, false)
+	deap := deapHandler{}.Command(&captureRunner{})
+	update, _, err := deap.Find([]string{"capability", "skill", "update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{
+		"agent-uuid": "agent-1", "skill-id": "skill-1",
+		"file": "./skill.zip", "enabled": "true",
+	} {
+		if err := update.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runErr := update.RunE(update, nil)
+	if runErr == nil || !strings.Contains(runErr.Error(), "互斥") {
+		t.Fatalf("file+enabled mutual-exclusion error = %v", runErr)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("mutually exclusive update made remote calls: %#v", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageDevDeapAgentSaveDraftDoesNotExposeCapabilityArrays(t *testing.T) {
 	deap := deapHandler{}.Command(&captureRunner{})
 	save, _, err := deap.Find([]string{"manage", "save-draft"})
@@ -1034,7 +1058,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 				"name": "值班助手", "description": "处理值班问题",
 				"dept-id":            "dept-1",
 				"supervisor-user-id": "supervisor-1",
-				"main-program-type":  "local_agent",
+				"type":               "local_agent",
 				"response-mode":      "targeted_proactive, mention_only",
 			},
 			wantArgs: map[string]any{
@@ -1054,7 +1078,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 		{
 			leaf: "list", tool: "list_digital_employees",
 			flags: map[string]string{
-				"keyword": "值班", "main-program-type": "local_agent", "page": "2", "page-size": "101",
+				"keyword": "值班", "type": "local_agent", "page": "2", "page-size": "101",
 			},
 			wantArgs: map[string]any{
 				"keyword": "值班", "type": "local_agent", "page": 2, "pageSize": 101,
@@ -1065,7 +1089,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			flags: map[string]string{
 				"agent-uuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
 				"supervisor-user-id": "supervisor-1",
-				"main-program-type":  "local_agent",
+				"type":               "local_agent",
 				"response-mode":      "targeted_proactive",
 			},
 			wantArgs: map[string]any{
@@ -1100,6 +1124,7 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 	for _, tc := range cases {
 		t.Run(tc.leaf, func(t *testing.T) {
 			caller.calls = nil
+			caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1","type":"open_code"}}`
 			root := deapHandler{}.Command(&captureRunner{})
 			leaf := deapFindLeaf(t, root, tc.leaf)
 			if tc.confirmed {
@@ -1114,10 +1139,24 @@ func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *t
 			if runErr := leaf.RunE(leaf, nil); runErr != nil {
 				t.Fatalf("RunE() error = %v", runErr)
 			}
-			if len(caller.calls) != 1 {
-				t.Fatalf("MCP call count = %d, want 1", len(caller.calls))
+			wantCalls := 1
+			if tc.leaf == "publish" {
+				wantCalls = 2
+				if len(caller.calls) < 1 || caller.calls[0].toolName != deapAgentDetailTool {
+					t.Fatal("publish must read the saved draft before dispatch")
+				}
 			}
-			call := caller.calls[0]
+			if tc.leaf == "create" {
+				wantCalls = 2
+			}
+			if len(caller.calls) != wantCalls {
+				t.Fatalf("MCP call count = %d, want %d", len(caller.calls), wantCalls)
+			}
+			callIndex := wantCalls - 1
+			if tc.leaf == "create" {
+				callIndex = 0
+			}
+			call := caller.calls[callIndex]
 			if call.productID != "deap-dev" || call.toolName != tc.tool {
 				t.Fatalf("route = %s/%s, want deap-dev/%s", call.productID, call.toolName, tc.tool)
 			}
@@ -1197,18 +1236,19 @@ func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testin
 		}{
 			{
 				name:        "local_agent_without_response_mode",
-				flags:       []string{"--main-program-type", "local_agent"},
+				flags:       []string{"--type", "local_agent"},
 				wantProfile: map[string]any{"type": "local_agent"},
 			},
 			{
 				name:        "open_code_with_response_mode",
-				flags:       []string{"--main-program-type", "open_code", "--response-mode", "mention_only"},
+				flags:       []string{"--type", "open_code", "--response-mode", "mention_only"},
 				wantProfile: map[string]any{"type": "open_code", "responseMode": "mention_only"},
 			},
 		} {
 			for _, dryRun := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/%s/dry_run=%t", leaf, tc.name, dryRun), func(t *testing.T) {
 					caller, out := newDeapAgentTestTree(t, dryRun)
+					caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1"}}`
 					root := deapHandler{}.Command(&captureRunner{})
 					root.PersistentFlags().Bool("yes", false, "test confirmation")
 					root.PersistentFlags().Bool("dry-run", false, "test preview")
@@ -1258,7 +1298,11 @@ func TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments(t *testin
 						}
 						got = preview.Arguments
 					} else {
-						if len(caller.calls) != 1 || caller.calls[0].toolName != tool || caller.calls[0].productID != deapAgentServerID {
+						wantCalls := 1
+						if leaf == "create" && profile["type"] == "local_agent" {
+							wantCalls = 2
+						}
+						if len(caller.calls) != wantCalls || caller.calls[0].toolName != tool || caller.calls[0].productID != deapAgentServerID {
 							t.Fatalf("MCP calls = %#v, want one %s/%s call", caller.calls, deapAgentServerID, tool)
 						}
 						got = caller.calls[0].args
@@ -1287,24 +1331,24 @@ func TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP(t *testing.T)
 		{leaf: "trace", flags: map[string]string{"agent-uuid": "agent-1", "source-id": "src-1"}, wantErr: "source-type"},
 		{leaf: "list", flags: map[string]string{"page": "0"}, wantErr: "--page 不能小于 1"},
 		{leaf: "list", flags: map[string]string{"page-size": "0"}, wantErr: "--page-size 不能小于 1"},
-		{leaf: "list", flags: map[string]string{"main-program-type": "a2a"}, wantErr: "--main-program-type"},
+		{leaf: "list", flags: map[string]string{"type": "a2a"}, wantErr: "--type"},
 		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "snapshot": "merged"}, wantErr: "--snapshot"},
 		{leaf: "login", flags: map[string]string{}, wantErr: "agent-uuid"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "always_reply", "main-program-type": "open_code",
+			"response-mode": "always_reply", "type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"response-mode": "mention_only,always_reply", "main-program-type": "open_code",
+			"response-mode": "mention_only,always_reply", "type": "open_code",
 		}, wantErr: "响应模式只允许"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1",
-			"main-program-type": "a2a",
-		}, wantErr: "--main-program-type"},
+			"type": "a2a",
+		}, wantErr: "--type"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "avatar-url": "avatar.bmp",
-			"response-mode": "mention_only", "main-program-type": "open_code",
+			"response-mode": "mention_only", "type": "open_code",
 		}, wantErr: "本地文件只支持"},
 		{leaf: "save-draft", flags: map[string]string{
 			"agent-uuid": "agent-1", "prompt": strings.Repeat("提", 5001),
@@ -1376,7 +1420,7 @@ func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHid
 
 	for name, value := range map[string]string{
 		"name": "值班助手", "description": "处理值班问题",
-		"dept-id": "dept-1", "response-mode": "mention_only", "main-program-type": "open_code",
+		"dept-id": "dept-1", "response-mode": "mention_only", "type": "open_code",
 	} {
 		if setErr := create.Flags().Set(name, value); setErr != nil {
 			t.Fatal(setErr)
@@ -1421,13 +1465,13 @@ func TestCrossPlatformCoverageDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing
 	}
 
 	publish := deapFindLeaf(t, root, "publish")
-	if flag := publish.Flags().Lookup("allow-join-group"); flag == nil || flag.DefValue != "false" {
-		t.Fatalf("allow-join-group default = %v, current MCP declares an optional boolean without a default", flag)
+	if flag := publish.Flags().Lookup("allow-join-group"); flag == nil || !flag.Hidden {
+		t.Fatalf("retired publish flag must remain a hidden compatibility input: %v", flag)
 	}
 	for _, leafName := range []string{"create", "list", "save-draft"} {
 		command := deapFindLeaf(t, root, leafName)
-		if flag := command.Flags().Lookup("main-program-type"); flag == nil {
-			t.Fatalf("%s is missing --main-program-type", leafName)
+		if flag := command.Flags().Lookup("type"); flag == nil {
+			t.Fatalf("%s is missing --type", leafName)
 		}
 	}
 	for _, leafName := range []string{"create", "save-draft"} {

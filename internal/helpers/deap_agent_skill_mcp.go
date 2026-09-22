@@ -573,13 +573,13 @@ func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any)
 func newDeapAgentSkillUpdateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "update", Short: "更新 Skill 启停状态或替换 ZIP",
-		Long: "按 skillId 更新草稿中的 Skill，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--file 提供新 ZIP 时，CLI 先本地校验再通过 OpenAPI multipart 上传，签名 URL 不落盘、不输出。--enabled 与 --file 至少提供一项。先 --dry-run 检查参数，再加 --yes。",
+		Long: "按 skillId 更新草稿中的 Skill，保持现有挂载关系，不自动发布。--enabled=true|false 切换启用状态（不传则不改）；--file 提供新 ZIP 时，CLI 先本地校验再通过 OpenAPI multipart 上传，签名 URL 不落盘、不输出。--enabled 与 --file 必须二选一且互斥：换包用 --file、切启停用 --enabled，不能同时提供（对应服务端 update_skill 的 fileUrl 不能与 enabled/attributes 并存）。先 --dry-run 检查参数，再加 --yes。",
 		Tool: deapAgentSkillUpdateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（Skill Center V2 tenant）", Bind: "agentUuid", Required: true, Trim: true},
 			{Name: "skill-id", Usage: "Skill ID", Bind: "skillId", Required: true, Trim: true},
-			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）", Bind: "enabled", Kind: LeafBool},
-			{Name: "file", Usage: "可选本地 Skill ZIP（相对当前目录、最大 50 MiB、必须包含 SKILL.md）；提供时替换 Skill 包", Bind: "file", Trim: true, OmitEmpty: true},
+			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）；不能与 --file 同时使用", Bind: "enabled", Kind: LeafBool},
+			{Name: "file", Usage: "可选本地 Skill ZIP（相对当前目录、最大 50 MiB、必须包含 SKILL.md）；提供时替换 Skill 包；不能与 --enabled 同时使用", Bind: "file", Trim: true, OmitEmpty: true},
 		},
 		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
 		Validate: func(cmd *cobra.Command, _ []string) error {
@@ -588,6 +588,9 @@ func newDeapAgentSkillUpdateCommand() *cobra.Command {
 			hasFile := strings.TrimSpace(rawPath) != ""
 			if !hasEnabled && !hasFile {
 				return apperrors.NewValidation("update 至少需要提供 --enabled 或 --file 之一")
+			}
+			if hasFile && hasEnabled {
+				return apperrors.NewValidation("--file 与 --enabled 互斥：替换 Skill 包请单独使用 --file，切换启停请单独使用 --enabled，不能同时提供")
 			}
 			if hasFile {
 				if _, err := deapAgentValidateSkillPackage(rawPath); err != nil {

@@ -15,7 +15,7 @@ dws dingtalk-tag capability skill list --agent-uuid <agentUuid> --snapshot draft
 dws dingtalk-tag capability skill query --agent-uuid <agentUuid> --skill-id <skillId> --snapshot draft --format json
 ```
 
-Skill ZIP 最大 50 MiB，必须包含 `SKILL.md`。create 和带 `--file` 的 update 会先校验本地 ZIP，再通过 OpenAPI multipart 上传；临时上传地址不会输出或落盘。update 至少传 `--enabled=true|false` 或 `--file` 之一，省略的字段保持原值。create/update/delete 均为 `confirmation=user_required`，必须先预览并取得用户确认。
+Skill ZIP 最大 50 MiB，必须包含 `SKILL.md`。create 和带 `--file` 的 update 会先校验本地 ZIP，再通过 OpenAPI multipart 上传；临时上传地址不会输出或落盘。update 必须二选一且互斥：切换启停用 `--enabled=true|false`、替换包用 `--file`，二者不能同时提供（对应服务端 update_skill 的 fileUrl 不能与 enabled/attributes 并存，同时传会被 CLI 本地拦截）；未提供的字段保持原值。create/update/delete 均为 `confirmation=user_required`，必须先预览并取得用户确认。
 
 ## MCP
 

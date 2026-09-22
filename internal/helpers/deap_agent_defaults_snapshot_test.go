@@ -16,9 +16,9 @@ func TestCrossPlatformCoverageDeapAgentCreateRequiresExplicitType(t *testing.T) 
 		flags []string
 	}{
 		{name: "omitted"},
-		{name: "empty", flags: []string{"--main-program-type", ""}},
-		{name: "whitespace", flags: []string{"--main-program-type", " \t "}},
-		{name: "unsupported", flags: []string{"--main-program-type", "a2a"}},
+		{name: "empty", flags: []string{"--type", ""}},
+		{name: "whitespace", flags: []string{"--type", " \t "}},
+		{name: "unsupported", flags: []string{"--type", "a2a"}},
 	} {
 		for _, dryRun := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/dry_run=%t", tc.name, dryRun), func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestCrossPlatformCoverageDeapAgentCreateRequiresExplicitType(t *testing.T) 
 				}
 				root.SetArgs(argv)
 				err := corecmd.ExecuteForTest(root)
-				if err == nil || !strings.Contains(err.Error(), "main-program-type") {
+				if err == nil || !strings.Contains(err.Error(), "--type") {
 					t.Errorf("create must reject missing or invalid type locally, got %v", err)
 				}
 				if len(caller.calls) != 0 {
@@ -53,17 +53,17 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 		tool string
 		want map[string]any
 	}{
-		{"create_open_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--main-program-type", "open_code"}, deapAgentCreateTool,
+		{"create_open_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code"}, deapAgentCreateTool,
 			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "mention_only"}}},
-		{"create_local_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--main-program-type", "local_agent"}, deapAgentCreateTool,
+		{"create_local_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "local_agent"}, deapAgentCreateTool,
 			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "local_agent", "responseMode": "mention_only"}}},
-		{"create_open_empty", []string{"manage", "create", "--name", "助手", "--description", "验收", "--main-program-type", "open_code", "--response-mode", " "}, deapAgentCreateTool,
+		{"create_open_empty", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code", "--response-mode", " "}, deapAgentCreateTool,
 			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "mention_only"}}},
-		{"create_explicit_mode", []string{"manage", "create", "--name", "助手", "--description", "验收", "--main-program-type", "open_code", "--response-mode", "targeted_proactive"}, deapAgentCreateTool,
+		{"create_explicit_mode", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code", "--response-mode", "targeted_proactive"}, deapAgentCreateTool,
 			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "targeted_proactive"}}},
 		{"save_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--name", "新名称"}, deapAgentSaveDraftTool,
 			map[string]any{"agentUuid": "agent-1", "name": "新名称"}},
-		{"save_open_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--main-program-type", "open_code"}, deapAgentSaveDraftTool,
+		{"save_open_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--type", "open_code"}, deapAgentSaveDraftTool,
 			map[string]any{"agentUuid": "agent-1", "digitalTagEmployeeProfile": map[string]any{"type": "open_code"}}},
 		{"save_explicit_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--response-mode", "targeted_proactive"}, deapAgentSaveDraftTool,
 			map[string]any{"agentUuid": "agent-1", "digitalTagEmployeeProfile": map[string]any{"responseMode": "targeted_proactive"}}},
@@ -82,6 +82,7 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 			}
 			t.Run(tc.name+suffix, func(t *testing.T) {
 				caller, out := newDeapAgentTestTree(t, dryRun)
+				caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1"}}`
 				root := deapHandler{}.Command(&captureRunner{})
 				root.PersistentFlags().Bool("yes", false, "test confirmation")
 				root.PersistentFlags().Bool("dry-run", false, "test preview")
@@ -112,7 +113,11 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 					}
 					got = preview.Arguments
 				} else {
-					if len(caller.calls) != 1 || caller.calls[0].toolName != tc.tool || caller.calls[0].productID != deapAgentServerID {
+					wantCalls := 1
+					if tc.name == "create_local_default" {
+						wantCalls = 2
+					}
+					if len(caller.calls) != wantCalls || caller.calls[0].toolName != tc.tool || caller.calls[0].productID != deapAgentServerID {
 						t.Fatalf("unexpected calls: %#v", caller.calls)
 					}
 					got = caller.calls[0].args

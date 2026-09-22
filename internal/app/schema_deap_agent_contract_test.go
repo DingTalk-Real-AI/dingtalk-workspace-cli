@@ -80,8 +80,9 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			map[string]string{
 				"name": "name", "description": "description", "dept-id": "deptId",
 				"avatar-url":         "avatarUrl",
+				"prompt":             "prompt",
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
-				"main-program-type":  "digitalTagEmployeeProfile.type",
+				"type":               "digitalTagEmployeeProfile.type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
 			},
 		},
@@ -89,7 +90,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			"dingtalk-tag manage set-visibility", "set_visibility", "write", "high", "user_required",
 			map[string]string{
 				"agent-uuid": "agentUuid", "visibility": "visibility",
-				"staff-ids": "staffIds", "dept-ids": "deptIds",
+				"user-ids": "staffIds", "dept-ids": "deptIds",
 			},
 		},
 		"dingtalk-tag.get_digital_employee_detail": {
@@ -99,7 +100,7 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 		"dingtalk-tag.list_digital_employees": {
 			"dingtalk-tag manage list", "list_digital_employees", "read", "low", "not_required",
 			map[string]string{
-				"keyword": "keyword", "main-program-type": "type",
+				"keyword": "keyword", "type": "type",
 				"page": "page", "page-size": "pageSize",
 			},
 		},
@@ -113,13 +114,13 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				"agent-uuid": "agentUuid", "name": "name", "description": "description", "dept-id": "deptId",
 				"avatar-url": "avatarUrl", "prompt": "prompt",
 				"supervisor-user-id": "digitalTagEmployeeProfile.supervisorUserId",
-				"main-program-type":  "digitalTagEmployeeProfile.type",
+				"type":               "digitalTagEmployeeProfile.type",
 				"response-mode":      "digitalTagEmployeeProfile.responseMode",
 			},
 		},
 		"dingtalk-tag.publish_digital_employee": {
 			"dingtalk-tag manage publish", "publish_digital_employee", "write", "high", "user_required",
-			map[string]string{"agent-uuid": "agentUuid", "allow-join-group": "allowJoinGroup"},
+			map[string]string{"agent-uuid": "agentUuid"},
 		},
 		"dingtalk-tag.delete_digital_employee": {
 			"dingtalk-tag manage delete", "delete_digital_employee", "destructive", "high", "user_required",
@@ -181,11 +182,14 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			if got := schemaContractString(parameter["property"]); got != property {
 				t.Errorf("%s parameter %s property = %q, want %q", canonical, flagName, got, property)
 			}
-			if flagName == "main-program-type" {
+			if flagName == "prompt" && parameter["required"] == true {
+				t.Errorf("%s prompt must remain optional", canonical)
+			}
+			if flagName == "type" {
 				wantRequired := canonical == "dingtalk-tag.create_digital_employee"
 				gotRequired, _ := parameter["required"].(bool)
 				if gotRequired != wantRequired {
-					t.Errorf("%s main-program-type required=%t, want %t", canonical, gotRequired, wantRequired)
+					t.Errorf("%s type required=%t, want %t", canonical, gotRequired, wantRequired)
 				}
 			}
 			if flagName == "response-mode" {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -123,16 +124,35 @@ func deapAgentCallCreateWithAvatar(cmd *cobra.Command, tool string, args map[str
 	if err != nil {
 		return err
 	}
-	if !local {
-		return callMCPToolOnServer(deapAgentServerID, tool, args)
+	prompt := stringArgument(args, "prompt")
+	delete(args, "prompt") // The create API has no prompt field; persist it in the new draft.
+	profile, _ := args["digitalTagEmployeeProfile"].(map[string]any)
+	agentType := stringArgument(profile, "type")
+	defaulted := prompt == "" && agentType == deapAgentMainProgramTypeLocalAgent
+	if defaulted {
+		prompt = deapAgentLocalDefaultPrompt
 	}
-	delete(args, "avatarUrl")
-	if deps.Caller.DryRun() {
-		args["avatarUrl"] = map[string]any{
-			"localFile": filepath.Base(avatarURL), "upload": true, "redacted": true,
+	if prompt == "" {
+		deps.Out.PrintWarning("未提供 --prompt；本次仅创建草稿，请在发布前使用 manage save-draft --agent-uuid <agentUuid> --prompt 配置人设。")
+	}
+	if !local && prompt == "" {
+		return CallMCPToolOnServerContext(cmd.Context(), deapAgentServerID, tool, args)
+	}
+	patch := map[string]any{}
+	if prompt != "" {
+		patch["prompt"] = prompt
+	}
+	action := "create_then_save_draft"
+	if local {
+		delete(args, "avatarUrl")
+		action = "create_then_" + deapAgentAvatarUploadAction
+	}
+	if commandDryRun(cmd) || deps.Caller.DryRun() {
+		if local {
+			args["avatarUrl"] = map[string]any{"localFile": filepath.Base(avatarURL), "upload": true, "redacted": true}
 		}
 		return deps.Out.PrintJSON(map[string]any{
-			"dryRun": true, "action": "create_then_" + deapAgentAvatarUploadAction, "request": args,
+			"dry_run": true, "dryRun": true, "executed": false, "action": action, "tool": tool, "arguments": args, "request": args, "draftPatch": patch,
 		})
 	}
 	responseText, err := callMCPToolReturnTextOnServer(cmd.Context(), deapAgentServerID, tool, args)
@@ -141,16 +161,23 @@ func deapAgentCallCreateWithAvatar(cmd *cobra.Command, tool string, args map[str
 	}
 	agentUUID, err := deapAgentParseCreatedUUID(responseText)
 	if err != nil {
-		return &deapAgentAvatarStageError{Stage: "创建结果解析", Err: err}
+		return fmt.Errorf("创建结果解析失败，无法确认 agentUuid；请先查询草稿，勿重复创建: %w", err)
 	}
-	fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, avatarURL)
-	if err != nil {
-		return &deapAgentAvatarStageError{Stage: "上传", AgentUUID: agentUUID, Err: err}
+	patch["agentUuid"] = agentUUID
+	slog.DebugContext(cmd.Context(), "dingtalk_tag_create_draft_created", "agentUuid", agentUUID, "hasPrompt", prompt != "", "promptDefaulted", defaulted, "localAvatar", local)
+	if local {
+		fileURL, err := deapAgentAvatarFileUploader.Upload(cmd.Context(), agentUUID, avatarURL)
+		if err != nil {
+			return &deapAgentAvatarStageError{Stage: "上传", AgentUUID: agentUUID, Err: err}
+		}
+		patch["avatarUrl"] = fileURL
 	}
-	return callMCPToolOnServer(deapAgentServerID, deapAgentSaveDraftTool, map[string]any{
-		"agentUuid": agentUUID,
-		"avatarUrl": fileURL,
-	})
+	if err := CallMCPToolOnServerContext(cmd.Context(), deapAgentServerID, deapAgentSaveDraftTool, patch); err != nil {
+		slog.DebugContext(cmd.Context(), "dingtalk_tag_create_draft_patch_failed", "agentUuid", agentUUID, "stage", "save_draft")
+		return fmt.Errorf("数字员工草稿已创建，agentUuid=%s，但保存人设/头像失败；请通过 manage detail / save-draft 恢复，勿重复创建: %w", agentUUID, err)
+	}
+	slog.DebugContext(cmd.Context(), "dingtalk_tag_create_draft_initialized", "agentUuid", agentUUID, "promptDefaulted", defaulted)
+	return nil
 }
 
 func deapAgentCallSaveWithAvatar(cmd *cobra.Command, tool string, args map[string]any) error {

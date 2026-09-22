@@ -40,11 +40,11 @@ DSH 注册后由正在运行的宿主员工级启动；宿主不可用时返回 
 ```bash
 dws dingtalk-tag manage create \
   --name "<名称>" --description "<职责>" \
-  --main-program-type local_agent \
+  --type local_agent \
   --dry-run --format json
 ```
 
-create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--main-program-type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
+create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。create 支持可选 --prompt；local_agent 创建时省略则由 DWS 自动保存默认人设，发布时仍对历史草稿兜底，已有非空人设保持不变。open_code 省略时仅提醒发布前补齐，不阻断草稿创建。显式空字符串或纯空白无效。其他发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
 
 ## 修改：按字段更新
 
@@ -55,7 +55,7 @@ dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format j
 
 `save-draft` 只更新显式基础字段，未传字段保持原值；Skill/MCP 的创建、更新、删除统一通过 `capability` 子命令管理。头像统一使用 `--avatar-url`；它既可接收公网 HTTP(S)，也可接收本地路径，本地文件由 CLI 复用 Skill 上传封装并回写 OSS URL。
 
-`create` / `save-draft` 的 `--main-program-type` 映射到 MCP 的 `digitalTagEmployeeProfile.type`；`list` 的同名参数仍映射到顶层 `type`，用于类型筛选。详情查询命令自身的 `--snapshot draft|published` 仅选择配置来源。
+`create` / `save-draft` 的 `--type` 映射到 MCP 的 `digitalTagEmployeeProfile.type`；`list` 的 `--type` 映射到顶层 `type`，用于类型筛选。详情查询命令自身的 `--snapshot draft|published` 仅选择配置来源。
 
 创建时未提供 `--response-mode` 或值为空，默认发送 `mention_only`；更新时未传则保留草稿原值。显式响应模式不会被默认值覆盖。
 
