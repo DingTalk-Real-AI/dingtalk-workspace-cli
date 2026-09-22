@@ -6,6 +6,23 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.63-beta.2] - 2026-09-22
+
+### Changed
+
+- Standardize `dingtalk-tag manage create/list/save-draft` on `--type` and `set-visibility` on `--user-ids`, keeping help and Skill guidance focused on canonical flags while preserving existing script compatibility and MCP field mappings.
+- Document `set-visibility` in both mono and multi Skill references, including ALL/PARTIAL scopes, full replacement semantics, omitted-list clearing, the userId-to-staffIds mapping, and confirmation requirements.
+- Send only supported fields in publish requests and keep compatibility handling silent in both preview and execution.
+
+### Fixed
+
+- Accept optional `--prompt` when creating digital employees. Save custom prompts in the new draft, default omitted prompts only for `local_agent`, and remind other supported types to configure a prompt before publishing without blocking draft creation.
+- Include prompt initialization in dry-run previews and retain the created employee ID with recovery guidance if subsequent draft initialization fails.
+
+- Initialize a missing platform prompt before publishing a local_agent employee, preserving existing prompts and stopping publication when draft lookup or initialization fails. Dry-run retains its request preview contract and includes the conditional steps without remote calls.
+- Reject explicitly empty or whitespace-only save-draft text fields in both preview and execution, while preserving omitted fields. Clarify the coordinated server contracts for no-op draft saves and draft/published snapshot responses.
+
+
 ## [1.0.63-beta.1] - 2026-09-22
 
 ### Added
