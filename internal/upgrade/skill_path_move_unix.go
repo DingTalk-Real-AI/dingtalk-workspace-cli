@@ -4,9 +4,18 @@ package upgrade
 
 import (
 	"errors"
+	"os"
 	"syscall"
 )
 
 func isCrossDeviceError(err error) bool {
 	return errors.Is(err, syscall.EXDEV)
+}
+
+func isSkillPathLink(mode os.FileMode) bool {
+	return mode&os.ModeSymlink != 0
+}
+
+func copySkillPathLink(target, dst string, _ os.FileMode) error {
+	return skillPathSymlink(target, dst)
 }

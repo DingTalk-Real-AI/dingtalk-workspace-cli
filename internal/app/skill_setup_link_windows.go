@@ -1,6 +1,6 @@
 //go:build windows
 
-package upgrade
+package app
 
 import (
 	"encoding/binary"
@@ -14,33 +14,18 @@ import (
 )
 
 var (
-	skillPathAbs              = filepath.Abs
+	filepathAbs               = filepath.Abs
 	windowsUTF16PtrFromString = windows.UTF16PtrFromString
 	windowsCreateFile         = windows.CreateFile
 	windowsDeviceIoControl    = windows.DeviceIoControl
-	windowsSkillPathRemove    = skillPathRemove
+	windowsOsRemove           = os.Remove
 )
 
-func isCrossDeviceError(err error) bool {
-	return errors.Is(err, windows.ERROR_NOT_SAME_DEVICE)
-}
-
-func isSkillPathLink(mode os.FileMode) bool {
-	return mode&os.ModeSymlink != 0 || mode&os.ModeIrregular != 0
-}
-
-func copySkillPathLink(target, dst string, mode os.FileMode) error {
-	if mode&os.ModeSymlink != 0 {
-		return skillPathSymlink(target, dst)
-	}
-	return createSkillPathDirJunction(target, dst)
-}
-
-func createSkillPathDirJunction(target, link string) (err error) {
+func createSkillSetupDirLink(target, link string) (err error) {
 	if target == "" {
 		return fmt.Errorf("junction target is empty")
 	}
-	target, err = skillPathAbs(target)
+	target, err = filepathAbs(target)
 	if err != nil {
 		return fmt.Errorf("resolve junction target: %w", err)
 	}
@@ -54,15 +39,18 @@ func createSkillPathDirJunction(target, link string) (err error) {
 		return fmt.Errorf("encode junction path: %w", err)
 	}
 
-	if err := skillPathMkdir(link, 0o755); err != nil {
+	if err := os.Mkdir(link, 0o755); err != nil {
 		return err
 	}
 	removeLink := true
 	defer func() {
 		if removeLink {
-			if rmErr := windowsSkillPathRemove(link); rmErr != nil && !os.IsNotExist(rmErr) {
-				cleanErr := fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr)
-				err = errors.Join(err, cleanErr)
+			if rmErr := windowsOsRemove(link); rmErr != nil && !os.IsNotExist(rmErr) {
+				cleanupErr := &skillSetupStagingCleanupError{
+					Path: link,
+					Err:  fmt.Errorf("清理 junction 占位目录失败 %s: %w", link, rmErr),
+				}
+				err = errors.Join(err, cleanupErr)
 			}
 		}
 	}()
@@ -99,6 +87,40 @@ func createSkillPathDirJunction(target, link string) (err error) {
 	}
 	removeLink = false
 	return nil
+}
+
+func skillSetupLinkTarget(realTarget, relativeTarget string) string {
+	return realTarget
+}
+
+func isSkillSetupCurrentCanonicalAdapter(path, canonicalTarget string) bool {
+	info, err := skillSetupLstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular == 0 {
+		// Junctions report ModeIrregular; symlinks report ModeSymlink and must
+		// be upgraded; ordinary directories are not adapters.
+		return false
+	}
+	linkTarget, err := skillSetupReadlink(path)
+	if err != nil {
+		return false
+	}
+	// filepath.EvalSymlinks does not follow junctions (they surface as
+	// ModeIrregular, not ModeSymlink), so physical equality must be checked
+	// on the junction's stored target. Both sides resolve through EvalSymlinks
+	// so 8.3 short path components and symlinked parents normalize identically.
+	realCanonical, err := skillSetupEvalSymlinks(canonicalTarget)
+	if err != nil {
+		return false
+	}
+	realLink, err := skillSetupEvalSymlinks(filepath.Clean(linkTarget))
+	if err != nil {
+		// The stored target no longer resolves; the junction must be rebuilt.
+		return false
+	}
+	if !sameSkillSetupPath(realLink, realCanonical) {
+		return false
+	}
+	return validateSkillSetupLink(path) == nil
 }
 
 func junctionSubstituteName(target string) string {

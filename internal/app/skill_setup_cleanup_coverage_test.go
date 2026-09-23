@@ -402,7 +402,7 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 		dest := t.TempDir()
 		testseam.Swap(t, &skillSetupCopyDir, func(string, string) error { return failure })
 		cleanupErr := errors.New("staging cleanup failure")
-		testseam.Swap(t, &skillSetupRemoveAll, func(string) error { return cleanupErr })
+		testseam.Swap(t, &skillSetupRemove, func(string) error { return cleanupErr })
 		_, _, err := stageSkillSetupTarget(
 			&skillSetupPlan{Mode: skillSetupModeMulti, Source: src, MultiSkillNames: []string{"dingtalk-a"}},
 			skillSetupTargetPlan{Destination: dest},
@@ -524,7 +524,7 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return t.TempDir(), nil })
 			testseam.Swap(t, &skillSetupBackupAndRemove, func(string, string) (string, error) { return "", failure })
 			cleanupErr := errors.New("cleanup after backup failure")
-			testseam.Swap(t, &skillSetupRemoveAll, func(string) error { return cleanupErr })
+			testseam.Swap(t, &skillSetupRemove, func(string) error { return cleanupErr })
 			var stderr bytes.Buffer
 			_, skipped, err := executeSkillSetupPlan(plan, io.Discard, &stderr)
 			if err != nil || skipped != 1 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
@@ -541,13 +541,13 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 				}
 				return originalPublish(oldPath, newPath)
 			})
-			originalRemoveAll := skillSetupRemoveAll
+			originalRemove := skillSetupRemove
 			cleanupErr := errors.New("cleanup after publish failure")
-			testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			testseam.Swap(t, &skillSetupRemove, func(path string) error {
 				if strings.HasPrefix(filepath.Base(path), ".dws-setup-set-") {
 					return cleanupErr
 				}
-				return originalRemoveAll(path)
+				return originalRemove(path)
 			})
 			var stderr bytes.Buffer
 			_, skipped, err := executeSkillSetupPlan(plan, io.Discard, &stderr)
@@ -558,17 +558,17 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 
 		t.Run("after success", func(t *testing.T) {
 			plan := newPlan(t)
-			originalRemoveAll := skillSetupRemoveAll
+			originalRemove := skillSetupRemove
 			cleanupErr := errors.New("cleanup after success")
-			testseam.Swap(t, &skillSetupRemoveAll, func(path string) error {
+			testseam.Swap(t, &skillSetupRemove, func(path string) error {
 				if strings.HasPrefix(filepath.Base(path), ".dws-setup-set-") {
 					return cleanupErr
 				}
-				return originalRemoveAll(path)
+				return originalRemove(path)
 			})
 			var stderr bytes.Buffer
 			installed, skipped, err := executeSkillSetupPlan(plan, io.Discard, &stderr)
-			if err != nil || installed != 1 || skipped != 0 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
+			if err == nil || installed != 1 || skipped != 0 || !strings.Contains(stderr.String(), cleanupErr.Error()) {
 				t.Fatalf("success cleanup = installed %d, skipped %d, err %v, stderr %q", installed, skipped, err, stderr.String())
 			}
 		})

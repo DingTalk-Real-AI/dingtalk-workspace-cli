@@ -1,6 +1,6 @@
 //go:build windows
 
-package upgrade
+package app
 
 import (
 	"errors"
@@ -13,86 +13,47 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func testCrossDeviceError() error {
-	return &os.LinkError{Op: "rename", Old: "src", New: "dst", Err: windows.ERROR_NOT_SAME_DEVICE}
-}
-
-func testNoReplaceUnsupportedErrors() []error {
-	return []error{errNoReplaceRenameUnsupported}
-}
-
-func TestCrossPlatformCoverageWindowsCrossDeviceError(t *testing.T) {
-	if !isCrossDeviceError(testCrossDeviceError()) {
-		t.Fatal("ERROR_NOT_SAME_DEVICE must enter the cross-device fallback")
-	}
-}
-
-func TestCrossPlatformCoverageWindowsCrossDeviceMoveJunction(t *testing.T) {
-	tempDir := t.TempDir()
-	target := filepath.Join(tempDir, "canonical", "dingtalk-chat")
-	src := filepath.Join(tempDir, "agent", "dingtalk-chat")
-	dst := filepath.Join(tempDir, "backup", "dingtalk-chat")
-
+func TestCrossPlatformCoverageSkillSetupWindowsJunctionReadable(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "canonical", "dingtalk-chat")
+	link := filepath.Join(t.TempDir(), "agent", "dingtalk-chat")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("chat\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("chat"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := createSkillPathDirJunction(target, src); err != nil {
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	forceCrossDeviceRename(t, src, dst)
-	if err := moveSkillPathRecoverably(src, dst); err != nil {
-		t.Fatalf("moveSkillPathRecoverably junction cross-device = %v", err)
+	if err := createSkillSetupDirLink(target, link); err != nil {
+		t.Fatal(err)
 	}
+	defer os.Remove(link)
 
-	if _, err := os.Lstat(src); !os.IsNotExist(err) {
-		t.Fatalf("source junction must be removed: %v", err)
+	info, err := os.Stat(link)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("junction stat = %#v, %v", info, err)
 	}
-	dstInfo, err := os.Lstat(dst)
-	if err != nil || !isSkillPathLink(dstInfo.Mode()) {
-		t.Fatalf("destination must be a link/junction: mode=%v, err=%v", dstInfo.Mode(), err)
+	body, err := os.ReadFile(filepath.Join(link, "SKILL.md"))
+	if err != nil || string(body) != "chat" {
+		t.Fatalf("junction Skill read = %q, %v", body, err)
 	}
-	readTarget, err := os.Readlink(dst)
-	if err != nil {
-		t.Fatalf("readlink(dst) error = %v", err)
-	}
-	cleanTarget, _ := filepath.Abs(target)
-	if filepath.Clean(readTarget) != filepath.Clean(cleanTarget) {
-		t.Fatalf("readlink(dst) = %q, want %q", readTarget, cleanTarget)
-	}
-	content, err := os.ReadFile(filepath.Join(dst, "SKILL.md"))
-	if err != nil || string(content) != "chat\n" {
-		t.Fatalf("read SKILL.md through junction = %q, %v", content, err)
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
-		t.Fatalf("canonical target must remain intact: %v", err)
-	}
-
-	// Test RestoreSkillPath (rollback)
-	forceCrossDeviceRename(t, dst, src)
-	if err := RestoreSkillPath(dst, src); err != nil {
-		t.Fatalf("RestoreSkillPath junction = %v", err)
-	}
-	if _, err := os.Lstat(dst); !os.IsNotExist(err) {
-		t.Fatalf("backup junction must be removed: %v", err)
-	}
-	srcInfo, err := os.Lstat(src)
-	if err != nil || !isSkillPathLink(srcInfo.Mode()) {
-		t.Fatalf("restored source must be a link/junction: mode=%v, err=%v", srcInfo.Mode(), err)
-	}
-	if _, err := os.Stat(filepath.Join(target, "SKILL.md")); err != nil {
-		t.Fatalf("canonical target must still remain intact: %v", err)
+		t.Fatalf("junction removal changed canonical target: %v", err)
 	}
 }
 
-func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
-	// 1. junctionSubstituteName edge cases
+func TestCrossPlatformCoverageSkillSetupWindowsJunctionHelpersAndEdges(t *testing.T) {
+	// 1. skillSetupLinkTarget returns realTarget
+	if got := skillSetupLinkTarget("real", "rel"); got != "real" {
+		t.Fatalf("skillSetupLinkTarget = %q, want real", got)
+	}
+
+	// 2. junctionSubstituteName edge cases
 	for _, tc := range []struct {
 		input string
 		want  string
@@ -109,7 +70,7 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		}
 	}
 
-	// 2. mountPointReparseBuffer NUL byte and oversized path error branches
+	// 3. mountPointReparseBuffer NUL byte and oversized path error branches
 	if _, err := mountPointReparseBuffer("bad\x00sub", "print"); err == nil {
 		t.Fatal("expected error for NUL in substitute")
 	}
@@ -125,10 +86,10 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		t.Fatalf("expected path too long error for >64k path without panic, got %v", err)
 	}
 
-	// 3. createSkillPathDirJunction error branches isolated via t.Run
+	// 4. createSkillSetupDirLink error branches isolated via t.Run
 	t.Run("empty_target", func(t *testing.T) {
 		linkPath := filepath.Join(t.TempDir(), "link-empty-target")
-		err := createSkillPathDirJunction("", linkPath)
+		err := createSkillSetupDirLink("", linkPath)
 		if err == nil || !strings.Contains(err.Error(), "junction target is empty") {
 			t.Fatalf("expected empty target error, got %v", err)
 		}
@@ -139,10 +100,10 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 
 	t.Run("filepath_abs_error", func(t *testing.T) {
 		tempDir := t.TempDir()
-		testseam.Swap(t, &skillPathAbs, func(string) (string, error) {
+		testseam.Swap(t, &filepathAbs, func(string) (string, error) {
 			return "", errors.New("mock abs error")
 		})
-		err := createSkillPathDirJunction(tempDir, filepath.Join(tempDir, "link-abs-err"))
+		err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link-abs-err"))
 		if err == nil || !strings.Contains(err.Error(), "resolve junction target") {
 			t.Fatalf("expected resolve junction target error, got %v", err)
 		}
@@ -150,8 +111,8 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 
 	t.Run("mount_point_buffer_error", func(t *testing.T) {
 		tempDir := t.TempDir()
-		testseam.Swap(t, &skillPathAbs, func(s string) (string, error) { return s, nil })
-		err := createSkillPathDirJunction("C:\\bad\x00target", filepath.Join(tempDir, "link-bad-target"))
+		testseam.Swap(t, &filepathAbs, func(s string) (string, error) { return s, nil })
+		err := createSkillSetupDirLink("C:\\bad\x00target", filepath.Join(tempDir, "link-bad-target"))
 		if err == nil || !strings.Contains(err.Error(), "encode junction substitute name") {
 			t.Fatalf("expected encode junction substitute name error, got %v", err)
 		}
@@ -159,7 +120,7 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 
 	t.Run("link_path_nul_error", func(t *testing.T) {
 		tempDir := t.TempDir()
-		err := createSkillPathDirJunction(tempDir, filepath.Join(tempDir, "link\x00bad"))
+		err := createSkillSetupDirLink(tempDir, filepath.Join(tempDir, "link\x00bad"))
 		if err == nil || !strings.Contains(err.Error(), "encode junction path") {
 			t.Fatalf("expected encode junction path error, got %v", err)
 		}
@@ -171,7 +132,7 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		if err := os.WriteFile(existingFile, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := createSkillPathDirJunction(tempDir, existingFile); err == nil {
+		if err := createSkillSetupDirLink(tempDir, existingFile); err == nil {
 			t.Fatal("expected error when link path is an existing file")
 		}
 	})
@@ -182,7 +143,7 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 			return windows.InvalidHandle, errors.New("mock create file error")
 		})
 		linkPath := filepath.Join(tempDir, "link-create-fail")
-		err := createSkillPathDirJunction(tempDir, linkPath)
+		err := createSkillSetupDirLink(tempDir, linkPath)
 		if err == nil || !strings.Contains(err.Error(), "open junction") {
 			t.Fatalf("expected open junction error, got %v", err)
 		}
@@ -197,7 +158,7 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 			return errors.New("mock device io control error")
 		})
 		linkPath := filepath.Join(tempDir, "link-ioctl-fail")
-		err := createSkillPathDirJunction(tempDir, linkPath)
+		err := createSkillSetupDirLink(tempDir, linkPath)
 		if err == nil || !strings.Contains(err.Error(), "set junction reparse point") {
 			t.Fatalf("expected set junction reparse point error, got %v", err)
 		}
@@ -211,16 +172,20 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		testseam.Swap(t, &windowsCreateFile, func(path *uint16, access uint32, shareMode uint32, sa *windows.SecurityAttributes, creationDisposition uint32, flagsAndAttributes uint32, templateFile windows.Handle) (windows.Handle, error) {
 			return windows.InvalidHandle, errors.New("mock create file error")
 		})
-		testseam.Swap(t, &windowsSkillPathRemove, func(path string) error {
+		testseam.Swap(t, &windowsOsRemove, func(path string) error {
 			return errors.New("mock remove placeholder error")
 		})
 		linkPath := filepath.Join(tempDir, "link-create-fail-remove-fail")
-		err := createSkillPathDirJunction(tempDir, linkPath)
+		err := createSkillSetupDirLink(tempDir, linkPath)
 		if err == nil {
-			t.Fatal("expected error when windowsCreateFile and windowsSkillPathRemove fail")
+			t.Fatal("expected error when windowsCreateFile and windowsOsRemove fail")
 		}
 		if !strings.Contains(err.Error(), "open junction") || !strings.Contains(err.Error(), "清理 junction 占位目录失败") {
 			t.Fatalf("expected joined error containing create and cleanup errors, got: %v", err)
+		}
+		var cleanupErr *skillSetupStagingCleanupError
+		if !errors.As(err, &cleanupErr) {
+			t.Fatalf("expected error to wrap *skillSetupStagingCleanupError, got: %T (%v)", err, err)
 		}
 	})
 
@@ -229,31 +194,102 @@ func TestCrossPlatformCoverageWindowsJunctionHelpersAndEdges(t *testing.T) {
 		testseam.Swap(t, &windowsDeviceIoControl, func(handle windows.Handle, ioControlCode uint32, inBuffer *byte, inBufferSize uint32, outBuffer *byte, outBufferSize uint32, bytesReturned *uint32, overlapped *windows.Overlapped) error {
 			return errors.New("mock device io control error")
 		})
-		testseam.Swap(t, &windowsSkillPathRemove, func(path string) error {
+		testseam.Swap(t, &windowsOsRemove, func(path string) error {
 			return errors.New("mock remove placeholder error")
 		})
 		linkPath := filepath.Join(tempDir, "link-ioctl-fail-remove-fail")
-		err := createSkillPathDirJunction(tempDir, linkPath)
+		err := createSkillSetupDirLink(tempDir, linkPath)
 		if err == nil {
-			t.Fatal("expected error when windowsDeviceIoControl and windowsSkillPathRemove fail")
+			t.Fatal("expected error when windowsDeviceIoControl and windowsOsRemove fail")
 		}
 		if !strings.Contains(err.Error(), "set junction reparse point") || !strings.Contains(err.Error(), "清理 junction 占位目录失败") {
 			t.Fatalf("expected joined error containing device io control and cleanup errors, got: %v", err)
 		}
+		var cleanupErr *skillSetupStagingCleanupError
+		if !errors.As(err, &cleanupErr) {
+			t.Fatalf("expected error to wrap *skillSetupStagingCleanupError, got: %T (%v)", err, err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageSkillSetupWindowsCurrentCanonicalAdapter(t *testing.T) {
+	tempDir := t.TempDir()
+	canonical := filepath.Join(tempDir, "canonical")
+	if err := os.MkdirAll(canonical, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(canonical, "SKILL.md"), []byte("chat"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Nonexistent path
+	if isSkillSetupCurrentCanonicalAdapter(filepath.Join(tempDir, "nonexistent"), canonical) {
+		t.Fatal("nonexistent path must not be current canonical adapter")
+	}
+
+	// 2. Ordinary directory (not a junction)
+	normalDir := filepath.Join(tempDir, "normal-dir")
+	if err := os.MkdirAll(normalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if isSkillSetupCurrentCanonicalAdapter(normalDir, canonical) {
+		t.Fatal("normal directory must not be current canonical adapter")
+	}
+
+	// 3. Valid junction pointing to canonical
+	junctionPath := filepath.Join(tempDir, "junction-link")
+	if err := createSkillSetupDirLink(canonical, junctionPath); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(junctionPath)
+	if !isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+		t.Fatal("valid junction pointing to canonical must be current canonical adapter")
+	}
+
+	// 4. Junction pointing to wrong target
+	otherDir := filepath.Join(tempDir, "other")
+	if err := os.MkdirAll(otherDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if isSkillSetupCurrentCanonicalAdapter(junctionPath, otherDir) {
+		t.Fatal("junction pointing to different target must not be current canonical adapter")
+	}
+
+	// 5. Simulated legacy symlink (ModeSymlink set)
+	t.Run("legacy_symlink_mode", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupLstat, func(path string) (os.FileInfo, error) {
+			if path == junctionPath {
+				return skillSetupFileInfo{name: filepath.Base(junctionPath), mode: os.ModeSymlink | 0o777}, nil
+			}
+			return os.Lstat(path)
+		})
+		if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+			t.Fatal("legacy symlink with ModeSymlink must not be current canonical adapter")
+		}
 	})
 
-	t.Run("copy_skill_path_link_symlink_branch", func(t *testing.T) {
-		tempDir := t.TempDir()
-		symlinkCalled := false
-		testseam.Swap(t, &skillPathSymlink, func(target, link string) error {
-			symlinkCalled = true
-			return nil
+	// 6. Junction whose stored target no longer resolves must be rebuilt
+	dangling := filepath.Join(tempDir, "dangling-link")
+	if err := createSkillSetupDirLink(filepath.Join(tempDir, "gone-target"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(dangling)
+	if isSkillSetupCurrentCanonicalAdapter(dangling, canonical) {
+		t.Fatal("junction with unresolvable target must not be current canonical adapter")
+	}
+
+	// 7. Reparse entry whose target cannot be read must be rebuilt
+	t.Run("readlink_failure", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupReadlink, func(string) (string, error) {
+			return "", errors.New("mock readlink error")
 		})
-		if err := copySkillPathLink("target", filepath.Join(tempDir, "symlink"), os.ModeSymlink); err != nil {
-			t.Fatalf("copySkillPathLink symlink = %v", err)
-		}
-		if !symlinkCalled {
-			t.Fatal("expected skillPathSymlink to be called for ModeSymlink")
+		if isSkillSetupCurrentCanonicalAdapter(junctionPath, canonical) {
+			t.Fatal("reparse entry with unreadable target must not be current canonical adapter")
 		}
 	})
+
+	// 8. Canonical target that no longer exists must be rebuilt
+	if isSkillSetupCurrentCanonicalAdapter(junctionPath, filepath.Join(tempDir, "gone-canonical")) {
+		t.Fatal("adapter check against missing canonical target must not be current")
+	}
 }
