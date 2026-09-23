@@ -321,7 +321,7 @@ func newDeapAgentDetailCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage detail", PrimaryCLIPath: "dingtalk-tag manage detail",
 				Group: "manage",
 			},
-			Description: "按 agentUuid 查询数字员工 draft 或 published 详情及其 Skill/MCP 引用配置。snapshot 默认 draft；返回 snapshot 标明配置来源，status 是独立的生命周期状态；尚未成功发布时读取 published 返回不存在错误。",
+			Description: "按 agentUuid 查询数字员工 draft 或 published 详情及其 Skill/MCP 引用配置；返回 createUserId 和可用的 updateUserId。snapshot 默认 draft；返回 snapshot 标明配置来源，status 是独立的生命周期状态；尚未成功发布时读取 published 返回不存在错误。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentDetailTool),
 			Selection: contract.SelectionSpec{
@@ -438,7 +438,7 @@ func newDeapAgentSaveDraftCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage save-draft", PrimaryCLIPath: "dingtalk-tag manage save-draft",
 				Group: "manage",
 			},
-			Description: "按显式参数更新数字员工基础信息草稿，未传字段保持不变；Skill/MCP 资源及草稿挂载由 capability skill|mcp 生命周期命令管理；成功返回 detail 同构的完整草稿。",
+			Description: "按显式参数更新数字员工基础信息草稿，未传字段保持不变；Skill/MCP 资源及草稿挂载由 capability skill|mcp 生命周期命令管理；成功返回 detail 同构的完整草稿，包含 createUserId 和 updateUserId。",
 			DryRun:      deapAgentDryRun,
 			Interface:   deapAgentMCPInterface(deapAgentSaveDraftTool),
 			Selection: contract.SelectionSpec{
@@ -506,7 +506,7 @@ func newDeapAgentPublishCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "publish",
 		Short:     "发布数字员工",
-		Long:      "发布指定数字员工当前已保存的完整草稿。local_agent 无需用户配置平台人设；发布前读取草稿，仅在人设缺失时自动保存默认人设，已有内容保持不变。默认人设保存成功但发布失败时，草稿仍保留该默认值。发布前应已配置 responseMode；create 默认 mention_only，历史草稿缺失时先通过 save-draft 补齐，其他必填配置由服务端校验。这是高影响操作，真实执行前必须确认。",
+		Long:      "发布指定数字员工当前已保存的完整草稿。发布前读取草稿；若草稿含 updateUserId，则必须与当前操作人的 userId 一致，否则拒绝发布。历史草稿缺少更新人时兼容放行。发布不会修改草稿或自动补人设；local_agent 无需用户配置平台人设。发布前应已配置 responseMode；create 默认 mention_only，历史草稿缺失时先通过 save-draft 补齐，其他必填配置由服务端校验。这是高影响操作，真实执行前必须确认。",
 		Tool:      deapAgentPublishTool,
 		Server:    deapAgentServerID,
 		PostMount: deapAgentNoArgs,
@@ -526,11 +526,11 @@ func newDeapAgentPublishCommand() *cobra.Command {
 				CLIPath:       "dingtalk-tag manage publish", PrimaryCLIPath: "dingtalk-tag manage publish",
 				Group: "manage",
 			},
-			Description: "发布当前完整草稿；仅为人设缺失的 local_agent 自动补齐默认平台人设，保留已有配置，其余发布要求由服务端校验。",
+			Description: "读取并发布当前完整草稿；有更新人时要求与当前操作人一致，缺少更新人的历史草稿兼容放行。不会在发布时写草稿；其余发布要求由服务端校验。",
 			DryRun:      deapAgentDryRun,
 			Interface: &contract.InterfaceSpec{
 				Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable,
-				Reason: "先读取草稿，必要时为 local_agent 保存默认人设，再调用发布 MCP",
+				Reason: "先读取草稿并校验可用的更新人信息，再调用发布 MCP",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "校验并发布数字员工，使草稿配置进入线上生效流程",

@@ -102,7 +102,7 @@ Usage:
   dws dingtalk-tag manage publish --agent-uuid <agentUuid>
 ```
 
-发布当前已保存的完整草稿。`local_agent` 无需用户配置平台人设；DWS 在发布前读取草稿，仅在人设缺失时自动保存默认人设，已有非空人设不会被覆盖。`open_code` 不自动补人设。预览只列出条件补齐与发布计划，不访问远端。若默认人设保存成功而发布失败，默认值保留在草稿，查询草稿后再重试。其他发布所需配置由服务端校验。创建默认发送 `mention_only`；历史草稿缺少响应模式时，先通过 `save-draft --response-mode mention_only` 补齐。
+发布当前已保存的完整草稿。DWS 在发布前读取草稿；如果返回 `updateUserId`，必须与当前操作人的 userId 一致，否则拒绝发布。旧草稿缺少更新人时兼容放行，无法提供同样的防误发保障。`publish` 不会修改草稿或自动补人设；`local_agent` 无需用户配置平台人设。预览只列出检查与发布计划，不访问远端。其他发布所需配置由服务端校验。创建默认发送 `mention_only`；历史草稿缺少响应模式时，先通过 `save-draft --response-mode mention_only` 补齐。
 
 ## delete — 删除
 
