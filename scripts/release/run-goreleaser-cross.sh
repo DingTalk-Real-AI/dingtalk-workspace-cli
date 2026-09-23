@@ -188,7 +188,10 @@ done
 # present. TestReleaseCrossCompilerEnvMatchesWrapper pins these to the config.
 # MACOSX_DEPLOYMENT_TARGET pins the Darwin deployment target; osxcross x86_64
 # otherwise defaults to 10.13 and ld64 emits __DATA_CONST without
-# SG_READ_ONLY, which current dyld rejects before main() (#1441).
+# SG_READ_ONLY, which current dyld rejects before main() (#1441). It is
+# exported unconditionally and is deliberately NOT in the --exec pass-through
+# list below: the container always gets exactly this value, so an ambient
+# host setting can neither duplicate nor weaken the pin.
 compiler_env=(
   "MACOSX_DEPLOYMENT_TARGET=11.0"
   "CC_darwin_amd64=o64-clang"
@@ -221,8 +224,7 @@ if [ "${1:-}" = "--exec" ]; then
   entrypoint=/usr/bin/env
   for name in \
     CGO_ENABLED GOOS GOARCH CC CXX \
-    GOTOOLCHAIN GOFLAGS GOEXPERIMENT GOWORK GOAMD64 GOARM64 \
-    MACOSX_DEPLOYMENT_TARGET
+    GOTOOLCHAIN GOFLAGS GOEXPERIMENT GOWORK GOAMD64 GOARM64
   do
     if [ "${!name+x}" = x ]; then
       env_args+=(--env "$name")

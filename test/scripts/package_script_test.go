@@ -2795,6 +2795,8 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"runtime-payload materialize",
 		`test "$binary_team" = "$library_team"`,
 		"require_read_only_data",
+		"awk -f scripts/release/extract-data-const-flags.awk",
+		"for flags_entry in $data_const_flags",
 		"SG_READ_ONLY",
 		`"$stage/dws" version >/dev/null`,
 		`arch -x86_64 "$stage/dws" version >/dev/null`,

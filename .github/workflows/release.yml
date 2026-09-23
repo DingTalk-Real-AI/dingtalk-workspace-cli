@@ -1146,21 +1146,22 @@ jobs:
             # statically check the segment flags on the binary and its
             # embedded runtime library, then launch every architecture this
             # host can execute (Rosetta covers amd64 on Apple Silicon) before
-            # any Darwin asset is allowed to publish.
+            # any Darwin asset is allowed to publish. The extractor returns
+            # one flags word per __DATA_CONST segment across every slice of a
+            # universal binary, and every single one must carry SG_READ_ONLY.
             require_read_only_data() {
               target="$1"
-              data_const_flags="$(otool -l "$target" | awk '
-                /segname __DATA_CONST/ {found = 1}
-                found && /^ +flags / { print $2; exit }
-              ')"
+              data_const_flags="$(otool -l "$target" | awk -f scripts/release/extract-data-const-flags.awk)"
               test -n "$data_const_flags" || {
                 echo "$target exposes no __DATA_CONST segment flags" >&2
                 return 1
               }
-              if [ $((data_const_flags & 0x10)) -eq 0 ]; then
-                echo "$target __DATA_CONST is missing SG_READ_ONLY (flags=$data_const_flags)" >&2
-                return 1
-              fi
+              for flags_entry in $data_const_flags; do
+                if [ $((flags_entry & 0x10)) -eq 0 ]; then
+                  echo "$target __DATA_CONST is missing SG_READ_ONLY (flags=$flags_entry)" >&2
+                  return 1
+                fi
+              done
             }
             require_read_only_data "$stage/dws"
             require_read_only_data "$library"
