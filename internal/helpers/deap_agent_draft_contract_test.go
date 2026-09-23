@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
@@ -113,6 +114,7 @@ func TestCrossPlatformCoverageDeapAgentPublishChecksEditorWithoutWritingDraft(t 
 		{"same_editor", `{"agentUuid":"agent-1","type":"local_agent","updateUserId":"operator-1"}`, "operator-1", "", true},
 		{"other_editor", `{"agentUuid":"agent-1","type":"local_agent","prompt":"custom","updateUserId":"other-operator"}`, "operator-1", "草稿最近更新人为 other-operator，当前操作人为 operator-1", true},
 		{"operator_unavailable", `{"agentUuid":"agent-1","updateUserId":"operator-1"}`, "", "无法确认当前操作人身份", true},
+		{"operator_missing_user_id", `{"agentUuid":"agent-1","updateUserId":"operator-1"}`, "  ", "当前操作人 Profile 缺少 userId", true},
 		{"legacy_missing_editor", `{"agentUuid":"agent-1","type":"local_agent"}`, "", "", false},
 		{"legacy_null_editor", `{"agentUuid":"agent-1","updateUserId":null}`, "", "", false},
 		{"legacy_blank_editor", `{"agentUuid":"agent-1","updateUserId":"  "}`, "", "", false},
@@ -160,6 +162,29 @@ func TestCrossPlatformCoverageDeapAgentPublishChecksEditorWithoutWritingDraft(t 
 			}
 		})
 	}
+}
+
+func TestCrossPlatformCoverageDeapAgentPublishResolvesOperatorFromSupervisorProfile(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		setupServerBindingSupervisor(t)
+		operator, err := deapAgentPublishOperatorUserID(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if operator != "supervisor" {
+			t.Fatalf("operator = %q, want supervisor", operator)
+		}
+	})
+
+	t.Run("profile_error", func(t *testing.T) {
+		setupServerBindingSupervisor(t)
+		testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+			return nil, errors.New("profile unavailable")
+		})
+		if _, err := deapAgentPublishOperatorUserID(context.Background()); err == nil || !strings.Contains(err.Error(), "profile unavailable") {
+			t.Fatalf("operator profile error = %v", err)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageDeapAgentPublishStopsWhenDraftReadFails(t *testing.T) {
