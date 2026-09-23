@@ -313,6 +313,13 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDeapAgentSkillUpdatePublishesExactlyOneConstraint(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.update_skill")
+	tool := payload.Tools["dingtalk-tag.update_skill"]
+	assertSchemaContractConstraintGroup(t, tool, "require_one_of", []string{"enabled", "file"})
+	assertSchemaContractConstraintGroup(t, tool, "mutually_exclusive", []string{"enabled", "file"})
+}
+
 func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
 	root := NewRootCommand()
 	cmd, args, err := root.Find([]string{"dingtalk-tag", "capability", "mcp", "create"})
