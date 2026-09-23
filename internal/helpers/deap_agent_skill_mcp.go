@@ -581,6 +581,10 @@ func newDeapAgentSkillUpdateCommand() *cobra.Command {
 			{Name: "enabled", Usage: "启用状态 true|false；不传保持原值（草稿态，不自动发布）；不能与 --file 同时使用", Bind: "enabled", Kind: LeafBool},
 			{Name: "file", Usage: "可选本地 Skill ZIP（相对当前目录、最大 50 MiB、必须包含 SKILL.md）；提供时替换 Skill 包；不能与 --enabled 同时使用", Bind: "file", Trim: true, OmitEmpty: true},
 		},
+		Constraints: []LeafConstraint{{
+			Kind: LeafExactlyOne, Flags: []string{"enabled", "file"},
+			Description: "--enabled 与 --file 必须二选一且不能同时提供",
+		}},
 		Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
 		Validate: func(cmd *cobra.Command, _ []string) error {
 			hasEnabled := cmd.Flags().Changed("enabled")

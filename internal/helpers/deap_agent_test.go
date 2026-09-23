@@ -838,11 +838,12 @@ func TestCrossPlatformCoverageDevDeapAgentMCPCheckFailureBlocksUpdate(t *testing
 
 func TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange(t *testing.T) {
 	for _, tc := range []struct {
-		path  []string
-		flags map[string]string
+		path    []string
+		flags   map[string]string
+		wantErr string
 	}{
-		{path: []string{"capability", "skill", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1"}},
-		{path: []string{"capability", "mcp", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}},
+		{path: []string{"capability", "skill", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1"}, wantErr: "请指定 --enabled、--file 之一"},
+		{path: []string{"capability", "mcp", "update"}, flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantErr: "至少需要提供"},
 	} {
 		t.Run(strings.Join(tc.path, "_"), func(t *testing.T) {
 			caller, _ := newDeapAgentTestTree(t, false)
@@ -857,7 +858,7 @@ func TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange(t *testin
 				}
 			}
 			runErr := update.RunE(update, nil)
-			if runErr == nil || !strings.Contains(runErr.Error(), "至少需要提供") {
+			if runErr == nil || !strings.Contains(runErr.Error(), tc.wantErr) {
 				t.Fatalf("missing change error = %v", runErr)
 			}
 			if len(caller.calls) != 0 {
@@ -883,7 +884,7 @@ func TestCrossPlatformCoverageDevDeapAgentSkillUpdateRejectsFileWithEnabled(t *t
 		}
 	}
 	runErr := update.RunE(update, nil)
-	if runErr == nil || !strings.Contains(runErr.Error(), "互斥") {
+	if runErr == nil || !strings.Contains(runErr.Error(), "--enabled、--file 只能指定其一") {
 		t.Fatalf("file+enabled mutual-exclusion error = %v", runErr)
 	}
 	if len(caller.calls) != 0 {
