@@ -6,6 +6,185 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.63-beta.2] - 2026-09-22
+
+### Changed
+
+- Standardize `dingtalk-tag manage create/list/save-draft` on `--type` and `set-visibility` on `--user-ids`, keeping help and Skill guidance focused on canonical flags while preserving existing script compatibility and MCP field mappings.
+- Document `set-visibility` in both mono and multi Skill references, including ALL/PARTIAL scopes, full replacement semantics, omitted-list clearing, the userId-to-staffIds mapping, and confirmation requirements.
+- Send only supported fields in publish requests and keep compatibility handling silent in both preview and execution.
+
+### Fixed
+
+- Accept optional `--prompt` when creating digital employees. Save custom prompts in the new draft, default omitted prompts only for `local_agent`, and remind other supported types to configure a prompt before publishing without blocking draft creation.
+- Include prompt initialization in dry-run previews and retain the created employee ID with recovery guidance if subsequent draft initialization fails.
+
+- Initialize a missing platform prompt before publishing a local_agent employee, preserving existing prompts and stopping publication when draft lookup or initialization fails. Dry-run retains its request preview contract and includes the conditional steps without remote calls.
+- Reject explicitly empty or whitespace-only save-draft text fields in both preview and execution, while preserving omitted fields. Clarify the coordinated server contracts for no-op draft saves and draft/published snapshot responses.
+
+
+## [1.0.63-beta.1] - 2026-09-22
+
+### Added
+
+- **Attendance approval helpers** — adds shortcuts to calculate attendance approval duration, validate travel/out-of-office companion schedules, and query employees' effective complex overtime settings. Proposed overtime durations (total and per-day detail entries) must be finite positive numbers matched to the requested duration unit, and numeric detail-list work dates must be 13-digit millisecond timestamps; anything else is rejected before the server call. Flag help publishes each custom constraint's decision facts so the delivered schema keeps the validation contract visible to agents, and the detail-list help matches the two-stage workflow (second-stage input; the first stage omits it to obtain the server's per-day skeleton).
+
+- **Auth status read-only snapshot** — `dws auth status --readonly` observes the local credential snapshot without the authentication lock, network validation, refresh, migration, or credential writes, keeping the same output fields as normal status and reporting inconclusive local state through explicit `reason` codes instead of a confirmed logout.
+
+- **Contact user lookup by dingtalkId** — adds `dws contact user get-by-dingtalk-id --id <dingtalkId>` (alias `search-dingtalk`) to retrieve a user's `userId` from their dingtalkId.
+
+- **数字员工管理与能力资源** — 新增 `dws dingtalk-tag manage`、`capability`、`run`，覆盖创建、草稿保存、发布、查询、Skill ZIP 上传、员工域 MCP 创建与运行追踪；统一 `agentUuid`，支持双响应模式与 `open_code` / `local_agent` 类型。MCP 创建自动追加草稿依赖配套服务端，不自动发布；Skill/MCP 选择支持省略保留、空数组清空和非空数组替换。
+- **员工身份登录** — `manage login` 串联授权码申请、换票、在线身份核验和精确 Profile 保存/刷新，保持主管当前 Profile；补充外部 `auth exchange`，不在普通输出中返回授权码或 Token。
+- **本地 Agent 接入** — `dingtalk-tag connect` 支持本地 Agent Adapter 与 DSH，提供员工隔离的事件处理、生命周期、设备绑定及失败恢复；仅登录员工身份使用 `manage login`。同步 Help、Schema、mono/multi Skill 与必要接口文档。
+
+- 统一 `dingtalk-tag manage` 的 `agentUuid` / `userId` 用户契约：创建时部门可省略，草稿按字段更新并分开 Skill/MCP 输入，本地头像可安全上传且不暴露临时凭证。
+- 直属上级的输入与输出统一使用 `supervisorUserId`；HSF 历史字段名仅保留在 MCP 映射边界内部。
+- 头像统一使用 `avatarUrl`；`--avatar-url` 同时支持公网 HTTP(S) 与本地图片，本地文件复用 Skill 上传封装并自动回写。
+- 创建、更新的主程序类型映射到 MCP `digitalTagEmployeeProfile.type`；列表筛选仍使用顶层 `type`。CLI 保留 `--main-program-type`，详情查询改为 `--snapshot draft|published` 并发送 `snapshot`，兼容旧 `--type` 别名。
+- 创建时响应模式缺省或为空，默认发送 `mention_only`；更新未传则保留原值，显式响应模式不会被默认值覆盖。发布前的完整配置由服务端校验。
+- 登录/连接使用已发布详情的 `profile.corpId/userId`，不再要求旧 `robotUid/staffId` 字段；换票后仍在线核验身份，再保存精确 Profile。
+- MCP 创建/替换配置的帮助、Schema 与技能示例明确要求显式填写 `configString.mcpServers.<名称>.type`（`streamable-http` 或 `sse`），避免只有 URL 时服务端校验失败。
+- 创建数字员工必须显式指定 `--main-program-type open_code|local_agent`，DWS 本地拒绝缺失或空值，帮助/Schema/调用说明同步标为必填；更新不传仍保留原值。
+
+- **Mail employee lookup by corporate email** — adds `mail user get --org-email`
+  and `mail user batch-get --org-emails`, with Schemas for
+  `mail.get_user_by_org_email` and `mail.batch_get_users_by_org_emails`.
+  Batch lookup accepts 1–100 addresses before deduplication and returns matched
+  employees plus `notFoundOrgEmails`. Both declare required input mappings,
+  read-only safety, and result fields, and use platform-injected operator and
+  organization identity.
+  Direct single lookup validates the employee result and declared field types
+  before reporting success, while retaining null/omitted not-found results and
+  exact integer IDs. This check does not reject a batch because one item is bad.
+- **Mail batch partial results** — preserves confirmed employee and not-found
+  results when individual inputs or response records fail. Partial output
+  separates `succeeded`, `failed` and `unknown` entries (exit code 7). An explicit
+  server rejection of an invalid batch address falls back to at most 100
+  deduplicated single-address lookups, including errors classified by the
+  runtime transport; global authentication, permission and
+  connection failures do not trigger that fallback. Unconfirmed results are
+  never reported as not-found.
+  Address-validation fallback recognizes the live service code `1001` as well
+  as `SYSTEM_ERROR`; unrelated errors with either code remain failures.
+  During fallback, global failures retain their original classification and
+  exit status, with confirmed progress in structured error
+  `details.partialResult`. Cancellation and raw PAT authorization errors are
+  returned to the framework unchanged instead of becoming partial success.
+  Agent guidance requires reading confirmed members from `succeeded` even on
+  exit code 7, continuing authorized follow-up work with them and reporting
+  unmatched, failed and unknown addresses.
+- **Large integer output precision** — preserves integer IDs beyond the exact
+  `float64` range when decoding MCP text responses and through `--jq`, `--fields`
+  and formatted output.
+- **International login is English-first** — `dws auth login --intl` now renders
+  its terminal copy, the DingTalk authorization page (`lang=en-US`) and the
+  callback success page in English without requiring `DWS_LANG=en`. A locale
+  inherited from `LANG` no longer forces Chinese output; set `DWS_LANG=zh`
+  explicitly to keep the Chinese copy. Domestic (`.com`) login keeps following
+  `DWS_LANG`/`LANG` as before.
+
+- **Wait framework capability** — adds the reviewed `Contract.Wait`
+  declaration (`contract.WaitSpec`) with three execution modes: `poll`
+  (cadence-poll the leaf's `WaitPoll` hook), `event` (consume the leaf's
+  `WaitEvents` push stream, correlate events to the accepted resource via
+  `match_field`/`resource_query`, apply the same terminal map), and `auto`
+  (event first, fall back to polling when the stream ends or the
+  subscription fails — one deadline spans both phases). Declared commands
+  must use the `ResultInvoke` dispatcher; mode and hooks are paired at
+  construction (poll↔WaitPoll, event↔WaitEvents, auto↔both; surplus hooks
+  are rejected too). Declared commands register `--wait` /
+  `--wait-timeout` (framework-owned flags that never enter MCP toolArgs);
+  undeclared commands reject the flags as unknown. The wait phase closes
+  the unified envelope exactly once: terminal success → `success`,
+  terminal failure → `failure` with new wire-stable `error.type: "wait"`
+  (exit code 8), timeout → `pending` with `meta.operation.timed_out: true`
+  and the last observed state (exit 0). Deadline exhaustion during a poll,
+  during event consumption, or between polls always closes as timed-out
+  pending, never as a poll/stream failure; a correlated event with an
+  unknown status fails closed exactly like a poll. The pairing also closes
+  the overlay path: `AttachContract` / Tier2 metadata attaches cannot
+  publish a wait declaration (no hooks, no flags, no wait phase behind
+  it) — only the managed `New` construction can. At Schema assembly every
+  `poll_command` is resolved against the bound registry and must name a
+  delivered, agent-visible read command, so the declared manual resume
+  path cannot drift from the command tree. The capability is
+  projected into the Schema catalog (`wait` key) alongside `dry_run`. No
+  business command declares it yet; approval/export/batch adoption lands
+  separately.
+
+### Changed
+
+- **Smart chat read shortcuts** (`+chat-messages`, `+at-me`, `+search-msg`, `+thread-replies`) now decrypt third-party encrypted (SafeChat) message ciphertext before projection when the message crypto policy allows it. Message projections gain `contentDecrypted`, `cryptoLayer`, and `dingKeyVersion` (when > 0), and payloads gain an additive decrypt ledger (`decryptCandidateCount`, `decryptAllowedCount`, `decryptedCount`, `decryptFailedCount`, `decryptFailures[]`). Single-item failures land in the ledger with `partial: true` and never change the command exit code. Policy-off keeps the ciphertext and records one `policy_disabled` failure per candidate, so the additive ledger appears with `decryptFailedCount >= 1` and the existing `partial` field can flip to `true`; only stub builds and `--dry-run` short-circuit the decrypt pipeline and keep output byte-identical to the previous behavior.
+- **`intField` in the message crypto module now accepts `json.Number`**, so `keyVersion` fields surfaced as JSON numbers by the MCP runtime are parsed instead of being silently dropped. The atomic chat read path may now emit `dingKeyVersion` on decrypted message projections (additive and within the existing result contract). Parsing `ttlSeconds` the same way means the crypto policy cache now honors the server-provided TTL: atomic reads fetch the policy once per conversation within the TTL window instead of once per message.
+
+- Introduce Schema delivery inside the existing Schema command of the single `dws` executable. Production does not produce or embed Schema identity at compile or release time. On supported ends (darwin/linux/windows amd64/arm64) each machine generates identity from live declarations at install or first `dws schema`, writes authenticated protobuf shards under the shared or user cache directory, and later hits verify digests then read those shards. Miss or corruption repairs from live assembly; when the shared cache exists but cannot be locked for repair (typically root-owned read-only), the repair falls back to the per-user cache and later processes reuse it. Empty local identity generates then uses the cache; it is not a permanent live-only mode. When plugins or other runtime extensions change the command surface, cache assembly and repair are delegated to an isolated child process using the pristine pre-registration environment, keeping persistent cache active without inheriting plugin runtime side effects. Plugin commands never enter the Schema surface, cached or live. The POSIX installer only advertises a cross-user shared cache when the warmed artifacts are root-owned, matching the runtime's shared-path ownership rule; a cache warmed by an ordinary user under a writable custom root is reported as installing-user-only instead.
+- Keep one complete Cobra tree for every public invocation. Compact typed metadata and shared builders reduce complete-tree allocations; process argv does not select a product factory or a utility-only tree.
+- Reduce temporary allocations during Schema validation and command initialization.
+- Normative notes live in `docs/rfc-schema-runtime-cache.md` only; no sibling plan/design/performance pages are kept.
+
+### Removed
+
+- **Retire legacy contract review CLI leaves** — hide `dws contract review benefit|create|analysis|result` from help and mark their Agent Schema availability `unavailable`. The commands remain as hidden historical argv stubs and fail closed with `command_retired` without calling legacy review MCP tools. The `review` group stays visible because hiding it is not in the consumed ledger. Ledger `schema_availability_hardening` entries are consumed.
+
+### Fixed
+
+- **OA TableField examples** (#1347) — correct mono and multi skill examples to encode detail rows as a two-dimensional array of `name`/`value` objects, and clarify that both creation modes preserve the serialized value without converting row objects.
+
+- **Persistent Schema cache with plugins** (#1400) — delegates Schema cache assembly and repair to an isolated child process when plugins are present, keeping persistent cache active without inheriting plugin runtime side effects.
+
+- **AI Table form sharing** now exposes server-returned `shareFormUuid`, status, and cover through shared structured result contracts for atomic commands and shortcuts; updates also publish `cpSynced`. Agent guidance requires confirming CP synchronization before reporting the sharing workflow as complete. Readback and CP projection remain the server's responsibility; DWS does not issue a second view update or construct cover URLs.
+- Atomic and shortcut updates now share strict terminal validation. Missing or invalid required fields, including `cpSynced=false`, produce `partial_failure` (exit 7), preserve the remote response and mark remote execution as started without retrying the write. Result Schema documents both verified success and partial-stage evidence. Usage guidance distinguishes supplied IDs from placeholders and preserves the shortcut JSON flag.
+- Terminal validation binds `baseId`, `tableId`, and `viewId` to the original request before accepting CP synchronization. A complete response for a different form is still `partial_failure`, even with `cpSynced=true`; both command entries retain the raw response and never replay or compensate the write.
+- Terminal validation also compares the explicitly requested `enabled`, `formName`, and `formDesc` against the echoed readback, so a response reporting different values is `partial_failure` rather than success. Requested properties the helper never echoes cannot be proven, so verified success reports `verified=false` and lists them in `unverified` instead of implying they took effect.
+- All four form-share Result Schemas accept their real dry-run request previews, including the optional shortcut `dry_run` marker. Preview success never implies remote execution or CP synchronization; assembled-leaf regression tests validate real envelopes against both full and compact JSON Schemas.
+- Skill discovery preserves the requested atomic/shortcut entry for result reviews instead of substituting usage Help. Interpretation selects the actual result branch and does not invent required fields or copy Schema evidence into malformed samples.
+
+- Recovery reviews preserve the target named in the original user request before Skill loading. Agent-authored Skill arguments cannot turn a background write into an additional contract-review target; this scope boundary is visible in discovery metadata as well as the loaded body. Synthetic JSON receipt reviews also load the product Skill: prohibiting online business operations does not skip local contract discovery or permit generic guesses about product-specific fields.
+
+- **AI Table write recovery**: `+table-copy` and `+record-batch-create` now generate one UUID v4 `clientToken` per create batch, submit it once, and reconcile uncertain receipts through MCP `get_record_write_result`. A fully recovered ID set is independently checked against record values before continuing. Unknown or partial results preserve the token/IDs and stop without replaying creation. The new read-only `+record-write-result` command exposes the recovery path in Help and Schema.
+- **AI field readiness**: `+field-create` recognizes MCP `CREATE_FIELD_READBACK_PENDING`, keeps the created IDs, and uses the existing bounded exact-ID readback/resume path. `+field-run-ai` requires readable `aiConfig` before mutation and reports `submitted` only for complete per-field task receipts; submission is not computation completion.
+- **Review follow-up**: duplicate-token errors and explicit `get_record_write_result` recovery hints no longer count as input rejections, even with `retryable=false`. They use the original token for read-only reconciliation and value verification; ordinary input rejections still stop immediately.
+- **Recovery evidence**: unknown creates without returned IDs do not advertise known effects. The read-only reconciliation command includes its Intent, and its Result Schema distinguishes verified `applied` results from dry-run previews and rejects unknown or incomplete success objects.
+- **Pagination recovery**: record queries classify business errors before accepting an empty terminal page. Invalidated cursors discard accumulated records and continuation tokens, return non-retryable restart guidance, and stop composite workflows before further writes.
+- **Agent recovery guidance**: the Shortcut Schema and mono/multi pagination references distinguish invalid snapshots from ordinary resumable failures; stale snapshots must discard prior rows and cursors, never deduplicate and concatenate pages across snapshots or replay a composite write.
+- **Pagination review boundary**: mono/multi references separate a concise, complete recovery assessment from operational query recipes. Unknown or incomplete writes remain read-only until reconciled; comparing query results is not permission to infer missing records or propose incremental create/backfill.
+- **Focused recovery discovery**: field-create Help/Schema explains `CREATE_FIELD_READBACK_PENDING` and bounded same-ID verification. Result-only reviews stay on the requested recovery command instead of expanding to its upstream write command or inferring unpublished Result fields from repeated discovery.
+- **Skill loading and routing**: keep the AITable skill description focused on capability selection, with execution examples in the loaded body. Contract reviews preserve the requested command identity and query only that command, without treating background writes as additional discovery targets. Regression tests enforce this metadata/body boundary and all four exact form-share review routes.
+- **Recovery review clarity**: lead with the requested read-only next step and safety decision, distinguishing local contract discovery from unverified remote state. When no command is requested, answer all safety questions up front—write replay, retained/discarded results, and read-only recovery prerequisites—before detailed explanation. Unknown or incomplete results retain the original Base/Table/token reconciliation route instead of switching to full-table queries. Reconciliation Schema explicitly treats records missing from the returned ID set as unverified, never as a count-based backfill plan.
+- Deployment dependency: the paired MCP branch must be deployed and the new read-only tool registered in the gateway. No `lippi-doc-notable` changes are included. Local mock/contract tests do not establish live service readiness; real-environment evaluation remains a separate deployment check.
+
+- 登录过程中使用临时 Token 补全身份时，立即应用本次登录的 MCP 端点覆盖，包括国内及国际预发；不再等待登录成功后的 `mcp_url` 持久化。显式产品端点、第三方地址和插件所属路由保持原值，查询不读取旧 Profile。
+
+- Windows 原生覆盖率作业的总时限从 20 分钟调整为 30 分钟，为完整测试批次、工具链准备和产物上传保留余量，避免接近 20 分钟的运行被取消。测试范围、单批测试超时、100% 变更代码覆盖率门禁及汇总依赖检查保持原有要求。
+
+- **DEK missing relogin** — Allow reauthorization when the local login encryption key is missing. Keep old ciphertext until a fresh credential is available, then replace only the login write targets and create a new encryption key as needed. Refresh and transient Keychain failures retain their existing protection.
+
+- 数字员工 Skill 创建和更新使用同一个已打开的文件完成 ZIP 校验与流式上传，避免校验后重新打开路径时把替换文件或符号链接目标上传。上传仅读取校验时的文件大小，句柄在操作结束（包括 dry-run 和失败）后关闭。
+- 补充普通文件替换和符号链接替换的 create/update 回归测试，保留打开前对命名管道等特殊文件的拒绝；增加 `dingtalk_tag.skill_package_validated`、`dingtalk_tag.file_upload` 本地诊断事件，仅记录大小、阶段、接口路径、成功状态与耗时，不记录本地路径、文件内容、身份或凭据。
+
+- 修正数字员工接入的事件传输就绪判断：使用上游真实状态并报告断线重连，区分 IPC、Agent 初始化和事件连接；DSH 状态交叉验证同一员工的 Event Bus，旧版或未知连接不再报告传输就绪。
+- 数字员工本地 Agent 不再固定指定事件来源为 `digital_employee`，改为沿用 Event 默认规则：优先读取 `DWS_STREAM_SOURCE_ID`，未设置时开源版使用 `open`；升级后需重启员工 worker 生效。
+- 个人 Stream 正确响应系统 ping/disconnect，不将系统控制帧投递为业务消息；订阅查询兼容 `items`/`list` 及字符串/整数时间戳。
+- 修正 Windows 下正常停止可能被误报为消费者异常退出，以及损坏的任务/绑定目录被误当作不存在的问题；补充跨平台身份、绑定回执、上传失败、重试隔离和日志脱敏回归测试。
+
+- **单聊引用回复** — 会话信息明确返回 `singleChat: true` 时，即使省略群聊话题开关，也能正常引用回复；保留会话身份、响应有效性及话题标记校验。
+
+- **OA approval event fields** — preserve `staff_id`, `activity_id`, `corp_id`, and `business_id` from the business payload in `event consume --flatten` for all seven OA approval events, and expose `cc_time` for approval instance CC events. Optional fields remain omitted when absent; an explicitly provided zero `cc_time` is preserved.
+
+- **Legacy token pre-login recovery** — Allow OAuth, device, auth-code, PAT, and `--token` reauthorization to start when the legacy `auth-token` ciphertext has a confirmed DEK mismatch. The old ciphertext remains untouched until fresh credentials are available, then only the login's target slots are replaced; transient and unclassified Keychain failures still fail closed.
+
+- **Windows cgo 崩溃**：重新编译 Windows amd64/arm64 预编译 `libsafechat.a`（消除 legacy `_vsnprintf`/`__imp__*` dllimport 引用），并移除已无必要的 `msvcrt_compat_windows.c` 旧 CRT 桥接层，修复官方发布包在 Windows 上初始化 safechat（cgo）即崩溃的问题。
+
+- Root help renders the live complete Cobra tree, so explicitly registered supplement-backed commands stay visible alongside products and utilities. There is no separate declaration-derived help snapshot.
+
+- **Command validation errors** — report framework-owned parameter failures consistently as validation errors with exit code 3, while preserving API errors, explicit exit codes, cancellation, and deadlines.
+- **Parent and proxy flags** — route parent traversal and wiki proxy parse failures through the same validation boundary and preserve target command hints.
+
+- **Required flag wording** — framework-prepared commands now report `missing required flag(s): --name` instead of Cobra’s `required flag(s) "name" not set`. The original Cobra error remains available as the cause.
+
+- **Generated commands** — normalize native validation failures in lazily created help/completion commands, and remove duplicate required/group checks while retaining business hook order.
+
+
 ## [1.0.62] - 2026-09-16
 
 This stable release promotes the sealed `v1.0.62-beta.8` baseline and adds verified AI Table, document, event, calendar, chat, AISearch, and language-default improvements merged afterwards.

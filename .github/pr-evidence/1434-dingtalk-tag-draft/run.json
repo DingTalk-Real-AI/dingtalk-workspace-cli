@@ -1,0 +1,53 @@
+{
+  "sha": "e54df2c0dc6c53ef35f96ba5fc7f670f8066a324",
+  "started_at": "2026-09-22T09:42:03.976245+00:00",
+  "environment": "macOS arm64, Go 1.26.1",
+  "evidence_kind": "Actual local Go tests with mock MCP and schema dry-run. Not live backend, model evaluation, or GitHub Actions screenshots.",
+  "suites": {
+    "command": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "./internal/helpers",
+        "-run",
+        "Test.*(DeapAgent|DigitalEmployee|DingTalkTag)"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "top_level_pass": 70,
+        "subtest_pass": 233,
+        "fail": 0,
+        "skip": 0
+      },
+      "raw_jsonl_sha256": "b37742fe91a6cb576dfb39a0ef87755a768c6c2ee0c1eaa35b926cba9ab255bb"
+    },
+    "agent": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "./internal/app",
+        "-run",
+        "^(TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema|TestAgentExamplesContract|TestAgentExamplesDryRun|TestAgentSelectionScenariosCoverEveryExecutableSchemaTool)$"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "top_level_pass": 4,
+        "subtest_pass": 196,
+        "fail": 0,
+        "skip": 0
+      },
+      "raw_jsonl_sha256": "73a64a7a5aa90a734b5619addd1fb9641b45a790bae1a22e9dd5bf43d38fb6b4"
+    }
+  },
+  "completed_at": "2026-09-22T09:42:22.397250+00:00",
+  "changed_coverage": {
+    "result": "changed code coverage: 100.0000% (62 executable statements; target 100.0000%)",
+    "profile_sha256": "7c07a1799460f5f7047fc5a476d6f5b9d51ce3781ae95825aec464e0e588cffd",
+    "command": "go run ./scripts/policy/coverage-gate --base-ref upstream/main --module github.com/DingTalk-Real-AI/dingtalk-workspace-cli --changed-only --diff-profile /tmp/dws-pr1434-fixed.cover --target 100 --scope-buildable",
+    "profile_note": "Profile produced by the identical helpers code/tests at original feature commit 495f3871a0c4fa1d15d1cf544e71d9596da02b8c; gate evaluated the PR diff."
+  }
+}
