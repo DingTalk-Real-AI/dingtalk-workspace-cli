@@ -936,6 +936,19 @@ type interfaceTransition struct {
 // is a contract decision and belongs in a governance review, not in the product
 // feature change that consumes it.
 var reviewedInterfaceTransitions = map[string]interfaceTransition{
+	// PR #1444 aligns the declared interface kind with the existing runtime
+	// orchestration. Create can save prompt/avatar state after the create RPC;
+	// publish reads the draft and validates its editor before the publish RPC.
+	"dingtalk-tag/dingtalk-tag.create_digital_employee": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"deap-dev","rpc_name":"create_digital_employee"}`,
+		NewMode: "composite",
+	},
+	"dingtalk-tag/dingtalk-tag.publish_digital_employee": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"deap-dev","rpc_name":"publish_digital_employee"}`,
+		NewMode: "composite",
+	},
 	// Chart writes now perform a reviewed Dashboard metadata read and root-grid
 	// validation before the write RPC. The complete command is no longer a
 	// single create_chart/update_chart projection.
@@ -1143,6 +1156,11 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 // business semantics. Keep this narrow: removing a constraint can expose a new
 // runtime route, so arbitrary removals must not pass as harmless drift.
 var reviewedConstraintTransition = map[string]map[string]string{
+	// PR #1444 publishes the exact-one rule already enforced by Skill update:
+	// callers must choose either a state toggle or a replacement ZIP payload.
+	"dingtalk-tag/dingtalk-tag.update_skill": {
+		"": `{"mutually_exclusive":[["enabled","file"]],"require_one_of":[["enabled","file"]]}`,
+	},
 	// PR #1236 adds an explicit staffId alternative to the historically required
 	// member-uids input. Every historical UID invocation remains valid; the new
 	// exact-one group prevents ambiguous mixed-identifier requests while making
