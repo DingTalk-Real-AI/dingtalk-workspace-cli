@@ -38,7 +38,8 @@ var (
 	schemaCacheBuilderExecutable    = os.Executable
 	schemaCacheBuilderEnvironment   = cli.SchemaAssemblyEnvironmentSnapshot
 	schemaCacheBuilderWorkingDir    = cli.SchemaAssemblyWorkingDirectory
-	schemaCacheBuilderResponseLimit = 64 << 20
+	// Keep in sync with cli.maxSchemaCacheBuilderResponse (see its comment).
+	schemaCacheBuilderResponseLimit = 192 << 20
 	schemaCacheBuilderAssemble      = buildSchemaCacheResult
 	schemaCacheResolve              = cli.ResolveSchemaBuild
 	schemaCacheBuildArtifacts       = cli.BuildSchemaCacheArtifacts

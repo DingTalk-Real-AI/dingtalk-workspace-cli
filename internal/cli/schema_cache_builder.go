@@ -26,7 +26,11 @@ import (
 const schemaCacheBuilderProtocolVersion = 1
 
 var (
-	maxSchemaCacheBuilderResponse = 64 << 20
+	// The response transports Meta + Registry + Payload as JSON with base64
+	// bytes. Artifact bounds: meta <= 4MiB, registry <= 64MiB, payloads (with
+	// the pre-rendered schema --all catalog) <= 64MiB; base64 inflates binary
+	// fields by 4/3, so the worst legitimate wire is ~177MiB.
+	maxSchemaCacheBuilderResponse = 192 << 20
 	marshalSchemaCacheBuilder     = json.Marshal
 )
 

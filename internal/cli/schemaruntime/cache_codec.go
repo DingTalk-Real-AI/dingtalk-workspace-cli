@@ -537,11 +537,12 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 		Locators:   locatorsToProto(locators),
 		Products:   payloadDescriptorsToProto(result.PayloadDescriptors),
 	}
-	// The rendered catalog blob sits between the index region and the product
-	// shards, so its absolute offset equals the index region length — which
-	// depends on the marshaled index size, which depends on the offset value.
-	// Converge by fixed-point iteration; varint length is monotonic in the
-	// offset, so this stabilizes within a couple of passes. An oversized
+	// The rendered catalog blob is appended AFTER every product payload shard
+	// so product offsets (relative to the post-index region) stay valid for
+	// all existing readers. Its absolute offset equals the index region plus
+	// product region length, and the index region size depends on the offset
+	// value; converge by fixed-point iteration (varint length is monotonic in
+	// the offset, so this stabilizes within a couple of passes). An oversized
 	// catalog only loses the fast path: the generation still publishes
 	// without the ref.
 	catalogRef := (*schemacachepb.RenderedCatalogRef)(nil)
@@ -553,9 +554,16 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	}
 	catalogOffset := uint64(0)
 	indexBytes := []byte(nil)
+	products := result.PayloadShards
 	for i := 0; i < 8; i++ {
 		indexRoot.RenderedCatalog = catalogRef
 		if catalogRef != nil {
+			// The catalog blob lives AFTER every product payload shard, so
+			// product offsets (relative to the post-index region) stay valid
+			// for all existing readers. Only this absolute catalog offset
+			// depends on the marshaled index size; converge it by fixed-point
+			// iteration (varint length is monotonic, so it stabilizes
+			// immediately in practice).
 			catalogRef.Offset = catalogOffset
 		}
 		marshaled, marshalErr := MarshalSchemaCacheDeterministic(indexRoot)
@@ -566,7 +574,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 			indexBytes = marshaled
 			break
 		}
-		if next := uint64(4 + len(marshaled)); next == catalogOffset {
+		if next := uint64(4+len(marshaled)) + uint64(len(products)); next == catalogOffset {
 			indexBytes = marshaled
 			break
 		} else {
@@ -580,9 +588,8 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	if marshalErr != nil {
 		return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
 	}
-	products := result.PayloadShards
 	includeCatalog := catalogRef != nil &&
-		uint64(len(indexRegion))+catalogRef.Length+uint64(len(products)) <= MaxSchemaShardData
+		uint64(len(indexRegion))+uint64(len(products))+catalogRef.Length <= MaxSchemaShardData
 	if !includeCatalog && catalogRef != nil {
 		// Over budget: republish without the catalog ref rather than pinning a
 		// blob that is not in the file.
@@ -603,10 +610,10 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 		return 0
 	}())
 	final = append(final, indexRegion...)
+	final = append(final, products...)
 	if includeCatalog {
 		final = append(final, catalogAll...)
 	}
-	final = append(final, products...)
 	result.PayloadShards = final
 	result.PayloadIndexLength = uint64(len(indexRegion))
 	result.PayloadIndexSHA256 = sha256.Sum256(indexRegion)

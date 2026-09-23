@@ -1274,11 +1274,12 @@ type SchemaPayloadIndex struct {
 	Locators   *LocatorEntryList             `protobuf:"bytes,2,opt,name=locators,proto3" json:"locators,omitempty"`
 	Products   *CommandPayloadDescriptorList `protobuf:"bytes,3,opt,name=products,proto3" json:"products,omitempty"`
 	// Pre-rendered full `schema --all -f json` wire bytes. The blob is global
-	// (it spans every product's full leaf) and lives between the index region
-	// and the product payload shards; offset is absolute from the payload file
-	// start, and the ref is authenticated because the index region itself is
-	// pinned by the identity. Absent in generations published before this
-	// field: readers miss and use the registry path, which stays authoritative.
+	// (it spans every product's full leaf) and lives after all product payload
+	// shards, so per-product offsets stay relative to the post-index region;
+	// offset is absolute from the payload file start, and the ref is
+	// authenticated because the index region itself is pinned by the identity.
+	// Absent in generations published before this field: readers miss and use
+	// the registry path, which stays authoritative.
 	RenderedCatalog *RenderedCatalogRef `protobuf:"bytes,4,opt,name=rendered_catalog,json=renderedCatalog,proto3" json:"rendered_catalog,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
