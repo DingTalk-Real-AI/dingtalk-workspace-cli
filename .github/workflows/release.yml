@@ -1140,6 +1140,41 @@ jobs:
             library_team="$(codesign -dvvv "$library" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
             test -n "$binary_team"
             test "$binary_team" = "$library_team"
+            # v1.0.62 shipped a cross-linked darwin/amd64 asset whose
+            # __DATA_CONST segment missed SG_READ_ONLY; current dyld aborts
+            # such binaries before main() (#1441). Codesign accepts them, so
+            # statically check the segment flags on the binary and its
+            # embedded runtime library, then launch every architecture this
+            # host can execute (Rosetta covers amd64 on Apple Silicon) before
+            # any Darwin asset is allowed to publish.
+            require_read_only_data() {
+              target="$1"
+              data_const_flags="$(otool -l "$target" | awk '
+                /segname __DATA_CONST/ {found = 1}
+                found && /^ +flags / { print $2; exit }
+              ')"
+              test -n "$data_const_flags" || {
+                echo "$target exposes no __DATA_CONST segment flags" >&2
+                return 1
+              }
+              if [ $((data_const_flags & 0x10)) -eq 0 ]; then
+                echo "$target __DATA_CONST is missing SG_READ_ONLY (flags=$data_const_flags)" >&2
+                return 1
+              fi
+            }
+            require_read_only_data "$stage/dws"
+            require_read_only_data "$library"
+            case "$arch" in
+              "$host_arch")
+                "$stage/dws" version >/dev/null
+                ;;
+              amd64)
+                arch -x86_64 /usr/bin/true 2>/dev/null || {
+                  sudo softwareupdate --install-rosetta --agree-to-license
+                }
+                arch -x86_64 "$stage/dws" version >/dev/null
+                ;;
+            esac
             if [ "$arch" = "$host_arch" ]; then
               # Runtime context initialization obtains a host-scoped native token.
               # It is diagnostic-only here: the signed binary and embedded dylib

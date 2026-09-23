@@ -186,7 +186,11 @@ done
 # internal, so export the same values into the container's process environment as
 # well; the template then resolves from an environment that is unambiguously
 # present. TestReleaseCrossCompilerEnvMatchesWrapper pins these to the config.
+# MACOSX_DEPLOYMENT_TARGET pins the Darwin deployment target; osxcross x86_64
+# otherwise defaults to 10.13 and ld64 emits __DATA_CONST without
+# SG_READ_ONLY, which current dyld rejects before main() (#1441).
 compiler_env=(
+  "MACOSX_DEPLOYMENT_TARGET=11.0"
   "CC_darwin_amd64=o64-clang"
   "CXX_darwin_amd64=o64-clang++"
   "CC_darwin_arm64=oa64-clang"
@@ -217,7 +221,8 @@ if [ "${1:-}" = "--exec" ]; then
   entrypoint=/usr/bin/env
   for name in \
     CGO_ENABLED GOOS GOARCH CC CXX \
-    GOTOOLCHAIN GOFLAGS GOEXPERIMENT GOWORK GOAMD64 GOARM64
+    GOTOOLCHAIN GOFLAGS GOEXPERIMENT GOWORK GOAMD64 GOARM64 \
+    MACOSX_DEPLOYMENT_TARGET
   do
     if [ "${!name+x}" = x ]; then
       env_args+=(--env "$name")
