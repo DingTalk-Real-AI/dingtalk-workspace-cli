@@ -110,6 +110,26 @@ type baseEventOutput struct {
 	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
 }
 
+// FriendRequestReceivedOutput preserves the raw friend-request payload until
+// a stable reviewed projection for the contact domain is available.
+type FriendRequestReceivedOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"收到好友申请事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
+// FriendAddedOutput preserves the raw friend-added payload until a stable
+// reviewed projection for the contact domain is available.
+type FriendAddedOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"好友添加成功事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
 // GroupLifecycleEventOutput is intentionally conservative until stable group
 // event payload samples are available. Payload keeps unknown business fields
 // while transport identity and routing metadata remain available only in raw
@@ -920,6 +940,30 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		return projectVoIPCallReceiveInviteEvent(base, data.Payload)
 	case isTodoEvent(eventType):
 		return projectTodoEvent(ev, base, data.Payload)
+	case isFriendRequestReceivedEvent(eventType):
+		payload, err := decodeConservativePayload(data.Payload)
+		if err != nil {
+			return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
+		}
+		return FriendRequestReceivedOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
+	case isFriendAddedEvent(eventType):
+		payload, err := decodeConservativePayload(data.Payload)
+		if err != nil {
+			return ev, fmt.Errorf("decode personal friend added payload: %w", err)
+		}
+		return FriendAddedOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
@@ -1518,6 +1562,10 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(TodoTaskUpdatedOutput{})
 	case eventKey == EventTodoTaskDeleted:
 		return reflect.TypeOf(TodoTaskDeletedOutput{})
+	case isFriendRequestReceivedEvent(eventKey):
+		return reflect.TypeOf(FriendRequestReceivedOutput{})
+	case isFriendAddedEvent(eventKey):
+		return reflect.TypeOf(FriendAddedOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -1566,6 +1614,14 @@ func isTodoEvent(eventKey string) bool {
 	return eventKey == EventTodoTaskCreated ||
 		eventKey == EventTodoTaskUpdated ||
 		eventKey == EventTodoTaskDeleted
+}
+
+func isFriendRequestReceivedEvent(eventKey string) bool {
+	return eventKey == EventFriendRequestReceived
+}
+
+func isFriendAddedEvent(eventKey string) bool {
+	return eventKey == EventFriendAdded
 }
 
 func isOAApprovalTaskEvent(eventKey string) bool {

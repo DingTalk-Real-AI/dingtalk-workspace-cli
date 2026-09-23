@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办与互动卡片回调事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出/群状态变化，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除，或互动卡片回调。命令前缀：dws event。
+description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、互动卡片与好友事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出/群状态变化，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、好友申请/好友添加成功，或互动卡片回调。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,7 +9,7 @@ metadata:
       - dws
 ---
 
-# 钉钉个人 IM、OA 审批、VoIP、待办与互动卡片事件
+# 钉钉个人 IM、OA 审批、VoIP、待办、互动卡片与好友事件
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
@@ -32,12 +32,15 @@ metadata:
 | 监听指定群消息 | `dws event +listen-im --kind group --chat-query <群名>` |
 | 同一人/群的消息、表情、已读或撤回 | `dws event +listen-im --kind <sender|group> --events message,reaction,read,recall ...` |
 | 监听全部单聊或全部群消息 | `dws event +listen-im --kind <all-direct|all-group>`；只有用户明确要求“全部”时使用 |
+| 收到好友申请、好友添加成功 | 读取 [好友事件参考](references/event-contact.md)，使用精确 `event consume` EventKey |
 | 群改名、成员进退、群解散 | 读取 [EventKey 索引](references/event-im-keys.md)，使用精确 `event consume` EventKey |
 | OA 审批任务或实例事件 | 读取 [OA 事件参考](references/event-oa.md)，使用精确 `event consume` EventKey |
 | 查看 OA 事件目录 | `dws event list --category oa` |
 | VoIP 通话邀请 | 读取 [VoIP 事件参考](references/event-voip.md)，使用精确 `event consume` EventKey |
 | 待办创建、更新或删除事件 | 读取 [Todo 事件参考](references/event-todo.md)，使用精确 `event consume` EventKey 与 `--role-types` |
 | 查看 Todo 事件目录 | `dws event list --category todo` |
+| 好友申请/好友添加成功事件 | 读取 [好友事件参考](references/event-contact.md)，使用精确 `event consume` EventKey |
+| 查看好友事件目录 | `dws event list --category contact` |
 | 互动卡片回调 | 读取 [互动卡片事件参考](references/event-card.md)，使用 `dws event consume user_card_action_triggered --flatten -f ndjson` |
 | 查看互动卡片事件目录 | `dws event list --category card` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
@@ -50,9 +53,11 @@ metadata:
 - `group` 必须且只能传 `--chat-id` 或 `--chat-query` 之一。
 - `--query` 只用于纯 `message` 监听；混入 reaction/read/recall 时不得使用。
 
-OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集。每项独立订阅并共享 bus。
+OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友两个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标、角色或消息过滤。每项独立订阅并共享 bus。
 
 <!-- dws-intent: event.listen.card -->互动卡片使用 `dws event consume user_card_action_triggered --flatten -f ndjson`、`ruleType=all`、`filterRule={}`；不接受目标、角色或消息过滤。结构化上下文在 `payload.body.actionData.context`，未知字段保留。
+
+<!-- dws-intent: event.listen.contact -->好友事件使用 `dws event consume` 长连接；收到好友申请或好友添加成功时触发。查询或操作好友关系走 `dws contact`，不要轮询好友列表模拟事件。
 
 姓名/群名必须唯一解析，零命中或多候选在创建订阅前停止。解析、监听、状态、停止使用同一 `--profile`，不得跨组织搬运 ID；`--dry-run` 走同一解析链。
 
@@ -78,7 +83,7 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 - `event stop` 会取消订阅并影响本地 consumer：先 `--dry-run`，用户确认后再加 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
-- 全部 28 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`，`retryable=true`→`max_additional_attempts=2`，`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，CLI 不持久化或计算跨调用的 Agent/host 尝试次数。
+- 全部 30 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片 + 2 好友）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`，`retryable=true`→`max_additional_attempts=2`，`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，CLI 不持久化或计算跨调用的 Agent/host 尝试次数。
 - 遵守 `retry_after_seconds`/`next_retry_at`；`in_flight`、`cooldown`、`terminal_hold` 时不并发或换 `subscribe_id`/`trace_id` 绕过。
 - 认证、profile、订阅保护状态和 bus 排障按失败类型读取 [订阅运维](references/event-im-operations.md)，不要在正常路径预加载完整运维手册。
 
@@ -105,4 +110,5 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 | OA 审批事件 | [event-oa.md](references/event-oa.md) | 选择七个 OA EventKey、组合消费或解析审批字段 |
 | VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) | 选择 VoIP EventKey、解析邀请字段或检查敏感输出边界 |
 | Todo 待办事件 | [event-todo.md](references/event-todo.md) | 选择三个 Todo EventKey、设置角色范围或解析待办字段 |
+| 好友事件 | [event-contact.md](references/event-contact.md) | 选择两个好友 EventKey、解析好友申请或好友添加字段 |
 | 互动卡片回调事件 | [event-card.md](references/event-card.md) | 订阅互动卡片回调、解析开放 payload 或检查空过滤规则 |

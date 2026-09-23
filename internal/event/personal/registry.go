@@ -51,6 +51,8 @@ const (
 	EventTodoTaskUpdated              = "user_todo_task_update"
 	EventTodoTaskDeleted              = "user_todo_task_delete"
 	EventCardAction                   = "user_card_action_triggered"
+	EventFriendRequestReceived        = "user_contact_friend_request_received"
+	EventFriendAdded                  = "user_contact_friend_added"
 )
 
 const (
@@ -412,6 +414,28 @@ var definitions = []Definition{
 		DisplayName:    "互动卡片回调",
 		Description:    "当前用户提交或操作互动卡片后收到的回调；结构化上下文位于 payload.body.actionData.context",
 		Category:       "card",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventFriendRequestReceived,
+		DisplayName:    "收到好友申请",
+		Description:    "当前用户收到好友申请",
+		Category:       "contact",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventFriendAdded,
+		DisplayName:    "好友添加成功",
+		Description:    "当前用户与目标用户建立好友关系",
+		Category:       "contact",
 		RuleType:       "all",
 		Status:         StatusEnabled,
 		RequiredParams: nil,

@@ -838,7 +838,7 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
-	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card")
+	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card|contact")
 	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
 	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
 	hideEventInternalFlags(cmd, "as", "all", "all-editions", "client-id")
