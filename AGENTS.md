@@ -646,7 +646,13 @@ from declarations.
   Full `schema --all` is linear in tools + parameters + Result schema bytes and
   is an audit/compatibility export, not the normal Agent discovery path.
   Overview → compact product/group → compact leaf remains the normal route;
-  only the final leaf carries its Result declaration.
+  only the final leaf carries its Result declaration. Cache publication
+  additionally pre-renders the exact `--all -f json` wire bytes into the
+  payload shard (a `rendered_catalog` ref in the pinned payload index), so a
+  warm `schema --all -f json` is one authenticated range read + verbatim
+  write — no registry decode, no `RenderAll`, no re-marshal. Misses (older
+  generations, oversized blobs) fall back to the linear path, which stays
+  authoritative.
 - Constructing a `CommandResult` defensively clones result data and validates
   invariants; rendering is buffer-first and then writes once. Both CPU cost and
   transient memory are O(payload size), with roughly one additional in-memory

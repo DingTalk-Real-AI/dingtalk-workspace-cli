@@ -122,12 +122,12 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 	primary := drifted["sample group run"]
 	primary.Identity.Title = "drifted"
 	drifted["sample group run"] = primary
-	if _, err := BuildSchemaCache(registry, drifted, overview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, drifted, overview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("lookup drift accepted")
 	}
 	wrongOverview := overview
 	wrongOverview.Kind = "other"
-	if _, err := BuildSchemaCache(registry, lookup, wrongOverview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, wrongOverview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("overview drift accepted")
 	}
 	wrongLocators := make(map[string]string, len(locators))
@@ -135,7 +135,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 		wrongLocators[key] = value
 	}
 	wrongLocators["sample group run"] = "other"
-	if _, err := BuildSchemaCache(registry, lookup, overview, wrongLocators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, wrongLocators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("locator drift accepted")
 	}
 
@@ -150,7 +150,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildSchemaCache(badProduct, badLookup, badOverview, badLocators, fixtureHashes(), fixtureRenderedLeaves(badLookup)); err == nil {
+	if _, err := BuildSchemaCache(badProduct, badLookup, badOverview, badLocators, fixtureHashes(), fixtureRenderedLeaves(badLookup), nil); err == nil {
 		t.Fatal("unsupported disposition converted")
 	}
 
@@ -186,7 +186,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BuildSchemaCache(colliding, collidingLookup, collidingOverview, map[string]string{"alpha": "alpha"}, fixtureHashes(), fixtureRenderedLeaves(collidingLookup)); err == nil {
+	if _, err := BuildSchemaCache(colliding, collidingLookup, collidingOverview, map[string]string{"alpha": "alpha"}, fixtureHashes(), fixtureRenderedLeaves(collidingLookup), nil); err == nil {
 		t.Fatal("locator collision during cache build accepted")
 	}
 
@@ -199,7 +199,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 			return orig(message)
 		}
 	})
-	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("empty command payload header accepted")
 	}
 	testseam.Swap(t, &marshalSchemaCacheMessage, func(message proto.Message) ([]byte, error) {
@@ -210,7 +210,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 			return orig(message)
 		}
 	})
-	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("oversized command payload shard accepted")
 	}
 	testseam.Swap(t, &marshalSchemaCacheMessage, func(message proto.Message) ([]byte, error) {
@@ -221,7 +221,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 			return orig(message)
 		}
 	})
-	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("empty payload index accepted")
 	}
 
@@ -261,7 +261,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheProjectionDrift(t *testing.T) {
 		}
 		return orig(message)
 	})
-	if _, err := BuildSchemaCache(many, manyLookup, manyOverview, manyLocators, fixtureHashes(), fixtureRenderedLeaves(manyLookup)); err == nil {
+	if _, err := BuildSchemaCache(many, manyLookup, manyOverview, manyLocators, fixtureHashes(), fixtureRenderedLeaves(manyLookup), nil); err == nil {
 		t.Fatal("oversized registry shard data accepted")
 	}
 }
@@ -765,7 +765,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheRenderedLeafDrift(t *testing.T) {
 	}
 	rendered := fixtureRenderedLeaves(lookup)
 	delete(rendered, "sample.run")
-	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered, nil); err == nil {
 		t.Fatal("missing rendered leaf accepted")
 	}
 }

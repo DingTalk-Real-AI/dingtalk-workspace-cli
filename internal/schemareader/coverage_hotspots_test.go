@@ -262,7 +262,7 @@ func publishValidReaderFixture(t *testing.T) (*schemacache.Cache, Identity, sche
 	hashes := schemaruntime.CacheHashes{SourceSHA256: sha256.Sum256([]byte("source")), SurfaceSHA256: sha256.Sum256([]byte("surface"))}
 	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, map[string][]byte{
 		"sample.run": []byte("{\"ok\":true}\n"),
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

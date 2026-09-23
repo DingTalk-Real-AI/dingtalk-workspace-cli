@@ -38,7 +38,7 @@ func TestCrossPlatformCoverageReaderAuthenticatedRoundTrip(t *testing.T) {
 	lookup := schemaruntime.BuildCommandMetaLookup(registry)
 	rendered := map[string][]byte{"sample.run": []byte("{\"canonical\":\"sample.run\"}\n")}
 	hashes := schemaruntime.CacheHashes{SourceSHA256: sha256.Sum256([]byte("src")), SurfaceSHA256: sha256.Sum256([]byte("surf"))}
-	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered)
+	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +103,58 @@ func TestCrossPlatformCoverageReaderAuthenticatedRoundTrip(t *testing.T) {
 	leaf, err := ReadRenderedLeaf(cache, identity, index, "sample", ref)
 	if err != nil || string(leaf) != string(rendered["sample.run"]) {
 		t.Fatalf("leaf = %q %v", leaf, err)
+	}
+
+	// The full-catalog fast path round-trips the pre-rendered wire bytes and
+	// authenticates them through the pinned payload index.
+	catalogWire := []byte("{\n  \"kind\": \"catalog\"\n}\n")
+	builtWithCatalog, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered, catalogWire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityWithCatalog := identity
+	identityWithCatalog.Meta = artifact(schemacache.KindMeta, builtWithCatalog.Meta)
+	identityWithCatalog.Payload = artifact(schemacache.KindPayloads, builtWithCatalog.PayloadShards)
+	identityWithCatalog.PayloadIndexLength = builtWithCatalog.PayloadIndexLength
+	identityWithCatalog.PayloadIndexSHA256 = builtWithCatalog.PayloadIndexSHA256
+	if err := cache.Publish(identityWithCatalog.ExpectedIdentity(),
+		schemacache.Artifact{Expectation: identityWithCatalog.Registry, Payload: builtWithCatalog.ProductShards},
+		schemacache.Artifact{Expectation: identityWithCatalog.Meta, Payload: builtWithCatalog.Meta},
+		schemacache.Artifact{Expectation: identityWithCatalog.Payload, Payload: builtWithCatalog.PayloadShards},
+	); err != nil {
+		t.Fatal(err)
+	}
+	indexWithCatalog, err := ReadPayloadIndex(cache, identityWithCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if indexWithCatalog.RenderedCatalog == nil {
+		t.Fatal("rendered catalog ref missing after publish")
+	}
+	payloadsFile, err := cache.OpenPayloads(identityWithCatalog.ExpectedIdentity(), identityWithCatalog.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := ReadRenderedCatalogRange(payloadsFile, identityWithCatalog, *indexWithCatalog.RenderedCatalog)
+	_ = payloadsFile.Close()
+	if err != nil || string(catalog) != string(catalogWire) {
+		t.Fatalf("rendered catalog = %q %v", catalog, err)
+	}
+	tamperedRef := *indexWithCatalog.RenderedCatalog
+	tamperedRef.SHA256 = sha256.Sum256([]byte("tampered"))
+	payloadsFile2, err := cache.OpenPayloads(identityWithCatalog.ExpectedIdentity(), identityWithCatalog.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadRenderedCatalogRange(payloadsFile2, identityWithCatalog, tamperedRef); err == nil {
+		_ = payloadsFile2.Close()
+		t.Fatal("tampered catalog digest accepted")
+	}
+	_ = payloadsFile2.Close()
+	// A generation published without the blob decodes with a nil ref so the
+	// caller falls back to the registry path.
+	if index.RenderedCatalog != nil {
+		t.Fatal("legacy generation unexpectedly carries a rendered catalog ref")
 	}
 
 	garbage := identity

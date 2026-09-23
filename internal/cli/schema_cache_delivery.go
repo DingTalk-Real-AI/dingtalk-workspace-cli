@@ -599,6 +599,31 @@ func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (an
 	return resolvedMeta{Meta: m, OK: ok}, nil
 }
 
+// renderedCatalogAll serves the full `schema --all -f json` wire bytes from
+// the payload file without decoding registry shards or re-marshaling. Any
+// miss (older generation without the ref, read failure, digest mismatch)
+// reports false so the caller falls through to the registry-backed path,
+// which owns repair semantics.
+func (r *schemaCacheRuntime) renderedCatalogAll() ([]byte, bool) {
+	index, err := r.loadPayloadIndex()
+	if err != nil {
+		return nil, false
+	}
+	ref := index.RenderedCatalog
+	if ref == nil {
+		return nil, false
+	}
+	handle, err := r.payloadsHandle()
+	if err != nil {
+		return nil, false
+	}
+	blob, err := schemareader.ReadRenderedCatalogRange(handle, r.optionsSnapshot().Identity, *ref)
+	if err != nil {
+		return nil, false
+	}
+	return blob, true
+}
+
 // renderedCompactLeaf serves one canonical compact leaf query from the command
 // payload file without opening the registry or Meta. Any miss or read failure
 // reports false so the caller falls through to the registry-backed path, which
@@ -1118,7 +1143,11 @@ func buildSchemaCacheArtifacts(registry SchemaRegistry, sourceHash, surfaceHash 
 	if err != nil {
 		return SchemaCacheArtifacts{}, err
 	}
-	built, err := schemaruntime.BuildSchemaCache(registry, schemaruntime.BuildCommandMetaLookup(registry), overview, locators, hashes, rendered)
+	catalogAll, err := renderFullCatalogWire(index, hashes)
+	if err != nil {
+		return SchemaCacheArtifacts{}, err
+	}
+	built, err := schemaruntime.BuildSchemaCache(registry, schemaruntime.BuildCommandMetaLookup(registry), overview, locators, hashes, rendered, catalogAll)
 	if err != nil {
 		return SchemaCacheArtifacts{}, err
 	}
@@ -1162,6 +1191,27 @@ func renderCompactSchemaLeaves(registry SchemaRegistry, index SchemaIndex) (map[
 		}
 	}
 	return rendered, nil
+}
+
+// renderFullCatalogWire pre-renders the full `schema --all -f json` output
+// bytes through the same RenderAll projection and writer semantics as the
+// schema command (WriteJSON: MarshalIndent with two-space indent plus a
+// trailing newline), so a cached --all query is byte-identical to the live
+// render without decoding registry shards or re-marshaling.
+func renderFullCatalogWire(index SchemaIndex, hashes schemaruntime.CacheHashes) ([]byte, error) {
+	trusted := schemaruntime.TrustedHashes{
+		CatalogHash: "sha256:" + hex.EncodeToString(hashes.SourceSHA256[:]),
+		SurfaceHash: "sha256:" + hex.EncodeToString(hashes.SurfaceSHA256[:]),
+	}
+	payload, err := schemaruntime.RenderAll(index.Registry(), trusted)
+	if err != nil {
+		return nil, fmt.Errorf("render Schema catalog: %w", err)
+	}
+	data, err := compactLeafMarshal(payload, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("render Schema catalog: %w", err)
+	}
+	return append(data, '\n'), nil
 }
 
 // canonicalSchemaCacheRegistry removes irrelevant JSON object insertion order

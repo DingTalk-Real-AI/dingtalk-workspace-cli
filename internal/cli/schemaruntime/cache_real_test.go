@@ -187,7 +187,7 @@ func buildRealCache(t testFataler, registry cli.SchemaRegistry) (schemaruntime.B
 	}
 	hashes := schemaruntime.CacheHashes{SourceSHA256: sha256.Sum256([]byte("real-source")), SurfaceSHA256: sha256.Sum256([]byte("real-surface"))}
 	lookup := schemaruntime.BuildCommandMetaLookup(registry)
-	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, fixtureRenderedLeaves(lookup))
+	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, fixtureRenderedLeaves(lookup), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

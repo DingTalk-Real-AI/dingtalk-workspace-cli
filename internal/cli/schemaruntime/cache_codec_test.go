@@ -84,7 +84,7 @@ func TestCrossPlatformCoverageSchemaCacheDeterministicAndDeepCopies(t *testing.T
 	}
 	hashes := fixtureHashes()
 	rendered := fixtureRenderedLeaves(lookup)
-	first, err := BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered)
+	first, err := BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestCrossPlatformCoverageSchemaCacheDeterministicAndDeepCopies(t *testing.T
 	for i := len(locatorKeys) - 1; i >= 0; i-- {
 		reversedLocators[locatorKeys[i]] = locators[locatorKeys[i]]
 	}
-	second, err := BuildSchemaCache(registry, reversedLookup, overview, reversedLocators, hashes, rendered)
+	second, err := BuildSchemaCache(registry, reversedLookup, overview, reversedLocators, hashes, rendered, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,14 +161,14 @@ func TestCrossPlatformCoverageSchemaCacheBuildRejectsProjectionDrift(t *testing.
 			bad[key] = value
 		}
 		delete(bad, "sample zzz")
-		if _, err := BuildSchemaCache(registry, bad, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+		if _, err := BuildSchemaCache(registry, bad, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 			t.Fatal("drifted lookup unexpectedly succeeded")
 		}
 	})
 	t.Run("overview", func(t *testing.T) {
 		bad := overview
 		bad.ToolCount++
-		if _, err := BuildSchemaCache(registry, lookup, bad, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+		if _, err := BuildSchemaCache(registry, lookup, bad, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 			t.Fatal("drifted overview unexpectedly succeeded")
 		}
 	})
@@ -178,7 +178,7 @@ func TestCrossPlatformCoverageSchemaCacheBuildRejectsProjectionDrift(t *testing.
 			bad[key] = value
 		}
 		delete(bad, "sample.zzz")
-		if _, err := BuildSchemaCache(registry, lookup, overview, bad, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+		if _, err := BuildSchemaCache(registry, lookup, overview, bad, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 			t.Fatal("drifted locator unexpectedly succeeded")
 		}
 	})
@@ -380,7 +380,7 @@ func buildFixtureCache(t *testing.T, registry SchemaRegistry) (BuiltSchemaCache,
 		t.Fatal(err)
 	}
 	lookup := BuildCommandMetaLookup(registry)
-	built, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup))
+	built, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

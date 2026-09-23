@@ -200,10 +200,10 @@ func TestCrossPlatformCoverageBuildSchemaOverviewAndLocators(t *testing.T) {
 
 func TestCrossPlatformCoverageBuildSchemaCacheRejectsLimitsAndMarshal(t *testing.T) {
 	empty := SchemaRegistry{Kind: "schema", Level: "catalog"}
-	if _, err := BuildSchemaCache(empty, nil, SchemaOverview{}, nil, fixtureHashes(), nil); err == nil {
+	if _, err := BuildSchemaCache(empty, nil, SchemaOverview{}, nil, fixtureHashes(), nil, nil); err == nil {
 		t.Fatal("empty product list accepted")
 	}
-	if _, err := BuildSchemaCache(SchemaRegistry{Products: []ProductSpec{{ID: ""}}}, nil, SchemaOverview{}, nil, fixtureHashes(), nil); err == nil {
+	if _, err := BuildSchemaCache(SchemaRegistry{Products: []ProductSpec{{ID: ""}}}, nil, SchemaOverview{}, nil, fixtureHashes(), nil, nil); err == nil {
 		t.Fatal("invalid registry accepted")
 	}
 	registry := allFieldsRegistry()
@@ -220,7 +220,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheRejectsLimitsAndMarshal(t *testing
 	for i := 0; i < maxSchemaMetaEntries+1; i++ {
 		oversized[fmt.Sprintf("k%d", i)] = "sample"
 	}
-	if _, err := BuildSchemaCache(registry, lookup, overview, oversized, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+	if _, err := BuildSchemaCache(registry, lookup, overview, oversized, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 		t.Fatal("oversized locators accepted")
 	}
 	aliasLookup := make(map[string]CommandMeta, len(lookup)+1)
@@ -228,7 +228,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheRejectsLimitsAndMarshal(t *testing
 		aliasLookup[key] = value
 	}
 	aliasLookup["not-an-owned-alias"] = lookup["sample group run"]
-	if _, err := BuildSchemaCache(registry, aliasLookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+	if _, err := BuildSchemaCache(registry, aliasLookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 		t.Fatal("alias expansion drift accepted")
 	}
 
@@ -252,7 +252,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheRejectsLimitsAndMarshal(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testseam.Swap(t, &marshalSchemaCacheMessage, tc.next)
-			if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+			if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 				t.Fatal("forced marshal failure unexpectedly succeeded")
 			}
 		})
@@ -268,7 +268,7 @@ func TestCrossPlatformCoverageBuildSchemaCacheRejectsLimitsAndMarshal(t *testing
 					}
 					return orig(message)
 				})
-				if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
+				if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup), nil); err == nil {
 					t.Fatal("nth marshal failure unexpectedly succeeded")
 				}
 			})

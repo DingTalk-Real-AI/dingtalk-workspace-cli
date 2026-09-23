@@ -1269,12 +1269,19 @@ func (x *CommandPayloadEntryList) GetItems() []*CommandPayloadEntry {
 // Meta or registry files on the hot path. Locators mirror the Meta's and are
 // cross-checked at build time.
 type SchemaPayloadIndex struct {
-	state         protoimpl.MessageState        `protogen:"open.v1"`
-	DtoVersion    DTOVersion                    `protobuf:"varint,1,opt,name=dto_version,json=dtoVersion,proto3,enum=dws.schemacache.v2.DTOVersion" json:"dto_version,omitempty"`
-	Locators      *LocatorEntryList             `protobuf:"bytes,2,opt,name=locators,proto3" json:"locators,omitempty"`
-	Products      *CommandPayloadDescriptorList `protobuf:"bytes,3,opt,name=products,proto3" json:"products,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState        `protogen:"open.v1"`
+	DtoVersion DTOVersion                    `protobuf:"varint,1,opt,name=dto_version,json=dtoVersion,proto3,enum=dws.schemacache.v2.DTOVersion" json:"dto_version,omitempty"`
+	Locators   *LocatorEntryList             `protobuf:"bytes,2,opt,name=locators,proto3" json:"locators,omitempty"`
+	Products   *CommandPayloadDescriptorList `protobuf:"bytes,3,opt,name=products,proto3" json:"products,omitempty"`
+	// Pre-rendered full `schema --all -f json` wire bytes. The blob is global
+	// (it spans every product's full leaf) and lives between the index region
+	// and the product payload shards; offset is absolute from the payload file
+	// start, and the ref is authenticated because the index region itself is
+	// pinned by the identity. Absent in generations published before this
+	// field: readers miss and use the registry path, which stays authoritative.
+	RenderedCatalog *RenderedCatalogRef `protobuf:"bytes,4,opt,name=rendered_catalog,json=renderedCatalog,proto3" json:"rendered_catalog,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SchemaPayloadIndex) Reset() {
@@ -1328,6 +1335,74 @@ func (x *SchemaPayloadIndex) GetProducts() *CommandPayloadDescriptorList {
 	return nil
 }
 
+func (x *SchemaPayloadIndex) GetRenderedCatalog() *RenderedCatalogRef {
+	if x != nil {
+		return x.RenderedCatalog
+	}
+	return nil
+}
+
+// Global pre-rendered catalog descriptor; see SchemaPayloadIndex.rendered_catalog.
+type RenderedCatalogRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        uint64                 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length        uint64                 `protobuf:"varint,2,opt,name=length,proto3" json:"length,omitempty"`
+	Sha256        []byte                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RenderedCatalogRef) Reset() {
+	*x = RenderedCatalogRef{}
+	mi := &file_schema_cache_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RenderedCatalogRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RenderedCatalogRef) ProtoMessage() {}
+
+func (x *RenderedCatalogRef) ProtoReflect() protoreflect.Message {
+	mi := &file_schema_cache_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RenderedCatalogRef.ProtoReflect.Descriptor instead.
+func (*RenderedCatalogRef) Descriptor() ([]byte, []int) {
+	return file_schema_cache_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RenderedCatalogRef) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *RenderedCatalogRef) GetLength() uint64 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *RenderedCatalogRef) GetSha256() []byte {
+	if x != nil {
+		return x.Sha256
+	}
+	return nil
+}
+
 // One canonical command's rendered compact leaf descriptor. The leaf bytes
 // live in the shard's raw blob region right after the header, so a leaf query
 // reads only the small header and its own blob instead of the whole shard.
@@ -1344,7 +1419,7 @@ type RenderedSchemaLeafRef struct {
 
 func (x *RenderedSchemaLeafRef) Reset() {
 	*x = RenderedSchemaLeafRef{}
-	mi := &file_schema_cache_proto_msgTypes[16]
+	mi := &file_schema_cache_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1356,7 +1431,7 @@ func (x *RenderedSchemaLeafRef) String() string {
 func (*RenderedSchemaLeafRef) ProtoMessage() {}
 
 func (x *RenderedSchemaLeafRef) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[16]
+	mi := &file_schema_cache_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1369,7 +1444,7 @@ func (x *RenderedSchemaLeafRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenderedSchemaLeafRef.ProtoReflect.Descriptor instead.
 func (*RenderedSchemaLeafRef) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{16}
+	return file_schema_cache_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RenderedSchemaLeafRef) GetCanonicalPath() string {
@@ -1409,7 +1484,7 @@ type RenderedSchemaLeafRefList struct {
 
 func (x *RenderedSchemaLeafRefList) Reset() {
 	*x = RenderedSchemaLeafRefList{}
-	mi := &file_schema_cache_proto_msgTypes[17]
+	mi := &file_schema_cache_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1496,7 @@ func (x *RenderedSchemaLeafRefList) String() string {
 func (*RenderedSchemaLeafRefList) ProtoMessage() {}
 
 func (x *RenderedSchemaLeafRefList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[17]
+	mi := &file_schema_cache_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1509,7 @@ func (x *RenderedSchemaLeafRefList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenderedSchemaLeafRefList.ProtoReflect.Descriptor instead.
 func (*RenderedSchemaLeafRefList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{17}
+	return file_schema_cache_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RenderedSchemaLeafRefList) GetItems() []*RenderedSchemaLeafRef {
@@ -1463,7 +1538,7 @@ type SchemaCommandPayloadCache struct {
 
 func (x *SchemaCommandPayloadCache) Reset() {
 	*x = SchemaCommandPayloadCache{}
-	mi := &file_schema_cache_proto_msgTypes[18]
+	mi := &file_schema_cache_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1475,7 +1550,7 @@ func (x *SchemaCommandPayloadCache) String() string {
 func (*SchemaCommandPayloadCache) ProtoMessage() {}
 
 func (x *SchemaCommandPayloadCache) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[18]
+	mi := &file_schema_cache_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1488,7 +1563,7 @@ func (x *SchemaCommandPayloadCache) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaCommandPayloadCache.ProtoReflect.Descriptor instead.
 func (*SchemaCommandPayloadCache) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{18}
+	return file_schema_cache_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SchemaCommandPayloadCache) GetDtoVersion() DTOVersion {
@@ -1535,7 +1610,7 @@ type CommandPayloadDescriptor struct {
 
 func (x *CommandPayloadDescriptor) Reset() {
 	*x = CommandPayloadDescriptor{}
-	mi := &file_schema_cache_proto_msgTypes[19]
+	mi := &file_schema_cache_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1547,7 +1622,7 @@ func (x *CommandPayloadDescriptor) String() string {
 func (*CommandPayloadDescriptor) ProtoMessage() {}
 
 func (x *CommandPayloadDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[19]
+	mi := &file_schema_cache_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1560,7 +1635,7 @@ func (x *CommandPayloadDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandPayloadDescriptor.ProtoReflect.Descriptor instead.
 func (*CommandPayloadDescriptor) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{19}
+	return file_schema_cache_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CommandPayloadDescriptor) GetProductId() string {
@@ -1614,7 +1689,7 @@ type CommandPayloadDescriptorList struct {
 
 func (x *CommandPayloadDescriptorList) Reset() {
 	*x = CommandPayloadDescriptorList{}
-	mi := &file_schema_cache_proto_msgTypes[20]
+	mi := &file_schema_cache_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1626,7 +1701,7 @@ func (x *CommandPayloadDescriptorList) String() string {
 func (*CommandPayloadDescriptorList) ProtoMessage() {}
 
 func (x *CommandPayloadDescriptorList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[20]
+	mi := &file_schema_cache_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1639,7 +1714,7 @@ func (x *CommandPayloadDescriptorList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandPayloadDescriptorList.ProtoReflect.Descriptor instead.
 func (*CommandPayloadDescriptorList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{20}
+	return file_schema_cache_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CommandPayloadDescriptorList) GetItems() []*CommandPayloadDescriptor {
@@ -1660,7 +1735,7 @@ type SchemaOverviewCache struct {
 
 func (x *SchemaOverviewCache) Reset() {
 	*x = SchemaOverviewCache{}
-	mi := &file_schema_cache_proto_msgTypes[21]
+	mi := &file_schema_cache_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1672,7 +1747,7 @@ func (x *SchemaOverviewCache) String() string {
 func (*SchemaOverviewCache) ProtoMessage() {}
 
 func (x *SchemaOverviewCache) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[21]
+	mi := &file_schema_cache_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1685,7 +1760,7 @@ func (x *SchemaOverviewCache) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaOverviewCache.ProtoReflect.Descriptor instead.
 func (*SchemaOverviewCache) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{21}
+	return file_schema_cache_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SchemaOverviewCache) GetRegistry() *RegistryFields {
@@ -1718,7 +1793,7 @@ type OverviewProductList struct {
 
 func (x *OverviewProductList) Reset() {
 	*x = OverviewProductList{}
-	mi := &file_schema_cache_proto_msgTypes[22]
+	mi := &file_schema_cache_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1730,7 +1805,7 @@ func (x *OverviewProductList) String() string {
 func (*OverviewProductList) ProtoMessage() {}
 
 func (x *OverviewProductList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[22]
+	mi := &file_schema_cache_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1743,7 +1818,7 @@ func (x *OverviewProductList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewProductList.ProtoReflect.Descriptor instead.
 func (*OverviewProductList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{22}
+	return file_schema_cache_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *OverviewProductList) GetItems() []*OverviewProduct {
@@ -1766,7 +1841,7 @@ type OverviewProduct struct {
 
 func (x *OverviewProduct) Reset() {
 	*x = OverviewProduct{}
-	mi := &file_schema_cache_proto_msgTypes[23]
+	mi := &file_schema_cache_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1778,7 +1853,7 @@ func (x *OverviewProduct) String() string {
 func (*OverviewProduct) ProtoMessage() {}
 
 func (x *OverviewProduct) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[23]
+	mi := &file_schema_cache_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1791,7 +1866,7 @@ func (x *OverviewProduct) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewProduct.ProtoReflect.Descriptor instead.
 func (*OverviewProduct) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{23}
+	return file_schema_cache_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *OverviewProduct) GetId() string {
@@ -1838,7 +1913,7 @@ type LocatorEntryList struct {
 
 func (x *LocatorEntryList) Reset() {
 	*x = LocatorEntryList{}
-	mi := &file_schema_cache_proto_msgTypes[24]
+	mi := &file_schema_cache_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1850,7 +1925,7 @@ func (x *LocatorEntryList) String() string {
 func (*LocatorEntryList) ProtoMessage() {}
 
 func (x *LocatorEntryList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[24]
+	mi := &file_schema_cache_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1863,7 +1938,7 @@ func (x *LocatorEntryList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocatorEntryList.ProtoReflect.Descriptor instead.
 func (*LocatorEntryList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{24}
+	return file_schema_cache_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LocatorEntryList) GetItems() []*LocatorEntry {
@@ -1883,7 +1958,7 @@ type LocatorEntry struct {
 
 func (x *LocatorEntry) Reset() {
 	*x = LocatorEntry{}
-	mi := &file_schema_cache_proto_msgTypes[25]
+	mi := &file_schema_cache_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1895,7 +1970,7 @@ func (x *LocatorEntry) String() string {
 func (*LocatorEntry) ProtoMessage() {}
 
 func (x *LocatorEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[25]
+	mi := &file_schema_cache_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1908,7 +1983,7 @@ func (x *LocatorEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LocatorEntry.ProtoReflect.Descriptor instead.
 func (*LocatorEntry) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{25}
+	return file_schema_cache_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *LocatorEntry) GetLookupPath() string {
@@ -1934,7 +2009,7 @@ type ProductDescriptorList struct {
 
 func (x *ProductDescriptorList) Reset() {
 	*x = ProductDescriptorList{}
-	mi := &file_schema_cache_proto_msgTypes[26]
+	mi := &file_schema_cache_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1946,7 +2021,7 @@ func (x *ProductDescriptorList) String() string {
 func (*ProductDescriptorList) ProtoMessage() {}
 
 func (x *ProductDescriptorList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[26]
+	mi := &file_schema_cache_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1959,7 +2034,7 @@ func (x *ProductDescriptorList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProductDescriptorList.ProtoReflect.Descriptor instead.
 func (*ProductDescriptorList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{26}
+	return file_schema_cache_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ProductDescriptorList) GetItems() []*ProductDescriptor {
@@ -1981,7 +2056,7 @@ type ProductDescriptor struct {
 
 func (x *ProductDescriptor) Reset() {
 	*x = ProductDescriptor{}
-	mi := &file_schema_cache_proto_msgTypes[27]
+	mi := &file_schema_cache_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1993,7 +2068,7 @@ func (x *ProductDescriptor) String() string {
 func (*ProductDescriptor) ProtoMessage() {}
 
 func (x *ProductDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[27]
+	mi := &file_schema_cache_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2006,7 +2081,7 @@ func (x *ProductDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProductDescriptor.ProtoReflect.Descriptor instead.
 func (*ProductDescriptor) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{27}
+	return file_schema_cache_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ProductDescriptor) GetProductId() string {
@@ -2052,7 +2127,7 @@ type ProductSpec struct {
 
 func (x *ProductSpec) Reset() {
 	*x = ProductSpec{}
-	mi := &file_schema_cache_proto_msgTypes[28]
+	mi := &file_schema_cache_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2139,7 @@ func (x *ProductSpec) String() string {
 func (*ProductSpec) ProtoMessage() {}
 
 func (x *ProductSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[28]
+	mi := &file_schema_cache_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2152,7 @@ func (x *ProductSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProductSpec.ProtoReflect.Descriptor instead.
 func (*ProductSpec) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{28}
+	return file_schema_cache_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ProductSpec) GetId() string {
@@ -2138,7 +2213,7 @@ type ToolList struct {
 
 func (x *ToolList) Reset() {
 	*x = ToolList{}
-	mi := &file_schema_cache_proto_msgTypes[29]
+	mi := &file_schema_cache_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2150,7 +2225,7 @@ func (x *ToolList) String() string {
 func (*ToolList) ProtoMessage() {}
 
 func (x *ToolList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[29]
+	mi := &file_schema_cache_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2163,7 +2238,7 @@ func (x *ToolList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolList.ProtoReflect.Descriptor instead.
 func (*ToolList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{29}
+	return file_schema_cache_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ToolList) GetItems() []*ToolSpec {
@@ -2197,7 +2272,7 @@ type ToolSpec struct {
 
 func (x *ToolSpec) Reset() {
 	*x = ToolSpec{}
-	mi := &file_schema_cache_proto_msgTypes[30]
+	mi := &file_schema_cache_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2284,7 @@ func (x *ToolSpec) String() string {
 func (*ToolSpec) ProtoMessage() {}
 
 func (x *ToolSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[30]
+	mi := &file_schema_cache_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2297,7 @@ func (x *ToolSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolSpec.ProtoReflect.Descriptor instead.
 func (*ToolSpec) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{30}
+	return file_schema_cache_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ToolSpec) GetIdentity() *ToolIdentity {
@@ -2354,7 +2429,7 @@ type WaitSpec struct {
 
 func (x *WaitSpec) Reset() {
 	*x = WaitSpec{}
-	mi := &file_schema_cache_proto_msgTypes[31]
+	mi := &file_schema_cache_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2366,7 +2441,7 @@ func (x *WaitSpec) String() string {
 func (*WaitSpec) ProtoMessage() {}
 
 func (x *WaitSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[31]
+	mi := &file_schema_cache_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2379,7 +2454,7 @@ func (x *WaitSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitSpec.ProtoReflect.Descriptor instead.
 func (*WaitSpec) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{31}
+	return file_schema_cache_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *WaitSpec) GetMode() string {
@@ -2455,7 +2530,7 @@ type WaitTerminalEntry struct {
 
 func (x *WaitTerminalEntry) Reset() {
 	*x = WaitTerminalEntry{}
-	mi := &file_schema_cache_proto_msgTypes[32]
+	mi := &file_schema_cache_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2467,7 +2542,7 @@ func (x *WaitTerminalEntry) String() string {
 func (*WaitTerminalEntry) ProtoMessage() {}
 
 func (x *WaitTerminalEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[32]
+	mi := &file_schema_cache_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2480,7 +2555,7 @@ func (x *WaitTerminalEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitTerminalEntry.ProtoReflect.Descriptor instead.
 func (*WaitTerminalEntry) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{32}
+	return file_schema_cache_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *WaitTerminalEntry) GetStatus() string {
@@ -2506,7 +2581,7 @@ type WaitTerminalList struct {
 
 func (x *WaitTerminalList) Reset() {
 	*x = WaitTerminalList{}
-	mi := &file_schema_cache_proto_msgTypes[33]
+	mi := &file_schema_cache_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2518,7 +2593,7 @@ func (x *WaitTerminalList) String() string {
 func (*WaitTerminalList) ProtoMessage() {}
 
 func (x *WaitTerminalList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[33]
+	mi := &file_schema_cache_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2531,7 +2606,7 @@ func (x *WaitTerminalList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitTerminalList.ProtoReflect.Descriptor instead.
 func (*WaitTerminalList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{33}
+	return file_schema_cache_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *WaitTerminalList) GetItems() []*WaitTerminalEntry {
@@ -2550,7 +2625,7 @@ type ParameterList struct {
 
 func (x *ParameterList) Reset() {
 	*x = ParameterList{}
-	mi := &file_schema_cache_proto_msgTypes[34]
+	mi := &file_schema_cache_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2562,7 +2637,7 @@ func (x *ParameterList) String() string {
 func (*ParameterList) ProtoMessage() {}
 
 func (x *ParameterList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[34]
+	mi := &file_schema_cache_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2575,7 +2650,7 @@ func (x *ParameterList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParameterList.ProtoReflect.Descriptor instead.
 func (*ParameterList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{34}
+	return file_schema_cache_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ParameterList) GetItems() []*ParameterSpec {
@@ -2612,7 +2687,7 @@ type ParameterSpec struct {
 
 func (x *ParameterSpec) Reset() {
 	*x = ParameterSpec{}
-	mi := &file_schema_cache_proto_msgTypes[35]
+	mi := &file_schema_cache_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2624,7 +2699,7 @@ func (x *ParameterSpec) String() string {
 func (*ParameterSpec) ProtoMessage() {}
 
 func (x *ParameterSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[35]
+	mi := &file_schema_cache_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2637,7 +2712,7 @@ func (x *ParameterSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParameterSpec.ProtoReflect.Descriptor instead.
 func (*ParameterSpec) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{35}
+	return file_schema_cache_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ParameterSpec) GetName() string {
@@ -2772,7 +2847,7 @@ type ToolIdentity struct {
 
 func (x *ToolIdentity) Reset() {
 	*x = ToolIdentity{}
-	mi := &file_schema_cache_proto_msgTypes[36]
+	mi := &file_schema_cache_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2784,7 +2859,7 @@ func (x *ToolIdentity) String() string {
 func (*ToolIdentity) ProtoMessage() {}
 
 func (x *ToolIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[36]
+	mi := &file_schema_cache_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2797,7 +2872,7 @@ func (x *ToolIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolIdentity.ProtoReflect.Descriptor instead.
 func (*ToolIdentity) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{36}
+	return file_schema_cache_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ToolIdentity) GetProductId() string {
@@ -2895,7 +2970,7 @@ type Constraints struct {
 
 func (x *Constraints) Reset() {
 	*x = Constraints{}
-	mi := &file_schema_cache_proto_msgTypes[37]
+	mi := &file_schema_cache_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +2982,7 @@ func (x *Constraints) String() string {
 func (*Constraints) ProtoMessage() {}
 
 func (x *Constraints) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[37]
+	mi := &file_schema_cache_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +2995,7 @@ func (x *Constraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Constraints.ProtoReflect.Descriptor instead.
 func (*Constraints) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{37}
+	return file_schema_cache_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Constraints) GetMutuallyExclusive() *StringListList {
@@ -2953,7 +3028,7 @@ type PositionalList struct {
 
 func (x *PositionalList) Reset() {
 	*x = PositionalList{}
-	mi := &file_schema_cache_proto_msgTypes[38]
+	mi := &file_schema_cache_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2965,7 +3040,7 @@ func (x *PositionalList) String() string {
 func (*PositionalList) ProtoMessage() {}
 
 func (x *PositionalList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[38]
+	mi := &file_schema_cache_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2978,7 +3053,7 @@ func (x *PositionalList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PositionalList.ProtoReflect.Descriptor instead.
 func (*PositionalList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{38}
+	return file_schema_cache_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *PositionalList) GetItems() []*Positional {
@@ -3002,7 +3077,7 @@ type Positional struct {
 
 func (x *Positional) Reset() {
 	*x = Positional{}
-	mi := &file_schema_cache_proto_msgTypes[39]
+	mi := &file_schema_cache_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3014,7 +3089,7 @@ func (x *Positional) String() string {
 func (*Positional) ProtoMessage() {}
 
 func (x *Positional) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[39]
+	mi := &file_schema_cache_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3027,7 +3102,7 @@ func (x *Positional) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Positional.ProtoReflect.Descriptor instead.
 func (*Positional) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{39}
+	return file_schema_cache_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Positional) GetName() string {
@@ -3082,7 +3157,7 @@ type DryRun struct {
 
 func (x *DryRun) Reset() {
 	*x = DryRun{}
-	mi := &file_schema_cache_proto_msgTypes[40]
+	mi := &file_schema_cache_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3094,7 +3169,7 @@ func (x *DryRun) String() string {
 func (*DryRun) ProtoMessage() {}
 
 func (x *DryRun) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[40]
+	mi := &file_schema_cache_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3107,7 +3182,7 @@ func (x *DryRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DryRun.ProtoReflect.Descriptor instead.
 func (*DryRun) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{40}
+	return file_schema_cache_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *DryRun) GetPreviewKind() string {
@@ -3135,7 +3210,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_schema_cache_proto_msgTypes[41]
+	mi := &file_schema_cache_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3147,7 +3222,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[41]
+	mi := &file_schema_cache_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3160,7 +3235,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{41}
+	return file_schema_cache_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *Result) GetOutcomes() *ResultOutcomeList {
@@ -3193,7 +3268,7 @@ type ResultOutcomeList struct {
 
 func (x *ResultOutcomeList) Reset() {
 	*x = ResultOutcomeList{}
-	mi := &file_schema_cache_proto_msgTypes[42]
+	mi := &file_schema_cache_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3205,7 +3280,7 @@ func (x *ResultOutcomeList) String() string {
 func (*ResultOutcomeList) ProtoMessage() {}
 
 func (x *ResultOutcomeList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[42]
+	mi := &file_schema_cache_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3218,7 +3293,7 @@ func (x *ResultOutcomeList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultOutcomeList.ProtoReflect.Descriptor instead.
 func (*ResultOutcomeList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{42}
+	return file_schema_cache_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ResultOutcomeList) GetItems() []ResultOutcome {
@@ -3241,7 +3316,7 @@ type Pagination struct {
 
 func (x *Pagination) Reset() {
 	*x = Pagination{}
-	mi := &file_schema_cache_proto_msgTypes[43]
+	mi := &file_schema_cache_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3253,7 +3328,7 @@ func (x *Pagination) String() string {
 func (*Pagination) ProtoMessage() {}
 
 func (x *Pagination) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[43]
+	mi := &file_schema_cache_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3266,7 +3341,7 @@ func (x *Pagination) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pagination.ProtoReflect.Descriptor instead.
 func (*Pagination) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{43}
+	return file_schema_cache_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *Pagination) GetKind() string {
@@ -3317,7 +3392,7 @@ type Safety struct {
 
 func (x *Safety) Reset() {
 	*x = Safety{}
-	mi := &file_schema_cache_proto_msgTypes[44]
+	mi := &file_schema_cache_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3329,7 +3404,7 @@ func (x *Safety) String() string {
 func (*Safety) ProtoMessage() {}
 
 func (x *Safety) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[44]
+	mi := &file_schema_cache_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3342,7 +3417,7 @@ func (x *Safety) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Safety.ProtoReflect.Descriptor instead.
 func (*Safety) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{44}
+	return file_schema_cache_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *Safety) GetEffect() string {
@@ -3392,7 +3467,7 @@ type Interface struct {
 
 func (x *Interface) Reset() {
 	*x = Interface{}
-	mi := &file_schema_cache_proto_msgTypes[45]
+	mi := &file_schema_cache_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3404,7 +3479,7 @@ func (x *Interface) String() string {
 func (*Interface) ProtoMessage() {}
 
 func (x *Interface) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[45]
+	mi := &file_schema_cache_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3417,7 +3492,7 @@ func (x *Interface) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interface.ProtoReflect.Descriptor instead.
 func (*Interface) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{45}
+	return file_schema_cache_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *Interface) GetRef() *InterfaceRef {
@@ -3458,7 +3533,7 @@ type InterfaceRef struct {
 
 func (x *InterfaceRef) Reset() {
 	*x = InterfaceRef{}
-	mi := &file_schema_cache_proto_msgTypes[46]
+	mi := &file_schema_cache_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3470,7 +3545,7 @@ func (x *InterfaceRef) String() string {
 func (*InterfaceRef) ProtoMessage() {}
 
 func (x *InterfaceRef) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[46]
+	mi := &file_schema_cache_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3483,7 +3558,7 @@ func (x *InterfaceRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterfaceRef.ProtoReflect.Descriptor instead.
 func (*InterfaceRef) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{46}
+	return file_schema_cache_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *InterfaceRef) GetProductId() string {
@@ -3520,7 +3595,7 @@ type Selection struct {
 
 func (x *Selection) Reset() {
 	*x = Selection{}
-	mi := &file_schema_cache_proto_msgTypes[47]
+	mi := &file_schema_cache_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3532,7 +3607,7 @@ func (x *Selection) String() string {
 func (*Selection) ProtoMessage() {}
 
 func (x *Selection) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[47]
+	mi := &file_schema_cache_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3545,7 +3620,7 @@ func (x *Selection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Selection.ProtoReflect.Descriptor instead.
 func (*Selection) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{47}
+	return file_schema_cache_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *Selection) GetAgentSummary() string {
@@ -3641,7 +3716,7 @@ type ExampleDispositionList struct {
 
 func (x *ExampleDispositionList) Reset() {
 	*x = ExampleDispositionList{}
-	mi := &file_schema_cache_proto_msgTypes[48]
+	mi := &file_schema_cache_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3653,7 +3728,7 @@ func (x *ExampleDispositionList) String() string {
 func (*ExampleDispositionList) ProtoMessage() {}
 
 func (x *ExampleDispositionList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[48]
+	mi := &file_schema_cache_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3666,7 +3741,7 @@ func (x *ExampleDispositionList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExampleDispositionList.ProtoReflect.Descriptor instead.
 func (*ExampleDispositionList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{48}
+	return file_schema_cache_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ExampleDispositionList) GetItems() []*ExampleDisposition {
@@ -3689,7 +3764,7 @@ type ExampleDisposition struct {
 
 func (x *ExampleDisposition) Reset() {
 	*x = ExampleDisposition{}
-	mi := &file_schema_cache_proto_msgTypes[49]
+	mi := &file_schema_cache_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3701,7 +3776,7 @@ func (x *ExampleDisposition) String() string {
 func (*ExampleDisposition) ProtoMessage() {}
 
 func (x *ExampleDisposition) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[49]
+	mi := &file_schema_cache_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3714,7 +3789,7 @@ func (x *ExampleDisposition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExampleDisposition.ProtoReflect.Descriptor instead.
 func (*ExampleDisposition) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{49}
+	return file_schema_cache_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ExampleDisposition) GetIndex() *IntValue {
@@ -3761,7 +3836,7 @@ type ProvenanceList struct {
 
 func (x *ProvenanceList) Reset() {
 	*x = ProvenanceList{}
-	mi := &file_schema_cache_proto_msgTypes[50]
+	mi := &file_schema_cache_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3773,7 +3848,7 @@ func (x *ProvenanceList) String() string {
 func (*ProvenanceList) ProtoMessage() {}
 
 func (x *ProvenanceList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[50]
+	mi := &file_schema_cache_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3786,7 +3861,7 @@ func (x *ProvenanceList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvenanceList.ProtoReflect.Descriptor instead.
 func (*ProvenanceList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{50}
+	return file_schema_cache_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ProvenanceList) GetItems() []*ProvenanceEntry {
@@ -3806,7 +3881,7 @@ type ProvenanceEntry struct {
 
 func (x *ProvenanceEntry) Reset() {
 	*x = ProvenanceEntry{}
-	mi := &file_schema_cache_proto_msgTypes[51]
+	mi := &file_schema_cache_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3818,7 +3893,7 @@ func (x *ProvenanceEntry) String() string {
 func (*ProvenanceEntry) ProtoMessage() {}
 
 func (x *ProvenanceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[51]
+	mi := &file_schema_cache_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3831,7 +3906,7 @@ func (x *ProvenanceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvenanceEntry.ProtoReflect.Descriptor instead.
 func (*ProvenanceEntry) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{51}
+	return file_schema_cache_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ProvenanceEntry) GetKey() string {
@@ -3864,7 +3939,7 @@ type FieldProvenance struct {
 
 func (x *FieldProvenance) Reset() {
 	*x = FieldProvenance{}
-	mi := &file_schema_cache_proto_msgTypes[52]
+	mi := &file_schema_cache_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3876,7 +3951,7 @@ func (x *FieldProvenance) String() string {
 func (*FieldProvenance) ProtoMessage() {}
 
 func (x *FieldProvenance) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[52]
+	mi := &file_schema_cache_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3889,7 +3964,7 @@ func (x *FieldProvenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FieldProvenance.ProtoReflect.Descriptor instead.
 func (*FieldProvenance) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{52}
+	return file_schema_cache_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *FieldProvenance) GetValue() *BytesValue {
@@ -3957,7 +4032,7 @@ type CandidateList struct {
 
 func (x *CandidateList) Reset() {
 	*x = CandidateList{}
-	mi := &file_schema_cache_proto_msgTypes[53]
+	mi := &file_schema_cache_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3969,7 +4044,7 @@ func (x *CandidateList) String() string {
 func (*CandidateList) ProtoMessage() {}
 
 func (x *CandidateList) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[53]
+	mi := &file_schema_cache_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3982,7 +4057,7 @@ func (x *CandidateList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CandidateList.ProtoReflect.Descriptor instead.
 func (*CandidateList) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{53}
+	return file_schema_cache_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CandidateList) GetItems() []*FieldCandidate {
@@ -4006,7 +4081,7 @@ type FieldCandidate struct {
 
 func (x *FieldCandidate) Reset() {
 	*x = FieldCandidate{}
-	mi := &file_schema_cache_proto_msgTypes[54]
+	mi := &file_schema_cache_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4018,7 +4093,7 @@ func (x *FieldCandidate) String() string {
 func (*FieldCandidate) ProtoMessage() {}
 
 func (x *FieldCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_schema_cache_proto_msgTypes[54]
+	mi := &file_schema_cache_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4031,7 +4106,7 @@ func (x *FieldCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FieldCandidate.ProtoReflect.Descriptor instead.
 func (*FieldCandidate) Descriptor() ([]byte, []int) {
-	return file_schema_cache_proto_rawDescGZIP(), []int{54}
+	return file_schema_cache_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *FieldCandidate) GetValue() *BytesValue {
@@ -4161,12 +4236,17 @@ const file_schema_cache_proto_rawDesc = "" +
 	"\tselection\x18\x06 \x01(\v2+.dws.schemacache.v2.CommandSelectionPayloadR\tselection\x12@\n" +
 	"\bidentity\x18\a \x01(\v2$.dws.schemacache.v2.CommandMetaEntryR\bidentity\"X\n" +
 	"\x17CommandPayloadEntryList\x12=\n" +
-	"\x05items\x18\x01 \x03(\v2'.dws.schemacache.v2.CommandPayloadEntryR\x05items\"\xe5\x01\n" +
+	"\x05items\x18\x01 \x03(\v2'.dws.schemacache.v2.CommandPayloadEntryR\x05items\"\xb8\x02\n" +
 	"\x12SchemaPayloadIndex\x12?\n" +
 	"\vdto_version\x18\x01 \x01(\x0e2\x1e.dws.schemacache.v2.DTOVersionR\n" +
 	"dtoVersion\x12@\n" +
 	"\blocators\x18\x02 \x01(\v2$.dws.schemacache.v2.LocatorEntryListR\blocators\x12L\n" +
-	"\bproducts\x18\x03 \x01(\v20.dws.schemacache.v2.CommandPayloadDescriptorListR\bproducts\"\x86\x01\n" +
+	"\bproducts\x18\x03 \x01(\v20.dws.schemacache.v2.CommandPayloadDescriptorListR\bproducts\x12Q\n" +
+	"\x10rendered_catalog\x18\x04 \x01(\v2&.dws.schemacache.v2.RenderedCatalogRefR\x0frenderedCatalog\"\\\n" +
+	"\x12RenderedCatalogRef\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\x04R\x06offset\x12\x16\n" +
+	"\x06length\x18\x02 \x01(\x04R\x06length\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\fR\x06sha256\"\x86\x01\n" +
 	"\x15RenderedSchemaLeafRef\x12%\n" +
 	"\x0ecanonical_path\x18\x01 \x01(\tR\rcanonicalPath\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x04R\x06offset\x12\x16\n" +
@@ -4450,7 +4530,7 @@ func file_schema_cache_proto_rawDescGZIP() []byte {
 }
 
 var file_schema_cache_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_schema_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
+var file_schema_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_schema_cache_proto_goTypes = []any{
 	(DTOVersion)(0),                      // 0: dws.schemacache.v2.DTOVersion
 	(OverviewSummaryKind)(0),             // 1: dws.schemacache.v2.OverviewSummaryKind
@@ -4473,58 +4553,59 @@ var file_schema_cache_proto_goTypes = []any{
 	(*CommandPayloadEntry)(nil),          // 18: dws.schemacache.v2.CommandPayloadEntry
 	(*CommandPayloadEntryList)(nil),      // 19: dws.schemacache.v2.CommandPayloadEntryList
 	(*SchemaPayloadIndex)(nil),           // 20: dws.schemacache.v2.SchemaPayloadIndex
-	(*RenderedSchemaLeafRef)(nil),        // 21: dws.schemacache.v2.RenderedSchemaLeafRef
-	(*RenderedSchemaLeafRefList)(nil),    // 22: dws.schemacache.v2.RenderedSchemaLeafRefList
-	(*SchemaCommandPayloadCache)(nil),    // 23: dws.schemacache.v2.SchemaCommandPayloadCache
-	(*CommandPayloadDescriptor)(nil),     // 24: dws.schemacache.v2.CommandPayloadDescriptor
-	(*CommandPayloadDescriptorList)(nil), // 25: dws.schemacache.v2.CommandPayloadDescriptorList
-	(*SchemaOverviewCache)(nil),          // 26: dws.schemacache.v2.SchemaOverviewCache
-	(*OverviewProductList)(nil),          // 27: dws.schemacache.v2.OverviewProductList
-	(*OverviewProduct)(nil),              // 28: dws.schemacache.v2.OverviewProduct
-	(*LocatorEntryList)(nil),             // 29: dws.schemacache.v2.LocatorEntryList
-	(*LocatorEntry)(nil),                 // 30: dws.schemacache.v2.LocatorEntry
-	(*ProductDescriptorList)(nil),        // 31: dws.schemacache.v2.ProductDescriptorList
-	(*ProductDescriptor)(nil),            // 32: dws.schemacache.v2.ProductDescriptor
-	(*ProductSpec)(nil),                  // 33: dws.schemacache.v2.ProductSpec
-	(*ToolList)(nil),                     // 34: dws.schemacache.v2.ToolList
-	(*ToolSpec)(nil),                     // 35: dws.schemacache.v2.ToolSpec
-	(*WaitSpec)(nil),                     // 36: dws.schemacache.v2.WaitSpec
-	(*WaitTerminalEntry)(nil),            // 37: dws.schemacache.v2.WaitTerminalEntry
-	(*WaitTerminalList)(nil),             // 38: dws.schemacache.v2.WaitTerminalList
-	(*ParameterList)(nil),                // 39: dws.schemacache.v2.ParameterList
-	(*ParameterSpec)(nil),                // 40: dws.schemacache.v2.ParameterSpec
-	(*ToolIdentity)(nil),                 // 41: dws.schemacache.v2.ToolIdentity
-	(*Constraints)(nil),                  // 42: dws.schemacache.v2.Constraints
-	(*PositionalList)(nil),               // 43: dws.schemacache.v2.PositionalList
-	(*Positional)(nil),                   // 44: dws.schemacache.v2.Positional
-	(*DryRun)(nil),                       // 45: dws.schemacache.v2.DryRun
-	(*Result)(nil),                       // 46: dws.schemacache.v2.Result
-	(*ResultOutcomeList)(nil),            // 47: dws.schemacache.v2.ResultOutcomeList
-	(*Pagination)(nil),                   // 48: dws.schemacache.v2.Pagination
-	(*Safety)(nil),                       // 49: dws.schemacache.v2.Safety
-	(*Interface)(nil),                    // 50: dws.schemacache.v2.Interface
-	(*InterfaceRef)(nil),                 // 51: dws.schemacache.v2.InterfaceRef
-	(*Selection)(nil),                    // 52: dws.schemacache.v2.Selection
-	(*ExampleDispositionList)(nil),       // 53: dws.schemacache.v2.ExampleDispositionList
-	(*ExampleDisposition)(nil),           // 54: dws.schemacache.v2.ExampleDisposition
-	(*ProvenanceList)(nil),               // 55: dws.schemacache.v2.ProvenanceList
-	(*ProvenanceEntry)(nil),              // 56: dws.schemacache.v2.ProvenanceEntry
-	(*FieldProvenance)(nil),              // 57: dws.schemacache.v2.FieldProvenance
-	(*CandidateList)(nil),                // 58: dws.schemacache.v2.CandidateList
-	(*FieldCandidate)(nil),               // 59: dws.schemacache.v2.FieldCandidate
+	(*RenderedCatalogRef)(nil),           // 21: dws.schemacache.v2.RenderedCatalogRef
+	(*RenderedSchemaLeafRef)(nil),        // 22: dws.schemacache.v2.RenderedSchemaLeafRef
+	(*RenderedSchemaLeafRefList)(nil),    // 23: dws.schemacache.v2.RenderedSchemaLeafRefList
+	(*SchemaCommandPayloadCache)(nil),    // 24: dws.schemacache.v2.SchemaCommandPayloadCache
+	(*CommandPayloadDescriptor)(nil),     // 25: dws.schemacache.v2.CommandPayloadDescriptor
+	(*CommandPayloadDescriptorList)(nil), // 26: dws.schemacache.v2.CommandPayloadDescriptorList
+	(*SchemaOverviewCache)(nil),          // 27: dws.schemacache.v2.SchemaOverviewCache
+	(*OverviewProductList)(nil),          // 28: dws.schemacache.v2.OverviewProductList
+	(*OverviewProduct)(nil),              // 29: dws.schemacache.v2.OverviewProduct
+	(*LocatorEntryList)(nil),             // 30: dws.schemacache.v2.LocatorEntryList
+	(*LocatorEntry)(nil),                 // 31: dws.schemacache.v2.LocatorEntry
+	(*ProductDescriptorList)(nil),        // 32: dws.schemacache.v2.ProductDescriptorList
+	(*ProductDescriptor)(nil),            // 33: dws.schemacache.v2.ProductDescriptor
+	(*ProductSpec)(nil),                  // 34: dws.schemacache.v2.ProductSpec
+	(*ToolList)(nil),                     // 35: dws.schemacache.v2.ToolList
+	(*ToolSpec)(nil),                     // 36: dws.schemacache.v2.ToolSpec
+	(*WaitSpec)(nil),                     // 37: dws.schemacache.v2.WaitSpec
+	(*WaitTerminalEntry)(nil),            // 38: dws.schemacache.v2.WaitTerminalEntry
+	(*WaitTerminalList)(nil),             // 39: dws.schemacache.v2.WaitTerminalList
+	(*ParameterList)(nil),                // 40: dws.schemacache.v2.ParameterList
+	(*ParameterSpec)(nil),                // 41: dws.schemacache.v2.ParameterSpec
+	(*ToolIdentity)(nil),                 // 42: dws.schemacache.v2.ToolIdentity
+	(*Constraints)(nil),                  // 43: dws.schemacache.v2.Constraints
+	(*PositionalList)(nil),               // 44: dws.schemacache.v2.PositionalList
+	(*Positional)(nil),                   // 45: dws.schemacache.v2.Positional
+	(*DryRun)(nil),                       // 46: dws.schemacache.v2.DryRun
+	(*Result)(nil),                       // 47: dws.schemacache.v2.Result
+	(*ResultOutcomeList)(nil),            // 48: dws.schemacache.v2.ResultOutcomeList
+	(*Pagination)(nil),                   // 49: dws.schemacache.v2.Pagination
+	(*Safety)(nil),                       // 50: dws.schemacache.v2.Safety
+	(*Interface)(nil),                    // 51: dws.schemacache.v2.Interface
+	(*InterfaceRef)(nil),                 // 52: dws.schemacache.v2.InterfaceRef
+	(*Selection)(nil),                    // 53: dws.schemacache.v2.Selection
+	(*ExampleDispositionList)(nil),       // 54: dws.schemacache.v2.ExampleDispositionList
+	(*ExampleDisposition)(nil),           // 55: dws.schemacache.v2.ExampleDisposition
+	(*ProvenanceList)(nil),               // 56: dws.schemacache.v2.ProvenanceList
+	(*ProvenanceEntry)(nil),              // 57: dws.schemacache.v2.ProvenanceEntry
+	(*FieldProvenance)(nil),              // 58: dws.schemacache.v2.FieldProvenance
+	(*CandidateList)(nil),                // 59: dws.schemacache.v2.CandidateList
+	(*FieldCandidate)(nil),               // 60: dws.schemacache.v2.FieldCandidate
 }
 var file_schema_cache_proto_depIdxs = []int32{
 	5,  // 0: dws.schemacache.v2.StringListList.items:type_name -> dws.schemacache.v2.StringList
 	0,  // 1: dws.schemacache.v2.SchemaMetaCache.dto_version:type_name -> dws.schemacache.v2.DTOVersion
 	12, // 2: dws.schemacache.v2.SchemaMetaCache.registry:type_name -> dws.schemacache.v2.RegistryFields
-	26, // 3: dws.schemacache.v2.SchemaMetaCache.overview:type_name -> dws.schemacache.v2.SchemaOverviewCache
-	29, // 4: dws.schemacache.v2.SchemaMetaCache.locators:type_name -> dws.schemacache.v2.LocatorEntryList
-	31, // 5: dws.schemacache.v2.SchemaMetaCache.product_descriptors:type_name -> dws.schemacache.v2.ProductDescriptorList
-	25, // 6: dws.schemacache.v2.SchemaMetaCache.command_payload_descriptors:type_name -> dws.schemacache.v2.CommandPayloadDescriptorList
+	27, // 3: dws.schemacache.v2.SchemaMetaCache.overview:type_name -> dws.schemacache.v2.SchemaOverviewCache
+	30, // 4: dws.schemacache.v2.SchemaMetaCache.locators:type_name -> dws.schemacache.v2.LocatorEntryList
+	32, // 5: dws.schemacache.v2.SchemaMetaCache.product_descriptors:type_name -> dws.schemacache.v2.ProductDescriptorList
+	26, // 6: dws.schemacache.v2.SchemaMetaCache.command_payload_descriptors:type_name -> dws.schemacache.v2.CommandPayloadDescriptorList
 	15, // 7: dws.schemacache.v2.SchemaMetaCache.command_entry_shards:type_name -> dws.schemacache.v2.CommandMetaEntryShardList
 	0,  // 8: dws.schemacache.v2.SchemaProductCache.dto_version:type_name -> dws.schemacache.v2.DTOVersion
 	12, // 9: dws.schemacache.v2.SchemaProductCache.registry:type_name -> dws.schemacache.v2.RegistryFields
-	33, // 10: dws.schemacache.v2.SchemaProductCache.product:type_name -> dws.schemacache.v2.ProductSpec
+	34, // 10: dws.schemacache.v2.SchemaProductCache.product:type_name -> dws.schemacache.v2.ProductSpec
 	6,  // 11: dws.schemacache.v2.RegistryFields.agent_metadata:type_name -> dws.schemacache.v2.BytesValue
 	17, // 12: dws.schemacache.v2.CommandMetaEntryList.items:type_name -> dws.schemacache.v2.CommandMetaEntry
 	14, // 13: dws.schemacache.v2.CommandMetaEntryShardList.items:type_name -> dws.schemacache.v2.CommandMetaEntryShard
@@ -4532,81 +4613,82 @@ var file_schema_cache_proto_depIdxs = []int32{
 	17, // 15: dws.schemacache.v2.CommandPayloadEntry.identity:type_name -> dws.schemacache.v2.CommandMetaEntry
 	18, // 16: dws.schemacache.v2.CommandPayloadEntryList.items:type_name -> dws.schemacache.v2.CommandPayloadEntry
 	0,  // 17: dws.schemacache.v2.SchemaPayloadIndex.dto_version:type_name -> dws.schemacache.v2.DTOVersion
-	29, // 18: dws.schemacache.v2.SchemaPayloadIndex.locators:type_name -> dws.schemacache.v2.LocatorEntryList
-	25, // 19: dws.schemacache.v2.SchemaPayloadIndex.products:type_name -> dws.schemacache.v2.CommandPayloadDescriptorList
-	21, // 20: dws.schemacache.v2.RenderedSchemaLeafRefList.items:type_name -> dws.schemacache.v2.RenderedSchemaLeafRef
-	0,  // 21: dws.schemacache.v2.SchemaCommandPayloadCache.dto_version:type_name -> dws.schemacache.v2.DTOVersion
-	19, // 22: dws.schemacache.v2.SchemaCommandPayloadCache.entries:type_name -> dws.schemacache.v2.CommandPayloadEntryList
-	22, // 23: dws.schemacache.v2.SchemaCommandPayloadCache.rendered_leaf_index:type_name -> dws.schemacache.v2.RenderedSchemaLeafRefList
-	24, // 24: dws.schemacache.v2.CommandPayloadDescriptorList.items:type_name -> dws.schemacache.v2.CommandPayloadDescriptor
-	12, // 25: dws.schemacache.v2.SchemaOverviewCache.registry:type_name -> dws.schemacache.v2.RegistryFields
-	27, // 26: dws.schemacache.v2.SchemaOverviewCache.products:type_name -> dws.schemacache.v2.OverviewProductList
-	28, // 27: dws.schemacache.v2.OverviewProductList.items:type_name -> dws.schemacache.v2.OverviewProduct
-	1,  // 28: dws.schemacache.v2.OverviewProduct.summary_kind:type_name -> dws.schemacache.v2.OverviewSummaryKind
-	30, // 29: dws.schemacache.v2.LocatorEntryList.items:type_name -> dws.schemacache.v2.LocatorEntry
-	32, // 30: dws.schemacache.v2.ProductDescriptorList.items:type_name -> dws.schemacache.v2.ProductDescriptor
-	34, // 31: dws.schemacache.v2.ProductSpec.tools:type_name -> dws.schemacache.v2.ToolList
-	52, // 32: dws.schemacache.v2.ProductSpec.selection:type_name -> dws.schemacache.v2.Selection
-	55, // 33: dws.schemacache.v2.ProductSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
-	35, // 34: dws.schemacache.v2.ToolList.items:type_name -> dws.schemacache.v2.ToolSpec
-	41, // 35: dws.schemacache.v2.ToolSpec.identity:type_name -> dws.schemacache.v2.ToolIdentity
-	39, // 36: dws.schemacache.v2.ToolSpec.parameters:type_name -> dws.schemacache.v2.ParameterList
-	42, // 37: dws.schemacache.v2.ToolSpec.constraints:type_name -> dws.schemacache.v2.Constraints
-	43, // 38: dws.schemacache.v2.ToolSpec.positionals:type_name -> dws.schemacache.v2.PositionalList
-	45, // 39: dws.schemacache.v2.ToolSpec.dry_run:type_name -> dws.schemacache.v2.DryRun
-	46, // 40: dws.schemacache.v2.ToolSpec.result:type_name -> dws.schemacache.v2.Result
-	48, // 41: dws.schemacache.v2.ToolSpec.pagination:type_name -> dws.schemacache.v2.Pagination
-	49, // 42: dws.schemacache.v2.ToolSpec.safety:type_name -> dws.schemacache.v2.Safety
-	50, // 43: dws.schemacache.v2.ToolSpec.interface:type_name -> dws.schemacache.v2.Interface
-	52, // 44: dws.schemacache.v2.ToolSpec.selection:type_name -> dws.schemacache.v2.Selection
-	55, // 45: dws.schemacache.v2.ToolSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
-	36, // 46: dws.schemacache.v2.ToolSpec.wait:type_name -> dws.schemacache.v2.WaitSpec
-	38, // 47: dws.schemacache.v2.WaitSpec.terminal:type_name -> dws.schemacache.v2.WaitTerminalList
-	2,  // 48: dws.schemacache.v2.WaitTerminalEntry.outcome:type_name -> dws.schemacache.v2.ResultOutcome
-	37, // 49: dws.schemacache.v2.WaitTerminalList.items:type_name -> dws.schemacache.v2.WaitTerminalEntry
-	40, // 50: dws.schemacache.v2.ParameterList.items:type_name -> dws.schemacache.v2.ParameterSpec
-	6,  // 51: dws.schemacache.v2.ParameterSpec.default_value:type_name -> dws.schemacache.v2.BytesValue
-	6,  // 52: dws.schemacache.v2.ParameterSpec.interface_default:type_name -> dws.schemacache.v2.BytesValue
-	6,  // 53: dws.schemacache.v2.ParameterSpec.example:type_name -> dws.schemacache.v2.BytesValue
-	5,  // 54: dws.schemacache.v2.ParameterSpec.enum:type_name -> dws.schemacache.v2.StringList
-	55, // 55: dws.schemacache.v2.ParameterSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
-	5,  // 56: dws.schemacache.v2.ParameterSpec.any_of:type_name -> dws.schemacache.v2.StringList
-	5,  // 57: dws.schemacache.v2.ToolIdentity.aliases:type_name -> dws.schemacache.v2.StringList
-	9,  // 58: dws.schemacache.v2.Constraints.mutually_exclusive:type_name -> dws.schemacache.v2.StringListList
-	9,  // 59: dws.schemacache.v2.Constraints.require_one_of:type_name -> dws.schemacache.v2.StringListList
-	9,  // 60: dws.schemacache.v2.Constraints.require_together:type_name -> dws.schemacache.v2.StringListList
-	44, // 61: dws.schemacache.v2.PositionalList.items:type_name -> dws.schemacache.v2.Positional
-	47, // 62: dws.schemacache.v2.Result.outcomes:type_name -> dws.schemacache.v2.ResultOutcomeList
-	6,  // 63: dws.schemacache.v2.Result.data_schema:type_name -> dws.schemacache.v2.BytesValue
-	5,  // 64: dws.schemacache.v2.Result.sensitive_paths:type_name -> dws.schemacache.v2.StringList
-	2,  // 65: dws.schemacache.v2.ResultOutcomeList.items:type_name -> dws.schemacache.v2.ResultOutcome
-	51, // 66: dws.schemacache.v2.Interface.ref:type_name -> dws.schemacache.v2.InterfaceRef
-	5,  // 67: dws.schemacache.v2.Selection.use_when:type_name -> dws.schemacache.v2.StringList
-	5,  // 68: dws.schemacache.v2.Selection.avoid_when:type_name -> dws.schemacache.v2.StringList
-	5,  // 69: dws.schemacache.v2.Selection.prerequisites:type_name -> dws.schemacache.v2.StringList
-	5,  // 70: dws.schemacache.v2.Selection.tips:type_name -> dws.schemacache.v2.StringList
-	5,  // 71: dws.schemacache.v2.Selection.workflow_refs:type_name -> dws.schemacache.v2.StringList
-	5,  // 72: dws.schemacache.v2.Selection.examples:type_name -> dws.schemacache.v2.StringList
-	53, // 73: dws.schemacache.v2.Selection.example_dispositions:type_name -> dws.schemacache.v2.ExampleDispositionList
-	7,  // 74: dws.schemacache.v2.Selection.reviewed:type_name -> dws.schemacache.v2.BoolValue
-	5,  // 75: dws.schemacache.v2.Selection.source_refs:type_name -> dws.schemacache.v2.StringList
-	54, // 76: dws.schemacache.v2.ExampleDispositionList.items:type_name -> dws.schemacache.v2.ExampleDisposition
-	8,  // 77: dws.schemacache.v2.ExampleDisposition.index:type_name -> dws.schemacache.v2.IntValue
-	3,  // 78: dws.schemacache.v2.ExampleDisposition.mode:type_name -> dws.schemacache.v2.ExampleDispositionMode
-	4,  // 79: dws.schemacache.v2.ExampleDisposition.reason_code:type_name -> dws.schemacache.v2.ExampleDispositionReasonCode
-	56, // 80: dws.schemacache.v2.ProvenanceList.items:type_name -> dws.schemacache.v2.ProvenanceEntry
-	57, // 81: dws.schemacache.v2.ProvenanceEntry.value:type_name -> dws.schemacache.v2.FieldProvenance
-	6,  // 82: dws.schemacache.v2.FieldProvenance.value:type_name -> dws.schemacache.v2.BytesValue
-	58, // 83: dws.schemacache.v2.FieldProvenance.candidates:type_name -> dws.schemacache.v2.CandidateList
-	58, // 84: dws.schemacache.v2.FieldProvenance.overridden_candidates:type_name -> dws.schemacache.v2.CandidateList
-	59, // 85: dws.schemacache.v2.CandidateList.items:type_name -> dws.schemacache.v2.FieldCandidate
-	6,  // 86: dws.schemacache.v2.FieldCandidate.value:type_name -> dws.schemacache.v2.BytesValue
-	7,  // 87: dws.schemacache.v2.FieldCandidate.selected:type_name -> dws.schemacache.v2.BoolValue
-	88, // [88:88] is the sub-list for method output_type
-	88, // [88:88] is the sub-list for method input_type
-	88, // [88:88] is the sub-list for extension type_name
-	88, // [88:88] is the sub-list for extension extendee
-	0,  // [0:88] is the sub-list for field type_name
+	30, // 18: dws.schemacache.v2.SchemaPayloadIndex.locators:type_name -> dws.schemacache.v2.LocatorEntryList
+	26, // 19: dws.schemacache.v2.SchemaPayloadIndex.products:type_name -> dws.schemacache.v2.CommandPayloadDescriptorList
+	21, // 20: dws.schemacache.v2.SchemaPayloadIndex.rendered_catalog:type_name -> dws.schemacache.v2.RenderedCatalogRef
+	22, // 21: dws.schemacache.v2.RenderedSchemaLeafRefList.items:type_name -> dws.schemacache.v2.RenderedSchemaLeafRef
+	0,  // 22: dws.schemacache.v2.SchemaCommandPayloadCache.dto_version:type_name -> dws.schemacache.v2.DTOVersion
+	19, // 23: dws.schemacache.v2.SchemaCommandPayloadCache.entries:type_name -> dws.schemacache.v2.CommandPayloadEntryList
+	23, // 24: dws.schemacache.v2.SchemaCommandPayloadCache.rendered_leaf_index:type_name -> dws.schemacache.v2.RenderedSchemaLeafRefList
+	25, // 25: dws.schemacache.v2.CommandPayloadDescriptorList.items:type_name -> dws.schemacache.v2.CommandPayloadDescriptor
+	12, // 26: dws.schemacache.v2.SchemaOverviewCache.registry:type_name -> dws.schemacache.v2.RegistryFields
+	28, // 27: dws.schemacache.v2.SchemaOverviewCache.products:type_name -> dws.schemacache.v2.OverviewProductList
+	29, // 28: dws.schemacache.v2.OverviewProductList.items:type_name -> dws.schemacache.v2.OverviewProduct
+	1,  // 29: dws.schemacache.v2.OverviewProduct.summary_kind:type_name -> dws.schemacache.v2.OverviewSummaryKind
+	31, // 30: dws.schemacache.v2.LocatorEntryList.items:type_name -> dws.schemacache.v2.LocatorEntry
+	33, // 31: dws.schemacache.v2.ProductDescriptorList.items:type_name -> dws.schemacache.v2.ProductDescriptor
+	35, // 32: dws.schemacache.v2.ProductSpec.tools:type_name -> dws.schemacache.v2.ToolList
+	53, // 33: dws.schemacache.v2.ProductSpec.selection:type_name -> dws.schemacache.v2.Selection
+	56, // 34: dws.schemacache.v2.ProductSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
+	36, // 35: dws.schemacache.v2.ToolList.items:type_name -> dws.schemacache.v2.ToolSpec
+	42, // 36: dws.schemacache.v2.ToolSpec.identity:type_name -> dws.schemacache.v2.ToolIdentity
+	40, // 37: dws.schemacache.v2.ToolSpec.parameters:type_name -> dws.schemacache.v2.ParameterList
+	43, // 38: dws.schemacache.v2.ToolSpec.constraints:type_name -> dws.schemacache.v2.Constraints
+	44, // 39: dws.schemacache.v2.ToolSpec.positionals:type_name -> dws.schemacache.v2.PositionalList
+	46, // 40: dws.schemacache.v2.ToolSpec.dry_run:type_name -> dws.schemacache.v2.DryRun
+	47, // 41: dws.schemacache.v2.ToolSpec.result:type_name -> dws.schemacache.v2.Result
+	49, // 42: dws.schemacache.v2.ToolSpec.pagination:type_name -> dws.schemacache.v2.Pagination
+	50, // 43: dws.schemacache.v2.ToolSpec.safety:type_name -> dws.schemacache.v2.Safety
+	51, // 44: dws.schemacache.v2.ToolSpec.interface:type_name -> dws.schemacache.v2.Interface
+	53, // 45: dws.schemacache.v2.ToolSpec.selection:type_name -> dws.schemacache.v2.Selection
+	56, // 46: dws.schemacache.v2.ToolSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
+	37, // 47: dws.schemacache.v2.ToolSpec.wait:type_name -> dws.schemacache.v2.WaitSpec
+	39, // 48: dws.schemacache.v2.WaitSpec.terminal:type_name -> dws.schemacache.v2.WaitTerminalList
+	2,  // 49: dws.schemacache.v2.WaitTerminalEntry.outcome:type_name -> dws.schemacache.v2.ResultOutcome
+	38, // 50: dws.schemacache.v2.WaitTerminalList.items:type_name -> dws.schemacache.v2.WaitTerminalEntry
+	41, // 51: dws.schemacache.v2.ParameterList.items:type_name -> dws.schemacache.v2.ParameterSpec
+	6,  // 52: dws.schemacache.v2.ParameterSpec.default_value:type_name -> dws.schemacache.v2.BytesValue
+	6,  // 53: dws.schemacache.v2.ParameterSpec.interface_default:type_name -> dws.schemacache.v2.BytesValue
+	6,  // 54: dws.schemacache.v2.ParameterSpec.example:type_name -> dws.schemacache.v2.BytesValue
+	5,  // 55: dws.schemacache.v2.ParameterSpec.enum:type_name -> dws.schemacache.v2.StringList
+	56, // 56: dws.schemacache.v2.ParameterSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
+	5,  // 57: dws.schemacache.v2.ParameterSpec.any_of:type_name -> dws.schemacache.v2.StringList
+	5,  // 58: dws.schemacache.v2.ToolIdentity.aliases:type_name -> dws.schemacache.v2.StringList
+	9,  // 59: dws.schemacache.v2.Constraints.mutually_exclusive:type_name -> dws.schemacache.v2.StringListList
+	9,  // 60: dws.schemacache.v2.Constraints.require_one_of:type_name -> dws.schemacache.v2.StringListList
+	9,  // 61: dws.schemacache.v2.Constraints.require_together:type_name -> dws.schemacache.v2.StringListList
+	45, // 62: dws.schemacache.v2.PositionalList.items:type_name -> dws.schemacache.v2.Positional
+	48, // 63: dws.schemacache.v2.Result.outcomes:type_name -> dws.schemacache.v2.ResultOutcomeList
+	6,  // 64: dws.schemacache.v2.Result.data_schema:type_name -> dws.schemacache.v2.BytesValue
+	5,  // 65: dws.schemacache.v2.Result.sensitive_paths:type_name -> dws.schemacache.v2.StringList
+	2,  // 66: dws.schemacache.v2.ResultOutcomeList.items:type_name -> dws.schemacache.v2.ResultOutcome
+	52, // 67: dws.schemacache.v2.Interface.ref:type_name -> dws.schemacache.v2.InterfaceRef
+	5,  // 68: dws.schemacache.v2.Selection.use_when:type_name -> dws.schemacache.v2.StringList
+	5,  // 69: dws.schemacache.v2.Selection.avoid_when:type_name -> dws.schemacache.v2.StringList
+	5,  // 70: dws.schemacache.v2.Selection.prerequisites:type_name -> dws.schemacache.v2.StringList
+	5,  // 71: dws.schemacache.v2.Selection.tips:type_name -> dws.schemacache.v2.StringList
+	5,  // 72: dws.schemacache.v2.Selection.workflow_refs:type_name -> dws.schemacache.v2.StringList
+	5,  // 73: dws.schemacache.v2.Selection.examples:type_name -> dws.schemacache.v2.StringList
+	54, // 74: dws.schemacache.v2.Selection.example_dispositions:type_name -> dws.schemacache.v2.ExampleDispositionList
+	7,  // 75: dws.schemacache.v2.Selection.reviewed:type_name -> dws.schemacache.v2.BoolValue
+	5,  // 76: dws.schemacache.v2.Selection.source_refs:type_name -> dws.schemacache.v2.StringList
+	55, // 77: dws.schemacache.v2.ExampleDispositionList.items:type_name -> dws.schemacache.v2.ExampleDisposition
+	8,  // 78: dws.schemacache.v2.ExampleDisposition.index:type_name -> dws.schemacache.v2.IntValue
+	3,  // 79: dws.schemacache.v2.ExampleDisposition.mode:type_name -> dws.schemacache.v2.ExampleDispositionMode
+	4,  // 80: dws.schemacache.v2.ExampleDisposition.reason_code:type_name -> dws.schemacache.v2.ExampleDispositionReasonCode
+	57, // 81: dws.schemacache.v2.ProvenanceList.items:type_name -> dws.schemacache.v2.ProvenanceEntry
+	58, // 82: dws.schemacache.v2.ProvenanceEntry.value:type_name -> dws.schemacache.v2.FieldProvenance
+	6,  // 83: dws.schemacache.v2.FieldProvenance.value:type_name -> dws.schemacache.v2.BytesValue
+	59, // 84: dws.schemacache.v2.FieldProvenance.candidates:type_name -> dws.schemacache.v2.CandidateList
+	59, // 85: dws.schemacache.v2.FieldProvenance.overridden_candidates:type_name -> dws.schemacache.v2.CandidateList
+	60, // 86: dws.schemacache.v2.CandidateList.items:type_name -> dws.schemacache.v2.FieldCandidate
+	6,  // 87: dws.schemacache.v2.FieldCandidate.value:type_name -> dws.schemacache.v2.BytesValue
+	7,  // 88: dws.schemacache.v2.FieldCandidate.selected:type_name -> dws.schemacache.v2.BoolValue
+	89, // [89:89] is the sub-list for method output_type
+	89, // [89:89] is the sub-list for method input_type
+	89, // [89:89] is the sub-list for extension type_name
+	89, // [89:89] is the sub-list for extension extendee
+	0,  // [0:89] is the sub-list for field type_name
 }
 
 func init() { file_schema_cache_proto_init() }
@@ -4620,7 +4702,7 @@ func file_schema_cache_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_schema_cache_proto_rawDesc), len(file_schema_cache_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   55,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

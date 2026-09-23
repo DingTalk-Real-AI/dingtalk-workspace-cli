@@ -107,8 +107,20 @@ func NewSchemaCommand() *cobra.Command {
 				output.ResolveFields(cmd) == "" && output.ResolveJQ(cmd) == "" &&
 				runtimeDeliveryLiveCatalog.Load() == nil {
 				auditSchemaDeliveryAccess("query loader")
-				if runtime := activeSchemaCacheRuntime(); runtime != nil {
+				if runtime := readableSchemaCacheRuntime(); runtime != nil {
 					if data, ok := runtime.renderedCompactLeaf(args[0]); ok {
+						_, err := cmd.OutOrStdout().Write(data)
+						return err
+					}
+				}
+			}
+			if all && !compact &&
+				output.ResolveFormat(cmd, output.FormatJSON) == output.FormatJSON &&
+				output.ResolveFields(cmd) == "" && output.ResolveJQ(cmd) == "" &&
+				runtimeDeliveryLiveCatalog.Load() == nil {
+				auditSchemaDeliveryAccess("query loader")
+				if runtime := readableSchemaCacheRuntime(); runtime != nil {
+					if data, ok := runtime.renderedCatalogAll(); ok {
 						_, err := cmd.OutOrStdout().Write(data)
 						return err
 					}

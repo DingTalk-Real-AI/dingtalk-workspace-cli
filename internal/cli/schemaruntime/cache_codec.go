@@ -408,7 +408,7 @@ func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]st
 // The supplied projections must exactly match the validated Registry. rendered
 // carries each canonical Schema path's exact pre-rendered compact leaf payload
 // (indented JSON plus trailing newline) for the payload shard's rendered leaves.
-func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, overview SchemaOverview, locators map[string]string, hashes CacheHashes, rendered map[string][]byte) (BuiltSchemaCache, error) {
+func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, overview SchemaOverview, locators map[string]string, hashes CacheHashes, rendered map[string][]byte, catalogAll []byte) (BuiltSchemaCache, error) {
 	if _, err := registry.Index(); err != nil {
 		return BuiltSchemaCache{}, fmt.Errorf("validate Schema Registry: %w", err)
 	}
@@ -537,15 +537,77 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 		Locators:   locatorsToProto(locators),
 		Products:   payloadDescriptorsToProto(result.PayloadDescriptors),
 	}
-	indexBytes, marshalErr := MarshalSchemaCacheDeterministic(indexRoot)
-	if marshalErr != nil {
-		return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+	// The rendered catalog blob sits between the index region and the product
+	// shards, so its absolute offset equals the index region length — which
+	// depends on the marshaled index size, which depends on the offset value.
+	// Converge by fixed-point iteration; varint length is monotonic in the
+	// offset, so this stabilizes within a couple of passes. An oversized
+	// catalog only loses the fast path: the generation still publishes
+	// without the ref.
+	catalogRef := (*schemacachepb.RenderedCatalogRef)(nil)
+	if len(catalogAll) > 0 {
+		digest := sha256.Sum256(catalogAll)
+		catalogRef = &schemacachepb.RenderedCatalogRef{
+			Length: uint64(len(catalogAll)), Sha256: cloneBytes(digest[:]),
+		}
+	}
+	catalogOffset := uint64(0)
+	indexBytes := []byte(nil)
+	for i := 0; i < 8; i++ {
+		indexRoot.RenderedCatalog = catalogRef
+		if catalogRef != nil {
+			catalogRef.Offset = catalogOffset
+		}
+		marshaled, marshalErr := MarshalSchemaCacheDeterministic(indexRoot)
+		if marshalErr != nil {
+			return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+		}
+		if catalogRef == nil {
+			indexBytes = marshaled
+			break
+		}
+		if next := uint64(4 + len(marshaled)); next == catalogOffset {
+			indexBytes = marshaled
+			break
+		} else {
+			catalogOffset = next
+		}
+	}
+	if indexBytes == nil {
+		return BuiltSchemaCache{}, fmt.Errorf("rendered catalog offset did not converge")
 	}
 	indexRegion, marshalErr := assembleCommandPayloadShard(indexBytes, nil)
 	if marshalErr != nil {
 		return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
 	}
-	result.PayloadShards = append(indexRegion, result.PayloadShards...)
+	products := result.PayloadShards
+	includeCatalog := catalogRef != nil &&
+		uint64(len(indexRegion))+catalogRef.Length+uint64(len(products)) <= MaxSchemaShardData
+	if !includeCatalog && catalogRef != nil {
+		// Over budget: republish without the catalog ref rather than pinning a
+		// blob that is not in the file.
+		indexRoot.RenderedCatalog = nil
+		indexBytes, marshalErr = MarshalSchemaCacheDeterministic(indexRoot)
+		if marshalErr != nil {
+			return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+		}
+		indexRegion, marshalErr = assembleCommandPayloadShard(indexBytes, nil)
+		if marshalErr != nil {
+			return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+		}
+	}
+	final := make([]byte, 0, len(indexRegion)+len(products)+func() int {
+		if includeCatalog {
+			return len(catalogAll)
+		}
+		return 0
+	}())
+	final = append(final, indexRegion...)
+	if includeCatalog {
+		final = append(final, catalogAll...)
+	}
+	final = append(final, products...)
+	result.PayloadShards = final
 	result.PayloadIndexLength = uint64(len(indexRegion))
 	result.PayloadIndexSHA256 = sha256.Sum256(indexRegion)
 	result.PayloadDataSize = uint64(len(result.PayloadShards))
@@ -721,6 +783,16 @@ type RenderedLeafRef struct {
 	SHA256        [sha256.Size]byte
 }
 
+// RenderedCatalogRef locates the global pre-rendered `schema --all -f json`
+// wire bytes appended after all product payload shards. Offset is absolute
+// from the payload file start (unlike RenderedLeafRef, which is relative to a
+// product's blob region).
+type RenderedCatalogRef struct {
+	Offset uint64
+	Length uint64
+	SHA256 [sha256.Size]byte
+}
+
 // RenderedLeaf finds the leaf ref for one canonical path by binary search.
 func (d DecodedCommandPayloads) RenderedLeaf(canonical string) (RenderedLeafRef, bool) {
 	i := sort.Search(len(d.LeafIndex), func(i int) bool { return d.LeafIndex[i].CanonicalPath >= canonical })
@@ -798,6 +870,9 @@ func decodeCommandPayloadHeader(header []byte, descriptor CommandPayloadDescript
 type DecodedSchemaPayloadIndex struct {
 	LocatorProductByPath map[string]string
 	PayloadDescriptors   []CommandPayloadDescriptor
+	// RenderedCatalog is nil for generations published before the field
+	// existed; readers fall back to the registry path.
+	RenderedCatalog *RenderedCatalogRef
 }
 
 // DecodeSchemaPayloadIndex decodes and validates the payload index region,
@@ -847,6 +922,14 @@ func DecodeSchemaPayloadIndex(region []byte) (DecodedSchemaPayloadIndex, error) 
 		if descriptor == nil || len(descriptor.GetSha256()) != sha256.Size || len(descriptor.GetHeaderSha256()) != sha256.Size || descriptor.GetHeaderLength() == 0 {
 			return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index descriptor %d is incomplete", i)
 		}
+	}
+	if ref := root.GetRenderedCatalog(); ref != nil {
+		if ref.GetOffset() == 0 || ref.GetLength() == 0 || len(ref.GetSha256()) != sha256.Size {
+			return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index rendered catalog ref is incomplete")
+		}
+		digest := [sha256.Size]byte{}
+		copy(digest[:], ref.GetSha256())
+		result.RenderedCatalog = &RenderedCatalogRef{Offset: ref.GetOffset(), Length: ref.GetLength(), SHA256: digest}
 	}
 	return result, nil
 }

@@ -381,6 +381,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 当前磁盘形态还包括（DTO v5）：
 
 - payload 分片携带按 canonical 路径寻址的预渲染 compact 叶子；`schema <leaf> --compact -f json` 快路径只做小 range 读，不打开 registry 分片；
+- payload 索引（identity 钉住）另携带全局预渲染的 `schema --all -f json` wire 字节（`rendered_catalog` ref，offset 为 payload 文件内绝对地址，位于 index 区与产品分片之间；旧代际无此字段，读取方回退 registry 路径）；`schema --all -f json` 快路径单次认证 range 读 + 直写，不做 registry 解码、RenderAll 或重新 marshal；
 - Meta 的 `command_entries` 按产品拆为 `command_entry_shards`；`CommandMeta(path)` 经 locator 定位产品后只解码该产品分片；
 - root 构树时可 `PrewarmSchemaCache`（`WithNoCreate` 只读探测），与 Cobra 建树重叠；进程级共用单一 payload 句柄。
 

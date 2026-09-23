@@ -141,6 +141,18 @@ func ReadRenderedLeafRange(payloads *schemacache.Registry, identity Identity, in
 	})
 }
 
+// ReadRenderedCatalogRange serves the pre-rendered full `schema --all -f json`
+// wire bytes. The ref comes from the already authenticated payload index, and
+// the offset is absolute from the payload file start (the blob spans all
+// products, so no per-product base applies).
+func ReadRenderedCatalogRange(payloads *schemacache.Registry, identity Identity, ref schemaruntime.RenderedCatalogRef) ([]byte, error) {
+	return payloads.ReadCatalogRange(schemacache.RangeDescriptor{
+		Offset: ref.Offset,
+		Length: ref.Length,
+		SHA256: ref.SHA256,
+	})
+}
+
 func Locator(meta schemaruntime.DecodedSchemaMeta, raw string) (string, bool) {
 	tokens := schemaruntime.SplitPathTokens(raw)
 	candidates := []string{strings.TrimSpace(raw), schemaruntime.NormalizeQueryCLIPath(raw), strings.Join(tokens, ".")}

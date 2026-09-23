@@ -58,7 +58,7 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "cd5115522e35946b02fdea2c443533c671b35175703284fedd55425ec9fab3f3"
+	const expectedProtoSHA256 = "0b44e8a4774e6f37d41f125a78461a6a37915663f26c8529b902b4d2b97eea40"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,8 @@ func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
 	assertFieldNumbers(t, (&schemacachepb.CommandPayloadDescriptor{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6})
 	assertFieldNumbers(t, (&schemacachepb.CommandMetaEntryShard{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
 	assertFieldNumbers(t, (&schemacachepb.CommandPayloadEntry{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6, 7})
-	assertFieldNumbers(t, (&schemacachepb.SchemaPayloadIndex{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
+	assertFieldNumbers(t, (&schemacachepb.SchemaPayloadIndex{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4})
+	assertFieldNumbers(t, (&schemacachepb.RenderedCatalogRef{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
 }
 
 func shortTypeName(value reflect.Type) string {

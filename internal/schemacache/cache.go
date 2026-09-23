@@ -209,6 +209,21 @@ func (r *Registry) ReadRange(descriptor RangeDescriptor) ([]byte, error) {
 	return r.backend.readRange(descriptor)
 }
 
+// ReadCatalogRange reads one large authenticated span: the pre-rendered
+// `schema --all` wire blob living inside the payload artifact. The descriptor
+// comes from the payload index, which the pinned identity authenticates, so
+// this relaxes ReadRange's per-product sanity bound to the artifact bound
+// while keeping the bounds, digest, and file-state checks of readRange.
+func (r *Registry) ReadCatalogRange(descriptor RangeDescriptor) ([]byte, error) {
+	if r == nil || r.backend == nil {
+		return nil, ErrClosed
+	}
+	if descriptor.Length == 0 || descriptor.Length > MaxRegistryPayloadSize || isZeroDigest(descriptor.SHA256) {
+		return nil, fmt.Errorf("%w: invalid catalog range descriptor", ErrInvalidArtifact)
+	}
+	return r.backend.readRange(descriptor)
+}
+
 // ValidateAggregate hashes the complete Registry payload for repair or full
 // audit. ReadRange does not call it.
 func (r *Registry) ValidateAggregate() error {
