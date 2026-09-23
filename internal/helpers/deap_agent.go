@@ -278,7 +278,10 @@ func newDeapAgentCreateCommand() *cobra.Command {
 			},
 			Description: "创建数字员工草稿并返回 agentUuid。必须显式填写 type（open_code 或 local_agent），不可为空；部门可由服务端按操作人主任职部门补齐；本地头像由 CLI 上传后回写；可选 prompt 在创建后自动保存，local_agent 省略时使用默认人设，其他类型省略时仅提醒补齐；不自动发布。",
 			DryRun:      deapAgentDryRun,
-			Interface:   deapAgentMCPInterface(deapAgentCreateTool),
+			Interface: &contract.InterfaceSpec{
+				Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable,
+				Reason: "按参数编排数字员工创建、临时凭证与本地头像上传、草稿人设和头像保存；无需附加步骤时仅调用创建 MCP",
+			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建新的草稿态 DEAP 数字员工",
 				UseWhen:      []string{"需要从零创建数字员工并获得 agentUuid 时"},
@@ -525,7 +528,10 @@ func newDeapAgentPublishCommand() *cobra.Command {
 			},
 			Description: "发布当前完整草稿；仅为人设缺失的 local_agent 自动补齐默认平台人设，保留已有配置，其余发布要求由服务端校验。",
 			DryRun:      deapAgentDryRun,
-			Interface:   deapAgentMCPInterface(deapAgentPublishTool),
+			Interface: &contract.InterfaceSpec{
+				Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable,
+				Reason: "先读取草稿，必要时为 local_agent 保存默认人设，再调用发布 MCP",
+			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "校验并发布数字员工，使草稿配置进入线上生效流程",
 				UseWhen:      []string{"草稿配置已完成并经用户明确确认，需要发布到钉钉时"},
