@@ -19,6 +19,9 @@ func executeWorkflowList(rt *shortcut.RuntimeContext) error {
 		return fmt.Errorf("workflow limit must be 1-100 and offset nonnegative")
 	}
 	all := rt.Bool("all")
+	if all && offset != 0 {
+		return fmt.Errorf("--all requires --offset 0 so the complete workflow set is scanned")
+	}
 	if rt.Changed("status") && !all {
 		return fmt.Errorf("--status requires --all so filtering covers the complete workflow set")
 	}
