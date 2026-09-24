@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	friendOperationList         = "contact/get_friend_list"
-	friendOperationRequestList  = "contact/get_friend_request_list"
-	friendOperationRequestSend  = "contact/send_friend_request"
+	friendOperationList          = "contact/get_friend_list"
+	friendOperationRequestList   = "contact/get_friend_request_list"
+	friendOperationRequestSend   = "contact/send_friend_request"
 	friendOperationRequestAccept = "contact/accept_friend_request"
 	friendOperationRequestReject = "contact/remove_friend_request"
-	friendOperationRemove       = "contact/remove_friend"
+	friendOperationRemove        = "contact/remove_friend"
 )
 
 var friendReadSafety = contract.SafetySpec{
@@ -172,11 +172,11 @@ var ListFriendRequests = shortcut.Shortcut{
 			return err
 		}
 		return rt.Output(map[string]any{
-			"count":         len(requests),
-			"pendingCount":  pendingCount,
-			"cursor":        cursor,
-			"hasMore":       hasMore,
-			"requests":      requests,
+			"count":        len(requests),
+			"pendingCount": pendingCount,
+			"cursor":       cursor,
+			"hasMore":      hasMore,
+			"requests":     requests,
 		})
 	},
 }

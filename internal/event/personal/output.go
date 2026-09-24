@@ -131,6 +131,26 @@ type FriendDwsFriendAddedBody struct {
 	Direction            string `json:"direction"`
 }
 
+// personalFriendRequestReceivedPayload matches the DWS personal event
+// transport envelope whose business fields live under the body key.
+type personalFriendRequestReceivedPayload struct {
+	BizID     string                          `json:"bizid"`
+	EventTime int64                           `json:"event_time"`
+	UID       int64                           `json:"uid"`
+	OrgID     int64                           `json:"orgId"`
+	Body      FriendDwsRequestReceivedBody    `json:"body"`
+}
+
+// personalFriendAddedPayload matches the DWS personal event transport
+// envelope whose business fields live under the body key.
+type personalFriendAddedPayload struct {
+	BizID     string                     `json:"bizid"`
+	EventTime int64                      `json:"event_time"`
+	UID       int64                      `json:"uid"`
+	OrgID     int64                      `json:"orgId"`
+	Body      FriendDwsFriendAddedBody   `json:"body"`
+}
+
 // FriendRequestReceivedOutput is the reviewed projection for the contact
 // friend-request-received event. Field names match the lippi-friend
 // FriendDwsRequestReceivedBody payload contract.
@@ -1093,10 +1113,11 @@ func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMess
 }
 
 func projectFriendRequestReceivedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
-	var body FriendDwsRequestReceivedBody
-	if err := decodeRequiredPayload(raw, &body); err != nil {
+	var payload personalFriendRequestReceivedPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
 		return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
 	}
+	body := payload.Body
 	return FriendRequestReceivedOutput{
 		Type:               base.Type,
 		EventID:            base.EventID,
@@ -1113,10 +1134,11 @@ func projectFriendRequestReceivedEvent(ev transport.Event, base baseEventOutput,
 }
 
 func projectFriendAddedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
-	var body FriendDwsFriendAddedBody
-	if err := decodeRequiredPayload(raw, &body); err != nil {
+	var payload personalFriendAddedPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
 		return ev, fmt.Errorf("decode personal friend added payload: %w", err)
 	}
+	body := payload.Body
 	return FriendAddedOutput{
 		Type:                 base.Type,
 		EventID:              base.EventID,
