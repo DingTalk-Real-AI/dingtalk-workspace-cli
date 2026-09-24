@@ -34,6 +34,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -780,6 +781,8 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}
 	}
 
+	tc.ExtraHeaders = applyDelegatorHeaders(ctx, tc.ExtraHeaders, endpoint, invocation, hasPluginAuth || hasRequestToken)
+
 	callCtx := ctx
 	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -1284,6 +1287,7 @@ func resolveIdentityHeaders() map[string]string {
 	// every case variant potentially supplied by an edition or credential hook
 	// so shared consumers such as A2A cannot inherit them.
 	removeAgentMetadataHeaders(headers)
+	requestmeta.RemoveDelegatorHeaders(headers)
 	return headers
 }
 

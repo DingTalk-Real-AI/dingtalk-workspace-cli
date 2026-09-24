@@ -473,6 +473,11 @@ func safeRedirectPolicy(req *http.Request, via []*http.Request) error {
 		return fmt.Errorf("too many redirects")
 	}
 	if redirectChainLeftInitialOrigin(req, via) {
+		for key := range req.Header {
+			if requestmeta.IsDelegatorHeader(key) {
+				delete(req.Header, key)
+			}
+		}
 		req.Header.Del(HeaderAgentExt)
 		req.Header.Del(requestmeta.DingTalkExtHeader)
 		req.Header.Del("Authorization")
