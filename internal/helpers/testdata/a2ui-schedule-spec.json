@@ -1,0 +1,12 @@
+{
+  "recipe": "schedule",
+  "surfaceId": "dws-local-schedule",
+  "title": "日程",
+  "body": "测试",
+  "scheduleTime": "09月24日 周四 01:00–02:00 (GMT+8)",
+  "meetingUrl": "https://example.com/meeting/249643090",
+  "meetingState": "未开始",
+  "meetingNumber": "249 643 090",
+  "primaryCta": "接受",
+  "actionDisabled": false
+}

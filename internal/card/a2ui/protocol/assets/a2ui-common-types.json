@@ -1,0 +1,1303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "钉钉 A2UI 公共类型",
+  "description": "钉钉 A2UI 协议包的公共类型；与同目录 a2ui-catalog.json 一起本地加载，不等同于上游通用类型。",
+  "$defs": {
+    "ComponentId": {
+      "type": "string",
+      "description": "The unique identifier for a component, used for both definitions and references within the same surface."
+    },
+    "CallId": {
+      "type": "string",
+      "description": "The unique identifier for an agent initiated function call."
+    },
+    "AccessibilityAttributes": {
+      "type": "object",
+      "description": "Attributes to enhance accessibility when using assistive technologies like screen readers.",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/DynamicString",
+          "description": "A short string, typically 1 to 3 words, used by assistive technologies to convey the purpose or intent of an element. For example, an input field might have an accessible label of 'User ID' or a button might be labeled 'Submit'."
+        },
+        "description": {
+          "$ref": "#/$defs/DynamicString",
+          "description": "Additional information provided by assistive technologies about an element such as instructions, format requirements, or result of an action. For example, a mute button might have a label of 'Mute' and a description of 'Silences notifications about this conversation'."
+        }
+      }
+    },
+    "ComponentCommon": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "catalogId": {
+          "type": "string",
+          "description": "覆盖 Surface 默认 Catalog 的组件级 catalogId。"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/AccessibilityAttributes"
+        },
+        "visible": {
+          "description": "Visibility control (boolean expression or literal)."
+        },
+        "metadata": {
+          "$ref": "#/$defs/ComponentMetadata"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "allOf": [
+        {
+          "$ref": "#/$defs/HostActionOwner"
+        }
+      ]
+    },
+    "Child": {
+      "$ref": "#/$defs/ComponentId",
+      "description": "A reference to a single child component ID."
+    },
+    "ChildList": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentId"
+          },
+          "description": "A static list of child component IDs."
+        },
+        {
+          "type": "object",
+          "description": "A template for generating a dynamic list of children from a data model list. The `componentId` is the component to use as a template.",
+          "properties": {
+            "componentId": {
+              "$ref": "#/$defs/ComponentId"
+            },
+            "path": {
+              "type": "string",
+              "description": "The path to the list of component property objects in the data model."
+            }
+          },
+          "required": [
+            "componentId",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "DataBinding": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "数据模型路径；模板内可使用相对路径，~ 只能写成 ~0 或 ~1。求值上下文、路径归一和目标存在性由运行时检查。",
+          "pattern": "^(?:[^~]|~[01])*$"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "DynamicValue": {
+      "description": "通用取值：字符串、数值、布尔值、数组、null、普通对象、数据绑定或取值函数结果。带 call 的对象按函数解析；仅含 path 的对象按绑定解析。",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/LiteralObject"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/ValueFunctionCall"
+        }
+      ]
+    },
+    "DynamicString": {
+      "description": "Represents a string",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/ValueFunctionCall"
+        }
+      ]
+    },
+    "DynamicNumber": {
+      "description": "数值型动态值：可以是 JSON number 字面量、指向数值的 DataBinding，或返回数值的 ValueFunctionCall。绑定与函数的运行时结果也必须是 JSON number；不做字符串到数值的隐式转换，数字字符串与 ISO 8601 日期时间字符串均不合法。",
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/ValueFunctionCall"
+        }
+      ]
+    },
+    "DynamicBoolean": {
+      "description": "A boolean value that can be a literal, a path, or a function call returning a boolean.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/ValueFunctionCall"
+        }
+      ]
+    },
+    "DynamicStringList": {
+      "description": "Represents a value that can be either a literal array of strings, a path to a string array in the data model, or a function call returning a string array.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/ValueFunctionCall"
+        }
+      ]
+    },
+    "FunctionCommon": {
+      "type": "object",
+      "properties": {
+        "catalogId": {
+          "type": "string",
+          "description": "函数目录标识；不填写时沿用所属 Surface 的默认目录。它不是 Schema 文件路径。"
+        }
+      }
+    },
+    "FunctionCall": {
+      "type": "object",
+      "description": "A2UI v1.0 FunctionCall：调用当前 Surface Catalog 中注册的 Renderer 函数。",
+      "properties": {
+        "call": {
+          "type": "string",
+          "description": "The name of the function to call."
+        },
+        "catalogId": {
+          "type": "string",
+          "description": "The catalog ID for this function, overriding any surface-level default catalogId."
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments passed to the function.",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DynamicValue"
+              },
+              {
+                "type": "object",
+                "description": "A literal object argument (e.g. configuration)."
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "$ref": "a2ui-catalog.json#/$defs/anyFunction"
+        }
+      ]
+    },
+    "CheckRule": {
+      "type": "object",
+      "description": "A single validation rule applied to an input component.",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/DynamicBoolean"
+        },
+        "message": {
+          "type": "string",
+          "description": "The error message to display if the check fails."
+        }
+      },
+      "required": [
+        "condition",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Checkable": {
+      "description": "Properties for components that support renderer-side checks.",
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "description": "A list of checks to perform. These are function calls that must return a boolean indicating validity.",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        }
+      }
+    },
+    "Action": {
+      "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Triggers an agent-side event.",
+          "properties": {
+            "event": {
+              "type": "object",
+              "description": "The event to dispatch to the agent.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The name of the action to be dispatched to the agent."
+                },
+                "context": {
+                  "type": "object",
+                  "description": "A JSON object containing the key-value pairs for the action context. Values can be literals or paths. Use literal values unless the value must be dynamically bound to the data model. Do NOT use paths for static IDs.",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/DynamicValue"
+                  }
+                },
+                "wantResponse": {
+                  "type": "boolean",
+                  "description": "响应意愿元数据；当前公开接入不保证标准响应闭环，不应依赖 true 自动产生响应。",
+                  "default": false
+                },
+                "responsePath": {
+                  "type": "string",
+                  "description": "标准事件响应路径元数据；当前公开接入不保证自动写回。宿主函数写回使用 metadata.extensions.dt_actionBindingsV1；业务更新使用 updateDataModel 或 updateComponents。"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Executes a local renderer-side function.",
+          "properties": {
+            "functionCall": {
+              "$ref": "#/$defs/ActionFunctionCall"
+            }
+          },
+          "required": [
+            "functionCall"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EventAction": {
+      "$ref": "#/$defs/Action",
+      "description": "只允许 Agent 事件上报；必须包含 event，不允许 functionCall。",
+      "type": "object",
+      "required": [
+        "event"
+      ]
+    },
+    "Surface": {
+      "title": "Surface Container Component",
+      "description": "保留的消息层类型，未接入本包组件校验入口；不表示已经开放新的组件或主题能力。The reserved canonical container component representing an A2UI surface. The Surface component is immutable and always has 'child': 'root'.",
+      "type": "object",
+      "allowedParents": [],
+      "properties": {
+        "component": {
+          "const": "Surface"
+        },
+        "child": {
+          "const": "root"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DingTalkAction": {
+      "$ref": "#/$defs/Action",
+      "description": "钉钉组件统一使用 A2UI v1.0 Action；旧 type/params 事件格式仅作为输入迁移源，不再向开发者开放。",
+      "x-a2ui-origin": "official-action"
+    },
+    "surfaceProperties": {
+      "type": "object",
+      "properties": {
+        "cardInstanceId": {
+          "type": "string"
+        },
+        "bizScene": {
+          "type": "string",
+          "enum": [
+            "im",
+            "topbox",
+            "WorkBench",
+            "cooperationV2",
+            "UserProfile",
+            "search"
+          ]
+        },
+        "themeMode": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "auto"
+          ]
+        }
+      },
+      "additionalProperties": true,
+      "description": "保留的消息层类型，未接入本包组件校验入口；不表示已经开放新的组件或主题能力。"
+    },
+    "EventTrigger": {
+      "description": "An event trigger that fires a DingTalkAction when the specified event occurs on a component.",
+      "$ref": "#/$defs/DingTalkAction"
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "primaryColor": {
+          "type": "string",
+          "description": "The primary brand color used for highlights (e.g., primary buttons, active borders). Renderers may generate variants of this color for different contexts. Format: Hexadecimal code (e.g., '#00BFFF').",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "iconUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "A URL for an image that identifies the agent or tool associated with the surface."
+        },
+        "agentDisplayName": {
+          "type": "string",
+          "description": "Text to be displayed next to the surface to identify the agent or tool that created it."
+        }
+      },
+      "additionalProperties": true,
+      "description": "保留的消息层类型，未接入本包组件校验入口；不表示已经开放新的组件或主题能力。"
+    },
+    "LiteralObject": {
+      "type": "object",
+      "description": "普通对象字面量。带 call 的对象保留给函数，只有 path 一个键的对象保留给绑定，避免与动态表达式重复匹配。",
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "call"
+            ]
+          },
+          {
+            "required": [
+              "path"
+            ],
+            "maxProperties": 1
+          }
+        ]
+      }
+    },
+    "SizeToken": {
+      "type": "string",
+      "description": "DDesign 原生字号 Token ID，用于 Text.sizeToken。下表保留 13 个设计档位的用途，并列出当前源码存在的原生语义候选；候选不是已实现的别名映射，不承诺与设计稿各端字号或行高完全一致。优先按使用场景选择原生 Token；未找到等价档位时不要自造名称。本类型保持既有 string 约束，本次只补选型说明。\n\n设计 Token：font-size/extra-large-title；使用描述：页面核心主标题；原生 Token 候选：无等价 Token；适配说明：当前未找到等价的原生字号 Token，不生成别名。\n设计 Token：font-size/title-1；使用描述：页面或模块一级标题；原生 Token 候选：common_supertitle_text_style__font_size；适配说明：按标题语义选型；未实现设计名称到原生名称的自动映射。\n设计 Token：font-size/title-2；使用描述：主要内容分区标题；原生 Token 候选：common_largetitle_text_style__font_size；适配说明：按标题语义选型；未实现设计名称到原生名称的自动映射。\n设计 Token：font-size/title-3；使用描述：卡片或内容区标题；原生 Token 候选：common_h1_text_style__font_size；适配说明：按标题语义选型；未实现设计名称到原生名称的自动映射。\n设计 Token：font-size/title-4；使用描述：较小层级标题；原生 Token 候选：common_h2_text_style__font_size；适配说明：按标题语义选型；未实现设计名称到原生名称的自动映射。\n设计 Token：font-size/subhead；使用描述：标题下方的补充信息；原生 Token 候选：common_subhead_text_style__font_size；适配说明：仅为语义候选，各端实际字号与行高由宿主决定。\n设计 Token：font-size/body；使用描述：主要正文内容；原生 Token 候选：common_body_text_style__font_size；适配说明：正文语义候选；实际字号与行高由宿主决定。\n设计 Token：font-size/action-l；使用描述：主要按钮或重点操作文字；原生 Token 候选：无等价 Token；适配说明：当前无独立等价的原生操作大字号 Token，不用同字号正文 Token 冒充映射。\n设计 Token：font-size/action；使用描述：常规按钮、链接等操作文字；原生 Token 候选：common_action_text_style__font_size；适配说明：常规操作语义候选；原生档位与设计稿字号不完全一致。\n设计 Token：font-size/description；使用描述：辅助说明和次要信息；原生 Token 候选：common_description_text_style__font_size；适配说明：辅助说明语义候选；实际字号与行高由宿主决定。\n设计 Token：font-size/footnote；使用描述：来源、备注等补充内容；原生 Token 候选：common_footnote_text_style__font_size；适配说明：备注语义候选；原生档位与设计稿字号不完全一致，不承诺等价。\n设计 Token：font-size/caption-1；使用描述：图片说明、状态或短标签；原生 Token 候选：无等价 Token；适配说明：当前 sizeToken 字符串表无等价档位；UIFont 的 caption 方法不等于可下发 Token。\n设计 Token：font-size/caption-2；使用描述：空间受限场景中的弱提示；原生 Token 候选：common_tiny_text_style__font_size；适配说明：弱提示语义候选；各端实际字号与行高由宿主决定。",
+      "examples": [
+        "common_supertitle_text_style__font_size",
+        "common_largetitle_text_style__font_size",
+        "common_h1_text_style__font_size",
+        "common_h2_text_style__font_size",
+        "common_subhead_text_style__font_size",
+        "common_body_text_style__font_size",
+        "common_action_text_style__font_size",
+        "common_description_text_style__font_size",
+        "common_footnote_text_style__font_size",
+        "common_tiny_text_style__font_size"
+      ]
+    },
+    "IndexSystemFunction": {
+      "$ref": "a2ui-catalog.json#/functions/@index"
+    },
+    "ValueFunctionCall": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/FunctionCall"
+        },
+        {
+          "$ref": "a2ui-catalog.json#/$defs/anyValueFunction"
+        }
+      ]
+    },
+    "ActionFunctionCall": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/FunctionCall"
+        },
+        {
+          "$ref": "a2ui-catalog.json#/$defs/anyActionFunction"
+        }
+      ]
+    },
+    "HostStaticValueTree": {
+      "description": "宿主参数子树的求值阶段约束；实际取值类型、路径与表达式合法性仍由现有运行时校验。",
+      "not": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "call": {
+                "enum": [
+                  "env",
+                  "isPC",
+                  "isMobile",
+                  "localData"
+                ]
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "viewerPath"
+            ],
+            "maxProperties": 1
+          }
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/HostStaticValueTree"
+      },
+      "items": {
+        "$ref": "#/$defs/HostStaticValueTree"
+      }
+    },
+    "HostCompiledValueTree": {
+      "description": "宿主参数子树的求值阶段约束；实际取值类型、路径与表达式合法性仍由现有运行时校验。",
+      "not": {
+        "type": "object",
+        "properties": {
+          "call": {
+            "not": {
+              "enum": [
+                "eq",
+                "ne",
+                "lt",
+                "lte",
+                "gt",
+                "gte",
+                "add",
+                "sub",
+                "mul",
+                "div",
+                "mod",
+                "cond",
+                "and",
+                "or",
+                "not",
+                "objectGet",
+                "arrayGet",
+                "arrayFind",
+                "getLength",
+                "toDouble",
+                "toLong",
+                "localData",
+                "env",
+                "isPC",
+                "isMobile"
+              ]
+            }
+          }
+        },
+        "required": [
+          "call"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/HostCompiledValueTree"
+      },
+      "items": {
+        "$ref": "#/$defs/HostCompiledValueTree"
+      }
+    },
+    "HostResultPath": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^/ui/(?=[^/]*[A-Za-z_-])[A-Za-z0-9_-]+(?:/(?=[^/]*[A-Za-z_-])[A-Za-z0-9_-]+){0,14}$",
+      "description": "结果写回路径；仅 /ui/ 下的对象键，最多 256 个 ASCII 字符、16 段（含 ui），禁止空段、纯数字段与转义。"
+    },
+    "HostActionBinding": {
+      "type": "object",
+      "properties": {
+        "resultPath": {
+          "$ref": "#/$defs/HostResultPath"
+        }
+      },
+      "required": [
+        "resultPath"
+      ],
+      "additionalProperties": false
+    },
+    "ComponentMetadata": {
+      "description": "扩展元数据。仅在使用宿主动作时校验对应的写回槽；未使用的内容透传。",
+      "properties": {
+        "extensions": {
+          "properties": {
+            "dt_actionBindingsV1": {
+              "description": "按动作属性名组织写回配置，例如 action: {resultPath: /ui/result}。已使用槽必须符合 HostActionBinding；其它槽忽略。"
+            }
+          }
+        }
+      }
+    },
+    "HostActionOwner": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "scanCard",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "action": {
+                                "$ref": "#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "action"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onComplete": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "scanCard",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onComplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onComplete": {
+                                "$ref": "#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onComplete"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onLinkClick": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "scanCard",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onLinkClick"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onLinkClick": {
+                                "$ref": "#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onLinkClick"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onPreview": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "scanCard",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onPreview"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onPreview": {
+                                "$ref": "#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onPreview"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onTap": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "scanCard",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onTap"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onTap": {
+                                "$ref": "#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onTap"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ColorToken": {
+      "type": "string",
+      "description": "仅允许下表 57 个 Token ID，名称区分大小写。描述说明用途与状态语义；实际色值及透明度由宿主按当前平台与主题解析，本协议不固定色值。",
+      "enum": [
+        "extended_yellow0_color",
+        "extended_yellow1_color",
+        "extended_yellow6_color",
+        "extended_orange0_color",
+        "extended_orange1_color",
+        "extended_orange6_color",
+        "extended_red0_color",
+        "extended_red1_color",
+        "extended_red6_color",
+        "extended_magenta0_color",
+        "extended_magenta1_color",
+        "extended_magenta6_color",
+        "extended_purple0_color",
+        "extended_purple1_color",
+        "extended_purple6_color",
+        "extended_deeppurple0_color",
+        "extended_deeppurple1_color",
+        "extended_deeppurple6_color",
+        "extended_blue0_color",
+        "extended_blue1_color",
+        "extended_blue6_color",
+        "extended_darkgreen0_color",
+        "extended_darkgreen1_color",
+        "extended_darkgreen6_color",
+        "extended_green0_color",
+        "extended_green1_color",
+        "extended_green6_color",
+        "common_level1_base_color",
+        "common_level2_base_color",
+        "common_level3_base_color",
+        "common_level4_base_color",
+        "common_stamp_color",
+        "common_link_color",
+        "common_bg_color",
+        "common_fg_z1_color",
+        "common_line_light_color",
+        "common_line_hard_color",
+        "common_red1_color",
+        "common_orange1_color",
+        "common_green1_color",
+        "common_white1_color",
+        "common_white2_color",
+        "common_white3_color",
+        "common_white4_color",
+        "common_white5_color",
+        "common_white6_color",
+        "common_black1_color",
+        "common_black2_color",
+        "common_black3_color",
+        "common_black4_color",
+        "common_black5_color",
+        "common_black6_color",
+        "theme_primary3_color",
+        "theme_primary2_color",
+        "theme_primary_hover_color",
+        "theme_primary1_color",
+        "theme_primary_press_color"
+      ],
+      "oneOf": [
+        {
+          "const": "extended_yellow0_color",
+          "description": "黄色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_yellow1_color",
+          "description": "黄色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_yellow6_color",
+          "description": "黄色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_orange0_color",
+          "description": "橙色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_orange1_color",
+          "description": "橙色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_orange6_color",
+          "description": "橙色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_red0_color",
+          "description": "红色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_red1_color",
+          "description": "红色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_red6_color",
+          "description": "红色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_magenta0_color",
+          "description": "洋红色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_magenta1_color",
+          "description": "洋红色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_magenta6_color",
+          "description": "洋红色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_purple0_color",
+          "description": "紫色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_purple1_color",
+          "description": "紫色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_purple6_color",
+          "description": "紫色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_deeppurple0_color",
+          "description": "深紫色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_deeppurple1_color",
+          "description": "深紫色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_deeppurple6_color",
+          "description": "深紫色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_blue0_color",
+          "description": "蓝色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_blue1_color",
+          "description": "蓝色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_blue6_color",
+          "description": "蓝色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_darkgreen0_color",
+          "description": "深绿色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_darkgreen1_color",
+          "description": "深绿色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_darkgreen6_color",
+          "description": "深绿色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "extended_green0_color",
+          "description": "绿色背景色；用于该色系的区域背景填充。"
+        },
+        {
+          "const": "extended_green1_color",
+          "description": "绿色边框色；用于该色系区域的描边。"
+        },
+        {
+          "const": "extended_green6_color",
+          "description": "绿色文字色；用于该色系的文字强调。"
+        },
+        {
+          "const": "common_level1_base_color",
+          "description": "一级文字与图标；用于标题、正文等主要信息。"
+        },
+        {
+          "const": "common_level2_base_color",
+          "description": "二级文字与图标；用于次要信息和辅助图标。"
+        },
+        {
+          "const": "common_level3_base_color",
+          "description": "三级文字与图标；用于较弱的补充信息。"
+        },
+        {
+          "const": "common_level4_base_color",
+          "description": "禁用状态的文字与图标颜色；仅表达视觉状态。"
+        },
+        {
+          "const": "common_stamp_color",
+          "description": "水印颜色；用于低干扰的水印内容。"
+        },
+        {
+          "const": "common_link_color",
+          "description": "超链接文字与高亮边框颜色。"
+        },
+        {
+          "const": "common_bg_color",
+          "description": "区域底层背景色；用于页面或内容区的背景。"
+        },
+        {
+          "const": "common_fg_z1_color",
+          "description": "前景区域背景色；用于底层背景之上的内容区域。"
+        },
+        {
+          "const": "common_line_light_color",
+          "description": "弱分隔线；用于较轻的内容分隔。"
+        },
+        {
+          "const": "common_line_hard_color",
+          "description": "强分隔线；用于需要更明确边界的内容分隔。"
+        },
+        {
+          "const": "common_red1_color",
+          "description": "危险状态色；用于表达危险或错误语义。"
+        },
+        {
+          "const": "common_orange1_color",
+          "description": "警告状态色；用于需要用户留意的提示。"
+        },
+        {
+          "const": "common_green1_color",
+          "description": "成功状态色；用于成功或完成反馈。"
+        },
+        {
+          "const": "common_white1_color",
+          "description": "白色遮罩；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_white2_color",
+          "description": "白色遮罩（设计描述为 40% 档）；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_white3_color",
+          "description": "白色遮罩（设计描述为 30% 档）；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_white4_color",
+          "description": "白色遮罩（设计描述为 20% 档）；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_white5_color",
+          "description": "白色遮罩（设计描述为 10% 档）；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_white6_color",
+          "description": "白色遮罩（设计描述为 5% 档）；用于白色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black1_color",
+          "description": "黑色遮罩；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black2_color",
+          "description": "黑色遮罩（设计描述为 40% 档）；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black3_color",
+          "description": "黑色遮罩（设计描述为 30% 档）；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black4_color",
+          "description": "黑色遮罩（设计描述为 20% 档）；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black5_color",
+          "description": "黑色遮罩（设计描述为 10% 档）；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "common_black6_color",
+          "description": "黑色遮罩（设计描述为 5% 档）；用于黑色覆盖层，实际透明度随宿主主题资源解析。"
+        },
+        {
+          "const": "theme_primary3_color",
+          "description": "主题背景色；用于承载主题风格的区域背景。"
+        },
+        {
+          "const": "theme_primary2_color",
+          "description": "主题浅色；用于较轻的主题色强调和辅助装饰。"
+        },
+        {
+          "const": "theme_primary_hover_color",
+          "description": "主题悬停色；用于指针悬停时的主题色视觉反馈。"
+        },
+        {
+          "const": "theme_primary1_color",
+          "description": "主题主色；用于主要主题强调。"
+        },
+        {
+          "const": "theme_primary_press_color",
+          "description": "主题按下色；用于按压时的主题色视觉反馈。"
+        }
+      ]
+    },
+    "IconName": {
+      "type": "string",
+      "description": "公共类型 IconName，供 Icon.name 引用的公开字体图标名称，共 14 个，区分大小写；以下描述保留设计稿图形含义及对应使用场景。",
+      "oneOf": [
+        {
+          "const": "Search_L_outlined",
+          "description": "搜索。用于搜索、搜索内容、搜索文件、搜索图片。"
+        },
+        {
+          "const": "Language_L_outlined",
+          "description": "多语言切换图形。设计稿用于搜索网页。"
+        },
+        {
+          "const": "CodeProgram_L_outlined",
+          "description": "代码程序。用于运行终端。"
+        },
+        {
+          "const": "Picture_L_outlined",
+          "description": "图片。用于生成图片。"
+        },
+        {
+          "const": "Folder_L_outlined",
+          "description": "文件夹。用于读取文件。"
+        },
+        {
+          "const": "Edit_L_outlined",
+          "description": "填写、编辑、笔。用于写入文件、文件创建。"
+        },
+        {
+          "const": "ListView_L_outlined",
+          "description": "列表视图 1。用于列出文件。"
+        },
+        {
+          "const": "ManagementBackground_L_outlined",
+          "description": "管理后台图形。设计稿用于使用浏览器。"
+        },
+        {
+          "const": "Tool_L_outlined",
+          "description": "工具。用于调用工具、Workspace 工具组、MCP 工具组、DWS 工具组、MCP 调用及通用兜底。"
+        },
+        {
+          "const": "Delete_L_outlined",
+          "description": "删除。用于文件删除。"
+        },
+        {
+          "const": "SpinLoading_L_outlined",
+          "description": "旋转加载图形。用于 Skill 加载、加载中状态；名称本身不启用旋转动画。"
+        },
+        {
+          "const": "UploadOne_L_outlined",
+          "description": "上传。用于文件上传。"
+        },
+        {
+          "const": "DownloadAndSave_L_outlined",
+          "description": "下载保存。用于文件下载。"
+        },
+        {
+          "const": "Check_L_outlined",
+          "description": "对勾。用于完成、成功状态。"
+        }
+      ]
+    }
+  }
+}

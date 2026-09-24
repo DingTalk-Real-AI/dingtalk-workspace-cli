@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DWS A2UI 内置模板画廊</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      color: #18202a;
+      background: #f2f4f7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 44px 24px 72px; }
+    header, main { width: min(1320px, 100%); margin: 0 auto; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 44px); line-height: 1.15; letter-spacing: -.025em; }
+    .intro { max-width: 780px; margin: 14px 0 0; color: #58616c; font-size: 15px; line-height: 1.7; }
+    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 22px 0 0; color: #3f4853; font-size: 13px; }
+    .legend span::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #1677ff; vertical-align: 1px; }
+    nav { display: flex; gap: 8px; margin: 30px 0 34px; overflow-x: auto; scrollbar-width: thin; }
+    nav a { min-height: 38px; padding: 9px 13px; border: 1px solid #dbe0e6; border-radius: 9px; color: #343d48; background: #fff; text-decoration: none; white-space: nowrap; }
+    nav a:hover, nav a:focus-visible { border-color: #1677ff; color: #075fc1; outline: none; }
+    .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 28px; align-items: start; }
+    article { min-width: 0; scroll-margin-top: 20px; }
+    .template-head { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: baseline; margin: 0 10px 12px; }
+    h2 { margin: 0; font-size: 18px; line-height: 1.3; }
+    .recipe-id { color: #58616c; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .template-copy { grid-column: 1 / -1; margin: 0; color: #58616c; font-size: 13px; line-height: 1.5; }
+    iframe { display: block; width: 100%; min-height: 360px; border: 0; background: transparent; }
+    footer { width: min(1320px, 100%); margin: 48px auto 0; padding-top: 18px; border-top: 1px solid #d9dee5; color: #58616c; font-size: 12px; line-height: 1.6; }
+    @media (max-width: 860px) {
+      body { padding: 28px 14px 48px; }
+      .gallery { grid-template-columns: 1fr; gap: 34px; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { color: #eef1f5; background: #121416; }
+      .intro, .template-copy, footer, .recipe-id { color: #aeb6c0; }
+      .legend { color: #d3d8de; }
+      nav a { border-color: #353b42; color: #dce1e7; background: #1f2328; }
+      nav a:hover, nav a:focus-visible { border-color: #79b8ff; color: #9dccff; }
+      footer { border-color: #353b42; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>A2UI 内置模板画廊</h1>
+    <p class="intro">Preview all 5 built-in A2UI recipes. Each card is compiled from its CompositionSpec and rendered locally for structural review.</p>
+    <div class="legend" aria-label="画廊说明">
+      <span>5 built-in recipes</span>
+      <span>12 component types covered</span>
+      <span>本地无远端副作用</span>
+    </div>
+    <nav aria-label="跳转到模板">
+      <a href="#notification">通知</a>
+      <a href="#information">信息</a>
+      <a href="#task">任务</a>
+      <a href="#schedule">日程</a>
+      <a href="#form">表单</a>
+    </nav>
+  </header>
+  <main class="gallery">
+    <article id="notification">
+      <div class="template-head"><h2>轻量结果通知</h2><span class="recipe-id">notification</span><p class="template-copy">一件事、一个状态、一个主要动作。</p></div>
+      <iframe title="notification 模板预览" src="notification-preview.html?embed=1"></iframe>
+    </article>
+    <article id="information">
+      <div class="template-head"><h2>丰富信息摘要</h2><span class="recipe-id">information</span><p class="template-copy">封面、指标、进展、附件、详情和主要动作的完整信息层次。</p></div>
+      <iframe title="information 模板预览" src="information-preview.html?embed=1"></iframe>
+    </article>
+    <article id="task">
+      <div class="template-head"><h2>任务处理</h2><span class="recipe-id">task</span><p class="template-copy">责任信息、当前进展、完成标准和处理动作。</p></div>
+      <iframe title="task 模板预览" src="task-preview.html?embed=1"></iframe>
+    </article>
+    <article id="schedule">
+      <div class="template-head"><h2>Meeting schedule</h2><span class="recipe-id">schedule</span><p class="template-copy">Meeting title, time, joining details, and response status.</p></div>
+      <iframe title="schedule 模板预览" src="schedule-preview.html?embed=1"></iframe>
+    </article>
+    <article id="form">
+      <div class="template-head"><h2>结构化信息收集</h2><span class="recipe-id">form</span><p class="template-copy">字段集中成独立填写区，完成信息后统一提交；取消操作保持低强调。</p></div>
+      <iframe title="form 模板预览" src="form-preview.html?embed=1"></iframe>
+    </article>
+  </main>
+  <footer>这是快速结构与交互验收环境，不代表钉钉客户端像素级渲染结果。真实 Renderer、消息发送和更新链路需要另行验收。</footer>
+  <script>
+    const resize = (frame) => {
+      try {
+        const height = frame.contentDocument.documentElement.scrollHeight;
+        frame.style.height = `${Math.max(360, height)}px`;
+      } catch (_) {
+        frame.style.height = "760px";
+      }
+    };
+    document.querySelectorAll("iframe").forEach((frame) => {
+      frame.addEventListener("load", () => {
+        resize(frame);
+        new ResizeObserver(() => resize(frame)).observe(frame.contentDocument.documentElement);
+      });
+    });
+  </script>
+</body>
+</html>
