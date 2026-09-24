@@ -110,24 +110,56 @@ type baseEventOutput struct {
 	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
 }
 
-// FriendRequestReceivedOutput preserves the raw friend-request payload until
-// a stable reviewed projection for the contact domain is available.
-type FriendRequestReceivedOutput struct {
-	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
-	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
-	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
-	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
-	Payload     map[string]any `json:"payload" description:"收到好友申请事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+// FriendDwsRequestReceivedBody mirrors the lippi-friend event payload for
+// unmarshalling before projecting the stable CLI output.
+type FriendDwsRequestReceivedBody struct {
+	SrcOpenDingTalkID  string `json:"src_open_dingtalk_id"`
+	SrcName            string `json:"src_name"`
+	DestOpenDingTalkID string `json:"dest_open_dingtalk_id"`
+	Remark             string `json:"remark"`
+	Source             int    `json:"source"`
+	BizType            int    `json:"biz_type"`
+	ApplyTime          int64  `json:"apply_time"`
 }
 
-// FriendAddedOutput preserves the raw friend-added payload until a stable
-// reviewed projection for the contact domain is available.
+// FriendDwsFriendAddedBody mirrors the lippi-friend event payload for
+// unmarshalling before projecting the stable CLI output.
+type FriendDwsFriendAddedBody struct {
+	FriendOpenDingTalkID string `json:"friend_open_dingtalk_id"`
+	FriendName           string `json:"friend_name"`
+	EstablishTime        int64  `json:"establish_time"`
+	Direction            string `json:"direction"`
+}
+
+// FriendRequestReceivedOutput is the reviewed projection for the contact
+// friend-request-received event. Field names match the lippi-friend
+// FriendDwsRequestReceivedBody payload contract.
+type FriendRequestReceivedOutput struct {
+	Type               string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID            string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp          int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID        string `json:"subscribe_id" description:"订阅 ID"`
+	SrcOpenDingTalkID  string `json:"src_open_dingtalk_id" description:"发起人开放 ID" format:"open_dingtalk_id"`
+	SrcName            string `json:"src_name" description:"发起人展示名"`
+	DestOpenDingTalkID string `json:"dest_open_dingtalk_id" description:"接收人开放 ID" format:"open_dingtalk_id"`
+	Remark             string `json:"remark" description:"好友申请验证留言"`
+	Source             int    `json:"source" description:"好友申请来源"`
+	BizType            int    `json:"biz_type" description:"好友申请业务类型"`
+	ApplyTime          int64  `json:"apply_time" description:"好友申请时间戳" format:"timestamp_ms"`
+}
+
+// FriendAddedOutput is the reviewed projection for the contact friend-added
+// event. Field names match the lippi-friend FriendDwsFriendAddedBody payload
+// contract.
 type FriendAddedOutput struct {
-	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
-	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
-	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
-	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
-	Payload     map[string]any `json:"payload" description:"好友添加成功事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+	Type                 string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID              string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp            int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID          string `json:"subscribe_id" description:"订阅 ID"`
+	FriendOpenDingTalkID string `json:"friend_open_dingtalk_id" description:"对方开放 ID" format:"open_dingtalk_id"`
+	FriendName           string `json:"friend_name" description:"对方展示名"`
+	EstablishTime        int64  `json:"establish_time" description:"好友关系建立时间戳" format:"timestamp_ms"`
+	Direction            string `json:"direction" description:"当前用户视角：active 为主动添加对方，passive 为对方添加当前用户"`
 }
 
 // GroupLifecycleEventOutput is intentionally conservative until stable group
@@ -941,29 +973,9 @@ func ProjectOutput(ev transport.Event) (any, error) {
 	case isTodoEvent(eventType):
 		return projectTodoEvent(ev, base, data.Payload)
 	case isFriendRequestReceivedEvent(eventType):
-		payload, err := decodeConservativePayload(data.Payload)
-		if err != nil {
-			return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
-		}
-		return FriendRequestReceivedOutput{
-			Type:        base.Type,
-			EventID:     base.EventID,
-			Timestamp:   base.Timestamp,
-			SubscribeID: base.SubscribeID,
-			Payload:     payload,
-		}, nil
+		return projectFriendRequestReceivedEvent(ev, base, data.Payload)
 	case isFriendAddedEvent(eventType):
-		payload, err := decodeConservativePayload(data.Payload)
-		if err != nil {
-			return ev, fmt.Errorf("decode personal friend added payload: %w", err)
-		}
-		return FriendAddedOutput{
-			Type:        base.Type,
-			EventID:     base.EventID,
-			Timestamp:   base.Timestamp,
-			SubscribeID: base.SubscribeID,
-			Payload:     payload,
-		}, nil
+		return projectFriendAddedEvent(ev, base, data.Payload)
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
@@ -1078,6 +1090,43 @@ func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMess
 	default:
 		return ev, fmt.Errorf("unsupported personal Todo event type %q", base.Type)
 	}
+}
+
+func projectFriendRequestReceivedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var body FriendDwsRequestReceivedBody
+	if err := decodeRequiredPayload(raw, &body); err != nil {
+		return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
+	}
+	return FriendRequestReceivedOutput{
+		Type:               base.Type,
+		EventID:            base.EventID,
+		Timestamp:          base.Timestamp,
+		SubscribeID:        base.SubscribeID,
+		SrcOpenDingTalkID:  body.SrcOpenDingTalkID,
+		SrcName:            body.SrcName,
+		DestOpenDingTalkID: body.DestOpenDingTalkID,
+		Remark:             body.Remark,
+		Source:             body.Source,
+		BizType:            body.BizType,
+		ApplyTime:          body.ApplyTime,
+	}, nil
+}
+
+func projectFriendAddedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var body FriendDwsFriendAddedBody
+	if err := decodeRequiredPayload(raw, &body); err != nil {
+		return ev, fmt.Errorf("decode personal friend added payload: %w", err)
+	}
+	return FriendAddedOutput{
+		Type:                 base.Type,
+		EventID:              base.EventID,
+		Timestamp:            base.Timestamp,
+		SubscribeID:          base.SubscribeID,
+		FriendOpenDingTalkID: body.FriendOpenDingTalkID,
+		FriendName:           body.FriendName,
+		EstablishTime:        body.EstablishTime,
+		Direction:            body.Direction,
+	}, nil
 }
 
 func projectMessageEventContext(message personalMessageContext) MessageEventContext {
