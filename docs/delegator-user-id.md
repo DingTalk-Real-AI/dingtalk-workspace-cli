@@ -51,6 +51,12 @@ dws doc +fetch --node '<node-id>' --delegator-open-dingtalk-id '<open-dingtalk-i
 
 嵌入调用者应给每个并发 CLI 执行创建独立命令树；Cobra 树自身不支持并发 Execute。请求 context 可由同一执行内的并发子请求共享，禁止调用方在辅助请求中丢弃 context。
 
+### 业务调用链的上下文要求
+
+全局参数可解析不等于每个业务入口已经完成透传。命令必须从 `cmd.Context()` 向 MCP 调用、分页和重试传递上下文；重新创建 `context.Background()` 会丢失委托身份。AI 表格的主服务、辅助服务、记录分页、视图更新和工作流发布已按此要求修复。其他产品仍有无上下文的旧调用入口，需要逐项迁移，当前不能宣称所有命令均已覆盖。
+
+回归测试从真实 AI 表格命令入口经过运行器到 HTTP 请求，检查三个委托 Header 的具体值，并验证同一命令树下一次不传参数时不会继承旧身份。`extra_headers_count` 仅统计额外 Header 数量，不能代替字段值检查，也不能证明服务端委托授权成功。
+
 ## 旧文档参数兼容
 
 `--principal-user-id` 继续使用原文档域 `drive-internal.check_capability` 流程。新参数不作为其别名，也不跳过或替代其校验。
