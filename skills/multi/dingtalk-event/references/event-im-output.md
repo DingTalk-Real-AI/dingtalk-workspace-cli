@@ -11,6 +11,7 @@ Agent 默认使用 `--flatten -f ndjson`，顶层直接读取字段，不再 `fr
 | `content` / `create_time` / `event_time` | 正文及时间 |
 | `quoted_message` | 可选引用原消息 |
 | `forward_messages` | 可选合并转发子消息数组 |
+| `thread_id` / `parent_conversation_id` / `root_message_id` | 上游明确提供时保留的 Thread、父会话、根消息 ID |
 
 引用和转发子消息字段为 `message_id`、`conversation_id`、`sender`、
 `sender_open_dingtalk_id`、`content`、`create_time`。按结构识别转发，不匹配本地化摘要。
@@ -37,3 +38,11 @@ Agent 默认使用 `--flatten -f ndjson`，顶层直接读取字段，不再 `fr
 
 媒体事件正文可能只是描述。优先按真实消息 ID/会话 ID 使用 Chat 消息读取命令加
 `--download-resources`；只有精确 lower fallback 才用 `chat message download-media`。
+
+## Thread 字段边界
+
+上述可选字段分别透传 `payload.body.openConvThreadId`、`parentConversationId`、
+`rootMessageId`，不覆盖原 `conversation_id`。原始事件未提供时省略；不能据字段缺失
+判断消息必然在 Thread 外。已观测到 Thread 回复列表可查到消息、但原始个人群事件
+不带这些字段的情况。此时改用不加 `--flatten` 的 `event consume` 也不会恢复标识，
+需要上游事件补齐或提供按消息 ID 查询归属的能力；不要按最近话题、正文相似度猜测。
