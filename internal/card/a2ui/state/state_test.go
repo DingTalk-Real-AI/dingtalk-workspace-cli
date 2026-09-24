@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestReduceAppendAndDiff(t *testing.T) {
+func TestCrossPlatformCoverageReduceAppendAndDiff(t *testing.T) {
 	create := []map[string]any{
 		{"version": "v1.0", "createSurface": map[string]any{"surfaceId": "s", "catalogId": "catalog"}},
 		{"version": "v1.0", "updateDataModel": map[string]any{"surfaceId": "s", "path": "/", "value": map[string]any{"stream": map[string]any{"body": "hello"}}}},
@@ -42,7 +42,7 @@ func TestReduceAppendAndDiff(t *testing.T) {
 	}
 }
 
-func TestReduceRejectsCrossSurfaceAndNonStringAppend(t *testing.T) {
+func TestCrossPlatformCoverageReduceRejectsCrossSurfaceAndNonStringAppend(t *testing.T) {
 	base := Surface{SurfaceID: "a", Data: map[string]any{"value": 1.0}}
 	if _, err := Reduce(base, []map[string]any{{"version": "v1.0", "updateDataModel": map[string]any{"surfaceId": "b", "path": "/", "value": map[string]any{}}}}); err == nil {
 		t.Fatal("expected surface mismatch")
@@ -52,7 +52,7 @@ func TestReduceRejectsCrossSurfaceAndNonStringAppend(t *testing.T) {
 	}
 }
 
-func TestDiffPreservesInteractiveBindingsAndUsesLeafUpdates(t *testing.T) {
+func TestCrossPlatformCoverageDiffPreservesInteractiveBindingsAndUsesLeafUpdates(t *testing.T) {
 	components := map[string]map[string]any{
 		"root":    {"id": "root", "component": "Column", "children": []any{"body", "comment"}},
 		"body":    {"id": "body", "component": "Text", "text": map[string]any{"path": "/content/body"}},
@@ -80,7 +80,7 @@ func TestDiffPreservesInteractiveBindingsAndUsesLeafUpdates(t *testing.T) {
 	}
 }
 
-func TestDiffPreservesEverySupportedInteractiveBinding(t *testing.T) {
+func TestCrossPlatformCoverageDiffPreservesEverySupportedInteractiveBinding(t *testing.T) {
 	for _, componentName := range []string{"CheckBox", "CheckableImageList", "CheckboxListMulti", "ChoicePicker", "ConversationPicker", "DateTimeInput", "ImageUpload", "InputList", "NumberInput", "Rating", "Slider", "Switch", "TextField", "UserPicker"} {
 		t.Run(componentName, func(t *testing.T) {
 			components := map[string]map[string]any{
@@ -107,7 +107,7 @@ func TestDiffPreservesEverySupportedInteractiveBinding(t *testing.T) {
 	}
 }
 
-func TestDiffRejectsUnsupportedRemovals(t *testing.T) {
+func TestCrossPlatformCoverageDiffRejectsUnsupportedRemovals(t *testing.T) {
 	previous := Surface{
 		SurfaceID:  "s",
 		Components: map[string]map[string]any{"root": {"id": "root", "component": "Text", "text": "hello"}, "extra": {"id": "extra", "component": "Text", "text": "remove"}},
@@ -129,7 +129,7 @@ func TestDiffRejectsUnsupportedRemovals(t *testing.T) {
 	}
 }
 
-func TestReduceUpdatesDataInsideArrays(t *testing.T) {
+func TestCrossPlatformCoverageReduceUpdatesDataInsideArrays(t *testing.T) {
 	base := Surface{SurfaceID: "s", Data: map[string]any{"items": []any{map[string]any{"status": "old"}}}}
 	updated, err := Reduce(base, []map[string]any{{"version": "v1.0", "updateDataModel": map[string]any{"surfaceId": "s", "path": "/items/0/status", "value": "new"}}})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestReduceUpdatesDataInsideArrays(t *testing.T) {
 	}
 }
 
-func TestParseSnapshotContract(t *testing.T) {
+func TestCrossPlatformCoverageParseSnapshotContract(t *testing.T) {
 	raw := `{"version":"v1.0","surfaceId":"s","components":{"root":{"id":"root","component":"Text","text":"ok"}},"dataModel":{"content":{"body":"ok"}}}`
 	snapshot, err := ParseSnapshot(strings.NewReader(raw))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestParseSnapshotContract(t *testing.T) {
 	}
 }
 
-func TestReducedSurfaceRoundTripsAsSnapshot(t *testing.T) {
+func TestCrossPlatformCoverageReducedSurfaceRoundTripsAsSnapshot(t *testing.T) {
 	surface, err := Reduce(Surface{}, []map[string]any{
 		{"version": "v1.0", "createSurface": map[string]any{"surfaceId": "s", "catalogId": "catalog"}},
 		{"version": "v1.0", "updateDataModel": map[string]any{"surfaceId": "s", "path": "/", "value": map[string]any{"content": map[string]any{"status": "ready"}}}},

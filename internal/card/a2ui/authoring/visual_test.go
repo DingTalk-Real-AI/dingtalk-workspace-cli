@@ -9,7 +9,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/card/a2ui/protocol"
 )
 
-func TestNotificationVisualLintDistinguishesBadAndRepairedLayout(t *testing.T) {
+func TestCrossPlatformCoverageNotificationVisualLintDistinguishesBadAndRepairedLayout(t *testing.T) {
 	components := []any{
 		map[string]any{"id": "root", "component": "Column", "children": []any{"header", "evidence"}},
 		map[string]any{"id": "header", "component": "Row", "children": []any{"title", "status"}},
@@ -35,7 +35,7 @@ func TestNotificationVisualLintDistinguishesBadAndRepairedLayout(t *testing.T) {
 	}
 }
 
-func TestNotificationVisualLintKeepsHeaderFullWidthWithoutPanelBorder(t *testing.T) {
+func TestCrossPlatformCoverageNotificationVisualLintKeepsHeaderFullWidthWithoutPanelBorder(t *testing.T) {
 	components := []any{
 		map[string]any{"id": "root", "component": "Card", "child": "layout", "padding": float64(12)},
 		map[string]any{"id": "layout", "component": "Column", "children": []any{"header", "body"}},
@@ -61,7 +61,7 @@ func TestNotificationVisualLintKeepsHeaderFullWidthWithoutPanelBorder(t *testing
 	}
 }
 
-func TestRootCardVisualLintRequiresExplicitTransparency(t *testing.T) {
+func TestCrossPlatformCoverageRootCardVisualLintRequiresExplicitTransparency(t *testing.T) {
 	root := map[string]any{"id": "root", "component": "Card", "child": "body"}
 	body := map[string]any{"id": "body", "component": "Text", "text": "内容"}
 	messages := []map[string]any{{"createSurface": map[string]any{"components": []any{root, body}}}}
@@ -84,7 +84,7 @@ func TestRootCardVisualLintRequiresExplicitTransparency(t *testing.T) {
 	}
 }
 
-func TestKeyValueVisualLintRequiresSeparatorAndCentersCompactRow(t *testing.T) {
+func TestCrossPlatformCoverageKeyValueVisualLintRequiresSeparatorAndCentersCompactRow(t *testing.T) {
 	components := []any{
 		map[string]any{"id": "root", "component": "Row", "children": []any{"iso_label", "iso_result"}, "align": "start"},
 		map[string]any{"id": "iso_label", "component": "Text", "text": "ISO 8601", "variant": "caption"},
@@ -104,7 +104,7 @@ func TestKeyValueVisualLintRequiresSeparatorAndCentersCompactRow(t *testing.T) {
 	}
 }
 
-func TestKeyValueVisualLintAlignsFirstLinesWhenValueWraps(t *testing.T) {
+func TestCrossPlatformCoverageKeyValueVisualLintAlignsFirstLinesWhenValueWraps(t *testing.T) {
 	components := []any{
 		map[string]any{"id": "root", "component": "Row", "children": []any{"space_label", "space_result"}, "align": "center"},
 		map[string]any{"id": "space_label", "component": "Text", "text": "空格时间：", "variant": "caption"},

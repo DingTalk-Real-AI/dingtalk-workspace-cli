@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestLoadAndValidateCreate(t *testing.T) {
+func TestCrossPlatformCoverageLoadAndValidateCreate(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestLoadAndValidateCreate(t *testing.T) {
 	}
 }
 
-func TestValidateGraphFollowsCardHeaderTrailingReference(t *testing.T) {
+func TestCrossPlatformCoverageValidateGraphFollowsCardHeaderTrailingReference(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestValidateGraphFollowsCardHeaderTrailingReference(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsRadioButtonAndMissingCatalog(t *testing.T) {
+func TestCrossPlatformCoverageValidateRejectsRadioButtonAndMissingCatalog(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestValidateRejectsRadioButtonAndMissingCatalog(t *testing.T) {
 	}
 }
 
-func TestParseMessagesSupportsObjectArrayWireAndJSONL(t *testing.T) {
+func TestCrossPlatformCoverageParseMessagesSupportsObjectArrayWireAndJSONL(t *testing.T) {
 	inputs := []string{
 		`[{"version":"v1.0","deleteSurface":{"surfaceId":"s"}}]`,
 		`["{\"version\":\"v1.0\",\"deleteSurface\":{\"surfaceId\":\"s\"}}"]`,
@@ -107,7 +107,7 @@ func TestParseMessagesSupportsObjectArrayWireAndJSONL(t *testing.T) {
 	}
 }
 
-func TestValidateUpdateAndAppendContracts(t *testing.T) {
+func TestCrossPlatformCoverageValidateUpdateAndAppendContracts(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestValidateUpdateAndAppendContracts(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsMissingInitialBinding(t *testing.T) {
+func TestCrossPlatformCoverageValidateRejectsMissingInitialBinding(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func TestValidateRejectsMissingInitialBinding(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsMalformedUpdateComponents(t *testing.T) {
+func TestCrossPlatformCoverageValidateRejectsMalformedUpdateComponents(t *testing.T) {
 	registry, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -177,7 +177,7 @@ func TestValidateRejectsMalformedUpdateComponents(t *testing.T) {
 	}
 }
 
-func TestDingTalkExtensionSemanticValidation(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkExtensionSemanticValidation(t *testing.T) {
 	for _, valid := range []string{"/ui/action", "/ui/action/result_1", "/ui/a-b/c_d/segment9"} {
 		if !validHostResultPath(valid) {
 			t.Fatalf("valid path rejected: %s", valid)
@@ -198,7 +198,7 @@ func TestDingTalkExtensionSemanticValidation(t *testing.T) {
 	}
 }
 
-func TestValidateDeliveryResourcesRejectsPreviewOnlyImageURLs(t *testing.T) {
+func TestCrossPlatformCoverageValidateDeliveryResourcesRejectsPreviewOnlyImageURLs(t *testing.T) {
 	message := func(resource string) []map[string]any {
 		return []map[string]any{{"version": "v1.0", "updateComponents": map[string]any{
 			"surfaceId":  "s",

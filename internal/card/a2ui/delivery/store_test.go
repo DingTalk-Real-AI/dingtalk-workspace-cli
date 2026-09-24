@@ -15,7 +15,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-func TestStoreRoundTripAndExtractBizID(t *testing.T) {
+func TestCrossPlatformCoverageStoreRoundTripAndExtractBizID(t *testing.T) {
 	store := Store{Dir: t.TempDir()}
 	want := Record{Handle: "card-123", BizID: "biz-1", Profile: ProfileScope{Selector: "corp:user", CorpID: "corp", UserID: "user", Environment: "im:test"}, ConversationID: "cid", Surface: state.Surface{SurfaceID: "surface"}, FlowStatus: "PROCESSING", Revision: 1}
 	if err := store.Save(want); err != nil {
@@ -43,7 +43,7 @@ func TestStoreRoundTripAndExtractBizID(t *testing.T) {
 	}
 }
 
-func TestStoreScopeLockAndRevisionCAS(t *testing.T) {
+func TestCrossPlatformCoverageStoreScopeLockAndRevisionCAS(t *testing.T) {
 	store := Store{Dir: t.TempDir()}
 	scope := ProfileScope{Selector: "corp:user", CorpID: "corp", UserID: "user", Environment: "im:test"}
 	record := Record{Handle: "card-locked", BizID: "biz", Profile: scope, ConversationID: "cid", Surface: state.Surface{SurfaceID: "surface"}, FlowStatus: "PROCESSING", Revision: 1}
@@ -76,7 +76,7 @@ func TestStoreScopeLockAndRevisionCAS(t *testing.T) {
 	}
 }
 
-func TestWithHandleLockReclaimsDeadOwnerAndPreservesLiveOwner(t *testing.T) {
+func TestCrossPlatformCoverageWithHandleLockReclaimsDeadOwnerAndPreservesLiveOwner(t *testing.T) {
 	store := Store{Dir: t.TempDir()}
 	if err := os.MkdirAll(store.Dir, 0o700); err != nil {
 		t.Fatal(err)

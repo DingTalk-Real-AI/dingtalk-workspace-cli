@@ -1,3 +1,5 @@
 internal/runtimepayload/assets/*.payload binary
 # Preserve the upstream README byte-for-byte for Cobra provenance checks.
 third_party/cobra/README.md whitespace=-blank-at-eol
+# Bundle digests are byte-sensitive; Windows checkout must preserve LF.
+internal/card/a2ui/protocol/assets/*.json text eol=lf

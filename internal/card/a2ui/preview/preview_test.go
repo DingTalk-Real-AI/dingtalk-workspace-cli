@@ -11,7 +11,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/card/a2ui/state"
 )
 
-func TestRenderReferencePreview(t *testing.T) {
+func TestCrossPlatformCoverageRenderReferencePreview(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{Recipe: "form", SurfaceID: "preview", Title: "信息收集", Status: "待填写", Body: "请补充发布信息。", PrimaryCTA: "提交", Secondary: "取消"})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestRenderReferencePreview(t *testing.T) {
 	}
 }
 
-func TestReferencePreviewInteractionContract(t *testing.T) {
+func TestCrossPlatformCoverageReferencePreviewInteractionContract(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe:     "form",
 		SurfaceID:  "interactive-preview",
@@ -86,7 +86,7 @@ func TestReferencePreviewInteractionContract(t *testing.T) {
 	}
 }
 
-func TestRenderReleaseFormChoiceStyles(t *testing.T) {
+func TestCrossPlatformCoverageRenderReleaseFormChoiceStyles(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe: "form", SurfaceID: "release-preview", Title: "Release details", Body: "Complete the release details.",
 		FormFields: []authoring.FormField{
@@ -121,7 +121,7 @@ func TestRenderReleaseFormChoiceStyles(t *testing.T) {
 	}
 }
 
-func TestRenderRichInformationComponents(t *testing.T) {
+func TestCrossPlatformCoverageRenderRichInformationComponents(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe:          "information",
 		SurfaceID:       "rich-preview",
@@ -183,7 +183,7 @@ func TestRenderRichInformationComponents(t *testing.T) {
 	}
 }
 
-func TestRenderMarkdownStructureAndEscaping(t *testing.T) {
+func TestCrossPlatformCoverageRenderMarkdownStructureAndEscaping(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe:    "notification",
 		SurfaceID: "markdown-preview",
@@ -214,7 +214,7 @@ func TestRenderMarkdownStructureAndEscaping(t *testing.T) {
 	}
 }
 
-func TestRenderMarkdownTableStructureAndResponsiveStyle(t *testing.T) {
+func TestCrossPlatformCoverageRenderMarkdownTableStructureAndResponsiveStyle(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe:    "notification",
 		SurfaceID: "markdown-table-preview",
@@ -244,7 +244,7 @@ func TestRenderMarkdownTableStructureAndResponsiveStyle(t *testing.T) {
 	}
 }
 
-func TestRenderRejectsUnsafeImageURL(t *testing.T) {
+func TestCrossPlatformCoverageRenderRejectsUnsafeImageURL(t *testing.T) {
 	messages, err := authoring.Compile(authoring.Spec{
 		Recipe:    "information",
 		SurfaceID: "unsafe-image-preview",
@@ -272,7 +272,7 @@ func TestRenderRejectsUnsafeImageURL(t *testing.T) {
 	}
 }
 
-func TestRenderHonorsUnboundedPanelAndLargeLineLimit(t *testing.T) {
+func TestCrossPlatformCoverageRenderHonorsUnboundedPanelAndLargeLineLimit(t *testing.T) {
 	surface := state.Surface{
 		SurfaceID: "numeric-preview",
 		Components: map[string]map[string]any{
@@ -298,7 +298,7 @@ func TestRenderHonorsUnboundedPanelAndLargeLineLimit(t *testing.T) {
 	}
 }
 
-func TestRenderProjectsPublicBoxModelAndImageVariants(t *testing.T) {
+func TestCrossPlatformCoverageRenderProjectsPublicBoxModelAndImageVariants(t *testing.T) {
 	surface := state.Surface{
 		SurfaceID: "visual-contract-preview",
 		Components: map[string]map[string]any{
@@ -336,7 +336,7 @@ func TestRenderProjectsPublicBoxModelAndImageVariants(t *testing.T) {
 	}
 }
 
-func TestRenderProjectsTextIconColorTypographyAndButtonShape(t *testing.T) {
+func TestCrossPlatformCoverageRenderProjectsTextIconColorTypographyAndButtonShape(t *testing.T) {
 	surface := state.Surface{
 		SurfaceID: "visual-token-preview",
 		Components: map[string]map[string]any{
@@ -377,7 +377,7 @@ func TestRenderProjectsTextIconColorTypographyAndButtonShape(t *testing.T) {
 	}
 }
 
-func TestRenderCardHeaderIncludesTrailingComponent(t *testing.T) {
+func TestCrossPlatformCoverageRenderCardHeaderIncludesTrailingComponent(t *testing.T) {
 	surface := state.Surface{Components: map[string]map[string]any{
 		"root":   {"id": "root", "component": "Card", "child": "header"},
 		"header": {"id": "header", "component": "CardHeader", "title": "任务提醒", "theme": "blue", "trailing": "status"},

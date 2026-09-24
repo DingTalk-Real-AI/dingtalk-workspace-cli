@@ -11,7 +11,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/card/a2ui/protocol"
 )
 
-func TestRecipesCompileToValidA2UI(t *testing.T) {
+func TestCrossPlatformCoverageRecipesCompileToValidA2UI(t *testing.T) {
 	registry, err := protocol.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestRecipesCompileToValidA2UI(t *testing.T) {
 	}
 }
 
-func TestRecommendWithMatchDoesNotInferRecipeFromWordFragments(t *testing.T) {
+func TestCrossPlatformCoverageRecommendWithMatchDoesNotInferRecipeFromWordFragments(t *testing.T) {
 	for _, intent := range []string{
 		"GitHub issue timestamp format mismatch",
 		"scheduled notice failure",
@@ -79,7 +79,7 @@ func TestRecommendWithMatchDoesNotInferRecipeFromWordFragments(t *testing.T) {
 	}
 }
 
-func TestInformationRecipeBuildsAReadableHierarchy(t *testing.T) {
+func TestCrossPlatformCoverageInformationRecipeBuildsAReadableHierarchy(t *testing.T) {
 	messages, err := Compile(Spec{
 		Recipe:          "information",
 		SurfaceID:       "information-hierarchy",
@@ -220,7 +220,7 @@ func TestInformationRecipeBuildsAReadableHierarchy(t *testing.T) {
 	}
 }
 
-func TestRequestedComponentGuidesAreCovered(t *testing.T) {
+func TestCrossPlatformCoverageRequestedComponentGuidesAreCovered(t *testing.T) {
 	for _, name := range []string{"Button", "File", "Markdown", "TextField", "Link", "Card", "Row", "Column", "Tag", "Divider", "CollapsiblePanel", "Image", "Text", "ChoicePicker"} {
 		if _, ok := Guide(name); !ok {
 			t.Errorf("missing guide for %s", name)
@@ -228,7 +228,7 @@ func TestRequestedComponentGuidesAreCovered(t *testing.T) {
 	}
 }
 
-func TestSurfacePoliciesKeepCardsReadableWithoutInventingWireFields(t *testing.T) {
+func TestCrossPlatformCoverageSurfacePoliciesKeepCardsReadableWithoutInventingWireFields(t *testing.T) {
 	policies := SurfacePolicies()
 	if len(policies) != 3 {
 		t.Fatalf("surface policies=%d, want 3", len(policies))
@@ -257,7 +257,7 @@ func TestSurfacePoliciesKeepCardsReadableWithoutInventingWireFields(t *testing.T
 	}
 }
 
-func TestRootCardBackgroundMustBeTransparent(t *testing.T) {
+func TestCrossPlatformCoverageRootCardBackgroundMustBeTransparent(t *testing.T) {
 	compileBackground := func(background string) (any, bool) {
 		t.Helper()
 		messages, err := Compile(Spec{Recipe: "form", SurfaceID: "background", Title: "通知", Body: "内容", BackgroundColor: background})
@@ -279,13 +279,13 @@ func TestRootCardBackgroundMustBeTransparent(t *testing.T) {
 	}
 }
 
-func TestSeventeenSemanticBlocksAreRegistered(t *testing.T) {
+func TestCrossPlatformCoverageSeventeenSemanticBlocksAreRegistered(t *testing.T) {
 	if got := len(Blocks()); got != 17 {
 		t.Fatalf("blocks=%d, want 17", got)
 	}
 }
 
-func TestContentSectionBlockUsesCanonicalCardTokens(t *testing.T) {
+func TestCrossPlatformCoverageContentSectionBlockUsesCanonicalCardTokens(t *testing.T) {
 	var section *Block
 	for _, block := range Blocks() {
 		if block.Name == "content-panel" {
@@ -326,7 +326,7 @@ func TestContentSectionBlockUsesCanonicalCardTokens(t *testing.T) {
 	}
 }
 
-func TestContentSectionStylesValidateAgainstA2UIProtocol(t *testing.T) {
+func TestCrossPlatformCoverageContentSectionStylesValidateAgainstA2UIProtocol(t *testing.T) {
 	registry, err := protocol.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +350,7 @@ func TestContentSectionStylesValidateAgainstA2UIProtocol(t *testing.T) {
 	}
 }
 
-func TestNotificationRecipesUseCompactHeaderBlock(t *testing.T) {
+func TestCrossPlatformCoverageNotificationRecipesUseCompactHeaderBlock(t *testing.T) {
 	for _, recipe := range Recipes() {
 		if recipe.Name != "schedule" && recipe.Name != "task" {
 			continue
@@ -390,7 +390,7 @@ func TestNotificationRecipesUseCompactHeaderBlock(t *testing.T) {
 	}
 }
 
-func TestScheduleRecipeUsesMeetingDetailsWithoutConflictScaffolding(t *testing.T) {
+func TestCrossPlatformCoverageScheduleRecipeUsesMeetingDetailsWithoutConflictScaffolding(t *testing.T) {
 	messages, err := Compile(Spec{
 		Recipe: "schedule", SurfaceID: "meeting-schedule", Title: "Schedule", Body: "Design review",
 		ScheduleTime: "Sep 24, 01:00–02:00 (GMT+8)", MeetingURL: "https://example.com/meeting",
@@ -439,7 +439,7 @@ func TestScheduleRecipeUsesMeetingDetailsWithoutConflictScaffolding(t *testing.T
 	}
 }
 
-func TestInformationMetricsUseLabeledThemedTiles(t *testing.T) {
+func TestCrossPlatformCoverageInformationMetricsUseLabeledThemedTiles(t *testing.T) {
 	messages, err := Compile(Spec{
 		Recipe: "information", SurfaceID: "themed-metrics", Title: "Quarterly review", Body: "The team met its goal.",
 		Metrics: []Metric{{Label: "Completion", Value: "96%", Theme: "green"}, {Label: "On time", Value: "18 / 19", Theme: "blue"}, {Label: "Risk", Value: "0", Theme: "orange"}},
@@ -473,7 +473,7 @@ func TestInformationMetricsUseLabeledThemedTiles(t *testing.T) {
 	}
 }
 
-func TestTaskRecipeKeepsCompletionCriteriaVisible(t *testing.T) {
+func TestCrossPlatformCoverageTaskRecipeKeepsCompletionCriteriaVisible(t *testing.T) {
 	messages, err := Compile(Spec{
 		Recipe: "task", SurfaceID: "task-criteria", Title: "Fix login", Status: "In progress",
 		Body:      "### Progress\n\n- Regression checks are running",
@@ -502,7 +502,7 @@ func TestTaskRecipeKeepsCompletionCriteriaVisible(t *testing.T) {
 	}
 }
 
-func TestResolveRecipeReportsTheEffectiveDefault(t *testing.T) {
+func TestCrossPlatformCoverageResolveRecipeReportsTheEffectiveDefault(t *testing.T) {
 	got, err := ResolveRecipe(Spec{Title: "普通通知", Body: "处理完成"})
 	if err != nil {
 		t.Fatal(err)
@@ -521,7 +521,7 @@ func TestResolveRecipeReportsTheEffectiveDefault(t *testing.T) {
 	}
 }
 
-func TestBuiltInRecipesUseUnpaintedInsetHeader(t *testing.T) {
+func TestCrossPlatformCoverageBuiltInRecipesUseUnpaintedInsetHeader(t *testing.T) {
 	for _, recipe := range []string{"notification", "information", "form"} {
 		t.Run(recipe, func(t *testing.T) {
 			messages, err := Compile(Spec{Recipe: recipe, SurfaceID: "header-" + recipe, Title: "标题", Status: "进行中", Body: "说明"})
@@ -562,7 +562,7 @@ func TestBuiltInRecipesUseUnpaintedInsetHeader(t *testing.T) {
 	}
 }
 
-func TestImageTextItemBlockDeclaresCompactHorizontalContract(t *testing.T) {
+func TestCrossPlatformCoverageImageTextItemBlockDeclaresCompactHorizontalContract(t *testing.T) {
 	var found *Block
 	for _, block := range Blocks() {
 		if block.Name == "image-text-item" {
@@ -582,7 +582,7 @@ func TestImageTextItemBlockDeclaresCompactHorizontalContract(t *testing.T) {
 	}
 }
 
-func TestFormRecipeInformationArchitecture(t *testing.T) {
+func TestCrossPlatformCoverageFormRecipeInformationArchitecture(t *testing.T) {
 	compile := func(recipe string) map[string]map[string]any {
 		t.Helper()
 		messages, err := Compile(Spec{
@@ -629,7 +629,7 @@ func TestFormRecipeInformationArchitecture(t *testing.T) {
 	}
 }
 
-func TestFormRecipeCompilesReleaseFieldsWithIndependentBindings(t *testing.T) {
+func TestCrossPlatformCoverageFormRecipeCompilesReleaseFieldsWithIndependentBindings(t *testing.T) {
 	messages, err := Compile(Spec{
 		Recipe: "form", SurfaceID: "release-form", Title: "Release details", Body: "Complete the release details.",
 		PrimaryCTA: "Submit",
@@ -701,7 +701,7 @@ func containsString(values []string, expected string) bool {
 	return false
 }
 
-func TestRecommend(t *testing.T) {
+func TestCrossPlatformCoverageRecommend(t *testing.T) {
 	if got := Recommend("请生成一个审批确认卡片").Name; got != "form" {
 		t.Fatalf("got %s", got)
 	}
@@ -710,7 +710,7 @@ func TestRecommend(t *testing.T) {
 	}
 }
 
-func TestStatusTagThemeHandlesNegativeFormsBeforeSuccessTokens(t *testing.T) {
+func TestCrossPlatformCoverageStatusTagThemeHandlesNegativeFormsBeforeSuccessTokens(t *testing.T) {
 	for _, value := range []string{"未完成", "未通过", "incomplete", "unsuccessful", "not completed", "failure"} {
 		if got := statusTagTheme(value); got != "red" {
 			t.Errorf("statusTagTheme(%q) = %q, want red", value, got)
