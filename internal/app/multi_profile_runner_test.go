@@ -7,6 +7,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx"
 )
 
 func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
@@ -28,6 +29,9 @@ func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
 	}
 	if got := authpkg.RuntimeProfile(); got != "corp_a, corp_b" {
 		t.Fatalf("runtime profile after Run = %q, want restored raw selector", got)
+	}
+	if got := profilectx.GetIdentity(); got != (profilectx.Identity{}) {
+		t.Fatalf("runtime identity after Run = %+v, want restored empty identity", got)
 	}
 
 	content := result.Response["content"].(map[string]any)
@@ -53,6 +57,9 @@ func TestRuntimeRunnerAggregatesCommaSeparatedProfiles(t *testing.T) {
 		wantProfile := wantCorpID + ":user-" + wantCorpID
 		if resultPayload["runtimeProfile"] != wantProfile {
 			t.Fatalf("profiles[%d].result.runtimeProfile = %#v, want %q", i, resultPayload["runtimeProfile"], wantProfile)
+		}
+		if resultPayload["runtimeCorpID"] != wantCorpID || resultPayload["runtimeUserID"] != "user-"+wantCorpID {
+			t.Fatalf("profiles[%d].result identity = %#v", i, resultPayload)
 		}
 	}
 }
@@ -165,8 +172,15 @@ func TestRuntimeRunnerKeepsSingleProfileBehavior(t *testing.T) {
 	if got := result.Response["content"].(map[string]any)["runtimeProfile"]; got != "corp_a:user-corp_a" {
 		t.Fatalf("fallback runtime profile = %#v, want exact identity selector", got)
 	}
+	content := result.Response["content"].(map[string]any)
+	if content["runtimeCorpID"] != "corp_a" || content["runtimeUserID"] != "user-corp_a" {
+		t.Fatalf("fallback runtime identity = %#v", content)
+	}
 	if got := authpkg.RuntimeProfile(); got != "corp_a" {
 		t.Fatalf("runtime profile after Run = %q, want corp_a", got)
+	}
+	if got := profilectx.GetIdentity(); got != (profilectx.Identity{}) {
+		t.Fatalf("runtime identity after Run = %+v, want restored empty identity", got)
 	}
 }
 
@@ -234,11 +248,14 @@ type multiProfileFallbackRunner struct{}
 
 func (multiProfileFallbackRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
 	invocation.Implemented = true
+	identity := profilectx.GetIdentity()
 	return executor.Result{
 		Invocation: invocation,
 		Response: map[string]any{
 			"content": map[string]any{
 				"runtimeProfile": authpkg.RuntimeProfile(),
+				"runtimeCorpID":  identity.CorpID,
+				"runtimeUserID":  identity.UserID,
 				"tool":           invocation.Tool,
 			},
 		},

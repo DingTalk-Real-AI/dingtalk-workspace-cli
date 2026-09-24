@@ -7332,10 +7332,11 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	})
 
 	chatMessageSendA2UICardCmd := &cobra.Command{
-		Use:     "send-a2ui-card",
-		Short:   "创建并推送 A2UI 卡片",
-		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，创建时默认 flowStatus=PROCESSING。",
-		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
+		Use:        "send-a2ui-card",
+		Short:      "创建并推送 A2UI 卡片",
+		Deprecated: "use `dws card send` for validated A2UI delivery and local state tracking",
+		Long:       "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，创建时默认 flowStatus=PROCESSING。",
+		Example:    `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID := mustGetFlag(cmd, "conversation-id")
 			receiver := mustGetFlag(cmd, "open-dingtalk-id")
@@ -7403,8 +7404,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并向群聊或单聊发送 A2UI 卡片",
-				UseWhen:      []string{"已准备 A2UI 消息数组，需要创建并发送 A2UI 卡片时"},
-				AvoidWhen:    []string{"创建 streaming 卡片或需要 @成员时使用 chat message send-card；只发送普通文本时使用 send 或 send-by-bot"},
+				UseWhen:      []string{"仅在兼容旧脚本、且调用方已经自行完成 A2UI 校验和状态管理时"},
+				AvoidWhen:    []string{"新建 A2UI 卡片默认使用 card send；创建 streaming 卡片或需要 @成员时使用 chat message send-card；只发送普通文本时使用 send 或 send-by-bot"},
 				Examples:     []string{`dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7528,8 +7529,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageUpdateCardCmd.Flags().String("flow-status", "", "流式状态 (必填)")
 
 	chatMessageUpdateA2UICardCmd := &cobra.Command{
-		Use:   "update-a2ui-card",
-		Short: "更新 A2UI 卡片内容和状态",
+		Use:        "update-a2ui-card",
+		Short:      "更新 A2UI 卡片内容和状态",
+		Deprecated: "use `dws card update` or `dws card finish` for validated, same-scope updates",
 		Long: `更新已发送的 A2UI 卡片。--content 必须是非空 JSON 字符串数组。
 --flow-status 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，兼容数字 1-9。`,
 		Example: `  dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]' --flow-status FINISH`,
@@ -7591,8 +7593,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新已发送 A2UI 卡片的内容和状态",
-				UseWhen:      []string{"已有 A2UI 卡片 bizId，需要更新 A2UI 消息数组和流转状态时"},
-				AvoidWhen:    []string{"更新 streaming 卡片时使用 chat message update-card；创建新 A2UI 卡片时使用 chat message send-a2ui-card"},
+				UseWhen:      []string{"仅在兼容旧脚本、且调用方只持有原始 bizId 时"},
+				AvoidWhen:    []string{"由 card send 创建的 A2UI 卡片使用 card update 或 card finish；更新 streaming 卡片时使用 chat message update-card"},
 				Examples:     []string{`dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\"}"]' --flow-status FINISH`},
 			},
 			Parameters: []contract.ParamDecl{

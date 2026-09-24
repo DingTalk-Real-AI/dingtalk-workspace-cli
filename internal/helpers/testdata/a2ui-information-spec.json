@@ -1,0 +1,55 @@
+{
+  "recipe": "information",
+  "surfaceId": "dws-local-information",
+  "title": "季度执行报告",
+  "status": "已完成",
+  "body": "## 核心结论\n\n本季度核心目标按计划完成，体验指标和交付质量均达到验收线。剩余两项低风险工作已进入下季度计划，不影响当前版本发布。",
+  "imageUrl": "https://quickchart.io/chart?w=700&h=438&v=4&f=png&bkg=white&c=%7B%22type%22%3A%22line%22%2C%22data%22%3A%7B%22labels%22%3A%5B%227%E6%9C%88%E5%88%9D%22%2C%227%E6%9C%88%E4%B8%AD%22%2C%228%E6%9C%88%E5%88%9D%22%2C%228%E6%9C%88%E4%B8%AD%22%2C%229%E6%9C%8815%E6%97%A5%22%5D%2C%22datasets%22%3A%5B%7B%22label%22%3A%22%E7%9B%AE%E6%A0%87%E5%AE%8C%E6%88%90%E7%8E%87%22%2C%22data%22%3A%5B34%2C61%2C67%2C88%2C96%5D%2C%22borderColor%22%3A%22%231f6fff%22%2C%22backgroundColor%22%3A%22rgba%2831%2C111%2C255%2C0.10%29%22%2C%22fill%22%3Atrue%2C%22tension%22%3A0.48%2C%22cubicInterpolationMode%22%3A%22monotone%22%2C%22pointRadius%22%3A3%2C%22pointHoverRadius%22%3A4%2C%22pointBackgroundColor%22%3A%22%231f6fff%22%2C%22borderWidth%22%3A3%2C%22borderJoinStyle%22%3A%22round%22%2C%22borderCapStyle%22%3A%22round%22%7D%5D%7D%2C%22options%22%3A%7B%22responsive%22%3Afalse%2C%22plugins%22%3A%7B%22legend%22%3A%7B%22display%22%3Afalse%7D%2C%22datalabels%22%3A%7B%22display%22%3Atrue%2C%22align%22%3A%22top%22%2C%22anchor%22%3A%22end%22%2C%22offset%22%3A5%2C%22color%22%3A%22%2324519a%22%2C%22font%22%3A%7B%22size%22%3A13%2C%22weight%22%3A%22bold%22%7D%2C%22formatter%22%3A%28value%29%3D%3Evalue%2B%27%25%27%7D%7D%2C%22scales%22%3A%7B%22y%22%3A%7B%22display%22%3Afalse%2C%22min%22%3A0%2C%22max%22%3A110%7D%2C%22x%22%3A%7B%22grid%22%3A%7B%22display%22%3Afalse%7D%2C%22border%22%3A%7B%22display%22%3Afalse%7D%2C%22ticks%22%3A%7B%22color%22%3A%22%23687078%22%2C%22font%22%3A%7B%22size%22%3A12%7D%7D%7D%7D%2C%22layout%22%3A%7B%22padding%22%3A%7B%22top%22%3A18%2C%22right%22%3A18%2C%22left%22%3A18%2C%22bottom%22%3A0%7D%7D%7D%7D",
+  "imageFit": "contain",
+  "imageAlt": "2026 Q3 目标完成率趋势图",
+  "metrics": [
+    {
+      "label": "目标完成率",
+      "value": "96%",
+      "theme": "green"
+    },
+    {
+      "label": "按期交付",
+      "value": "18 / 19",
+      "theme": "blue"
+    },
+    {
+      "label": "下季跟进",
+      "value": "2 项",
+      "theme": "orange"
+    }
+  ],
+  "highlights": [
+    {
+      "title": "核心能力交付",
+      "detail": "三项关键能力已完成灰度验收",
+      "status": "已完成",
+      "theme": "green"
+    },
+    {
+      "title": "体验指标改善",
+      "detail": "关键路径平均耗时下降 23%",
+      "status": "符合预期",
+      "theme": "blue"
+    },
+    {
+      "title": "遗留事项收敛",
+      "detail": "两项低风险工作转入下季度",
+      "status": "已排期",
+      "theme": "orange"
+    }
+  ],
+  "fileName": "quarterly-report.pdf",
+  "fileUrl": "https://www.rfc-editor.org/rfc/rfc8259.pdf",
+  "filePreviewUrl": "https://www.rfc-editor.org/rfc/rfc8259.pdf",
+  "fileDescription": "正式版 · 由报告 Agent 生成",
+  "fileMimeType": "application/pdf",
+  "fileSize": 2488320,
+  "details": "- 完成率按季度承诺项计算\n- 交付数包含已通过验收的需求\n- 风险统计截止到 2026-09-15",
+  "primaryCta": "查看完整报告"
+}

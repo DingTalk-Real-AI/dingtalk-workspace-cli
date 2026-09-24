@@ -11,3 +11,8 @@ func Format(version, commit, buildTime string) string {
 	}
 	return version
 }
+
+// CurrentVersion returns the version stamp of the running DWS binary.
+func CurrentVersion() string {
+	return Format(stampVersion, stampCommit, stampBuildTime)
+}

@@ -1,0 +1,22 @@
+{
+  "recipe": "form",
+  "surfaceId": "dws-local-form",
+  "title": "补充发布信息",
+  "status": "待填写",
+  "body": "请填写本次发布的版本、说明、影响端、目标环境和执行方式。",
+  "formFields": [
+    {"id": "version", "label": "发布版本", "kind": "text", "placeholder": "例如 v1.0.62-beta.9"},
+    {"id": "notes", "label": "发布说明", "kind": "longText", "placeholder": "概述主要变更和验证结果"},
+    {"id": "platforms", "label": "影响端（可多选）", "kind": "checkbox", "options": [
+      {"label": "Web", "value": "web"}, {"label": "iOS", "value": "ios"}, {"label": "Android", "value": "android"}
+    ]},
+    {"id": "environment", "label": "目标环境", "kind": "dropdown", "options": [
+      {"label": "测试环境", "value": "test"}, {"label": "预发环境", "value": "staging"}, {"label": "生产环境", "value": "production"}
+    ]},
+    {"id": "strategy", "label": "执行方式", "kind": "radio", "options": [
+      {"label": "正常发布", "value": "standard"}, {"label": "灰度发布", "value": "gradual"}, {"label": "仅验证", "value": "verify_only"}
+    ]}
+  ],
+  "primaryCta": "提交发布信息",
+  "secondaryCta": "取消"
+}
