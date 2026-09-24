@@ -119,7 +119,16 @@ func TestCrossPlatformCoverageCardOfflineComposeLintPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout, `"previewKind": "reference_preview"`) || !strings.Contains(stdout, previewPath) {
+	var previewResult struct {
+		Data struct {
+			Output      string `json:"output"`
+			PreviewKind string `json:"previewKind"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &previewResult); err != nil {
+		t.Fatalf("decode preview output: %v: %s", err, stdout)
+	}
+	if previewResult.Data.PreviewKind != "reference_preview" || previewResult.Data.Output != previewPath {
 		t.Fatalf("preview output=%s", stdout)
 	}
 	raw, err := os.ReadFile(previewPath)
