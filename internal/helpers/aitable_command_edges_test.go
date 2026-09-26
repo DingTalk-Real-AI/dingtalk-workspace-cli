@@ -314,19 +314,19 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 	retryable := fmt.Errorf("timeout: retryable: true")
 	caller := &aitableTestCaller{errors: []error{retryable, retryable, retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableTool("get_base", nil); err == nil {
+	if err := callAitableToolContext(context.Background(), "get_base", nil); err == nil {
 		t.Fatal("exhausted aitable retries returned nil")
 	}
 
 	caller = &aitableTestCaller{errors: []error{retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableHelperTool("list_workflows", nil); err != nil {
+	if err := callAitableHelperToolContext(context.Background(), "list_workflows", nil); err != nil {
 		t.Fatalf("helper retry did not recover: %v", err)
 	}
 
 	caller = &aitableTestCaller{errors: []error{retryable, retryable, retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableHelperTool("list_workflows", nil); err == nil {
+	if err := callAitableHelperToolContext(context.Background(), "list_workflows", nil); err == nil {
 		t.Fatal("exhausted helper retries returned nil")
 	}
 
@@ -343,9 +343,9 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 			installAitableDeps(t, writeCaller)
 			var err error
 			if tc.helper {
-				err = callAitableHelperTool(tc.tool, nil)
+				err = callAitableHelperToolContext(context.Background(), tc.tool, nil)
 			} else {
-				err = callAitableTool(tc.tool, nil)
+				err = callAitableToolContext(context.Background(), tc.tool, nil)
 			}
 			if err == nil {
 				t.Fatal("write timeout should remain unknown to the caller")
@@ -1556,13 +1556,13 @@ func TestCrossPlatformCoverageAitableAtomicDeletesPassServiceConfirmation(t *tes
 func TestCrossPlatformCoverageAitableHistoricalHelperRouting(t *testing.T) {
 	caller := &aitableTestCaller{}
 	installAitableDeps(t, caller)
-	if err := callAitableHelperTool("list_form_views", map[string]any{"baseId": "b", "tableId": "t"}); err != nil {
+	if err := callAitableHelperToolContext(context.Background(), "list_form_views", map[string]any{"baseId": "b", "tableId": "t"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := callAitableHelperTool("get_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "recordId": "r"}); err != nil {
+	if err := callAitableHelperToolContext(context.Background(), "get_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "recordId": "r"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := callAitableHelperTool("create_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "fieldId": "f", "recordId": "r"}); err != nil {
+	if err := callAitableHelperToolContext(context.Background(), "create_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "fieldId": "f", "recordId": "r"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 3 || caller.calls[0].server != "aitable-helper" || caller.calls[1].server != "aitable-helper" || caller.calls[2].server != "aitable-helper" {

@@ -901,7 +901,12 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	if root == nil || credentialInvocationSeen == nil {
 		return
 	}
-	cleanup := func() {
+	cleanup := func(current *cobra.Command) {
+		if principal := current.Flags().Lookup("principal-user-id"); principal != nil {
+			_ = principal.Value.Set("")
+			principal.Changed = false
+		}
+		consumeDelegatorFlags(root)
 		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
 		discardRootVersionInvocationFlag(root, versionRequested)
 		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
@@ -914,7 +919,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	// partially parsed invocation state after rendering.
 	previousHelp := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		defer cleanup()
+		defer cleanup(cmd)
 		previousHelp(cmd, args)
 	})
 
@@ -923,7 +928,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	previousValidationError := root.ValidationErrorFunc()
 	validationError := func(current *cobra.Command, stage cobra.ValidationStage, err error) error {
 		// Classify before clearing flags needed for required-flag diagnostics.
-		defer cleanup()
+		defer cleanup(current)
 		return previousValidationError(current, stage, err)
 	}
 
@@ -939,7 +944,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 
 		previousFlagError := cmd.FlagErrorFunc()
 		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {
-			cleanup()
+			cleanup(current)
 			return previousFlagError(current, err)
 		})
 	}
@@ -987,6 +992,9 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 				}
 			}()
 			rootVersionShortCircuit = false
+			if err := beginDelegatorInvocation(cmd); err != nil {
+				return err
+			}
 			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
 			if rootVersionRequested && cmd == cmd.Root() {
 				// Preserve Cobra's historical --version behavior: no metadata

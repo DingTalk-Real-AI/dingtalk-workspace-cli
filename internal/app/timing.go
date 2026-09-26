@@ -385,10 +385,13 @@ func defaultPerfReportPath() string {
 
 // sensitiveFlags are flag names whose values should be masked in commands.
 var sensitiveFlags = map[string]bool{
-	"--token":         true,
-	"--code":          true,
-	"--client-secret": true,
-	"--client-id":     true,
+	"--delegator-user-id":          true,
+	"--delegator-corp-id":          true,
+	"--delegator-open-dingtalk-id": true,
+	"--token":                      true,
+	"--code":                       true,
+	"--client-secret":              true,
+	"--client-id":                  true,
 }
 
 // SanitizeCommand redacts sensitive flag values from a command arg slice.
