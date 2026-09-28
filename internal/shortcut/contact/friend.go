@@ -43,7 +43,7 @@ var ListFriends = shortcut.Shortcut{
 	Command:     "+friend-list",
 	Product:     "contact",
 	Description: "查询当前用户的好友列表",
-	Intent:      "当你想查看当前登录用户已经添加的好友名单、核对某位联系人是否已经是好友，或需要好友的钉钉号/备注信息时使用；支持分页翻页。",
+	Intent:      "当你想查看当前登录用户已经添加的好友名单、核对某位联系人是否已经是好友，或需要好友的开放钉钉号ID（openDingTalkId）/备注信息时使用；支持分页翻页。",
 	Risk:        shortcut.RiskRead,
 	Safety:      friendReadSafety,
 	Contract: corecmd.ContractDecl{
@@ -62,7 +62,7 @@ var ListFriends = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询当前用户的好友列表",
-			UseWhen:      []string{"当你想查看当前登录用户已经添加的好友名单、核对某位联系人是否已经是好友，或需要好友的钉钉号/备注信息时使用；支持分页翻页。"},
+			UseWhen:      []string{"当你想查看当前登录用户已经添加的好友名单、核对某位联系人是否已经是好友，或需要好友的开放钉钉号ID（openDingTalkId）/备注信息时使用；支持分页翻页。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +friend-list", "dws contact +friend-list --cursor 100 --size 50"},
 		},
@@ -187,7 +187,7 @@ var SendFriendRequest = shortcut.Shortcut{
 	Command:     "+friend-request-send",
 	Product:     "contact",
 	Description: "向指定用户发起好友申请",
-	Intent:      "当你想添加某人为好友、需要向对方发送好友申请时使用；传入对方钉钉号（--to）和可选的验证留言（--remark）。",
+	Intent:      "当你想添加某人为好友、需要向对方发送好友申请时使用；传入对方开放钉钉号ID（--to）和可选的验证留言（--remark）。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      friendWriteSafety,
 	Contract: corecmd.ContractDecl{
@@ -206,14 +206,14 @@ var SendFriendRequest = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "向指定用户发起好友申请",
-			UseWhen:      []string{"当你想添加某人为好友、需要向对方发送好友申请时使用；传入对方钉钉号（--to）和可选的验证留言（--remark）。"},
+			UseWhen:      []string{"当你想添加某人为好友、需要向对方发送好友申请时使用；传入对方开放钉钉号ID（--to）和可选的验证留言（--remark）。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +friend-request-send --to alice", "dws contact +friend-request-send --to alice --remark \"我是研发部的 Bob\""},
 		},
 		Parameters: []contract.ParamDecl{{Name: "to"}, {Name: "remark"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "to", Type: shortcut.FlagString, Desc: "对方钉钉号（dingtalkId）；--to 不能为空白", Required: true},
+		{Name: "to", Type: shortcut.FlagString, Desc: "对方开放钉钉号ID（openDingTalkId）；--to 不能为空白", Required: true},
 		{Name: "remark", Type: shortcut.FlagString, Desc: "好友申请验证留言（可选）"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -227,7 +227,7 @@ var SendFriendRequest = shortcut.Shortcut{
 		`dws contact +friend-request-send --to alice --remark "我是研发部的 Bob"`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		args := map[string]any{"targetDingtalkId": strings.TrimSpace(rt.Str("to"))}
+		args := map[string]any{"destOpenDingtalkId": strings.TrimSpace(rt.Str("to"))}
 		if rt.Changed("remark") {
 			args["remark"] = rt.Str("remark")
 		}
@@ -241,7 +241,7 @@ var AcceptFriendRequest = shortcut.Shortcut{
 	Command:     "+friend-request-accept",
 	Product:     "contact",
 	Description: "同意指定用户发来的好友申请",
-	Intent:      "当你想同意某位联系人发来好友申请、与对方建立好友关系时使用；传入对方钉钉号（--from），可选项为该好友设置备注名（--alias）。",
+	Intent:      "当你想同意某位联系人发来好友申请、与对方建立好友关系时使用；传入对方开放钉钉号ID（--from），可选项为该好友设置备注名（--alias）。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      friendWriteSafety,
 	Contract: corecmd.ContractDecl{
@@ -260,14 +260,14 @@ var AcceptFriendRequest = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "同意指定用户发来的好友申请",
-			UseWhen:      []string{"当你想同意某位联系人发来好友申请、与对方建立好友关系时使用；传入对方钉钉号（--from），可选项为该好友设置备注名（--alias）。"},
+			UseWhen:      []string{"当你想同意某位联系人发来好友申请、与对方建立好友关系时使用；传入对方开放钉钉号ID（--from），可选项为该好友设置备注名（--alias）。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +friend-request-accept --from alice", "dws contact +friend-request-accept --from alice --alias \"Alice Li\""},
 		},
 		Parameters: []contract.ParamDecl{{Name: "from"}, {Name: "alias"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "from", Type: shortcut.FlagString, Desc: "对方钉钉号（dingtalkId）；--from 不能为空白", Required: true},
+		{Name: "from", Type: shortcut.FlagString, Desc: "对方开放钉钉号ID（openDingTalkId）；--from 不能为空白", Required: true},
 		{Name: "alias", Type: shortcut.FlagString, Desc: "同意后为该好友设置的备注名（可选）"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -281,7 +281,7 @@ var AcceptFriendRequest = shortcut.Shortcut{
 		`dws contact +friend-request-accept --from alice --alias "Alice Li"`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		args := map[string]any{"targetDingtalkId": strings.TrimSpace(rt.Str("from"))}
+		args := map[string]any{"targetOpenDingtalkId": strings.TrimSpace(rt.Str("from"))}
 		if rt.Changed("alias") {
 			args["alias"] = rt.Str("alias")
 		}
@@ -295,7 +295,7 @@ var RejectFriendRequest = shortcut.Shortcut{
 	Command:     "+friend-request-reject",
 	Product:     "contact",
 	Description: "删除（忽略）指定用户发来的好友申请",
-	Intent:      "当你想忽略某位联系人发来的好友申请、让该申请不再出现在好友请求列表中时使用；传入对方钉钉号（--from）。",
+	Intent:      "当你想忽略某位联系人发来的好友申请、让该申请不再出现在好友请求列表中时使用；传入对方开放钉钉号ID（--from）。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      friendWriteSafety,
 	Contract: corecmd.ContractDecl{
@@ -314,14 +314,14 @@ var RejectFriendRequest = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "删除（忽略）指定用户发来的好友申请",
-			UseWhen:      []string{"当你想忽略某位联系人发来的好友申请、让该申请不再出现在好友请求列表中时使用；传入对方钉钉号（--from）。"},
+			UseWhen:      []string{"当你想忽略某位联系人发来的好友申请、让该申请不再出现在好友请求列表中时使用；传入对方开放钉钉号ID（--from）。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +friend-request-reject --from alice"},
 		},
 		Parameters: []contract.ParamDecl{{Name: "from"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "from", Type: shortcut.FlagString, Desc: "对方钉钉号（dingtalkId）；--from 不能为空白", Required: true},
+		{Name: "from", Type: shortcut.FlagString, Desc: "对方开放钉钉号ID（openDingTalkId）；--from 不能为空白", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"from"}, Description: "--from 必须是非空字符串"},
@@ -334,7 +334,7 @@ var RejectFriendRequest = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("remove_friend_request", map[string]any{
-			"targetDingtalkId": strings.TrimSpace(rt.Str("from")),
+			"targetOpenDingtalkId": strings.TrimSpace(rt.Str("from")),
 		})
 	},
 }
@@ -345,7 +345,7 @@ var RemoveFriend = shortcut.Shortcut{
 	Command:     "+friend-remove",
 	Product:     "contact",
 	Description: "删除指定好友",
-	Intent:      "当你想解除与某位联系人的好友关系时使用；传入对方钉钉号（--friend）。删除后双方不再是好友，如需恢复需重新发起好友申请，请谨慎操作。",
+	Intent:      "当你想解除与某位联系人的好友关系时使用；传入对方开放钉钉号ID（--friend）。删除后双方不再是好友，如需恢复需重新发起好友申请，请谨慎操作。",
 	Risk:        shortcut.RiskHighWrite,
 	Safety:      friendRemoveSafety,
 	Contract: corecmd.ContractDecl{
@@ -364,14 +364,14 @@ var RemoveFriend = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "删除指定好友",
-			UseWhen:      []string{"当你想解除与某位联系人的好友关系时使用；传入对方钉钉号（--friend）。"},
+			UseWhen:      []string{"当你想解除与某位联系人的好友关系时使用；传入对方开放钉钉号ID（--friend）。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +friend-remove --friend alice"},
 		},
 		Parameters: []contract.ParamDecl{{Name: "friend"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "friend", Type: shortcut.FlagString, Desc: "要删除的好友钉钉号（dingtalkId）；--friend 不能为空白", Required: true},
+		{Name: "friend", Type: shortcut.FlagString, Desc: "要删除的好友开放钉钉号ID（openDingTalkId）；--friend 不能为空白", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"friend"}, Description: "--friend 必须是非空字符串"},
@@ -384,7 +384,7 @@ var RemoveFriend = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("remove_friend", map[string]any{
-			"targetDingtalkId": strings.TrimSpace(rt.Str("friend")),
+			"targetOpenDingtalkId": strings.TrimSpace(rt.Str("friend")),
 		})
 	},
 }
@@ -411,26 +411,26 @@ func init() {
 }
 
 func friendCollectionResult(collection, description string) *contract.ResultSpec {
-	itemSchema := `{"type":"object","description":"好友列表项","properties":{"dingtalkId":{"type":"string","minLength":1,"description":"好友钉钉号"},"alias":{"type":"string","description":"好友昵称"},"remark":{"type":"string","description":"好友备注"},"status":{"type":"number","description":"好友状态"},"gmtCreate":{"type":"number","description":"加好友时间（毫秒时间戳）"}},"required":["dingtalkId"],"additionalProperties":false}`
+	itemSchema := `{"type":"object","description":"好友列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"好友开放钉钉号ID"},"alias":{"type":"string","description":"好友昵称"},"remark":{"type":"string","description":"好友备注"},"status":{"type":"number","description":"好友状态"},"gmtCreate":{"type":"number","description":"加好友时间（毫秒时间戳）"}},"required":["openDingTalkId"],"additionalProperties":false}`
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
 			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的项目数量"},"cursor":{"type":"number","description":"分页游标"},"hasMore":{"type":"boolean","description":"是否还有更多数据"},%q:{"type":"array","description":%q,"items":%s}},"required":["count","cursor","hasMore",%q],"additionalProperties":false}`,
 			description, collection, description, itemSchema, collection,
 		)),
-		SensitivePaths: []string{"friends.dingtalkId", "friends.alias", "friends.remark"},
+		SensitivePaths: []string{"friends.openDingTalkId", "friends.alias", "friends.remark"},
 	}
 }
 
 func friendRequestCollectionResult() *contract.ResultSpec {
-	itemSchema := `{"type":"object","description":"好友申请列表项","properties":{"dingtalkId":{"type":"string","minLength":1,"description":"申请人钉钉号"},"status":{"type":"number","description":"申请状态"},"remark":{"type":"string","description":"申请留言"},"modifyAt":{"type":"number","description":"申请时间（毫秒时间戳）"},"isRead":{"type":"boolean","description":"是否已读"}},"required":["dingtalkId"],"additionalProperties":false}`
+	itemSchema := `{"type":"object","description":"好友申请列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"申请人开放钉钉号ID"},"status":{"type":"number","description":"申请状态"},"remark":{"type":"string","description":"申请留言"},"modifyAt":{"type":"number","description":"申请时间（毫秒时间戳）"},"isRead":{"type":"boolean","description":"是否已读"}},"required":["openDingTalkId"],"additionalProperties":false}`
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
 			`{"type":"object","description":"好友申请列表","properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的项目数量"},"pendingCount":{"type":"number","description":"待处理申请数量"},"cursor":{"type":"number","description":"分页游标"},"hasMore":{"type":"boolean","description":"是否还有更多数据"},"requests":{"type":"array","description":"好友申请列表","items":%s}},"required":["count","pendingCount","cursor","hasMore","requests"],"additionalProperties":false}`,
 			itemSchema,
 		)),
-		SensitivePaths: []string{"requests.dingtalkId", "requests.remark"},
+		SensitivePaths: []string{"requests.openDingTalkId", "requests.remark"},
 	}
 }
 
@@ -463,15 +463,15 @@ func strictFriendList(data map[string]any, operation string) ([]map[string]any, 
 		if !ok || item == nil {
 			return nil, 0, false, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("响应 result.friendList[%d] 应为对象，实际为 %T", index, rawItem))
 		}
-		dingtalkId := contactString(item, "dingtalkId")
-		if dingtalkId == "" {
-			return nil, 0, false, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("响应 result.friendList[%d] 缺少 dingtalkId", index))
+		openDingTalkId := contactString(item, "openDingTalkId")
+		if openDingTalkId == "" {
+			return nil, 0, false, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("响应 result.friendList[%d] 缺少 openDingTalkId", index))
 		}
-		if seen[dingtalkId] {
-			return nil, 0, false, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 dingtalkId（索引 %d）", index))
+		if seen[openDingTalkId] {
+			return nil, 0, false, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 openDingTalkId（索引 %d）", index))
 		}
-		seen[dingtalkId] = true
-		row := map[string]any{"dingtalkId": dingtalkId}
+		seen[openDingTalkId] = true
+		row := map[string]any{"openDingTalkId": openDingTalkId}
 		if v, _, valid := contactOptionalString(item, "alias"); valid && v != "" {
 			row["alias"] = v
 		}
@@ -519,15 +519,15 @@ func strictFriendRequestList(data map[string]any, operation string) ([]map[strin
 		if !ok || item == nil {
 			return nil, 0, false, 0, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("响应 result.friendList[%d] 应为对象，实际为 %T", index, rawItem))
 		}
-		dingtalkId := contactString(item, "dingtalkId")
-		if dingtalkId == "" {
-			return nil, 0, false, 0, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("响应 result.friendList[%d] 缺少 dingtalkId", index))
+		openDingTalkId := contactString(item, "openDingTalkId")
+		if openDingTalkId == "" {
+			return nil, 0, false, 0, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("响应 result.friendList[%d] 缺少 openDingTalkId", index))
 		}
-		if seen[dingtalkId] {
-			return nil, 0, false, 0, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 dingtalkId（索引 %d）", index))
+		if seen[openDingTalkId] {
+			return nil, 0, false, 0, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 openDingTalkId（索引 %d）", index))
 		}
-		seen[dingtalkId] = true
-		row := map[string]any{"dingtalkId": dingtalkId}
+		seen[openDingTalkId] = true
+		row := map[string]any{"openDingTalkId": openDingTalkId}
 		if v, ok := contactInt64(item["status"]); ok {
 			row["status"] = v
 		}

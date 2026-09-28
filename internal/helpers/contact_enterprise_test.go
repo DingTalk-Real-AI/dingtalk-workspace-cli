@@ -160,6 +160,22 @@ func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testin
 			},
 		},
 		{
+			name:     "get user id by open dingtalk id",
+			args:     []string{"user", "get-by-open-dingtalk-id", "--id", "open-dt-zhangsan"},
+			toolName: "get_user_id_by_open_dingtalk_id",
+			wantArgs: map[string]any{
+				"open_dingtalk_id": "open-dt-zhangsan",
+			},
+		},
+		{
+			name:     "get user id by open dingtalk id alias",
+			args:     []string{"user", "search-open-dingtalk", "--open-dingtalk-id", " open-dt-zhangsan "},
+			toolName: "get_user_id_by_open_dingtalk_id",
+			wantArgs: map[string]any{
+				"open_dingtalk_id": "open-dt-zhangsan",
+			},
+		},
+		{
 			name:     "create enterprise account with explicit false send flag",
 			args:     []string{"account", "create", "--org-user-name", "王五", "--login-id", "wangwu001", "--send-pwd-via-sms=false"},
 			toolName: "exclusive_account_create",
@@ -209,6 +225,23 @@ func TestCrossPlatformCoverageContactUserInviteRejectsInvalidDepartmentsJSON(t *
 func TestCrossPlatformCoverageContactGetByDingtalkIdRejectsBlankID(t *testing.T) {
 	caller, err := runContactEnterpriseCommand(t,
 		"user", "get-by-dingtalk-id",
+		"--id", "   ",
+	)
+	if err == nil || !strings.Contains(err.Error(), "不能为空") {
+		t.Fatalf("error = %v, want blank id validation", err)
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("error = %T %v, want validation error", err, err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
+	}
+}
+
+func TestCrossPlatformCoverageContactGetByOpenDingtalkIdRejectsBlankID(t *testing.T) {
+	caller, err := runContactEnterpriseCommand(t,
+		"user", "get-by-open-dingtalk-id",
 		"--id", "   ",
 	)
 	if err == nil || !strings.Contains(err.Error(), "不能为空") {

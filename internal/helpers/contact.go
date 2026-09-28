@@ -1490,6 +1490,7 @@ func newContactCommand() *cobra.Command {
 【何时用哪个命令】
   - 查询用户的部门、主管、管理员权限         → contact user get
   - 已知钉钉号（dingtalkId）获取 userId       → contact user get-by-dingtalk-id
+  - 已知开放钉钉号ID（openDingTalkId）获取 userId → contact user get-by-open-dingtalk-id
   - 修改员工信息（姓名 / 部门 / 直属主管）   → contact user update
   - 更新当前用户自己的 profile（昵称 / 头像） → contact user update-self
   - 更新用户个人状态（如「居家办公中」）     → contact user update-ownness
@@ -1726,6 +1727,70 @@ func newContactCommand() *cobra.Command {
 				{Name: "id", Property: "dingtalk_id", Required: boolPtr(true)},
 				{Name: "dingtalk-id", Property: "dingtalk_id", Required: boolPtr(false)},
 				{Name: "dingtalkId", Property: "dingtalk_id", Required: boolPtr(false)},
+			},
+		},
+	})
+
+	contactUserGetByOpenDingtalkIdCmd := &cobra.Command{
+		Use:     "get-by-open-dingtalk-id",
+		Aliases: []string{"search-open-dingtalk"},
+		Short:   "按开放钉钉号ID获取用户ID",
+		Long: `根据开放钉钉号ID（openDingTalkId）查询当前组织内员工，返回其 userId。
+
+openDingTalkId 是开放平台场景下、用于标识两个 uid 关系的开放钉钉号ID，
+通常出现在好友事件（如 user_contact_friend_request_received、
+user_contact_friend_added）等业务消息体中。
+
+注意：openDingTalkId 与钉钉号（dingtalkId，如 zhangsan）不是同一概念。
+已知普通钉钉号时请使用 contact user get-by-dingtalk-id。`,
+		Example: `  dws contact user get-by-open-dingtalk-id --id open-dt-xxx
+  dws contact user search-open-dingtalk --id open-dt-xxx  # 别名`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "id", "open-dingtalk-id", "openDingtalkId"); err != nil {
+				return err
+			}
+			openDingtalkId := strings.TrimSpace(flagOrFallback(cmd, "id", "open-dingtalk-id", "openDingtalkId"))
+			if openDingtalkId == "" {
+				return apperrors.NewValidation(fmt.Sprintf("--%s 不能为空", contactFirstSetFlagName(cmd, "id", "open-dingtalk-id", "openDingtalkId")))
+			}
+			return callMCPTool("get_user_id_by_open_dingtalk_id", map[string]any{
+				"open_dingtalk_id": openDingtalkId,
+			})
+		},
+	}
+	DeclareLeafMetadata(contactUserGetByOpenDingtalkIdCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_user_id_by_open_dingtalk_id",
+				CanonicalPath:  "contact.get_user_id_by_open_dingtalk_id",
+				CLIPath:        "contact user get-by-open-dingtalk-id",
+				PrimaryCLIPath: "contact user get-by-open-dingtalk-id",
+			},
+			Description: "根据开放钉钉号ID获取用户 userId",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_user_id_by_open_dingtalk_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "根据开放钉钉号ID获取用户 userId",
+				UseWhen:      []string{"已知员工开放钉钉号ID（openDingTalkId，常见于好友事件消息体），需要获取其 userId 时"},
+				AvoidWhen: []string{
+					"已知普通钉钉号（dingtalkId）请用 contact user get-by-dingtalk-id",
+					"按姓名/手机号找人请用 contact user search / search-mobile",
+					"已有 userId 需要详情请用 contact user get",
+				},
+				Examples: []string{"dws contact user get-by-open-dingtalk-id --id open-dt-xxx --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "open_dingtalk_id", Required: boolPtr(true)},
+				{Name: "open-dingtalk-id", Property: "open_dingtalk_id", Required: boolPtr(false)},
+				{Name: "openDingtalkId", Property: "open_dingtalk_id", Required: boolPtr(false)},
 			},
 		},
 	})
@@ -2794,6 +2859,11 @@ contact user profile fields 获取可用字段列表。
 	contactUserGetByDingtalkIdCmd.Flags().String("dingtalkId", "", "--id 的别名")
 	_ = contactUserGetByDingtalkIdCmd.Flags().MarkHidden("dingtalk-id")
 	_ = contactUserGetByDingtalkIdCmd.Flags().MarkHidden("dingtalkId")
+	contactUserGetByOpenDingtalkIdCmd.Flags().String("id", "", "开放钉钉号ID openDingTalkId (必填)")
+	contactUserGetByOpenDingtalkIdCmd.Flags().String("open-dingtalk-id", "", "--id 的别名")
+	contactUserGetByOpenDingtalkIdCmd.Flags().String("openDingtalkId", "", "--id 的别名")
+	_ = contactUserGetByOpenDingtalkIdCmd.Flags().MarkHidden("open-dingtalk-id")
+	_ = contactUserGetByOpenDingtalkIdCmd.Flags().MarkHidden("openDingtalkId")
 	contactUserGetCmd.Flags().String("ids", "", "用户 ID 列表 (必填)")
 	contactUserGetCmd.Flags().String("user-id", "", "--ids 的别名")
 	contactUserGetCmd.Flags().String("user-ids", "", "--ids 的别名")
@@ -2802,7 +2872,7 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserGetCmd.Flags().MarkHidden("user-ids")
 	_ = contactUserGetCmd.Flags().MarkHidden("userid")
 	userCmd.AddCommand(
-		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetByDingtalkIdCmd, contactUserGetCmd,
+		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetByDingtalkIdCmd, contactUserGetByOpenDingtalkIdCmd, contactUserGetCmd,
 		contactUserInviteCmd,        // 邀请员工加入企业
 		contactUserUpdateCmd,        // 修改员工信息
 		contactUserUpdateSelfCmd,    // 更新当前用户自己的 profile 信息

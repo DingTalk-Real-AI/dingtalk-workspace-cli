@@ -16,8 +16,8 @@ func TestStrictFriendListProjectsCleanList(t *testing.T) {
 		"success": true,
 		"result": {
 			"friendList": [
-				{"dingtalkId":"alice","alias":"Alice","remark":"colleague","status":1,"gmtCreate":1758422400000},
-				{"dingtalkId":"bob","alias":"Bob","status":1}
+				{"openDingTalkId":"open-dt-alice","alias":"Alice","remark":"colleague","status":1,"gmtCreate":1758422400000},
+				{"openDingTalkId":"open-dt-bob","alias":"Bob","status":1}
 			],
 			"cursor": 100,
 			"hasMore": true
@@ -34,7 +34,7 @@ func TestStrictFriendListProjectsCleanList(t *testing.T) {
 	if len(friends) != 2 {
 		t.Fatalf("want 2 friends, got %d (%v)", len(friends), friends)
 	}
-	if friends[0]["dingtalkId"] != "alice" || friends[0]["remark"] != "colleague" {
+	if friends[0]["openDingTalkId"] != "open-dt-alice" || friends[0]["remark"] != "colleague" {
 		t.Fatalf("first friend projection mismatch: %v", friends[0])
 	}
 	if _, exists := friends[1]["remark"]; exists {
@@ -58,23 +58,23 @@ func TestStrictFriendListEmpty(t *testing.T) {
 	}
 }
 
-func TestStrictFriendListRejectsMissingDingtalkId(t *testing.T) {
+func TestStrictFriendListRejectsMissingOpenDingTalkId(t *testing.T) {
 	_, _, _, err := strictFriendList(map[string]any{
 		"success": true,
 		"result":  map[string]any{"friendList": []any{map[string]any{"alias": "Alice"}}},
 	}, friendOperationList)
 	if err == nil {
-		t.Fatal("expected error for missing dingtalkId")
+		t.Fatal("expected error for missing openDingTalkId")
 	}
 }
 
-func TestStrictFriendListRejectsDuplicateDingtalkId(t *testing.T) {
+func TestStrictFriendListRejectsDuplicateOpenDingTalkId(t *testing.T) {
 	_, _, _, err := strictFriendList(map[string]any{
 		"success": true,
-		"result":  map[string]any{"friendList": []any{map[string]any{"dingtalkId": "alice"}, map[string]any{"dingtalkId": "alice"}}},
+		"result":  map[string]any{"friendList": []any{map[string]any{"openDingTalkId": "open-dt-alice"}, map[string]any{"openDingTalkId": "open-dt-alice"}}},
 	}, friendOperationList)
 	if err == nil {
-		t.Fatal("expected error for duplicate dingtalkId")
+		t.Fatal("expected error for duplicate openDingTalkId")
 	}
 }
 
@@ -83,8 +83,8 @@ func TestStrictFriendRequestListProjectsCleanList(t *testing.T) {
 		"success": true,
 		"result": {
 			"friendList": [
-				{"dingtalkId":"alice","status":0,"remark":"hi","modifyAt":1758422400000,"isRead":false},
-				{"dingtalkId":"bob","status":1,"modifyAt":1758422500000,"isRead":true}
+				{"openDingTalkId":"open-dt-alice","status":0,"remark":"hi","modifyAt":1758422400000,"isRead":false},
+				{"openDingTalkId":"open-dt-bob","status":1,"modifyAt":1758422500000,"isRead":true}
 			],
 			"cursor": 50,
 			"hasMore": false,
@@ -102,7 +102,7 @@ func TestStrictFriendRequestListProjectsCleanList(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("want 2 requests, got %d (%v)", len(requests), requests)
 	}
-	if requests[0]["dingtalkId"] != "alice" || requests[0]["isRead"] != false {
+	if requests[0]["openDingTalkId"] != "open-dt-alice" || requests[0]["isRead"] != false {
 		t.Fatalf("first request projection mismatch: %v", requests[0])
 	}
 	if cursor != 50 || hasMore || pendingCount != 1 {
@@ -123,13 +123,13 @@ func TestStrictFriendRequestListEmpty(t *testing.T) {
 	}
 }
 
-func TestStrictFriendRequestListRejectsMissingDingtalkId(t *testing.T) {
+func TestStrictFriendRequestListRejectsMissingOpenDingTalkId(t *testing.T) {
 	_, _, _, _, err := strictFriendRequestList(map[string]any{
 		"success": true,
 		"result":  map[string]any{"friendList": []any{map[string]any{"status": 0}}},
 	}, friendOperationRequestList)
 	if err == nil {
-		t.Fatal("expected error for missing dingtalkId")
+		t.Fatal("expected error for missing openDingTalkId")
 	}
 }
 
