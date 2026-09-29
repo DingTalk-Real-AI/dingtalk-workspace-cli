@@ -69,8 +69,8 @@ var ListFriends = shortcut.Shortcut{
 		Parameters: []contract.ParamDecl{{Name: "cursor"}, {Name: "size"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor", Default: "0"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "每页数量，默认 20", Default: "20"},
+		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor（--cursor 必须大于或等于 0）", Default: "0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "每页数量（--size 必须大于 0 且不超过 100），默认 20", Default: "20"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 必须大于或等于 0"},
@@ -137,8 +137,8 @@ var ListFriendRequests = shortcut.Shortcut{
 		Parameters: []contract.ParamDecl{{Name: "cursor"}, {Name: "size"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor", Default: "0"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "每页数量，默认 20", Default: "20"},
+		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor（--cursor 必须大于或等于 0）", Default: "0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "每页数量（--size 必须大于 0 且不超过 100），默认 20", Default: "20"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 必须大于或等于 0"},
@@ -217,7 +217,7 @@ var SendFriendRequest = shortcut.Shortcut{
 		{Name: "remark", Type: shortcut.FlagString, Desc: "好友申请验证留言（可选）"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"to"}, Description: "--to 必须是非空字符串"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"to"}, Description: "--to 不能为空白"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		return validateContactNonBlank(rt, friendOperationRequestSend, "to")
@@ -271,7 +271,7 @@ var AcceptFriendRequest = shortcut.Shortcut{
 		{Name: "alias", Type: shortcut.FlagString, Desc: "同意后为该好友设置的备注名（可选）"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"from"}, Description: "--from 必须是非空字符串"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"from"}, Description: "--from 不能为空白"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		return validateContactNonBlank(rt, friendOperationRequestAccept, "from")
@@ -324,7 +324,7 @@ var RejectFriendRequest = shortcut.Shortcut{
 		{Name: "from", Type: shortcut.FlagString, Desc: "对方开放钉钉号ID（openDingTalkId）；--from 不能为空白", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"from"}, Description: "--from 必须是非空字符串"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"from"}, Description: "--from 不能为空白"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		return validateContactNonBlank(rt, friendOperationRequestReject, "from")
@@ -374,7 +374,7 @@ var RemoveFriend = shortcut.Shortcut{
 		{Name: "friend", Type: shortcut.FlagString, Desc: "要删除的好友开放钉钉号ID（openDingTalkId）；--friend 不能为空白", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"friend"}, Description: "--friend 必须是非空字符串"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"friend"}, Description: "--friend 不能为空白"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		return validateContactNonBlank(rt, friendOperationRemove, "friend")

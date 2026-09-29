@@ -31,8 +31,8 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 			registered[item.Command] = item
 		}
 	}
-	if len(registered) != 16 || len(source.Shortcuts) != 16 {
-		t.Fatalf("registered/catalog = %d/%d, want 16/16", len(registered), len(source.Shortcuts))
+	if len(registered) != 22 || len(source.Shortcuts) != 22 {
+		t.Fatalf("registered/catalog = %d/%d, want 22/22", len(registered), len(source.Shortcuts))
 	}
 	wantCompatibilityVisible := map[string]bool{"+list-roles": true}
 	public, unavailable := 0, 0
@@ -98,7 +98,7 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 			}
 		}
 	}
-	if public != 13 || unavailable != 3 {
-		t.Fatalf("public/unavailable = %d/%d, want 13/3", public, unavailable)
+	if public != 19 || unavailable != 3 {
+		t.Fatalf("public/unavailable = %d/%d, want 19/3", public, unavailable)
 	}
 }
