@@ -1733,7 +1733,7 @@ func newContactCommand() *cobra.Command {
 
 	contactUserGetByOpenDingtalkIdCmd := &cobra.Command{
 		Use:     "get-by-open-dingtalk-id",
-		Aliases: []string{"search-open-dingtalk-id"},
+		Aliases: []string{"get-user-by-open-dingtalk-id"},
 		Short:   "按开放钉钉号ID获取用户ID",
 		Long: `根据开放钉钉号ID（openDingTalkId）查询当前组织内员工，返回其 userId。
 
@@ -1744,7 +1744,7 @@ user_contact_friend_added）等业务消息体中。
 注意：openDingTalkId 与钉钉号（dingtalkId，如 zhangsan）不是同一概念。
 已知普通钉钉号时请使用 contact user get-by-dingtalk-id。`,
 		Example: `  dws contact user get-by-open-dingtalk-id --id open-dt-xxx
-  dws contact user search-open-dingtalk-id --id open-dt-xxx  # 别名`,
+  dws contact user get-user-by-open-dingtalk-id --id open-dt-xxx  # 别名`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "id", "open-dingtalk-id", "openDingtalkId"); err != nil {
 				return err

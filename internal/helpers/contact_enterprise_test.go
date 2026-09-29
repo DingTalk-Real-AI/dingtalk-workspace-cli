@@ -169,7 +169,7 @@ func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testin
 		},
 		{
 			name:     "get user id by open dingtalk id alias",
-			args:     []string{"user", "search-open-dingtalk-id", "--open-dingtalk-id", " open-dt-zhangsan "},
+			args:     []string{"user", "get-user-by-open-dingtalk-id", "--open-dingtalk-id", " open-dt-zhangsan "},
 			toolName: "get_user_id_by_open_dingtalk_id",
 			wantArgs: map[string]any{
 				"open_dingtalk_id": "open-dt-zhangsan",
