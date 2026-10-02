@@ -599,7 +599,8 @@ func TestCrossPlatformCoverageSkillPublicationPinFailure(t *testing.T) {
 				t.Fatalf("uncertain destination changed: content=%q err=%v", content, err)
 			}
 			if held != nil {
-				if _, err := held.Stat(); !errors.Is(err, os.ErrClosed) {
+				// Stat 在 Windows 返回原生句柄错误；重复 Close 统一返回 ErrClosed。
+				if err := held.Close(); !errors.Is(err, os.ErrClosed) {
 					t.Fatalf("failed publication leaked pin: %v", err)
 				}
 			}
