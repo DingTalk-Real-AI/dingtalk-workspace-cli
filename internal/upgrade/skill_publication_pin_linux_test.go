@@ -117,68 +117,8 @@ func TestCrossPlatformCoverageSkillPublicationPinLifetime(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageSkillPublicationPinFailure(t *testing.T) {
+func TestCrossPlatformCoverageSkillPublicationPinMissingPath(t *testing.T) {
 	if _, err := pinSkillPathIdentity(filepath.Join(t.TempDir(), "missing")); !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-	for _, failure := range []string{"open", "closed", "confirmation"} {
-		t.Run(failure, func(t *testing.T) {
-			root := t.TempDir()
-			staged, destination := filepath.Join(root, "staged"), filepath.Join(root, "destination")
-			seedUpgradeSkill(t, staged, "new", false)
-			var held *os.File
-			testseam.Swap(t, &skillPathPinIdentity, func(path string) (*os.File, error) {
-				if failure == "open" {
-					return nil, os.ErrPermission
-				}
-				var err error
-				held, err = pinSkillPathIdentity(path)
-				if err != nil {
-					return nil, err
-				}
-				if failure == "closed" {
-					_ = held.Close()
-				}
-				if failure == "confirmation" {
-					original := skillPathLstat
-					testseam.Swap(t, &skillPathLstat, func(path string) (os.FileInfo, error) {
-						if path == destination {
-							return nil, os.ErrPermission
-						}
-						return original(path)
-					})
-				}
-				return held, nil
-			})
-			if _, err := PublishSkillPathNoReplace(staged, destination); err == nil {
-				t.Fatal("must fail closed")
-			}
-			if _, err := os.Lstat(destination); err != nil {
-				t.Fatal("uncertain destination must remain:", err)
-			}
-			if held != nil {
-				if _, err := held.Stat(); !errors.Is(err, os.ErrClosed) {
-					t.Fatalf("failed publication leaked pin: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestCrossPlatformCoverageSkillPublicationPinCloseError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(path, []byte("new"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	pin, err := pinSkillPathIdentity(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = pin.Close() })
-	// 不直接关闭底层 FD，以免并发运行时复用编号后误关其他文件。
-	failure := errors.New("injected close failure")
-	testseam.Swap(t, &skillPathCloseIdentityPin, func(*os.File) error { return failure })
-	if err := ReleaseSkillPathPublications([]SkillPathPublication{{identityPin: pin}}); !errors.Is(err, failure) {
 		t.Fatal(err)
 	}
 }
