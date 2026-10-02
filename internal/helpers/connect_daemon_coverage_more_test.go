@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -163,7 +164,14 @@ func TestCrossPlatformCoverageStartDaemonLifecycleEdges(t *testing.T) {
 		preserveDaemonHooks(t)
 		connectDaemonDirOverride = t.TempDir()
 		daemonExecutable = os.Executable
-		fixture := writeShellExecutable(t, t.TempDir(), "daemon-success", "exit 0\n")
+		// Keep the child alive until the test has acquired its own process handle.
+		// startDaemon releases its handle as part of normal detached operation.
+		exitGate := filepath.Join(t.TempDir(), "exit")
+		gatePath := ShellQuoteArg(filepath.ToSlash(exitGate))
+		fixture := writeShellExecutable(t, t.TempDir(), "daemon-success",
+			fmt.Sprintf("while [ ! -f %s ]; do sleep 0.05; done\nexit 0\n", gatePath))
+		// Also release the gate if start/output assertions fail before PID lookup.
+		t.Cleanup(func() { _ = os.WriteFile(exitGate, nil, 0o600) })
 		daemonCommand = func(string, ...string) *exec.Cmd { return exec.Command(fixture) }
 		cmd := daemonTestCommand()
 		var out, errOut bytes.Buffer
@@ -172,6 +180,40 @@ func TestCrossPlatformCoverageStartDaemonLifecycleEdges(t *testing.T) {
 		if err := startDaemon(cmd, "key", "client", "app", "custom", "staff", "profile", true); err != nil {
 			t.Fatalf("startDaemon() error = %v", err)
 		}
+		var pid int
+		if _, err := fmt.Sscanf(out.String(), "connect daemon started (pid %d)", &pid); err != nil || pid <= 0 {
+			t.Fatalf("daemon PID missing from output %q: %v", out.String(), err)
+		}
+		child, err := os.FindProcess(pid)
+		if err != nil {
+			t.Fatalf("open daemon fixture process: %v", err)
+		}
+		done := make(chan struct{})
+		var state *os.ProcessState
+		var waitErr error
+		go func() {
+			state, waitErr = child.Wait()
+			close(done)
+		}()
+		t.Cleanup(func() {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			_ = os.WriteFile(exitGate, nil, 0o600)
+			select {
+			case <-done:
+				return
+			case <-time.After(5 * time.Second):
+			}
+			_ = child.Kill()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Error("daemon fixture did not exit after cleanup kill")
+			}
+		})
 		// The streaming root remains legacy until a dedicated stream contract.
 		if !strings.Contains(out.String(), "daemon started") || !strings.Contains(out.String(), "pid") {
 			t.Fatalf("legacy daemon start output = %q", out.String())
@@ -180,23 +222,26 @@ func TestCrossPlatformCoverageStartDaemonLifecycleEdges(t *testing.T) {
 			t.Fatalf("legacy daemon start stderr = %q", errOut.String())
 		}
 
-		// startDaemon intentionally releases its detached child. On Windows the
-		// child keeps daemon.log locked until it exits, so wait for that handle
-		// to close before TempDir cleanup.
+		if err := os.WriteFile(exitGate, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-done:
+			if waitErr != nil || state == nil || !state.Success() {
+				t.Fatalf("daemon fixture exit: state=%v, error=%v", state, waitErr)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("daemon fixture did not exit after release")
+		}
+
+		// Assert that the log is removable only after observing child exit.
+		// Retain the bounded Windows sharing-violation retry for filesystem lag.
 		dir, err := connectDaemonDir("key")
 		if err != nil {
 			t.Fatal(err)
 		}
-		deadline := time.Now().Add(2 * time.Second)
-		for {
-			err = os.Remove(daemonLogPath(dir))
-			if err == nil || os.IsNotExist(err) {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("daemon log remained locked: %v", err)
-			}
-			time.Sleep(10 * time.Millisecond)
+		if err := retryHelpersFixtureCleanup(func() error { return os.Remove(daemonLogPath(dir)) }); err != nil {
+			t.Fatalf("daemon log remained locked after child exit: %v", err)
 		}
 	})
 }

@@ -30,6 +30,32 @@ type SkillPathPublication struct {
 	identity    os.FileInfo
 	incarnation string
 	fileID      string
+	identityPin *os.File
+}
+
+var skillPathPinIdentity = pinSkillPathIdentity
+var skillPathCloseIdentityPin = (*os.File).Close
+
+// ReleaseSkillPathPublications 在事务提交后释放身份句柄，不删除发布内容。
+// 回滚入口也会释放；重复释放安全。Linux 句柄释放后不再授权回滚删除。
+func ReleaseSkillPathPublications(publications []SkillPathPublication) error {
+	var result error
+	for _, publication := range publications {
+		if publication.identityPin != nil {
+			if err := skillPathCloseIdentityPin(publication.identityPin); err != nil && !errors.Is(err, os.ErrClosed) {
+				result = errors.Join(result, err)
+			}
+		}
+	}
+	return result
+}
+
+func skillPathPinnedIdentityMatches(pin *os.File, info os.FileInfo) bool {
+	if pin == nil {
+		return true // 非 Linux 平台保留既有身份机制。
+	}
+	held, err := pin.Stat()
+	return err == nil && os.SameFile(held, info)
 }
 
 // PublishSkillPathNoReplace atomically publishes a staged path without ever
@@ -43,7 +69,7 @@ type SkillPathPublication struct {
 // identity no longer matches dest, publication reports uncertain state
 // (ErrSkillPathPublicationUncertain) and keeps dest — auto-retracting or
 // overwriting would delete the concurrent writer's data.
-func PublishSkillPathNoReplace(staged, destination string) (SkillPathPublication, error) {
+func PublishSkillPathNoReplace(staged, destination string) (publication SkillPathPublication, err error) {
 	identity, err := skillPathLstat(staged)
 	if err != nil {
 		return SkillPathPublication{}, fmt.Errorf("读取待发布 Skill 身份失败 %s: %w", staged, err)
@@ -57,6 +83,17 @@ func PublishSkillPathNoReplace(staged, destination string) (SkillPathPublication
 	if err != nil {
 		return SkillPathPublication{}, fmt.Errorf("目标必须不存在的 Skill 发布失败 %s: %w", destination, err)
 	}
+	// 在采集发布快照前固定对象生命周期。Linux unlink 后可以立即复用
+	// inode 和时间戳；仅保存 Lstat 数值与内容摘要不足以证明回滚归属。
+	pin, err := skillPathPinIdentity(destination)
+	if err != nil {
+		return SkillPathPublication{}, fmt.Errorf("固定已发布 Skill 身份失败 %s（对象保留）: %w", destination, err)
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, ReleaseSkillPathPublications([]SkillPathPublication{{identityPin: pin}}))
+		}
+	}()
 	// If the child-move fallback published dest, the claim identity must
 	// still describe the object at destination. A wholesale replacement of
 	// dest between the mkdir claim and this check produces a different
@@ -90,12 +127,16 @@ func PublishSkillPathNoReplace(staged, destination string) (SkillPathPublication
 	if publishedFingerprint != fingerprint {
 		return SkillPathPublication{}, fmt.Errorf("确认已发布 Skill 内容失败 %s（对象保留）: staging 内容已变化", destination)
 	}
+	if !skillPathPinnedIdentityMatches(pin, publishedIdentity) {
+		return SkillPathPublication{}, fmt.Errorf("%w：已发布 Skill %s 的身份句柄无法验证；对象保留", ErrSkillPathPublicationUncertain, destination)
+	}
 	return SkillPathPublication{
 		Destination: destination,
 		fingerprint: fingerprint,
 		identity:    publishedIdentity,
 		incarnation: skillPathFileIncarnation(publishedIdentity),
 		fileID:      publishedFileID,
+		identityPin: pin,
 	}, nil
 }
 
@@ -103,8 +144,8 @@ func PublishSkillPathNoReplace(staged, destination string) (SkillPathPublication
 // to have been published by this transaction. Each live path is first claimed
 // into a private sibling quarantine. A concurrent replacement is restored when
 // possible, otherwise retained in quarantine and reported explicitly.
-func RollbackSkillPathPublications(publications []SkillPathPublication) error {
-	var rollbackErr error
+func RollbackSkillPathPublications(publications []SkillPathPublication) (rollbackErr error) {
+	defer func() { rollbackErr = errors.Join(rollbackErr, ReleaseSkillPathPublications(publications)) }()
 	for i := len(publications) - 1; i >= 0; i-- {
 		if err := rollbackSkillPathPublication(publications[i]); err != nil {
 			rollbackErr = errors.Join(rollbackErr, err)
@@ -140,6 +181,7 @@ func rollbackSkillPathPublication(publication SkillPathPublication) (err error) 
 		)
 	}
 	if publication.identity == nil ||
+		!skillPathPinnedIdentityMatches(publication.identityPin, liveIdentity) ||
 		!skillPathIdentityProven(publication.identity, liveIdentity, publication.fileID, skillPathFileIdentity(destination)) ||
 		publication.incarnation != skillPathFileIncarnation(liveIdentity) ||
 		liveFingerprint != publication.fingerprint {
@@ -160,6 +202,7 @@ func rollbackSkillPathPublication(publication SkillPathPublication) (err error) 
 	actualIdentity, identityErr := skillPathLstat(quarantine)
 	actual, fingerprintErr := fingerprintSkillPath(quarantine)
 	if identityErr == nil && fingerprintErr == nil &&
+		skillPathPinnedIdentityMatches(publication.identityPin, actualIdentity) &&
 		skillPathIdentityProven(publication.identity, actualIdentity, publication.fileID, skillPathFileIdentity(quarantine)) &&
 		actual == publication.fingerprint {
 		if removeErr := removePublishedSkillSource(quarantine); removeErr != nil {

@@ -49,6 +49,11 @@ func TestCrossPlatformCoverageIsSensitiveKey(t *testing.T) {
 		{"dws_auth_code", true},
 		{"password", true},
 		{"cookie", true},
+		{"api_key", true},
+		{"api-key", true},
+		{"apiKey", true},
+		{"ApiKey", true},
+		{"APIKEY", true},
 		{"Content-Type", false},
 		{"X-Cli-Source", false},
 		{"method", false},
@@ -119,6 +124,7 @@ func TestSanitizeArguments(t *testing.T) {
 		"dwsAuthCode": "test-dws-auth-code-should-never-appear",
 		"nested": map[string]any{
 			"api_key": "key-value",
+			"apiKey":  "camel-case-key-value",
 			"safe":    "ok",
 		},
 	}

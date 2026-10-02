@@ -52,6 +52,7 @@ func TestRootHelpHidesCompatibilityOnlyCommands(t *testing.T) {
 	}
 	for _, want := range []string{
 		"● dev",
+		"• aicard",
 		"• upgrade",
 	} {
 		if !strings.Contains(help, want) {

@@ -40,6 +40,7 @@ var sensitiveKeys = map[string]bool{
 	"password":                    true,
 	"cookie":                      true,
 	"api_key":                     true,
+	"apikey":                      true,
 	"api-key":                     true,
 	"access_token":                true,
 	"dwsauthcode":                 true,

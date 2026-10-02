@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/common-types-basic.json",
+  "title": "DingTalk AICard Protocol V0.8 Basic Common Types",
+  "description": "Basic common types based on the current DingTalk definitions; sharing a name with an official type does not imply equivalence. See ./common-types-extended.json for action and expression extensions, and ./common-types-visual.json for colors, font sizes and icons. Basic components may depend on these types as well. The DingTalk AICard Protocol V0.8 is split into shards for selective loading. Consumers must assemble and validate the files required by the selected scope. Modified by DingTalk from A2UI v1.0 common_types.json; selected definitions and descriptions are retained. See NOTICE for provenance and changes.",
+  "$defs": {
+    "ComponentId": {
+      "type": "string",
+      "description": "The unique identifier for a component, used for both definitions and references within the same surface."
+    },
+    "AccessibilityAttributes": {
+      "type": "object",
+      "description": "Provides a name and detailed description for assistive technologies such as screen readers. ⚠️ Reserved by the protocol and currently ineffective: the field itself is valid and never causes a validation failure or a component fallback, but screen readers cannot reach the content configured here.",
+      "properties": {
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "A short string, typically 1 to 3 words, used by assistive technologies to convey the purpose or intent of an element. For example, an input field might have an accessible label of 'User ID' or a button might be labeled 'Submit'."
+        },
+        "description": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Additional information provided by assistive technologies about an element such as instructions, format requirements, or result of an action. For example, a mute button might have a label of 'Mute' and a description of 'Silences notifications about this conversation'."
+        }
+      }
+    },
+    "ComponentCommon": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "./common-types-basic.json#/$defs/ComponentId"
+        },
+        "catalogId": {
+          "type": "string",
+          "description": "Component-level `catalogId` that overrides the surface default catalog."
+        },
+        "accessibility": {
+          "$ref": "./common-types-basic.json#/$defs/AccessibilityAttributes"
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        },
+        "metadata": {}
+      },
+      "required": [
+        "id"
+      ],
+      "allOf": [
+        {
+          "$ref": "./common-types-extended.json#/$defs/HostActionOwner"
+        }
+      ]
+    },
+    "Child": {
+      "$ref": "./common-types-basic.json#/$defs/ComponentId",
+      "description": "A reference to a single child component ID."
+    },
+    "ChildList": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/ComponentId"
+          },
+          "description": "A static list of child component IDs."
+        },
+        {
+          "type": "object",
+          "description": "A template for generating a dynamic list of children from a data model list. The `componentId` is the component to use as a template.",
+          "properties": {
+            "componentId": {
+              "$ref": "./common-types-basic.json#/$defs/ComponentId"
+            },
+            "path": {
+              "type": "string",
+              "description": "The path to the list of component property objects in the data model."
+            }
+          },
+          "required": [
+            "componentId",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "DataBinding": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Data model path; relative paths can be used within the template, and ~ can only be written as ~0 or ~1. Evaluation context, path normalization, and target existence are checked at runtime.",
+          "pattern": "^(?:[^~]|~[01])*$"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "DynamicValue": {
+      "description": "General value: a string, number, boolean, array, `null`, plain object, data binding, or value-function result. An object containing `call` is parsed as a function call; an object whose only key is `path` is parsed as a binding.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "./common-types-extended.json#/$defs/LiteralObject"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicString": {
+      "description": "Represents a value that can be either a string literal, a path to a string in the data model, or a function call returning a string.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicNumber": {
+      "description": "Numeric dynamic value: It can be a JSON number literal, a DataBinding pointing to a numeric value, or a FunctionCall that returns a numeric value. The runtime results of bindings and functions must also be JSON numbers; no implicit conversion from string to number is performed, and numeric strings and ISO 8601 date-time strings are both invalid.",
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicBoolean": {
+      "description": "A boolean value that can be a literal, a path, or a function call returning a boolean.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicStringList": {
+      "description": "Represents a value that can be either a literal array of strings, a path to a string array in the data model, or a function call returning a string array.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "FunctionCommon": {
+      "type": "object",
+      "properties": {
+        "catalogId": {
+          "type": "string",
+          "description": "Function catalog identifier. If omitted, the default catalog of the containing surface is used. This is not a Schema file path."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "copyText"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "openChat"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "previewImages"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "previewVideo"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "promptText"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "showConfirm"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "call": {
+                "const": "showModal"
+              }
+            },
+            "required": [
+              "call"
+            ]
+          },
+          "then": {
+            "properties": {
+              "catalogId": {
+                "const": "urn:dingtalk:a2ui:host:v1",
+                "description": "Required. Explicitly specifies the DingTalk host Function catalog. The public catalog HTTP identifier of the containing surface or component cannot replace this value."
+              }
+            },
+            "required": [
+              "catalogId"
+            ]
+          }
+        }
+      ]
+    },
+    "FunctionCall": {
+      "type": "object",
+      "description": "A2UI v1.0 FunctionCall: Call the renderer function registered in the current surface catalog.",
+      "properties": {
+        "call": {
+          "type": "string",
+          "description": "The name of the function to call."
+        },
+        "catalogId": {
+          "type": "string",
+          "description": "The catalog ID for this function, overriding any surface-level default catalogId."
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments passed to the function.",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+              },
+              {
+                "type": "object",
+                "description": "A literal object argument (e.g. configuration)."
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "$ref": "./catalog-functions-core.json#/$defs/anyFunction"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/$defs/anyFunction"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/$defs/anyFunction"
+        },
+        {
+          "$ref": "./common-types-basic.json#/$defs/IndexSystemFunction"
+        }
+      ],
+      "allOf": [
+        {
+          "$ref": "./common-types-basic.json#/$defs/FunctionCommon"
+        }
+      ]
+    },
+    "CheckRule": {
+      "type": "object",
+      "description": "A single validation rule applied to an input component.",
+      "properties": {
+        "condition": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+        },
+        "message": {
+          "type": "string",
+          "description": "The error message to display if the check fails."
+        }
+      },
+      "required": [
+        "condition",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Action": {
+      "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Triggers an agent-side event.",
+          "properties": {
+            "event": {
+              "type": "object",
+              "description": "The event to dispatch to the agent.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The name of the action to be dispatched to the agent."
+                },
+                "context": {
+                  "type": "object",
+                  "description": "A JSON object containing the key-value pairs for the action context. Values can be literals or paths. Use literal values unless the value must be dynamically bound to the data model. Do NOT use paths for static IDs.",
+                  "additionalProperties": {
+                    "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+                  }
+                },
+                "wantResponse": {
+                  "type": "boolean",
+                  "description": "Response-request metadata. The current public integration does not guarantee the standard response loop; do not rely on `true` to generate a response automatically.",
+                  "default": false
+                },
+                "responsePath": {
+                  "type": "string",
+                  "description": "Standard event-response-path metadata. The current public integration does not guarantee automatic write-back. Host-function results use `metadata.extensions.dt_actionBindingsV1`; business updates use `updateDataModel` or `updateComponents`."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Executes a local renderer-side function.",
+          "properties": {
+            "functionCall": {
+              "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+            }
+          },
+          "required": [
+            "functionCall"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Surface": {
+      "title": "Surface Container Component",
+      "description": "Reserved message layer type, not connected to the package component validation entry; does not indicate that new component or theme capabilities have been opened. The reserved canonical container component representing an A2UI surface. The Surface component is immutable and always has 'child': 'root'.",
+      "type": "object",
+      "allowedParents": [],
+      "properties": {
+        "component": {
+          "const": "Surface"
+        },
+        "child": {
+          "const": "root"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IndexSystemFunction": {
+      "type": "object",
+      "description": "Returns the 0-based index of the current item when rendering a dynamic list from a template. This function MUST ONLY be available when evaluating template items within a list context.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "@index"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+              "description": "Optional. An offset to add to the 0-based index (e.g., 1 for 1-based indexing). Defaults to 0.",
+              "default": 0
+            }
+          },
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "unevaluatedProperties": false
+    },
+    "Extensions": {
+      "type": "object",
+      "description": "Optional extension metadata. Keys MUST be Unicode identifiers (UAX #31). Keys starting with 'a2ui_' are reserved for official extensions.",
+      "patternProperties": {
+        "^[\\p{XID_Start}_][\\p{XID_Continue}]*$": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

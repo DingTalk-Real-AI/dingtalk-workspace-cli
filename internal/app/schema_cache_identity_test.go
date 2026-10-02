@@ -79,7 +79,8 @@ func TestCrossPlatformCoverageSchemaCacheLocalGenerateWriteHitCorruptRepair(t *t
 	}
 	identity, ok := cli.SchemaCacheFastPathIdentity()
 	if !ok {
-		t.Fatal("first schema use did not adopt a generated identity")
+		_, artifactErr := cli.DeliverySchemaCacheArtifactsForTest()
+		t.Fatalf("first schema use did not adopt a generated identity; artifacts: %v", artifactErr)
 	}
 	live, err := cli.DeliverySchemaCacheArtifactsForTest()
 	if err != nil {

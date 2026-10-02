@@ -160,7 +160,7 @@ func SaveProfiles(configDir string, cfg *ProfilesConfig) error {
 	if err := profilesWriteFile(tmp, data, config.FilePerm); err != nil {
 		return fmt.Errorf("write profiles tmp: %w", err)
 	}
-	if err := profilesRename(tmp, path); err != nil {
+	if err := renameAuthFile(tmp, path, profilesRename); err != nil {
 		_ = profilesRemove(tmp)
 		return fmt.Errorf("rename profiles: %w", err)
 	}

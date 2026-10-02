@@ -58,6 +58,11 @@ func TestCrossPlatformCoverageSkillPublicationNoClobberAndOwnedRollback(t *testi
 		// Even a byte-for-byte identical replacement is not owned by this
 		// transaction: inode identity, not content alone, is authoritative.
 		seedUpgradeSkill(t, destination, "new", false)
+		replacement, statErr := os.Lstat(destination)
+		if statErr != nil {
+			t.Fatal(statErr)
+		}
+		t.Logf("replacement fixture: same_file=%t, original=%+v, replacement=%+v", os.SameFile(publication.identity, replacement), publication.identity.Sys(), replacement.Sys())
 
 		err = RollbackSkillPathPublications([]SkillPathPublication{publication})
 		if err == nil || !strings.Contains(err.Error(), "拒绝删除非本事务") {
@@ -104,6 +109,16 @@ func TestCrossPlatformCoverageSkillPublicationNoClobberAndOwnedRollback(t *testi
 		}
 		assertUpgradeSkillContent(t, destination, "new")
 	})
+}
+
+func TestCrossPlatformCoverageSkillPublicationOptionalPin(t *testing.T) {
+	// 非 Linux 平台没有新增句柄；原来的身份与内容检查仍然是必需的。
+	if !skillPathPinnedIdentityMatches(nil, nil) {
+		t.Fatal("optional pin must preserve existing platform identity checks")
+	}
+	if err := ReleaseSkillPathPublications([]SkillPathPublication{{}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCrossPlatformCoverageSkillPublicationFailureEdges(t *testing.T) {

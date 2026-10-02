@@ -941,3 +941,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 |------|------|------|
 | [oa_pending_review.py](../../scripts/oa_pending_review.py) | 查看待审批列表+逐条显示详情 | `python oa_pending_review.py --days 7` |
 | [oa_batch_approve.py](../../scripts/oa_batch_approve.py) | 批量同意/拒绝审批项 | `python oa_batch_approve.py --action approve --days 7` |
+
+### 创建和更新模板路由
+
+用户要创建或更新审批模板时，继续读取 [oa-template-write.md](oa-template-write.md)。不要凭本文件直接组装 `--schema-content` 或 `--process-config`。

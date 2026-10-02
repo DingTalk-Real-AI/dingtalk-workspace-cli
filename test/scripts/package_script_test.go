@@ -440,6 +440,11 @@ func waitForProcessExit(t *testing.T, pid int, label string) {
 		if err := exec.Command("kill", "-0", strconv.Itoa(pid)).Run(); err != nil {
 			return
 		}
+		// 容器的 PID 1 可能尚未回收孤儿进程；僵尸已经退出，不能当成仍在运行。
+		if status, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output(); err == nil && strings.HasPrefix(strings.TrimSpace(string(status)), "Z") {
+			t.Logf("%s process %d exited; awaiting container init reaping", label, pid)
+			return
+		}
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("%s process %d is still running after npm wrapper exited", label, pid)

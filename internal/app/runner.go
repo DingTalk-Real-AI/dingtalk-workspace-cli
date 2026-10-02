@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -330,6 +331,10 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		return executor.Result{}, apperrors.NewValidation(err.Error())
 	}
 	if multi {
+		// Credential commands bind one Base to one authenticated identity.
+		if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+			return executor.Result{}, aitableprotocol.SQLSheetKeyProfileError()
+		}
 		return r.runMultiProfile(ctx, invocation, selections)
 	}
 	if strings.TrimSpace(rawProfile) != "" {
@@ -807,6 +812,11 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return executor.Result{}, err
 	}
 
+	// Do not persist credential response bodies in transport diagnostics.
+	if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+		tc.FileLogger = nil
+		tc.SnapshotRecorder = nil
+	}
 	callStart := time.Now()
 	// tools/call can mutate remote state even when the gateway returns an error.
 	// Only callers with a reviewed read/reconciliation policy may replay it;
@@ -814,6 +824,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
 	traceWhiteboardTransportResponse(invocation, callResult, err)
 	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
+	// A sent credential request must not enter authentication replay paths.
+	if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+		if err != nil {
+			return executor.Result{}, aitableprotocol.SQLSheetKeyFailure(invocation.Tool, "")
+		}
+		if responseErr := sqlSheetKeyToolResultError(invocation.Tool, callResult); responseErr != nil {
+			return executor.Result{}, responseErr
+		}
+		return r.sqlSheetKeyResult(endpoint, invocation, callResult.Content)
+	}
 	if err != nil {
 		if !hasRequestToken && isRefreshableTransportAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
