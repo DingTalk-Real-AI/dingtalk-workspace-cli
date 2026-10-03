@@ -153,14 +153,22 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				t.Errorf("%s %s = %q, want %q", canonical, field, got, expected)
 			}
 		}
-		if want.tool == "" {
+		composite := want.tool == "" || canonical == "dingtalk-tag.create_digital_employee" ||
+			canonical == "dingtalk-tag.publish_digital_employee"
+		if composite {
 			if got := schemaContractString(tool["interface_mode"]); got != "composite" {
 				t.Errorf("%s interface_mode = %q, want composite", canonical, got)
 			}
 			if ref := schemaInterfaceObject(tool["interface_ref"]); len(ref) != 0 {
 				t.Errorf("%s composite unexpectedly exposes interface_ref %#v", canonical, ref)
 			}
+			if reason := schemaContractString(tool["interface_reason"]); reason == "" {
+				t.Errorf("%s composite has no interface_reason", canonical)
+			}
 		} else {
+			if got := schemaContractString(tool["interface_mode"]); got != "mcp" {
+				t.Errorf("%s interface_mode = %q, want mcp", canonical, got)
+			}
 			ref := schemaInterfaceObject(tool["interface_ref"])
 			if got := schemaContractString(ref["product_id"]); got != "deap-dev" {
 				t.Errorf("%s interface product = %q, want deap-dev", canonical, got)
@@ -311,6 +319,13 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 			t.Errorf("%s agent-uuid must be required in final Schema", canonical)
 		}
 	}
+}
+
+func TestCrossPlatformCoverageDeapAgentSkillUpdatePublishesExactlyOneConstraint(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.update_skill")
+	tool := payload.Tools["dingtalk-tag.update_skill"]
+	assertSchemaContractConstraintGroup(t, tool, "require_one_of", []string{"enabled", "file"})
+	assertSchemaContractConstraintGroup(t, tool, "mutually_exclusive", []string{"enabled", "file"})
 }
 
 func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
