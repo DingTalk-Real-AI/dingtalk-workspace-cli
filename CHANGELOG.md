@@ -42,10 +42,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Added
 
-- **AI 卡片** — 新增 `dws aicard explain <name>`、`lint`、`preview`，提供内嵌钉钉 A2UI 协议的原生离线查询与结构校验。本人预览先校验完整新卡片文件，再发送到当前用户单聊；dry-run 不发送，请求受理与客户端实际渲染证据分别报告。
-- **分享范围** — 新增 `dws drive permission set-share-scope` 与 `dws wiki permission set-share-scope`，支持节点或知识库空间的 PRIVATE / ORGANIZATION / PUBLIC 范围、角色、合作方和组织搜索/推荐设置；Drive 节点另支持密码与过期时间，未传字段保持原值。
-- **OA 审批模板写入** — 新增 `dws oa approval template create` / `update`，支持逐项参数或 `--from-document` 完整 JSON 文档配置，两种模式互斥；本地检查控件 ID 唯一性与流程结构，保留服务端同名及数量限制错误。dry-run 仅校验及展示请求，成功返回 `data.processCode`；创建或更新后的真实状态仍需详情回读。同步模板写入、流程节点及连接器审批人说明。
-- **AI 表格访问密钥** — 新增 SQL Sheet API Key 的创建、查询和撤销命令及 Agent 使用说明；完整凭据仅创建时返回，创建结果未知时先查询状态。
+- Add `dws aicard explain <name>`, `lint`, and `preview`. The embedded DingTalk A2UI protocol supports native offline lookup and structural validation without Python. Preview validates a complete new-card file and sends it to the current user's direct chat; dry-run does not send. Include the DWS authoring Skill and report request acceptance separately from client-rendering evidence.
+
+- **Drive & Wiki set-share-scope** — add `dws drive permission set-share-scope` and `dws wiki permission set-share-scope` for managing node-level and workspace-level share visibility (PRIVATE / ORGANIZATION / PUBLIC) with partial-update semantics, role control, partner inclusion, organization search/recommend toggles, password protection and expiration (drive node only).
+
+- **OA 审批模板创建与更新命令** — 新增 `dws oa approval template create`（`oa/create_process_template`）与 `dws oa approval template update`（`oa/update_process_template`），均为企业钉钉管理员能力。两者支持逐项参数模式（`create` 必填 `--name`、`--schema-content`；`update` 必填 `--process-code`、`--name`、`--schema-content`、`--process-config`），也支持 `--from-document` 传入完整 JSON 文档的绝对路径整体配置，两种模式互斥；`--schema-content`、`--process-config` 等对象参数以 JSON 字符串发送给 MCP，`--plugin-configs`、`--visible-range`、`--manager-user-ids` 以数组发送，均支持直接 JSON、`@文件` 与 `-` 标准输入。CLI 侧做本地校验：`schemaContent` 控件 `props.id` 唯一性检查（递归进 `children` 嵌套控件）与 `processConfig` 结构校验，并解析 MCP 返回的 `810001`（同名模板冲突）/`810002`（模板数量超限）拒绝码为失败输出而非静默重试；`--dry-run` 仅做本地校验并展示请求参数（`executed=false`），成功统一由 `data.processCode` 返回模板编码。构造 `processConfig` 时若未显式指定审批人类型，审批节点默认使用**部门主管**（`target_management`）而非直属主管。**Skill 文档**：新增 `oa-template-write.md`（从 `oa.md` 拆分模板写入路由，渐进披露）与连接器审批人规则 `target_connect_approval.md`，并补充 50+ 个控件 schema、流程节点、选人规则子文档；`oa.md` 增加模板管理路由条目、`process-nodes.md` 增加连接器审批人条目、`SKILL.md` 引用 `oa-template-write.md`。**验证状态**：变更代码含完整单测（含 `schema_oa_template_contract_test.go` Schema 契约测试）与 `mono-multi-coverage.yaml` 的 `oa-template-write` 注册；模板名称是否可用、数量是否超限由创建 MCP 校验，dry-run 不能证明名称可用，建议创建/更新后再用 `template detail` 核对实际状态。
+
+- **AI 表格访问密钥** — 新增 SQL Sheet API Key 的创建、查询和撤销命令，以及对应的 Agent 使用说明；完整凭据仅创建时返回，创建结果未知时先查询状态。
 
 ### Changed
 
@@ -54,14 +57,17 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
-- 固定 AI 卡片协议 JSON 的 Git 检出换行为 LF，修复 Windows 自动转换 CRLF 后协议哈希校验失败的问题。
-- 修复 Windows 鉴权文件遇到短暂占用时的替换失败，对受限错误有界重试并在失败时保留旧文件。
-- 修复 Linux Skill 安装的目录身份校验，固定目录句柄并在结束后释放；修复产品根名称与产品 ID 不一致时的 Schema 缓存定位。
-- AI 听记整包导出支持服务端明确成功的空摘要，分析等待器继续保持严格判断；钉钉招聘创建职位正确处理校园招聘默认值并保留 Connector 业务错误。
+- 固定 AI 卡片协议 JSON 的 Git 检出换行为 LF，修复 Windows 自动转换 CRLF 后协议哈希校验失败、卡片查询和校验命令无法使用的问题。
+
+- 修复 Windows 鉴权文件替换遇到短暂文件占用时的失败，保留旧文件并对受限错误执行有界重试。
+- 修复 Linux Skill 安装期间的目录身份校验，固定目录句柄并在结束后释放。
+- 修复产品命令根名称与产品 ID 不一致时的 Schema 缓存定位。
+- AI 听记整包导出支持服务端明确成功的空摘要，仍保留分析等待器的严格判断。
+- 钉钉招聘创建职位时正确处理校园招聘默认值，并保留 Connector 返回的业务错误信息。
 
 ### Security
 
-- 密码从 timing/perf 报告的命令参数中脱敏，覆盖 `--password <值>` 与 `--password=<值>`；Drive 分享范围 dry-run 将密码显示为 `***`，真实请求仍发送原值，预览不发业务 RPC。
+- **Password argv sanitization** — add `--password` to the timing/perf report sensitive-flag allowlist so `SanitizeCommand` redacts it in both `--password <value>` and `--password=<value>` forms. This also fixes a pre-existing plaintext leak where `dws drive publish set --password …` wrote the raw secret into the `DWS_PERF_REPORT` argv record. The `drive permission set-share-scope --dry-run` preview now masks the password value as `***` while still emitting `requirePassword`; real calls keep sending the correct secret and no business RPC is issued during preview.
 
 
 ## [1.0.63-beta.3] - 2026-09-23
