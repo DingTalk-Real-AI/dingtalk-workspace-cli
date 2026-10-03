@@ -267,9 +267,9 @@ func TestCrossPlatformCoverageAitableRetryAndPaginationCoverage(t *testing.T) {
 	} {
 		caller := &scriptedToolCaller{steps: steps, format: "json"}
 		installScriptedCaller(t, caller)
-		_ = callAitableTool("get_base", nil)
+		_ = callAitableToolContext(context.Background(), "get_base", nil)
 		caller.index = 0
-		_ = callAitableHelperTool("list_workflows", nil)
+		_ = callAitableHelperToolContext(context.Background(), "list_workflows", nil)
 	}
 
 	for _, steps := range [][]scriptedToolStep{
@@ -282,7 +282,7 @@ func TestCrossPlatformCoverageAitableRetryAndPaginationCoverage(t *testing.T) {
 	} {
 		caller := &scriptedToolCaller{steps: steps, format: "json"}
 		installScriptedCaller(t, caller)
-		_ = recordQueryFetchAll(map[string]any{}, 1)
+		_ = recordQueryFetchAll(context.Background(), map[string]any{}, 1)
 	}
 	for _, steps := range [][]scriptedToolStep{
 		{{text: `{"data":{"records":[{"id":"one"}],"nextCursor":"next"}}`}, {err: errors.New("second page failed")}},
@@ -292,6 +292,6 @@ func TestCrossPlatformCoverageAitableRetryAndPaginationCoverage(t *testing.T) {
 	} {
 		caller := &scriptedToolCaller{steps: steps, format: "json"}
 		installScriptedCaller(t, caller)
-		_ = recordQueryFetchAll(map[string]any{}, 0)
+		_ = recordQueryFetchAll(context.Background(), map[string]any{}, 0)
 	}
 }

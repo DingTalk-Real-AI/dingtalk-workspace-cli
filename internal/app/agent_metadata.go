@@ -25,6 +25,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
@@ -268,6 +269,7 @@ func pluginRequestHeaders(pluginAuth *PluginAuth) map[string]string {
 	}
 	removeAgentMetadataHeaders(headers)
 	removeRuntimeContextHeader(headers)
+	requestmeta.RemoveDelegatorHeaders(headers)
 	if len(headers) == 0 {
 		return nil
 	}

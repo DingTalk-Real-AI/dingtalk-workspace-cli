@@ -222,11 +222,11 @@ func resolveWorkflowDSL(cmd *cobra.Command) (map[string]any, error) {
 // executeAitableWorkflowPublish executes a publish exactly once, then requires
 // the reviewed valid/flowId envelope before rendering any success output.
 // create_workflow is non-idempotent, so transport uncertainty is never retried.
-func executeAitableWorkflowPublish(toolName string, args map[string]any) error {
+func executeAitableWorkflowPublish(ctx context.Context, toolName string, args map[string]any) error {
 	if deps.Caller.DryRun() {
-		return callMCPToolOnServer("aitable", toolName, args)
+		return CallMCPToolOnServerContext(ctx, "aitable", toolName, args)
 	}
-	raw, err := callMCPToolReturnTextOnServer(context.Background(), "aitable", toolName, args)
+	raw, err := callMCPToolReturnTextOnServer(ctx, "aitable", toolName, args)
 	if err != nil {
 		return err
 	}
@@ -365,10 +365,9 @@ func validateWorkflowHistoryFlags(cmd *cobra.Command, _ []string) error {
 // transport failure, or cursor cycle returns a non-zero structured error whose
 // details retain the incomplete records and retry cursor, unless the server
 // invalidated pagination; invalidated pages must be discarded before restarting.
-func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
+func recordQueryFetchAll(ctx context.Context, toolArgs map[string]any, pageLimit int) error {
 	const serverID = "aitable"
 
-	ctx := context.Background()
 	requestArgs := make(map[string]any, len(toolArgs))
 	for key, value := range toolArgs {
 		requestArgs[key] = value
@@ -1234,12 +1233,8 @@ func suggestOperator(op string) string {
 
 const aitableMaxRetries = 3
 
-// callAitableTool 是 aitable 专用的 MCP 调用入口。
+// callAitableToolContext 保留命令上下文中的委托身份和取消信号。
 // 只有显式列入只读白名单的工具才会自动重试。
-func callAitableTool(toolName string, args map[string]any) error {
-	return callAitableToolContext(context.Background(), toolName, args)
-}
-
 func callAitableToolContext(ctx context.Context, toolName string, args map[string]any) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1440,15 +1435,15 @@ func callAitableReadWithRetry[T any](ctx context.Context, toolName string, call 
 	return zero, lastErr
 }
 
-// callAitableHelperTool is the aitable-helper entry point. Writes are never
-// retried; reads use the same reviewed retry allowlist as the public server.
-func callAitableHelperTool(toolName string, args map[string]any) error {
+// callAitableHelperToolContext 向辅助服务及其重试传递同一调用上下文。
+// 写操作不重试；读操作沿用主服务的只读白名单。
+func callAitableHelperToolContext(ctx context.Context, toolName string, args map[string]any) error {
 	server := "aitable-helper"
 	if !isAitableReadRetryTool(toolName) {
-		return callMCPToolOnServer(server, toolName, args)
+		return CallMCPToolOnServerContext(ctx, server, toolName, args)
 	}
-	_, err := callAitableReadWithRetry(context.Background(), toolName, func(context.Context) (struct{}, error) {
-		return struct{}{}, callMCPToolOnServer(server, toolName, args)
+	_, err := callAitableReadWithRetry(ctx, toolName, func(callCtx context.Context) (struct{}, error) {
+		return struct{}{}, CallMCPToolOnServerContext(callCtx, server, toolName, args)
 	})
 	return err
 }
@@ -1704,7 +1699,7 @@ func mergeUpdateBlock(jsonStr string, typedFields map[string]any) (map[string]an
 // callUpdateViewWithBlock 组装 update_view 的 toolArgs 并调用。
 // blockKey 为 config 子块的服务端 key（如 "kanbanCard"）；当 blockKey == ""
 // 时直接把 extra 合并到 toolArgs 顶层（供 name 子命令传 newViewName 用）。
-func callUpdateViewWithBlock(baseID, tableID, viewID, blockKey string, blockValue any, extra map[string]any) error {
+func callUpdateViewWithBlock(ctx context.Context, baseID, tableID, viewID, blockKey string, blockValue any, extra map[string]any) error {
 	toolArgs := map[string]any{
 		"baseId":  baseID,
 		"tableId": tableID,
@@ -1716,7 +1711,7 @@ func callUpdateViewWithBlock(baseID, tableID, viewID, blockKey string, blockValu
 	for k, v := range extra {
 		toolArgs[k] = v
 	}
-	return callAitableTool("update_view", toolArgs)
+	return callAitableToolContext(ctx, "update_view", toolArgs)
 }
 
 // isAitableRetryableError 判断 aitable MCP 调用错误是否值得重试。
@@ -1880,7 +1875,7 @@ func runAitableViewUpdateArray(cmd *cobra.Command, blockKey string) error {
 	if err := normalizeViewConfigBlock(cfgMap); err != nil {
 		return err
 	}
-	return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, cfgMap[blockKey], nil)
+	return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, blockKey, cfgMap[blockKey], nil)
 }
 
 func runAitableViewUpdateFilter(cmd *cobra.Command) error {
@@ -2503,7 +2498,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			return callAitableTool("list_bases", toolArgs)
+			return callAitableToolContext(cmd.Context(), "list_bases", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseListCmd, LeafSpec{
@@ -2542,7 +2537,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 				if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 					toolArgs["cursor"] = v
 				}
-				return callAitableTool("list_bases", toolArgs)
+				return callAitableToolContext(cmd.Context(), "list_bases", toolArgs)
 			}
 			toolArgs := map[string]any{
 				"query": query,
@@ -2550,7 +2545,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			return callAitableTool("search_bases", toolArgs)
+			return callAitableToolContext(cmd.Context(), "search_bases", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseSearchCmd, LeafSpec{
@@ -2585,7 +2580,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_base", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_base", map[string]any{
 				"baseId": baseID,
 			})
 		},
@@ -2635,7 +2630,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("template-id"); v != "" {
 				toolArgs["templateId"] = v
 			}
-			return callMCPTool("create_base", toolArgs)
+			return callMCPToolContext(cmd.Context(), "create_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseCreateCmd, LeafSpec{
@@ -2683,7 +2678,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("desc"); v != "" {
 				toolArgs["description"] = v
 			}
-			return callAitableTool("update_base", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseUpdateCmd, LeafSpec{
@@ -2728,7 +2723,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("reason"); v != "" {
 				toolArgs["reason"] = v
 			}
-			return callAitableTool("delete_base", toolArgs)
+			return callAitableToolContext(cmd.Context(), "delete_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseDeleteCmd, LeafSpec{
@@ -2778,7 +2773,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if targetFolderID, _ := cmd.Flags().GetString("target-folder-id"); strings.TrimSpace(targetFolderID) != "" {
 				toolArgs["targetFolderId"] = strings.TrimSpace(targetFolderID)
 			}
-			return callAitableTool("copy_base", toolArgs)
+			return callAitableToolContext(cmd.Context(), "copy_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseCopyCmd, LeafSpec{
@@ -2832,7 +2827,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("table-ids"); v != "" {
 				toolArgs["tableIds"] = parseCSVValues(v)
 			}
-			return callAitableTool("get_tables", toolArgs)
+			return callAitableToolContext(cmd.Context(), "get_tables", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(tableGetCmd, LeafSpec{
@@ -2938,7 +2933,7 @@ config 结构参考：
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["description"] = v
 			}
-			return callMCPTool("create_table", toolArgs)
+			return callMCPToolContext(cmd.Context(), "create_table", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(tableCreateCmd, LeafSpec{
@@ -3009,7 +3004,7 @@ config 结构参考：
 			if rnKey != "" {
 				toolArgs["recordNameKey"] = rnKey
 			}
-			return callAitableTool("update_table", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_table", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(tableUpdateCmd, LeafSpec{
@@ -3062,7 +3057,7 @@ config 结构参考：
 			if v, _ := cmd.Flags().GetString("reason"); v != "" {
 				toolArgs["reason"] = v
 			}
-			return callAitableTool("delete_table", toolArgs)
+			return callAitableToolContext(cmd.Context(), "delete_table", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(tableDeleteCmd, LeafSpec{
@@ -3242,7 +3237,7 @@ config 结构参考：
 			if err != nil {
 				return err
 			}
-			return callMCPTool("create_fields", map[string]any{
+			return callMCPToolContext(cmd.Context(), "create_fields", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"fields":  fields,
@@ -3334,7 +3329,7 @@ newFieldName、description、config、aiConfig 至少传入一项。
 					}
 				}
 			}
-			return callAitableTool("update_field", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_field", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(fieldUpdateCmd, LeafSpec{
@@ -3395,7 +3390,7 @@ newFieldName、description、config、aiConfig 至少传入一项。
 			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("search_field_options", toolArgs)
+			return callMCPToolContext(cmd.Context(), "search_field_options", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(fieldSearchOptionsCmd, LeafSpec{
@@ -3440,7 +3435,7 @@ newFieldName、description、config、aiConfig 至少传入一项。
 			if err != nil {
 				return err
 			}
-			return callAitableTool("delete_field", map[string]any{
+			return callAitableToolContext(cmd.Context(), "delete_field", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"fieldId": fieldID,
@@ -3501,7 +3496,7 @@ newFieldName、description、config、aiConfig 至少传入一项。
 				}
 				toolArgs["recordIds"] = recordIDs
 			}
-			return callAitableTool("run_ai_field", toolArgs)
+			return callAitableToolContext(cmd.Context(), "run_ai_field", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(fieldRunAICmd, LeafSpec{
@@ -3650,11 +3645,11 @@ newFieldName、description、config、aiConfig 至少传入一项。
 			// --all: 自动翻页，合并所有页的 records 后统一输出
 			fetchAll, _ := cmd.Flags().GetBool("all")
 			if !fetchAll {
-				return callAitableTool("query_records", toolArgs)
+				return callAitableToolContext(cmd.Context(), "query_records", toolArgs)
 			}
 			// The flag default is already 50; an explicit zero means unlimited.
 			pageLimit, _ := cmd.Flags().GetInt("page-limit")
-			return recordQueryFetchAll(toolArgs, pageLimit)
+			return recordQueryFetchAll(cmd.Context(), toolArgs, pageLimit)
 		},
 	}
 	DeclareLeafMetadata(recordQueryCmd, LeafSpec{
@@ -3810,7 +3805,7 @@ lt/gt/lte/gte 的过滤值必须使用 JSON 数字；单选/多选过滤建议�
 			if value, _ := cmd.Flags().GetString("data-version"); value != "" {
 				toolArgs["dataVersion"] = value
 			}
-			return callAitableTool("query_records_stats", toolArgs)
+			return callAitableToolContext(cmd.Context(), "query_records_stats", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordStatsCmd, LeafSpec{
@@ -3908,7 +3903,7 @@ MEDIAN、DISTINCT、DISTINCT_RATIO 等服务端统计动作。
 			if value, _ := cmd.Flags().GetString("data-version"); value != "" {
 				toolArgs["dataVersion"] = value
 			}
-			return callAitableTool("query_stats", toolArgs)
+			return callAitableToolContext(cmd.Context(), "query_stats", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordGroupStatsCmd, LeafSpec{
@@ -4011,7 +4006,7 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 					if clientToken != "" {
 						toolArgs["clientToken"] = clientToken
 					}
-					return callMCPTool("create_records", toolArgs)
+					return callMCPToolContext(cmd.Context(), "create_records", toolArgs)
 				}
 			}
 			recordsStr, err := resolveRecordsFlag(cmd)
@@ -4034,7 +4029,7 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 			if clientToken != "" {
 				toolArgs["clientToken"] = clientToken
 			}
-			return callMCPTool("create_records", toolArgs)
+			return callMCPToolContext(cmd.Context(), "create_records", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordCreateCmd, LeafSpec{
@@ -4111,7 +4106,7 @@ records 的 cells 写入格式与 record create 相同，无需手动写入 hier
 			if clientToken != "" {
 				toolArgs["clientToken"] = clientToken
 			}
-			return callAitableTool("create_sub_records", toolArgs)
+			return callAitableToolContext(cmd.Context(), "create_sub_records", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordCreateSubCmd, LeafSpec{
@@ -4166,7 +4161,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 				if err != nil {
 					return err
 				}
-				return callAitableTool("update_records", map[string]any{
+				return callAitableToolContext(cmd.Context(), "update_records", map[string]any{
 					"baseId":  baseID,
 					"tableId": mustGetFlag(cmd, "table-id"),
 					"records": []any{map[string]any{"recordId": singleRecID, "cells": cellsObj}},
@@ -4184,7 +4179,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if err != nil {
 				return err
 			}
-			return callAitableTool("update_records", map[string]any{
+			return callAitableToolContext(cmd.Context(), "update_records", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"records": records,
@@ -4230,7 +4225,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if err != nil {
 				return err
 			}
-			return callAitableTool("delete_records", map[string]any{
+			return callAitableToolContext(cmd.Context(), "delete_records", map[string]any{
 				"baseId":    baseID,
 				"tableId":   mustGetFlag(cmd, "table-id"),
 				"recordIds": parseCSVValues(recordIDs),
@@ -4310,7 +4305,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 			if err != nil {
 				return err
 			}
-			return callAitableTool("update_records", map[string]any{
+			return callAitableToolContext(cmd.Context(), "update_records", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"records": records,
@@ -4374,7 +4369,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			return callAitableHelperTool("query_empty_records", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "query_empty_records", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordQueryEmptyCmd, LeafSpec{
@@ -4443,7 +4438,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 				}
 				toolArgs["limit"] = limit
 			}
-			return callAitableHelperTool("query_record_history", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "query_record_history", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordHistoryListCmd, LeafSpec{
@@ -4501,7 +4496,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 			if v, _ := cmd.Flags().GetString("view-id"); v != "" {
 				toolArgs["viewId"] = v
 			}
-			return callAitableHelperTool("get_record_share_url", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "get_record_share_url", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordShareUrlCmd, LeafSpec{
@@ -4581,7 +4576,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if clientToken != "" {
 				toolArgs["clientToken"] = clientToken
 			}
-			return callAitableHelperTool("record_upsert", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "record_upsert", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordUpsertCmd, LeafSpec{
@@ -4738,7 +4733,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			return callAitableTool("search_templates", toolArgs)
+			return callAitableToolContext(cmd.Context(), "search_templates", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(templateSearchCmd, LeafSpec{
@@ -4811,7 +4806,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			if v, _ := cmd.Flags().GetString("mime-type"); v != "" {
 				toolArgs["mimeType"] = v
 			}
-			return callAitableTool("prepare_attachment_upload", toolArgs)
+			return callAitableToolContext(cmd.Context(), "prepare_attachment_upload", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(attachmentUploadCmd, LeafSpec{
@@ -4873,7 +4868,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 				}
 				toolArgs["resourceIds"] = resourceIDs
 			}
-			return callAitableTool("remove_attachments", toolArgs)
+			return callAitableToolContext(cmd.Context(), "remove_attachments", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(attachmentRemoveCmd, LeafSpec{
@@ -4925,7 +4920,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			if v, _ := cmd.Flags().GetString("view-ids"); v != "" {
 				toolArgs["viewIds"] = parseCSVValues(v)
 			}
-			return callAitableTool("get_views", toolArgs)
+			return callAitableToolContext(cmd.Context(), "get_views", toolArgs)
 		},
 	}
 	newHybridGroupCommand(viewGetCmd)
@@ -5312,7 +5307,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 				}
 				toolArgs["config"] = cfgMap
 			}
-			return callMCPTool("create_view", toolArgs)
+			return callMCPToolContext(cmd.Context(), "create_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewCreateCmd, LeafSpec{
@@ -5383,7 +5378,7 @@ fieldWidths 仅支持 Grid 视图。
 				}
 				toolArgs["config"] = cfgMap
 			}
-			return callAitableTool("update_view", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_view", toolArgs)
 		},
 	}
 	newHybridGroupCommand(viewUpdateCmd)
@@ -5429,7 +5424,7 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 			if err != nil {
 				return err
 			}
-			return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, block, nil)
+			return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, blockKey, block, nil)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateCardCmd, LeafSpec{
@@ -5490,7 +5485,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			if err != nil {
 				return err
 			}
-			return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, block, nil)
+			return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, blockKey, block, nil)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateTimebarCmd, LeafSpec{
@@ -5558,7 +5553,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			if err != nil {
 				return err
 			}
-			return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, block, nil)
+			return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, blockKey, block, nil)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateAggregateCmd, LeafSpec{
@@ -5610,7 +5605,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			if err != nil {
 				return err
 			}
-			return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, block, nil)
+			return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, blockKey, block, nil)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateFieldWidthsCmd, LeafSpec{
@@ -5675,7 +5670,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			if len(fieldIDs) == 0 {
 				return fmt.Errorf("必须指定 --field-ids 或 --json 之一")
 			}
-			return callUpdateViewWithBlock(baseID, tableID, viewID, "visibleFieldIds", fieldIDs, nil)
+			return callUpdateViewWithBlock(cmd.Context(), baseID, tableID, viewID, "visibleFieldIds", fieldIDs, nil)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateVisibleFieldsCmd, LeafSpec{
@@ -5850,7 +5845,7 @@ from_now.offset 必须是 JSON string。写入后命令会独立读取并按原�
 				return err
 			}
 			newName, _ := cmd.Flags().GetString("name")
-			return callUpdateViewWithBlock(baseID, mustGetFlag(cmd, "table-id"), mustGetFlag(cmd, "view-id"),
+			return callUpdateViewWithBlock(cmd.Context(), baseID, mustGetFlag(cmd, "table-id"), mustGetFlag(cmd, "view-id"),
 				"", nil, map[string]any{"newViewName": newName})
 		},
 	}
@@ -5915,7 +5910,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_view_lock_status", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "get_view_lock_status", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewGetLockCmd, LeafSpec{
@@ -5957,7 +5952,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				action = "unlock"
 			}
 			toolArgs["action"] = action
-			return callAitableHelperTool("lock_or_unlock_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "lock_or_unlock_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewLockCmd, LeafSpec{
@@ -5993,7 +5988,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_frozen_columns_of_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "get_frozen_columns_of_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewGetFrozenColsCmd, LeafSpec{
@@ -6041,7 +6036,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				return err
 			}
 			toolArgs["count"] = count
-			return callAitableHelperTool("set_frozen_columns_of_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "set_frozen_columns_of_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateFrozenColsCmd, LeafSpec{
@@ -6077,7 +6072,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_cell_height_of_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "get_cell_height_of_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewGetRowHeightCmd, LeafSpec{
@@ -6125,7 +6120,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				return err
 			}
 			toolArgs["cellHeight"] = cellHeight
-			return callAitableHelperTool("set_cell_height_of_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "set_cell_height_of_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateRowHeightCmd, LeafSpec{
@@ -6218,7 +6213,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			toolArgs["conditionalFormats"] = arr
 			// set_view_fill_color_rule 部署在 aitable 主 server（不是 aitable-helper），
 			// 与其他 set_view_* 工具的归属不同，单独走 callAitableTool。
-			return callAitableTool("set_view_fill_color_rule", toolArgs)
+			return callAitableToolContext(cmd.Context(), "set_view_fill_color_rule", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateFillColorRuleCmd, LeafSpec{
@@ -6269,7 +6264,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if v, _ := cmd.Flags().GetString("new-name"); v != "" {
 				toolArgs["newViewName"] = v
 			}
-			return callAitableHelperTool("duplicate_view", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "duplicate_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(viewDuplicateCmd, LeafSpec{
@@ -6328,7 +6323,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableTool("delete_view", map[string]any{
+			return callAitableToolContext(cmd.Context(), "delete_view", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"viewId":  viewID,
@@ -6376,7 +6371,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("list_form_views", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "list_form_views", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 			})
@@ -6550,7 +6545,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("delete_form_view", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "delete_form_view", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"viewId":  viewID,
@@ -6611,7 +6606,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if description != "" {
 				toolArgs["description"] = description
 			}
-			return callAitableHelperTool("update_form_info", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "update_form_info", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(formUpdateCmd, LeafSpec{
@@ -6715,7 +6710,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("list_form_fields", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "list_form_fields", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"viewId":  mustGetFlag(cmd, "view-id"),
@@ -6774,7 +6769,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if v, _ := cmd.Flags().GetString("field-description"); v != "" {
 				toolArgs["fieldDescription"] = v
 			}
-			return callAitableHelperTool("update_form_field", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "update_form_field", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(formFieldUpdateCmd, LeafSpec{
@@ -6818,7 +6813,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("update_form_field_hidden", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "update_form_field_hidden", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"viewId":  mustGetFlag(cmd, "view-id"),
@@ -7140,7 +7135,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableTool("submit_form", map[string]any{
+			return callAitableToolContext(cmd.Context(), "submit_form", map[string]any{
 				"baseId": baseID, "tableId": mustGetFlag(cmd, "table-id"),
 				"viewId": mustGetFlag(cmd, "view-id"), "value": value,
 			})
@@ -7206,7 +7201,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			}
 			// create_workflow is non-idempotent. Bypass the retry wrapper to
 			// prevent an uncertain first response from creating a duplicate.
-			return executeAitableWorkflowPublish("create_workflow", toolArgs)
+			return executeAitableWorkflowPublish(cmd.Context(), "create_workflow", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(workflowCreateCmd, LeafSpec{
@@ -7301,7 +7296,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
 				toolArgs["locale"] = locale
 			}
-			return executeAitableWorkflowPublish("update_workflow", toolArgs)
+			return executeAitableWorkflowPublish(cmd.Context(), "update_workflow", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(workflowUpdateCmd, LeafSpec{
@@ -7347,7 +7342,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("enable_workflow", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "enable_workflow", map[string]any{
 				"baseId":     baseID,
 				"workflowId": mustGetFlag(cmd, "workflow-id"),
 			})
@@ -7392,7 +7387,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				return err
 			}
 			workflowID := mustGetFlag(cmd, "workflow-id")
-			return callAitableHelperTool("disable_workflow", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "disable_workflow", map[string]any{
 				"baseId":     baseID,
 				"workflowId": workflowID,
 			})
@@ -7437,7 +7432,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_workflow", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "get_workflow", map[string]any{
 				"baseId":     baseID,
 				"workflowId": mustGetFlag(cmd, "workflow-id"),
 			})
@@ -7492,7 +7487,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				}
 				toolArgs["offset"] = offset
 			}
-			return callAitableHelperTool("list_workflows", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "list_workflows", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(workflowListCmd, LeafSpec{
@@ -7637,7 +7632,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 可作为 dashboard create / dashboard update 的 --config 参数结构参考。`,
 		Example: `  dws aitable dashboard config-example`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callAitableTool("get_dashboard_config_example", map[string]any{})
+			return callAitableToolContext(cmd.Context(), "get_dashboard_config_example", map[string]any{})
 		},
 	}
 	DeclareLeafMetadata(dashboardConfigExampleCmd, LeafSpec{
@@ -7677,7 +7672,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_dashboard", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_dashboard", map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 			})
@@ -7738,7 +7733,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if err != nil {
 				return err
 			}
-			return callMCPTool("create_dashboard", map[string]any{
+			return callMCPToolContext(cmd.Context(), "create_dashboard", map[string]any{
 				"baseId": baseID,
 				"config": cfg,
 			})
@@ -7805,7 +7800,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if err != nil {
 				return err
 			}
-			return callAitableTool("update_dashboard", map[string]any{
+			return callAitableToolContext(cmd.Context(), "update_dashboard", map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 				"config":      cfg,
@@ -7860,7 +7855,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if v, _ := cmd.Flags().GetString("reason"); v != "" {
 				toolArgs["reason"] = v
 			}
-			return callAitableTool("delete_dashboard", toolArgs)
+			return callAitableToolContext(cmd.Context(), "delete_dashboard", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(dashboardDeleteCmd, LeafSpec{
@@ -7911,7 +7906,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				v, _ := cmd.Flags().GetBool("is-app-mode")
 				toolArgs["isAppMode"] = v
 			}
-			return callAitableHelperTool("align_dashboard", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "align_dashboard", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(dashboardArrangeCmd, LeafSpec{
@@ -7956,7 +7951,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_dashboard_share", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_dashboard_share", map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 			})
@@ -8016,7 +8011,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 					toolArgs["allowBackToDoc"] = v
 				}
 			}
-			return callAitableTool("update_dashboard_share", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_dashboard_share", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(dashboardShareUpdateCmd, LeafSpec{
@@ -8051,7 +8046,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 可作为 chart create / chart update 的 --config 参数结构参考，根据目标图表类型选取对应示例。`,
 		Example: `  dws aitable chart widgets-example`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callAitableTool("get_dashboard_widgets_example", map[string]any{})
+			return callAitableToolContext(cmd.Context(), "get_dashboard_widgets_example", map[string]any{})
 		},
 	}
 	DeclareLeafMetadata(chartWidgetsExampleCmd, LeafSpec{
@@ -8091,7 +8086,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_chart", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_chart", map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 				"chartId":     mustGetFlag(cmd, "chart-id"),
@@ -8338,7 +8333,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_chart_share", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_chart_share", map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
 				"chartId":     mustGetFlag(cmd, "chart-id"),
@@ -8400,7 +8395,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 					toolArgs["allowBackToDoc"] = v
 				}
 			}
-			return callAitableTool("update_chart_share", toolArgs)
+			return callAitableToolContext(cmd.Context(), "update_chart_share", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(chartShareUpdateCmd, LeafSpec{
@@ -8504,7 +8499,7 @@ export-format 可选值：excel、attachment、excel_and_attachment、excel_with
 			if v, _ := cmd.Flags().GetInt("timeout-ms"); v > 0 {
 				toolArgs["timeoutMs"] = v
 			}
-			return callAitableTool("export_data", toolArgs)
+			return callAitableToolContext(cmd.Context(), "export_data", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(exportDataCmd, LeafSpec{
@@ -8549,7 +8544,7 @@ export-format 可选值：excel、attachment、excel_and_attachment、excel_with
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("set_advanced_permission", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "set_advanced_permission", map[string]any{
 				"baseId":  baseID,
 				"enabled": true,
 			})
@@ -8591,7 +8586,7 @@ message: "the current user must be a manager (administrator) of this base to man
 				return err
 			}
 			// 先确认 baseID 合法再进入二次确认提示，避免对无效请求弹无意义的确认。
-			return callAitableHelperTool("set_advanced_permission", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "set_advanced_permission", map[string]any{
 				"baseId":  baseID,
 				"enabled": false,
 			})
@@ -8636,7 +8631,7 @@ subRoles[].display.* 提供人类可读标签（authLevelLabel / targetTypeLabel
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("list_roles", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "list_roles", map[string]any{
 				"baseId": baseID,
 			})
 		},
@@ -8676,7 +8671,7 @@ subRoles[].display.* 提供人类可读标签（authLevelLabel / targetTypeLabel
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_role", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "get_role", map[string]any{
 				"baseId": baseID,
 				"roleId": mustGetFlag(cmd, "role-id"),
 			})
@@ -8743,7 +8738,7 @@ subRoles[].display.* 提供人类可读标签（authLevelLabel / targetTypeLabel
 				}
 				toolArgs["subRoles"] = subRoles
 			}
-			return callAitableHelperTool("create_role", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "create_role", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(advpermRoleCreateCmd, LeafSpec{
@@ -8810,7 +8805,7 @@ role-get 自行 merge）。
 				}
 				toolArgs["subRoles"] = subRoles
 			}
-			return callAitableHelperTool("patch_role", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "patch_role", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(advpermRoleUpdateCmd, LeafSpec{
@@ -8855,7 +8850,7 @@ role-get 自行 merge）。
 				return err
 			}
 			roleID := mustGetFlag(cmd, "role-id")
-			return callAitableHelperTool("delete_role", map[string]any{
+			return callAitableHelperToolContext(cmd.Context(), "delete_role", map[string]any{
 				"baseId": baseID,
 				"roleId": roleID,
 			})
@@ -8918,7 +8913,7 @@ role-get 自行 merge）。
 			if names, _ := cmd.Flags().GetStringSlice("table-names"); len(names) > 0 {
 				toolArgs["tableNames"] = names
 			}
-			return callAitableTool("prepare_import_upload", toolArgs)
+			return callAitableToolContext(cmd.Context(), "prepare_import_upload", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(importUploadCmd, LeafSpec{
@@ -8992,7 +8987,7 @@ role-get 自行 merge）。
 				}
 				toolArgs["fieldMapping"] = mapping
 			}
-			return callAitableTool("import_data", toolArgs)
+			return callAitableToolContext(cmd.Context(), "import_data", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(importDataCmd, LeafSpec{
@@ -9051,7 +9046,7 @@ role-get 自行 merge）。
 			if v, _ := cmd.Flags().GetInt("index"); v >= 0 {
 				toolArgs["index"] = v
 			}
-			return callAitableHelperTool("create_section", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "create_section", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionCreateCmd, LeafSpec{
@@ -9096,7 +9091,7 @@ role-get 自行 merge）。
 				"sectionId": mustGetFlag(cmd, "section-id"),
 				"newName":   mustGetFlag(cmd, "new-name"),
 			}
-			return callAitableHelperTool("rename_section", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "rename_section", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionRenameCmd, LeafSpec{
@@ -9140,7 +9135,7 @@ role-get 自行 merge）。
 				"baseId":    baseID,
 				"sectionId": mustGetFlag(cmd, "section-id"),
 			}
-			return callAitableHelperTool("delete_section", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "delete_section", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionDeleteCmd, LeafSpec{
@@ -9189,7 +9184,7 @@ role-get 自行 merge）。
 				"sectionId":   mustGetFlag(cmd, "section-id"),
 				"targetIndex": targetIndex,
 			}
-			return callAitableHelperTool("reorder_section", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "reorder_section", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionReorderCmd, LeafSpec{
@@ -9229,7 +9224,7 @@ parentSectionId 为空串表示该文件夹在 Base 根目录下。`,
 			toolArgs := map[string]any{
 				"baseId": baseID,
 			}
-			return callAitableHelperTool("list_empty_sections", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "list_empty_sections", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionListEmptyCmd, LeafSpec{
@@ -9270,7 +9265,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			toolArgs := map[string]any{
 				"baseId": baseID,
 			}
-			return callAitableHelperTool("list_nsheet_nodes", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "list_nsheet_nodes", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionListNodesCmd, LeafSpec{
@@ -9326,7 +9321,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if v, _ := cmd.Flags().GetInt("target-index"); v >= 0 {
 				toolArgs["targetIndex"] = v
 			}
-			return callAitableHelperTool("move_nsheet_node", toolArgs)
+			return callAitableHelperToolContext(cmd.Context(), "move_nsheet_node", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(sectionMoveNodeCmd, LeafSpec{
@@ -10132,7 +10127,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_datasource_config", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_datasource_config", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 			})
@@ -10173,7 +10168,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if err != nil {
 				return err
 			}
-			return callAitableTool("list_datasource_sources", map[string]any{
+			return callAitableToolContext(cmd.Context(), "list_datasource_sources", map[string]any{
 				"baseId":         baseID,
 				"datasourceType": mustGetFlag(cmd, "datasource-type"),
 			})
@@ -10231,7 +10226,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if err != nil {
 				return err
 			}
-			return callAitableTool("get_datasource_fields", map[string]any{
+			return callAitableToolContext(cmd.Context(), "get_datasource_fields", map[string]any{
 				"baseId":         baseID,
 				"datasourceType": mustGetFlag(cmd, "datasource-type"),
 				"sourceConfig":   mustGetFlag(cmd, "source-config"),
@@ -10293,7 +10288,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				}
 				toolArgs["autoSyncSetting"] = v
 			}
-			return callAitableTool("create_datasource", toolArgs)
+			return callAitableToolContext(cmd.Context(), "create_datasource", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(datasourceCreateCmd, LeafSpec{
@@ -10441,7 +10436,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if len(tableIDs) < 1 || len(tableIDs) > 5 {
 				return fmt.Errorf("--table-ids requires 1-5 table IDs, got %d", len(tableIDs))
 			}
-			return callAitableTool("run_datasource_sync", map[string]any{
+			return callAitableToolContext(cmd.Context(), "run_datasource_sync", map[string]any{
 				"baseId":   baseID,
 				"tableIds": tableIDs,
 			})
@@ -10495,7 +10490,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"taskIds": ids,
 			}
-			return callAitableTool("get_datasource_sync_status", toolArgs)
+			return callAitableToolContext(cmd.Context(), "get_datasource_sync_status", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(datasourceSyncStatusCmd, LeafSpec{
