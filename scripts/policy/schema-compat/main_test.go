@@ -2850,3 +2850,113 @@ func writeRawSchemaContractFile(t *testing.T, path string, contract schemaContra
 		t.Fatal(err)
 	}
 }
+
+func TestCrossPlatformCoverageDingTalkTagInterfaceTransitionsAreReviewed(t *testing.T) {
+	want := map[string]interfaceTransition{
+		"dingtalk-tag/dingtalk-tag.create_digital_employee": {
+			OldMode: interfaceModeMCP,
+			OldRef:  `{"product_id":"deap-dev","rpc_name":"create_digital_employee"}`,
+			NewMode: "composite",
+		},
+		"dingtalk-tag/dingtalk-tag.publish_digital_employee": {
+			OldMode: interfaceModeMCP,
+			OldRef:  `{"product_id":"deap-dev","rpc_name":"publish_digital_employee"}`,
+			NewMode: "composite",
+		},
+	}
+	fixture := func(mode, ref string) toolSchema {
+		return toolSchema{
+			PrimaryCLIPath: "dingtalk-tag fixture",
+			InterfaceMode:  mode,
+			InterfaceRef:   ref,
+			Availability:   "available",
+			Parameters:     map[string]parameterSchema{},
+			Effect:         "write",
+			Risk:           "high",
+			Confirmation:   "user_required",
+			Idempotency:    "unknown",
+		}
+	}
+
+	for toolPath, expected := range want {
+		t.Run(toolPath, func(t *testing.T) {
+			transition, ok := reviewedInterfaceTransitions[toolPath]
+			if !ok {
+				t.Fatalf("missing reviewed interface transition for %s", toolPath)
+			}
+			if transition != expected {
+				t.Fatalf("reviewed transition = %#v, want %#v", transition, expected)
+			}
+
+			baseline := fixture(expected.OldMode, expected.OldRef)
+			current := fixture(expected.NewMode, expected.NewRef)
+			if failures := checkToolCompatibility(toolPath, baseline, current); len(failures) != 0 {
+				t.Fatalf("reviewed transition should pass: %v", failures)
+			}
+
+			wrongSource := baseline
+			wrongSource.InterfaceRef = `{"product_id":"deap-dev","rpc_name":"unreviewed_source"}`
+			if failures := checkToolCompatibility(toolPath, wrongSource, current); len(failures) == 0 {
+				t.Fatal("wrong source ref inherited the approval")
+			}
+
+			wrongTarget := current
+			wrongTarget.InterfaceMode = "local"
+			if failures := checkToolCompatibility(toolPath, baseline, wrongTarget); len(failures) == 0 {
+				t.Fatal("wrong target mode inherited the approval")
+			}
+
+			if failures := checkToolCompatibility(toolPath+"_unlisted", baseline, current); len(failures) == 0 {
+				t.Fatal("an unlisted tool inherited the approval")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDingTalkTagSkillConstraintTransitionIsReviewed(t *testing.T) {
+	const toolPath = "dingtalk-tag/dingtalk-tag.update_skill"
+	const currentConstraints = `{"mutually_exclusive":[["enabled","file"]],"require_one_of":[["enabled","file"]]}`
+
+	transitions, ok := reviewedConstraintTransition[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed constraint transition for %s", toolPath)
+	}
+	if got := transitions[""]; got != currentConstraints {
+		t.Fatalf("reviewed constraint target = %q, want %q", got, currentConstraints)
+	}
+
+	fixture := func(constraints string) toolSchema {
+		return toolSchema{
+			PrimaryCLIPath: "dingtalk-tag capability skill update",
+			InterfaceMode:  interfaceModeMCP,
+			InterfaceRef:   `{"product_id":"deap-dev","rpc_name":"update_skill"}`,
+			Availability:   "available",
+			Parameters: map[string]parameterSchema{
+				"enabled": {Type: `"boolean"`},
+				"file":    {Type: `"string"`},
+			},
+			Constraints:  constraints,
+			Effect:       "write",
+			Risk:         "high",
+			Confirmation: "user_required",
+			Idempotency:  "idempotent",
+		}
+	}
+
+	baseline := fixture("")
+	current := fixture(currentConstraints)
+	if failures := checkToolCompatibility(toolPath, baseline, current); len(failures) != 0 {
+		t.Fatalf("reviewed constraint transition should pass: %v", failures)
+	}
+	if failures := checkToolCompatibility(toolPath+"_unlisted", baseline, current); len(failures) == 0 {
+		t.Fatal("an unlisted tool inherited the constraint approval")
+	}
+	wrongSource := fixture(`{"require_one_of":[["enabled"]]}`)
+	if failures := checkToolCompatibility(toolPath, wrongSource, current); len(failures) == 0 {
+		t.Fatal("a wrong source constraint inherited the approval")
+	}
+	wrongTarget := fixture(`{"mutually_exclusive":[["enabled","file"]]}`)
+	if failures := checkToolCompatibility(toolPath, baseline, wrongTarget); len(failures) == 0 {
+		t.Fatal("a wrong target constraint inherited the approval")
+	}
+}
