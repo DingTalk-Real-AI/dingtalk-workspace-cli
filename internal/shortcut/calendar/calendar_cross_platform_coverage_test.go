@@ -84,9 +84,6 @@ func TestCrossPlatformCoverageCalendarListRequiresExplicitCollectionAndPaginatio
 	for name, payload := range map[string]string{
 		"missing collection":   `{"success":true,"result":{"hasMore":false}}`,
 		"bad collection":       `{"success":true,"result":{"events":{}}}`,
-		"bad item":             `{"success":true,"result":{"events":["bad"],"hasMore":false}}`,
-		"empty item":           `{"success":true,"result":{"events":[{}],"hasMore":false}}`,
-		"unknown null item":    `{"success":true,"result":{"events":[{"summary":null}],"hasMore":false}}`,
 		"sentinel with cursor": `{"success":true,"result":{"events":[{"attendees":null}],"hasMore":false,"nextCursor":"unexpected"}}`,
 		"missing pagination":   `{"success":true,"result":{"events":[]}}`,
 		"missing next cursor":  `{"success":true,"result":{"events":[],"hasMore":true}}`,
@@ -102,6 +99,25 @@ func TestCrossPlatformCoverageCalendarListRequiresExplicitCollectionAndPaginatio
 		})
 	}
 
+	// Item-level placeholders are filtered like the atomic command
+	// (callSortedCalendarEvents) instead of failing the whole read.
+	for name, payload := range map[string]string{
+		"bad item":          `{"success":true,"result":{"events":["bad"],"hasMore":false}}`,
+		"empty item":        `{"success":true,"result":{"events":[{}],"hasMore":false}}`,
+		"unknown null item": `{"success":true,"result":{"events":[{"summary":null}],"hasMore":false}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var data map[string]any
+			if err := json.Unmarshal([]byte(payload), &data); err != nil {
+				t.Fatal(err)
+			}
+			events, page, err := eventListProject(data)
+			if err != nil || len(events) != 0 || !page.Known || page.HasMore {
+				t.Fatalf("item placeholder not filtered: events=%#v page=%+v err=%v", events, page, err)
+			}
+		})
+	}
+
 	var nextPage map[string]any
 	if err := json.Unmarshal([]byte(`{"success":true,"result":{"events":[{"id":"event-1","summary":"review"}],"hasMore":true,"nextCursor":"cursor-2"}}`), &nextPage); err != nil {
 		t.Fatal(err)
@@ -109,6 +125,85 @@ func TestCrossPlatformCoverageCalendarListRequiresExplicitCollectionAndPaginatio
 	events, page, err = eventListProject(nextPage)
 	if err != nil || len(events) != 1 || events[0]["eventId"] != "event-1" || !page.HasMore || page.NextCursor != "cursor-2" {
 		t.Fatalf("next page projection: events=%#v page=%+v err=%v", events, page, err)
+	}
+}
+
+// TestCrossPlatformCoverageCalendarEmptyCollectionsFilterLikeAtomicCommands pins
+// the alignment with the atomic commands' defensive filtering for list reads:
+// any terminal empty-page placeholder variant — not just the exact
+// four-null-field sentinel recognized by calendarcompat.NormalizeTerminalEmptyEvents
+// — must project to an empty collection, while real rows survive. Busy/free
+// status is excluded here because it is a decision signal: malformed busy
+// evidence must fail closed rather than be silently projected to "free".
+func TestCrossPlatformCoverageCalendarEmptyCollectionsFilterLikeAtomicCommands(t *testing.T) {
+	// Sentinel shape variants the exact-shape normalizer rejects; the generic
+	// item-level filtering must still yield an empty collection.
+	for name, payload := range map[string]string{
+		"extra field":    `{"success":true,"result":{"events":[{"attendees":null,"categories":null,"meetingRooms":null,"reminders":null,"extra":null}],"hasMore":false}}`,
+		"missing field":  `{"success":true,"result":{"events":[{"attendees":null,"categories":null}],"hasMore":false}}`,
+		"empty arrays":   `{"success":true,"result":{"events":[{"attendees":[],"categories":null}],"hasMore":false}}`,
+		"mixed sentinel": `{"success":true,"result":{"events":[{"attendees":null},{"id":"event-1","summary":"real"}],"hasMore":false}}`,
+	} {
+		t.Run("event-"+name, func(t *testing.T) {
+			var data map[string]any
+			if err := json.Unmarshal([]byte(payload), &data); err != nil {
+				t.Fatal(err)
+			}
+			events, page, err := eventListProject(data)
+			if err != nil || !page.Known || page.HasMore {
+				t.Fatalf("%s: events=%#v page=%+v err=%v", name, events, page, err)
+			}
+			if name == "mixed sentinel" {
+				if len(events) != 1 || events[0]["eventId"] != "event-1" {
+					t.Fatalf("real row lost in mixed sentinel: %#v", events)
+				}
+				return
+			}
+			if len(events) != 0 {
+				t.Fatalf("%s: placeholder not filtered: %#v", name, events)
+			}
+		})
+	}
+
+	// The same filtering contract applies to the other read projections whose
+	// business arrays never went through the events-only sentinel normalizer.
+	for name, check := range map[string]func(t *testing.T){
+		"attendees": func(t *testing.T) {
+			rows, err := attendeeListProject(map[string]any{"success": true, "result": map[string]any{
+				"attendees": []any{map[string]any{"attendees": nil, "categories": nil}},
+			}})
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("attendee placeholder not filtered: %#v %v", rows, err)
+			}
+		},
+		"rooms": func(t *testing.T) {
+			rows, err := roomSearchProject(map[string]any{"success": true, "result": map[string]any{
+				"rooms": []any{map[string]any{"roomName": nil, "capacity": nil}},
+			}})
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("room placeholder not filtered: %#v %v", rows, err)
+			}
+		},
+		"groups": func(t *testing.T) {
+			rows, err := roomGroupsProject(map[string]any{"success": true, "result": map[string]any{
+				"groupList": []any{map[string]any{"groupName": nil}},
+			}})
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("group placeholder not filtered: %#v %v", rows, err)
+			}
+		},
+		"calendars": func(t *testing.T) {
+			rows, err := bookListProject(map[string]any{"success": true, "result": map[string]any{
+				"calendars": []any{map[string]any{"summary": nil, "type": nil}},
+			}})
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("calendar placeholder not filtered: %#v %v", rows, err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			check(t)
+		})
 	}
 }
 
@@ -328,12 +423,18 @@ func TestCrossPlatformCoverageCalendarAttendeeProjectionAcceptsStableUserID(t *t
 		t.Fatalf("attendees=%#v", attendees)
 	}
 
-	if _, err := attendeeListProject(map[string]any{
+	unidentifiable, err := attendeeListProject(map[string]any{
 		"success": true,
 		"result": map[string]any{
 			"attendees": []any{map[string]any{"responseStatus": "accepted"}},
 		},
-	}); err == nil {
-		t.Fatal("attendee without displayName or userId was accepted")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Attendees without displayName or userId carry no stable identity and
+	// are filtered like the atomic commands instead of failing the read.
+	if len(unidentifiable) != 0 {
+		t.Fatalf("unidentifiable attendee not filtered: %#v", unidentifiable)
 	}
 }
