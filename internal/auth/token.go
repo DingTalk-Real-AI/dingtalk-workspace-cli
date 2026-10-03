@@ -297,10 +297,11 @@ func writeTokenMarker(configDir string, manual bool) error {
 		return err
 	}
 	tmp := filepath.Join(configDir, tokenJSONFile+"."+uuid.New().String()+".tmp")
+	defer func() { _ = tokenRemove(tmp) }()
 	if err := tokenWriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return tokenRename(tmp, filepath.Join(configDir, tokenJSONFile))
+	return renameAuthFile(tmp, filepath.Join(configDir, tokenJSONFile), tokenRename)
 }
 
 // ReadTokenMarkerRevision returns the current credential publication revision.

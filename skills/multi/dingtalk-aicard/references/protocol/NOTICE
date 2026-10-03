@@ -1,0 +1,115 @@
+DingTalk AICard Protocol V0.8
+Copyright 2026 DingTalk (China) Information Technology Co., Ltd.
+(DingTalk modifications and this notice)
+
+This protocol package includes schema definitions and descriptions derived from the
+A2UI (Agent to UI) Protocol project, which is licensed under the
+Apache License, Version 2.0. A copy of that license is included in the
+LICENSE file in this directory.
+
+  Upstream project : A2UI (Agent to UI) Protocol
+  Upstream license : Apache License, Version 2.0
+  Specification    : v1.0 (Status: Candidate)
+  Baseline commit  : f5e945a93da36a5d126228f2ad6fbe68809ef8f7 (2026-09-15)
+
+--------------------------------------------------------------------------------
+DERIVED FILES AND MODIFICATIONS (Apache-2.0 section 4(b))
+--------------------------------------------------------------------------------
+
+The files below identify DingTalk modifications and distinguish upstream-derived
+material from DingTalk-authored additions:
+
+1. agent-to-renderer.json
+   Derived from : specification/v1_0/json/agent_to_renderer.json
+   Modified     :
+     - "$id" changed from "https://a2ui.org/specification/v1_0/agent_to_renderer.json"
+       to "https://dingtalk.com/card/a2ui/agent-to-renderer.json". The upstream
+       "$id" is intentionally NOT reused, so that this package is never mistaken
+       for an official A2UI file and never collides with one inside a shared
+       validator registry.
+     - Added "$defs/anyComponent", which unions the four component shards of this
+       package. Upstream resolves a single placeholder "catalog.json" instead.
+     - References to "common_types.json" retargeted to "./common-types-basic.json".
+     - Removed the "callRendererFunction" and "agentFunctionResponse" message
+       branches, together with their "$defs", because the current implementation
+       does not support the corresponding RPC flows. The remaining
+       four branches are identical in name and order to upstream v1.0.
+
+2. common-types-basic.json
+   Derived from : specification/v1_0/json/common_types.json
+   Unchanged definitions : "$defs/ComponentId", "$defs/Extensions".
+   Modified     : Removed FunctionResponse and CallId with the unsupported RPC
+                  flows. Remaining definitions include reference adjustments
+                  and DingTalk customizations.
+                  The common-type files as a whole are NOT a drop-in replacement
+                  for upstream "common_types.json". Two important semantic
+                  changes are:
+     - "Action"    : adds "responsePath" and "wantResponse"; omits upstream
+                     "userMessage".
+     - "CheckRule" : "condition" is a DynamicBoolean and "message" is required,
+                     whereas upstream evaluates "condition" to a ValidationResult
+                     object and treats "message" as an optional fallback.
+
+3. common-types-extended.json
+   DingTalk literal-object and host-action value-tree, binding, ownership and
+   result-path types. Function result schemas are documented in the host-function
+   catalog next to each function. Not part of the upstream specification.
+
+4. common-types-visual.json
+   DingTalk visual types (ColorToken, SizeToken and IconName), moved without
+   changing their definitions from common-types-extended.json. Not part of
+   the upstream specification.
+
+5. catalog-components-common.json, catalog-components-composition.json,
+   catalog-components-inputs.json, catalog-components-specialized.json,
+   catalog-functions-core.json, catalog-functions-expressions.json,
+   catalog-functions-host-actions.json
+   DingTalk-maintained catalog shards. The four component shards and
+   catalog-functions-core.json retain or adapt selected definitions and
+   description text from specification/v1_0/catalogs/basic/catalog.json;
+   their content is not wholly DingTalk-original. DingTalk has changed and
+   extended those entries and split them into task-specific shards.
+   catalog-functions-expressions.json and catalog-functions-host-actions.json
+   contain DingTalk-specific functions. All seven shards follow the upstream
+   v1.0 catalog structure and pass its "catalog_definition.json" meta
+   contract; they are not unmodified official catalogs. Empty union branches
+   use false.
+
+6. examples/
+   DingTalk-authored message examples. Not derived from upstream.
+
+--------------------------------------------------------------------------------
+TRADEMARKS AND SCOPE
+--------------------------------------------------------------------------------
+
+This package is maintained by DingTalk. It is neither certified, endorsed, nor
+published by the A2UI project. Apache-2.0 grants no trademark rights; "A2UI" is
+referenced here solely to identify the upstream work from which parts of this
+package are derived.
+
+The derived schema files and this notice describe this package's scope.
+Nothing here constitutes a warranty of full interoperability with official
+A2UI renderers or SDKs.
+
+--------------------------------------------------------------------------------
+中文摘要（以上述英文内容为准）
+--------------------------------------------------------------------------------
+
+本包部分 Schema 定义与说明派生自 A2UI 协议项目（Apache-2.0 许可），许可证全文见同目录 LICENSE。
+上游基线为 A2UI 规范 v1.0（状态：Candidate），提交 f5e945a93d（2026-09-15）。
+
+已改编并修改的文件：agent-to-renderer.json（改 $id、增 anyComponent、公共类型引用
+重定向并裁剪两类当前不支持的 RPC 消息）、common-types-basic.json（原样保留
+ComponentId 与 Extensions；随未开放的 RPC 流程移除 FunctionResponse 和 CallId；
+其他定义包含引用调整和钉钉定制，Action 与 CheckRule 存在语义差异）。公共类型文件
+整体不能直接替代上游 common_types.json。四份组件 catalog 与
+catalog-functions-core.json 保留或改编了官方 Basic Catalog 的部分定义与说明，
+由钉钉扩展并分片，不属于纯钉钉原创内容。catalog-functions-expressions.json、
+catalog-functions-host-actions.json、common-types-extended.json、
+common-types-visual.json 与 examples/ 为钉钉新增内容。
+
+本包消息集为官方四支子集（不含 callRendererFunction 与 agentFunctionResponse）。
+
+本包由钉钉维护，未获 A2UI 项目认证或背书。Apache-2.0 不授予商标权利，文中提及
+"A2UI" 仅用于标识派生来源。本包范围由随包 Schema 和本说明界定，不构成与官方渲染器或
+SDK 完全互操作的担保。

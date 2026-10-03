@@ -26,6 +26,7 @@ dws recruit job create --from ./job.json --format json
 
 JSON 必填字段为 `name`、`description`、`jobNature`、`requiredEdu`、`extData`、
 `creatorUserId`。
+`campus` 缺失或为 null 时默认 `false`；只有明确创建校招职位时才设置为 `true`。
 `jobNature` 当前固定为 `FULL-TIME`；学历枚举为 1小学、2初中、3高中、4中专、
 5大专、6本科、7硕士、8博士、9其他。`minSalary`、`maxSalary` 可选；两者同时
 提供时最低薪资不得高于最高薪资。

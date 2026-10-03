@@ -2396,9 +2396,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、权限、访问密钥、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、记录评论、应用模式、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、记录评论、应用模式、视图、权限、访问密钥、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -2408,7 +2408,7 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、图表、访问密钥、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
@@ -2429,7 +2429,8 @@ func newAitableCommand() *cobra.Command {
   dws aitable import     [upload|data]                                                  数据导入
   dws aitable attachment [upload|remove]                                                附件管理
   dws aitable template   search                                                         模板搜索
-  dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理`,
+  dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理
+  dws aitable api-key    [create|list|revoke]                                          SQL Sheet 访问密钥管理`,
 		RunE:                       groupRunE,
 		SuggestionsMinimumDistance: 2, // Enable "Did you mean ...?" for typos
 	})
@@ -10706,6 +10707,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	infoAliasCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	root.AddCommand(infoAliasCmd)
 	root.AddCommand(newAitablePsqlCommand())
+	root.AddCommand(newAitableAPIKeyCommand())
 	// hint: dws aitable doc search → dws aitable base search
 	root.AddCommand(hintSubCmd("doc", "use: dws aitable base search --query <关键词>"))
 	// NOTE: "create" and "info" are registered as real alias commands above

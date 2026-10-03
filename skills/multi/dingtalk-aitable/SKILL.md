@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）业务操作与 CLI 契约评审。只评审 aitable 合成 JSON 回执也必须加载本 Skill；“不要执行线上业务”不等于免除本机离线契约核对，不能按通用 JSON 经验直接作答。评审以用户原文指定的核对入口为准；背景写命令不是额外目标，Agent 自拟的 Skill 参数不得扩大范围。用户给出 aitable 命令、form share 合成回执、dry-run 或询问写入恢复方案时也必须加载本 Skill；这是本机 Help/Schema 契约核对，不是仓库源码审查，不从源码搜索开始。先加载正文确定入口与规则，不能仅凭摘要执行。适用于 Base/Table、字段与记录、评论、筛选排序、公式、SQL/PostgreSQL/JOIN、表单分享与 CP 同步、App 页面/Widget、模板、导入导出、仪表盘/图表、附件及审批等数据源同步。不做电子表格单元格操作（走 dingtalk-misc）或文字文档编辑（走 dingtalk-doc）。
+description: 钉钉 AI 表格（多维表）业务操作。Use when 用户需要操作 AI 表格/多维表/Base/Table、应用模式/App 页面/Widget、建表、查写记录、字段、记录评论、评论回复、访问密钥（API Key）、SQL/PostgreSQL/SELECT/JOIN、筛选、排序、公式、模板、批量导入 CSV 或 JSON、导出、仪表盘、图表、上传附件、数据源配置与同步、按任务 ID 查询同步状态或审批数据同步。普通请求以完成明确的业务操作为主；当用户明确要求 CLI 契约评审、核对 aitable 合成 JSON 回执、dry-run、命令参数、Help/Schema 契约或恢复方案时，必须加载本 Skill。只评审 aitable 合成 JSON 回执也必须加载本 Skill；“不要执行线上业务”不等于免除本机离线契约核对，不能按通用 JSON 经验直接作答。这是本机 Help/Schema 契约核对，不是仓库源码审查，不从源码搜索开始；先加载正文确定入口与规则，不能仅凭摘要执行；以用户原文指定的核对入口为准，Skill 参数不得扩大范围。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -10,6 +10,10 @@ metadata:
 ---
 
 # 钉钉 AI 表格 Skill
+
+## 业务操作优先与契约评审边界
+
+默认目标是完成用户明确提出的 AI 表格业务操作，包括查询、创建、更新、同步和其他已授权写入。契约评审是辅助场景，仅在用户明确要求核对合成 JSON、dry-run、参数合法性、Help/Schema 或恢复方案时启用；这类请求默认只读，不把评审要求扩展成线上业务操作。用户同时提出业务操作和契约核对时，先按真实业务目标执行必要的契约校验，再继续执行已明确授权的业务操作。
 
 ## 先区分操作、用法与契约评审
 
@@ -232,6 +236,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | 自动化工作流 | [workflow](references/aitable/aitable-workflow.md) |
 | 普通角色或高级权限 | [advperm](references/aitable/aitable-advperm.md) |
 | 数据源接入、同步管理、sourceConfig 构造或审批数据同步 | [datasource](references/aitable/aitable-datasource.md) |
+| 访问密钥创建、查询或撤销 | [api-key](references/aitable/aitable-api-key.md) |
 | SQL、PostgreSQL、SELECT 或同 Base 多表 JOIN | [psql](references/aitable/aitable-psql.md) |
 | 产品边界不明确 | [intent-guide](references/intent-guide.md) |
 | 只有上述 Reference 仍无法定位的低频原子能力 | [aitable.md](references/aitable.md) 的对应章节 |

@@ -54,6 +54,11 @@ Select the PR risk tier before choosing checks:
 | Standard | Ordinary implementation work with a stable package graph | Focused unit/integration tests and observable behavior for the changed path | Race tests for changed packages and their reverse dependencies, scope-matched HEAD/base coverage, and representative Darwin/Windows compilation |
 | High-risk | Workflow/policy, package graph, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure change | Relevant full or domain suite plus focused behavior evidence | Complete race suite, native platform tests, and all affected domain gates; protected `main` uses this tier unless an exact two-parent merge can reuse a complete, base-owned PR admission |
 
+Repository Git hooks are opt-in through `make setup-hooks`. The pre-commit hook
+checks staged whitespace and staged Go formatting only. It reads the Git index,
+does not modify the working tree, and does not run repository-wide lint, build,
+or test commands. Run the change-specific checks above before opening a PR.
+
 Classification fails closed: an incomplete diff, package add/remove/rename, or
 uncertain dependency graph selects the high-risk suite. Native changed-code
 coverage is additionally selected for platform-sensitive code.

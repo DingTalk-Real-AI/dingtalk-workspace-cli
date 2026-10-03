@@ -65,6 +65,14 @@
 | `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
 | `field search-options` | 搜索单选/多选字段的选项 | `--base-id` `--table-id` `--field-id` | 仅 singleSelect/multipleSelect；`--keyword` 模糊过滤，不传返回全部 |
 
+### api-key (访问密钥管理) → 详见 [aitable-api-key.md](./aitable/aitable-api-key.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `api-key create` | 创建 SQL Sheet API Key | `--base-id` | MANAGER；确认后执行；完整凭据仅创建时返回 |
+| `api-key list` | 查询有效凭据 | `--base-id` | MANAGER；返回 0 或 1 个凭据的元数据 |
+| `api-key revoke` | 撤销指定凭据 | `--base-id --key-id` | MANAGER；确认目标 keyId 后执行；重复撤销同样成功 |
+
 ### psql (PostgreSQL 只读查询) → 详见 [aitable-psql.md](./aitable/aitable-psql.md)
 
 | 命令模式 | 用途 | 必填参数 | 路由提醒 |

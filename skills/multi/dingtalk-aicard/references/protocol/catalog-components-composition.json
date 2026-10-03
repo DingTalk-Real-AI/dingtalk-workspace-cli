@@ -1,0 +1,726 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-components-composition.json",
+  "title": "DingTalk AICard Protocol V0.8 Composition and repeated layouts",
+  "description": "11 components and 0 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog. Modified by DingTalk from selected entries of the A2UI v1.0 Basic Catalog; some upstream definitions and descriptions are retained. See NOTICE.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {
+    "Link": {
+      "type": "object",
+      "description": "Clickable link text and navigation.",
+      "properties": {
+        "component": {
+          "const": "Link",
+          "description": "Public component type identifier."
+        },
+        "text": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Text displayed by the link. Supports literals, data bindings, and value functions. The server localizes multilingual copy before sending it."
+        },
+        "maxLine": {
+          "type": "integer",
+          "description": "Maximum number of display lines. Omitted means 2."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Action executed when the component is clicked; only effective if the component declares click capability."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "text"
+      ]
+    },
+    "CardHeader": {
+      "type": "object",
+      "description": "Unified card header with a theme, dynamic title, dark-theme icon, and trailing content.",
+      "properties": {
+        "component": {
+          "const": "CardHeader",
+          "description": "Public component type identifier."
+        },
+        "title": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Card header title, supports literals, data binding, and function return values."
+        },
+        "theme": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "blue",
+                "red",
+                "orange",
+                "green",
+                "pink",
+                "purple",
+                "yellow",
+                "water",
+                "olive"
+              ]
+            },
+            {
+              "$ref": "./common-types-basic.json#/$defs/DataBinding"
+            },
+            {
+              "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+            }
+          ],
+          "description": "Semantic theme. **A single value determines four light/dark colours at once** — light and dark title colours plus light and dark header background colours. The design system fixes these pairings, so arbitrary hexadecimal colours are not accepted and the value is not split into separate fields; this is exactly why the field is an enum rather than a `colorToken`, whose contract is one token to one colour and cannot express a one-to-many relationship. The background uses the primary colour at 12%–16% opacity, and the renderer picks the light or dark variant for the active theme; the title colour is selected the same way. The default is `blue`. For compatibility, legacy cards may send a primary-colour hex value directly (`#0066FF`, `#00B853`, `#F2510C`, `#FF9200`). Unknown values fall back to `blue` without raising an error."
+        },
+        "icon": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Header LOGO image URL, rendered to the left of the title, 16px square, with a 6px spacing from the title. If not configured, the icon position will not be rendered."
+        },
+        "darkIcon": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Logo image URL for the dark theme. The light and dark URLs are sent together, and the renderer selects one for the current theme, updating immediately when the theme changes. If omitted, it falls back to `icon`."
+        },
+        "trailing": {
+          "$ref": "./common-types-basic.json#/$defs/ComponentId",
+          "description": "Slot on the **right side** of the title. Its value is the `id` of one component in the same surface: **a single string, not an array**. Slot content is right-aligned with a 6px gap from the title. The title occupies the remaining width and wraps when too long. Typical uses include source labels, status tags, and timestamps. To place multiple elements, put a `Row` in the slot and control spacing and alignment explicitly with its `gap` and `align`. If omitted, no trailing content is rendered."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "title"
+      ]
+    },
+    "GridLayout": {
+      "type": "object",
+      "description": "Grid layout supporting static children and data templates. Omitting columns enables adaptive column selection from card content width; setting columns fixes the column count. See the corresponding fields for omitted row-height and column-gap behavior.",
+      "properties": {
+        "component": {
+          "const": "GridLayout",
+          "description": "Public component type identifier."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "List of child component IDs or dynamic child templates. In dynamic form, `componentId` points to the cell template, and `path` points to an array in the Data Model; the rendering results are the same for both forms, with cells laid out row by row according to `columns`."
+        },
+        "columns": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Number of columns per row. **When omitted, the layout adapts to the card width** using a minimum column width of 234 and at most 3 columns; if the width is unavailable, it uses 2 columns. When specified, the exact value is used and adaptive column selection is disabled."
+        },
+        "columnGap": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Column gap. May be a number or a card-protocol `DynamicNumber`. The default is 8 when `columns` is set and 12 in adaptive mode when `columns` is omitted."
+        },
+        "rowGap": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Row gap. May be a number or a card-protocol `DynamicNumber`; default 8."
+        },
+        "itemHeight": {
+          "type": "number",
+          "description": "Fixed cell height. When omitted or set to 0, no fixed cell height is supplied to the renderer; final height is determined by its layout. Set a positive number when a fixed height is required."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "Loop": {
+      "type": "object",
+      "description": "Data-driven repeated-rendering container. Repeated items are arranged vertically; dimensions follow the template content and parent layout.",
+      "properties": {
+        "component": {
+          "const": "Loop",
+          "description": "Public component type identifier."
+        },
+        "children": {
+          "description": "The template and data path structure is the same as the dynamic ChildList.",
+          "allOf": [
+            {
+              "$ref": "./common-types-basic.json#/$defs/ChildList"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "componentId": {
+                  "$ref": "./common-types-basic.json#/$defs/ComponentId",
+                  "description": "Loop item template component ID."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The absolute JSON Pointer of the Data Model array."
+                }
+              },
+              "required": [
+                "componentId",
+                "path"
+              ]
+            }
+          ]
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "Stack": {
+      "type": "object",
+      "description": "Z-axis stacking container: A **base layer** determines the size, on which 0~N **overlay layers** are stacked.",
+      "properties": {
+        "component": {
+          "const": "Stack",
+          "description": "Public component type identifier."
+        },
+        "child": {
+          "$ref": "./common-types-basic.json#/$defs/Child",
+          "description": "The component ID of the **base layer**, single. It fills the entire Stack and **determines the container size**; overlay layers are positioned relative to it. To place multiple elements, wrap them with `Row` / `Column` before passing them here."
+        },
+        "overlays": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "child": {
+                "$ref": "./common-types-basic.json#/$defs/Child",
+                "description": "The component ID of this overlay layer."
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "topStart",
+                  "topCenter",
+                  "topEnd",
+                  "centerStart",
+                  "center",
+                  "centerEnd",
+                  "bottomStart",
+                  "bottomCenter",
+                  "bottomEnd"
+                ],
+                "description": "The placement of this overlay on the base layer takes values from the same set of nine-level two-dimensional alignment vocabulary as `ColumnLayout.contentAlignment`."
+              }
+            },
+            "required": [
+              "child",
+              "position"
+            ]
+          },
+          "description": "**Overlay layer** list, stacked on top of the base layer from bottom to top according to the array order. Each item is an object, only accepting the keys `child` and `position`, both of which are required. If omitted, only the base child is shown and no overlays are created."
+        },
+        "backgroundColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the container background, with **higher priority than `backgroundColor`**. Its values and behavior match the same field on `Row` and `Column`."
+        },
+        "backgroundColor": {
+          "type": "string",
+          "description": "Container background color, hexadecimal `#RRGGBB` or `#AARRGGBB`. A semi-transparent overlay placed over the image is a typical use of a stacked container. If not set, it is transparent."
+        },
+        "cornerRadius": {
+          "type": "number",
+          "description": "Corner radius, in px, must be a number. If omitted, no explicit radius is set and host container defaults remain in effect."
+        },
+        "borderWidth": {
+          "type": "number",
+          "description": "Border width in px; must be a number. **A visible border requires `borderColor` to be configured as well.**"
+        },
+        "borderColor": {
+          "type": "string",
+          "description": "Stroke color, the value format is the same as `backgroundColor`."
+        },
+        "borderColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the border color. It has **higher priority than `borderColor`** and is resolved by the host for the **current client platform, theme, and tenant**. This is the only way to make the border follow light and dark themes: `borderColor` accepts a single value that remains unchanged in dark mode. The line-color families are `common_line_light_color` and `common_line_hard_color`; the host resolves their actual values and opacity. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `borderColor` without reporting an error."
+        },
+        "padding": {
+          "type": "number",
+          "description": "Uniform padding on all four sides in px. Use it to keep overlays away from the container edge. If omitted, this field adds no padding; a card root can still receive insets from card layout."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Makes the entire container clickable, using the same Action semantics as the `action` field on `Row` / `Column`."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "child",
+        "component"
+      ]
+    },
+    "ScrollView": {
+      "type": "object",
+      "description": "A horizontal or vertical scroll container.",
+      "properties": {
+        "component": {
+          "const": "ScrollView",
+          "description": "Public component type identifier."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ],
+          "description": "Scroll direction; omitted means `vertical`. Vertical scrolling additionally requires a positive maxHeight to bound the viewport; horizontal scrolling is constrained by available width."
+        },
+        "autoScrollOnUpdate": {
+          "type": "boolean",
+          "description": "Automatically scrolls to the end after content updates: to the far right horizontally or to the bottom vertically. Defaults to `false`. During streaming output, PC also blocks user scrolling so follow-scrolling is not interrupted. This applies only to **scrollable** configurations: `direction: \"horizontal\"`, or `direction: \"vertical\"` with `maxHeight`. An uncapped vertical list does not scroll, so this field has no effect there."
+        },
+        "maxHeight": {
+          "type": "number",
+          "description": "Viewport height limit. When omitted or set to 0, no height limit is set and vertical content expands without internal scrolling. A positive value limits viewport height in both horizontal and vertical modes. Vertical mode also enables internal scrolling; horizontal scrolling still depends on content exceeding the available width."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "List of child component IDs, all references must exist in the current surface."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "Tabs": {
+      "type": "object",
+      "description": "Tab header and content panel.",
+      "properties": {
+        "component": {
+          "const": "Tabs",
+          "description": "Component type identification field."
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "$ref": "./common-types-basic.json#/$defs/DynamicString",
+                "description": "The tab title."
+              },
+              "child": {
+                "$ref": "./common-types-basic.json#/$defs/Child",
+                "description": "The ID of the child component."
+              },
+              "action": {
+                "$ref": "./common-types-basic.json#/$defs/Action",
+                "description": "When switching to this tab, report: First, the renderer locally switches to the selected state, and then sends the event to the agent. **Each tab is configured independently**; tabs that are not configured only perform local switching and do not report. Only the `event` branch is supported; writing `functionCall` will not work (treated as `action` that is not configured)."
+              }
+            },
+            "required": [
+              "title",
+              "child"
+            ]
+          },
+          "description": "An array of objects, where each object defines a tab with a title and a child component. The first array entry is initially selected. Subsequent selection is maintained locally; there is no public initial-tab selection field."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "tabs"
+      ]
+    },
+    "List": {
+      "type": "object",
+      "description": "The public `List` component. `direction` unifies horizontal, vertical, and data-driven lists.",
+      "properties": {
+        "component": {
+          "const": "List",
+          "description": "Component type identification field."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ],
+          "description": "The direction in which the list items are laid out. Omitted means `vertical`."
+        },
+        "align": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ],
+          "description": "Defines the alignment of children along the cross axis. Omitted means `stretch`."
+        },
+        "wrap": {
+          "type": "boolean",
+          "description": "Whether children wrap to the next line when they do not fit; default `false`. **Effective only with `direction: horizontal`.** A vertical container has unbounded height in a card, so wrapping can never occur; `wrap: true` on a vertical List is ignored and the component still renders normally. ⚠️ **Incompatible with child `weight`**: a weighted child fills the row and prevents wrapping. Do not assign child `weight` when wrapping is required."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "CollapsiblePanel": {
+      "type": "object",
+      "description": "Unified collapsible panel, collapsed by default. `variant` controls the expanded-content style: `indented` uses an indented left rule, while `reasoning` uses a flat agent-reasoning layout. `defaultExpanded` can expand the first frame, `maxHeight` enables internal scrolling after a height limit, and `textEffect` can add a shimmer effect to the title.",
+      "properties": {
+        "component": {
+          "const": "CollapsiblePanel",
+          "description": "Public component type identifier."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Collapsible-panel title. The current integration requires non-empty text."
+        },
+        "textEffect": {
+          "type": "string",
+          "enum": [
+            "shimmer"
+          ],
+          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. The field is sent consistently to all clients. The effect currently works only on iOS; unsupported clients silently ignore it and render regular text without affecting the text itself. No protocol change is required when those clients add support."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Light mode title icon address."
+        },
+        "darkIcon": {
+          "type": "string",
+          "description": "Dark mode title icon URL; falls back to icon if not provided."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "indented",
+            "reasoning"
+          ],
+          "description": "Expanded-content style. `indented`, the default, draws a thin vertical line on the left and indents the content to convey details subordinate to the title; it suits step details and tool-call lists. `reasoning` omits the line and aligns the content with the title, marking the panel as an agent execution or reasoning container; it suits cases where the title acts as a toggle and the content itself is first-class information. The field affects only the expanded content's appearance and this semantic marking: collapse behaviour, `defaultExpanded` and `maxHeight` scrolling are identical in both styles."
+        },
+        "defaultExpanded": {
+          "type": "boolean",
+          "description": "Whether the first frame is expanded, default is false (collapsed). The semantic of a collapsible panel is \"keep it closed first, click to open if you want to see it,\" so the default is collapsed; panels that really need to be expanded from the start should explicitly set it to true. The expanded/collapsed state after the user clicks the title is maintained locally by the renderer and is not affected by this field."
+        },
+        "maxHeight": {
+          "type": "number",
+          "description": "Maximum height of the expanded content area in px; default 300. Content that exceeds the limit scrolls inside the panel instead of extending the entire card. Shorter content uses only its actual height without leaving blank space. A value of 0 removes the height limit."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "List of child component IDs or data-driven templates."
+        },
+        "colorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name with **the highest color-resolution priority**. When resolved, `customLightColor` and `customDarkColor` are ignored. It uses the same resolution mechanism as `Text.colorToken`."
+        },
+        "customLightColor": {
+          "type": "string",
+          "description": "The title color in light mode, in hexadecimal. Only effective when `colorToken` is not matched."
+        },
+        "customDarkColor": {
+          "type": "string",
+          "description": "Title color in dark mode, in hexadecimal. Only effective when `colorToken` is not hit."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component",
+        "title"
+      ]
+    },
+    "ColumnLayout": {
+      "type": "object",
+      "description": "Responsive columns from one to six.",
+      "properties": {
+        "component": {
+          "const": "ColumnLayout",
+          "description": "Public component type identifier."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "List of child component IDs or data-driven templates."
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "description": "Column-count hint at normal width, from 1 to 6; internally defaults to 2. The current horizontal layout allocates width to the children and their weights rather than grouping or wrapping by this field. Supply two child columns for a two-column layout."
+        },
+        "gap": {
+          "type": "number",
+          "description": "Column spacing. Omitted means 8; used as vertical spacing after responsive stacking."
+        },
+        "columnWidths": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "const": "auto"
+              }
+            ]
+          },
+          "description": "Child-column weights or auto, corresponding to children in order. Used to allocate width only in horizontal layout; an explicit weight on a child takes precedence. If omitted, children without their own weight receive equal weights. This field no longer allocates width after responsive stacking into a vertical column."
+        },
+        "contentAlignment": {
+          "type": "string",
+          "enum": [
+            "topStart",
+            "topCenter",
+            "topEnd",
+            "centerStart",
+            "center",
+            "centerEnd",
+            "bottomStart",
+            "bottomCenter",
+            "bottomEnd"
+          ],
+          "description": "Two-dimensional content alignment; the vocabulary is the same nine-level set as `Stack.overlays[].position`. Columns themselves are evenly weighted, so what this actually controls is **the alignment of each column along the cross axis (vertical)**: when column heights differ, it decides whether the shorter column is aligned to the top, centre or bottom."
+        },
+        "responsive": {
+          "type": "boolean",
+          "description": "**Responsive stacking on narrow cards**; defaults to false. When enabled with responsiveColumns omitted or set to 1, child columns stack vertically on narrow cards and gap becomes vertical spacing. On wider cards, the actual children and their weights retain a horizontal layout. See the responsive behavior section."
+        },
+        "responsiveColumns": {
+          "type": "integer",
+          "description": "The number of target columns on a narrow screen, default is `1`; it only takes effect when configured together with `responsive: true`. **Currently only `1` is available**—setting other values does not reduce the columns, keeping the original layout on narrow screens."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "ButtonGroup": {
+      "type": "object",
+      "description": "A row of buttons arranged side by side, each button comes with its own text and action. The button style is exactly the same as the standalone `Button` (the same set of capsule styles), the only difference is that multiple buttons are declared at once using an array, with unified control over spacing and wrapping.",
+      "properties": {
+        "component": {
+          "const": "ButtonGroup",
+          "description": "Component type identification field."
+        },
+        "buttons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "$ref": "./common-types-basic.json#/$defs/DynamicString",
+                "description": "Button text. When missing or empty, the entire component degrades to a placeholder."
+              },
+              "variant": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "primary",
+                  "borderless"
+                ],
+                "description": "Button visual variant. Values have the same meaning as the standalone `Button` component's `variant`; default `default`. Values outside the vocabulary render as `default`."
+              },
+              "disabled": {
+                "type": "boolean",
+                "description": "Whether to disable, default `false`. Disabled items are grayed out **and do not have click events attached**."
+              },
+              "action": {
+                "$ref": "./common-types-basic.json#/$defs/Action",
+                "description": "Action when clicked. **If this is not configured, it is just an unclickable label**—it does not mint a token or enter the action list."
+              },
+              "metadata": {
+                "description": "Extension metadata for the current button. Host-action write-back uses this item's `dt_actionBindingsV1.action` and does not inherit parent-component metadata."
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "allOf": [
+              {
+                "$ref": "./common-types-extended.json#/$defs/HostActionOwner"
+              }
+            ]
+          },
+          "description": "Button definition list **cannot be an empty array**. An empty array will cause the entire component to degrade to a placeholder."
+        },
+        "responsive": {
+          "type": "boolean",
+          "description": "**Adaptive line wrapping for wide and narrow screens**, default `false`. See the 'Responsive Behavior' below."
+        },
+        "gap": {
+          "type": "number",
+          "description": "Horizontal gap between adjacent buttons in px; default `8`. No gap is added before the first button."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Relative flex factor when used as a direct child of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "buttons",
+        "component"
+      ]
+    }
+  },
+  "functions": {},
+  "$defs": {
+    "anyComponent": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-components-composition.json#/components/ButtonGroup"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/CardHeader"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/CollapsiblePanel"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/ColumnLayout"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/GridLayout"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/Link"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/List"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/Loop"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/ScrollView"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/Stack"
+        },
+        {
+          "$ref": "./catalog-components-composition.json#/components/Tabs"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "component"
+      }
+    },
+    "anyFunction": false
+  }
+}

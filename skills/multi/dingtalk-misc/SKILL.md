@@ -23,7 +23,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 
 | 触发关键词 | 一句话范围 | 命令前缀 | 详细参考 |
 |---|---|---|---|
-| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 / 发起审批 / 审批附件 | OA 审批查询与处理；创建和附件按需加载专项说明 | `dws oa` | 先读核心 [oa.md](references/oa.md)；发起审批再读 [oa-create.md](references/oa-create.md)；附件操作再读 [oa-attachments.md](references/oa-attachments.md) |
+| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 / 发起审批 / 审批附件 / 创建模板 / 更新模板 | OA 审批查询与处理；创建、附件和模板写入按需加载专项说明 | `dws oa` | 先读核心 [oa.md](references/oa.md)；发起审批再读 [oa-create.md](references/oa-create.md)；附件操作再读 [oa-attachments.md](references/oa-attachments.md)；创建/更新模板再读 [oa-template-write.md](references/oa-template-write.md) |
 | 法务 / 智能合同 / 合同台账 / 合同归档 / 合同项目 / 相对方 / 合同账款 | 智能合同台账、导入、起草、归档、项目、相对方与账款管理 | `dws contract` | [contract.md](references/contract.md) |
 | 考勤 / 打卡 / 班次 / 考勤组 / 排班 / 考勤报表 / 假期余额 | 考勤记录、规则与配置、排班、报表、假期 | `dws attendance` | 日常查询/规则/设置：[attendance.md](references/attendance.md)；排班导入或排班表导出：[attendance-schedule.md](references/attendance-schedule.md)；考勤 Excel/报表导出：[attendance-report.md](references/attendance-report.md)；假期/余额：[attendance-vacation.md](references/attendance-vacation.md) |
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
@@ -62,7 +62,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 - **Dev 完成纪律**：执行前记下用户要求的每个交付项；按依赖顺序执行，删除/停用等清理放到最后。用户最初请求写操作只授权 dry-run，不是看过预检后的正式确认。必须先展示 dry-run 的准确对象、动作、业务参数和影响，再取得用户对该预览的明确确认；随后只把同一命令的 `--dry-run` 换成 `--yes`，目标或业务参数有任何变化都重新 dry-run、展示并确认。确认前不得发出非 dry-run 写调用；`--dry-run` 不是完成。写后只做一次必要回读。相同业务错误且参数、状态均未改变时不要重试；仅在新证据实际改变命令、参数或状态后重试一次。最终逐项回答，空列表也明确写“暂无”，不要用大段原始 JSON 挤掉其它结果。
 - **Devapp 跨域快路径**：创建/清理应用加机器人、网页、成员等能力，首读 `dev/recipes.md` 即可，不再预读 app 或各专题。缺参才补精确段落；新建失败不能借用其它应用。确认后的续轮直接执行已确认且未变化的命令，完成必要回读后，同轮继续下一项 dry-run 并询问该项确认，不另问“是否继续”。复用 ID、回执和已读 reference；目标/参数变化仍重新预检确认。明确 STREAM 要传 `--mode STREAM`，不建连接就不读 connect；明确不发布就不进入发布链。
 - **DevDoc 搜索预算**：明确的开发文档任务直接读 [devdoc.md](references/devdoc.md)，无需冷启动预读 shared 或 Devapp。每个主题先原短语搜索；无结果或全不相关时，普通查找至多一次有依据的改写，再报告未命中。指定查询词和页数时不擅自替换或缩减；有返回不等于找到相关资料，禁止连续近义词或跨产品搜索碰运气。
-- OA 任务先读核心 [oa.md](references/oa.md)。只有进入真实提单阶段才增量读取 [oa-create.md](references/oa-create.md)，只有处理审批附件才增量读取 [oa-attachments.md](references/oa-attachments.md)；不要为普通查询预读创建、控件、节点和附件全集。要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
+- OA 任务先读核心 [oa.md](references/oa.md)。只有进入真实提单阶段才增量读取 [oa-create.md](references/oa-create.md)，只有处理审批附件才增量读取 [oa-attachments.md](references/oa-attachments.md)，只有创建或更新模板才增量读取 [oa-template-write.md](references/oa-template-write.md)；不要为普通查询预读创建、控件、节点、附件和模板写入全集。要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
 - 原生 `.md` 与在线富文本 `adoc`、通用文件存储的边界见 [markdown.md](references/markdown.md)；原生 `.html`/`.htm` 文件读写见 [html.md](references/html.md)；跨组织 / profile 规则见 [profile.md](references/profile.md)。
 - PAT 行为授权不是开放平台应用权限；后者见 [dev/permission.md](references/dev/permission.md)。
 

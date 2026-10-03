@@ -297,6 +297,10 @@ func TestCrossPlatformCoverageWindowsSystemAndOverridePaths(t *testing.T) {
 	}
 
 	override := privateTestBase(t)
+	// 显式覆盖目录按共享缓存校验，不能假设 Runner 临时目录的继承 ACL 安全。
+	if err := restrictSharedReadOnly(override); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("DWS_SCHEMA_CACHE_DIR", override)
 	userCacheDir = func() (string, error) { return privateTestBase(t), nil }
 	platformIO = realWindowsIO{}
@@ -1726,6 +1730,10 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 
 	// validateDirectorySecurity open / security / close faults
 	base := privateTestBase(t)
+	// 成功分支需要真实的个人缓存 ACL，独立于宿主临时目录的权限。
+	if err := restrictOwnerWrite(base); err != nil {
+		t.Fatal(err)
+	}
 	counters := &Counters{}
 	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, openFn: func(string, uint32, uint32, uint32, uint32) (windows.Handle, error) {
 		return 0, errors.New("forced open")
@@ -1737,7 +1745,8 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 	}}, false); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("security fault = %v", err)
 	}
-	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, closeFn: func(windows.Handle) error {
+	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, closeFn: func(h windows.Handle) error {
+		_ = windows.CloseHandle(h)
 		return errors.New("forced close")
 	}}, false); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("close fault = %v", err)

@@ -250,7 +250,7 @@ func recruitBusinessResultData(data any, tool string) (map[string]any, error) {
 	if !hasSuccess && !hasResult {
 		return object, nil
 	}
-	if !hasSuccess || !hasResult {
+	if !hasSuccess {
 		return nil, fmt.Errorf("%s 返回的 Connector 信封必须同时包含 success 和 result", tool)
 	}
 	success, ok := successValue.(bool)
@@ -258,11 +258,17 @@ func recruitBusinessResultData(data any, tool string) (map[string]any, error) {
 		return nil, fmt.Errorf("%s 返回的 Connector 信封字段 success 必须是布尔值", tool)
 	}
 	if !success {
-		message, _ := object["message"].(string)
+		message, _ := object["errorMsg"].(string)
+		if strings.TrimSpace(message) == "" {
+			message, _ = object["message"].(string)
+		}
 		if strings.TrimSpace(message) == "" {
 			message = "Connector 返回 success=false"
 		}
 		return nil, &recruitBusinessFailure{message: fmt.Sprintf("%s 调用失败: %s", tool, message)}
+	}
+	if !hasResult {
+		return nil, fmt.Errorf("%s 返回的 Connector 信封必须同时包含 success 和 result", tool)
 	}
 	result, ok := resultValue.(map[string]any)
 	if !ok {
@@ -398,11 +404,11 @@ func newRecruitJobCreateCommand() *cobra.Command {
 			Interface:   recruitMCPInterface(recruitCreateJobTool),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "使用结构化 JSON 创建招聘职位",
-				UseWhen:      []string{"用户明确要求新建职位，并已准备或同意生成职位 JSON 时；文件必须包含 name、description、jobNature、requiredEdu、extData、creatorUserId；jobNature 固定为 FULL-TIME；creatorUserId 必须使用真实创建人 userId；ownerUserIds 可选"},
+				UseWhen:      []string{"用户明确要求新建职位，并已准备或同意生成职位 JSON 时；文件必须包含 name、description、jobNature、requiredEdu、extData、creatorUserId；jobNature 固定为 FULL-TIME；campus 未提供时默认 false，只有明确为校招职位时才设为 true；creatorUserId 必须使用真实创建人 userId；ownerUserIds 可选"},
 				AvoidWhen:    []string{"仅查询职位时使用 recruit job list 或 recruit job get"},
 				Examples:     []string{"dws recruit job create --from ./job.json --dry-run --format json"},
 			},
-			Parameters: []contract.ParamDecl{{Name: "from", Property: "atsAddJobParam", Required: boolPtr(true), InterfaceType: "object", Description: "职位 JSON 文件；CLI 校验后原样作为 atsAddJobParam 对象发送；creatorUserId 为必填的创建人 userId，ownerUserIds 为可选的负责人 userId 字符串数组"}},
+			Parameters: []contract.ParamDecl{{Name: "from", Property: "atsAddJobParam", Required: boolPtr(true), InterfaceType: "object", Description: "职位 JSON 文件；CLI 校验后作为 atsAddJobParam 对象发送；campus 缺失或为 null 时默认 false，明确为校招时传 true；creatorUserId 为必填的创建人 userId，ownerUserIds 为可选的负责人 userId 字符串数组"}},
 		},
 	})
 }
@@ -498,6 +504,11 @@ func loadRecruitJobFile(path string) (any, error) {
 	}
 	if job == nil {
 		return nil, apperrors.NewValidation("职位 JSON 顶层必须是对象")
+	}
+	// ATS requires campus whenever jobNature is provided. Default ordinary
+	// recruitment jobs to false while preserving an explicit campus=true.
+	if campus, exists := job["campus"]; !exists || campus == nil {
+		job["campus"] = false
 	}
 	if err := validateRecruitJob(job); err != nil {
 		return nil, err

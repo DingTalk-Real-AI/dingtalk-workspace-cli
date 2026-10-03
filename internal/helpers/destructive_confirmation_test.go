@@ -656,3 +656,146 @@ func TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall(t *testing.T) 
 		})
 	}
 }
+
+// TestSetShareScopeRequiresConfirmationBeforeToolCall pins the destructive
+// confirmation gate on both set-share-scope entry points across all three
+// visibility tiers. Setting a share scope can open a whole node / wiki space to
+// the org or the internet, so every invocation must confirm first: without
+// --yes the command fails with the typed confirmation_required error and
+// performs zero MCP calls; with --yes it dispatches exactly one call with the
+// precise tool arguments; --dry-run previews without any call. The interactive
+// prompt is covered on both paths too: a piped "no" declines with the typed
+// 用户取消了操作 validation error and zero calls, a piped "yes" dispatches the
+// exact same single call as --yes.
+func TestSetShareScopeRequiresConfirmationBeforeToolCall(t *testing.T) {
+	cases := []struct {
+		name     string
+		build    func() *cobra.Command
+		args     []string
+		product  string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:     "drive PRIVATE",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "PRIVATE"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "PRIVATE"},
+		},
+		{
+			name:     "drive ORGANIZATION",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "ORGANIZATION", "--role", "READER"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "ORGANIZATION", "defaultRole": "READER"},
+		},
+		{
+			name:     "drive PUBLIC",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "PUBLIC", "--role", "DOWNLOADER"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "PUBLIC", "defaultRole": "DOWNLOADER"},
+		},
+		{
+			name:     "wiki PRIVATE",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "PRIVATE"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "PRIVATE"},
+		},
+		{
+			name:     "wiki ORGANIZATION",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "ORGANIZATION", "--role", "EDITOR"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "ORGANIZATION", "defaultRole": "EDITOR"},
+		},
+		{
+			name:     "wiki PUBLIC",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "PUBLIC", "--role", "DOWNLOADER"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "PUBLIC", "defaultRole": "DOWNLOADER"},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// 1) 未确认（EOF stdin）：typed confirmation_required + 零 MCP 调用。
+			caller := &guardedMutationCaller{}
+			err := executeGuardedMutationCommand(t, caller, tc.build, tc.args...)
+			requireTypedConfirmationError(t, err)
+			if len(caller.calls) != 0 {
+				t.Fatalf("tool calls before confirmation = %#v, want none", caller.calls)
+			}
+
+			// 2) 明确确认（--yes）：恰好一次调用，参数精确。
+			confirmed := &guardedMutationCaller{}
+			if err := executeGuardedMutationCommand(t, confirmed, tc.build, append(append([]string(nil), tc.args...), "--yes")...); err != nil {
+				t.Fatalf("confirmed set-share-scope returned error: %v", err)
+			}
+			if len(confirmed.calls) != 1 {
+				t.Fatalf("tool calls = %d, want exactly 1: %+v", len(confirmed.calls), confirmed.calls)
+			}
+			call := confirmed.calls[0]
+			if call.productID != tc.product || call.toolName != tc.tool {
+				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(call.args, tc.wantArgs) {
+				t.Fatalf("tool args = %#v, want %#v", call.args, tc.wantArgs)
+			}
+
+			// 3) --dry-run 预览：不触发任何 MCP 调用。
+			dryRun := &guardedMutationCaller{dryRun: true}
+			if err := executeGuardedMutationCommand(t, dryRun, tc.build, append(append([]string(nil), tc.args...), "--dry-run")...); err != nil {
+				t.Fatalf("dry-run set-share-scope returned error: %v", err)
+			}
+			if len(dryRun.calls) != 0 {
+				t.Fatalf("dry-run tool calls = %#v, want none", dryRun.calls)
+			}
+
+			// 4) 交互拒绝（stdin "no\n"）：typed validation「用户取消了操作」+ 零调用。
+			// ConfirmSafety 把显式拒绝与 EOF 区分开——EOF 走 confirmation_required
+			// （阶段 1），拒绝走本阶段，两者都不得派发。
+			declined := &guardedMutationCaller{}
+			declineRoot := tc.build()
+			declineRoot.SetIn(strings.NewReader("no\n"))
+			err = executeGuardedMutationCommand(t, declined, func() *cobra.Command { return declineRoot }, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+				t.Fatalf("declined set-share-scope error = %v, want 用户取消了操作", err)
+			}
+			var declineErr *apperrors.Error
+			if !stderrors.As(err, &declineErr) || declineErr.Category != apperrors.CategoryValidation {
+				t.Fatalf("declined error = %#v, want typed validation category (exit 3)", err)
+			}
+			if len(declined.calls) != 0 {
+				t.Fatalf("declined tool calls = %#v, want none", declined.calls)
+			}
+
+			// 5) 交互同意（stdin "yes\n"）：恰好一次调用，参数与 --yes 路径完全一致
+			// （管道授权与 flag 授权必须同构，不得产生第二套装配）。
+			accepted := &guardedMutationCaller{}
+			acceptRoot := tc.build()
+			acceptRoot.SetIn(strings.NewReader("yes\n"))
+			if err := executeGuardedMutationCommand(t, accepted, func() *cobra.Command { return acceptRoot }, tc.args...); err != nil {
+				t.Fatalf("accepted set-share-scope returned error: %v", err)
+			}
+			if len(accepted.calls) != 1 {
+				t.Fatalf("accepted tool calls = %d, want exactly 1: %+v", len(accepted.calls), accepted.calls)
+			}
+			if accepted.calls[0].productID != tc.product || accepted.calls[0].toolName != tc.tool {
+				t.Fatalf("accepted tool call = %s/%s, want %s/%s", accepted.calls[0].productID, accepted.calls[0].toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(accepted.calls[0].args, tc.wantArgs) {
+				t.Fatalf("accepted tool args = %#v, want %#v", accepted.calls[0].args, tc.wantArgs)
+			}
+		})
+	}
+}

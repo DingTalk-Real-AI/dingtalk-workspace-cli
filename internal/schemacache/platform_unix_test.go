@@ -215,6 +215,10 @@ func TestCrossPlatformCoverageSecureFileAndDirectoryRejections(t *testing.T) {
 			if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
 				t.Fatal(err)
 			}
+			// 创建权限受 umask 影响；显式设置以保证命中不安全权限分支。
+			if err := os.Chmod(target, 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}},
 		{"hardlink", func(t *testing.T, cache *Cache, target string) {
 			other := filepath.Join(cache.Directory(), "linked")
