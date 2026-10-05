@@ -177,6 +177,81 @@ var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityExceptio
 	"aitable/aitable.record_primary_doc_create": {
 		{Field: "idempotency", Old: "unknown", New: "idempotent"},
 	},
+	// 创建操作在回执不明时不得重放；稳定 ID 的 App/Page/Widget 读取及更新
+	// 重复执行收敛到同一资源。仅批准以下精确的幂等性迁移，其他安全字段
+	// 仍须通过原有兼容检查。
+	"aitable/aitable.advperm_role_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.base_copy": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.base_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.chart_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.dashboard_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.datasource_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.field_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.form_submit": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.record_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.record_create_sub": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.section_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.table_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.view_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.view_duplicate": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.shortcut_app_block_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.shortcut_app_block_get": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_block_list": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_block_update": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_get": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_page_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.shortcut_app_page_get": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_page_list": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.shortcut_app_page_update": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
 	"aitable/aitable.section_delete": {
 		{Field: "confirmation", Old: "not_required", New: "user_required"},
 		{Field: "effect", Old: "write", New: "destructive"},
