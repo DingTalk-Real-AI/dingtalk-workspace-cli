@@ -19,7 +19,7 @@ dws aitable record query --base-id <B> --table-id <T> --filters '<JSON>' --all -
 - filters 使用 `{"operator":"and|or","operands":[...]}`，字段引用使用 fieldId。明确出现 AND/OR、日期或比较操作符时，应由根 Skill 直接选中记录筛选 reference；不要先读本文件再跳到第二个 reference。
 - `+record-query` 必须传真实 `base-id` 和 `table-id`。URL 先用 `+url-resolve`；名称先用 `+resolve-base` / `+resolve-table` 唯一解析，禁止自动选第一项。
 - 单页 `limit` 为 1-100。返回 `data.records`、`data.hasMore`，存在后续页时还会返回 `data.nextCursor`；把该值原样传给下一次 `--cursor`。
-- `+record-query` 不提供 `--all`；明确要求全量时改用原子 `record query --all --page-limit <N>`。达到页上限后仍有 `hasMore=true` 代表截断，应从返回 cursor 续跑；只有 `hasMore=false`，或按 `record-ids` 查询且所有请求 ID 均已返回时，才能声称结果完整。
+- `+record-query --all --max-records <N>` 支持有界全量读取，`max-records` 默认 10000、范围 1–10000，超限返回错误；`--all` 与 `--cursor` 互斥。原子 `record query --all --page-limit <N>` 按页数限界，达到页上限且仍有更多页时也返回非零错误。只有已确认遍历结束，或按 `record-ids` 查询且所有请求 ID 均已返回时，才能声称结果完整。
 - 出现 `pagination_cursor_cycle`、相同 cursor 或重复页时，保留已取记录并立即停止；不要用相同参数重跑，也不要更换查询命令把不完整结果误报为完整。
 
 ## 新增
@@ -31,7 +31,7 @@ dws aitable record create --base-id <B> --table-id <T> \
   --records '[{"cells":{"fldText":"内容"}}]' --format json
 ```
 
-长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.newRecordIds[]` 取 recordId，再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。
+长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.createdRecordIds[]` 取 recordId（兼容保留 `data.newRecordIds[]`），再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。需要回收丢失回执时，调用前持久化 UUID v4 并传 `--client-token`；遇到超时只用原 Base/Table/token 调用 `+record-write-result`，不得自动重放创建。
 
 ## 更新、同步与批量修改
 
@@ -79,4 +79,4 @@ dws aitable +record-delete --base-id <B> --table-id <T> --record-ids <R1,R2>
 
 - 记录历史：`dws aitable +record-history-list --base-id <B> --table-id <T> --record-id <R>`。已有真实 recordId 直接执行，不扫描 Help 或产品 Catalog。
 - 批量记录分享：`dws aitable +record-share-links --base <B> --table <T> --record-ids <R1,R2>`；单条也可用 `+record-share-url`。
-- 用户要求把分享链接“发给”联系人时，AITable 的职责在链接生成后结束；随后加载 `dingtalk-chat`，用 `dws chat +dm --to <姓名> --text <包含全部链接的文本>` 对每位收件人分别发送并检查真实回执。只解析联系人或只生成 URL 都不算完成。
+- 用户要求把分享链接“发给”联系人时，AITable 的职责在链接生成后结束；随后加载 `dingtalk-chat`，用 `dws chat +dm --to <姓名> --content <包含全部链接的文本>` 对每位收件人分别发送并检查真实回执。只解析联系人或只生成 URL 都不算完成。

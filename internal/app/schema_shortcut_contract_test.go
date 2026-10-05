@@ -14,6 +14,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -25,6 +26,58 @@ const (
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
 	publiclyDeliveredShortcutCount = 477
 )
+
+func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
+	const path = "aitable +record-write-result"
+	full := executeShortcutSchemaQuery(t, "--cli-path", path)
+	compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+	result, ok := full["result"].(map[string]any)
+	if !ok || !schemaContractJSONEqual(result, compact["result"]) {
+		t.Fatalf("Result must reach both projections: full=%#v compact=%#v", full, compact)
+	}
+	if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) {
+		t.Fatalf("outcomes=%#v", result["outcomes"])
+	}
+	schema := result["data_schema"].(map[string]any)
+	branches := schema["oneOf"].([]any)
+	if len(branches) != 2 {
+		t.Fatalf("missing actual/preview branches: %#v", schema)
+	}
+	actual := branches[0].(map[string]any)
+	preview := branches[1].(map[string]any)
+	if !schemaContractJSONEqual(actual["required"], []string{"baseId", "tableId", "clientToken", "state", "recordIds"}) || !schemaContractJSONEqual(preview["required"], []string{"executed", "tool", "arguments"}) {
+		t.Fatalf("required fields=%#v", branches)
+	}
+	params := schemaContractMap(full["parameters"])
+	for name, property := range map[string]string{"base-id": "baseId", "table-id": "tableId", "client-token": "clientToken"} {
+		if params[name]["property"] != property || params[name]["required"] != true {
+			t.Fatalf("parameter %s=%#v", name, params[name])
+		}
+	}
+	root := NewRootCommand()
+	cmd, _, err := root.Find(strings.Fields(path))
+	if err != nil || !output.UsesUnifiedResult(cmd) {
+		t.Fatalf("Result published without unified runtime: %v", err)
+	}
+	if full["effect"] != "read" || full["confirmation"] != "not_required" || full["dry_run"].(map[string]any)["preview_kind"] != "request" {
+		t.Fatalf("unsafe contract: %#v", full)
+	}
+}
+
+func TestCrossPlatformCoverageAITableUpsertHelpForbidsWriteReplay(t *testing.T) {
+	root := NewRootCommand()
+	for _, path := range []string{"aitable record upsert", "aitable +record-upsert"} {
+		cmd, _, err := root.Find(strings.Fields(path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, phrase := range []string{"禁止重放整个 upsert", "即使使用同一 token", "创建分组", "独立读回更新分组"} {
+			if !strings.Contains(cmd.Long, phrase) {
+				t.Fatalf("%s help missing %q: %s", path, phrase, cmd.Long)
+			}
+		}
+	}
+}
 
 func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
 	for _, name := range []string{"+media-download", "+media-preview", "+resource-download", "+download-overwrite"} {

@@ -22,10 +22,12 @@ import (
 )
 
 var (
-	inlineCommand     = regexp.MustCompile("`(dws\\s+[^`]+)`")
-	inlineChatCommand = regexp.MustCompile("`(\\+[^`]+)`")
-	lineCommand       = regexp.MustCompile(`^\s*(?:[>$]\s*)?(dws\s+.+?)\s*$`)
-	antiMarkers       = []string{
+	inlineCommand          = regexp.MustCompile("`(dws\\s+[^`]+)`")
+	inlineChatCommand      = regexp.MustCompile("`(\\+[^`]+)`")
+	shortcutName           = regexp.MustCompile(`^\+[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+	negativeShortcutPrefix = regexp.MustCompile(`(?:当前无|当前没有|不要猜)\s*$`)
+	lineCommand            = regexp.MustCompile(`^\s*(?:[>$]\s*)?(dws\s+.+?)\s*$`)
+	antiMarkers            = []string{
 		"禁止", "不存在", "不要使用", "不要用", "错误写法", "错误命令",
 		"反模式", "反例", "错例", "臆造", "虚构", "不支持", "unknown ",
 		"❌", "×", "已下线", "废弃",
@@ -123,12 +125,21 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 
 func enforceVisibleFlags(rootPath, path string) bool {
 	relative, _ := filepath.Rel(rootPath, path)
-	skillRoot := filepath.Join("skills", "multi", "dingtalk-chat")
-	return relative == skillRoot || strings.HasPrefix(relative, skillRoot+string(filepath.Separator))
+	for _, product := range []string{"dingtalk-chat", "dingtalk-aitable"} {
+		skillRoot := filepath.Join("skills", "multi", product)
+		if relative == skillRoot || strings.HasPrefix(relative, skillRoot+string(filepath.Separator)) {
+			return true
+		}
+	}
+	aitableMono := filepath.Join("skills", "mono", "references", "products", "aitable")
+	if strings.HasPrefix(relative, aitableMono+string(filepath.Separator)) {
+		return true
+	}
+	return false
 }
 
 // publicFlagIssue rejects both removed/typoed flags and compatibility flags
-// that still exist on Cobra but are deliberately hidden. Published Chat Skill
+// that still exist on Cobra but are deliberately hidden. Published product Skill
 // instructions must be executable through the current public contract; merely
 // finding a similarly named internal flag is not sufficient.
 func publicFlagIssue(root *cobra.Command, path string, flags []string) string {
@@ -251,9 +262,20 @@ func extractReferences(root string) ([]commandRef, error) {
 				seen[command] = true
 				refs = append(refs, commandRef{File: path, Line: lineNumber, Text: command})
 			}
-			if isMultiChatSkillPath(path) {
-				for _, match := range inlineChatCommand.FindAllStringSubmatch(line, -1) {
-					command := "dws chat " + strings.TrimSpace(match[1])
+			if product := qualifiedShortcutProduct(path); product != "" {
+				for _, match := range inlineChatCommand.FindAllStringSubmatchIndex(line, -1) {
+					// A mixed line can document a real command and warn about an
+					// invented shortcut. Skip only the negative snippet, not its
+					// positive neighbour's flag checks.
+					if negativeShortcutPrefix.MatchString(line[:match[0]]) {
+						continue
+					}
+					shortcut := strings.TrimSpace(line[match[2]:match[3]])
+					shortcutFields := strings.Fields(shortcut)
+					if len(shortcutFields) == 0 || !shortcutName.MatchString(shortcutFields[0]) {
+						continue
+					}
+					command := "dws " + product + " " + shortcut
 					if !seen[command] {
 						seen[command] = true
 						refs = append(refs, commandRef{File: path, Line: lineNumber, Text: command})
@@ -276,9 +298,17 @@ func extractReferences(root string) ([]commandRef, error) {
 	return refs, err
 }
 
-func isMultiChatSkillPath(path string) bool {
+func qualifiedShortcutProduct(path string) string {
 	cleaned := filepath.ToSlash(filepath.Clean(path))
-	return strings.Contains(cleaned, "/skills/multi/dingtalk-chat/")
+	for _, product := range []string{"chat", "aitable"} {
+		if strings.Contains(cleaned, "/skills/multi/dingtalk-"+product+"/") {
+			return product
+		}
+	}
+	if strings.Contains(cleaned, "/skills/mono/references/products/aitable/") {
+		return "aitable"
+	}
+	return ""
 }
 
 func isAntiPatternLine(line string) bool {
