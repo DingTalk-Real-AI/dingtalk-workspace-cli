@@ -362,6 +362,9 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 				return `[{"remindType":"minute","remindTime":10}]`
 			case "filepath", "file-path":
 				return files.binary
+			case "key_id":
+				// SQL Sheet 凭据 ID 在请求预览中也必须是规范 UUID。
+				return "00000000-0000-4000-8000-000000000001"
 			case "uuid1,uuid2":
 				return "uuid1,uuid2"
 			default:

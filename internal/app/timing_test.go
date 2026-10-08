@@ -414,6 +414,16 @@ func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 			want: "dws --client-id=***",
 		},
 		{
+			name: "password space-separated (drive/wiki set-share-scope, publish set)",
+			args: []string{"dws", "drive", "permission", "set-share-scope", "--node", "n1", "--visibility", "PUBLIC", "--password", "ab12"},
+			want: "dws drive permission set-share-scope --node n1 --visibility PUBLIC --password ***",
+		},
+		{
+			name: "password with equals sign",
+			args: []string{"dws", "drive", "publish", "set", "--password=ab12", "--node", "n1"},
+			want: "dws drive publish set --password=*** --node n1",
+		},
+		{
 			name: "empty args",
 			args: []string{},
 			want: "",

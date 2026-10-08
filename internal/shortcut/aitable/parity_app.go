@@ -16,6 +16,7 @@ import (
 type parityAppOperation struct {
 	command, tool, description, idFlag, idKey, readTool, collection string
 	write, create                                                   bool
+	idempotency                                                     string // Reviewed per operation; independent of risk and confirmation.
 	flags                                                           []shortcut.Flag
 }
 
@@ -27,21 +28,30 @@ func parityAppShortcuts() []shortcut.Shortcut {
 	name := str("name", "显示名称", true)
 	widget := str("widget-id", "Widget ID", true)
 	ops := []parityAppOperation{
-		{command: "+app-get", tool: "get_app", description: "获取 Base 唯一应用模式 App；不存在时自动创建，需确认", write: true},
-		{command: "+app-page-list", tool: "list_app_pages", description: "列出 Base 应用页面；不存在 App 时会创建默认 App，需确认", collection: "pages", idKey: "pageId", write: true},
-		{command: "+app-page-get", tool: "get_app_page", description: "读取准确应用页面及组件摘要", idFlag: "page-id", idKey: "pageId", flags: []shortcut.Flag{page}},
-		{command: "+app-page-create", tool: "create_app_page", description: "新建应用仪表盘页面并按返回 ID 读回名称", idKey: "pageId", readTool: "get_app_page", write: true, create: true, flags: []shortcut.Flag{name}},
-		{command: "+app-page-update", tool: "update_app_page", description: "重命名应用页面并按准确 ID 读回", idFlag: "page-id", idKey: "pageId", readTool: "get_app_page", write: true, flags: []shortcut.Flag{page, name}},
-		{command: "+app-page-delete", tool: "delete_app_page", description: "删除应用页面并核对完整页面目录中已不存在", idFlag: "page-id", idKey: "deletedPageId", write: true, flags: []shortcut.Flag{page}},
-		{command: "+app-block-delete", tool: "delete_app_widget", description: "删除应用 Widget 并核对其所属页面列表", idFlag: "widget-id", idKey: "deletedWidgetId", write: true, flags: []shortcut.Flag{page, widget}},
+		{command: "+app-get", idempotency: "idempotent", tool: "get_app", description: "获取 Base 唯一应用模式 App；不存在时自动创建，需确认", write: true},
+		{command: "+app-page-list", idempotency: "idempotent", tool: "list_app_pages", description: "列出 Base 应用页面；不存在 App 时会创建默认 App，需确认", collection: "pages", idKey: "pageId", write: true},
+		{command: "+app-page-get", idempotency: "idempotent", tool: "get_app_page", description: "读取准确应用页面及组件摘要", idFlag: "page-id", idKey: "pageId", flags: []shortcut.Flag{page}},
+		{command: "+app-page-create", idempotency: "non_idempotent", tool: "create_app_page", description: "新建应用仪表盘页面并按返回 ID 读回名称", idKey: "pageId", readTool: "get_app_page", write: true, create: true, flags: []shortcut.Flag{name}},
+		{command: "+app-page-update", idempotency: "idempotent", tool: "update_app_page", description: "重命名应用页面并按准确 ID 读回", idFlag: "page-id", idKey: "pageId", readTool: "get_app_page", write: true, flags: []shortcut.Flag{page, name}},
+		{command: "+app-page-delete", idempotency: "unknown", tool: "delete_app_page", description: "删除应用页面并核对完整页面目录中已不存在", idFlag: "page-id", idKey: "deletedPageId", write: true, flags: []shortcut.Flag{page}},
+		{command: "+app-block-delete", idempotency: "unknown", tool: "delete_app_widget", description: "删除应用 Widget 并核对其所属页面列表", idFlag: "widget-id", idKey: "deletedWidgetId", write: true, flags: []shortcut.Flag{page, widget}},
 
-		{command: "+app-block-list", tool: "list_page_widgets", description: "列出准确应用页面中的全部 Widget", idFlag: "page-id", idKey: "widgetId", collection: "widgets", flags: []shortcut.Flag{page}},
-		{command: "+app-block-get", tool: "get_app_widget", description: "读取准确应用 Widget 配置与布局", idFlag: "widget-id", idKey: "widgetId", flags: []shortcut.Flag{page, widget}},
-		{command: "+app-block-create", tool: "create_app_widget", description: "创建应用 Widget 并独立核对配置和 48 列布局", idKey: "widgetId", readTool: "get_app_widget", write: true, create: true, flags: []shortcut.Flag{page, str("name", "组件名称", false), str("config", "含 chartType 的完整 Widget 配置 JSON", true), str("layout", "48 列根布局 JSON（x/y/w/h）", true)}},
-		{command: "+app-block-update", tool: "update_app_widget", description: "更新应用 Widget 并独立核对名称、配置或布局", idFlag: "widget-id", idKey: "widgetId", readTool: "get_app_widget", write: true, flags: []shortcut.Flag{page, widget, str("name", "新名称", false), str("config", "完整 Widget 配置 JSON，省略保留", false), str("layout", "完整 48 列根布局 JSON，省略保留", false)}},
+		{command: "+app-block-list", idempotency: "idempotent", tool: "list_page_widgets", description: "列出准确应用页面中的全部 Widget", idFlag: "page-id", idKey: "widgetId", collection: "widgets", flags: []shortcut.Flag{page}},
+		{command: "+app-block-get", idempotency: "idempotent", tool: "get_app_widget", description: "读取准确应用 Widget 配置与布局", idFlag: "widget-id", idKey: "widgetId", flags: []shortcut.Flag{page, widget}},
+		{command: "+app-block-create", idempotency: "non_idempotent", tool: "create_app_widget", description: "创建应用 Widget 并独立核对配置和 48 列布局", idKey: "widgetId", readTool: "get_app_widget", write: true, create: true, flags: []shortcut.Flag{page, str("name", "组件名称", false), str("config", "含 chartType 的完整 Widget 配置 JSON", true), str("layout", "48 列根布局 JSON（x/y/w/h）", true)}},
+		{command: "+app-block-update", idempotency: "idempotent", tool: "update_app_widget", description: "更新应用 Widget 并独立核对名称、配置或布局", idFlag: "widget-id", idKey: "widgetId", readTool: "get_app_widget", write: true, flags: []shortcut.Flag{page, widget, str("name", "新名称", false), str("config", "完整 Widget 配置 JSON，省略保留", false), str("layout", "完整 48 列根布局 JSON，省略保留", false)}},
 	}
+	return buildParityAppShortcuts(ops)
+}
+
+func buildParityAppShortcuts(ops []parityAppOperation) []shortcut.Shortcut {
 	out := make([]shortcut.Shortcut, 0, len(ops))
 	for _, op := range ops {
+		//  Keep an omitted future declaration conservative instead of allowing a
+		// partial SafetySpec to panic during command construction.
+		if op.idempotency == "" {
+			op.idempotency = "unknown"
+		}
 		risk, effect, confirmation := shortcut.RiskRead, "read", "not_required"
 		safetyRisk := "low"
 		if op.write {
@@ -52,7 +62,7 @@ func parityAppShortcuts() []shortcut.Shortcut {
 				safetyRisk = "high"
 			}
 		}
-		flags := append([]shortcut.Flag{str("base-id", "所属 Base ID；不是 Lark app-token", true)}, op.flags...)
+		flags := append([]shortcut.Flag{{Name: "base-id", Type: shortcut.FlagString, Desc: "所属 Base ID；不是 Lark app-token", Required: true}}, op.flags...)
 		example := "dws aitable " + op.command + " --base-id B"
 		for _, f := range op.flags {
 			if f.Required {
@@ -66,7 +76,7 @@ func parityAppShortcuts() []shortcut.Shortcut {
 				example += " --" + f.Name + " " + v
 			}
 		}
-		s := shortcut.Shortcut{Service: "aitable", Command: op.command, Product: serverMain, Description: op.description, Intent: op.description + "；仅支持 Base 应用模式仪表盘页面/Widget，旧原子入口保留。", Risk: risk, Safety: contract.SafetySpec{Effect: effect, Risk: safetyRisk, Confirmation: confirmation, Idempotency: "unknown"}, Contract: aitableCompositeContractWithResult(op.command, op.description, op.description+"时", "独立 Workspace BaseApp 或 AI Page JSON 不使用这些入口；其他属性仍可用 aitable app 原子命令", example, parityCompositeResultSpec()), Flags: flags}
+		s := shortcut.Shortcut{Service: "aitable", Command: op.command, Product: serverMain, Description: op.description, Intent: op.description + "；仅支持 Base 应用模式仪表盘页面/Widget，旧原子入口保留。", Risk: risk, Safety: contract.SafetySpec{Effect: effect, Risk: safetyRisk, Confirmation: confirmation, Idempotency: op.idempotency}, Contract: aitableCompositeContractWithResult(op.command, op.description, op.description+"时", "独立 Workspace BaseApp 或 AI Page JSON 不使用这些入口；其他属性仍可用 aitable app 原子命令", example, parityCompositeResultSpec()), Flags: flags}
 		s.Execute = func(rt *shortcut.RuntimeContext) error { return executeParityApp(rt, op) }
 		out = append(out, withAITableParityAliases(s))
 	}

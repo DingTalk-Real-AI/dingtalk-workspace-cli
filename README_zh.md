@@ -81,7 +81,7 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 
 - **快速安装**（上方一行 curl）：非交互，默认装 `multi`。
 - **TTY 安装**（先下载再执行）：`curl -O .../install.sh && bash install.sh`，会弹出 `1) multi  2) mono` 选项（默认 1）。
-- **环境变量覆盖**：`DWS_SKILL_MODE=mono curl -fsSL ... | sh`。
+- **环境变量覆盖**：`curl -fsSL ... | DWS_SKILL_MODE=mono sh`。
 - **装完之后再切换**：`dws skill setup --mode mono`（或 `--mode multi`），核对列出的路径后交互确认。
 
 </details>
@@ -152,7 +152,7 @@ cp dws ~/.local/bin/         # 安装到 PATH
 仓库镜像地址：`https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > 设置 `DWS_GITEE_REPO` 后，安装脚本会改从 Gitee API 解析最新版本和各个 release 产物（二进制、校验和、skills 包），而不是走 GitHub。不设置时默认从 GitHub 安装。
@@ -168,7 +168,7 @@ npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
 **3. 单独安装 Skills（Gitee 镜像）：**
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > 同样设置 `DWS_GITEE_REPO`，`install-skills.sh` 会从 Gitee 解析版本和 skills 包；GitHub 不可达时也会自动回退到 Gitee 镜像。

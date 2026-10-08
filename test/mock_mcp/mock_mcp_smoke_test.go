@@ -950,9 +950,14 @@ func isolatedCLIEnv(t *testing.T, extra map[string]string) []string {
 	t.Helper()
 
 	root := t.TempDir()
+	coverageDir := filepath.Join(root, "coverage")
+	if err := os.MkdirAll(coverageDir, 0o700); err != nil {
+		t.Fatalf("create isolated coverage directory: %v", err)
+	}
 	controlled := map[string]string{
 		"HOME":                     root,
 		"USERPROFILE":              root,
+		"GOCOVERDIR":               coverageDir,
 		"DWS_CONFIG_DIR":           filepath.Join(root, "config"),
 		"DWS_KEYCHAIN_DIR":         filepath.Join(root, "keychain"),
 		"DWS_DISABLE_KEYCHAIN":     "1",

@@ -22,7 +22,7 @@
 | `number` | JSON number | 将明确数值转换为数字，禁止传字符串数字 |
 | `date` | `YYYY-MM-DD`、RFC3339 或毫秒时间戳 | 使用日期专用操作符；范围拆为 `not_before` + `not_after` |
 | `singleSelect` / `multipleSelect` | singleSelect 通常传 option ID 标量；multipleSelect 或数组型条件传 option ID 数组，如 `["optA"]` | `field get` 或 `field search-options` 唯一匹配；写记录时才使用 option name |
-| 人员 | `[{"userId":"..."}]`（需要时同时带 `corpId`） | `dws aisearch person --keyword "<姓名>" --dimension name --format json`；取唯一 `userId`，重名必须消歧 |
+| 人员 | `[{"userId":"..."}]`（需要时同时带 `corpId`） | `dws aisearch person --query "<姓名>" --dimension name --format json`；取唯一 `userId`，重名必须消歧 |
 | 部门 | `[{"departmentId":"..."}]` | `dws contact +resolve-dept --name "<部门名>" --format json`；取唯一 `deptId` 并写入 `departmentId`，零/多命中必须停止 |
 | 群组 | `[{"cid":"..."}]` | `dws chat +chat-search --query "<群名>" --page-all --format json`；取唯一 `openConversationId` 并写入 `cid`，零/多命中必须停止 |
 | 关联记录 | 稳定 `recordId` 或字段协议要求的 recordId 结构 | 先查询关联目标表并唯一定位记录；不得传记录标题 |

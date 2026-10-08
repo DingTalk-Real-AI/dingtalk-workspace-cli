@@ -31,6 +31,15 @@ func TestCrossPlatformCoverageEmployeeDaemonStartupFailures(t *testing.T) {
 			cmd.SetOut(io.Discard)
 			testseam.Swap(t, &daemonDetachEnabled, scenario != "unsupported")
 			if runtime.GOOS == "windows" {
+				// PID 已退出后，可执行映射仍可能短暂阻止删除。复用有界清理，
+				// 在 TempDir 的单次删除前清除夹具的两个硬链接；持续占用仍失败。
+				t.Cleanup(func() {
+					for _, path := range []string{daemonExecutablePath(dir) + ".exe", daemonExecutablePath(dir)} {
+						if err := retryHelpersFixtureCleanup(func() error { return os.Remove(path) }); err != nil {
+							t.Errorf("remove daemon fixture: %v", err)
+						}
+					}
+				})
 				// Exercise orchestration below the unsupported-platform guard.
 				// Windows exec resolves an extensionless Path through .exe; only
 				// the test fixture gets this alias, not the public daemon command.
@@ -84,8 +93,8 @@ func TestCrossPlatformCoverageEmployeeDaemonStartupFailures(t *testing.T) {
 			err := startDigitalEmployeeDaemon(cmd, cfg)
 			cancel()
 			if child != nil && child.Process != nil {
-				// startDigitalEmployeeDaemon owns Wait; wait for its goroutine before
-				// temporary paths or package seams are restored.
+				// startDigitalEmployeeDaemon 拥有 Wait；这里只验证子进程已退出，
+				// Windows 可执行映射释放由上面的有界夹具清理单独验证。
 				deadline := time.Now().Add(5 * time.Second)
 				for processAlive(child.Process.Pid) && time.Now().Before(deadline) {
 					time.Sleep(10 * time.Millisecond)

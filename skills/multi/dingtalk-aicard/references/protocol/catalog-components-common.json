@@ -1,0 +1,700 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-components-common.json",
+  "title": "DingTalk AICard Protocol V0.8 Common components",
+  "description": "10 components and 0 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog. Modified by DingTalk from selected entries of the A2UI v1.0 Basic Catalog; some upstream definitions and descriptions are retained. See NOTICE.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {
+    "Text": {
+      "type": "object",
+      "description": "Text, font size, color, and streaming state. `textEffect` can add a shimmer effect.",
+      "properties": {
+        "component": {
+          "const": "Text",
+          "description": "Public component type identifier."
+        },
+        "text": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Text content to display. Supports literals, data bindings, and value functions. **Object forms such as `{content, i18n}` are not accepted**; the server must localize multilingual copy before sending it."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "caption",
+            "body"
+          ],
+          "description": "Text style preset; omitted means `body`. Metrics first use the host style tokens. If unavailable, font size/line height fall back to 14/21 on desktop and 17/21 on mobile for `body`, or 12/18 on desktop and 12/16 on mobile for `caption`. A successfully resolved explicit `sizeToken` takes precedence; these fallback metrics are not fixed values for every client."
+        },
+        "sizeToken": {
+          "$ref": "./common-types-visual.json#/$defs/SizeToken",
+          "description": "Native DDesign font-size Token ID. See the common `SizeToken` type for names and individual uses. Specify the full `__font_size` key; it takes priority over `variant`. Line height attempts to use the matching `__line_height` token and falls back to the `variant` preset if the host cannot resolve it. Do not use design labels such as `font-size/body` or style names without a suffix."
+        },
+        "bold": {
+          "type": "boolean",
+          "description": "Whether the text is bold."
+        },
+        "italic": {
+          "type": "boolean",
+          "description": "Whether the text is italic."
+        },
+        "strikeThrough": {
+          "type": "boolean",
+          "description": "Whether to apply strikethrough."
+        },
+        "colorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name such as `common_level1_base_color`. The renderer calls the host design-token service to resolve it for the **current client platform and theme**, making this the preferred way to keep colors consistent across platforms. This has the highest priority: when resolved, `color`, `customLightColor`, and `customDarkColor` are ignored. If the host cannot resolve the token, evaluation falls back to the subsequent color sources."
+        },
+        "customLightColor": {
+          "type": "string",
+          "description": "Custom text color for light mode (hex)."
+        },
+        "customDarkColor": {
+          "type": "string",
+          "description": "Custom text color for dark mode (hex). The renderer selects and sends the light or dark value for the current theme. A theme change takes effect after the card's next refresh."
+        },
+        "maxLine": {
+          "type": "integer",
+          "description": "Truncate after exceeding this number of lines. **By default, only 3 lines are displayed if not configured**. Long text will be silently truncated; to display it fully, please explicitly set a sufficiently large value."
+        },
+        "icon": {
+          "type": "object",
+          "description": "Semantic leading icon. Use exactly one of `{\"name\":\"icon library name\"}` or `{\"url\":\"light-theme URL\",\"darkUrl\":\"dark-theme URL\"}`. `darkUrl` is optional and falls back to `url`. **Exactly one of `name` and `url` must be provided**; providing both or neither is invalid. ⚠️ **Mutually exclusive with `textEffect`**: a `Text` component with `textEffect` uses a different rendering path with no icon slot. If both are sent, **the icon is retained and the effect is ignored**.",
+          "properties": {
+            "name": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString",
+              "description": "Registered icon-library name; mutually exclusive with `url`."
+            },
+            "url": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString",
+              "description": "Light-theme image URL; mutually exclusive with `name`."
+            },
+            "darkUrl": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString",
+              "description": "Dark-theme image URL. Effective only when `url` is used; falls back to `url` when omitted."
+            }
+          }
+        },
+        "textEffect": {
+          "type": "string",
+          "enum": [
+            "shimmer"
+          ],
+          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. The field is sent consistently to all clients. The effect currently works only on iOS; unsupported clients silently ignore it and render regular text without affecting the text itself. No protocol change is required when those clients add support."
+        },
+        "onLinkClick": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "The value must be an `Action` from the base protocol: the `event` branch reports to the agent, while the `functionCall` branch runs locally in the renderer. ⚠️ **The current implementation is reduced to \"a click anywhere on the Text node\"**: clicking any part of the text fires the action, **and the event does not carry which link was clicked**. The field therefore suits coarse-grained tracking such as \"the user read this text containing a link\", but cannot distinguish which link was followed. Link navigation itself is unaffected: the renderer opens it directly without going through the card event system."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "text"
+      ]
+    },
+    "Markdown": {
+      "type": "object",
+      "description": "Markdown headings, lists, code, and quotes.",
+      "properties": {
+        "component": {
+          "const": "Markdown",
+          "description": "Public component type identifier."
+        },
+        "content": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Markdown body. In addition to standard Markdown, DingTalk supports these @-mention extensions: `<a atId=\"{openDingTalkId}\">nickname</a>` mentions a specific member, and `<a atId=\"all\">everyone</a>` mentions everyone (`all` is a reserved ID). Every `atId` in the body must be listed in the card-creation parameter `atIdList`; the reserved ID `all` does not need to be listed. The server resolves each `openDingTalkId` to a user. Write only the display name inside the tag and do not add `@` yourself; the renderer prepends `@` when rendering an at node, so a self-written one renders as `@@`. If an `atId` is not listed or cannot be resolved, it falls back to plain text without highlighting or click behavior and does not report an error. The `<@openDingTalkId>` and `<@all>` placeholders used by IM Markdown messages **do not work** in the card flow and are displayed literally. Server-side resolution of openDingTalkId is not yet available, so mentions currently do not take effect and degrade to plain text as described above. The body syntax and this field's contract stay unchanged once it ships."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "content"
+      ]
+    },
+    "Image": {
+      "type": "object",
+      "description": "Image display with a dark-theme image alternative. When variant is omitted, the current DingTalk implementation builds a full-row image with height 200; available width remains subject to the parent layout.",
+      "properties": {
+        "component": {
+          "const": "Image",
+          "description": "Public component type identifier."
+        },
+        "url": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Light mode and default image URL."
+        },
+        "darkUrl": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Dark mode image URL; if not configured, the renderer side will continue to use the URL."
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "contain",
+            "cover",
+            "fill",
+            "none",
+            "scaleDown"
+          ],
+          "description": "Image scaling within its container. When omitted, the current DingTalk implementation crops to fill, corresponding to `cover`; this differs from the official Basic Catalog default of `fill`. Specify a value from this field's vocabulary to control containment, cropping or stretching."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "icon",
+            "avatar",
+            "smallFeature",
+            "mediumFeature",
+            "largeFeature",
+            "header"
+          ],
+          "description": "Image size and style hint. Omitted means full-row width and height 200, rather than the official Basic Catalog default `mediumFeature`. Current DingTalk sizes are: `icon` 24×24, `avatar` 40×40, `smallFeature` 96×96, `mediumFeature` 160×120, and `largeFeature` 320×200; `header` uses full-row width and height 200. Available width is subject to parent constraints, and clients must integrate the corresponding Nest implementation."
+        },
+        "cornerRadius": {
+          "type": "number",
+          "description": "Image corner radius in px; omitted means `6`. `ImageList` defaults to `4`, and `ImageCarousel` to `12`. The radius clips the image's outer container. Use a finite non-negative number; `0` gives square corners."
+        },
+        "previewEnabled": {
+          "type": "boolean",
+          "description": "Whether to allow clicking the image to open a large preview, default `true`. ⚠️ Default is **on**: if this field is not set, as long as `url` is an address that can be loaded on the renderer, the image is clickable. To make it a pure display image, explicitly set `false`."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "url"
+      ]
+    },
+    "Icon": {
+      "type": "object",
+      "description": "DingTalk icon set and loading status. Current icon size is 14 with line height 22. Without a resolved color configuration, built-in light/dark colors are used; valid explicit colors take precedence.",
+      "properties": {
+        "component": {
+          "const": "Icon",
+          "description": "Public component type identifier."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "./common-types-visual.json#/$defs/IconName"
+            },
+            {
+              "$ref": "./common-types-basic.json#/$defs/DataBinding"
+            },
+            {
+              "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+            }
+          ],
+          "description": "Only the 24 case-sensitive names in the `IconName` list below are available. Data bindings and value functions are supported, but their results must also be names from the list. SVG objects, image URLs, and custom semantic aliases are not accepted."
+        },
+        "colorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name such as `common_level1_base_color`. The renderer calls the host design-token service to resolve it for the **current client platform and theme**, making this the preferred way to keep colors consistent across platforms. This has the highest priority: when resolved, `customLightColor` and `customDarkColor` are ignored. If the host cannot resolve the token, evaluation falls back to the subsequent color sources."
+        },
+        "customLightColor": {
+          "type": "string",
+          "description": "Custom light mode color (hexadecimal)."
+        },
+        "customDarkColor": {
+          "type": "string",
+          "description": "Custom dark-theme color in hexadecimal. The renderer selects and sends the light or dark value for the current theme. A theme change takes effect after the card's next refresh."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "name"
+      ]
+    },
+    "Divider": {
+      "type": "object",
+      "description": "Horizontal or vertical separator line.",
+      "properties": {
+        "component": {
+          "const": "Divider",
+          "description": "Component type identification field."
+        },
+        "axis": {
+          "type": "string",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ],
+          "description": "Divider direction, default is `horizontal`. `vertical` is used for vertical separation between elements within the same row (such as button dividers in the bottom action bar), rendered with a fixed line width and stretched to the height of the parent container, so **the parent container is required to be `Row` and the elements in that row must have consistent height**; for full-height vertical bars spanning multiple rows, it is also used, placed in the first position of `Row`. Line width and color are controlled by `borderWidth` / `borderColor`."
+        },
+        "borderWidth": {
+          "type": "number",
+          "description": "Line thickness in px; default `0.5`, the hairline value from the design specification. Its name and value semantics match the same field on `Row`, `Column`, `Card`, and `Stack`, and correspond to CSS `border-width`. **It always describes line thickness, regardless of direction**: when `axis` is `horizontal`, it determines line height; when `axis` is `vertical`, it determines line width. The value must be finite and non-negative. Invalid values are silently discarded and fall back to `0.5` without failing the card."
+        },
+        "borderColor": {
+          "type": "string",
+          "description": "Line color in `#AARRGGBB` form; default `#1F111F2C`, a neutral gray at approximately 12% opacity. Corresponds to CSS `border-color`. **Only a single color value is accepted; a `{light,dark}` pair is not supported**, so the color does not change with the theme. Use `borderColorToken` below when theme-aware color is required."
+        },
+        "borderColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the line color. It has **higher priority than `borderColor`** and is the only way to make the divider follow light and dark themes. The design-system line-color families are `common_line_light_color` (16% in light mode, 10% in dark mode) and `common_line_hard_color` (24% in light mode, 18% in dark mode). The legacy default `#1F111F2C` differs from both; **specify a token explicitly to align with the design system**. If the host cannot resolve the token, it is treated as omitted and falls back to `borderColor` without reporting an error."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "Tag": {
+      "type": "object",
+      "description": "Semantic tag whose theme determines text color, background color, border color, and border width together.",
+      "properties": {
+        "component": {
+          "const": "Tag",
+          "description": "Public component type identifier."
+        },
+        "text": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Label text."
+        },
+        "theme": {
+          "type": "string",
+          "enum": [
+            "black",
+            "gray",
+            "red",
+            "orange",
+            "green",
+            "blue"
+          ],
+          "description": "**Semantic theme: one value determines the text color, background color, border color, and border width together.** The design system fixes these relationships, so arbitrary hexadecimal colors are not accepted. Defaults to `gray`; unknown values fall back to `gray` without reporting an error. **This differs from the `color` field on `Text` and `Icon`**, which specifies a single foreground color. Here the field defines the entire tag color scheme, so it is named `theme`, consistent with `CardHeader.theme`."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "filled",
+            "hollow"
+          ],
+          "description": "Tag style; default `filled`. **The two styles are mutually exclusive**: `filled` has a background from the 12%-opacity level of `theme` and no border; `hollow` has a transparent background and a 1px border from the 48%-opacity level of `theme`. Both use the same text color. **A tag cannot have both a filled background and a border**; compose that appearance with `Row` instead."
+        },
+        "maxWidth": {
+          "type": "number",
+          "description": "Maximum tag width in px; omitted means `999`, a numeric limit rather than unlimited width. Text is truncated beyond it."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "text"
+      ]
+    },
+    "Card": {
+      "type": "object",
+      "description": "Single-child card container with padding, background, and rounded corners.",
+      "properties": {
+        "component": {
+          "const": "Card",
+          "description": "Component type identification field."
+        },
+        "child": {
+          "$ref": "./common-types-basic.json#/$defs/Child",
+          "description": "The ID of the single child component to be rendered inside the card. To display multiple elements, you MUST wrap them in a layout component (like Column or Row) and pass that container's ID here. Do NOT pass multiple IDs or a non-existent ID."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "backgroundColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the card surface, such as `common_bg_color`. The host resolves it for the **current client platform, theme, and tenant**, making this the preferred way to keep the surface consistent across platforms and themes. It has **higher priority than `backgroundColor`**. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `backgroundColor`; the default surface color is used only when that field is also omitted. No error is reported."
+        },
+        "backgroundColor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {}
+            }
+          ],
+          "description": "Card surface color. Two forms are supported: a string in `#AARRGGBB` form is a **single value** that does not change with the light or dark theme; `{\"light\":\"#…\",\"dark\":\"#…\"}` provides **light and dark values** selected by the renderer for the current theme and is recommended. If omitted, the default surface color is used: `#FFFFFFFF` in light mode and `#FF1F1F1F` in dark mode."
+        },
+        "cornerRadius": {
+          "type": "number",
+          "description": "Card-surface corner radius in px; default `8`. Must be a non-negative number."
+        },
+        "borderWidth": {
+          "type": "number",
+          "description": "Border width in px; default `0`, meaning no border. **A visible border requires `borderColor` to be configured as well.**"
+        },
+        "borderColor": {
+          "type": "string",
+          "description": "Stroke color, hexadecimal. Only visible when `borderWidth` is also set; if a color is set, a solid line style is automatically applied."
+        },
+        "borderColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the border color. It has **higher priority than `borderColor`** and is resolved by the host for the **current client platform, theme, and tenant**. This is the only way to make the border follow light and dark themes: `borderColor` accepts a single value that remains unchanged in dark mode. The line-color families are `common_line_light_color` and `common_line_hard_color`; the host resolves their actual values and opacity. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `borderColor` without reporting an error."
+        },
+        "padding": {
+          "type": "number",
+          "description": "Uniform padding on all four sides, unit px, default `12`. Must be a number and not less than 0."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "child",
+        "component"
+      ]
+    },
+    "Row": {
+      "type": "object",
+      "description": "Child nodes are arranged from left to right.",
+      "properties": {
+        "component": {
+          "const": "Row",
+          "description": "Component type identification field."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list. Children cannot be defined inline, they must be referred to by ID."
+        },
+        "justify": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly",
+            "stretch"
+          ],
+          "description": "Main-axis layout; the seven values match the official vocabulary. `start`, `center` and `end` control where children sit along the main axis; `spaceBetween`, `spaceAround` and `spaceEvenly` distribute the remaining space exactly like CSS `justify-content` (`gap` still applies only between adjacent children and is never added at the edges). **`spaceBetween` with two children**: positioning matches CSS while the content fits, and an over-long last item wraps within the remaining width instead of overflowing. In the other arrangements, once a weighted child appears in the row, subsequent children are measured against the full row width, so content that does not fit on one line overflows and is clipped — use child `weight` for long text. No remaining space is distributed when any child already carries `weight`, matching the official flex-grow behaviour. On a flex row, `stretch` behaves like `start`. Omitted means `start`."
+        },
+        "align": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ],
+          "description": "Cross-axis alignment. `start`, `center` and `end` control the vertical position of children. `stretch`, the default, gives children equal height and matches the official `align-items: stretch` semantics: container children (`Row`, `Column`, `Card`, and a vertical `Divider`) stretch to the full row height, while leaf and composite components such as `Text`, `Image` and `Button` keep their intrinsic height and are top-aligned, with their `weight`, spacing and visibility unaffected. While equal height is in effect, `justify` values `center`, `end`, `spaceBetween`, `spaceAround` and `spaceEvenly` on a stretched child `Column` become visible. ⚠️ Component ids must not take the form `<Row id>__stretch.<n>`, which is reserved for layout; a collision makes the whole row give up equal height. Under `Column` and `List`, `stretch` decides whether a child fills the available width or sizes to its content."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "backgroundColor": {
+          "type": "string",
+          "description": "Container background color in hexadecimal `#RRGGBB` or `#AARRGGBB` form, with Alpha first in the 8-digit form. **Only a single color string is accepted; a `{light,dark}` object is not supported**, so the color does not change with the theme. To use a different dark-theme color, send an updated component definition. If omitted, the background is transparent."
+        },
+        "cornerRadius": {
+          "type": "number",
+          "description": "Corner radius in px. If omitted, no explicit radius is set and the host container's default styling remains in effect. Set a non-negative number when a definite appearance is needed. Use a number; fractional values are truncated rather than rounded."
+        },
+        "borderWidth": {
+          "type": "number",
+          "description": "Stroke width, in px, must be a number. After configuration, a solid line type is automatically applied, and other line types cannot be specified. **It must be configured in pairs with `borderColor`** to draw a visible stroke."
+        },
+        "borderColor": {
+          "type": "string",
+          "description": "Stroke color, the value format is the same as `backgroundColor`. **Must be configured in pairs with `borderWidth`**; if only the color is provided without the width, the line will not be drawn."
+        },
+        "borderColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the border color. It has **higher priority than `borderColor`** and is resolved by the host for the **current client platform, theme, and tenant**. This is the only way to make the border follow light and dark themes: `borderColor` accepts a single value that remains unchanged in dark mode. The line-color families are `common_line_light_color` and `common_line_hard_color`; the host resolves their actual values and opacity. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `borderColor` without reporting an error."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Makes the entire container clickable. Uses the same Action semantics as `Button.action`: exactly one of `event` (reported to the agent) and `functionCall` (executed locally by the renderer) may be present."
+        },
+        "padding": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Uniform padding on all four sides, unit px, must be a number and not less than 0. Containers with a background color generally need it; otherwise, the child content will be close to the edge of the color block. **Only uniform values for all four sides are supported**; individual sides or `paddingX`/`paddingY` are not supported yet. If not configured, this field will not be sent, consistent with historical version behavior. Omission is not equivalent to an explicit 0: a card root can still receive platform-specific insets from card layout, while this field adds no padding to a nested container when omitted."
+        },
+        "gap": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Gap between children in px; must be a non-negative number. `Column` applies it vertically and `Row` horizontally; the first child is unaffected. **When omitted, hierarchy-specific defaults remain in effect**: 8 between top-level card blocks, 12 in nested columns, and 8 horizontally. Existing card spacing therefore remains unchanged."
+        },
+        "backgroundColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the container background, such as `common_bg_color`. The host resolves it for the **current client platform, theme, and tenant**, and it has **higher priority than `backgroundColor`**. This is the component's only way to make its background follow dark mode; `backgroundColor` accepts a single color value and does not change with the theme. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `backgroundColor` without reporting an error."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "Column": {
+      "type": "object",
+      "description": "Child nodes are stacked from top to bottom. As a card root with padding omitted and no full-width CardHeader, card layout supplies horizontal insets of 16 on desktop or 12 on mobile, with top and bottom insets of 10. On mobile, a final visible Markdown block changes the bottom inset to 14. Nested Columns do not automatically receive these root insets.",
+      "properties": {
+        "component": {
+          "const": "Column",
+          "description": "Component type identification field."
+        },
+        "children": {
+          "$ref": "./common-types-basic.json#/$defs/ChildList",
+          "description": "Defines the children. Use an array of strings for a fixed set of children, or a template object to generate children from a data list. Children cannot be defined inline, they must be referred to by ID."
+        },
+        "justify": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly",
+            "stretch"
+          ],
+          "description": "Main-axis layout. A `Column` is normally sized by its content and has no remaining space, so `spaceBetween`, `spaceAround`, `spaceEvenly` and `stretch` behave here exactly like an official flex column and produce the same result as `start` (accepted, no error). The only case with remaining height is when the column is a child of an equal-height row and is pulled to the row height (see `align` on Row): `center` and `end` then take effect normally, and `spaceBetween`, `spaceAround` and `spaceEvenly` distribute the remaining height under the same rules as Row (no distribution when any child already carries `weight`). ⚠️ Component ids must not take the form `<Column id>__justify.<n>`, which is reserved for layout; a collision disables `justify` on that column while equal height for the row is unaffected. Omitted means `start`."
+        },
+        "align": {
+          "type": "string",
+          "enum": [
+            "center",
+            "end",
+            "start",
+            "stretch"
+          ],
+          "description": "Defines the alignment of children along the cross axis (horizontally). This is similar to the CSS 'align-items' property. Omitted means `stretch`; whether a child fills the available width also depends on its fixed dimensions and parent constraints."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "backgroundColor": {
+          "type": "string",
+          "description": "Container background color in hexadecimal `#RRGGBB` or `#AARRGGBB` form, with Alpha first in the 8-digit form. **Only a single color string is accepted; a `{light,dark}` object is not supported**, so the color does not change with the theme. To use a different dark-theme color, send an updated component definition. If omitted, the background is transparent."
+        },
+        "cornerRadius": {
+          "type": "number",
+          "description": "Corner radius in px. If omitted, no explicit radius is set and the host container's default styling remains in effect. Set a non-negative number when a definite appearance is needed. Use a number; fractional values are truncated rather than rounded."
+        },
+        "borderWidth": {
+          "type": "number",
+          "description": "Stroke width, in px, must be a number. After configuration, a solid line type is automatically applied, and other line types cannot be specified. **It must be configured in pairs with `borderColor`** to draw a visible stroke."
+        },
+        "borderColor": {
+          "type": "string",
+          "description": "Stroke color, the value format is the same as `backgroundColor`. **Must be configured in pairs with `borderWidth`**; if only the color is provided without the width, the line will not be drawn."
+        },
+        "borderColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the border color. It has **higher priority than `borderColor`** and is resolved by the host for the **current client platform, theme, and tenant**. This is the only way to make the border follow light and dark themes: `borderColor` accepts a single value that remains unchanged in dark mode. The line-color families are `common_line_light_color` and `common_line_hard_color`; the host resolves their actual values and opacity. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `borderColor` without reporting an error."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Makes the entire container clickable. Uses the same Action semantics as `Button.action`: exactly one of `event` (reported to the agent) and `functionCall` (executed locally by the renderer) may be present."
+        },
+        "padding": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Uniform padding on all four sides, unit px, must be a number and not less than 0. Containers with a background color generally need it; otherwise, the child content will be close to the edge of the color block. **Only uniform values for all four sides are supported**; individual sides or `paddingX`/`paddingY` are not supported yet. If not configured, this field will not be sent, consistent with historical version behavior. Omission is not equivalent to an explicit 0: a card root can still receive platform-specific insets from card layout, while this field adds no padding to a nested container when omitted."
+        },
+        "gap": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Gap between children in px; must be a non-negative number. `Column` applies it vertically and `Row` horizontally; the first child is unaffected. **When omitted, hierarchy-specific defaults remain in effect**: 8 between top-level card blocks, 12 in nested columns, and 8 horizontally. Existing card spacing therefore remains unchanged."
+        },
+        "backgroundColorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the container background, such as `common_bg_color`. The host resolves it for the **current client platform, theme, and tenant**, and it has **higher priority than `backgroundColor`**. This is the component's only way to make its background follow dark mode; `backgroundColor` accepts a single color value and does not change with the theme. If the host cannot resolve the token, it is treated as omitted and evaluation continues with `backgroundColor` without reporting an error."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "Button": {
+      "type": "object",
+      "description": "The public `Button` component. `disabled` dims the button and removes its click action; the implementation remains compatible with the `SingleButton` builder preset.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/CheckRule"
+          },
+          "description": "A list of checks to perform. These are function calls that must return a boolean indicating validity. **DingTalk implementation:** On click, the checks are evaluated against the latest DataModel. A failed check blocks the click and displays a toast. **This is the standard attachment point for form validation**: rules use `path` to reference the paths bound to input components, allowing the entire form to be validated at once."
+        },
+        "component": {
+          "const": "Button",
+          "description": "Component type identification field."
+        },
+        "child": {
+          "$ref": "./common-types-basic.json#/$defs/Child",
+          "description": "The ID of the child component. Use a 'Text' component for a labeled button. Only use an 'Icon' if the requirements explicitly ask for an icon-only button."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "default",
+            "primary",
+            "borderless"
+          ],
+          "description": "Button style hint; omitted means `default`. `primary` marks the main action, and `borderless` removes the background and border. When disabled is true, disabled colors take precedence."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function. **DingTalk implementation:** Although required by the contract, a missing or invalid value **does not make the button disappear**. The button still renders, including its label and colors, and clicking it displays \"This action is not supported by the current version.\" See Section 1.4, \"Invalid actions do not affect rendering.\" Only `child` is required for rendering."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether the button is disabled; omitted means `false`. The current implementation uses disabled colors and attaches no click action when true; the button and its label remain visible."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "action",
+        "child",
+        "component"
+      ]
+    }
+  },
+  "functions": {},
+  "$defs": {
+    "anyComponent": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-components-common.json#/components/Button"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Card"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Column"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Divider"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Icon"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Image"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Markdown"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Row"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Tag"
+        },
+        {
+          "$ref": "./catalog-components-common.json#/components/Text"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "component"
+      }
+    },
+    "anyFunction": false
+  }
+}

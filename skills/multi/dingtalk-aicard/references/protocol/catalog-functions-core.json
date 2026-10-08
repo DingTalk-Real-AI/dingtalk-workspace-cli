@@ -1,0 +1,530 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-functions-core.json",
+  "title": "DingTalk AICard Protocol V0.8 Core functions adapted by DingTalk from A2UI",
+  "description": "0 components and 14 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog. Modified by DingTalk from selected entries of the A2UI v1.0 Basic Catalog; some upstream definitions and descriptions are retained. See NOTICE.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThese 14 functions share upstream A2UI names but retain DingTalk definitions; this is not an unmodified official catalog.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {},
+  "functions": {
+    "required": {
+      "type": "object",
+      "description": "Checks that the value is not null, undefined, or empty.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "required"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "description": "The value to check."
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "regex": {
+      "type": "object",
+      "description": "Checks that the value matches a regular expression string.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "regex"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "pattern": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value",
+            "pattern"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "length": {
+      "type": "object",
+      "description": "Checks string length constraints.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "length"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "min"
+              ]
+            },
+            {
+              "required": [
+                "max"
+              ]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "numeric": {
+      "type": "object",
+      "description": "Checks numeric range constraints.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "numeric"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "min"
+              ]
+            },
+            {
+              "required": [
+                "max"
+              ]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "email": {
+      "type": "object",
+      "description": "Checks that the value is a valid email address.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "email"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "formatString": {
+      "type": "object",
+      "description": "Uses `${/path}` for data-path interpolation. Function calls such as `now()` and `formatDate(...)` are not supported inside placeholders. `args.value` may use a JSON-form data binding or value function; it is first evaluated to a string and then interpolated with data paths.",
+      "returnType": "string",
+      "properties": {
+        "call": {
+          "const": "formatString"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "formatNumber": {
+      "type": "object",
+      "description": "Formats a number with grouping and decimal precision.",
+      "returnType": "string",
+      "properties": {
+        "call": {
+          "const": "formatNumber"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "decimals": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "grouping": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "formatCurrency": {
+      "type": "object",
+      "description": "Formats a number as a currency string.",
+      "returnType": "string",
+      "properties": {
+        "call": {
+          "const": "formatCurrency"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "currency": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString",
+              "description": "ISO 4217 currency code (e.g. USD, EUR, CNY)."
+            },
+            "decimals": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "grouping": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+            }
+          },
+          "required": [
+            "currency",
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "formatDate": {
+      "type": "object",
+      "description": "Formats a timestamp into a string using Unicode TR35 date pattern.",
+      "returnType": "string",
+      "properties": {
+        "call": {
+          "const": "formatDate"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "format": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString",
+              "description": "Unicode TR35 pattern (e.g. 'yyyy-MM-dd', 'HH:mm')."
+            }
+          },
+          "required": [
+            "format",
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "pluralize": {
+      "type": "object",
+      "description": "Returns a localized string based on CLDR plural category of the count.",
+      "returnType": "string",
+      "properties": {
+        "call": {
+          "const": "pluralize"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "zero": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "one": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "two": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "few": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "many": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            },
+            "other": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value",
+            "other"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "openUrl": {
+      "type": "object",
+      "description": "Opens the specified URL in a browser or handler.",
+      "returnType": "void",
+      "properties": {
+        "call": {
+          "const": "openUrl"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "and": {
+      "type": "object",
+      "description": "Performs logical AND on a list of boolean values.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "and"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {
+                "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+              },
+              "minItems": 2
+            }
+          },
+          "required": [
+            "values"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "or": {
+      "type": "object",
+      "description": "Performs logical OR on a list of boolean values.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "or"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {
+                "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+              },
+              "minItems": 2
+            }
+          },
+          "required": [
+            "values"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "not": {
+      "type": "object",
+      "description": "Performs logical NOT on a boolean value.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "not"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "unevaluatedProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    }
+  },
+  "$defs": {
+    "anyComponent": false,
+    "anyFunction": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-functions-core.json#/functions/required"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/regex"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/length"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/numeric"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/email"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/formatString"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/formatNumber"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/formatCurrency"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/formatDate"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/pluralize"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/openUrl"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/and"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/or"
+        },
+        {
+          "$ref": "./catalog-functions-core.json#/functions/not"
+        }
+      ]
+    }
+  }
+}

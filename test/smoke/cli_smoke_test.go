@@ -385,6 +385,13 @@ func TestCrossPlatformCoverageCLISmokeCommandTypoGuidance(t *testing.T) {
 		if err != nil || strings.TrimSpace(stdout) == "" {
 			t.Fatalf("dws schema positional path failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 		}
+		var schema struct {
+			CanonicalPath string `json:"canonical_path"`
+			CLIPath       string `json:"cli_path"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &schema); err != nil || schema.CanonicalPath != "chat.send_personal_message" || schema.CLIPath != "chat message send" {
+			t.Fatalf("位置参数未返回目标 Schema: %+v, err=%v", schema, err)
+		}
 		stdout, stderr, err = runCLI(t, env, "completion", "zsh")
 		if err != nil || strings.TrimSpace(stdout) == "" {
 			t.Fatalf("dws completion positional shell failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)

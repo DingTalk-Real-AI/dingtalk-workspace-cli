@@ -4,6 +4,8 @@
 
 Managed Agent 宿主可为一次命令注入委托人身份。DWS 校验输入组合，在内置 MCP 网关请求中透传；实际登录 token、profile 和工具 arguments 保持原有语义。参数隐藏不代表可信身份或鉴权通过。
 
+本 PR 先完成 **AI 表格（`aitable`）的 DWS 侧接入与回归验证**。三个参数在全局可解析，但其他产品尚未完成全部调用路径的迁移和验证，不能据此宣称支持委托身份透传。后续业务按[业务接入指南](delegator-business-integration.md)逐项接入并补充证据。
+
 数字员工识别、工具白名单、ID 解析、身份一致性及业务联合权限由网关和服务端实现。本 PR 不实现或证明这些服务端能力。
 
 ## 参数与 Header
@@ -17,8 +19,8 @@ Managed Agent 宿主可为一次命令注入委托人身份。DWS 校验输入�
 | `--delegator-open-dingtalk-id` | `delegator-open-dingtalk-id` | 委托人的 Open DingTalk ID，服务端结合可信接收方上下文解析 |
 
 ```sh
-dws doc +fetch --node '<node-id>' --delegator-user-id '<user-id>' --delegator-corp-id '<corp-id>'
-dws doc +fetch --node '<node-id>' --delegator-open-dingtalk-id '<open-dingtalk-id>'
+dws aitable base list --limit 10 --delegator-user-id '<user-id>' --delegator-corp-id '<corp-id>' --format json
+dws aitable base list --limit 10 --delegator-open-dingtalk-id '<open-dingtalk-id>' --format json
 ```
 
 宿主应从可信任务触发上下文取得身份，不能由模型根据历史消息作者或业务查询结果猜测。User ID 与 corpId 必须是一组；数字员工在 A 组织登录，委托人在 B 组织时应传 B，不从当前 profile 补齐。
@@ -42,7 +44,7 @@ dws doc +fetch --node '<node-id>' --delegator-open-dingtalk-id '<open-dingtalk-i
 ## 生命周期和透传边界
 
 - 在根命令执行入口消费参数，生成不可变的请求 context；参数解析状态随即清理。复用 Cobra 命令树的后续调用不能继承前次新增委托身份；Help 和解析失败路径也清理参数。
-- 同一命令中的 shortcut 多请求、允许的 dry-run 辅助读取和现有重试继承相同 context。业务响应不能改写委托身份。纯本地 dry-run 保持现有零网络屏障。
+- 已接入命令中的 shortcut 多请求、允许的 dry-run 辅助读取和现有重试继承相同 context。业务响应不能改写委托身份。纯本地 dry-run 保持现有零网络屏障。
 - 只向 DWS 已识别的四个 HTTPS MCP 网关主机（生产、预发及对应国际域名，默认端口或 443）添加委托输入。第三方/插件、自定义非网关端点、stdio、直接 OpenAPI、换票辅助请求和 `mcp-meta` 发现请求不支持本协议。
 - 不向共享身份 Header 注入委托信息。保留字段由本次 context 最终决定，其他 edition/credential/plugin Header 来源不能覆盖或伪造。
 - 跨源重定向清除全部委托 Header；重定向链返回原始源时也不会恢复。同源重定向保留。
@@ -53,7 +55,7 @@ dws doc +fetch --node '<node-id>' --delegator-open-dingtalk-id '<open-dingtalk-i
 
 ### 业务调用链的上下文要求
 
-全局参数可解析不等于每个业务入口已经完成透传。命令必须从 `cmd.Context()` 向 MCP 调用、分页和重试传递上下文；重新创建 `context.Background()` 会丢失委托身份。AI 表格的主服务、辅助服务、记录分页、视图更新和工作流发布已按此要求修复。其他产品仍有无上下文的旧调用入口，需要逐项迁移，当前不能宣称所有命令均已覆盖。
+全局参数可解析不等于每个业务入口已经完成透传。命令必须从 `cmd.Context()` 向 MCP 调用、分页和重试传递上下文；重新创建 `context.Background()` 会丢失委托身份。AI 表格的主服务、辅助服务、记录分页、视图更新和工作流发布已按此要求修复。其他产品仍有无上下文的旧调用入口，需要逐项迁移，当前不能宣称所有命令均已覆盖。具体 API 替换、测试范式和各产品状态见[业务接入指南](delegator-business-integration.md)。
 
 回归测试从真实 AI 表格命令入口经过运行器到 HTTP 请求，检查三个委托 Header 的具体值，并验证同一命令树下一次不传参数时不会继承旧身份。`extra_headers_count` 仅统计额外 Header 数量，不能代替字段值检查，也不能证明服务端委托授权成功。
 

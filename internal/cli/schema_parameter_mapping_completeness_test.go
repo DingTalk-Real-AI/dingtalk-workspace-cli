@@ -69,6 +69,8 @@ func TestDeliveryCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 
 func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
+		"aicard.explain":               "Reads the protocol index generated into the binary",
+		"aicard.lint":                  "Uses the protocol embedded in the binary; does not access the network or execute card functions",
 		"dingtalk-tag.connect_status":  "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",

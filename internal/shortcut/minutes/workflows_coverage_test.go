@@ -450,8 +450,8 @@ func TestCrossPlatformCoverageMinutesArtifactCollectorBranches(t *testing.T) {
 	emptySummary := &minutesE2ECaller{responses: map[string][]string{"minutes/get_minutes_ai_summary": {`{"success":true,"result":{"fullSummary":""}}`}}}
 	helpers.InitDepsForTest(t, emptySummary)
 	rt = shortcut.RuntimeContextForTest(&cobra.Command{Use: "collect"}, ExportPack)
-	if _, failures = collectMinutesArtifactsOnce(rt, "u1", []string{"summary"}, 1); len(failures) != 1 {
-		t.Fatalf("empty summary failures=%#v", failures)
+	if bundle, failures = collectMinutesArtifactsOnce(rt, "u1", []string{"summary"}, 1); len(failures) != 0 || bundle["summary"] != "" {
+		t.Fatalf("empty summary bundle=%#v failures=%#v", bundle, failures)
 	}
 }
 

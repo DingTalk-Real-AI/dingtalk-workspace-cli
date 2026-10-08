@@ -1,5 +1,7 @@
 #!/bin/sh
-# Pre-commit hook: run make to ensure lint + tests pass before committing.
+# Pre-commit hook: validate staged content without modifying the working tree.
 
-echo "Running pre-commit checks (make)..."
-make
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$script_dir/../dev/check-staged-commit.sh"

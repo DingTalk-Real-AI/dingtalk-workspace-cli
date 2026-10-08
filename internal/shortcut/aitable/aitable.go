@@ -43,6 +43,8 @@ const serverMain = "aitable"
 // one tool call.
 const serverHelper = "aitable-helper"
 
+func boolPtr(value bool) *bool { return &value }
+
 // parseJSONAny parses an arbitrary JSON string (object or array) into any.
 func parseJSONAny(flag, s string) (any, error) {
 	var v any
@@ -732,7 +734,7 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "记录 ID 列表，单次最多 100（可选）"},
 		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "返回字段 ID 列表（可选）；必须先通过 field get 获取真实 fieldId，不要传字段中文名"},
-		{Name: "filters", Type: shortcut.FlagString, Desc: "结构化过滤条件 JSON（可选）；先用 field get 完整读一遍表头，确定用户条件对应的字段和类型后再传值。日期值用日期字符串或毫秒数，不接受 View relative/exact Scheme。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
+		{Name: "filters", Type: shortcut.FlagString, Desc: aitableprotocol.RecordFiltersHelp + "；先用 field get 完整读一遍表头，确定字段和类型。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
 		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
@@ -994,15 +996,23 @@ var RecordUpsert = shortcut.Shortcut{
 	Command:     "+record-upsert",
 	Product:     serverHelper,
 	Description: "按 recordId 自动拆分 create/update，按 100 条分片并读回验证",
-	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。",
+	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。clientToken 仅作用于创建分组；超时或回执丢失时禁止重放整个 upsert（即使使用同一 token），使用原 token 对账创建分组，并按输入 recordId 独立读回更新分组。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，单次最多 100 条", Required: true},
+		{Name: "client-token", Type: shortcut.FlagString, Desc: "可选 UUID v4；写入结果不明时必须复用原值对账"},
 	},
-	Tips:    []string{`dws aitable +record-upsert --base-id B --table-id T --records '[{"cells":{...}}]'`},
+	Tips:    []string{`dws aitable +record-upsert --base-id B --table-id T --records '[{"cells":{"fldTitle":"任务"}}]' --client-token <NEW_UUID_V4>`},
 	Execute: executeRecordUpsertBatches,
+}
+
+func invalidRecordWriteResult(cause error) error {
+	return apperrors.NewAPI("记录写入尚未确认，或对账回执身份/结构不匹配；不能证明写入结果",
+		apperrors.WithReason("invalid_record_write_result"), apperrors.WithRetryable(false),
+		apperrors.WithHint("先核对 baseId/tableId/clientToken 是否为原写入值；确认无误后保留原三参数只读对账，不得据此重放或补写"),
+		apperrors.WithCause(cause))
 }
 
 // RecordPrimaryDocGet 查询记录主键文档（get_cell_doc）。

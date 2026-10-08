@@ -118,6 +118,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/oa.md
+  - mono: oa-template-write
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/oa-template-write.md
   - mono: openapi-explorer
     multi_skill: dingtalk-misc
     multi_refs:

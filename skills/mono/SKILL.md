@@ -93,7 +93,7 @@ metadata:
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及员工 Profile、普通本地 Agent 或 DSH 接入与运行管理 | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
-| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
+| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期/节点分享范围(set-share-scope) | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
 | `html`            | 原生 HTML 文件：读取/创建/全量覆盖/局部替换（.html/.htm，钉盘或文档空间）     | [html.md](./references/products/html.md)                     |
 | `markdown`        | 原生 Markdown 文件：读取/创建/对比/全量覆盖/局部替换/评论列表           | [markdown.md](./references/products/markdown.md)               |
@@ -104,7 +104,7 @@ metadata:
 | `mail`            | 邮箱：邮箱地址查询/邮件搜索(KQL)/邮件详情/发送邮件                        | [mail.md](./references/products/mail.md)                       |
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
-| `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
+| `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询 + 空间分享范围(permission set-share-scope) | [wiki.md](./references/products/wiki.md)                       |
 | `whiteboard`      | 独立与文档内嵌白板：带内容创建、本地 SVG 预渲染、读取 OpenNodes、写前 diff、追加节点、整页重建 | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
 | `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |

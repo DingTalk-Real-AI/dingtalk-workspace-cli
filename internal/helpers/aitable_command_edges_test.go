@@ -1432,6 +1432,67 @@ func TestCrossPlatformCoverageAitableSnapshotThinCommands(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableRecordUpsertClientTokenBranches(t *testing.T) {
+	const records = `[{"cells":{"f":"v"}}]`
+	tests := []struct {
+		name       string
+		clientArg  string
+		wantToken  string
+		wantAbsent bool
+		wantError  string
+	}{
+		{
+			name:      "provided token is preserved in MCP arguments",
+			clientArg: "--client-token=123e4567-e89b-42d3-a456-426614174000",
+			wantToken: "123e4567-e89b-42d3-a456-426614174000",
+		},
+		{
+			name:       "omitted token is omitted from MCP arguments",
+			wantAbsent: true,
+		},
+		{
+			name:      "invalid token is rejected before MCP call",
+			clientArg: "--client-token=not-a-uuid",
+			wantError: "--client-token: client-token 必须是合法的 UUID v4",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			args := []string{"record", "upsert", "--base-id=b", "--table-id=t", "--records=" + records}
+			if tc.clientArg != "" {
+				args = append(args, tc.clientArg)
+			}
+			err := runAitableCoverageCommand(t, caller, args...)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("error = %v, want substring %q", err, tc.wantError)
+				}
+				if len(caller.calls) != 0 {
+					t.Fatalf("invalid token reached MCP: %#v", caller.calls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			if caller.calls[0].server != "aitable-helper" || caller.calls[0].tool != "record_upsert" {
+				t.Fatalf("call = %#v, want aitable-helper/record_upsert", caller.calls[0])
+			}
+			got, exists := caller.calls[0].args["clientToken"]
+			if tc.wantToken != "" && got != tc.wantToken {
+				t.Fatalf("clientToken = %#v, want %q", got, tc.wantToken)
+			}
+			if exists != !tc.wantAbsent {
+				t.Fatalf("clientToken presence = %v, args = %#v", exists, caller.calls[0].args)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAnnotateViewUpdateError(t *testing.T) {
 	if got := AnnotateViewUpdateError(nil); got != nil {
 		t.Fatalf("nil input must stay nil, got %#v", got)
