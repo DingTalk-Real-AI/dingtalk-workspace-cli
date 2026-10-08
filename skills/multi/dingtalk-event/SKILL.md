@@ -13,7 +13,7 @@ metadata:
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
-本 Skill 只负责实时个人事件；发送/历史消息、审批处理、待办操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`。IM 优先 `+listen-im`；OA、VoIP、Todo、互动卡片使用 `event consume`，不用列表轮询模拟事件。
+本 Skill 只负责实时个人事件；发送/历史消息、审批处理、待办操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`。IM 优先 `+listen-im`；OA、VoIP、Todo、互动卡片使用 `event consume`。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用
@@ -32,7 +32,6 @@ metadata:
 | 监听指定群消息 | `dws event +listen-im --kind group --chat-query <群名>` |
 | 同一人/群的消息、表情、已读或撤回 | `dws event +listen-im --kind <sender|group> --events message,reaction,read,recall ...` |
 | 监听全部单聊或全部群消息 | `dws event +listen-im --kind <all-direct|all-group>`；只有用户明确要求“全部”时使用 |
-| 收到好友申请、好友添加成功 | 读取 [好友事件参考](references/event-contact.md)，使用精确 `event consume` EventKey |
 | 群改名、成员进退、群解散 | 读取 [EventKey 索引](references/event-im-keys.md)，使用精确 `event consume` EventKey |
 | OA 审批任务或实例事件 | 读取 [OA 事件参考](references/event-oa.md)，使用精确 `event consume` EventKey |
 | 查看 OA 事件目录 | `dws event list --category oa` |
@@ -53,29 +52,29 @@ metadata:
 - `group` 必须且只能传 `--chat-id` 或 `--chat-query` 之一。
 - `--query` 只用于纯 `message` 监听；混入 reaction/read/recall 时不得使用。
 
-OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友两个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标、角色或消息过滤。每项独立订阅并共享 bus。
+OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友两个 EventKey 约束同 OA。每项独立订阅并共享 bus。
 
 <!-- dws-intent: event.listen.card -->互动卡片使用 `dws event consume user_card_action_triggered --flatten -f ndjson`、`ruleType=all`、`filterRule={}`；不接受目标、角色或消息过滤。结构化上下文在 `payload.body.actionData.context`，未知字段保留。
 
-<!-- dws-intent: event.listen.contact -->好友事件使用 `dws event consume` 长连接；收到好友申请或好友添加成功时触发。查询或操作好友关系走 `dws contact`，不要轮询好友列表模拟事件。
+<!-- dws-intent: event.listen.contact -->好友申请/好友添加成功事件用 `event consume`；查询或操作好友关系走 `dws contact`，不要轮询模拟事件。
 
 姓名/群名必须唯一解析，零命中或多候选在创建订阅前停止。解析、监听、状态、停止使用同一 `--profile`，不得跨组织搬运 ID；`--dry-run` 走同一解析链。
 
 ### EventKey 索引
 
-16 个 EventKey 及目标约束见 [索引](references/event-im-keys.md)，含 `user_im_message_receive_o2o_all`、`user_im_message_receive_group_all`、`user_im_group_updated`、`user_im_group_member_added`、`user_im_group_member_exited`、`user_im_group_disbanded`；群输出可含 `operator_open_dingtalk_id`、`members[].open_dingtalk_id`。其它类别见下方 Reference。
+16 个 EventKey 及目标约束见 [索引](references/event-im-keys.md)；群输出可含 `operator_open_dingtalk_id`、`members[].open_dingtalk_id`。其它类别见下方 Reference。
 
 ## 运行与结果契约
 
 - 正常消费使用当前用户 OAuth、`--flatten` 和 NDJSON；stdout 仅事件，stderr 为生命周期状态。
 - 单事件 ready：`[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`。
 - 多事件先逐条输出 subscription，全部就绪后输出 `[event] ready event_count=<n> bus_pid=<pid>`。必须等待 ready，不用 `sleep` 猜测。
-- 有界任务用 `--max-events N`/`--duration 10m`；干净退出会取消本次新建订阅。无界任务由宿主管理并持续读 stdout；用 SIGTERM 或受控 stdin/bounded exit，不用 `kill -9`。
+- 有界任务用 `--max-events N`/`--duration 10m`；干净退出会取消本次新建订阅。无界任务由宿主持续读 stdout；用 SIGTERM 或 bounded exit，不用 `kill -9`。
 - 自发消息会被 self-loop 过滤。回复时把真实 `conversation_id`/`sender_open_dingtalk_id` 交给 `dws chat +messages-send`，不从显示名猜 ID。
-- 扁平消息/动作字段按事件类型读取：已读为 `reader_open_dingtalk_id`，撤回为 `recaller_open_dingtalk_id`，回应为 `reaction_name`、`operation_type`。媒体优先通过聊天读取命令加 `--download-resources`；已知消息 ID 的底层降级入口是 `dws chat message download-media`。
+- 扁平消息/动作字段按事件类型读取：已读为 `reader_open_dingtalk_id`，撤回为 `recaller_open_dingtalk_id`，回应为 `reaction_name`、`operation_type`。媒体优先通过聊天读取命令加 `--download-resources`。
 - OA 扁平事件提供审批实例、任务和状态字段；字段差异、原始回退条件及与 OA 命令的稳定 ID 交接以 [OA 事件参考](references/event-oa.md) 为准。
 - Todo 扁平事件提供 `task_id`、标题、角色、状态阶段和时间字段；用真实 `task_id` 交给 `dws todo`，字段差异见 [Todo 事件参考](references/event-todo.md)。
-- 互动卡片输出 `type/event_id/timestamp/subscribe_id/payload`。在 `payload.body.actionData.context` 用 `questions[].id` 关联 `answers[question_id]`，按选项 ID 读 `selected`；空数组合法。操作者是 `operatorDTO.uid`；分别保留 `timestamp`、`event_time`、`triggerTimestamp`。其它字段与回退见 [互动卡片参考](references/event-card.md)。
+- 互动卡片输出 `type/event_id/timestamp/subscribe_id/payload`，上下文关联在 `payload.body.actionData.context`；操作者是 `operatorDTO.uid`，三个时间戳分别保留。其它字段与回退见 [互动卡片参考](references/event-card.md)。
 
 ## 安全与失败处理
 
@@ -83,7 +82,7 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 - `event stop` 会取消订阅并影响本地 consumer：先 `--dry-run`，用户确认后再加 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
-- 全部 30 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片 + 2 好友）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`，`retryable=true`→`max_additional_attempts=2`，`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，CLI 不持久化或计算跨调用的 Agent/host 尝试次数。
+- 全部 30 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片 + 2 好友）遵循 Agent/host `0/2/1`（retryable false/true/unknown 分别追加 0/2/1 次）。它不是 CLI 持久化硬总次数上限；进程内不自动重试。
 - 遵守 `retry_after_seconds`/`next_retry_at`；`in_flight`、`cooldown`、`terminal_hold` 时不并发或换 `subscribe_id`/`trace_id` 绕过。
 - 认证、profile、订阅保护状态和 bus 排障按失败类型读取 [订阅运维](references/event-im-operations.md)，不要在正常路径预加载完整运维手册。
 
@@ -107,8 +106,8 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 | ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) | 启动/托管/关闭 consumer |
 | 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) | 解析事件或自动回复 |
 | Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) | 订阅控制或失败恢复 |
-| OA 审批事件 | [event-oa.md](references/event-oa.md) | 选择七个 OA EventKey、组合消费或解析审批字段 |
+| OA 审批事件 | [event-oa.md](references/event-oa.md) | 七个 OA EventKey 与审批字段解析 |
 | VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) | 选择 VoIP EventKey、解析邀请字段或检查敏感输出边界 |
 | Todo 待办事件 | [event-todo.md](references/event-todo.md) | 选择三个 Todo EventKey、设置角色范围或解析待办字段 |
 | 好友事件 | [event-contact.md](references/event-contact.md) | 选择两个好友 EventKey、解析好友申请或好友添加字段 |
-| 互动卡片回调事件 | [event-card.md](references/event-card.md) | 订阅互动卡片回调、解析开放 payload 或检查空过滤规则 |
+| 互动卡片回调事件 | [event-card.md](references/event-card.md) | 订阅回调、解析 payload 与过滤规则 |
