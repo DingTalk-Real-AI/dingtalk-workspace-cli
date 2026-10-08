@@ -46,4 +46,4 @@ Value functions use `{"call": …, "args": {…}}` and may nest. Host actions re
 | `@index` | System function | number | — |  | Returns the 0-based index of the current item when rendering a dynamic list fro… |
 
 ---
-Generated from `references/protocol/` (fingerprint `7005139e5267c69e`). Do not edit this index: protocol changes regenerate it. For exact fields and a minimal example, query a name as shown in the Skill entrypoint; the whole catalog need not enter the model context.
+Generated from `references/protocol/` (fingerprint `cf4611469d2c3f5e`). Do not edit this index: protocol changes regenerate it. For exact fields and a minimal example, query a name as shown in the Skill entrypoint; the whole catalog need not enter the model context.

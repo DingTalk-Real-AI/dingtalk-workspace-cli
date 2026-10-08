@@ -54,15 +54,15 @@ func TestCrossPlatformCoverageAicardProtocolUtilities(t *testing.T) {
 	if reflect.DeepEqual(manifest, p.assets.Manifest) {
 		t.Fatal("caller must not mutate the embedded manifest")
 	}
-	if got := p.Explain(" text "); got["name"] != "Text" {
+	if got := mustExplain(t, p, " text "); got["name"] != "Text" {
 		t.Fatal(got)
 	}
-	if got := p.Explain("check_l_outlined"); got["kind"] != "unknown" {
+	if got := mustExplain(t, p, "check_l_outlined"); got["kind"] != "unknown" {
 		t.Fatal("token items must remain case sensitive", got)
 	}
 	mostSuggestions := 0
 	for _, name := range []string{"T", "B", "C", "R", "S", "I", "F", "P", "M", "D", "L", "A"} {
-		got := p.Explain(name)
+		got := mustExplain(t, p, name)
 		if got["kind"] != "unknown" {
 			t.Fatalf("unexpected match for %q: %v", name, got["name"])
 		}
@@ -232,4 +232,9 @@ func TestCrossPlatformCoverageAicardLoadIntegrityFailures(t *testing.T) {
 	setDoc(&a, "agent-to-renderer.json", badRoot)
 	setAssets(a)
 	check("error parsing regexp")
+	// Even a valid rehashed Schema must still agree with the explain bundle.
+	a = clone()
+	setDoc(&a, "agent-to-renderer.json", append(append([]byte{}, originalDoc...), '\n'))
+	setAssets(a)
+	check("explain index and protocol manifest have drifted")
 }

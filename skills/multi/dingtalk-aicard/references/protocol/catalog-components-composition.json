@@ -469,15 +469,15 @@
           "enum": [
             "shimmer"
           ],
-          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. The field is sent consistently to all clients. The effect currently works only on iOS; unsupported clients silently ignore it and render regular text without affecting the text itself. No protocol change is required when those clients add support."
+          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. Supported on iOS, Android, HarmonyOS, Windows, macOS, and Web."
         },
         "icon": {
           "type": "string",
-          "description": "Light mode title icon address."
+          "description": "Light-mode title icon. Accepts an image URL or a registered IconName such as Check_L_outlined."
         },
         "darkIcon": {
           "type": "string",
-          "description": "Dark mode title icon URL; falls back to icon if not provided."
+          "description": "Dark-mode title icon. Accepts an image URL or a registered IconName; falls back to icon when omitted."
         },
         "variant": {
           "type": "string",

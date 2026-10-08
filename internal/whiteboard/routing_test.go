@@ -4,8 +4,12 @@
 package whiteboard
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
 func TestCrossPlatformCoverageWhiteboardResolveKindPreservesEmbeddedCompatibility(t *testing.T) {
@@ -115,5 +119,32 @@ func TestCrossPlatformCoverageWhiteboardBuildUpdateCallPreservesOldArgsAndValida
 		if err := ValidateCreateRequestID(requestID); err == nil {
 			t.Fatalf("ValidateCreateRequestID(%q) unexpectedly succeeded", requestID)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardPresentationOrderIsFrameOnly(t *testing.T) {
+	valid := []map[string]any{
+		{"id": "frame", "type": "frame", "presentationOrder": float64(0)},
+		{"id": "shape", "type": "shape", "zIndex": float64(1)},
+	}
+	if err := ValidateOpenNodesPresentationOrder(valid); err != nil {
+		t.Fatalf("valid nodes rejected: %v", err)
+	}
+
+	invalid := []map[string]any{
+		{"id": "shape", "type": "shape", "presentationOrder": float64(0)},
+	}
+	err := ValidateOpenNodesPresentationOrder(invalid)
+	if err == nil {
+		t.Fatal("shape presentationOrder unexpectedly accepted")
+	}
+	for _, want := range []string{"/source/nodes/0/presentationOrder", "仅允许用于 frame", "zIndex"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+	var typed *opennodes.PresentationOrderValidationError
+	if !errors.As(err, &typed) {
+		t.Fatalf("validation wrapper lost typed cause: %v", err)
 	}
 }

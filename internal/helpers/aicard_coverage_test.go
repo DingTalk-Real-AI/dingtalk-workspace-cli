@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/card/a2ui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -23,6 +24,7 @@ func TestCrossPlatformCoverageAicardCommandFailureBranches(t *testing.T) {
 		{"preflight with fragment", []string{"lint", "--file", file, "--preflight", "resources", "--fragment"}, "Preflight requires"},
 		{"unreadable lint file", []string{"lint", "--file", file + ".missing"}, "Cannot read file"},
 		{"unknown batch name", []string{"explain", "Text", "unknown-name"}, "At least one name"},
+		{"unknown compact batch name", []string{"explain", "Text", "unknown-name", "--compact"}, "At least one name"},
 		{"missing preview file", []string{"preview", "--file", " "}, "--file is required"},
 		{"empty preview summary", []string{"preview", "--file", file, "--summary", " "}, "--summary must not be empty"},
 		{"unreadable preview file", []string{"preview", "--file", file + ".missing"}, "card.json.missing"},
@@ -42,11 +44,22 @@ func TestCrossPlatformCoverageAicardCommandInjectedFailures(t *testing.T) {
 	file := aicardTestFile(t, aicardTestSnapshot)
 	t.Run("protocol load", func(t *testing.T) {
 		testseam.Swap(t, &aicardLoadProtocol, func() (*a2ui.Protocol, error) { return nil, errors.New("damaged embedded protocol") })
-		for _, args := range [][]string{{"lint", "--self-check"}, {"explain", "Text"}, {"preview", "--file", file}} {
+		for _, args := range [][]string{{"lint", "--self-check"}, {"preview", "--file", file}} {
 			result, code, err := executeAicard(t, &aicardCaller{}, args...)
 			if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "damaged embedded protocol") {
 				t.Fatalf("%v: code=%d err=%v result=%v", args, code, err, result)
 			}
+		}
+		result, code, err := executeAicard(t, &aicardCaller{}, "explain", "Text")
+		if err != nil || code != 0 || result["ok"] != true {
+			t.Fatalf("explain must not initialize the validator: code=%d err=%v result=%v", code, err, result)
+		}
+	})
+	t.Run("explain load", func(t *testing.T) {
+		testseam.Swap(t, &aicardLoadExplain, func() (*a2ui.ExplainStore, error) { return nil, errors.New("damaged explain bundle") })
+		result, code, err := executeAicard(t, &aicardCaller{}, "explain", "Text")
+		if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "damaged explain bundle") {
+			t.Fatalf("code=%d err=%v result=%v", code, err, result)
 		}
 	})
 	t.Run("lint failure", func(t *testing.T) {
@@ -64,9 +77,12 @@ func TestCrossPlatformCoverageAicardCommandInjectedFailures(t *testing.T) {
 		testseam.Swap(t, &aicardPreflight, func(*a2ui.Protocol, []string, string) (map[string]any, error) {
 			return nil, errors.New("preflight input failed")
 		})
-		result, code, err := executeAicard(t, &aicardCaller{}, "lint", "--file", file, "--preflight", "new-card")
-		if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "preflight input failed") {
-			t.Fatalf("code=%d err=%v result=%v", code, err, result)
+		for _, args := range [][]string{{"lint", "--file", file, "--preflight", "new-card"}, {"preview", "--file", file, "--dry-run"}} {
+			caller := &aicardCaller{}
+			result, code, err := executeAicard(t, caller, args...)
+			if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "preflight input failed") || len(caller.calls) != 0 {
+				t.Fatalf("code=%d err=%v result=%v calls=%v", code, err, result, caller.calls)
+			}
 		}
 	})
 	if err := aicardReport(&cobra.Command{}, a2ui.Report{Metrics: map[string]any{"bad": make(chan int)}}); err == nil {
@@ -121,5 +137,53 @@ func TestCrossPlatformCoverageAicardPublicFactory(t *testing.T) {
 	}
 	if found != 1 {
 		t.Fatalf("aicard public factory count = %d, want 1", found)
+	}
+}
+
+func TestCrossPlatformCoverageAicardExplainCorruptContracts(t *testing.T) {
+	raw := `{"formatVersion":1,"manifestSha256":"` + strings.Repeat("0", 64) + `","entries":{"Text":{"kind":"component","definition":{"name":"wrong","kind":"component"}}}}`
+	store, err := a2ui.NewExplainStore(fstest.MapFS{"explain.json": &fstest.MapFile{Data: []byte(raw)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &aicardLoadExplain, func() (*a2ui.ExplainStore, error) { return store, nil })
+	for _, args := range [][]string{
+		{"explain", "Text"},
+		{"explain", "Text", "--compact"},
+		{"explain", "Text", "Row"},
+		{"explain", "Text", "Row", "--compact"},
+	} {
+		result, code, err := executeAicard(t, &aicardCaller{}, args...)
+		if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "Cannot read an embedded explain contract") {
+			t.Fatalf("%v: code=%d err=%v result=%v", args, code, err, result)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAicardSelfCheckRejectsMissingAssets(t *testing.T) {
+	testseam.Swap(t, &aicardLoadProtocol, func() (*a2ui.Protocol, error) { return &a2ui.Protocol{}, nil })
+	result, code, err := executeAicard(t, &aicardCaller{}, "lint", "--self-check")
+	if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "Cannot verify the embedded explain contracts") {
+		t.Fatalf("code=%d err=%v result=%v", code, err, result)
+	}
+}
+
+func TestCrossPlatformCoverageAicardWholeContractReferences(t *testing.T) {
+	result, code, err := executeAicard(t, &aicardCaller{}, "explain", "Text", "text", "--compact")
+	if err != nil || code != 0 {
+		t.Fatalf("code=%d err=%v result=%v", code, err, result)
+	}
+	bundle := result["data"].(map[string]any)
+	for _, item := range bundle["contracts"].([]any) {
+		ref, ok := item.(map[string]any)["$contractRef"].(string)
+		if !ok || bundle["definitions"].(map[string]any)[ref].(map[string]any)["name"] != "Text" {
+			t.Fatalf("expected whole Text contract reference: %v", item)
+		}
+	}
+	// Distinct raw names normalize to one long unknown contract and are compacted.
+	unknown := strings.Repeat("unknown", 50)
+	result, code, err = executeAicard(t, &aicardCaller{}, "explain", unknown, " "+unknown, "--compact")
+	if err != nil || code == 0 || !strings.Contains(result["error"].(map[string]any)["message"].(string), "At least one name") {
+		t.Fatalf("unknown reference accepted: code=%d err=%v result=%v", code, err, result)
 	}
 }

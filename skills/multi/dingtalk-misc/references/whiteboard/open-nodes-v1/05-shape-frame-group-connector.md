@@ -55,7 +55,8 @@ frame 的 update 结构见第 6 节 `OpenFrameNodeWrite`。
 
 - frame 必须是页面直属节点，不能带 `parentId`。
 - angle 只允许 `0`。
-- `presentationOrder` 是非负整数，并且不能和已有或本次创建的 frame 冲突。
+- 只有 frame 可以携带 `presentationOrder`；它是非负整数，并且不能和已有或
+  本次创建的 frame 冲突。其他节点的层叠顺序使用 `zIndex`。
 - frame 的子节点通过子节点 `parentId` 引用 frame 临时 ID。
 - frame 不能包含 frame 或 connector。
 - frame 默认 layer 为 `background`。

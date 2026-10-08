@@ -45,7 +45,7 @@ Python exits 0 for success, 1 for invalid input, and 2 for file, environment, pr
 
 The Python reference distinguishes `input.dependencies_unavailable` (missing dependency), `input.python_environment_unavailable` (dependency import failure), and `input.protocol_unavailable` (damaged protocol). `setup_env.py` prepares the environment and returns `pythonExecutable`; lint never installs dependencies implicitly. A damaged protocol must not be relabeled as a dependency-installation problem. `input.validation_incomplete` means local resources were insufficient to reach a validation conclusion.
 
-`dws aicard explain <name>` queries generated component, function, common-type, and Token field contracts and examples. Minimal examples for all 47 components must pass fragment validation.
+`dws aicard explain <name>` parses one generated `explain.json` into a name table with raw JSON definitions, then decodes the requested definition. It does not initialize the validator or compile Schema. This is capability-level lazy loading, not per-file loading: the complete bundle is embedded and its JSON syntax is parsed on first lookup. `lint --self-check` first checks the exact explain bundle SHA-256 against the independent digest in validator assets, then checks every definition, protocol manifest, references and Schema compilation. Missing, extra, or truncated definitions fail even when the protocol manifest is unchanged. Named lookups still decode only the requested definition. Generation checks verify exact bundle content. Minimal examples for all 47 components must pass fragment validation.
 
 ## Verification
 
@@ -53,7 +53,8 @@ Run the native checks from the DWS repository root. `make build` creates the `./
 
 ```bash
 make build
-DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/card/a2ui ./internal/helpers -run '^TestCrossPlatformCoverageAicard' -count=1
+DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/card/a2ui -count=1
+DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/helpers -run Aicard -count=1
 ./dws aicard lint --self-check --format json
 ```
 
@@ -77,4 +78,34 @@ The baseline covers DingTalk examples, invalid structural cases, structurally va
 
 Go `--emit` returns only encoded message strings; it writes no file and cannot be combined with `--fragment`. `--self-check` independently checks embedded resources. Preview applies the same initialization, public catalogId, and reference rules as explicit `new-card` preflight without changing general lint.
 
-`tools/build_go_assets.py` generates the query index and Unicode XID ranges from the Python reference and embeds matching internal rules, without duplicating the public protocol. The DWS Skill contains no Python scripts. Go uses `jsonschema/v6` and `regexp2`. Internal rules are synthesized on copies, and constant branches are evaluated early to avoid repeatedly computing recursive arguments without changing successful-branch annotations. Generator `--check` and full conformance detect drift.
+`tools/build_go_assets.py` generates one explain bundle and separate validator metadata with Unicode XID ranges from the Python reference. No per-name files, custom offset index or compressed storage format are needed. The DWS Skill contains no Python scripts. Go uses `jsonschema/v6` and `regexp2`. Internal rules are synthesized on copies, and constant branches are evaluated early to avoid repeatedly computing recursive arguments without changing successful-branch annotations. Generator `--check` and full conformance detect drift.
+
+## Supported integration baseline
+
+The official module is `github.com/DingTalk-Real-AI/dingtalk-workspace-cli`.
+The installer defaults to the sibling `../dingtalk-workspace-cli`; for a custom
+checkout or Git worktree always specify `--dws /absolute/path/to/checkout`.
+Compatibility acceptance targets official main with this extension installed.
+The inspected main baseline is `7de51a87`; feature-branch results do not prove
+released-version compatibility. All installer API seam checks must pass,
+including `RegisterPublicNamed`, a supported `RuntimeSchemaConstraints`
+struct or alias, typed help documentation and the test execution API.
+An older checkout missing those APIs is rejected before writing; `--force`
+does not bypass the API checks. Use a compatible checkout instead of weakening
+preflight or copying generated Skill files to simulate native command support.
+
+From the AICard repository, inspect the plan with
+`python3 tools/install_to_dws.py --dws /absolute/path/to/checkout --check`, then
+run the same command without `--check` to install and verify. Verification runs
+`go build ./...`, helper vet, all A2UI package tests, and helper tests matching
+`Aicard`. The helper filter is separate from the unfiltered validator package.
+`--check` alone proves neither compilation nor installed runtime behavior.
+
+## Base64 compatibility change
+
+Resource preflight emits `resource.base64_image_unverified` with severity
+`warning` for inline Base64 images. Relative to master, this adds a warning; master did not reject these images. Valid encoding
+alone does not prove image decoding, client support or transport size safety.
+Malformed data URIs and invalid/empty Base64 retain their existing errors.
+Prefer HTTPS for new authoring; this policy does not change public Schema
+validity or impose an invented per-image byte limit.

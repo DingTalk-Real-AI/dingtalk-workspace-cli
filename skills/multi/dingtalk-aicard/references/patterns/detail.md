@@ -4,7 +4,7 @@ Use for an approval request, schedule item, task, order, or another object with 
 
 | Needed presentation | Optional components | When to choose them |
 |---|---|---|
-| Title and current status | `CardHeader(trailing → Tag)` or `Row > Text + Tag` | Native themed header or a custom compact header |
+| Title and current status | `Text`, or `Row > Text + Tag` | Add a Tag only for an actual status; for CardHeader see [header layouts](../design.md#headers-and-card-insets) |
 | Labels and values | `Column > Row > Text + Text` | A few object attributes; see [key-value rows](../design.md#key-value-rows) for long values |
 | Fact and adjacent destination | `Row > Text + Link` | A role and "View role," or an attachment name and its details |
 | Reason or supporting material | `Markdown`, `File`, optionally within `CollapsiblePanel` | Choose separately for prose, a real file, and collapsible detail |

@@ -74,6 +74,98 @@ func TestWhiteboardReferencesAreDeliveredToBothSkillSurfaces(t *testing.T) {
 	}
 }
 
+func TestWhiteboardSkillTopLevelDescriptionsPreserveContainerRouting(t *testing.T) {
+	readDescription := func(path string) string {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts := strings.SplitN(string(data), "---", 3)
+		if len(parts) != 3 {
+			t.Fatalf("%s has no YAML front matter", path)
+		}
+		for _, line := range strings.Split(parts[1], "\n") {
+			if strings.HasPrefix(line, "description: ") {
+				return strings.TrimPrefix(line, "description: ")
+			}
+		}
+		t.Fatalf("%s has no top-level description", path)
+		return ""
+	}
+
+	docDescription := readDescription("../../skills/multi/dingtalk-doc/SKILL.md")
+	for _, required := range []string{
+		"文档内白板卡片容器的插入、定位、删除",
+		"白板图形内容创建或修改走 dingtalk-misc",
+	} {
+		if !strings.Contains(docDescription, required) {
+			t.Errorf("dingtalk-doc description missing routing boundary %q", required)
+		}
+	}
+	if strings.Contains(docDescription, "白板走 dingtalk-misc") {
+		t.Error("dingtalk-doc description routes whiteboard card containers away from doc")
+	}
+
+	miscDescription := readDescription("../../skills/multi/dingtalk-misc/SKILL.md")
+	for _, required := range []string{
+		"独立白板（白板文件）",
+		"文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写",
+		"两类目标相互独立，不互相推断或切换",
+		"已有 nodeId 和 partId 的文档内嵌白板图形内容读写",
+	} {
+		if !strings.Contains(miscDescription, required) {
+			t.Errorf("dingtalk-misc description missing embedded-content boundary %q", required)
+		}
+	}
+	if strings.Contains(miscDescription, "独立及文档内嵌白板") {
+		t.Error("dingtalk-misc description claims unqualified embedded whiteboard ownership")
+	}
+
+	paths := []string{
+		"../../skills/mono/SKILL.md",
+		"../../skills/mono/references/products/whiteboard.md",
+		"../../skills/multi/dingtalk-misc/SKILL.md",
+		"../../skills/multi/dingtalk-misc/references/whiteboard.md",
+		"../../skills/multi/dingtalk-shared/references/routing.md",
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, forbidden := range []string{
+			"没有文档内 `partId` 时默认独立白板",
+			"没有 `partId` 时默认独立白板",
+			"未提供 `partId` 时默认独立白板",
+			"无 part-id，默认独立",
+			"独立与文档内嵌白板",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s conflates independent and embedded targets with %q", path, forbidden)
+			}
+		}
+	}
+
+	whiteboardReference, err := os.ReadFile("../../skills/multi/dingtalk-misc/references/whiteboard.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"### 文档内嵌白板 part 的图形内容",
+		"### 独立白板文件",
+		"不能把其中一组当作另一组的创建、发现或失败回退流程",
+	} {
+		if !strings.Contains(string(whiteboardReference), required) {
+			t.Errorf("whiteboard reference missing separate-target boundary %q", required)
+		}
+	}
+	if strings.Contains(string(whiteboardReference), "# 新建文档和白板卡片") {
+		t.Error("whiteboard content reference must not own embedded card-container creation")
+	}
+}
+
 func TestWhiteboardProtocolDocumentsLocalAndServerValidationBoundaries(t *testing.T) {
 	for _, path := range []string{
 		"../../skills/mono/references/products/whiteboard/open-nodes-v1.md",

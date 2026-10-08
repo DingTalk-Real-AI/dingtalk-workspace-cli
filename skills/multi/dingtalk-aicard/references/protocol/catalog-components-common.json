@@ -82,7 +82,7 @@
           "enum": [
             "shimmer"
           ],
-          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. The field is sent consistently to all clients. The effect currently works only on iOS; unsupported clients silently ignore it and render regular text without affecting the text itself. No protocol change is required when those clients add support."
+          "description": "Text presentation effect. `shimmer` repeatedly sweeps a highlight across the text and is intended for streaming wait states such as \"Thinking...\". If omitted, no effect is applied. On `CollapsiblePanel`, it applies to the panel title. Supported on iOS, Android, HarmonyOS, Windows, macOS, and Web."
         },
         "onLinkClick": {
           "$ref": "./common-types-basic.json#/$defs/Action",
