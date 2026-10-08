@@ -815,6 +815,121 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageChatPromoteAvailabilityRetirementLifecycle(t *testing.T) {
+	tests := []struct {
+		name             string
+		candidateState   string
+		currentCLIHidden bool
+		mutateCurrent    func(*schemaContract)
+		wantCode         int
+		wantError        []string
+	}{
+		{
+			name:             "consumed hidden command authorizes atomic availability and ref retirement",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+		},
+		{
+			name:             "pending visible command cannot retire Schema early",
+			candidateState:   interfacesnapshot.CommandMigrationPending,
+			currentCLIHidden: false,
+			wantCode:         1,
+			wantError:        []string{"changed availability", "changed interface_ref"},
+		},
+		{
+			name:             "consumed migration rejects a different retired ref",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) {
+					tool.InterfaceRef = `{"product_id":"im","rpc_name":"other"}`
+				})
+			},
+			wantCode:  2,
+			wantError: []string{"does not match reviewed interface tuple"},
+		},
+		{
+			name:             "consumed migration rejects a different interface mode",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) { tool.InterfaceMode = "composite" })
+			},
+			wantCode:  2,
+			wantError: []string{"does not match reviewed interface tuple"},
+		},
+		{
+			name:             "authorized retirement does not hide safety drift",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) { tool.Risk = "high" })
+			},
+			wantCode:  1,
+			wantError: []string{"changed risk"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			baselinePath := filepath.Join(directory, "baseline.json")
+			currentPath := filepath.Join(directory, "current.json")
+			approvedPath := filepath.Join(directory, "approved.json")
+			candidatePath := filepath.Join(directory, "candidate.json")
+			currentSnapshotPath := filepath.Join(directory, "current-snapshot.json")
+			baseSnapshotPath := filepath.Join(directory, "base-snapshot.json")
+			stableSnapshotPath := filepath.Join(directory, "stable-snapshot.json")
+
+			current := chatPromoteRetirementContract(true)
+			if test.mutateCurrent != nil {
+				test.mutateCurrent(&current)
+			}
+			writeSchemaContractFile(t, baselinePath, chatPromoteRetirementContract(false))
+			writeRawSchemaContractFile(t, currentPath, current)
+			writeCommandMigrationManifestFile(t, approvedPath, chatPromoteRetirementManifest(interfacesnapshot.CommandMigrationPending))
+			writeCommandMigrationManifestFile(t, candidatePath, chatPromoteRetirementManifest(test.candidateState))
+			writeInterfaceSnapshotFile(t, currentSnapshotPath, chatPromoteRetirementSnapshot(test.currentCLIHidden))
+			writeInterfaceSnapshotFile(t, baseSnapshotPath, chatPromoteRetirementSnapshot(false))
+			writeInterfaceSnapshotFile(t, stableSnapshotPath, chatPromoteRetirementSnapshot(false))
+
+			args := []string{
+				"--check", baselinePath,
+				"--current", currentPath,
+				"--approved-command-migrations", approvedPath,
+				"--candidate-command-migrations", candidatePath,
+				"--migration-current-snapshot", currentSnapshotPath,
+				"--migration-base-snapshot", baseSnapshotPath,
+				"--migration-stable-snapshot", stableSnapshotPath,
+			}
+			var stdout, stderr strings.Builder
+			if code := run(args, &stdout, &stderr); code != test.wantCode {
+				t.Fatalf("run code=%d, want %d; stderr=%s", code, test.wantCode, stderr.String())
+			}
+			for _, want := range test.wantError {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("stderr=%q, want substring %q", stderr.String(), want)
+				}
+			}
+		})
+	}
+
+	t.Run("already retired baseline rejects a stale interface tuple", func(t *testing.T) {
+		baseline := chatPromoteRetirementContract(true)
+		mutateChatPromoteTool(&baseline, func(tool *toolSchema) {
+			tool.InterfaceRef = `{"product_id":"im","rpc_name":"convert_message_to_thread"}`
+		})
+		migration := chatPromoteRetirementManifest(interfacesnapshot.CommandMigrationConsumed).Migrations[0]
+		if _, err := normalizeSchemaCommandMigrations(
+			baseline,
+			chatPromoteRetirementContract(true),
+			[]interfacesnapshot.CommandMigration{migration},
+		); err == nil || !strings.Contains(err.Error(), "does not match reviewed interface tuple") {
+			t.Fatalf("stale after-state interface tuple error = %v", err)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageSchemaCommandMigrationComposesHistoricalFlagLineage(t *testing.T) {
 	directory := t.TempDir()
 	stableContract, baseContract, currentContract := schemaCommandLineageContracts()
@@ -1659,6 +1774,71 @@ func schemaCommandMigrationSnapshot(after bool) interfacesnapshot.Snapshot {
 			ExcludedFlags:           []string{"help"},
 		},
 		Commands: commands,
+	}
+}
+
+func chatPromoteRetirementContract(after bool) schemaContract {
+	tool := toolSchema{
+		PrimaryCLIPath: "chat thread promote",
+		InterfaceMode:  interfaceModeMCP,
+		InterfaceRef:   `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		Availability:   "available",
+		Parameters:     map[string]parameterSchema{},
+		Effect:         "write",
+		Risk:           "medium",
+		Confirmation:   "not_required",
+		Idempotency:    "idempotent",
+	}
+	if after {
+		tool.Availability = "unavailable"
+		tool.InterfaceRef = ""
+	}
+	return schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"chat": {Tools: map[string]toolSchema{"chat.promote_message_to_thread": tool}},
+	}}
+}
+
+func mutateChatPromoteTool(contract *schemaContract, mutate func(*toolSchema)) {
+	product := contract.Products["chat"]
+	tool := product.Tools["chat.promote_message_to_thread"]
+	mutate(&tool)
+	product.Tools["chat.promote_message_to_thread"] = tool
+	contract.Products["chat"] = product
+}
+
+func chatPromoteRetirementManifest(state string) interfacesnapshot.CommandMigrationManifest {
+	return interfacesnapshot.CommandMigrationManifest{
+		Version: interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{{
+			Kind: interfacesnapshot.CommandMigrationAvailability,
+			Legacy: interfacesnapshot.CommandMigrationSide{
+				Command: "dws chat thread promote",
+				Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+				After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+			},
+			Schema: interfacesnapshot.CommandMigrationSchema{
+				ProductID:    "chat",
+				SourceToolID: "chat.promote_message_to_thread",
+				Parameters:   []interfacesnapshot.CommandParameterMigration{},
+				Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+			},
+			State:  state,
+			Reason: "Retire chat thread promote after the command migration is consumed.",
+		}},
+	}
+}
+
+func chatPromoteRetirementSnapshot(hidden bool) interfacesnapshot.Snapshot {
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{"dws __complete", "dws __completeNoDesc", "dws completion", "dws help"},
+			ExcludedFlags:           []string{"help"},
+		},
+		Commands: []interfacesnapshot.Command{
+			{Path: "dws", Runnable: true, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+			{Path: "dws chat thread promote", Runnable: true, Hidden: hidden, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+		},
 	}
 }
 

@@ -17,127 +17,115 @@ metadata:
   catalogId: https://dingtalk.com/card/a2ui/catalogs/public/catalog.json
 ---
 
-# Create and validate DingTalk AI Cards V0.8
+# DingTalk AI Cards V0.8
 
-Turn the user's content and interaction requirements into a maintainable A2UI file. Look up contracts in the bundled DingTalk protocol, check syntax and structure, and identify runtime behavior that remains unverified. Sending and rendering require a delivery tool and a target client.
+Create or edit an A2UI file from the user's content or image, look up only the contracts needed, and distinguish local validation from delivery and client rendering. This Skill uses the DingTalk V0.8 package based on A2UI 1.0: message `version` is `"v1.0"` and send API `protocolVersion` is `"1.0"`.
 
-The DingTalk specification version is **V0.8**, based on the official A2UI **1.0** reference. The message `version` remains `"v1.0"`, and the sending API's `protocolVersion` remains `"1.0"`; neither becomes V0.8.
+Follow the user's requested lookup, file, send or update directly; the references are not a mandatory sequence. Obey command and protocol requirements. Ask only when missing facts, interaction meaning or the target affect the outcome.
 
-## Determine content and interactions
+## Route by intent
 
-Build the card when the available information is sufficient. Ask only when missing information affects factual content, the meaning of a required interaction, or delivery. A file-only request does not need a conversation target. Choose the layout, grouping, and a stable `surfaceId` as appropriate.
+Read only the relevant reference. Do not preload the complete protocol, every pattern, or the whole guide.
 
-- Preserve requested components, information, and interactions; do not drop requirements to fit a pattern.
-- Use provided or verified numbers, names, dates, and business URLs. Clearly label demonstration data in a prototype.
-- Preserve buttons, tags, and other visual elements requested by the user or shown in a reference image. Do not invent URLs or event names when business behavior is unknown. A static `ButtonGroup` may omit each item's `action` where the protocol permits it; report that its interaction is not connected. Standalone `Button.action` is still required: do not rely on renderer tolerance to omit it. Do not add buttons without a visual or operational need.
+| Intent | First reference | Optional follow-up |
+|---|---|---|
+| Set up lookup and validation | [Execution environment](#execution-environment) | Installed command help |
+| Create or redesign from content or images | [Visual focus and layout](references/design.md) | One relevant [pattern](#composition-patterns) or example |
+| Query a known name | [Query a named contract](#query-a-named-contract) | The result's source pointer |
+| Find an unknown name | [Component](references/index/components.md), [function](references/index/functions.md), or [Token](references/index/tokens.md) index | Query only the selected names |
+| Construct or repair a card | [Construct and validate](#construct-and-validate) | Diagnostic pointer and named contract |
+| Send, preview, or update | [Delivery boundary](#delivery-boundary) | Installed command help |
 
-## Surface and delivery scenarios
+Use patterns for composition guidance and linked JSON for message shapes. Read a named example directly; use the [example index](references/protocol/examples/README.md) only to choose one.
 
-Choose the message boundary for the known delivery route. If the user specified creation or update, use that route directly:
+## Composition patterns
 
-| Scenario | Required messages |
+| Content | Reference |
 |---|---|
-| New card or complete snapshot loaded from an empty state | Send `createSurface`, root `updateDataModel`, then `updateComponents`; set `catalogId` explicitly |
-| Host has created an empty Surface | Initialize with `updateDataModel` and `updateComponents`; do not create it again |
-| Existing-card update | Reuse the original `surfaceId` and identify the card as required by the host API; send only changes, without replaying `createSurface` or unrelated form defaults |
+| Notifications and reminders | [Notification](references/patterns/notification.md) |
+| Object facts and decisions | [Detail](references/patterns/detail.md) |
+| Illustrated content and attachments | [Content](references/patterns/content.md) |
+| Metrics and reports | [Report](references/patterns/report.md) |
+| Editable inputs and submission | [Form](references/patterns/form.md) |
+| Generation and execution updates | [Progress](references/patterns/progress.md) |
 
-For a new card, use `createSurface →` root `updateDataModel → updateComponents` and set `catalogId` explicitly. The current DingTalk creation and delivery API requires data initialization, even for a purely static card:
+For editable inputs, also consult the form pattern for bindings and submission,
+even when another pattern describes the card.
+When replaying an execution example, read [Examples and replay](references/patterns/progress.md#examples-and-replay) for its batch boundaries, even if the JSON was selected directly.
 
-```json
-{"version":"v1.0","createSurface":{"surfaceId":"same-as-following-messages","catalogId":"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"}}
-```
+## Execution environment
 
-```json
-{"version":"v1.0","updateDataModel":{"surfaceId":"same-as-create-message","path":"/","value":{}}}
-```
+This edition uses native DWS commands, not Python. Confirm `dws aicard --help` exposes `explain`, `lint`, and `preview`; copying the Skill does not install commands. Lookup and lint are offline and need no Profile. Check each command's current help and structured envelope (`ok`, `outcome`, `data`, or `error.details`). If unavailable, references can guide a draft, but do not claim DWS validation.
 
-Replace the empty object with real initial business data when needed. This is a DingTalk delivery requirement for complete creation, not a universal A2UI message-order rule. It does not require every string to be bound, `sendDataModel` to be enabled, or all updates to be sent at once. Preflight also accepts protocol-valid inline initialization in `createSurface.dataModel/components`; do not split such an existing file just to match the examples. Send only changed values in an incremental update.
-
-When integrating with an existing host, determine whether its API creates the Surface. The four [protocol examples](references/protocol/examples/README.md) contain creation, data initialization, and component initialization for new cards. For a host-created empty Surface, remove `createSurface` and use the host's `surfaceId`. Removing `createSurface` from a complete file does not turn it into a safe incremental update; construct the actual delta.
-
-## Query and validation environment
-
-This edition uses native DWS commands for lookup, validation, and preview; it does not need Python or the standalone Skill's scripts. On first use or an unrecognized command, run `dws aicard --help` to confirm that the binary provides `explain`, `lint`, and `preview`. Copying Skill files does not install commands in an older binary.
-
-`explain` and `lint` use the embedded protocol offline and need no Profile. Check `dws aicard explain --help` before a batch or compact query; query names individually if unsupported. Follow the current command help. Use `dws aicard explain` for lookup, not `dws aicard lint --explain`. Inspect the exit code, `ok`, and `outcome`: successful content is in `data`, failures in `error`, and structural diagnostics in `error.details`.
-
-If a command is missing, use a DWS build that includes aicard. Preserve the actual error if embedded protocol loading fails and inspect the DWS installation. When temporarily unavailable, the indexes can still guide a draft; state that DWS validation was not run. Do not present Python or manual checks as a DWS validation result.
-
-## Read on demand
-
-Choose components from the content, then look up their fields. Use the host's default background unless the content needs a local treatment. Short content does not require a title, metric, or button. Group content as needed and implement explicit interaction requirements.
-
-For image reconstruction, identify visible copy, controls, states, and media regions before querying the needed components. Use structured components for interface text and controls. Photography, posters, and complex illustrations may retain their original image regions. Use a real asset or reliable crop for a brand mark; do not imitate it with an emoji or character. Before delivery, compare key text, numbers, region order, and controls with the image. Do not infer business behavior from the image alone. See [image reconstruction](references/design.md#image-reconstruction).
-
-Read only the relevant section of [design guidance](references/design.md) when layout, color, density, or progress-state advice is needed. Do not load the entire guide, all indexes, or the whole catalog by default.
-
-For a known component, function, or Token name, query its contract directly. If the name is unknown, read only the relevant [component index](references/index/components.md), [function index](references/index/functions.md), or [Token index](references/index/tokens.md):
+## Query a named contract
 
 ```bash
 dws aicard explain Tabs --format json
 dws aicard explain Text Row Column --compact --format json
 ```
 
-Replace `Tabs` with the component, function, common type, or Token name. In a deduplicated batch result, `$contractRef` points to the corresponding `definitions` entry. These are lookup results, not A2UI fields. Use a normal query when fields need to be expanded directly. A query returns one definition's fields and example without loading the entire catalog. It includes essential nested structures and event-specific slots. If a function's arguments are missing, query that function by name rather than recursively loading every function.
+Query only needed names. Compact `$contractRef` and `definitions` are lookup metadata, not A2UI fields. Query without `--compact` for expanded fields; `source` locates omitted details.
 
-Read one component composition pattern when it fits the content; consult only the needed parts of another pattern for mixed content. Compositions are optional blocks, not complete-card templates. The user's requirements and current protocol determine the final layout and fields.
+## Construct and validate
 
-If the card has editable inputs, also consult [form](references/patterns/form.md) for field titles, bindings, and submission behavior, even when another pattern describes the overall card.
+Use `references/protocol/` as the contract. Write an ordered JSON message array.
+Within one card, keep the same `surfaceId`; choose an ID suitable for that card
+when creating it. A complete new card requires Surface creation, root data
+initialization (even `{}` for static content), and a component with ID `root`.
+The recommended explicit form is:
 
-| Current task | Reference |
+```json
+[
+  {"version":"v1.0","createSurface":{"surfaceId":"example-surface","catalogId":"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"}},
+  {"version":"v1.0","updateDataModel":{"surfaceId":"example-surface","path":"/","value":{}}},
+  {"version":"v1.0","updateComponents":{"surfaceId":"example-surface","components":[{"id":"root","component":"Text","text":"Example"}]}}
+]
+```
+
+This is a structural example, not a business card to send. Protocol-valid inline
+initialization in `createSurface.dataModel` and `createSurface.components` is also
+accepted; three separate messages are not the only valid representation.
+
+| Scenario | Messages and checks |
 |---|---|
-| Short result, alert, or status reminder | [notification](references/patterns/notification.md) |
-| Object facts and actions: approval, schedule, task, or order | [detail](references/patterns/detail.md) |
-| Illustrated content, recommendations, media, or attachments | [content](references/patterns/content.md) |
-| Metrics, records, charts, or analytical conclusions | [report](references/patterns/report.md) |
-| Inputs, settings, ratings, or feedback submission | [form](references/patterns/form.md) |
-| Agent generation, execution, and result updates | [progress](references/patterns/progress.md) |
+| Complete new card | Create and initialize as above; use `--preflight new-card` |
+| Host-created empty Surface | Initialize its existing ID without `createSurface`; use Schema and resource checks |
+| Existing card update | Keep IDs and send only intentional changes; use Schema and resource checks, then check against known current state |
 
-Simple content can use known components directly. In the pattern notation, `+` combines items, `>` shows a container and its contents, and `/` lists alternatives; none is sendable JSON. Fill actual reference fields from the contract. Reconstruct an image from what is visible, without adding unsupported content or actions because a pattern suggests them. General visual guidance is in `references/design.md`.
+Removing `createSurface` from a complete file does not make it a safe delta.
+Do not replay form defaults or unrelated initial data: that can overwrite user
+input. Resource checks alone cannot prove an update preserves state or references.
 
-The `source` field in a lookup result points to a protocol file and JSON Pointer. It also marks omitted deep structures or long descriptions; inspect that location rather than reloading the catalog. The [example index](references/protocol/examples/README.md) provides complete new-card form, host-action, agent-progress, and report scenarios. Read one that matches the task. Adapt its messages for a host-created Surface or existing-card update using the delivery scenarios above. Do not guess unread fields; confirm them in the protocol or a contract query.
+Preserve unrelated styling when editing. For ordinary new cards, prefer a root `Column` without background fields. If a root `Card` is needed, use `backgroundColor: "#00FFFFFF"` and no background token. Honor explicit surface designs; see [design guidance](references/design.md#root-surface).
 
-## Construction constraints
+Prefer `Markdown` for rich text and static tables; `Text` for short titles and labels. Omit root `padding` for ordinary cards. Do not default to `CardHeader`; preserve it when requested and check [insets](references/design.md#headers-and-card-insets).
 
-- Use `references/protocol/` as the contract for A2UI messages, common types, and DingTalk components, expressions, operators, host actions, and visual Tokens. An identically named official component or function is not necessarily identical to this package's definition.
-- Write an ordered JSON message array. A complete component tree has root `id` `root`; keep `surfaceId` stable within one card. Include `createSurface` according to the delivery scenario.
-- Match a binding's initial-value type to its literal counterpart. For example, `DynamicNumber` uses a JSON number and `ChoicePicker.value` uses an array of strings. A dynamic list's `path` points to an array; templates may use relative paths and `@index`.
-- Follow each function contract for placement, arguments, return type, and host `catalogId`. Select colors, font sizes, and icons from their Token definitions.
-- Replace `REPLACE_*` markers in prototypes or existing files before delivery. Do not describe unconnected events, inaccessible resources, or unverified client behavior as implemented.
+Preserve supplied facts and requested interactions; label demonstration data. Replace `REPLACE_*` placeholders before delivery. Do not present unverified resources, unconnected actions, or simulated states as real and working.
 
-## Validate before delivery
-
-Validate this file:
+Choose literals or bindings as the field contract permits. Initialize bound data with the required types and update it through `updateDataModel`; change component literals through `updateComponents`. `sendDataModel` controls whether A2A messages include the full data model, not whether bindings work.
 
 ```bash
 dws aicard lint --file card.a2ui.json --format json
 ```
 
-Add `--preflight new-card` for a new card, or `--preflight resources` to check inline resources in a delta or host-created content. Confirm option support with `dws aicard lint --help`; an older binary cannot claim to have run preflight.
+Choose `--preflight new-card` or `--preflight resources` for the selected scenario, and use `--emit` only when serialized message strings are needed; it cannot be combined with `--fragment`. Check exit status and `data.valid` plus `data.preflight.valid` when selected. `dws aicard lint --self-check --format json` verifies the full package.
 
-Read `data.valid` on success, plus `data.preflight.valid` and diagnostics when preflight is enabled. Warnings do not block. Structural or preflight errors cause a nonzero exit with details in `error.details`; `valid` still refers only to Schema checks. An environment or read failure is not a pass.
+## Validation scope
 
-Add `--emit` when the sending layer needs an array of message strings. After structural validation, `data.a2uiMessages` contains individually serialized messages. JSON-encode the whole array for the sending parameter; do not hand-write shell escaping. `--fragment` and `--emit` are mutually exclusive. Run `dws aicard lint --self-check --format json` separately to check embedded protocol integrity.
+Lint checks syntax and Schema fields. New-card preflight additionally checks initialization, root, duplicate IDs within a message, static references and cycles in the final component snapshot, not every intermediate streaming frame. Unreachable components are warnings. Resource preflight checks inline encoding; neither mode evaluates bindings or proves image loading. `--fragment` checks component/message fragments; it is not a way to bypass new-card initialization. Do not silently rewrite user data, remove requested components, or downgrade interactions to pass a check.
 
-Lint checks JSON syntax and the bundled A2UI protocol structure: Schema constraints on messages, components, functions, and DingTalk extensions, including field names, required fields, types, and enumerations. It does not merge data, execute functions, check reference closure or binding initial values, or grade design. `--fragment` accepts one component, a component array, or one message under the same structural rules as the default message-array input.
+A successful named lookup is not a full package check. Use the self-check supported by the selected execution environment; local checks do not establish client behavior.
 
-Generic lint accepts host-created content, so passing lint alone does not mean a new file can be delivered. Run the preflight appropriate to the delivery scenario; do not hide missing new-card initialization with `--fragment`. `new-card` merges the final component snapshot per Surface and checks the root, duplicate IDs within a message, existence of reachable static child references and template targets, and static cycles. Reusing an ID across update messages is valid. Unreachable components produce warnings only; retain them when they serve a purpose rather than deleting them to silence a warning. Template expansion, binding evaluation, intermediate frames, image decoding, and client support still require runtime verification. `resources` checks resource encoding without requiring a delta to be self-contained.
+## Delivery boundary
 
-Use media URLs provided by the user or otherwise verified. Have a program read and encode inline media into the standard resource field, then run resource preflight; do not paste tool logs into Base64. Mark unknown schemes and client SVG support as unverified rather than inventing a protocol allowlist. Follow [image reconstruction](references/design.md#image-reconstruction) when choosing image assets.
+With native `--emit`, read `data.a2uiMessages`.
 
-Static copy may be literal. Bind values that must update and provide first-frame initial values. `sendDataModel` controls whether the model accompanies an A2A message; it is not a switch that enables bindings. If delivery fails, check the initialization sequence, current sending API, and server receipt. A successful repair of one card does not justify enabling that field or binding every string in every card.
+Send only when requested. Resolve exactly one target under the sending profile: `--conversation-id` for a conversation or `--open-dingtalk-id` for a person. Names are not target IDs. Inspect installed command help, JSON-encode the emitted message-string array as one `--content` argument, and call `dws chat message send-a2ui-card`. Preserve the request, target, profile and returned `bizId`. An uncertain result must be checked before another create; do not resend automatically.
 
-**Fix structural errors and errors from the selected preflight.** Apply design suggestions according to the user and scenario; they are not lint gates. Confirm binding initial values, resource availability, and interaction behavior during authoring and runtime acceptance.
+Creation starts in PROCESSING. Update with `dws chat message update-a2ui-card --biz-id <bizId> --content <message-strings> --flow-status <state>` under the original profile. Keep the same `surfaceId` and component IDs; send only intended `updateDataModel` or `updateComponents` changes, not another `createSurface` or unrelated defaults. Static cards require `--flow-status FINISH` with a nonempty valid delta; prepare it before sending and preserve business data. Stream complete messages, not JSON tokens. Resource preflight checks only the delta. If current state is known, validate it with the delta; Schema validity does not prove business safety.
 
-Use a diagnostic's `pointer` to locate and edit the original field, then rerun validation. Do not silently rewrite user data. If several attempts fail, recheck the relevant field contract and diagnostic rather than replacing a requested component or downgrading an interaction.
+`dws aicard preview --file card.a2ui.json` sends a self-preview in PROCESSING; `--dry-run` does not send. For a completed static preview, finish it under the same profile with `dws chat message update-a2ui-card --biz-id <data.bizId> --content <message-strings> --flow-status FINISH`, using a nonempty state-preserving delta for the same Surface. Do not replay form defaults. Use server-issued `data.bizId`, never request-side `bizCardId`. If absent, inspect `updateWarning` and the receipt; do not recreate automatically. `openTaskId` cannot be used with `query-send-status`.
 
-## Delivery and rendering boundaries
+After sending, use the available readback capability under the same profile and target to identify this exact card from returned instance/message identifiers. Generic card text and a nearby timestamp are not sufficient. Report request acceptance, same-target readback, client rendering and interaction separately. If readback is unavailable or inconclusive, mark it unverified; do not claim the user received or correctly rendered the card from API acceptance alone.
 
-Deliver the file path, its purpose (new card, host-created initialization, or existing-card delta), validation results, and unresolved issues that affect use. `valid: true` means syntax and protocol structure passed. `renderingVerified: false` in the validation report means there is no evidence of client rendering.
-The `metrics` object is reserved for output compatibility and is currently empty; do not infer measurements from it.
-
-Local validation does not execute functions, invoke host actions, or simulate a client. Function evaluation and results, remote-resource availability, client-version support, actual layout, and button callbacks need runtime verification. If the user asks for client confirmation, use available delivery and preview capabilities in that environment. Request acceptance or conversation readback alone does not establish successful rendering or interaction.
-
-If the user requests a preview sent to themselves, use `dws aicard preview --file card.a2ui.json`. It really sends a card and requires a complete new-card sequence. `--dry-run` checks the local sending boundary without resolving identity or sending. To send to another person or a group, follow the current `dws chat message send-a2ui-card` contract for target and parameters.
-
-`preview` reports `success` only when the card creation request is explicitly accepted, even if its receipt contains `openTaskId`. Keep that ID in the receipt, but do not pass it to `dws chat message query-send-status`, which is for current-user message sends. `deliveryVerified` and `renderingVerified` remain `false`. Conversation readback is separate evidence; generic card text and a nearby timestamp do not uniquely identify this card. The default sending status is `PROCESSING`. Update or finish through `dws chat message update-a2ui-card`, locating the original card by `bizId` without replaying creation. Investigate an unknown result before retrying; a receipt is not client acceptance evidence.
+Report the file, checks actually run, and delivery result when requested. Local validation and request acceptance do not prove client rendering.

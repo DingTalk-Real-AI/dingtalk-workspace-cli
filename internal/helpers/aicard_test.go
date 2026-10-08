@@ -9,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -227,6 +226,9 @@ func TestCrossPlatformCoverageAicardPreviewRequestAndReceipt(t *testing.T) {
 				t.Fatal(result)
 			}
 			data := result["data"].(map[string]any)
+			if data["bizId"] != "b" || data["bizCardId"] != caller.sent["bizCardId"] || data["bizId"] == data["bizCardId"] || data["updateWarning"] != nil {
+				t.Fatal("preview must distinguish the server update ID from the request ID", data)
+			}
 			if data["requestAccepted"] != true || data["deliveryVerified"] != false || data["renderingVerified"] != false {
 				t.Fatal(data)
 			}
@@ -239,6 +241,54 @@ func TestCrossPlatformCoverageAicardPreviewRequestAndReceipt(t *testing.T) {
 		} else if code == 0 {
 			t.Fatal("failure or ambiguous receipt was accepted")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageAicardPreviewNormalizesUpdateIDWithoutChangingReceipt(t *testing.T) {
+	file := aicardTestFile(t, aicardTestSnapshot)
+	caller := &aicardCaller{response: `{"success":true,"result":{"bizId":"  opaque-card-token  "}}`}
+	result, code, err := executeAicard(t, caller, "preview", "--file", file)
+	if err != nil || code != 0 {
+		t.Fatalf("%v %d %v", result, code, err)
+	}
+	data := result["data"].(map[string]any)
+	if data["bizId"] != "opaque-card-token" || data["updateWarning"] != nil {
+		t.Fatal("preview must expose the normalized update ID", data)
+	}
+	receipt := data["receipt"].(map[string]any)
+	if receipt["result"].(map[string]any)["bizId"] != "  opaque-card-token  " {
+		t.Fatal("preview must preserve the original receipt", receipt)
+	}
+}
+
+func TestCrossPlatformCoverageAicardPreviewMissingUpdateID(t *testing.T) {
+	file := aicardTestFile(t, aicardTestSnapshot)
+	for _, response := range []string{
+		`{"success":true}`,
+		`{"success":true,"result":[]}`,
+		`{"success":true,"result":{"bizId":42}}`,
+		`{"success":true,"result":{"bizId":""}}`,
+		`{"success":true,"result":{"bizId":"  "}}`,
+		`{"success":true,"result":{"bizId":"wrong id"}}`,
+		`{"success":true,"result":{"bizId":"<bizId>"}}`,
+	} {
+		t.Run(response, func(t *testing.T) {
+			caller := &aicardCaller{response: response}
+			result, code, err := executeAicard(t, caller, "preview", "--file", file)
+			if err != nil || code != 0 {
+				t.Fatalf("accepted creation must not become a retryable failure: %v %d %v", result, code, err)
+			}
+			data := result["data"].(map[string]any)
+			if _, exists := data["bizId"]; exists {
+				t.Fatal("invented an update ID", data)
+			}
+			if data["requestAccepted"] != true || data["flowStatus"] != "PROCESSING" || data["updateWarning"] == nil || data["receipt"] == nil || data["bizCardId"] != caller.sent["bizCardId"] {
+				t.Fatal("missing accepted-creation recovery information", data)
+			}
+			if len(caller.calls) != 2 || caller.calls[1] != "im/create_and_send_a2ui_card" {
+				t.Fatal("preview must not retry creation or finish automatically", caller.calls)
+			}
+		})
 	}
 }
 
@@ -278,48 +328,6 @@ func TestCrossPlatformCoverageAicardPreviewResolvesSelfAndPreservesUnknownDelive
 	}
 }
 
-func TestCrossPlatformCoverageAicardSingleExplainCompactUnchanged(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		kind string
-		code int
-	}{
-		{"Text", "component", 0},
-		{"promptText", "function", 0},
-		{"ColorToken", "token", 0},
-		{"common_red1_color", "token-item", 0},
-		{"Action", "type", 0},
-		{"Tabss", "unknown", 3},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			caller := &aicardCaller{}
-			ordinary, code, err := executeAicard(t, caller, "explain", tc.name)
-			if err != nil || code != tc.code {
-				t.Fatalf("ordinary: code=%d err=%v result=%v", code, err, ordinary)
-			}
-			var contract map[string]any
-			if tc.code == 0 {
-				contract = ordinary["data"].(map[string]any)
-			} else {
-				contract = ordinary["error"].(map[string]any)["details"].(map[string]any)
-			}
-			if contract["kind"] != tc.kind || contract["name"] != tc.name {
-				t.Fatalf("unexpected single-name contract: %v", contract)
-			}
-			compact, compactCode, err := executeAicard(t, caller, "explain", tc.name, "--compact")
-			if err != nil || compactCode != code {
-				t.Fatalf("compact: code=%d err=%v result=%v", compactCode, err, compact)
-			}
-			if !reflect.DeepEqual(ordinary, compact) {
-				t.Fatal("--compact changed the single-name response")
-			}
-			if len(caller.calls) != 0 {
-				t.Fatal("offline explain must not call MCP", caller.calls)
-			}
-		})
-	}
-}
-
 func TestCrossPlatformCoverageAicardBatchAndExplicitPreflight(t *testing.T) {
 	caller := &aicardCaller{}
 	result, code, err := executeAicard(t, caller, "explain", "Text", "Tabs", "--compact")
@@ -337,5 +345,35 @@ func TestCrossPlatformCoverageAicardBatchAndExplicitPreflight(t *testing.T) {
 	}
 	if len(caller.calls) != 0 {
 		t.Fatal("offline query and lint must not send", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAicardPreviewBase64Warnings(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		caller := &aicardCaller{response: `{"success":true}`}
+		file := aicardTestFile(t, `[{"version":"v1.0","createSurface":{"surfaceId":"s","catalogId":"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json","dataModel":{},"components":[{"id":"root","component":"Image","url":"data:image/png;base64,YQ=="}]}}]`)
+		before, _ := os.ReadFile(file)
+		args := []string{"preview", "--file", file}
+		if dryRun {
+			args = append(args, "--dry-run")
+		}
+		result, code, err := executeAicard(t, caller, args...)
+		if err != nil || code != 0 {
+			t.Fatalf("%v code=%d err=%v", result, code, err)
+		}
+		data := result["data"].(map[string]any)
+		preflight := data["preflight"].(map[string]any)
+		diagnostics := preflight["diagnostics"].([]any)
+		if preflight["valid"] != true || len(diagnostics) != 1 || data["renderingVerified"] != false {
+			t.Fatal(data)
+		}
+		warning := diagnostics[0].(map[string]any)
+		if warning["code"] != "resource.base64_image_unverified" || warning["severity"] != "warning" {
+			t.Fatal(warning)
+		}
+		after, _ := os.ReadFile(file)
+		if !bytes.Equal(before, after) || (dryRun && len(caller.calls) != 0) {
+			t.Fatal("preview changed the input or dry-run called the service")
+		}
 	}
 }

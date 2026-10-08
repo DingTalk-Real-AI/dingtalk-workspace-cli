@@ -17,6 +17,7 @@ func newAicardCommand() *cobra.Command {
 		HelpReferences: contract.HelpReferences{
 			RelatedSkills: []string{"dingtalk-aicard"},
 			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI Card user guide", "dingtalk-aicard", "SKILL.md"),
 				contract.SkillDocumentation("A2UI card design guide", "dingtalk-aicard", "references/design.md"),
 			},
 		},
@@ -110,7 +111,7 @@ func newAicardPreviewCommand() *cobra.Command {
 The file must include createSurface and the public catalogId; this command does not modify the source file.
 --dry-run checks only the local file; it neither resolves an identity nor sends. Request acceptance does not prove delivery or rendering.
 Any openTaskId in the card receipt is not valid for chat message query-send-status; this command reports request acceptance only.
-The send API uses PROCESSING status; use chat message update-a2ui-card for later lifecycle transitions.
+The send API uses PROCESSING status. For a completed static preview, use chat message update-a2ui-card with the returned bizId, a nonempty state-preserving delta for the same Surface, and --flow-status FINISH. bizCardId is a request-side identifier, not an update ID. If bizId is absent, inspect updateWarning; do not create another card automatically.
 Card buttons may still trigger real business actions. This command accepts no other recipient.`,
 		Example: "  dws aicard preview --file card.a2ui.json --dry-run\n  dws aicard preview --file card.a2ui.json --summary \"Card preview\"",
 		Args:    cobra.NoArgs, RunE: runAicardPreview,
@@ -131,7 +132,7 @@ Card buttons may still trigger real business actions. This command accepts no ot
 				AvoidWhen:    []string{"Use aicard lint to check only the file; use chat message send-a2ui-card for another person or a group"},
 				Examples:     []string{"dws aicard preview --file card.a2ui.json", "dws aicard preview --file card.a2ui.json --dry-run"},
 			},
-			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success", "failure"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"requestAccepted":{"type":"boolean","description":"Whether the server explicitly accepted the send request"},"deliveryVerified":{"type":"boolean","description":"Whether delivery was confirmed by readback; false for this command"},"renderingVerified":{"type":"boolean","description":"Whether client rendering evidence exists; false for this command"},"flowStatus":{"type":"string","description":"Lifecycle status at send time"},"requestId":{"type":"string","description":"Identifier for this send request"},"bizCardId":{"type":"string","description":"Business card ID for this creation"},"receipt":{"type":"object","description":"Server receipt, including available card and task identifiers"},"executed":{"type":"boolean","description":"Whether the send API was actually called"}}}`)},
+			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success", "failure"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"preflight":{"type":"object","description":"Offline resource and delivery diagnostics, including compatibility warnings"},"requestAccepted":{"type":"boolean","description":"Whether the server explicitly accepted the send request"},"deliveryVerified":{"type":"boolean","description":"Whether delivery was confirmed by readback; false for this command"},"renderingVerified":{"type":"boolean","description":"Whether client rendering evidence exists; false for this command"},"flowStatus":{"type":"string","description":"Lifecycle status at send time"},"requestId":{"type":"string","description":"Identifier for this send request"},"bizCardId":{"type":"string","description":"Request-side business identifier; never use it as --biz-id for updates"},"bizId":{"type":"string","description":"Server-issued receipt.result.bizId for --biz-id updates and FINISH; omitted when unavailable or invalid"},"updateWarning":{"type":"string","description":"Accepted creation lacks a usable update ID; inspect the receipt without automatically creating another card"},"receipt":{"type":"object","description":"Server receipt, including available card and task identifiers"},"executed":{"type":"boolean","description":"Whether the send API was actually called"}}}`)},
 		},
 	})
 	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)

@@ -464,6 +464,41 @@ func TestCrossPlatformCoverageDriveWikiReviewedContractCorrections(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageChatPromoteRetirementRequiresMigrationAuthorization(t *testing.T) {
+	const toolPath = "chat/chat.promote_message_to_thread"
+	wantTransition := interfaceTransition{
+		OldMode: interfaceModeMCP,
+		OldRef:  `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		NewMode: interfaceModeMCP,
+	}
+	transition, ok := reviewedAvailabilityInterfaceRetirements[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed availability interface retirement for %s", toolPath)
+	}
+	if transition != wantTransition {
+		t.Fatalf("reviewed promote transition = %#v, want %#v", transition, wantTransition)
+	}
+	base := toolSchema{
+		PrimaryCLIPath: "chat thread promote",
+		InterfaceMode:  interfaceModeMCP,
+		InterfaceRef:   `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		Availability:   "available",
+		Parameters:     map[string]parameterSchema{},
+		Effect:         "write",
+		Risk:           "medium",
+		Confirmation:   "not_required",
+		Idempotency:    "idempotent",
+	}
+	current := base
+	current.InterfaceMode = transition.NewMode
+	current.InterfaceRef = transition.NewRef
+	current.Availability = "unavailable"
+	failures := strings.Join(checkToolCompatibility(toolPath, base, current), "\n")
+	if !strings.Contains(failures, "changed availability") || !strings.Contains(failures, "changed interface_ref") {
+		t.Fatalf("ordinary compatibility check unexpectedly authorized promote retirement: %q", failures)
+	}
+}
+
 func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
 	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
 	newTool := oldTool
@@ -1427,8 +1462,8 @@ func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testin
 			strings.HasPrefix(toolPath, "/") || strings.HasSuffix(toolPath, "/") {
 			t.Errorf("tool path %q is not <product id>/<tool id>", toolPath)
 		}
-		if transition.OldMode == transition.NewMode {
-			t.Errorf("%s: interface_mode did not change", toolPath)
+		if !validReviewedInterfaceTransitionShape(transition) {
+			t.Errorf("%s: interface tuple is not a mode transition", toolPath)
 		}
 		for _, side := range []struct {
 			name string
@@ -1441,6 +1476,10 @@ func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testin
 			switch side.mode {
 			case interfaceModeMCP:
 				if side.ref == "" {
+					if side.name == "new" && transition.OldMode == interfaceModeMCP &&
+						transition.NewMode == interfaceModeMCP && transition.OldRef != "" {
+						continue
+					}
 					t.Errorf("%s: %s mcp interface has no ref", toolPath, side.name)
 					continue
 				}

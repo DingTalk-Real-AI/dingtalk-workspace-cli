@@ -24,6 +24,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 	whiteboardcore "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
 const (
@@ -459,6 +460,12 @@ func parseWhiteboardSource(raw string) (*parsedUpdate, error) {
 	nodes, err := decodeNodeArray(input.Source.Nodes, "--source source.nodes")
 	if err != nil {
 		return nil, err
+	}
+	if err := whiteboardcore.ValidateOpenNodesPresentationOrder(nodes); err != nil {
+		return nil, err
+	}
+	if err := opennodes.ValidateText(nodes); err != nil {
+		return nil, apperrors.NewValidation(err.Error())
 	}
 	if err := validateWhiteboardConnectors(nodes); err != nil {
 		return nil, err

@@ -18,16 +18,16 @@ func contractJSON(v any) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-// ExplainMany preserves the old single-name API and adds an optional lossless bundle view.
-func (p *Protocol) ExplainMany(names []string, compact bool) map[string]any {
-	contracts := []any{}
-	seen := map[string]bool{}
-	for _, n := range names {
-		if !seen[n] {
-			contracts = append(contracts, p.Explain(n))
-			seen[n] = true
-		}
+// ExplainMany returns an optional lossless bundle and propagates store errors.
+func (p *Protocol) ExplainMany(names []string, compact bool) (map[string]any, error) {
+	store, err := BundledExplain()
+	if err != nil {
+		return nil, err
 	}
+	return store.LookupMany(names, compact)
+}
+
+func bundleContracts(contracts []any, compact bool) map[string]any {
 	result := map[string]any{"kind": "bundle", "formatVersion": 1, "contracts": contracts}
 	if !compact {
 		return result

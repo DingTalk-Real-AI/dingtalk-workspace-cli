@@ -12,6 +12,15 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+func mustExplain(t *testing.T, p *Protocol, name string) map[string]any {
+	t.Helper()
+	result, err := p.Explain(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
 func testProtocol(t *testing.T) *Protocol {
 	t.Helper()
 	source, err := fs.Sub(skills.FS, "multi/dingtalk-aicard")
@@ -27,8 +36,16 @@ func testProtocol(t *testing.T) *Protocol {
 
 func TestCrossPlatformCoverageAicardAllExplainExamples(t *testing.T) {
 	p := testProtocol(t)
-	for name, expected := range p.assets.Explain {
-		result := p.Explain(name)
+	store, err := BundledExplain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range store.Names() {
+		expected, err := store.Lookup(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := mustExplain(t, p, name)
 		if result["name"] != name || result["kind"] != expected["kind"] {
 			t.Fatal(name, result)
 		}
@@ -41,7 +58,7 @@ func TestCrossPlatformCoverageAicardAllExplainExamples(t *testing.T) {
 			t.Fatalf("%s: %v %+v", name, err, r.Diagnostics)
 		}
 	}
-	unknown := p.Explain("Tabss")
+	unknown := mustExplain(t, p, "Tabss")
 	if unknown["kind"] != "unknown" || len(unknown["suggestions"].([]string)) == 0 {
 		t.Fatal(unknown)
 	}
@@ -91,7 +108,7 @@ func TestCrossPlatformCoverageAicardUnicodeExtensionNames(t *testing.T) {
 
 func TestCrossPlatformCoverageAicardButtonGroupWritebackOwner(t *testing.T) {
 	p := testProtocol(t)
-	writeback := object(p.Explain("ButtonGroup")["hostWriteback"])
+	writeback := object(mustExplain(t, p, "ButtonGroup")["hostWriteback"])
 	if writeback["path"] != "buttons[].metadata.extensions.dt_actionBindingsV1.action.resultPath" {
 		t.Fatal(writeback)
 	}

@@ -105,7 +105,7 @@ metadata:
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询 + 空间分享范围(permission set-share-scope) | [wiki.md](./references/products/wiki.md)                       |
-| `whiteboard`      | 独立与文档内嵌白板：带内容创建、本地 SVG 预渲染、读取 OpenNodes、写前 diff、追加节点、整页重建 | [whiteboard.md](./references/products/whiteboard.md)           |
+| `whiteboard`      | 独立白板（白板文件）的内容操作；或在已有承载文档 nodeId 和 partId 后读写文档内嵌白板 part 的图形内容，两类目标互不转换 | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
 | `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
@@ -137,7 +137,7 @@ metadata:
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"白板/独立白板/文档内嵌白板/画布/OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`；没有文档内 `partId` 的目标默认按独立白板处理，创建文档内空白板卡片先走 `doc whiteboard insert`
+用户提到"白板文件/独立白板/保存到白板/画布/OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`。用户要在文档中插入、定位或删除白板卡片 → `doc whiteboard`；只有已有承载文档 `nodeId` 和 `partId` 的内嵌白板图形内容读写才走 `whiteboard`。内嵌目标身份缺失时停止并补齐，禁止转成独立白板
 用户提到"招聘/职位/JD/在招职位/创建职位/职位详情" → `recruit`
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/监听并自动回复消息/驱动 Agent 处理消息" → `event +listen-im`；群成员加入/退出、群改名/解散或明确原始 EventKey/Filter DSL → `event consume`
 用户提到"监听待我审批的任务/监听审批任务创建、完成或转交/监听审批单发起或终止/监听我发起的审批完成/监听审批实例完成/订阅 OA 事件/event consume user_oa_approval_*" → `event consume`
@@ -355,4 +355,4 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
 
-Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。更新只设一个用户确认点：先完成所需的 render 和必需的 +diff，再把视觉预览（如有）、差异与覆盖影响一起展示并一次确认；不要在 render 后先索要确认、获准后才补做 diff 再次询问。同一目标、revision、source 和模式已获确认后，直接提交；只有这些内容变化或出现未披露的实质风险才重新确认。
