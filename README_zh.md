@@ -36,6 +36,7 @@
 - [核心服务](#核心服务)
 - [安全设计](#安全设计)
 - [参考与文档](#参考与文档)
+- [OpenHarmony 仅编译构建](#openharmony-仅编译构建)
 - [贡献指南](#贡献指南)
 
 </details>
@@ -142,6 +143,22 @@ cp dws ~/.local/bin/         # 安装到 PATH
 > 静态端点数据由悟空基线生成并提交在本仓库 `internal/syncdata`，源码构建不需要额外 checkout 数据仓库。
 
 </details>
+
+## OpenHarmony 仅编译构建
+
+本仓库支持在用户提供可执行的 Go 1.26.7 OpenHarmony 工具链时，编译
+`openharmony/arm64` 目标。该支持仅保证编译，不代表真实设备验证，也不属于
+六个平台的正式发布产物。
+
+```bash
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/build-openharmony.sh
+```
+
+该构建固定使用 `CGO_ENABLED=0`，因此 SafeChat 不可用；OpenHarmony 也不支持
+runtime 原生 payload。脚本会校验生成的静态 AArch64 ELF 及 Go 构建元数据，
+完整边界请参见 [`docs/openharmony.md`](docs/openharmony.md)。
 
 ## 国内加速安装
 

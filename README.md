@@ -36,6 +36,7 @@
 - [Key Services](#key-services)
 - [Security by Design](#security-by-design)
 - [Reference & Docs](#reference--docs)
+- [OpenHarmony compile-only build](#openharmony-compile-only-build)
 - [Contributing](#contributing)
 
 </details>
@@ -146,6 +147,24 @@ data checkout.
 > targets through the repository's pinned cross-compilation toolchain.
 
 </details>
+
+## OpenHarmony compile-only build
+
+The repository supports a compile-only `openharmony/arm64` build when you provide
+an executable Go 1.26.7 OpenHarmony toolchain. This is not a device-tested build
+and is not part of the six official release targets.
+
+```bash
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/build-openharmony.sh
+```
+
+The build is `CGO_ENABLED=0` and therefore keeps SafeChat unavailable. Runtime
+native payloads are also unsupported on OpenHarmony. The script verifies the
+resulting static AArch64 ELF and its Go build metadata; see
+[`docs/openharmony.md`](docs/openharmony.md) for the complete boundary.
+
 
 ## China mirror
 
