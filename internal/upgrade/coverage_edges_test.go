@@ -27,6 +27,16 @@ func (f upgradeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, erro
 
 type upgradeFailWriter struct{}
 
+func TestCrossPlatformCoverageDefaultUpgradeRegistry(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_URL", "")
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	t.Setenv("DWS_UPGRADE_REGISTRY", "")
+	client := NewClient()
+	if client.registryURL != defaultNPMRegistry+"/"+npmPackageName || client.baseURL != "" {
+		t.Fatalf("默认主动升级未选择 npm Registry: %#v", client)
+	}
+}
+
 func (upgradeFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
 func TestCrossPlatformCoverageDownloaderEdgeCases(t *testing.T) {

@@ -181,7 +181,7 @@ curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/sc
 
 > Requires **v1.0.7** or later. For earlier versions, please re-run the [install script](#installation) to upgrade.
 
-dws has built-in self-upgrade capability. Updates are pulled directly from [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) with SHA256 integrity verification and automatic backup.
+DWS 默认通过 npm Registry 查询发行版本。独立二进制直接下载发布包、校验完整性和平台文件后自更新，无需安装 npm；npm、pnpm 和 Homebrew 安装交由对应包管理器升级。详见[版本来源与升级方式](docs/upgrading.md)。
 
 ```bash
 dws upgrade                    # interactive upgrade to latest version
@@ -196,7 +196,7 @@ dws upgrade --rollback         # rollback to the previous version
 dws upgrade -y                 # skip confirmation prompt
 ```
 
-By default, `dws upgrade` follows the stable release track. Use `--beta` only when you explicitly want the newest GitHub pre-release build.
+`dws upgrade` 默认选择正式渠道；`--beta` 选择 npm 的 beta 渠道。显式配置的 GitHub 升级来源仍使用原有协议。
 
 ### Six-channel post-release verification
 
@@ -213,12 +213,12 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 <details>
 <summary><strong>How it works</strong></summary>
 
-The upgrade process follows a two-phase atomic flow to ensure consistency:
+独立二进制的升级分为准备和替换两阶段：
 
-1. **Prepare** — downloads the platform-specific binary and skill packages to a temporary directory, verifies SHA256 checksums, and extracts/validates all files. If any step fails, the upgrade aborts without modifying the existing installation.
+1. **准备** — 下载 npm 发布包，强制验证包完整性及目标平台归档、技能包的 SHA256，再解压并验证新二进制。验证失败时不替换现有安装。
 2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into the canonical `~/.agents/skills` root. Agents classified by the pinned compatibility registry as supporting the universal root read it directly; other detected Agents receive links to the canonical copy, with a direct-copy fallback when links are unavailable. Older DWS-managed agent-specific copies are backed up and retired so the same Skill is not discovered twice.
 
-A backup of the current version is automatically created before each upgrade. Use `dws upgrade --rollback` to restore the previous version if needed.
+独立二进制升级保留自动备份和 `dws upgrade --rollback`。包管理器安装的回退由对应管理器处理；npm/pnpm 安装不支持 `--skip-skills`，因为发布包的安装脚本会更新技能。Homebrew 捆绑技能，使用 `dws skill setup` 安装到 Agent 目录。
 
 | Flag | Description |
 |------|-------------|
