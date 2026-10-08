@@ -35,7 +35,7 @@ fail() {
 work="${OHOS_GO_WORK:-${TMPDIR:-/tmp}/dws-ohos-go-build}"
 rm -rf "$work"
 mkdir -p "$work"
-archive="$work/$(basename "$source")"
+archive="$work/$(basename "${source%%[?#]*}")"
 
 case "$source" in
   http://*|https://*)
