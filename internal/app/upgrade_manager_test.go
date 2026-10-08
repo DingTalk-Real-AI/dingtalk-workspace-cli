@@ -18,6 +18,12 @@ import (
 
 const managedPackageManifest = `{"name":"dingtalk-workspace-cli","bin":{"dws":"./bin/dws.js"},"version":"9.9.9"}`
 
+func TestCrossPlatformCoverageUpgradeVersionSubprocessFailure(t *testing.T) {
+	if _, err := tryExecVersion(filepath.Join(t.TempDir(), "missing-dws")); err == nil {
+		t.Fatal("新二进制无法启动时应返回验证错误")
+	}
+}
+
 func TestCrossPlatformCoverageUpgradeInstallation(t *testing.T) {
 	for _, tc := range []struct {
 		name, binary, manager, root, goos, dependency string

@@ -37,6 +37,20 @@ func TestCrossPlatformCoverageDefaultUpgradeRegistry(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageExplicitGitHubUpgradeCredentials(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "fixture-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "token fixture-token" {
+			t.Error("显式 GitHub 升级未保留已配置的认证行为")
+		}
+		_, _ = io.WriteString(w, `{"tag_name":"v1.2.3"}`)
+	}))
+	defer server.Close()
+	if _, err := NewClientWithBaseURL(server.URL).FetchLatestRelease(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (upgradeFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
 func TestCrossPlatformCoverageDownloaderEdgeCases(t *testing.T) {
