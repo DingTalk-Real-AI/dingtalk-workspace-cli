@@ -6,12 +6,9 @@ package upgrade
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"time"
 )
 
@@ -85,13 +82,20 @@ func CheckVersion(ctx context.Context, current string, opts CheckOptions) CheckR
 	}
 	result.Track = track
 	result.Status = CheckStatusUnknown
-	client := NewClient()
+	client := NewVersionClient()
 	client.anonymous = true
-	if client.validateConfig() != nil || !validCheckSource(client.baseURL) {
+	if client.validateConfig() != nil || (!publicUpgradeEdition(opts.Edition) && !hasExplicitUpgradeSource()) {
+		return result
+	}
+	source, repository := client.baseURL, client.owner+"/"+client.repo
+	if client.registryURL != "" {
+		source, repository = client.registryURL, npmPackageName
+	}
+	if !validCheckSource(source) {
 		return result
 	}
 	key := versionCheckKey{
-		Source: client.baseURL, Repository: client.owner + "/" + client.repo,
+		Source: source, Repository: repository,
 		Edition: opts.Edition, Track: track, Current: normalized,
 	}
 	if opts.ReadOnly || !opts.Force {
@@ -105,22 +109,37 @@ func CheckVersion(ctx context.Context, current string, opts CheckOptions) CheckR
 	ctx, cancel := context.WithTimeout(ctx, versionCheckBudget)
 	defer cancel()
 	client.httpClient.Timeout = versionCheckBudget
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", client.baseURL, client.owner, client.repo)
-	var releases []GitHubRelease
-	if err := client.getJSONContext(ctx, endpoint, &releases); err != nil {
+	latest, ok := client.latestCheckVersion(ctx, track)
+	if !ok {
 		return result
 	}
-	for _, release := range releases {
-		latest, releaseTrack, valid := checkedReleaseVersion(release.TagName)
-		release.TagName = latest
-		if !valid || releaseTrack != track || !releaseMatchesTrack(release, track) {
-			continue
+	checkedAt := time.Now().UTC()
+	writeVersionCheckCache(opts.CacheDir, versionCheckCache{Key: key, Latest: latest, CheckedAt: checkedAt})
+	return checkedVersionResult(result, latest, checkedAt, false)
+}
+
+func (c *Client) latestCheckVersion(ctx context.Context, track ReleaseTrack) (string, bool) {
+	if c.registryURL != "" {
+		release, err := c.FetchLatestReleaseForTrackContext(ctx, track)
+		if err != nil {
+			return "", false
 		}
-		checkedAt := time.Now().UTC()
-		writeVersionCheckCache(opts.CacheDir, versionCheckCache{Key: key, Latest: latest, CheckedAt: checkedAt})
-		return checkedVersionResult(result, latest, checkedAt, false)
+		latest, actualTrack, ok := checkedReleaseVersion(release.Version)
+		return latest, ok && actualTrack == track
 	}
-	return result
+	// 兼容自定义 GitHub 源中的历史标签，同时只检查已知的 stable/beta 轨道。
+	releases, err := c.fetchReleasesContext(ctx)
+	if err != nil {
+		return "", false
+	}
+	for _, release := range releases {
+		latest, actualTrack, valid := checkedReleaseVersion(release.TagName)
+		release.TagName = latest
+		if valid && actualTrack == track && releaseMatchesTrack(release, track) {
+			return latest, true
+		}
+	}
+	return "", false
 }
 
 func checkedVersionResult(result CheckResult, latest string, checkedAt time.Time, cached bool) CheckResult {
@@ -133,34 +152,6 @@ func checkedVersionResult(result CheckResult, latest string, checkedAt time.Time
 		result.Status = CheckStatusUpdateAvailable
 	}
 	return result
-}
-
-// 仅比较已知发行轨道；build metadata 校验后移除，避免旧比较器将其解释为 patch。
-var checkedVersionPattern = regexp.MustCompile(`^v?((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))(-beta(?:\.(0|[1-9][0-9]*))?)?(\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
-
-func checkedReleaseVersion(version string) (string, ReleaseTrack, bool) {
-	match := checkedVersionPattern.FindStringSubmatch(version)
-	if match == nil {
-		return "", "", false
-	}
-	for _, number := range []string{match[2], match[3], match[4], match[6]} {
-		if number == "" {
-			continue
-		}
-		if _, err := strconv.Atoi(number); err != nil {
-			return "", "", false
-		}
-	}
-	track := ReleaseTrackRelease
-	if match[5] != "" {
-		track = ReleaseTrackBeta
-	}
-	return match[1] + match[5], track, true
-}
-
-func validCheckSource(source string) bool {
-	u, err := url.Parse(source)
-	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""
 }
 
 func readVersionCheckCache(dir string, key versionCheckKey, now time.Time) (versionCheckCache, bool) {
@@ -202,4 +193,9 @@ func writeVersionCheckCache(dir string, cached versionCheckCache) {
 	if writeErr == nil && closeErr == nil {
 		_ = os.Rename(name, filepath.Join(dir, versionCheckFile))
 	}
+}
+
+func validCheckSource(source string) bool {
+	u, err := url.Parse(source)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""
 }

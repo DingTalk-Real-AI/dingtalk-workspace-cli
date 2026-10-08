@@ -1,6 +1,6 @@
 # CLI 版本检查与升级提示
 
-`dws auth status`、`dws version` 和 `dws --version` 会检查当前发行渠道是否有新版本。检查使用现有的 GitHub Release 来源配置，不下载或安装软件。
+`dws auth status`、`dws version` 和 `dws --version` 会检查当前发行渠道是否有新版本。开源版默认通过 HTTP 查询 npm Registry，不需要本机安装 npm 或 Node.js，也不下载或安装软件。
 
 ## 关键指令
 
@@ -17,7 +17,9 @@ dws --version
 - 网络检查最多等待一秒。离线、超时、无有效 Release 或缓存不可用时不会改变原命令的业务结果和退出码。
 - `auth status --readonly` 仅读取有效版本缓存，不联网、不写入缓存；没有有效缓存时返回 `unknown`。未知参数导致解析提前停止时，仍保留 `--readonly` 的只读意图。
 
-正式版检查正式渠道；beta 版检查 beta 渠道并提示 `dws upgrade --beta`。开发构建与无法识别的版本不参与比较。检查请求不携带 `GH_TOKEN` 或 `GITHUB_TOKEN`；显式 `dws upgrade` 的原有认证行为不变。
+正式版查询 `https://registry.npmjs.org/dingtalk-workspace-cli/latest`；beta 版查询同一包的 `/beta`，并提示 `dws upgrade --beta`。开发构建与无法识别的版本不参与比较。Registry 查询不携带 `GH_TOKEN` 或 `GITHUB_TOKEN`。
+
+`DWS_UPGRADE_REGISTRY` 可设置兼容 npm Registry 的根地址。显式设置 `DWS_UPGRADE_URL` 或 `DWS_UPGRADE_REPOSITORY` 时，继续使用原有的 GitHub Release 协议，优先于 Registry 配置；自动检查仍不携带 GitHub 凭据，显式升级的 GitHub Token 行为保留。自定义发行版必须配置自己的升级来源，避免误用公开包。
 
 ## 未知命令或参数
 

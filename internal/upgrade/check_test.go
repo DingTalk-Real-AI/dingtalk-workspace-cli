@@ -30,6 +30,72 @@ func versionCheckServer(t *testing.T, handler http.HandlerFunc) *httptest.Server
 	return srv
 }
 
+func TestCrossPlatformCoverageVersionCheckRegistryCacheIsolation(t *testing.T) {
+	var calls atomic.Int32
+	_, srv := registryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Error("registry check sent credentials")
+		}
+		version := "2.0.0"
+		if strings.HasSuffix(r.URL.Path, "/beta") {
+			version = "2.1.0-beta.2"
+		}
+		_ = json.NewEncoder(w).Encode(registryFixture(version))
+	})
+	t.Setenv("GITHUB_TOKEN", "fixture-token")
+	t.Setenv("GH_TOKEN", "fixture-fallback")
+	dir := t.TempDir()
+	oldKey := versionCheckKey{Source: srv.URL, Repository: defaultOwner + "/" + defaultRepo, Current: "1.0.0", Track: ReleaseTrackRelease}
+	writeVersionCheckCache(dir, versionCheckCache{Key: oldKey, Latest: "9.0.0", CheckedAt: time.Now()})
+	opts := CheckOptions{CacheDir: dir, ReadOnly: true}
+	if got := CheckVersion(context.Background(), "1.0.0", opts); got.Status != CheckStatusUnknown || calls.Load() != 0 {
+		t.Fatalf("old GitHub cache reused: %#v, calls=%d", got, calls.Load())
+	}
+	opts.ReadOnly = false
+	if got := CheckVersion(context.Background(), "1.0.0", opts); got.Status != CheckStatusUpdateAvailable || got.Latest != "2.0.0" || got.Cached || calls.Load() != 1 {
+		t.Fatalf("registry check: %#v, calls=%d", got, calls.Load())
+	}
+	opts.ReadOnly, opts.Force = true, true
+	if got := CheckVersion(context.Background(), "v1.0.0+local", opts); got.Latest != "2.0.0" || !got.Cached || calls.Load() != 1 {
+		t.Fatalf("readonly cache: %#v, calls=%d", got, calls.Load())
+	}
+	t.Setenv("DWS_UPGRADE_REGISTRY", srv.URL+"/mirror")
+	if got := CheckVersion(context.Background(), "1.0.0", opts); got.Status != CheckStatusUnknown || calls.Load() != 1 {
+		t.Fatalf("registry source isolation: %#v", got)
+	}
+	opts.ReadOnly = false
+	opts.Track = ReleaseTrackBeta
+	if got := CheckVersion(context.Background(), "1.0.0", opts); got.Latest != "2.1.0-beta.2" || got.UpgradeCommand() != "dws upgrade --beta" || calls.Load() != 2 {
+		t.Fatalf("beta registry check: %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageVersionCheckRegistryFailsQuietly(t *testing.T) {
+	var calls atomic.Int32
+	_, _ = registryTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	if got := CheckVersion(context.Background(), "1.0.0", CheckOptions{}); got.Status != CheckStatusUnknown || got.CheckedAt != "" || calls.Load() != 1 {
+		t.Fatalf("failed registry: %#v", got)
+	}
+	t.Setenv("DWS_UPGRADE_REGISTRY", "")
+	if got := CheckVersion(context.Background(), "1.0.0", CheckOptions{Edition: "private"}); got.Status != CheckStatusUnknown || calls.Load() != 1 {
+		t.Fatalf("private edition contacted default: %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageVersionCheckRegistryDeadline(t *testing.T) {
+	_, _ = registryTestClient(t, func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	if got := CheckVersion(ctx, "1.0.0", CheckOptions{}); got.Status != CheckStatusUnknown || time.Since(started) > 500*time.Millisecond {
+		t.Fatalf("registry ignored caller deadline: %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageVersionCheckTracksAndSemver(t *testing.T) {
 	var calls atomic.Int32
 	versionCheckServer(t, func(w http.ResponseWriter, r *http.Request) {
