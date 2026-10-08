@@ -28,12 +28,17 @@ on:
       - "test/scripts/openharmony_build_test.go"
       - ".github/workflows/openharmony.yml"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit/ref to build (defaults to the dispatched ref)"
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: openharmony-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.sha) }}
+  group: openharmony-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('dispatch-{0}', inputs.ref || github.sha) }}
   cancel-in-progress: true
 
 env:
@@ -48,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -62,7 +68,7 @@ jobs:
 
       - name: Build, self-sign, and package
         env:
-          DWS_PACKAGE_VERSION: 0.0.0-${{ github.sha }}
+          DWS_PACKAGE_VERSION: 0.0.0-${{ inputs.ref || github.sha }}
           DWS_REQUIRE_ELF_STATIC: "1"
         run: ./scripts/dev/package-openharmony.sh "$RUNNER_TEMP/openharmony"
 
