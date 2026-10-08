@@ -411,7 +411,7 @@ func init() {
 }
 
 func friendCollectionResult(collection, description string) *contract.ResultSpec {
-	itemSchema := `{"type":"object","description":"好友列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"好友开放钉钉号ID"},"alias":{"type":"string","description":"好友昵称"},"remark":{"type":"string","description":"好友备注"},"status":{"type":"number","description":"好友状态"},"gmtCreate":{"type":"number","description":"加好友时间（毫秒时间戳）"}},"required":["openDingTalkId"],"additionalProperties":false}`
+	itemSchema := `{"type":"object","description":"好友列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"好友开放钉钉号ID，是执行好友申请/删除等后续操作所必需的标识；仅在用户需要操作时展示，列表展示场景非必要不显示"},"nick":{"type":"string","description":"好友昵称"},"alias":{"type":"string","description":"好友备注名"},"remark":{"type":"string","description":"好友备注信息"},"status":{"type":"number","description":"好友操作状态，增量同步用途（1=新增 0=删除）；判断是否为好友应以列表本身为准，列表查询场景该值不可靠，展示时可忽略"},"gmtCreate":{"type":"number","description":"加好友时间（毫秒时间戳）"}},"required":["openDingTalkId"],"additionalProperties":false}`
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
@@ -423,7 +423,7 @@ func friendCollectionResult(collection, description string) *contract.ResultSpec
 }
 
 func friendRequestCollectionResult() *contract.ResultSpec {
-	itemSchema := `{"type":"object","description":"好友申请列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"申请人开放钉钉号ID"},"status":{"type":"number","description":"申请状态"},"remark":{"type":"string","description":"申请留言"},"modifyAt":{"type":"number","description":"申请时间（毫秒时间戳）"},"isRead":{"type":"boolean","description":"是否已读"}},"required":["openDingTalkId"],"additionalProperties":false}`
+	itemSchema := `{"type":"object","description":"好友申请列表项","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"申请人开放钉钉号ID，是同意/忽略申请等后续操作所必需的标识；仅在用户需要操作时展示，列表展示场景非必要不显示"},"nick":{"type":"string","description":"申请人昵称"},"status":{"type":"number","description":"申请状态：0=无关系 1=待接受 2=已发送 3=已接受（成为好友） 4=推荐 5=推荐完成 6=准备推荐 8=已过期 9=智能推荐；向用户汇报时应翻译为对应中文状态描述，不要直接显示数字"},"remark":{"type":"string","description":"申请留言"},"modifyAt":{"type":"number","description":"申请时间（毫秒时间戳）"},"isRead":{"type":"boolean","description":"是否已读"}},"required":["openDingTalkId"],"additionalProperties":false}`
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
@@ -472,6 +472,11 @@ func strictFriendList(data map[string]any, operation string) ([]map[string]any, 
 		}
 		seen[openDingTalkId] = true
 		row := map[string]any{"openDingTalkId": openDingTalkId}
+		if profile, ok := item["userProfileModel"].(map[string]any); ok && profile != nil {
+			if v, _, valid := contactOptionalString(profile, "nick"); valid && v != "" {
+				row["nick"] = v
+			}
+		}
 		if v, _, valid := contactOptionalString(item, "alias"); valid && v != "" {
 			row["alias"] = v
 		}
@@ -528,6 +533,11 @@ func strictFriendRequestList(data map[string]any, operation string) ([]map[strin
 		}
 		seen[openDingTalkId] = true
 		row := map[string]any{"openDingTalkId": openDingTalkId}
+		if profile, ok := item["userProfileModel"].(map[string]any); ok && profile != nil {
+			if v, _, valid := contactOptionalString(profile, "nick"); valid && v != "" {
+				row["nick"] = v
+			}
+		}
 		if v, ok := contactInt64(item["status"]); ok {
 			row["status"] = v
 		}

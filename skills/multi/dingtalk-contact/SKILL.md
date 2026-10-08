@@ -120,7 +120,7 @@ metadata:
 **触发**：好友列表、好友申请、加好友、同意/拒绝申请、删除好友。
 
 1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。若用户只提供姓名/钉钉号，先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 或 `dws contact user get-by-dingtalk-id --id <dingtalkId> --format json` 取得 `openDingTalkId`；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
-2. **查好友（必须）**：`dws contact +friend-list --format json` 返回当前登录用户的好友名单、备注、状态与分页信息；`dws contact +friend-request-list --format json` 返回收到的好友申请与 pending 数量。
+2. **查好友（必须）**：`dws contact +friend-list --format json` 返回当前登录用户的好友名单（含昵称 nick、备注名 alias）、好友状态与分页信息；`dws contact +friend-request-list --format json` 返回收到的好友申请（含申请人昵称 nick、申请留言、状态）与 pending 数量。向用户展示列表时优先用 nick / alias 标识好友，openDingTalkId 非必要不展示；汇报申请 status 时必须翻译为中文状态（1=待接受、3=已成为好友），不要直接显示数字。
 3. **写操作（必须）**：发送申请 `dws contact +friend-request-send --to <openDingTalkId> --remark "<验证留言>" --format json`；同意 `dws contact +friend-request-accept --from <openDingTalkId> --format json`；拒绝 `dws contact +friend-request-reject --from <openDingTalkId> --format json`；删除好友 `dws contact +friend-remove --friend <openDingTalkId> --format json`（最后一条为不可逆高风险写操作，**必须先取得用户明确确认**）。
 
 **禁止**：把钉钉号（dingtalkId）与开放钉钉号ID（openDingTalkId）混用；在缺少 openDingTalkId 时直接执行写操作；删除好友不确认。

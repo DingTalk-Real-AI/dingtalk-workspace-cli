@@ -16,8 +16,8 @@ func TestStrictFriendListProjectsCleanList(t *testing.T) {
 		"success": true,
 		"result": {
 			"friendList": [
-				{"openDingTalkId":"open-dt-alice","alias":"Alice","remark":"colleague","status":1,"gmtCreate":1758422400000},
-				{"openDingTalkId":"open-dt-bob","alias":"Bob","status":1}
+				{"openDingTalkId":"open-dt-alice","alias":"Alice","remark":"colleague","status":1,"gmtCreate":1758422400000,"userProfileModel":{"nick":"Alice Nick"}},
+				{"openDingTalkId":"open-dt-bob","alias":"Bob","status":1,"userProfileModel":{"nick":"Bob Nick"}}
 			],
 			"cursor": 100,
 			"hasMore": true
@@ -37,6 +37,9 @@ func TestStrictFriendListProjectsCleanList(t *testing.T) {
 	if friends[0]["openDingTalkId"] != "open-dt-alice" || friends[0]["remark"] != "colleague" {
 		t.Fatalf("first friend projection mismatch: %v", friends[0])
 	}
+	if friends[0]["nick"] != "Alice Nick" || friends[1]["nick"] != "Bob Nick" {
+		t.Fatalf("nick projection mismatch: %v / %v", friends[0], friends[1])
+	}
 	if _, exists := friends[1]["remark"]; exists {
 		t.Fatalf("second friend should not have empty remark field")
 	}
@@ -55,6 +58,25 @@ func TestStrictFriendListEmpty(t *testing.T) {
 	}
 	if len(friends) != 0 || cursor != 0 || hasMore {
 		t.Fatalf("empty list mismatch: %d, cursor=%d hasMore=%v", len(friends), cursor, hasMore)
+	}
+}
+
+func TestStrictFriendListOmitsMissingNick(t *testing.T) {
+	friends, _, _, err := strictFriendList(map[string]any{
+		"success": true,
+		"result": map[string]any{"friendList": []any{
+			map[string]any{"openDingTalkId": "open-dt-alice", "status": 1},
+			map[string]any{"openDingTalkId": "open-dt-bob", "status": 1, "userProfileModel": map[string]any{"nick": ""}},
+		}, "cursor": 0, "hasMore": false},
+	}, friendOperationList)
+	if err != nil {
+		t.Fatalf("projection error: %v", err)
+	}
+	if _, exists := friends[0]["nick"]; exists {
+		t.Fatalf("friend without userProfileModel should not have nick field")
+	}
+	if _, exists := friends[1]["nick"]; exists {
+		t.Fatalf("friend with empty nick should not have nick field")
 	}
 }
 
@@ -83,8 +105,8 @@ func TestStrictFriendRequestListProjectsCleanList(t *testing.T) {
 		"success": true,
 		"result": {
 			"friendList": [
-				{"openDingTalkId":"open-dt-alice","status":0,"remark":"hi","modifyAt":1758422400000,"isRead":false},
-				{"openDingTalkId":"open-dt-bob","status":1,"modifyAt":1758422500000,"isRead":true}
+				{"openDingTalkId":"open-dt-alice","status":0,"remark":"hi","modifyAt":1758422400000,"isRead":false,"userProfileModel":{"nick":"Alice Nick"}},
+				{"openDingTalkId":"open-dt-bob","status":1,"modifyAt":1758422500000,"isRead":true,"userProfileModel":{"nick":"Bob Nick"}}
 			],
 			"cursor": 50,
 			"hasMore": false,
@@ -105,6 +127,9 @@ func TestStrictFriendRequestListProjectsCleanList(t *testing.T) {
 	if requests[0]["openDingTalkId"] != "open-dt-alice" || requests[0]["isRead"] != false {
 		t.Fatalf("first request projection mismatch: %v", requests[0])
 	}
+	if requests[0]["nick"] != "Alice Nick" || requests[1]["nick"] != "Bob Nick" {
+		t.Fatalf("nick projection mismatch: %v / %v", requests[0], requests[1])
+	}
 	if cursor != 50 || hasMore || pendingCount != 1 {
 		t.Fatalf("pagination mismatch: cursor=%d hasMore=%v pendingCount=%d", cursor, hasMore, pendingCount)
 	}
@@ -120,6 +145,21 @@ func TestStrictFriendRequestListEmpty(t *testing.T) {
 	}
 	if len(requests) != 0 || cursor != 0 || hasMore || pendingCount != 0 {
 		t.Fatalf("empty list mismatch: %d, cursor=%d hasMore=%v pendingCount=%d", len(requests), cursor, hasMore, pendingCount)
+	}
+}
+
+func TestStrictFriendRequestListOmitsMissingNick(t *testing.T) {
+	requests, _, _, _, err := strictFriendRequestList(map[string]any{
+		"success": true,
+		"result": map[string]any{"friendList": []any{
+			map[string]any{"openDingTalkId": "open-dt-alice", "status": 1},
+		}, "cursor": 0, "hasMore": false, "pendingCount": 0},
+	}, friendOperationRequestList)
+	if err != nil {
+		t.Fatalf("projection error: %v", err)
+	}
+	if _, exists := requests[0]["nick"]; exists {
+		t.Fatalf("request without userProfileModel should not have nick field")
 	}
 }
 

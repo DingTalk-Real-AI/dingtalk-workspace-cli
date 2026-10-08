@@ -388,11 +388,14 @@ Returns:
   cursor           int      分页游标（翻页用）
   hasMore          bool     是否还有更多数据
   friends          list     好友列表，每项包含：
-    openDingTalkId string   好友开放钉钉号ID
-    alias          string   好友昵称（可选）
-    remark         string   好友备注（可选）
-    status         number   好友状态（可选）
+    openDingTalkId string   好友开放钉钉号ID（后续操作必需的内部标识）
+    nick           string   好友昵称（可选）
+    alias          string   好友备注名（可选）
+    remark         string   好友备注信息（可选）
+    status         number   好友操作状态，增量同步用途（1=新增 0=删除）；列表查询场景不可靠，展示时可忽略（可选）
     gmtCreate      number   加好友时间，毫秒时间戳（可选）
+Notes:
+  - 向用户展示列表时优先用 nick / alias 标识好友；openDingTalkId 是执行加好友/删除等操作所必需的内部标识，仅在需要操作时展示，非必要不显示
 ```
 
 #### 查询收到的好友申请列表
@@ -411,13 +414,16 @@ Returns:
   cursor           int      分页游标
   hasMore          bool     是否还有更多数据
   requests         list     好友申请列表，每项包含：
-    openDingTalkId string   申请人开放钉钉号ID
-    status         number   申请状态（可选）
+    openDingTalkId string   申请人开放钉钉号ID（后续操作必需的内部标识）
+    nick           string   申请人昵称（可选）
+    status         number   申请状态：0=无关系 1=待接受 2=已发送 3=已接受（成为好友） 4=推荐 5=推荐完成 6=准备推荐 8=已过期 9=智能推荐（可选）
     remark         string   申请留言（可选）
     modifyAt       number   申请时间，毫秒时间戳（可选）
     isRead         bool     是否已读（可选）
 Notes:
   - 查询后未读申请会被服务端标记为已读
+  - 向用户汇报 status 时必须翻译为中文状态描述（如 1 → "待接受"、3 → "你们已成为好友"），不要直接显示数字
+  - 向用户展示申请列表时优先用 nick 标识申请人；openDingTalkId 是同意/忽略申请所必需的内部标识，仅在需要操作时展示，非必要不显示
 ```
 
 #### 发送好友申请
