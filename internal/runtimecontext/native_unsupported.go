@@ -1,4 +1,4 @@
-//go:build !darwin && !linux && !windows
+//go:build !darwin && !windows && !(linux && !openharmony)
 
 package runtimecontext
 

@@ -1,6 +1,13 @@
 package scripts_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,6 +69,26 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 	}
 	if strings.Contains(releaseVerifier, "openharmony") {
 		t.Fatal("OpenHarmony was admitted to the release artifact verifier")
+	}
+
+	packageScript := readTextFile(t, filepath.Join(root, "scripts", "dev", "package-openharmony.sh"))
+	for _, want := range []string{
+		"build-openharmony.sh",
+		"binary-sign-tool",
+		"-selfSign",
+		"enforce_static_elf",
+		"dws-openharmony-arm64.tar.gz",
+		"checksums.txt",
+		"gzip -n",
+	} {
+		if !strings.Contains(packageScript, want) {
+			t.Errorf("OpenHarmony package script is missing contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{"qwenwork", "Aone", "private"} {
+		if strings.Contains(strings.ToLower(packageScript), strings.ToLower(forbidden)) {
+			t.Errorf("OpenHarmony public package script contains forbidden reference %q", forbidden)
+		}
 	}
 }
 
@@ -270,4 +297,165 @@ func readTextFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+func TestOpenHarmonyPackageEndToEnd(t *testing.T) {
+	root := repoRoot(t)
+	outputDir := t.TempDir()
+	toolDir := t.TempDir()
+
+	writeVerifierTool(t, filepath.Join(toolDir, "file"), `#!/bin/sh
+printf 'ELF 64-bit LSB executable, ARM aarch64\n'
+`)
+	writeVerifierTool(t, filepath.Join(toolDir, "readelf"), `#!/bin/sh
+case "${1:-}" in
+  -h) printf 'Type: EXEC (Executable file)\nMachine: AArch64\n' ;;
+  -l) printf 'Program Headers:\n  LOAD\n' ;;
+  -d) printf 'There is no dynamic section in this file.\n' ;;
+  *) exit 2 ;;
+esac
+`)
+
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("resolve host go: %v", err)
+	}
+
+	writeVerifierTool(t, filepath.Join(toolDir, "go"), fmt.Sprintf(`#!/bin/sh
+if [ "${1:-}" = "version" ] && [ "${2:-}" = "-m" ]; then
+  printf 'build\tGOOS=openharmony\nbuild\tGOARCH=arm64\nbuild\tCGO_ENABLED=0\n'
+  exit 0
+fi
+exec %q "$@"
+`, realGo))
+
+	fakeOhosGo := filepath.Join(toolDir, "fake-ohos-go")
+	writeVerifierTool(t, fakeOhosGo, `#!/usr/bin/env bash
+set -eu
+if [ "${1:-}" = tool ] && [ "${2:-}" = dist ] && [ "${3:-}" = list ]; then
+  printf 'openharmony/arm64\n'
+  exit 0
+fi
+if [ "${1:-}" = build ]; then
+  out=""
+  version=""
+  commit=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -o) out="$2"; shift 2 ;;
+      -ldflags=*)
+        for f in ${1#-ldflags=}; do
+          case "$f" in
+            *internal/app.version=*) version="${f#*=}" ;;
+            *internal/app.gitCommit=*) commit="${f#*=}" ;;
+          esac
+        done
+        shift ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$out" ]
+  python3 - "$out" "$version" "$commit" <<'PY'
+import struct, sys
+out, version, commit = sys.argv[1], sys.argv[2], sys.argv[3]
+strings = b"\0.text\0.shstrtab\0"
+shoff = 0x200
+header = bytearray(64)
+header[:4] = b"\x7fELF"
+header[4:7] = bytes((2, 1, 1))
+struct.pack_into("<HHIQQQIHHHHHH", header, 16, 2, 183, 1, 0, 0, shoff, 0, 64, 0, 0, 64, 3, 2)
+sections = bytearray(64 * 3)
+struct.pack_into("<IIQQQQIIQQ", sections, 64, 1, 1, 0, 0, 0x100, 1, 0, 0, 1, 0)
+struct.pack_into("<IIQQQQIIQQ", sections, 128, 7, 3, 0, 0, 0x101, len(strings), 0, 0, 1, 0)
+meta = f"{version}\n{commit}\n".encode()
+data = header + bytearray(0x100 - len(header)) + b"\xc3" + strings + meta
+if len(data) < shoff:
+    data += b"\0" * (shoff - len(data))
+data += sections
+open(out, "wb").write(data)
+PY
+  chmod +x "$out"
+  exit 0
+fi
+exit 2
+`)
+
+	pkgScript := filepath.Join(root, "scripts", "dev", "package-openharmony.sh")
+	env := withEnv(os.Environ(), map[string]string{
+		"OHOS_GO":             fakeOhosGo,
+		"DWS_PACKAGE_VERSION": "v1.2.3",
+		"PATH":                toolDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+
+	runPkg := func() ([]byte, string) {
+		cmd := exec.Command(pkgScript, outputDir)
+		cmd.Dir = root
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("package-openharmony.sh failed: %v\n%s", err, out)
+		}
+		archivePath := filepath.Join(outputDir, "dws-openharmony-arm64.tar.gz")
+		archiveBytes, err := os.ReadFile(archivePath)
+		if err != nil {
+			t.Fatalf("read archive: %v", err)
+		}
+		checksumsPath := filepath.Join(outputDir, "checksums.txt")
+		checksumsBytes, err := os.ReadFile(checksumsPath)
+		if err != nil {
+			t.Fatalf("read checksums: %v", err)
+		}
+		return archiveBytes, string(checksumsBytes)
+	}
+
+	firstArchive, firstChecksums := runPkg()
+
+	digest := sha256.Sum256(firstArchive)
+	expectedDigest := hex.EncodeToString(digest[:])
+	expectedChecksum := fmt.Sprintf("%s  dws-openharmony-arm64.tar.gz\n", expectedDigest)
+	if firstChecksums != expectedChecksum {
+		t.Errorf("checksums = %q, want %q", firstChecksums, expectedChecksum)
+	}
+
+	gz, err := gzip.NewReader(bytes.NewReader(firstArchive))
+	if err != nil {
+		t.Fatalf("gzip reader: %v", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	foundFiles := make(map[string]bool)
+	var dwsBinary []byte
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("tar next: %v", err)
+		}
+		foundFiles[hdr.Name] = true
+		if hdr.Name == "dws" {
+			dwsBinary, err = io.ReadAll(tr)
+			if err != nil {
+				t.Fatalf("read dws from archive: %v", err)
+			}
+		}
+	}
+	for _, expectedFile := range []string{"LICENSE", "NOTICE", "README.md", "CHANGELOG.md", "dws"} {
+		if !foundFiles[expectedFile] {
+			t.Errorf("archive missing file %q", expectedFile)
+		}
+	}
+
+	if len(dwsBinary) < 64 || string(dwsBinary[:4]) != "\x7fELF" {
+		t.Fatalf("dws binary in archive is not ELF: len=%d", len(dwsBinary))
+	}
+
+	secondArchive, secondChecksums := runPkg()
+	if !bytes.Equal(firstArchive, secondArchive) {
+		t.Fatal("package-openharmony.sh is not bit-for-bit reproducible across runs")
+	}
+	if firstChecksums != secondChecksums {
+		t.Fatal("checksums differ across runs")
+	}
 }

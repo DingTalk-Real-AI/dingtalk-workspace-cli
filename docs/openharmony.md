@@ -38,6 +38,25 @@ The verifier fails closed unless the artifact is executable, ELF `ET_EXEC`,
 AArch64, static, and free of both an interpreter and a dynamic section. It also
 checks Go metadata for `GOOS=openharmony`, `GOARCH=arm64`, and `CGO_ENABLED=0`.
 
+## Packaging and self-signing
+
+To produce a self-signed OpenHarmony package archive (`dws-openharmony-arm64.tar.gz`)
+and its SHA-256 checksum:
+
+```bash
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/package-openharmony.sh
+```
+
+The packaging script:
+
+1. Compiles `dws` using `scripts/dev/build-openharmony.sh` with `-d -s -w` to produce a pure static `ET_EXEC` ELF without dynamic loader or glibc dependencies.
+2. Compiles and runs the pure-Go OpenHarmony code signer (`cmd/binary-sign-tool`), which embeds a 4096-aligned `.codesign` section with fs-verity SHA-256 root hash and descriptor self-signature (`-selfSign 1`).
+3. Enforces static ELF properties when `DWS_REQUIRE_ELF_STATIC=1` (no `PT_INTERP`, no `PT_DYNAMIC`, no `NEEDED`).
+4. Bundles `dws`, `LICENSE`, `NOTICE`, `README.md`, and `CHANGELOG.md` with deterministic file timestamps into `dist/openharmony/dws-openharmony-arm64.tar.gz`.
+5. Emits `dist/openharmony/checksums.txt`.
+
 ## Capability limits
 
 ### SafeChat

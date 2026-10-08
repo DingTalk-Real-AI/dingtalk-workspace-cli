@@ -154,6 +154,11 @@ cp dws ~/.local/bin/         # 安装到 PATH
 OHOS_GO=/path/to/openharmony-go \
   DWS_PACKAGE_VERSION=1.2.3 \
   ./scripts/dev/build-openharmony.sh
+
+# 或生成自签名归档包 (dws-openharmony-arm64.tar.gz)：
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/package-openharmony.sh
 ```
 
 该构建固定使用 `CGO_ENABLED=0`，因此 SafeChat 不可用；OpenHarmony 也不支持

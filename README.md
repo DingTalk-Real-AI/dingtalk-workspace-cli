@@ -158,6 +158,11 @@ and is not part of the six official release targets.
 OHOS_GO=/path/to/openharmony-go \
   DWS_PACKAGE_VERSION=1.2.3 \
   ./scripts/dev/build-openharmony.sh
+
+# Or create a self-signed package archive (dws-openharmony-arm64.tar.gz):
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/package-openharmony.sh
 ```
 
 The build is `CGO_ENABLED=0` and therefore keeps SafeChat unavailable. Runtime

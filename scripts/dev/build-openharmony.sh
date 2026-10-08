@@ -5,6 +5,12 @@ ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 OHOS_GO="${OHOS_GO:-}"
 OUTPUT="${OHOS_OUTPUT:-$ROOT/dist/dws-openharmony-arm64}"
 
+# setup-env and developer shells may export GOROOT pointing at the official
+# runner Go; that override would make the OpenHarmony toolchain resolve
+# official build tools that reject the openharmony GOOS, so restore the
+# toolchain's own root before any go invocation.
+unset GOROOT
+
 if [ -z "$OHOS_GO" ] || [ ! -x "$OHOS_GO" ]; then
   printf 'OHOS_GO must point to an executable Go 1.26.7 OpenHarmony toolchain\n' >&2
   exit 2
@@ -32,7 +38,7 @@ build_time="${DWS_BUILD_TIME:-$(sh "$ROOT/scripts/build/release-build-time.sh" "
   printf 'unable to determine a reproducible OpenHarmony build time\n' >&2
   exit 2
 }
-ldflags="-s -w -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=$version -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit=$git_commit -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime=$build_time"
+ldflags="-d -s -w -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=$version -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit=$git_commit -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime=$build_time"
 GOOS=openharmony GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local \
   "$OHOS_GO" build -trimpath -ldflags="$ldflags" -o "$OUTPUT" ./cmd
 
