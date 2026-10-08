@@ -34,6 +34,29 @@ Optional environment variables:
 - `DWS_BUILD_TIME` — UTC build timestamp; when omitted, it is derived from the
   selected commit.
 
+### Provisioning the toolchain
+
+When `OHOS_GO` is unset, the build script provisions the toolchain from an
+archive via `scripts/dev/provision-ohos-go.sh`:
+
+```bash
+OHOS_GO_ARCHIVE=/path/to/ohos-go.tar.gz \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/build-openharmony.sh
+```
+
+- `OHOS_GO_ARCHIVE` — path or HTTPS URL of a `.tar.gz` containing the toolchain
+  (any layout with a `bin/go` inside).
+- `OHOS_GO_SHA256` — expected SHA-256; **required for HTTPS URLs**, validated
+  for local files when set.
+- `OHOS_GO_ROOT` — cache location; defaults to
+  `${TMPDIR:-/tmp}/dws-ohos-go`. A validated toolchain is reused on later runs.
+
+This repository does not host the toolchain. Obtain a go1.26.7 OpenHarmony
+toolchain (one whose `go tool dist list` includes `openharmony/arm64`) from the
+OpenHarmony SIG / Huawei distribution channels, and prefer pinning
+`OHOS_GO_SHA256` for reproducible builds.
+
 The verifier fails closed unless the artifact is executable, ELF `ET_EXEC`,
 AArch64, static, and free of both an interpreter and a dynamic section. It also
 checks Go metadata for `GOOS=openharmony`, `GOARCH=arm64`, and `CGO_ENABLED=0`.

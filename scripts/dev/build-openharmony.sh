@@ -12,8 +12,8 @@ OUTPUT="${OHOS_OUTPUT:-$ROOT/dist/dws-openharmony-arm64}"
 unset GOROOT
 
 if [ -z "$OHOS_GO" ] || [ ! -x "$OHOS_GO" ]; then
-  printf 'OHOS_GO must point to an executable Go 1.26.7 OpenHarmony toolchain\n' >&2
-  exit 2
+  printf 'OHOS_GO not provided; provisioning from OHOS_GO_ARCHIVE\n' >&2
+  OHOS_GO="$(bash "$ROOT/scripts/dev/provision-ohos-go.sh")"
 fi
 
 if ! "$OHOS_GO" tool dist list | grep -Fxq 'openharmony/arm64'; then

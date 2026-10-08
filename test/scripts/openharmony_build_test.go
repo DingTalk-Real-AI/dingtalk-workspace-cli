@@ -90,6 +90,24 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 			t.Errorf("OpenHarmony public package script contains forbidden reference %q", forbidden)
 		}
 	}
+
+	provisionScript := readTextFile(t, filepath.Join(root, "scripts", "dev", "provision-ohos-go.sh"))
+	for _, want := range []string{
+		"OHOS_GO_ARCHIVE",
+		"OHOS_GO_SHA256",
+		"OHOS_GO_ROOT",
+		"go1.26.7",
+		"openharmony/arm64",
+	} {
+		if !strings.Contains(provisionScript, want) {
+			t.Errorf("OpenHarmony provision script is missing contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{"qwenwork", "aone", "alibaba-inc.com", "sha256_default", "toolchain/ohos"} {
+		if strings.Contains(strings.ToLower(provisionScript), strings.ToLower(forbidden)) {
+			t.Errorf("OpenHarmony public provision script contains forbidden reference %q", forbidden)
+		}
+	}
 }
 
 func TestOpenHarmonyArtifactVerifierAcceptsStaticMetadataFixture(t *testing.T) {
@@ -457,5 +475,228 @@ exit 2
 	}
 	if firstChecksums != secondChecksums {
 		t.Fatal("checksums differ across runs")
+	}
+}
+
+func TestOpenHarmonyProvisionRejectsMissingArchive(t *testing.T) {
+	root := repoRoot(t)
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "dev", "provision-ohos-go.sh"))
+	cmd.Env = withEnv(os.Environ(), map[string]string{
+		"OHOS_GO_ARCHIVE": filepath.Join(t.TempDir(), "missing.tar.gz"),
+		"OHOS_GO_ROOT":    filepath.Join(t.TempDir(), "root"),
+		"OHOS_GO_WORK":    filepath.Join(t.TempDir(), "work"),
+	})
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("provision accepted a missing archive; output:\n%s", output)
+	}
+	if !strings.Contains(string(output), "archive does not exist") {
+		t.Fatalf("provision output = %q, want missing-archive failure", output)
+	}
+}
+
+func TestOpenHarmonyProvisionRejectsShaMismatch(t *testing.T) {
+	root := repoRoot(t)
+	archive := filepath.Join(t.TempDir(), "ohos-go.tar.gz")
+	if err := os.WriteFile(archive, []byte("not a toolchain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "dev", "provision-ohos-go.sh"))
+	cmd.Env = withEnv(os.Environ(), map[string]string{
+		"OHOS_GO_ARCHIVE": archive,
+		"OHOS_GO_SHA256":  "0000000000000000000000000000000000000000000000000000000000000000",
+		"OHOS_GO_ROOT":    filepath.Join(t.TempDir(), "root"),
+		"OHOS_GO_WORK":    filepath.Join(t.TempDir(), "work"),
+	})
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("provision accepted a sha mismatch; output:\n%s", output)
+	}
+	if !strings.Contains(string(output), "sha256 mismatch") {
+		t.Fatalf("provision output = %q, want sha mismatch failure", output)
+	}
+}
+
+func TestOpenHarmonyProvisionCachesValidatedToolchain(t *testing.T) {
+	root := repoRoot(t)
+	toolDir := t.TempDir()
+
+	fakeGo := filepath.Join(toolDir, "fake-go")
+	writeVerifierTool(t, fakeGo, `#!/usr/bin/env bash
+set -eu
+if [ "${1:-}" = version ]; then
+  printf 'go version go1.26.7 linux/amd64\n'
+  exit 0
+fi
+if [ "${1:-}" = tool ] && [ "${2:-}" = dist ] && [ "${3:-}" = list ]; then
+  printf 'openharmony/arm64\n'
+  exit 0
+fi
+if [ "${1:-}" = env ] && [ "${2:-}" = GOROOT ]; then
+  dirname="$(cd "$(dirname "$0")/.." && pwd)"
+  printf '%s\n' "$dirname"
+  exit 0
+fi
+if [ "${1:-}" = build ]; then
+  out=""
+  version=""
+  commit=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -o) out="$2"; shift 2 ;;
+      -ldflags=*)
+        for f in ${1#-ldflags=}; do
+          case "$f" in
+            *internal/app.version=*) version="${f#*=}" ;;
+            *internal/app.gitCommit=*) commit="${f#*=}" ;;
+          esac
+        done
+        shift ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$out" ]
+  python3 - "$out" "$version" "$commit" <<'PY'
+import struct, sys
+out, version, commit = sys.argv[1], sys.argv[2], sys.argv[3]
+strings = b"\0.text\0.shstrtab\0"
+shoff = 0x200
+header = bytearray(64)
+header[:4] = b"\x7fELF"
+header[4:7] = bytes((2, 1, 1))
+struct.pack_into("<HHIQQQIHHHHHH", header, 16, 2, 183, 1, 0, 0, shoff, 0, 64, 0, 0, 64, 3, 2)
+sections = bytearray(64 * 3)
+struct.pack_into("<IIQQQQIIQQ", sections, 64, 1, 1, 0, 0, 0x100, 1, 0, 0, 1, 0)
+struct.pack_into("<IIQQQQIIQQ", sections, 128, 7, 3, 0, 0, 0x101, len(strings), 0, 0, 1, 0)
+meta = f"{version}\n{commit}\n".encode()
+data = header + bytearray(0x100 - len(header)) + b"\xc3" + strings + meta
+if len(data) < shoff:
+    data += b"\0" * (shoff - len(data))
+data += sections
+open(out, "wb").write(data)
+PY
+  chmod +x "$out"
+  exit 0
+fi
+exit 2
+`)
+
+	archive := filepath.Join(toolDir, "ohos-go.tar.gz")
+	writeTarballToolchain(t, archive, "ohos-go", fakeGo)
+
+	provisionRoot := filepath.Join(t.TempDir(), "root")
+	provisionEnv := func(work string) []string {
+		return withEnv(os.Environ(), map[string]string{
+			"OHOS_GO_ARCHIVE": archive,
+			"OHOS_GO_ROOT":    provisionRoot,
+			"OHOS_GO_WORK":    work,
+		})
+	}
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "dev", "provision-ohos-go.sh"))
+	cmd.Env = provisionEnv(filepath.Join(t.TempDir(), "work"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("provision failed: %v\n%s", err, output)
+	}
+	wantBin := filepath.Join(provisionRoot, "bin", "go") + "\n"
+	if !strings.HasSuffix(string(output), wantBin) {
+		t.Fatalf("provision output = %q, want suffix %q", output, wantBin)
+	}
+	if _, err := os.Stat(filepath.Join(provisionRoot, "bin", "go")); err != nil {
+		t.Fatalf("provisioned toolchain missing bin/go: %v", err)
+	}
+
+	// A second run must be served from the cache without re-extracting.
+	cmd2 := exec.Command("bash", filepath.Join(root, "scripts", "dev", "provision-ohos-go.sh"))
+	cmd2.Env = provisionEnv(filepath.Join(t.TempDir(), "work2"))
+	rerun, err := cmd2.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cached provision failed: %v\n%s", err, rerun)
+	}
+	if !strings.HasSuffix(string(rerun), wantBin) {
+		t.Fatalf("cached provision output = %q, want suffix %q", rerun, wantBin)
+	}
+
+	// build-openharmony.sh must pick up the provisioned toolchain when
+	// OHOS_GO is unset, and the resulting artifact must pass verification.
+	builtPath := filepath.Join(t.TempDir(), "built")
+	shimDir := t.TempDir()
+	writeVerifierTool(t, filepath.Join(shimDir, "go"), fmt.Sprintf(`#!/usr/bin/env bash
+if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
+  printf 'build\tGOOS=openharmony\nbuild\tGOARCH=arm64\nbuild\tCGO_ENABLED=0\n'
+  exit 0
+fi
+exec %q "$@"
+`, filepath.Join(provisionRoot, "bin", "go")))
+	writeVerifierTool(t, filepath.Join(shimDir, "file"), `#!/bin/sh
+printf 'ELF 64-bit LSB executable, ARM aarch64\n'
+`)
+	writeVerifierTool(t, filepath.Join(shimDir, "readelf"), `#!/bin/sh
+case "${1:-}" in
+  -h) printf 'Type: EXEC (Executable file)\nMachine: AArch64\n' ;;
+  -l) printf 'Program Headers:\n  LOAD\n' ;;
+  -d) printf 'There is no dynamic section in this file.\n' ;;
+  *) exit 2 ;;
+esac
+`)
+
+	buildEnv := withEnv(os.Environ(), map[string]string{
+		"OHOS_GO_ARCHIVE":     "",
+		"OHOS_GO_ROOT":        provisionRoot,
+		"OHOS_GO_WORK":        filepath.Join(t.TempDir(), "work3"),
+		"OHOS_OUTPUT":         builtPath,
+		"DWS_PACKAGE_VERSION": "v1.2.3",
+		"PATH":                shimDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	// Strip OHOS_GO so the build must provision.
+	filtered := make([]string, 0, len(buildEnv))
+	for _, item := range buildEnv {
+		if !strings.HasPrefix(item, "OHOS_GO=") {
+			filtered = append(filtered, item)
+		}
+	}
+	buildEnv = filtered
+
+	cmd3 := exec.Command("bash", filepath.Join(root, "scripts", "dev", "build-openharmony.sh"))
+	cmd3.Env = buildEnv
+	buildOut, err := cmd3.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build-openharmony.sh with provisioned toolchain failed: %v\n%s", err, buildOut)
+	}
+	if !strings.Contains(string(buildOut), "Built ") {
+		t.Fatalf("build output = %q, want Built confirmation", buildOut)
+	}
+	if _, err := os.Stat(builtPath); err != nil {
+		t.Fatalf("built artifact missing: %v", err)
+	}
+}
+
+func writeTarballToolchain(t *testing.T, archivePath, rootDir, fakeGoPath string) {
+	t.Helper()
+	goBytes, err := os.ReadFile(fakeGoPath)
+	if err != nil {
+		t.Fatalf("read fake go: %v", err)
+	}
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: rootDir + "/bin/go",
+		Mode: 0o755,
+		Size: int64(len(goBytes)),
+	}); err != nil {
+		t.Fatalf("tar header: %v", err)
+	}
+	if _, err := tw.Write(goBytes); err != nil {
+		t.Fatalf("tar write go: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar close: %v", err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	if err := os.WriteFile(archivePath, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write archive: %v", err)
 	}
 }
