@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
 )
 
 var readInputFile = os.ReadFile
@@ -49,5 +49,5 @@ func SignFile(inputPath, outputPath string) error {
 	}
 	block := codeSignBlock(len(rewritten.data), merkleRoot(rewritten.data, rewritten.codeOffset))
 	copy(rewritten.data[rewritten.codeOffset:], block)
-	return helpers.AtomicWrite(outputPath, rewritten.data, inputInfo.Mode().Perm())
+	return atomicfile.Write(outputPath, rewritten.data, inputInfo.Mode().Perm())
 }
