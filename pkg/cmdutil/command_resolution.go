@@ -111,13 +111,13 @@ func (r CommandResolution) Details() map[string]any {
 // Err projects the resolution through the repository's structured validation
 // error contract.
 func (r CommandResolution) Err() error {
-	return apperrors.NewValidation(
+	return apperrors.MarkUnknownInvocation(apperrors.NewValidation(
 		r.message,
 		apperrors.WithReason(string(r.reason)),
 		apperrors.WithHint(r.hint),
 		apperrors.WithActions(r.actions...),
 		apperrors.WithDetails(r.Details()),
-	)
+	))
 }
 
 // GroupRunE is the reusable handler for navigation-only parent commands. It

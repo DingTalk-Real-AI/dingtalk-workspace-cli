@@ -180,6 +180,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 
 	// Attach timing collector to context for use by child components
 	ctx := WithTimingCollector(context.Background(), timing)
+	ctx = context.WithValue(ctx, versionCheckArgsKey{}, append([]string(nil), os.Args[1:]...))
 	ctx = context.WithValue(ctx, authStatusProcessStartupKey{}, true)
 	ctx = contextWithAgentMetadataSnapshot(ctx, agentMetadata)
 	ctx, resultStore = output.WithResultStore(ctx)
@@ -205,16 +206,16 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		if interrupted, _ := signalState.Outcome(); interrupted != nil {
 			err = interrupted
 		}
+		notice := unknownInvocationNotice(root, err)
 		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(target, result)
+			code, emitErr := emitFailureWithVersionNotice(target, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
 				return
 			}
 		}
-		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(root, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -294,9 +295,9 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			return
 		}
 		var raw apperrors.RawStderrError
+		notice := unknownInvocationNotice(executed, err)
 		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(executed, result)
+			code, emitErr := emitFailureWithVersionNotice(executed, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
@@ -309,7 +310,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			_ = executed.Help()
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
-		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(executed, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -688,16 +689,26 @@ func unknownFlagName(errMsg string) (string, bool) {
 	return flag, flag != ""
 }
 
-func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
+func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error, notices ...*versionNotices) error {
 	var raw apperrors.RawStderrError
 	if stderrors.As(err, &raw) {
 		_, writeErr := fmt.Fprintln(stderr, raw.RawStderr())
 		return writeErr
 	}
 	if wantsJSONErrors(root) {
+		if len(notices) > 0 && notices[0] != nil {
+			return apperrors.PrintJSONWithNotice(stderr, err, notices[0])
+		}
 		return apperrors.PrintJSON(stderr, err)
 	}
-	return apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root))
+	if writeErr := apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root)); writeErr != nil {
+		return writeErr
+	}
+	if len(notices) > 0 && notices[0] != nil {
+		_, writeErr := fmt.Fprintln(stderr, notices[0].Update.Message)
+		return writeErr
+	}
+	return nil
 }
 
 // resolveVerbosity derives the error verbosity level from the root command's flags.
@@ -1124,6 +1135,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.RunE = func(cmd *cobra.Command, args []string) error {
 		if rootVersionRequested {
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s version %s\n", cmd.Name(), Version())
+			if err == nil {
+				// 保留版本字符串的 stdout 契约，检查结果走诊断通道。
+				_ = writeVersionCheck(cmd.ErrOrStderr(), commandVersionCheck(cmd, false))
+			}
 			return err
 		}
 		return rootRunE(cmd, args)
@@ -1413,13 +1428,18 @@ func newVersionCommand() *cobra.Command {
 			goVer := "1.24+"
 
 			arch := "MCP Static Endpoint Mode"
+			check := commandVersionCheck(cmd, false)
 
 			if wantJSON {
 				payload := map[string]any{
-					"version":      ver,
-					"edition":      editionName,
-					"architecture": arch,
-					"go":           goVer,
+					"version":       ver,
+					"edition":       editionName,
+					"architecture":  arch,
+					"go":            goVer,
+					"version_check": check,
+				}
+				if notice := noticeForVersion(check, false); notice != nil {
+					payload["_notice"] = notice
 				}
 				if bt != "unknown" {
 					payload["build"] = bt
@@ -1441,6 +1461,7 @@ func newVersionCommand() *cobra.Command {
 			}
 			fmt.Fprintf(w, "%-16s%s\n", "Architecture:", arch)
 			fmt.Fprintf(w, "%-16s%s\n", "Go:", goVer)
+			_ = writeVersionCheck(cmd.ErrOrStderr(), check)
 			return nil
 		},
 	}

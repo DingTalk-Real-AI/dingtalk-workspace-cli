@@ -6,6 +6,7 @@
 package upgrade
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -113,6 +114,7 @@ type Client struct {
 	repo       string
 	baseURL    string // overridable for testing or mirrors
 	configErr  error
+	anonymous  bool // 自动检查不继承显式升级请求的凭据权限。
 }
 
 // NewClient creates a GitHub release client with default settings.
@@ -334,7 +336,11 @@ func ExtractDigestSHA256(digest string) string {
 
 // getJSON performs a GET request and decodes the JSON response.
 func (c *Client) getJSON(url string, target interface{}) error {
-	req, err := http.NewRequest("GET", url, nil)
+	return c.getJSONContext(context.Background(), url, target)
+}
+
+func (c *Client) getJSONContext(ctx context.Context, url string, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
@@ -342,8 +348,10 @@ func (c *Client) getJSON(url string, target interface{}) error {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	if token := githubToken(); token != "" {
-		req.Header.Set("Authorization", "token "+token)
+	if !c.anonymous {
+		if token := githubToken(); token != "" {
+			req.Header.Set("Authorization", "token "+token)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
