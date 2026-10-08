@@ -134,21 +134,21 @@ type FriendDwsFriendAddedBody struct {
 // personalFriendRequestReceivedPayload matches the DWS personal event
 // transport envelope whose business fields live under the body key.
 type personalFriendRequestReceivedPayload struct {
-	BizID     string                          `json:"bizid"`
-	EventTime int64                           `json:"event_time"`
-	UID       int64                           `json:"uid"`
-	OrgID     int64                           `json:"orgId"`
-	Body      FriendDwsRequestReceivedBody    `json:"body"`
+	BizID     string                       `json:"bizid"`
+	EventTime int64                        `json:"event_time"`
+	UID       int64                        `json:"uid"`
+	OrgID     int64                        `json:"orgId"`
+	Body      FriendDwsRequestReceivedBody `json:"body"`
 }
 
 // personalFriendAddedPayload matches the DWS personal event transport
 // envelope whose business fields live under the body key.
 type personalFriendAddedPayload struct {
-	BizID     string                     `json:"bizid"`
-	EventTime int64                      `json:"event_time"`
-	UID       int64                      `json:"uid"`
-	OrgID     int64                      `json:"orgId"`
-	Body      FriendDwsFriendAddedBody   `json:"body"`
+	BizID     string                   `json:"bizid"`
+	EventTime int64                    `json:"event_time"`
+	UID       int64                    `json:"uid"`
+	OrgID     int64                    `json:"orgId"`
+	Body      FriendDwsFriendAddedBody `json:"body"`
 }
 
 // FriendRequestReceivedOutput is the reviewed projection for the contact
