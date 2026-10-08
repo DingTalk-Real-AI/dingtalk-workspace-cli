@@ -1,0 +1,82 @@
+name: OpenHarmony
+
+# Produces the self-signed openharmony/arm64 package on Linux: build, pure-Go
+# self-signing, static ELF enforcement, deterministic archive + checksum.
+# The OpenHarmony Go toolchain is fetched from the pinned fork release asset
+# and validated against the recorded SHA-256 before use (provision-ohos-go.sh).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/binary-sign-tool/**"
+      - "internal/openharmony/**"
+      - "internal/runtimecontext/native_*"
+      - "internal/keychain/**"
+      - "scripts/dev/*openharmony*"
+      - "scripts/dev/provision-ohos-go.sh"
+      - "test/scripts/openharmony_build_test.go"
+      - ".github/workflows/openharmony.yml"
+  pull_request:
+    paths:
+      - "cmd/binary-sign-tool/**"
+      - "internal/openharmony/**"
+      - "internal/runtimecontext/native_*"
+      - "internal/keychain/**"
+      - "scripts/dev/*openharmony*"
+      - "scripts/dev/provision-ohos-go.sh"
+      - "test/scripts/openharmony_build_test.go"
+      - ".github/workflows/openharmony.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openharmony-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.sha) }}
+  cancel-in-progress: true
+
+env:
+  OHOS_GO_ARCHIVE: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain/1.26_ohos_golang_go_cross.tar.gz
+  OHOS_GO_SHA256: e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125
+
+jobs:
+  openharmony-package:
+    name: OpenHarmony arm64 package
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.7"
+
+      - name: Unit tests (signer + contract)
+        run: go test -count=1 ./cmd/binary-sign-tool ./internal/openharmony/sign
+
+      - name: Script contract tests
+        run: go test -count=1 ./test/scripts -run '^TestOpenHarmony'
+
+      - name: Build, self-sign, and package
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-${{ github.sha }}
+          DWS_REQUIRE_ELF_STATIC: "1"
+        run: ./scripts/dev/package-openharmony.sh "$RUNNER_TEMP/openharmony"
+
+      - name: Verify package contents
+        run: |
+          cd "$RUNNER_TEMP/openharmony"
+          sha256sum -c checksums.txt
+          tar -tzf dws-openharmony-arm64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-openharmony
+          path: |
+            ${{ runner.temp }}/openharmony/dws-openharmony-arm64.tar.gz
+            ${{ runner.temp }}/openharmony/checksums.txt
+          if-no-files-found: error
+          retention-days: 7

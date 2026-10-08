@@ -108,6 +108,24 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 			t.Errorf("OpenHarmony public provision script contains forbidden reference %q", forbidden)
 		}
 	}
+
+	workflow := readTextFile(t, filepath.Join(root, ".github", "workflows", "openharmony.yml"))
+	for _, want := range []string{
+		"ubuntu-latest",
+		"OHOS_GO_ARCHIVE: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain/1.26_ohos_golang_go_cross.tar.gz",
+		"OHOS_GO_SHA256: e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125",
+		"DWS_REQUIRE_ELF_STATIC",
+		"package-openharmony.sh",
+		"actions/upload-artifact@v4",
+		"checksums.txt",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Errorf("OpenHarmony workflow is missing contract %q", want)
+		}
+	}
+	if strings.Contains(strings.ToLower(workflow), "alibaba-inc.com") {
+		t.Errorf("OpenHarmony public workflow contains forbidden reference to internal infrastructure")
+	}
 }
 
 func TestOpenHarmonyArtifactVerifierAcceptsStaticMetadataFixture(t *testing.T) {
