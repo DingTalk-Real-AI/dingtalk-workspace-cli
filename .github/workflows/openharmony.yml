@@ -42,8 +42,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OHOS_GO_ARCHIVE: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain/1.26_ohos_golang_go_cross.tar.gz
   OHOS_GO_SHA256: e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125
+  OHOS_GO_PARTS_URL: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain
 
 jobs:
   openharmony-package:
@@ -59,6 +59,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.7"
+
+      - name: Reassemble the pinned OpenHarmony Go toolchain
+        run: |
+          mkdir -p "$RUNNER_TEMP/ohos-go"
+          cd "$RUNNER_TEMP/ohos-go"
+          for part in ohos-go.tar.gz.part-00 ohos-go.tar.gz.part-01 ohos-go.tar.gz.part-02 ohos-go.tar.gz.part-03 ohos-go.tar.gz.part-04; do
+            curl -fL --retry 3 -o "$part" "$OHOS_GO_PARTS_URL/$part"
+          done
+          cat ohos-go.tar.gz.part-* > ohos-go.tar.gz
+          printf '%s  ohos-go.tar.gz\n' "$OHOS_GO_SHA256" | sha256sum -c -
+          echo "OHOS_GO_ARCHIVE=$PWD/ohos-go.tar.gz" >> "$GITHUB_ENV"
 
       - name: Unit tests (signer + contract)
         run: go test -count=1 ./cmd/binary-sign-tool ./internal/openharmony/sign

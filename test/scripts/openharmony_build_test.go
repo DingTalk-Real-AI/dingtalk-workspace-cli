@@ -112,8 +112,10 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 	workflow := readTextFile(t, filepath.Join(root, ".github", "workflows", "openharmony.yml"))
 	for _, want := range []string{
 		"ubuntu-latest",
-		"OHOS_GO_ARCHIVE: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain/1.26_ohos_golang_go_cross.tar.gz",
+		"OHOS_GO_PARTS_URL: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain",
 		"OHOS_GO_SHA256: e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125",
+		"cat ohos-go.tar.gz.part-* > ohos-go.tar.gz",
+		"sha256sum -c -",
 		"DWS_REQUIRE_ELF_STATIC",
 		"package-openharmony.sh",
 		"actions/upload-artifact@v4",
