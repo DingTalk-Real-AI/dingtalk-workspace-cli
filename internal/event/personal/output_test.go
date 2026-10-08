@@ -1572,3 +1572,21 @@ func TestCrossPlatformCoverageSchemaReflectionSupportsNestedArraysAndPointers(t 
 		t.Fatalf("meta schema = %#v", meta)
 	}
 }
+
+func TestCrossPlatformCoverageOutputSchemaFriendEvents(t *testing.T) {
+	for _, eventKey := range []string{EventFriendRequestReceived, EventFriendAdded} {
+		schema := outputSchema(eventKey)
+		properties, ok := schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: schema missing properties: %#v", eventKey, schema)
+		}
+		typeProperty, ok := properties["type"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: schema missing type property: %#v", eventKey, properties)
+		}
+		enum, ok := typeProperty["enum"].([]string)
+		if !ok || len(enum) != 1 || enum[0] != eventKey {
+			t.Fatalf("%s: type enum = %#v", eventKey, typeProperty["enum"])
+		}
+	}
+}
