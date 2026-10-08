@@ -13,9 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -209,9 +211,21 @@ func TestCrossPlatformCoverageVersionCheckUnknownErrorOutputs(t *testing.T) {
 
 func TestCrossPlatformCoverageVersionCheckProcessRecovery(t *testing.T) {
 	setupVersionCheckTest(t)
-	for _, args := range [][]string{{"future-command"}, {"version", "--future-option"}} {
-		testseam.Swap(t, &os.Args, append([]string{"dws"}, args...))
+	for _, tc := range []struct {
+		args     []string
+		check    bool
+		wantHint string
+	}{
+		{[]string{"future-command"}, true, "--help"},
+		{[]string{"version", "--future-option"}, true, "--help"},
+		{[]string{"auth", "stauts"}, false, "dws auth status"},
+		{[]string{"auth", "login", "--password"}, false, "不支持密码登录"},
+		{[]string{"calendar", "today"}, false, "dws calendar event list"},
+	} {
+		testseam.Swap(t, &os.Args, append([]string{"dws"}, tc.args...))
+		checks := 0
 		testseam.Swap(t, &checkCurrentVersion, func(context.Context, string, upgrade.CheckOptions) upgrade.CheckResult {
+			checks++
 			return availableVersionCheck()
 		})
 		capture, err := os.CreateTemp(t.TempDir(), "stderr")
@@ -221,7 +235,7 @@ func TestCrossPlatformCoverageVersionCheckProcessRecovery(t *testing.T) {
 		t.Cleanup(func() { _ = capture.Close() })
 		testseam.Swap(t, &os.Stderr, capture)
 		if code := Execute(); code != 3 {
-			t.Fatalf("%v exit=%d", args, code)
+			t.Fatalf("%v exit=%d", tc.args, code)
 		}
 		if _, err := capture.Seek(0, io.SeekStart); err != nil {
 			t.Fatal(err)
@@ -230,9 +244,114 @@ func TestCrossPlatformCoverageVersionCheckProcessRecovery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		stderr := string(data)
-		if !strings.Contains(stderr, `"_notice"`) || !strings.Contains(stderr, `"latest": "1.0.63"`) {
-			t.Fatalf("%v stderr=%s", args, stderr)
+		var payload struct {
+			Error struct {
+				Hint string `json:"hint"`
+			} `json:"error"`
+			Notice *versionNotices `json:"_notice"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatalf("%v invalid error JSON: %s: %v", tc.args, data, err)
+		}
+		if (checks == 1) != tc.check || (payload.Notice != nil) != tc.check || !strings.Contains(payload.Error.Hint, tc.wantHint) {
+			t.Fatalf("%v checks=%d error JSON=%s", tc.args, checks, data)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageVersionCheckLocalRecoveryBoundary(t *testing.T) {
+	setupVersionCheckTest(t)
+	cmd := &cobra.Command{Use: "dws"}
+	cmd.Flags().String("format", "json", "")
+	for _, tc := range []struct {
+		name  string
+		err   error
+		check bool
+	}{
+		{"command typo", cmdutil.NewInputCommandResolution(cmd, "stauts", []string{"status"}).Err(), false},
+		{"shortcut typo", cmdutil.NewCommandResolution(cmd, "+lst", cmdutil.ResolutionUnknownShortcut, []string{"+list"}, "").Err(), false},
+		{"authored path", cmdutil.NewCommandResolution(cmd, "department", cmdutil.ResolutionUnknownSubcommand, nil, "use dws contact dept").Err(), false},
+		{"only help", cmdutil.NewInputCommandResolution(cmd, "future-command", nil).Err(), true},
+		{"untyped hint text", apperrors.MarkUnknownInvocation(apperrors.NewValidation("unknown command", apperrors.WithHint("Did you mean anything?"))), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checks := 0
+			testseam.Swap(t, &checkCurrentVersion, func(context.Context, string, upgrade.CheckOptions) upgrade.CheckResult {
+				checks++
+				return availableVersionCheck()
+			})
+			var original bytes.Buffer
+			if err := apperrors.PrintJSON(&original, tc.err); err != nil {
+				t.Fatal(err)
+			}
+			notice := unknownInvocationNotice(cmd, tc.err)
+			if (checks == 1) != tc.check || (notice != nil) != tc.check {
+				t.Fatalf("checks=%d notice=%v", checks, notice)
+			}
+			if !tc.check {
+				var rendered bytes.Buffer
+				if err := printExecutionError(cmd, io.Discard, &rendered, tc.err, notice); err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(original.Bytes(), rendered.Bytes()) {
+					t.Fatalf("local hint changed: %s", &rendered)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageVersionCheckFlagRecoveryBoundary(t *testing.T) {
+	setupVersionCheckTest(t)
+	for _, tc := range []struct {
+		flag  string
+		check bool
+	}{
+		{"--formta", false}, {"--json", false}, {"--password", false}, {"--limit100", false}, {"--future-option", true},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true, Run: func(*cobra.Command, []string) { t.Fatal("invalid flag executed") }}
+			cmd.Flags().String("format", "json", "output format")
+			cmd.Flags().Int("limit", 10, "count")
+			cmd.SetFlagErrorFunc(flagErrorWithSuggestions)
+			cmd.SetArgs([]string{tc.flag})
+			err := corecmd.ExecuteForTest(cmd)
+			if !isUnknownInvocationError(err) || apperrors.ExitCode(err) != 3 {
+				t.Fatalf("unexpected failure: %v", err)
+			}
+			checks := 0
+			testseam.Swap(t, &checkCurrentVersion, func(context.Context, string, upgrade.CheckOptions) upgrade.CheckResult {
+				checks++
+				return availableVersionCheck()
+			})
+			if notice := unknownInvocationNotice(cmd, err); (checks == 1) != tc.check || (notice != nil) != tc.check {
+				t.Fatalf("checks=%d notice=%v", checks, notice)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageVersionCheckKnownFlagGuidance(t *testing.T) {
+	setupVersionCheckTest(t)
+	testseam.Swap(t, &checkCurrentVersion, func(context.Context, string, upgrade.CheckOptions) upgrade.CheckResult {
+		t.Fatal("已知参数处理方案不应查询版本")
+		return upgrade.CheckResult{}
+	})
+	for _, args := range [][]string{
+		{"chat", "+search-msg", "--from", "somebody"},
+		{"chat", "message", "list-by-sender", "--time", "today"},
+		{"drive", "list", "--space", "example"},
+	} {
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		err := root.Execute()
+		if !isUnknownInvocationError(err) || !apperrors.HasLocalRecovery(err) || apperrors.ExitCode(err) != 3 {
+			t.Fatalf("%v lost local recovery: %v", args, err)
+		}
+		if notice := unknownInvocationNotice(root, err); notice != nil {
+			t.Fatalf("%v unexpected notice: %v", args, notice)
 		}
 	}
 }

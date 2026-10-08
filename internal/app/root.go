@@ -574,7 +574,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	if flag, ok := unknownFlagName(errMsg); ok && flag == "from" {
 		switch cmd.CommandPath() {
 		case "dws chat +search-msg", "dws chat +chat-messages":
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint("--from 在消息查询中含义不明确：按发送者过滤请使用 --sender <姓名|userId|openDingTalkId>；指定时间起点请使用 --start <RFC3339>"),
 				apperrors.WithReason("ambiguous_flag"),
@@ -584,7 +584,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 					"Use --start <RFC3339> together with --end <RFC3339> to set a time range",
 				),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
@@ -594,14 +594,14 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 			hint = fmt.Sprintf("Parameter --%s is ambiguous on %q and cannot be normalized safely; choose the intended explicit flag from --help.", flag, cmd.CommandPath())
 			reason = "ambiguous_flag"
 		}
-		return apperrors.NewValidation(
+		return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 			msgWithTail,
 			apperrors.WithHint(hint),
 			apperrors.WithReason(reason),
 			apperrors.WithCause(err),
 			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-		)
+		))
 	}
 
 	// Common flag aliases and suggestions
@@ -620,21 +620,21 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 
 	if strings.Contains(errMsg, "unknown flag:") {
 		fix := cmdutil.SuggestFlagFix(cmd, err)
 		if fix.Suggestion != "" {
-			return apperrors.NewValidation(
+			result := apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(fix.Suggestion),
 				apperrors.WithReason("unknown_flag"),
@@ -642,6 +642,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
 			)
+			if fix.HasCorrection {
+				return apperrors.MarkLocalRecovery(result)
+			}
+			return result
 		}
 	}
 

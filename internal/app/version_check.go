@@ -127,7 +127,8 @@ func writeVersionCheck(w io.Writer, check upgrade.CheckResult) error {
 }
 
 func unknownInvocationNotice(cmd *cobra.Command, err error) *versionNotices {
-	if !isUnknownInvocationError(err) {
+	// 纠错候选或人工处理方案由解析生产方标记；不能因通用 --help hint 非空而跳过检查。
+	if !isUnknownInvocationError(err) || apperrors.HasLocalRecovery(err) {
 		return nil
 	}
 	target := cmd

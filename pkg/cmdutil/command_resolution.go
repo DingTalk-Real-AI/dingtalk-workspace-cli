@@ -28,12 +28,13 @@ const (
 // resolution failure. Its constructors normalize suggestions once so the
 // human hint and machine-readable details cannot diverge.
 type CommandResolution struct {
-	reason      ResolutionReason
-	input       string
-	suggestions []string
-	message     string
-	hint        string
-	actions     []string
+	reason           ResolutionReason
+	input            string
+	suggestions      []string
+	message          string
+	hint             string
+	actions          []string
+	hasLocalRecovery bool
 }
 
 // ClassifyCommandResolution returns the stable reason for an unresolved token.
@@ -53,17 +54,20 @@ func ClassifyCommandResolution(parent *cobra.Command, input string) ResolutionRe
 // NewCommandResolution builds a bounded command-resolution result. Callers
 // may pass sibling suggestions from SuggestSubcommands or reviewed deep-path
 // candidates; both are normalized to the same three-item contract.
+// authoredHint 只能承载人工明确的处理方案；通用帮助引导由此处自动补齐。
 func NewCommandResolution(parent *cobra.Command, input string, reason ResolutionReason, suggestions []string, authoredHint string) CommandResolution {
 	input = strings.TrimSpace(input)
 	suggestions = normalizeCommandSuggestions(suggestions)
+	authoredHint = strings.TrimSpace(authoredHint)
 	parentPath := commandResolutionParentPath(parent)
 	helpAction := fmt.Sprintf("Run '%s --help' for the full list", parentPath)
 
 	resolution := CommandResolution{
-		reason:      reason,
-		input:       input,
-		suggestions: suggestions,
-		actions:     []string{helpAction},
+		reason:           reason,
+		input:            input,
+		suggestions:      suggestions,
+		actions:          []string{helpAction},
+		hasLocalRecovery: len(suggestions) > 0 || authoredHint != "",
 	}
 
 	switch reason {
@@ -81,7 +85,6 @@ func NewCommandResolution(parent *cobra.Command, input string, reason Resolution
 		resolution.message = fmt.Sprintf("unknown subcommand %q for %q", input, parentPath)
 	}
 
-	authoredHint = strings.TrimSpace(authoredHint)
 	if authoredHint != "" {
 		resolution.hint = authoredHint + " (" + helpAction + ")"
 	} else {
@@ -111,13 +114,17 @@ func (r CommandResolution) Details() map[string]any {
 // Err projects the resolution through the repository's structured validation
 // error contract.
 func (r CommandResolution) Err() error {
-	return apperrors.MarkUnknownInvocation(apperrors.NewValidation(
+	err := apperrors.MarkUnknownInvocation(apperrors.NewValidation(
 		r.message,
 		apperrors.WithReason(string(r.reason)),
 		apperrors.WithHint(r.hint),
 		apperrors.WithActions(r.actions...),
 		apperrors.WithDetails(r.Details()),
 	))
+	if r.hasLocalRecovery {
+		return apperrors.MarkLocalRecovery(err)
+	}
+	return err
 }
 
 // GroupRunE is the reusable handler for navigation-only parent commands. It
