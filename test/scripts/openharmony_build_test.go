@@ -605,7 +605,9 @@ exit 2
 	provisionRoot := filepath.Join(t.TempDir(), "root")
 	provisionEnv := func(work string) []string {
 		return withEnv(os.Environ(), map[string]string{
+			"OHOS_GO":         "",
 			"OHOS_GO_ARCHIVE": archive,
+			"OHOS_GO_SHA256":  "",
 			"OHOS_GO_ROOT":    provisionRoot,
 			"OHOS_GO_WORK":    work,
 		})
