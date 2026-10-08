@@ -28,3 +28,10 @@ Make each field recognizable before and after input. Component labels have diffe
 Use the component contract for exact fields. A placeholder or current value alone should not carry a field name that must remain visible. Add a short purpose or outcome line for a longer form when the surrounding context does not explain it.
 
 Preserve user input after failure; show a completed state only after a real result. See [form interaction](../protocol/examples/form-interaction.json) for bindings, submit context, and checks, and [host action](../protocol/examples/host-action.json) for a host dialog and result writeback.
+
+## Example interaction notes
+
+- In the form example, `required(false)` passes; an agreement check must test the boolean value directly. ImageUpload reports only successful uploads, not cancellation or failure.
+- For host dialogs, use the explicit host catalog `urn:dingtalk:a2ui:host:v1`. The host-action example passes `initialValue` to `promptText` and reads `{status: "success", data: {text: "..."}}` from `resultPath`. Keep an empty state before a result arrives; a missing-initial-value warning on that asynchronous output binding is expected.
+- Cancellation preserves the previous result; a failed result has no `data.text`. Handle the status rather than treating every callback as new successful input.
+- ButtonGroup items own their metadata, including result writeback configuration; they do not inherit it from the group. Query the action contract before adapting the example.

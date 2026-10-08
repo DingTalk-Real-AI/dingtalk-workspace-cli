@@ -35,11 +35,49 @@ func TestCrossPlatformCoverageAicardPreflightBoundaries(t *testing.T) {
 	}
 }
 
+func TestAicardBase64ImageResourcePolicy(t *testing.T) {
+	p := testProtocol(t)
+	for _, field := range []string{"url", "darkUrl", "imageUrl", "posterUrl", "coverUrl", "images"} {
+		t.Run(field, func(t *testing.T) {
+			var value any = "data:image/png;base64,YQ=="
+			if field == "images" {
+				value = []any{value}
+			}
+			component := map[string]any{"id": "root", "component": "Image", field: value}
+			raw, err := json.Marshal(map[string]any{"version": "v1.0", "updateComponents": map[string]any{"surfaceId": "s", "components": []any{component}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			create := `{"version":"v1.0","createSurface":{"surfaceId":"s","catalogId":"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json","dataModel":{}}}`
+			for _, mode := range []string{"resources", "new-card"} {
+				messages := []string{create, string(raw)}
+				result, err := p.Preflight(messages, mode)
+				if err != nil || result["valid"] != true || result["renderingVerified"] != false {
+					t.Fatal(result, err)
+				}
+				diagnostics := result["diagnostics"].([]Diagnostic)
+				if len(diagnostics) != 1 || diagnostics[0].Code != "resource.base64_image_unverified" || diagnostics[0].Severity != "warning" {
+					t.Fatal(result)
+				}
+				if err := p.CheckNewCard(messages); err != nil {
+					t.Fatal("a compatibility warning must not reject a new card:", err)
+				}
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAicardBundleRoundtrip(t *testing.T) {
 	p := testProtocol(t)
 	names := []string{"Text", "Row", "Column", "ButtonGroup", "Tabs", "CheckBox", "promptText"}
-	ordinary := p.ExplainMany(names, false)
-	packed := p.ExplainMany(names, true)
+	ordinary, err := p.ExplainMany(names, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packed, err := p.ExplainMany(names, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defs := packed["definitions"].(map[string]any)
 	var unpack func(any) any
 	unpack = func(v any) any {

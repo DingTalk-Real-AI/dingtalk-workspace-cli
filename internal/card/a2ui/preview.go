@@ -128,6 +128,9 @@ func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, er
 				return
 			}
 			header, content, ok := strings.Cut(n, ",")
+			if strings.HasPrefix(strings.ToLower(header), "data:image/") && strings.Contains(strings.ToLower(header), ";base64") {
+				diagnostics = append(diagnostics, Diagnostic{"resource.base64_image_unverified", "warning", ptr, "Base64 image compatibility and operation size are unverified; prefer a verified HTTPS image URL", ""})
+			}
 			decoded, err := url.PathUnescape(content)
 			if !ok || err != nil {
 				add("resource.invalid_data_uri", ptr, "The data URI lacks a separator or contains invalid escaping")

@@ -1,0 +1,233 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "open-streaming",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "open-streaming",
+      "path": "/",
+      "value": {}
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-streaming",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "executionPanel"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "executionPanel",
+          "component": "CollapsiblePanel",
+          "title": "[AIGenerating]Reading...",
+          "children": [
+            "executionTimeline"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "reasoning",
+          "fallbackMarkdown": "Execution details",
+          "defaultExpanded": false,
+          "textEffect": "shimmer"
+        },
+        {
+          "id": "executionTimeline",
+          "component": "Column",
+          "children": [
+            "toolGroup_read"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "toolGroup_read",
+          "component": "CollapsiblePanel",
+          "title": "Reading...",
+          "children": [
+            "toolGroup_read_row"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "indented",
+          "fallbackMarkdown": "Execution details",
+          "defaultExpanded": false,
+          "icon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_light.DlX94S3.gif",
+          "darkIcon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_dark.D-pS11K.gif"
+        },
+        {
+          "id": "toolGroup_read_row",
+          "component": "Row",
+          "align": "center",
+          "children": [
+            "toolGroup_read_icon",
+            "toolGroup_read_text"
+          ]
+        },
+        {
+          "id": "toolGroup_read_icon",
+          "component": "Icon",
+          "name": "Folder_L_outlined",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "toolGroup_read_text",
+          "component": "Text",
+          "text": "Read sample data",
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false,
+          "maxLine": 2,
+          "weight": 1
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-streaming",
+      "components": [
+        {
+          "id": "executionPanel",
+          "component": "CollapsiblePanel",
+          "title": "[AIGenerating]Analyzing...",
+          "children": [
+            "executionTimeline"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "reasoning",
+          "fallbackMarkdown": "Execution details",
+          "textEffect": "shimmer"
+        },
+        {
+          "id": "toolGroup_read",
+          "component": "CollapsiblePanel",
+          "title": "Read complete",
+          "children": [
+            "toolGroup_read_row"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "indented",
+          "fallbackMarkdown": "Execution details"
+        },
+        {
+          "id": "executionTimeline",
+          "component": "Column",
+          "children": [
+            "toolGroup_read",
+            "toolGroup_summary"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "toolGroup_summary",
+          "component": "CollapsiblePanel",
+          "title": "Analyzing...",
+          "children": [
+            "toolGroup_summary_row"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "indented",
+          "fallbackMarkdown": "Execution details",
+          "defaultExpanded": false,
+          "icon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_light.DlX94S3.gif",
+          "darkIcon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_dark.D-pS11K.gif"
+        },
+        {
+          "id": "toolGroup_summary_row",
+          "component": "Row",
+          "align": "center",
+          "children": [
+            "toolGroup_summary_icon",
+            "toolGroup_summary_text"
+          ]
+        },
+        {
+          "id": "toolGroup_summary_icon",
+          "component": "Icon",
+          "name": "CodeProgram_L_outlined",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "toolGroup_summary_text",
+          "component": "Text",
+          "text": "Calculate summary",
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false,
+          "maxLine": 2,
+          "weight": 1
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-streaming",
+      "components": [
+        {
+          "id": "executionPanel",
+          "component": "CollapsiblePanel",
+          "title": "Completed",
+          "children": [
+            "executionTimeline"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "reasoning",
+          "fallbackMarkdown": "Execution details"
+        },
+        {
+          "id": "toolGroup_summary",
+          "component": "CollapsiblePanel",
+          "title": "Analysis complete",
+          "children": [
+            "toolGroup_summary_row"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "indented",
+          "fallbackMarkdown": "Execution details"
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "executionPanel",
+            "result"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "result",
+          "component": "Column",
+          "children": [
+            "answer",
+            "artifact"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "answer",
+          "component": "Markdown",
+          "content": "Analysis complete. Sample file attached."
+        },
+        {
+          "id": "artifact",
+          "component": "File",
+          "fileName": "dummy.pdf",
+          "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+          "mimeType": "application/pdf",
+          "description": "Public sample PDF; not a generated report"
+        }
+      ]
+    }
+  }
+]

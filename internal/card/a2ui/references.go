@@ -62,7 +62,7 @@ func (p *Protocol) checkReferences(s referenceSnapshot, surfaceID string) []Diag
 	}
 	edges := map[string][]referenceEdge{}
 	for id, node := range s.nodes {
-		for _, raw := range array(p.assets.Explain[str(node.component["component"])]["childRefs"]) {
+		for _, raw := range p.assets.ChildRefs[str(node.component["component"])] {
 			ref := object(raw)
 			referenceSlots(node.component, strings.Split(str(ref["path"]), "."), node.location, func(value any, ptr string) {
 				if ref["kind"] == "id" {

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -50,15 +51,17 @@ func TestCrossPlatformCoverageAicardPreflightErrorAndResourceCases(t *testing.T)
 		})
 	}
 	for _, tc := range []struct {
-		name string
-		url  string
-		code string
+		name  string
+		url   string
+		code  string
+		valid bool
 	}{
-		{"missing separator", "data:image/png;base64", "resource.invalid_data_uri"},
-		{"invalid escaping", "data:image/png;base64,%zz", "resource.invalid_data_uri"},
-		{"empty base64", "data:image/png;base64,", "resource.invalid_base64"},
-		{"valid base64", "data:image/png;base64,YQ==", ""},
-		{"plain data", "data:text/plain,hello", ""},
+		{"missing separator", "data:image/png;base64", "resource.invalid_data_uri", false},
+		{"invalid escaping", "data:image/png;base64,%zz", "resource.invalid_data_uri", false},
+		{"empty base64", "data:image/png;base64,", "resource.invalid_base64", false},
+		{"valid image encoding warns", "data:image/png;base64,YQ==", "resource.base64_image_unverified", true},
+		{"valid non-image base64", "data:text/plain;base64,YQ==", "", true},
+		{"plain data", "data:text/plain,hello", "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			message, _ := json.Marshal(map[string]any{"updateComponents": map[string]any{"components": []any{map[string]any{"url": tc.url, "nested": []any{map[string]any{"darkUrl": tc.url}}, "metadata": map[string]any{"imageUrl": "data:image/png;base64,bad!"}}}}})
@@ -70,7 +73,12 @@ func TestCrossPlatformCoverageAicardPreflightErrorAndResourceCases(t *testing.T)
 			for _, d := range r["diagnostics"].([]Diagnostic) {
 				found = found || d.Code == tc.code
 			}
-			if (tc.code == "" && r["valid"] != true) || (tc.code != "" && (!found || r["valid"] != false)) {
+			for _, diagnostic := range r["diagnostics"].([]Diagnostic) {
+				if diagnostic.Code == tc.code && tc.valid && diagnostic.Severity != "warning" {
+					t.Fatal("compatible resources must only warn:", diagnostic)
+				}
+			}
+			if r["valid"] != tc.valid || (tc.code != "" && !found) {
 				t.Fatalf("want %q: %+v", tc.code, r)
 			}
 		})
@@ -115,7 +123,7 @@ func TestCrossPlatformCoverageAicardLintFragmentAndEmission(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageAicardBundledCachesProtocol(t *testing.T) {
+func TestCrossPlatformCoverageAicardBundledValidatesEachFilesystem(t *testing.T) {
 	source, err := fs.Sub(skills.FS, "multi/dingtalk-aicard")
 	if err != nil {
 		t.Fatal(err)
@@ -124,9 +132,8 @@ func TestCrossPlatformCoverageAicardBundledCachesProtocol(t *testing.T) {
 	if err != nil || p == nil {
 		t.Fatalf("bundled load: %v", err)
 	}
-	q, again := Bundled(nil)
-	if q != p || again != nil {
-		t.Fatalf("cached protocol changed: %v / %v", p, q)
+	if _, err := Bundled(fstest.MapFS{}); err == nil {
+		t.Fatal("a prior valid filesystem must not mask a missing package")
 	}
 }
 
