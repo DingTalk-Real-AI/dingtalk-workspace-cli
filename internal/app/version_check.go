@@ -61,9 +61,6 @@ func versionCheckIntent(cmd *cobra.Command, ctx context.Context) (bool, bool) {
 		return readonly, help
 	}
 	target, _, _ := cmd.Root().Find(args)
-	if target == nil {
-		target = cmd
-	}
 	flags := pflag.NewFlagSet("version-check-readonly", pflag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.ParseErrorsWhitelist.UnknownFlags = true
