@@ -55,15 +55,17 @@ func TestCrossPlatformCoverageUpgradeInstallation(t *testing.T) {
 		{name: "brew-other", binary: "/brew/Cellar/other/1/bin/dws", fail: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 模拟文件系统和期望值都使用宿主路径格式，覆盖 Windows 的反斜杠路径。
+			binary := filepath.FromSlash(tc.binary)
 			files := map[string]string{}
 			if tc.name == "npm-local" || tc.name == "npm-dev" || tc.name == "transitive" {
-				files["/x/package-lock.json"] = "{}"
+				files[filepath.FromSlash("/x/package-lock.json")] = "{}"
 			}
 			if tc.name != "manifest-missing" {
-				files[filepath.Join(filepath.Dir(filepath.Dir(tc.binary)), "package.json")] = managedPackageManifest
+				files[filepath.Join(filepath.Dir(filepath.Dir(binary)), "package.json")] = managedPackageManifest
 			}
 			for k, v := range tc.files {
-				files[k] = v
+				files[filepath.FromSlash(k)] = v
 			}
 			testseam.Swap(t, &upgradeManagerReadFile, func(path string) ([]byte, error) {
 				if data, ok := files[path]; ok {
@@ -76,11 +78,11 @@ func TestCrossPlatformCoverageUpgradeInstallation(t *testing.T) {
 				goos = "linux"
 			}
 			testseam.Swap(t, &upgradeRuntimeGOOS, goos)
-			got, err := inspectUpgradeInstallation(tc.binary)
+			got, err := inspectUpgradeInstallation(binary)
 			if (err != nil) != tc.fail {
 				t.Fatalf("install=%+v err=%v", got, err)
 			}
-			if !tc.fail && (got.manager != tc.manager || got.root != tc.root || got.global != tc.global || got.dependency != tc.dependency) {
+			if !tc.fail && (got.manager != tc.manager || got.root != filepath.FromSlash(tc.root) || got.global != tc.global || got.dependency != tc.dependency) {
 				t.Fatalf("install=%+v", got)
 			}
 		})
