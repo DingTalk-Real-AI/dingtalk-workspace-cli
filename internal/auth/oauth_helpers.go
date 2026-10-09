@@ -35,9 +35,10 @@ import (
 )
 
 var (
-	oauthSaveTokenLocked = saveTokenDataLocked
-	oauthRetryAfter      = time.After
-	oauthNewRequest      = http.NewRequestWithContext
+	oauthSaveClientSecret = saveClientSecretTransactional
+	oauthSaveTokenLocked  = saveTokenDataLocked
+	oauthRetryAfter       = time.After
+	oauthNewRequest       = http.NewRequestWithContext
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
@@ -50,8 +51,16 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	if err != nil {
 		return nil, err
 	}
-	clientID := pair.ClientID
-	clientSecret := pair.ClientSecret
+	data, err := p.exchangeCodeWithClient(ctx, code, pair.ClientID, pair.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	data.Source = pair.Source
+	return data, nil
+}
+
+// exchangeCodeWithClient does not persist credentials before identity validation.
+func (p *OAuthProvider) exchangeCodeWithClient(ctx context.Context, code, clientID, clientSecret string) (*TokenData, error) {
 	body := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -68,8 +77,9 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	}
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
-	data.Source = pair.Source
 	p.applyLoginRegionToToken(data)
+	// The caller supplies the resolved provenance; explicit arguments alone do not
+	// imply credentials originated from command-line flags.
 	return data, nil
 }
 
@@ -142,7 +152,14 @@ func (p *OAuthProvider) applyLoginRegionToToken(data *TokenData) {
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {
-	clientID := strings.TrimSpace(p.clientID)
+	return p.exchangeCodeViaMCPClientID(ctx, code, strings.TrimSpace(p.clientID))
+}
+
+// exchangeCodeViaMCPClientID exchanges a managed identity authorization code
+// with the caller-provided application ID. It deliberately avoids process-wide
+// ClientID state so employee login cannot mutate the supervisor login context.
+func (p *OAuthProvider) exchangeCodeViaMCPClientID(ctx context.Context, code, clientID string) (*TokenData, error) {
+	clientID = strings.TrimSpace(clientID)
 	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPOAuthTokenPath
 	body := map[string]string{
 		"clientId":  clientID,

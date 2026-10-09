@@ -27,6 +27,8 @@ type FlagFixResult struct {
 	Suggestion   string
 	AutoFixFlag  string
 	AutoFixValue string
+	// HasCorrection 仅标记具体纠错候选；通用 --help 引导不算纠错。
+	HasCorrection bool `json:"-"`
 }
 
 // CommonFlagAliases maps commonly misused flag names to their correct equivalents.
@@ -123,7 +125,7 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 	body := strings.TrimSpace(msg[idx+len(prefix):])
 
 	if alias, ok := CommonFlagAliases[body]; ok {
-		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s? Run '%s --help' for options", alias, cmd.CommandPath())}
+		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s? Run '%s --help' for options", alias, cmd.CommandPath()), HasCorrection: true}
 	}
 
 	var bestFlag, bestValue string
@@ -154,10 +156,10 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 			if SuffixLooksLikeValue(bestValue, flagType, fmtStr, enumCopy) {
 				if flagType == "bool" || flagType == "boolean" {
 					normalized, _ := NormalizeBoolLiteral(bestValue)
-					return FlagFixResult{Suggestion: fmt.Sprintf("Use an explicit boolean value: --%s=%s", bestFlag, normalized)}
+					return FlagFixResult{Suggestion: fmt.Sprintf("Use an explicit boolean value: --%s=%s", bestFlag, normalized), HasCorrection: true}
 				}
 				suggestion := fmt.Sprintf("Space required between flag and value: --%s %s", bestFlag, bestValue)
-				return FlagFixResult{Suggestion: suggestion, AutoFixFlag: bestFlag, AutoFixValue: bestValue}
+				return FlagFixResult{Suggestion: suggestion, AutoFixFlag: bestFlag, AutoFixValue: bestValue, HasCorrection: true}
 			}
 		}
 	}
@@ -176,7 +178,7 @@ func SuggestFlagFix(cmd *cobra.Command, flagErr error) FlagFixResult {
 	threshold := LevenshteinThreshold(len(body))
 	if bestDist > 0 && bestDist <= threshold && bestName != "" {
 		suf := formatFlagHintSuffix(cmd.Flags().Lookup(bestName))
-		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s?%s", bestName, suf)}
+		return FlagFixResult{Suggestion: fmt.Sprintf("Did you mean --%s?%s", bestName, suf), HasCorrection: true}
 	}
 
 	return FlagFixResult{Suggestion: fmt.Sprintf("Run '%s --help' to see available options", cmd.CommandPath())}

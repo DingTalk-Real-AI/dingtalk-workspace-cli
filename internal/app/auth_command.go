@@ -36,6 +36,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/charmbracelet/huh"
@@ -211,7 +212,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				}
 				tokenData, err = authDeviceLogin(provider, loginCtx)
 				if err != nil {
-					return apperrors.NewAuth(fmt.Sprintf("device authorization failed: %v", err))
+					return authLoginFlowError("device authorization failed", err)
 				}
 			default:
 				loginCtx, cancel := context.WithTimeout(cmd.Context(), config.OAuthFlowTimeout)
@@ -233,7 +234,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				configureOAuthProviderCompatibility(provider, configDir)
 				tokenData, err = authOAuthLogin(provider, loginCtx, authLoginForcesAuthorization(cfg))
 				if err != nil {
-					return apperrors.NewAuth(fmt.Sprintf("dingtalk login failed: %v", err))
+					return authLoginFlowError("dingtalk login failed", err)
 				}
 			}
 
@@ -361,6 +362,13 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("refresh-url")
 	_ = cmd.Flags().MarkHidden("login-timeout")
 	return cmd
+}
+
+func authLoginFlowError(prefix string, err error) error {
+	if guidance, ok := authpkg.LoginRetryGuidance(err); ok {
+		return apperrors.NewAuth(guidance)
+	}
+	return apperrors.NewAuth(fmt.Sprintf("%s: %v", prefix, err))
 }
 
 var (
@@ -556,6 +564,7 @@ func newAuthStatusCommand() *cobra.Command {
 
 指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。
 使用 --readonly 只读本地快照，不获取认证锁、不访问认证服务、不刷新、不迁移或修复。
+普通模式检查 CLI 最新版本（24 小时缓存）；--readonly 仅读取已有版本缓存，不联网或写入。
 只读模式与普通模式使用相同输出字段，但不执行刷新，可能返回不同的 token 有效性。
 并发更新时可能读到旧快照或无法判断的状态；系统 Keychain 读取仍可能等待。`,
 		Example: `  dws auth status
@@ -645,10 +654,11 @@ func newAuthStatusCommand() *cobra.Command {
 
 // Both status modes render through the same compatibility-preserving path.
 func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, tokenData *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+	check := commandVersionCheck(cmd, false)
 	// Check if JSON output is requested
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if strings.EqualFold(strings.TrimSpace(format), "json") {
-		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
+		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic, check)
 	}
 
 	// Default table output
@@ -689,6 +699,7 @@ func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, to
 			fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
 		}
 	}
+	_ = writeVersionCheck(cmd.ErrOrStderr(), check)
 	return nil
 }
 
@@ -976,66 +987,6 @@ func newAuthImportCommandWithSupport(supportError func() error) *cobra.Command {
 	cmd.Flags().StringP("input", "i", "", "认证包输入路径")
 	cmd.Flags().Bool("base64", false, "输入为 base64 编码的认证包")
 	cmd.Flags().Bool("force", false, "覆盖已有登录态")
-	return cmd
-}
-
-func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:               "exchange",
-		Short:             "Exchange an authorization code for credentials",
-		Hidden:            true,
-		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			code, err := cmd.Flags().GetString("code")
-			if err != nil {
-				return apperrors.NewInternal("failed to read --code")
-			}
-			code = strings.TrimSpace(code)
-			if code == "" {
-				return apperrors.NewValidation("--code is required")
-			}
-			uid, err := cmd.Flags().GetString("uid")
-			if err != nil {
-				return apperrors.NewInternal("failed to read --uid")
-			}
-
-			configDir := defaultConfigDir()
-			provider := authpkg.NewOAuthProvider(configDir, nil)
-			provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
-				return enrichAuthLoginProfileFromContact(ctx, configDir, caller, data)
-			}
-			configureOAuthProviderCompatibility(provider, configDir)
-			exchangeCtx, cancel := context.WithTimeout(cmd.Context(), time.Minute)
-			defer cancel()
-			tokenData, err := authOAuthExchange(provider, exchangeCtx, code, strings.TrimSpace(uid))
-			if err != nil {
-				return apperrors.NewAuth(fmt.Sprintf("failed to exchange authorization code: %v", err))
-			}
-			ResetRuntimeTokenCache()
-			clearCompatCache()
-
-			w := cmd.OutOrStdout()
-			fmt.Fprintln(w, "[OK] 授权码兑换成功！")
-			if strings.TrimSpace(uid) != "" {
-				fmt.Fprintf(w, "%-16s%s\n", "用户:", strings.TrimSpace(uid))
-			}
-			if strings.TrimSpace(tokenData.CorpID) != "" {
-				fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
-			}
-			if !tokenData.ExpiresAt.IsZero() {
-				fmt.Fprintf(w, "%-16s%s\n", "有效期:", authLoginFormatExpiry(tokenData.ExpiresAt))
-			}
-			return nil
-		},
-	}
-	cmd.Flags().String("code", "", "Authorization code")
-	cmd.Flags().String("uid", "", "Optional user identifier for compatibility")
-	cmd.Flags().String("client-id", "", "Compatibility flag")
-	cmd.Flags().String("authorize-url", "", "Compatibility flag")
-	cmd.Flags().String("token-url", "", "Compatibility flag")
-	cmd.Flags().String("refresh-url", "", "Compatibility flag")
-	cmd.Flags().String("redirect-url", "", "Compatibility flag")
-	cmd.Flags().String("scopes", "", "Compatibility flag")
 	return cmd
 }
 
@@ -1608,13 +1559,6 @@ func authLoginHistorySelector(configDir string, profile *authpkg.Profile) string
 	return authpkg.ProfileSelector(*profile)
 }
 
-type contactProfileIdentity struct {
-	CorpID   string
-	CorpName string
-	UserID   string
-	UserName string
-}
-
 type authLoginHistoryHint struct {
 	Selector string
 	Explicit bool
@@ -1703,7 +1647,7 @@ func enrichAuthLoginProfileFromContact(
 		tryHistory()
 		return nil
 	}
-	identity, ok := contactProfileIdentityFromToolResult(result, corpID)
+	identity, ok := authpkg.ContactProfileIdentityFromToolResult(result, corpID)
 	if !ok {
 		logging.AuthDebug("auth.login.identity.lookup.empty", "corp_id", corpID)
 		if strings.TrimSpace(data.UserID) == "" {
@@ -1914,86 +1858,6 @@ func historicalProfileForSelector(corpID, selector string, profiles []*authpkg.P
 	return nil
 }
 
-func contactProfileIdentityFromToolResult(result *edition.ToolResult, expectedCorpIDs ...string) (contactProfileIdentity, bool) {
-	if result == nil {
-		return contactProfileIdentity{}, false
-	}
-	for _, block := range result.Content {
-		if strings.TrimSpace(block.Text) == "" {
-			continue
-		}
-		if identity, ok := contactProfileIdentityFromJSON([]byte(block.Text), expectedCorpIDs...); ok {
-			return identity, true
-		}
-	}
-	return contactProfileIdentity{}, false
-}
-
-func contactProfileIdentityFromJSON(data []byte, expectedCorpIDs ...string) (contactProfileIdentity, bool) {
-	var payload struct {
-		Result []struct {
-			OrgEmployeeModel struct {
-				CorpID      string `json:"corpId"`
-				OrgName     string `json:"orgName"`
-				UserID      string `json:"userId"`
-				UserIDLower string `json:"userid"`
-				OrgUserID   string `json:"orgUserId"`
-				OrgUserName string `json:"orgUserName"`
-				Name        string `json:"name"`
-			} `json:"orgEmployeeModel"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return contactProfileIdentity{}, false
-	}
-	if len(payload.Result) == 0 {
-		return contactProfileIdentity{}, false
-	}
-	identities := make([]contactProfileIdentity, 0, len(payload.Result))
-	for i := range payload.Result {
-		org := payload.Result[i].OrgEmployeeModel
-		identity := contactProfileIdentity{
-			CorpID:   strings.TrimSpace(org.CorpID),
-			CorpName: strings.TrimSpace(org.OrgName),
-			UserID:   firstNonEmptyString(org.UserID, org.UserIDLower, org.OrgUserID),
-			UserName: firstNonEmptyString(org.OrgUserName, org.Name),
-		}
-		if identity.CorpID != "" || identity.CorpName != "" || identity.UserID != "" || identity.UserName != "" {
-			identities = append(identities, identity)
-		}
-	}
-	if len(identities) == 0 {
-		return contactProfileIdentity{}, false
-	}
-	expectedCorpID := ""
-	if len(expectedCorpIDs) > 0 {
-		expectedCorpID = strings.TrimSpace(expectedCorpIDs[0])
-	}
-	if expectedCorpID != "" {
-		for _, identity := range identities {
-			if identity.CorpID == expectedCorpID {
-				return identity, true
-			}
-		}
-		// Older contact responses omit corpId. A single result is still
-		// unambiguous; multiple organization records without a target match
-		// must fall back to local history instead of choosing result[0].
-		if len(payload.Result) != 1 {
-			return contactProfileIdentity{}, false
-		}
-	}
-	return identities[0], true
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
 func authStatusAuthenticated(data *authpkg.TokenData) bool {
 	if data == nil {
 		return false
@@ -2016,20 +1880,22 @@ func authStatusUpdatedAt(data *authpkg.TokenData) string {
 
 // authStatusResponse is the JSON response for auth status command.
 type authStatusResponse struct {
-	Success           bool   `json:"success"`
-	Authenticated     bool   `json:"authenticated"`
-	Message           string `json:"message,omitempty"`
-	Reason            string `json:"reason,omitempty"`
-	Hint              string `json:"hint,omitempty"`
-	Refreshed         bool   `json:"refreshed,omitempty"`
-	TokenValid        bool   `json:"token_valid,omitempty"`
-	RefreshTokenValid bool   `json:"refresh_token_valid,omitempty"`
-	ExpiresAt         string `json:"expires_at,omitempty"`
-	RefreshExpiresAt  string `json:"refresh_expires_at,omitempty"`
-	CorpID            string `json:"corp_id,omitempty"`
-	CorpName          string `json:"corp_name,omitempty"`
-	UserID            string `json:"user_id,omitempty"`
-	UserName          string `json:"user_name,omitempty"`
+	VersionCheck      *upgrade.CheckResult `json:"version_check,omitempty"`
+	Notice            *versionNotices      `json:"_notice,omitempty"`
+	Success           bool                 `json:"success"`
+	Authenticated     bool                 `json:"authenticated"`
+	Message           string               `json:"message,omitempty"`
+	Reason            string               `json:"reason,omitempty"`
+	Hint              string               `json:"hint,omitempty"`
+	Refreshed         bool                 `json:"refreshed,omitempty"`
+	TokenValid        bool                 `json:"token_valid,omitempty"`
+	RefreshTokenValid bool                 `json:"refresh_token_valid,omitempty"`
+	ExpiresAt         string               `json:"expires_at,omitempty"`
+	RefreshExpiresAt  string               `json:"refresh_expires_at,omitempty"`
+	CorpID            string               `json:"corp_id,omitempty"`
+	CorpName          string               `json:"corp_name,omitempty"`
+	UserID            string               `json:"user_id,omitempty"`
+	UserName          string               `json:"user_name,omitempty"`
 }
 
 type authStatusDiagnostic struct {
@@ -2091,10 +1957,14 @@ func authStatusRefreshDiagnostic(err error) *authStatusDiagnostic {
 	}
 }
 
-func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData, diagnostic *authStatusDiagnostic, checks ...upgrade.CheckResult) error {
 	resp := authStatusResponse{
 		Success:       true,
 		Authenticated: authenticated,
+	}
+	if len(checks) > 0 {
+		resp.VersionCheck = &checks[0]
+		resp.Notice = noticeForVersion(checks[0], false)
 	}
 
 	if !authenticated {

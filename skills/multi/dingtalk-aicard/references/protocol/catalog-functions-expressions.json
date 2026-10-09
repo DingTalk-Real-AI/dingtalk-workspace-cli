@@ -1,0 +1,623 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-functions-expressions.json",
+  "title": "DingTalk AICard Protocol V0.8 DingTalk expressions and operators",
+  "description": "0 components and 18 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {},
+  "functions": {
+    "add": {
+      "type": "object",
+      "description": "DingTalk extension function. Represents adding two numbers together.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "add"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "sub": {
+      "type": "object",
+      "description": "DingTalk extension function. Represents subtracting two numbers.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "sub"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "mul": {
+      "type": "object",
+      "description": "DingTalk extension function. Multiplies two numbers.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "mul"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "div": {
+      "type": "object",
+      "description": "DingTalk extension function. Divides one number by another.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "div"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "mod": {
+      "type": "object",
+      "description": "DingTalk extension function. Computes the remainder of a numeric division.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "mod"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "eq": {
+      "type": "object",
+      "description": "Tests whether two values are equal. Supports comparison with `null`; use `eq(arrayFind(...), null)` to detect no match.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "eq"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "ne": {
+      "type": "object",
+      "description": "Tests whether two values are unequal. Supports comparison with `null`; use `ne(arrayFind(...), null)` to detect a match.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "ne"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "lt": {
+      "type": "object",
+      "description": "DingTalk extension function. Determines whether number A is less than number B.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "lt"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "lte": {
+      "type": "object",
+      "description": "DingTalk extension function. Determines whether number A is less than or equal to number B.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "lte"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "gt": {
+      "type": "object",
+      "description": "DingTalk extension function. Determines whether number A is greater than number B.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "gt"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "gte": {
+      "type": "object",
+      "description": "DingTalk extension function. Determines whether number A is greater than or equal to number B.",
+      "returnType": "boolean",
+      "properties": {
+        "call": {
+          "const": "gte"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            },
+            "b": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "cond": {
+      "type": "object",
+      "description": "DingTalk extension function. Conditional operator (ternary operator).",
+      "returnType": "any",
+      "properties": {
+        "call": {
+          "const": "cond"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "if": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicBoolean"
+            },
+            "then": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "else": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "else",
+            "if",
+            "then"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "toDouble": {
+      "type": "object",
+      "description": "DingTalk extension function. A function used to convert numbers into floating-point numbers.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "toDouble"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "toLong": {
+      "type": "object",
+      "description": "DingTalk extension function. A function used to convert numbers into integers.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "toLong"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "objectGet": {
+      "type": "object",
+      "description": "Reads an object property by `key`. `value` may be a plain object literal, data binding, or value-function result. A missing property returns `null`.",
+      "returnType": "any",
+      "properties": {
+        "call": {
+          "const": "objectGet"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "key": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "key",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "arrayGet": {
+      "type": "object",
+      "description": "DingTalk extension function. Retrieves an item from an array.",
+      "returnType": "any",
+      "properties": {
+        "call": {
+          "const": "arrayGet"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "index": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicNumber"
+            }
+          },
+          "required": [
+            "index",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "arrayFind": {
+      "type": "object",
+      "description": "DingTalk extension function. Finds a matching item in an array.",
+      "returnType": "any",
+      "properties": {
+        "call": {
+          "const": "arrayFind"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            },
+            "target": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "target",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "getLength": {
+      "type": "object",
+      "description": "DingTalk extension function. Returns the length of an array.",
+      "returnType": "number",
+      "properties": {
+        "call": {
+          "const": "getLength"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "./common-types-basic.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    }
+  },
+  "$defs": {
+    "anyComponent": false,
+    "anyFunction": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/add"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/sub"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/mul"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/div"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/mod"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/eq"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/ne"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/lt"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/lte"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/gt"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/gte"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/cond"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/toDouble"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/toLong"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/objectGet"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/arrayGet"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/arrayFind"
+        },
+        {
+          "$ref": "./catalog-functions-expressions.json#/functions/getLength"
+        }
+      ]
+    }
+  }
+}

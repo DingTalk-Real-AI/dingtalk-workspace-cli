@@ -111,3 +111,65 @@ func TestCrossPlatformCoverageOpenNodesParseRejectsInvalidSources(t *testing.T) 
 		t.Fatal("short digest accepted")
 	}
 }
+
+func TestCrossPlatformCoverageOpenNodesTextAlignmentPlacement(t *testing.T) {
+	for _, title := range []bool{false, true} {
+		for _, value := range []any{"center", nil, false} {
+			block := map[string]any{"type": "paragraph", "verticalAlign": value, "runs": []any{map[string]any{"text": "课程"}}}
+			text := map[string]any{"verticalAlign": "center", "blocks": []any{block}}
+			node := map[string]any{"id": "r1-mon", "type": "shape", "text": text}
+			path := "/source/nodes/0/text"
+			if title {
+				delete(node, "text")
+				node["title"] = map[string]any{"text": text}
+				path = "/source/nodes/0/title/text"
+			}
+			raw, _ := json.Marshal(Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: []map[string]any{node}})
+			for _, wrapped := range []bool{false, true} {
+				input := raw
+				if wrapped {
+					input = append(append([]byte(`{"source":`), raw...), '}')
+				}
+				_, err := Parse(input)
+				if err == nil || !strings.Contains(err.Error(), path+"/blocks/0/verticalAlign") || !strings.Contains(err.Error(), path+"/verticalAlign") || !strings.Contains(err.Error(), "r1-mon") {
+					t.Fatalf("title=%v value=%v: %v", title, value, err)
+				}
+			}
+			after, _ := json.Marshal(Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: []map[string]any{node}})
+			if string(raw) != string(after) {
+				t.Fatal("validation changed source")
+			}
+			delete(block, "verticalAlign")
+			for _, blockType := range []string{"paragraph", "bulletList", "orderedList"} {
+				block["type"] = blockType
+				good, _ := json.Marshal(Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: []map[string]any{node}})
+				parsed, err := Parse(good)
+				if err != nil {
+					t.Fatal(err)
+				}
+				roundtrip, _ := CanonicalJSON(parsed)
+				if string(roundtrip) != string(good) {
+					t.Fatal("valid text was rewritten")
+				}
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOpenNodesPresentationOrderPlacement(t *testing.T) {
+	valid := []byte(`{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"frame","type":"frame","presentationOrder":0},{"id":"shape","type":"shape","zIndex":1}]}`)
+	if _, err := Parse(valid); err != nil {
+		t.Fatalf("valid source rejected: %v", err)
+	}
+
+	invalid := []byte(`{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"shape","type":"shape","presentationOrder":0}]}`)
+	_, err := Parse(invalid)
+	if err == nil {
+		t.Fatal("shape presentationOrder unexpectedly accepted")
+	}
+	for _, want := range []string{"shape", "/source/nodes/0/presentationOrder", "仅允许用于 frame", "zIndex"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err, want)
+		}
+	}
+}

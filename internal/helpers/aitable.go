@@ -2396,9 +2396,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、权限、访问密钥、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、记录评论、应用模式、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、记录评论、应用模式、视图、权限、访问密钥、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -2408,7 +2408,7 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、图表、访问密钥、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
@@ -2429,7 +2429,8 @@ func newAitableCommand() *cobra.Command {
   dws aitable import     [upload|data]                                                  数据导入
   dws aitable attachment [upload|remove]                                                附件管理
   dws aitable template   search                                                         模板搜索
-  dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理`,
+  dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理
+  dws aitable api-key    [create|list|revoke]                                          SQL Sheet 访问密钥管理`,
 		RunE:                       groupRunE,
 		SuggestionsMinimumDistance: 2, // Enable "Did you mean ...?" for typos
 	})
@@ -2491,6 +2492,7 @@ exists=false 时不要猜测 nodeId，可调用 record primary-doc-create 创建
 AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/nodes/{baseId}
 
 注意: base list 仅返回最近访问过的 Base，不是全部 Base。
+空 bases 不表示遍历结束；只要 nextCursor 非空（hasMore=true）就应继续翻页。returnedCount 仅统计当前页；不会从 summary 推测已过滤数量。
 新创建或未在钉钉前端打开过的 Base 可能不会出现在此列表中。
 如需按名称查找表格，请优先使用 base search 命令。`,
 		Example: `  dws aitable base list
@@ -2503,7 +2505,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
 			}
-			return callAitableTool("list_bases", toolArgs)
+			return callAitableCompatibleReceipt(cmd.Context(), "list_bases", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseListCmd, LeafSpec{
@@ -2639,7 +2641,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 		},
 	}
 	DeclareLeafMetadata(baseCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -2782,7 +2784,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 		},
 	}
 	DeclareLeafMetadata(baseCopyCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -2867,7 +2869,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 --fields 参数说明：
 建表时随附创建的初始字段列表，至少包含 1 个字段，单次最多 15 个。若传空数组 []，系统会自动补一个名为"标题"的 primaryDoc 首列。
 建议在此处定义结构清晰的基础字段（如文本、数字、日期、单选等）；
-复杂字段（关联、流转等）建议建表完成后通过 field create 单独添加。
+复杂字段先核对对应 MCP 配置契约；当前生产 field create 的工具 Schema 只显式列出 config.options，其他配置不能仅凭类型枚举认定可用。
 
 每个字段对象包含：
   fieldName（必填）: 字段名称，长度为 1～150 个 UTF-16 字符
@@ -2906,7 +2908,7 @@ config 结构参考：
   unidirectionalLink/bidirectionalLink: {"linkedTableId":"<tableId>","multiple":true} — 反向关联端由系统自动创建，MCP 对外协议无需额外参数
 
 已知边界：
-  formula 字段在当前服务实例上创建会返回 not supported yet，调用前不要假设可用。
+  formula 字段依赖服务端支持；生产 create_fields 的工具 Schema 尚未显式列出 config.formula，不能据创建回执认定表达式已生效。建表的 config 与单独建字段的 config 契约不同；必须独立读回表达式及计算值。
   关联字段创建对底层主键约束严格；即使已传 linkedTableId，也可能因下游返回"主键不存在不允许创建关联字段"而失败。
 
 示例：
@@ -2938,11 +2940,12 @@ config 结构参考：
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["description"] = v
 			}
-			return callMCPTool("create_table", toolArgs)
+			return callAitableCreateWithWait(cmd, "create_table", toolArgs, fields)
 		},
 	}
+	tableCreateCmd.Long += "\n\n" + aitableCreateWaitHelp
 	DeclareLeafMetadata(tableCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -3146,15 +3149,17 @@ config 结构参考：
 	fieldCreateCmd := &cobra.Command{
 		Use:   "create",
 		Short: "创建字段",
-		Long: `在已有表格中批量新增字段。适用于建表后补充一批字段，或一次性添加多个关联、流转等复杂类型字段。
+		Long: `在已有表格中批量新增字段。适用于建表后补充基础字段；复杂字段的可用配置受下方 MCP 契约边界限制。
 单次最多创建 15 个字段；若超过该数量，请拆分多次调用。
 允许部分成功，返回结果会逐项说明每个字段是否创建成功；失败项会返回 reason 说明失败原因。
 系统会按数组顺序依次创建，返回结果顺序与入参保持一致，并逐项标明成功/失败状态。
 
 每个字段对象包含：
   fieldName（必填）: 字段名称，长度为 1～150 个 UTF-16 字符
-  type（必填）: 字段类型（参考见 table create --help），新增类型包括 address（行政区域）、filterUp（查找引用）、lookup（关联引用）
-  config（可选）: 字段配置（参考见 table create --help）
+  type（必填）: text|number|singleSelect|multipleSelect|date|currency|user|department|group|progress|rating|checkbox|attachment|url|richText|telephone|email|idCard|barcode|geolocation|address|primaryDoc|formula|filterUp|lookup|unidirectionalLink|bidirectionalLink|creator|lastModifier|createdTime|lastModifiedTime
+  config（可选）: 当前生产 MCP create_fields 的工具 Schema 只显式列出 options，格式 {"options":[{"name":"选项名"}]}，适用于 singleSelect/multipleSelect。
+    公式 config.formula、数字/日期 formatter、关联 linkedTableId 等非 options 配置尚需核对服务端完整契约与发布；CLI 原样透传 config 不代表网关或服务端已支持。不要重复试写或把回执中的 fieldId 当作配置已生效。
+    字段类型枚举不等于当前 MCP 支持该类型的全部配置；table create 使用独立契约。
   aiConfig（可选）: AI 字段配置，传入后表示创建 AI 字段。
     - outputType（必填）: text|select|multiSelect|number|currency|image|video
     - prompt（必填）: [{"type":"text","value":"..."}, {"type":"fieldRef","fieldId":"..."}]
@@ -3242,15 +3247,16 @@ config 结构参考：
 			if err != nil {
 				return err
 			}
-			return callMCPTool("create_fields", map[string]any{
+			return callAitableCreateWithWait(cmd, "create_fields", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"fields":  fields,
-			})
+			}, fields)
 		},
 	}
+	fieldCreateCmd.Long += "\n\n" + aitableCreateWaitHelp + "\n未使用 --wait 时，success 表示创建回执，不代表字段已可读；verificationStatus=pending/unknown 需只读核对。"
 	DeclareLeafMetadata(fieldCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -3594,14 +3600,11 @@ newFieldName、description、config、aiConfig 至少传入一项。
 				toolArgs["fieldIds"] = parseCSVValues(v)
 			}
 			if v, _ := cmd.Flags().GetString("filters"); v != "" {
-				parsed, err := parseAitableJSONObjectFlag("filters", v, false)
+				parsed, err := aitableprotocol.ParseRecordFilters(v)
 				if err != nil {
-					return err
-				}
-				if err := validateFiltersStructure(parsed, v); err != nil {
 					return apperrors.NewValidation(err.Error())
 				}
-				toolArgs["filters"] = normalizeFilters(parsed)
+				toolArgs["filters"] = parsed
 			}
 			if v, _ := cmd.Flags().GetString("sort"); v != "" {
 				var sortArr []map[string]any
@@ -3950,7 +3953,7 @@ MEDIAN、DISTINCT、DISTINCT_RATIO 等服务端统计动作。
 records 为待创建的记录列表 JSON 数组，单次最多 100 条。
 每条记录包含 cells 字段，key 为 fieldId（通过 table get 获取），value 为写入值。
 
-可选 --client-token 必须是 UUID v4。网络超时后重试必须复用同一 token；
+可选 --client-token 必须是 UUID v4。调用前持久化 token；网络超时或回执丢失后禁止自动重放创建，使用原 baseId/tableId/token 调用 +record-write-result 只读对账；
 收到重复 token 错误时停止重试并查询实际写入结果，不要换新 token 盲目重放。
 
 注意：filterUp（查找引用）和 lookup（关联引用）字段为只读字段，不能通过 record create/update 写入值。
@@ -4011,7 +4014,7 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 					if clientToken != "" {
 						toolArgs["clientToken"] = clientToken
 					}
-					return callMCPTool("create_records", toolArgs)
+					return callAitableCompatibleReceipt(cmd.Context(), "create_records", toolArgs)
 				}
 			}
 			recordsStr, err := resolveRecordsFlag(cmd)
@@ -4034,11 +4037,11 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 			if clientToken != "" {
 				toolArgs["clientToken"] = clientToken
 			}
-			return callMCPTool("create_records", toolArgs)
+			return callAitableCompatibleReceipt(cmd.Context(), "create_records", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -4066,7 +4069,7 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 		Short: "在父记录下创建子记录",
 		Long: `在指定父记录下批量创建子记录，单次最多 100 条。
 records 的 cells 写入格式与 record create 相同，无需手动写入 hierarchy 字段。
-可选 --client-token 必须是 UUID v4；网络超时后重试必须复用同一 token。`,
+可选 --client-token 必须是 UUID v4；调用前持久化 token，超时后禁止自动重放。当前 +record-write-result 不支持子记录模式；需按已有记录 ID 及父子关系只读核实，不能声称子记录创建完成。`,
 		Example: `  dws aitable record create-sub --base-id BASE_ID --table-id TABLE_ID --parent-record-id recParent --records '[{"cells":{"fldTitle":"子任务"}}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "parent-record-id"); err != nil {
@@ -4115,7 +4118,7 @@ records 的 cells 写入格式与 record create 相同，无需手动写入 hier
 		},
 	}
 	DeclareLeafMetadata(recordCreateSubCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID: "aitable", Name: "record_create_sub", CanonicalPath: "aitable.record_create_sub",
@@ -4537,6 +4540,11 @@ records JSON 结构与 record update 完全一致：[{"recordId": "<可选>", "c
 单次最多 100 条（创建 + 更新合计）。
 cells 写入格式见 record create --help（key 是 fieldId，value 按字段类型）。
 
+可选 --client-token 必须是 UUID v4，仅作用于创建分组，建议发送前生成并持久化。
+超时、回执丢失或收到重复 token 错误时，禁止重放整个 upsert（即使使用同一 token）。
+使用原 Base/Table/clientToken 调用 aitable +record-write-result 对账创建分组，
+并按输入 recordId 独立读回更新分组；unknown 不能证明未写入，不要换新 token 补写。
+
 返回 data: {createdRecordIds: [...], updatedRecordIds: [...]}，分别按链路汇总。
 
 Windows 用户注意：如果 --records JSON 很长，请使用 --records-file 参数指定一个 JSON 文件路径。`,
@@ -4564,14 +4572,14 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if len(records) > 100 {
 				return fmt.Errorf("--records 单次最多 100 条，got %d", len(records))
 			}
-			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
-			if err != nil {
-				return err
-			}
 			clientToken, _ := cmd.Flags().GetString("client-token")
 			clientToken = strings.TrimSpace(clientToken)
 			if err := aitableprotocol.ValidateClientToken(clientToken); err != nil {
 				return fmt.Errorf("--client-token: %w", err)
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
 			}
 			toolArgs := map[string]any{
 				"baseId":  baseID,
@@ -5284,6 +5292,9 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			if err != nil {
 				return err
 			}
+			if err := validateAitableViewType(mustGetFlag(cmd, "view-type")); err != nil {
+				return err
+			}
 			toolArgs := map[string]any{
 				"baseId":   baseID,
 				"tableId":  mustGetFlag(cmd, "table-id"),
@@ -5316,7 +5327,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 		},
 	}
 	DeclareLeafMetadata(viewCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -6273,7 +6284,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		},
 	}
 	DeclareLeafMetadata(viewDuplicateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -7147,7 +7158,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		},
 	}
 	DeclareLeafMetadata(formSubmitCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID: "aitable", Name: "form_submit", CanonicalPath: "aitable.form_submit",
@@ -7745,7 +7756,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 		},
 	}
 	DeclareLeafMetadata(dashboardCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -8172,7 +8183,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 		},
 	}
 	DeclareLeafMetadata(chartCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -8747,7 +8758,7 @@ subRoles[].display.* 提供人类可读标签（authLevelLabel / targetTypeLabel
 		},
 	}
 	DeclareLeafMetadata(advpermRoleCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -9055,7 +9066,7 @@ role-get 自行 merge）。
 		},
 	}
 	DeclareLeafMetadata(sectionCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -9390,6 +9401,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	_ = tableCreateCmd.Flags().MarkHidden("table-name")
 	tableCreateCmd.Flags().String("fields", "[]", "建表时随附创建的初始字段 JSON 数组，至少 1 个，单次最多 15 个。若传空数组 []，系统会自动补一个名为'标题'的 primaryDoc 首列")
 	tableCreateCmd.Flags().String("description", "", "数据表的备注说明，可选")
+	declareAitableCreateWaitFlags(tableCreateCmd)
 	tableUpdateCmd.Flags().String("base-id", "", "所属 Base ID（用于定位目标表）(必填)")
 	tableUpdateCmd.Flags().String("table-id", "", "目标 Table ID（通过 base get 获取）(必填)")
 	tableUpdateCmd.Flags().String("name", "", "新表名。不能包含 / \\ ? * [ ] : 等特殊字符；与 --description / --record-name-key 三选一")
@@ -9441,12 +9453,13 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	fieldGetCmd.Flags().String("table-id", "", "Table ID（可通过 base get 获取）(必填)")
 	fieldGetCmd.Flags().String("field-ids", "", "待获取详情的字段 ID 列表（通过 table get 获取），逗号分隔；建议只传真正需要展开完整配置的字段，单次最多 10 个；不传则返回全部字段。建议优先显式传入，以控制返回体大小，避免上下文突增")
 	fieldCreateCmd.Flags().String("base-id", "", "Base ID（通过 base list 获取）(必填)")
+	declareAitableCreateWaitFlags(fieldCreateCmd)
 	fieldCreateCmd.Flags().String("table-id", "", "Table ID（通过 base get 获取）(必填)")
 	fieldCreateCmd.Flags().String("fields", "", "待新增字段列表 JSON 数组，至少包含 1 个字段，单次最多 15 个。系统会按数组顺序依次创建，返回结果顺序与入参保持一致，并逐项标明成功/失败状态。若是单个字段可直接使用 --name/--type/--config")
 	fieldCreateCmd.Flags().String("name", "", "要创建的单字段名称（与 --type 配合使用，替代 --fields）")
 	fieldCreateCmd.Flags().String("field-name", "", "--name 的别名（兼容 LLM 常见误用）")
 	_ = fieldCreateCmd.Flags().MarkHidden("field-name")
-	fieldCreateCmd.Flags().String("type", "", "要创建的单字段类型（需要配合 --name，参考 table create 的内置类型）")
+	fieldCreateCmd.Flags().String("type", "", "单字段类型（配合 --name）：text|number|singleSelect|multipleSelect|date|currency|user|department|group|progress|rating|checkbox|attachment|url|richText|telephone|email|idCard|barcode|geolocation|address|primaryDoc|formula|filterUp|lookup|unidirectionalLink|bidirectionalLink|creator|lastModifier|createdTime|lastModifiedTime；类型枚举不保证配置可创建，生产 MCP Schema 当前只显式列出 config.options")
 	fieldCreateCmd.Flags().String("field-type", "", "--type 的别名（兼容 LLM 常见误用）")
 	_ = fieldCreateCmd.Flags().MarkHidden("field-type")
 	fieldCreateCmd.Flags().String("config", "", "单字段的额外配置 JSON（如 options，配合 --name/--type 使用）")
@@ -9516,7 +9529,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordQueryCmd.Flags().String("table-id", "", "Table ID（通过 base get 获取）(必填)")
 	recordQueryCmd.Flags().String("record-ids", "", "指定要获取的记录 ID 列表，逗号分隔，单次最多 100 个。传入时按 ID 返回，忽略 filters 和 sort。适用于已知 recordId（如关联字段中的 linkedRecordIds）时的精准取数")
 	recordQueryCmd.Flags().String("field-ids", "", "指定要返回的字段 ID 列表，逗号分隔。省略则返回所有字段。建议在字段较多时按需传入，可显著减少响应体积；单次最多 100 个")
-	recordQueryCmd.Flags().String("filters", "", "结构化过滤条件 JSON，不传则返回全部记录（受 limit 限制）")
+	recordQueryCmd.Flags().String("filters", "", aitableprotocol.RecordFiltersHelp+"；不传则返回全部记录（受 limit 限制）")
 	recordQueryCmd.Flags().String("sort", "", "排序条件 JSON 数组，按数组顺序依次生效")
 	recordQueryCmd.Flags().String("query", "", "全文关键词。将对整表内容做文本匹配搜索，并返回符合条件的记录")
 	recordQueryCmd.Flags().String("keyword", "", "全文关键词 (--query 的别名)")
@@ -9553,7 +9566,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCreateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordCreateCmd.Flags().String("records", "", "待创建的记录列表 JSON 数组，单次最多 100 条 (必填)")
 	recordCreateCmd.Flags().String("records-file", "", "从文件读取 records JSON（替代 --records，适合 Windows 或超长数据）")
-	recordCreateCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；超时重试时必须复用同一值")
+	recordCreateCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；调用前持久化，超时后保留原值并只读对账，禁止自动重放")
 	recordCreateCmd.Flags().String("fields", "", "--records 的别名（兼容 LLM 常见误用）")
 	_ = recordCreateCmd.Flags().MarkHidden("fields")
 	recordCreateCmd.Flags().String("cells", "", "单条记录的 cells JSON 对象（自动构造 --records '[{\"cells\":...}]'）")
@@ -9566,7 +9579,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCreateSubCmd.Flags().String("fields", "", "--records 的兼容别名")
 	_ = recordCreateSubCmd.Flags().MarkHidden("fields")
 	recordCreateSubCmd.Flags().String("view-id", "", "可选视图 ID；指定时从该视图读取 hierarchyConfig")
-	recordCreateSubCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；超时重试时必须复用同一值")
+	recordCreateSubCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；调用前持久化，超时后只读核实父子关系，禁止自动重放")
 	recordUpdateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpdateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)")
@@ -9608,7 +9621,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordUpsertCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpsertCmd.Flags().String("records", "", "待 upsert 的记录内容列表 JSON 数组，单次最多 100 条；带 recordId 的走更新，不带的走创建 (必填，可改用 --records-file)")
 	recordUpsertCmd.Flags().String("records-file", "", "从文件读取 records JSON（避免命令行长度限制）；与 --records 互斥，优先级更高")
-	recordUpsertCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键，仅作用于不带 recordId 的创建分组；超时重试时须复用同一值")
+	recordUpsertCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键，仅作用于不带 recordId 的创建分组；调用前持久化，超时后只读对账，禁止自动重放")
 	recordUpsertCmd.Flags().String("fields", "", "--records 的别名 (兼容旧用法)")
 	_ = recordUpsertCmd.Flags().MarkHidden("fields")
 
@@ -10297,7 +10310,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		},
 	}
 	DeclareLeafMetadata(datasourceCreateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -10643,7 +10656,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		RunE: baseCreateCmd.RunE, // 复用 baseCreateCmd 的执行逻辑
 	}
 	DeclareLeafMetadata(createAliasCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -10706,6 +10719,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	infoAliasCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	root.AddCommand(infoAliasCmd)
 	root.AddCommand(newAitablePsqlCommand())
+	root.AddCommand(newAitableAPIKeyCommand())
 	// hint: dws aitable doc search → dws aitable base search
 	root.AddCommand(hintSubCmd("doc", "use: dws aitable base search --query <关键词>"))
 	// NOTE: "create" and "info" are registered as real alias commands above

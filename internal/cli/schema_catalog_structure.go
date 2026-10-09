@@ -81,6 +81,7 @@ var schemaCatalogToolOptionalKeys = []string{
 	"pagination",
 	"positionals",
 	"result",
+	"wait",
 }
 
 var schemaCatalogToolEnums = map[string][]string{

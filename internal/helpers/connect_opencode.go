@@ -92,6 +92,7 @@ func newOpencodeForwarder(bin string, env []string, timeout time.Duration, opts 
 		sessions: sessions,
 	}
 	f.server = newOpencodeServer(bin, env, f.cwd(), opts.Yolo)
+	f.server.privateDiagnostics = opts.PrivateDiagnostics
 	return f
 }
 
@@ -212,16 +213,17 @@ func (f *opencodeForwarder) clearSession(ctx context.Context, convID string) err
 }
 
 type opencodeServer struct {
-	bin        string
-	env        []string
-	workDir    string
-	yolo       bool
-	mu         sync.Mutex
-	baseURL    string
-	password   string
-	cmd        *exec.Cmd
-	done       chan error
-	httpClient *http.Client
+	privateDiagnostics bool
+	bin                string
+	env                []string
+	workDir            string
+	yolo               bool
+	mu                 sync.Mutex
+	baseURL            string
+	password           string
+	cmd                *exec.Cmd
+	done               chan error
+	httpClient         *http.Client
 }
 
 func newOpencodeServer(bin string, env []string, workDir string, yolo bool) *opencodeServer {
@@ -265,6 +267,10 @@ func (s *opencodeServer) ensure(ctx context.Context) (*opencodeHTTPClient, error
 	cmd.Env = s.commandEnv(password)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
+	if s.privateDiagnostics {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("启动 opencode serve 失败：%w", err)
 	}

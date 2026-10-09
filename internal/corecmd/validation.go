@@ -14,6 +14,7 @@
 package corecmd
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strings"
 
@@ -95,7 +96,22 @@ func PrepareCommandTree(root *cobra.Command) error {
 				err = parserErr
 			}
 			// NormalizeValidation also preserves classifications returned by the handler.
-			return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
+			result := apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
+			// pflag 的原生缺失参数类型是权威事实。不要穿透 InvalidValueError
+			// 查找其业务 cause：已知参数的 Value.Set 也可能读取不存在的参数。
+			if _, unknown := parserErr.(*pflag.NotExistError); !unknown {
+				return result
+			}
+			// handler 主动替换的独立分类错误保持原身份；由 parser 派生的
+			// validation 提示则保留，标记仅放在透明的外层。
+			if apperrors.PreserveClassification(err) && !stderrors.Is(result, parserErr) {
+				return result
+			}
+			var validation *apperrors.Error
+			if !stderrors.As(result, &validation) || validation.Category != apperrors.CategoryValidation {
+				return result
+			}
+			return apperrors.MarkUnknownInvocation(result)
 		})
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
@@ -114,7 +130,13 @@ func normalizeCobraValidationError(cmd *cobra.Command, stage cobra.ValidationSta
 	}
 	switch stage {
 	case cobra.ValidationStageArgs:
-		return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_positionals"))
+		result := apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_positionals"))
+		// Args=nil 的根节点失败来自 Cobra Find 的 legacyArgs，它只在
+		// 存在子命令但无法解析输入时失败。自定义 Args 不共享此推断。
+		if cmd != nil && cmd.Args == nil && cmd.Parent() == nil && cmd.HasSubCommands() && !apperrors.PreserveClassification(err) {
+			return apperrors.MarkUnknownInvocation(result)
+		}
+		return result
 	case cobra.ValidationStageRequiredFlags:
 		if apperrors.PreserveClassification(err) {
 			return err

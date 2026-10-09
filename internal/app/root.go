@@ -180,6 +180,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 
 	// Attach timing collector to context for use by child components
 	ctx := WithTimingCollector(context.Background(), timing)
+	ctx = context.WithValue(ctx, versionCheckArgsKey{}, append([]string(nil), os.Args[1:]...))
 	ctx = context.WithValue(ctx, authStatusProcessStartupKey{}, true)
 	ctx = contextWithAgentMetadataSnapshot(ctx, agentMetadata)
 	ctx, resultStore = output.WithResultStore(ctx)
@@ -205,16 +206,16 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		if interrupted, _ := signalState.Outcome(); interrupted != nil {
 			err = interrupted
 		}
+		notice := unknownInvocationNotice(root, err)
 		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(target, result)
+			code, emitErr := emitFailureWithVersionNotice(target, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
 				return
 			}
 		}
-		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(root, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -294,9 +295,9 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			return
 		}
 		var raw apperrors.RawStderrError
+		notice := unknownInvocationNotice(executed, err)
 		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(executed, result)
+			code, emitErr := emitFailureWithVersionNotice(executed, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
@@ -309,7 +310,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			_ = executed.Help()
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
-		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(executed, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -573,7 +574,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	if flag, ok := unknownFlagName(errMsg); ok && flag == "from" {
 		switch cmd.CommandPath() {
 		case "dws chat +search-msg", "dws chat +chat-messages":
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint("--from 在消息查询中含义不明确：按发送者过滤请使用 --sender <姓名|userId|openDingTalkId>；指定时间起点请使用 --start <RFC3339>"),
 				apperrors.WithReason("ambiguous_flag"),
@@ -583,7 +584,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 					"Use --start <RFC3339> together with --end <RFC3339> to set a time range",
 				),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
@@ -593,14 +594,14 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 			hint = fmt.Sprintf("Parameter --%s is ambiguous on %q and cannot be normalized safely; choose the intended explicit flag from --help.", flag, cmd.CommandPath())
 			reason = "ambiguous_flag"
 		}
-		return apperrors.NewValidation(
+		return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 			msgWithTail,
 			apperrors.WithHint(hint),
 			apperrors.WithReason(reason),
 			apperrors.WithCause(err),
 			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-		)
+		))
 	}
 
 	// Common flag aliases and suggestions
@@ -619,21 +620,21 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 
 	if strings.Contains(errMsg, "unknown flag:") {
 		fix := cmdutil.SuggestFlagFix(cmd, err)
 		if fix.Suggestion != "" {
-			return apperrors.NewValidation(
+			result := apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(fix.Suggestion),
 				apperrors.WithReason("unknown_flag"),
@@ -641,6 +642,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
 			)
+			if fix.HasCorrection {
+				return apperrors.MarkLocalRecovery(result)
+			}
+			return result
 		}
 	}
 
@@ -688,16 +693,26 @@ func unknownFlagName(errMsg string) (string, bool) {
 	return flag, flag != ""
 }
 
-func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
+func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error, notices ...*versionNotices) error {
 	var raw apperrors.RawStderrError
 	if stderrors.As(err, &raw) {
 		_, writeErr := fmt.Fprintln(stderr, raw.RawStderr())
 		return writeErr
 	}
 	if wantsJSONErrors(root) {
+		if len(notices) > 0 && notices[0] != nil {
+			return apperrors.PrintJSONWithNotice(stderr, err, notices[0])
+		}
 		return apperrors.PrintJSON(stderr, err)
 	}
-	return apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root))
+	if writeErr := apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root)); writeErr != nil {
+		return writeErr
+	}
+	if len(notices) > 0 && notices[0] != nil {
+		_, writeErr := fmt.Fprintln(stderr, notices[0].Update.Message)
+		return writeErr
+	}
+	return nil
 }
 
 // resolveVerbosity derives the error verbosity level from the root command's flags.
@@ -904,6 +919,9 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	cleanup := func() {
 		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
 		discardRootVersionInvocationFlag(root, versionRequested)
+		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
+			resetAuthExchangeInvocationFlags(exchange)
+		}
 	}
 
 	// Cobra handles --help before PersistentPreRunE. Wrap the inherited help
@@ -977,7 +995,12 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// boundary instead.
 		Version: "",
 		RunE:    runRootHelp,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			defer func() {
+				if preRunErr != nil {
+					resetAuthExchangeInvocationFlags(cmd)
+				}
+			}()
 			rootVersionShortCircuit = false
 			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
 			if rootVersionRequested && cmd == cmd.Root() {
@@ -993,7 +1016,16 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// bound flag's value and Changed bit after ExecuteC returns, so consume
 			// credential flags at the execution boundary before any validation or
 			// hook can observe state left by a previous invocation.
-			consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			if isAuthExchangeCommand(cmd) {
+				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
+				// 清除前次调用安装的全局凭据；本次 flags 在 RunE 或早退时清理。
+				if credentialInvocationSeen {
+					authpkg.SetClientCredentials("", "")
+				}
+				credentialInvocationSeen = true
+			} else {
+				consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			}
 
 			// A public root may be reused by embedding callers through multiple
 			// ExecuteC invocations. Begin each invocation with an empty result
@@ -1107,6 +1139,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.RunE = func(cmd *cobra.Command, args []string) error {
 		if rootVersionRequested {
 			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s version %s\n", cmd.Name(), Version())
+			if err == nil {
+				// 保留版本字符串的 stdout 契约，检查结果走诊断通道。
+				_ = writeVersionCheck(cmd.ErrOrStderr(), commandVersionCheck(cmd, false))
+			}
 			return err
 		}
 		return rootRunE(cmd, args)
@@ -1396,13 +1432,18 @@ func newVersionCommand() *cobra.Command {
 			goVer := "1.24+"
 
 			arch := "MCP Static Endpoint Mode"
+			check := commandVersionCheck(cmd, false)
 
 			if wantJSON {
 				payload := map[string]any{
-					"version":      ver,
-					"edition":      editionName,
-					"architecture": arch,
-					"go":           goVer,
+					"version":       ver,
+					"edition":       editionName,
+					"architecture":  arch,
+					"go":            goVer,
+					"version_check": check,
+				}
+				if notice := noticeForVersion(check, false); notice != nil {
+					payload["_notice"] = notice
 				}
 				if bt != "unknown" {
 					payload["build"] = bt
@@ -1424,6 +1465,7 @@ func newVersionCommand() *cobra.Command {
 			}
 			fmt.Fprintf(w, "%-16s%s\n", "Architecture:", arch)
 			fmt.Fprintf(w, "%-16s%s\n", "Go:", goVer)
+			_ = writeVersionCheck(cmd.ErrOrStderr(), check)
 			return nil
 		},
 	}
@@ -1456,7 +1498,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 // hideNonDirectRuntimeCommands) and reservedCommands (the plugin-override
 // blocklist) derive from this single set so they cannot drift apart.
 var builtinCommandNames = map[string]bool{
-	"auth": true, "api": true, "audit": true, "cache": true, "config": true,
+	"aicard": true, "auth": true, "api": true, "audit": true, "cache": true, "config": true,
 	"doctor": true, "event": true, "completion": true, "skill": true,
 	"plugin": true, "profile": true, "recovery": true, "version": true, "help": true,
 	"schema": true, "mcp": true, "upgrade": true,
@@ -1697,6 +1739,8 @@ func installOutputSinkRunBoundary(cmd *cobra.Command) {
 	}
 	openSinkAndRun := func(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
+			// 输出初始化也可能早退；它必须处于一次性授权参数的清理边界内。
+			defer resetAuthExchangeInvocationFlags(cmd)
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}

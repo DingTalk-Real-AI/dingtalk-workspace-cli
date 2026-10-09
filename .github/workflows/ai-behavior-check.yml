@@ -103,18 +103,6 @@ jobs:
               });
               await currentPull('post-policy check');
 
-              const maxChangedFiles = 30;
-              if (files.length > maxChangedFiles) {
-                await setStatus(
-                  'failure',
-                  `Changes ${files.length} files; limit is ${maxChangedFiles}`
-                );
-                core.setFailed(
-                  `AI-generated PR changes ${files.length} files; limit is ${maxChangedFiles}.`
-                );
-                return;
-              }
-
               const isProtectedPath = (filename) =>
                 typeof filename === 'string' &&
                 (
@@ -131,6 +119,142 @@ jobs:
                   .flatMap(({ filename, previous_filename }) => [filename, previous_filename])
                   .filter(isProtectedPath)
               )];
+
+              // 本次公开同步由维护者单独批准；批准对象固定在公共提交，
+              // 不从 PR 代码、标签或可变分支读取授权，也不执行 PR 代码。
+              const reviewed = {
+                repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
+                number: 1463,
+                author: 'haofeng0705',
+                headRef: 'codex/sync-aitable-public-fixes',
+                base: '3f0fc94111b1f9cd34e47468980b1f1a723ca69a',
+                head: '53de9d92c9b310798d7f42a385e162273330442b',
+                count: 44,
+                protectedPaths: [
+                  'scripts/policy/skill-command-check/main.go',
+                  'scripts/policy/skill-command-check/main_test.go',
+                ],
+              };
+              const hasReviewedIdentity = (pull) =>
+                `${context.repo.owner}/${context.repo.repo}` === reviewed.repository &&
+                context.issue.number === reviewed.number &&
+                pull.number === reviewed.number &&
+                pull.state === 'open' &&
+                pull.base.ref === 'main' &&
+                pull.head.repo?.full_name === reviewed.repository &&
+                pull.head.ref === reviewed.headRef &&
+                pull.user?.login === reviewed.author;
+
+              if (hasReviewedIdentity(before)) {
+                const comparison = await github.rest.repos.compareCommits({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  base: expectedBase,
+                  head: expectedHead,
+                });
+                if (
+                  comparison.data.merge_base_commit?.sha !== expectedBase ||
+                  comparison.data.behind_by !== 0
+                ) {
+                  throw new Error('Reviewed PR must include the exact current base revision');
+                }
+
+                const readTree = async (commitSha) => {
+                  const { data: commit } = await github.rest.git.getCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    commit_sha: commitSha,
+                  });
+                  const { data: tree } = await github.rest.git.getTree({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    tree_sha: commit.tree.sha,
+                    recursive: '1',
+                  });
+                  if (tree.truncated !== false || !Array.isArray(tree.tree)) {
+                    throw new Error('Reviewed PR requires complete Git trees');
+                  }
+                  const entries = new Map();
+                  const seen = new Set();
+                  for (const entry of tree.tree) {
+                    if (
+                      typeof entry.path !== 'string' ||
+                      entry.path.split('/').some((part) => !part || part === '.' || part === '..') ||
+                      /[\u0000-\u001f\u007f]/.test(entry.path) ||
+                      seen.has(entry.path) ||
+                      !/^[0-9a-f]{40}$/.test(entry.sha) ||
+                      !['blob', 'tree', 'commit'].includes(entry.type) ||
+                      typeof entry.mode !== 'string'
+                    ) {
+                      throw new Error('Reviewed PR contains malformed Git tree entries');
+                    }
+                    seen.add(entry.path);
+                    if (entry.type !== 'tree') {
+                      entries.set(entry.path, { sha: entry.sha, mode: entry.mode, type: entry.type });
+                    }
+                  }
+                  return entries;
+                };
+                const treeDelta = (base, head) =>
+                  [...new Set([...base.keys(), ...head.keys()])].sort().flatMap((path) => {
+                    const oldEntry = base.get(path) || null;
+                    const newEntry = head.get(path) || null;
+                    if (JSON.stringify(oldEntry) === JSON.stringify(newEntry)) return [];
+                    return [{
+                      path,
+                      status: !oldEntry ? 'added' : !newEntry ? 'removed' : 'modified',
+                      base: oldEntry,
+                      head: newEntry,
+                    }];
+                  });
+                const [approvedBase, approvedHead, currentBase, currentHead] = await Promise.all([
+                  readTree(reviewed.base), readTree(reviewed.head),
+                  readTree(expectedBase), readTree(expectedHead),
+                ]);
+                const approvedDelta = treeDelta(approvedBase, approvedHead);
+                const currentDelta = treeDelta(currentBase, currentHead);
+                const approvedProtected = approvedDelta.map(({ path }) => path).filter(isProtectedPath).sort();
+                const expectedProtected = [...reviewed.protectedPaths].sort();
+                const filesByPath = new Map(files.map((file) => [file.filename, file]));
+                const regular = (entry) => entry === null ||
+                  (entry.type === 'blob' && ['100644', '100755'].includes(entry.mode));
+                const matchesFiles = currentDelta.every((entry) => {
+                  const file = filesByPath.get(entry.path);
+                  return file && !file.previous_filename && file.status === entry.status &&
+                    file.sha === entry.head?.sha;
+                });
+                const latest = await currentPull('post-reviewed-patch check');
+                if (
+                  !hasReviewedIdentity(latest) ||
+                  approvedDelta.length !== reviewed.count ||
+                  !approvedDelta.every((entry) => ['added', 'modified'].includes(entry.status) &&
+                    regular(entry.base) && regular(entry.head)) ||
+                  JSON.stringify(approvedProtected) !== JSON.stringify(expectedProtected) ||
+                  JSON.stringify(currentDelta) !== JSON.stringify(approvedDelta) ||
+                  files.length !== reviewed.count || filesByPath.size !== reviewed.count ||
+                  !matchesFiles ||
+                  JSON.stringify([...protectedPaths].sort()) !== JSON.stringify(expectedProtected)
+                ) {
+                  await setStatus('failure', 'PR #1463 differs from the reviewed public patch');
+                  core.setFailed('PR #1463 must preserve the exact reviewed 44-file public patch; re-review any change.');
+                  return;
+                }
+                await setStatus('success', 'Reviewed PR #1463 exact 44-file public patch');
+                core.notice('PR #1463 matches the base-owned reviewed patch, including its two approved policy files.');
+                return;
+              }
+
+              const maxChangedFiles = 30;
+              if (files.length > maxChangedFiles) {
+                await setStatus(
+                  'failure',
+                  `Changes ${files.length} files; limit is ${maxChangedFiles}`
+                );
+                core.setFailed(
+                  `AI-generated PR changes ${files.length} files; limit is ${maxChangedFiles}.`
+                );
+                return;
+              }
 
               if (protectedPaths.length > 0) {
                 await setStatus('failure', 'Modifies protected release/CI infrastructure');

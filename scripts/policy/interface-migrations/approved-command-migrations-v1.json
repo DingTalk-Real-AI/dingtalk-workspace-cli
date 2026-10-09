@@ -104,6 +104,22 @@
     {
       "kind": "schema_availability_hardening",
       "legacy": {
+        "command": "dws chat thread promote",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.promote_message_to_thread",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Retire chat thread promote from Agent Schema and public help while preserving a hidden historical argv command that fails closed with send/reply alternatives."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
         "command": "dws devapp +event-list",
         "before": {"present": true, "runnable": true},
         "after": {"present": true, "runnable": true, "hidden": true}

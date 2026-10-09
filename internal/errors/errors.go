@@ -59,6 +59,8 @@ const (
 //	5  internal       （CategoryInternal 与兜底：非结构化错误、panic 收敛均归 5）
 //	6  discovery      （CategoryDiscovery）
 //	7  partial_failure（部分成功专用码，见 ExitCodePartial）
+//	8  wait           （--wait 观察到失败终态的专用码，见 internal/output
+//	                   的 exitCodeWait；不设 Category，仅经统一信封产出）
 //
 // ExitCodePartial is the partial-result exit code shared with internal/output.
 // It is not returned for CategoryPartial errors because they lack the typed
@@ -448,6 +450,11 @@ func ExitCode(err error) int {
 // byte-compatible for commands whose rollout is legacy_only or dual_validate.
 // Unified commands publish outcome/type/subtype through internal/output only.
 func PrintJSON(w io.Writer, err error) error {
+	return PrintJSONWithNotice(w, err, nil)
+}
+
+// PrintJSONWithNotice preserves the legacy error shape while adding a system notice.
+func PrintJSONWithNotice(w io.Writer, err error, notice any) error {
 	errorPayload := map[string]any{
 		"code":     ExitCode(err),
 		"category": category(err),
@@ -529,6 +536,9 @@ func PrintJSON(w io.Writer, err error) error {
 		}
 	}
 	payload := map[string]any{"error": errorPayload}
+	if notice != nil {
+		payload["_notice"] = notice
+	}
 
 	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {

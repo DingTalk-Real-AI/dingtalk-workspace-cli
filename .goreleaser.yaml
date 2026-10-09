@@ -18,6 +18,11 @@ builds:
     env:
       - CGO_ENABLED=1
       - GOTOOLCHAIN=go1.25.9
+      # osxcross defaults the x86_64 deployment target to 10.13, where ld64
+      # emits __DATA_CONST without SG_READ_ONLY and current dyld refuses the
+      # binary before main() (#1441). 11.0 matches the arm64 toolchain floor
+      # and Go's own minimum macOS version.
+      - MACOSX_DEPLOYMENT_TARGET=11.0
       - CC_darwin_amd64=o64-clang
       - CXX_darwin_amd64=o64-clang++
       - CC_darwin_arm64=oa64-clang

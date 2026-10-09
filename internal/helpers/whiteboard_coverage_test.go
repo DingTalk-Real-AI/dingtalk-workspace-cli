@@ -74,6 +74,7 @@ func TestCrossPlatformCoverageLoadWhiteboardUpdateFileRejectsInvalidInputs(t *te
 		{name: "nodes missing", content: `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1"}}`},
 		{name: "nodes malformed", content: `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[}}`},
 		{name: "node primitive", content: `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[1]}}`},
+		{name: "shape presentation order", content: `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"shape","type":"shape","presentationOrder":0}]}}`},
 		{name: "append empty", content: `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`},
 		{name: "unknown field", content: `{"unknown":true}`},
 	}
@@ -98,6 +99,11 @@ func TestCrossPlatformCoverageLoadWhiteboardUpdateFileRejectsInvalidInputs(t *te
 		`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`))
 	if err != nil || !input.Overwrite || nodes != "[]" {
 		t.Fatalf("input=%#v nodes=%q err=%v", input, nodes, err)
+	}
+	input, nodes, err = loadWhiteboardUpdateFile(writeWhiteboardFixture(t,
+		`{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"frame","type":"frame","presentationOrder":0}]}}`))
+	if err != nil || input.Overwrite || !strings.Contains(nodes, `"presentationOrder":0`) {
+		t.Fatalf("frame input=%#v nodes=%q err=%v", input, nodes, err)
 	}
 }
 

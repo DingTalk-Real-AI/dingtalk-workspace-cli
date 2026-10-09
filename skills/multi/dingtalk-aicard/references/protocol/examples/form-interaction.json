@@ -1,0 +1,209 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "open-form",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "open-form",
+      "path": "/",
+      "value": {
+        "form": {
+          "name": "",
+          "dept": [],
+          "agreed": false,
+          "notify": false,
+          "count": 1,
+          "images": []
+        }
+      }
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-form",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "name",
+            "dept-title",
+            "dept",
+            "agreed",
+            "notify-row",
+            "count-title",
+            "count",
+            "images-title",
+            "images",
+            "submit"
+          ]
+        },
+        {
+          "id": "name",
+          "component": "TextField",
+          "label": "Name",
+          "value": {
+            "path": "/form/name"
+          }
+        },
+        {
+          "id": "dept-title",
+          "component": "Text",
+          "text": "Department"
+        },
+        {
+          "id": "dept",
+          "component": "ChoicePicker",
+          "label": "Choose a department",
+          "variant": "mutuallyExclusive",
+          "options": [
+            {
+              "label": "Engineering",
+              "value": "dev"
+            },
+            {
+              "label": "Design",
+              "value": "design"
+            }
+          ],
+          "value": {
+            "path": "/form/dept"
+          }
+        },
+        {
+          "id": "agreed",
+          "component": "CheckBox",
+          "label": "Agree to submit",
+          "value": {
+            "path": "/form/agreed"
+          },
+          "action": {
+            "event": {
+              "name": "agreement_changed",
+              "context": {
+                "agreed": {
+                  "path": "/form/agreed"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "notify-row",
+          "component": "Row",
+          "align": "center",
+          "children": [
+            "notify-label",
+            "notify"
+          ]
+        },
+        {
+          "id": "notify-label",
+          "component": "Text",
+          "text": "Receive progress updates",
+          "weight": 1
+        },
+        {
+          "id": "notify",
+          "component": "Switch",
+          "value": {
+            "path": "/form/notify"
+          },
+          "action": {
+            "event": {
+              "name": "notification_changed",
+              "context": {
+                "notify": {
+                  "path": "/form/notify"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "count-title",
+          "component": "Text",
+          "text": "Quantity"
+        },
+        {
+          "id": "count",
+          "component": "NumberInput",
+          "label": "Quantity",
+          "placeholder": "Enter a number",
+          "value": {
+            "path": "/form/count"
+          }
+        },
+        {
+          "id": "images-title",
+          "component": "Text",
+          "text": "Attachments"
+        },
+        {
+          "id": "images",
+          "component": "ImageUpload",
+          "label": "Upload images",
+          "value": {
+            "path": "/form/images"
+          },
+          "action": {
+            "event": {
+              "name": "image_uploaded",
+              "context": {
+                "images": {
+                  "path": "/form/images"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "submit",
+          "component": "Button",
+          "child": "submit-label",
+          "variant": "primary",
+          "checks": [
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/name"
+                  }
+                }
+              },
+              "message": "Enter a name"
+            },
+            {
+              "condition": {
+                "path": "/form/agreed"
+              },
+              "message": "Agree before submitting"
+            }
+          ],
+          "action": {
+            "event": {
+              "name": "submit",
+              "context": {
+                "form": {
+                  "path": "/form"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "submit-label",
+          "component": "Text",
+          "text": "Submit"
+        }
+      ]
+    }
+  }
+]

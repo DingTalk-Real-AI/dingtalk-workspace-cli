@@ -19,11 +19,94 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
+
+func TestCrossPlatformCoverageAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1.0/assistant/skills/upload" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get(AuthHeader); got != "access-token" {
+			t.Errorf("auth header = %q", got)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("ParseMultipartForm() error = %v", err)
+			return
+		}
+		if got := r.FormValue("agentUuid"); got != "" {
+			t.Errorf("upload unexpectedly bound agentUuid = %q", got)
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("FormFile() error = %v", err)
+			return
+		}
+		defer file.Close()
+		body, _ := io.ReadAll(file)
+		if header.Filename != "skill.zip" || !bytes.Equal(body, []byte("zip-bytes")) {
+			t.Errorf("file name=%q body=%q", header.Filename, body)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"fileUrl":"https://signed.example/temp"}`)
+	}))
+	defer server.Close()
+	client := NewClient("access-token", "https://api-deap.dingtalk.com")
+	testTransport := server.Client().Transport
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		clone := req.Clone(req.Context())
+		clone.URL.Scheme = "https"
+		clone.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		return testTransport.RoundTrip(clone)
+	})
+	response, err := client.UploadMultipart(context.Background(), MultipartUploadRequest{
+		Path:      "/v1.0/assistant/skills/upload",
+		FieldName: "file",
+		FileName:  "skill.zip",
+		File:      bytes.NewBufferString("zip-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("UploadMultipart() error = %v", err)
+	}
+	if response.StatusCode != http.StatusCreated || string(response.Body) != `{"fileUrl":"https://signed.example/temp"}` {
+		t.Fatalf("UploadMultipart() response = %+v", response)
+	}
+}
+
+func TestCrossPlatformCoverageAPIClientUploadMultipartSupportsScopedBearerCredential(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer sk-upload" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if got := r.Header.Get(AuthHeader); got != "" {
+			t.Errorf("%s must be empty, got %q", AuthHeader, got)
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := NewClient("sk-upload", "https://api-deap.dingtalk.com")
+	testTransport := server.Client().Transport
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		clone := req.Clone(req.Context())
+		clone.URL.Scheme = "https"
+		clone.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		return testTransport.RoundTrip(clone)
+	})
+	_, err := client.UploadMultipart(context.Background(), MultipartUploadRequest{
+		Path:       "/v1.0/assistant/skills/upload",
+		FileName:   "skill.zip",
+		File:       bytes.NewBufferString("zip-bytes"),
+		BearerAuth: true,
+	})
+	if err != nil {
+		t.Fatalf("UploadMultipart() error = %v", err)
+	}
+}
 
 func TestNewClient_DefaultBaseURL(t *testing.T) {
 	c := NewClient("tok", "")

@@ -379,7 +379,7 @@ func decryptWithAvailableDEK(service string, data []byte) (string, []byte, error
 		}
 		plaintext, err := decryptData(data, key)
 		if err != nil {
-			return "", nil, fmt.Errorf("%w: file-DEK cannot decrypt existing entry", ErrCiphertextKeyMismatch)
+			return "", nil, fileDEKCiphertextMismatchError()
 		}
 		return plaintext, key, nil
 	}

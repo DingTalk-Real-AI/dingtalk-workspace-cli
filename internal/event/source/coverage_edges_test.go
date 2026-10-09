@@ -123,6 +123,10 @@ func TestCrossPlatformCoveragePersonalRunAttemptAndFrameFailures(t *testing.T) {
 	if err := s.handleFrame(clientConn, dfRaw, func(*dwsevent.RawEvent) {}); !isRetryablePersonalError(err) {
 		t.Fatalf("ack write error = %v", err)
 	}
+	dfRaw, _ = json.Marshal(payload.DataFrame{Type: "SYSTEM", Headers: payload.DataFrameHeader{"topic": "ping"}})
+	if err := s.handleFrame(clientConn, dfRaw, func(*dwsevent.RawEvent) { t.Error("system frame emitted") }); !isRetryablePersonalError(err) {
+		t.Fatalf("system ack write error = %v", err)
+	}
 	_ = peer.Close()
 
 	wsEndpoint := ""

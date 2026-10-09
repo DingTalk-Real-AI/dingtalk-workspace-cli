@@ -5,12 +5,12 @@ package aitable
 
 import (
 	"fmt"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
-	"math"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -35,7 +35,7 @@ var RecordBulkPatch = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "patch", Type: shortcut.FlagString, Desc: "要合并到每条记录的非空 cells JSON 对象", Required: true},
-		{Name: "filters", Type: shortcut.FlagString, Desc: "query_records filters JSON（选择条件之一）"},
+		{Name: "filters", Type: shortcut.FlagString, Desc: aitableprotocol.RecordFiltersHelp + "（选择条件之一）"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（选择条件之一）"},
 		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "明确的 recordId 列表（选择条件之一）"},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "可选视图上下文"},
@@ -135,90 +135,9 @@ func parseBulkPatchFilters(raw string) (map[string]any, error) {
 }
 
 func parseRecordQueryFilters(raw string) (map[string]any, error) {
-	filters, err := parseJSONObject("filters", raw)
+	filters, err := aitableprotocol.ParseRecordFilters(raw)
 	if err != nil {
-		return nil, err
-	}
-	if !bulkPatchFilterConstrictsScope(filters, true) {
-		return nil, apperrors.NewValidation("--filters 必须是包含非空 record query 筛选条件的 JSON 对象，根 operator 必须为 and/or；View 的 from_now/relative/exact 日期 Scheme 不能用于记录查询")
-	}
-	if err := validateRecordQueryDateFilterValues(filters); err != nil {
 		return nil, apperrors.NewValidation(err.Error())
 	}
 	return filters, nil
-}
-
-func validateRecordQueryDateFilterValues(filter map[string]any) error {
-	operator, _ := filter["operator"].(string)
-	operator = strings.ToLower(strings.TrimSpace(operator))
-	operands, _ := filter["operands"].([]any)
-	if operator == "and" || operator == "or" {
-		for index, raw := range operands {
-			child, _ := raw.(map[string]any)
-			if err := validateRecordQueryDateFilterValues(child); err != nil {
-				return fmt.Errorf("filters operand %d: %w", index, err)
-			}
-		}
-		return nil
-	}
-	switch operator {
-	case "date_eq", "before", "after", "not_before", "not_after":
-		if len(operands) != 2 {
-			return nil
-		}
-		switch value := operands[1].(type) {
-		case string:
-			if strings.TrimSpace(value) != "" {
-				return nil
-			}
-		case float64:
-			if !math.IsNaN(value) && !math.IsInf(value, 0) && value == math.Trunc(value) {
-				return nil
-			}
-		}
-		return fmt.Errorf("record query operator %s requires a date/RFC3339 string or Unix-millisecond JSON number; relative/exact objects belong to view update filter", operator)
-	}
-	return nil
-}
-
-func bulkPatchFilterConstrictsScope(value any, root bool) bool {
-	filter, ok := value.(map[string]any)
-	if !ok {
-		return false
-	}
-	operator, ok := filter["operator"].(string)
-	if !ok {
-		return false
-	}
-	operator = strings.ToLower(strings.TrimSpace(operator))
-	if operator == "" {
-		return false
-	}
-	operands, ok := filter["operands"].([]any)
-	if !ok || len(operands) == 0 {
-		return false
-	}
-	if root && operator != "and" && operator != "or" {
-		return false
-	}
-	if operator == "and" || operator == "or" {
-		for _, operand := range operands {
-			if !bulkPatchFilterConstrictsScope(operand, false) {
-				return false
-			}
-		}
-		return true
-	}
-	switch operator {
-	case "eq", "ne", "gt", "lt", "gte", "lte", "contain", "exclusive",
-		"exist", "un_exist", "any_of", "all_of", "none_of", "date_eq",
-		"before", "after", "not_before", "not_after":
-	default:
-		return false
-	}
-	fieldID, ok := operands[0].(string)
-	if !ok || strings.TrimSpace(fieldID) == "" {
-		return false
-	}
-	return (operator == "exist" || operator == "un_exist") || len(operands) >= 2
 }

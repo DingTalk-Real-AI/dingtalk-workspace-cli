@@ -3454,6 +3454,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	for _, required := range []string{
 		"CGO_ENABLED=1",
 		"GOTOOLCHAIN=go1.25.9",
+		"MACOSX_DEPLOYMENT_TARGET=11.0",
 		"CC_darwin_amd64=o64-clang",
 		"CC_darwin_arm64=oa64-clang",
 		"CC_linux_amd64=/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17",

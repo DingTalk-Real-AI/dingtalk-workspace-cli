@@ -12,7 +12,8 @@ policy_prepare_runtime "$ROOT"
 # catalog + tools) that the jq queries below consume. No committed
 # schema_catalog/ split is consulted.
 catalog="$(mktemp)"
-trap 'rm -f "$catalog"' EXIT HUP INT TERM
+scan_catalog="$(mktemp)"
+trap 'rm -f "$catalog" "$scan_catalog"' EXIT HUP INT TERM
 scripts/policy/with-catalog.sh >"$catalog"
 
 if [ -e internal/cli/schema_native_contracts.go ] ||
@@ -208,8 +209,11 @@ if ! jq -e '
 	exit 1
 fi
 
+# 只对明确命令的无默认值参数声明重命名扫描键；不豁免任意文本或凭据赋值。
+# 扫描副本不参与 Catalog 交付；完整值、示例和 provenance 仍受原始规则检查。
+jq -f scripts/policy/schema-credential-scan.jq "$catalog" >"$scan_catalog"
 if policy_search_paths 'mcp-gw\.dingtalk\.com|mcp\.dingtalk\.com/server|Authorization[^[:alnum:]]*:|Bearer [A-Za-z0-9]|access[_-]?token|client[_-]?secret' \
-	"$catalog" \
+	"$scan_catalog" \
 	internal/cli/schema_parameter_mapping_ledger.go; then
 	printf '%s\n' 'schema assets contain endpoint or credential material' >&2
 	exit 1

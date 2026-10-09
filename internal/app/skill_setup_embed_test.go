@@ -77,6 +77,8 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		filepath.Join("dingtalk-event", "SKILL.md"),
 		filepath.Join("dingtalk-event", "references", "event-oa.md"),
 		filepath.Join("dingtalk-shared", "SKILL.md"),
+		filepath.Join("dingtalk-tag", "SKILL.md"),
+		filepath.Join("dingtalk-tag", "references", "manage-and-connect.md"),
 		filepath.Join("dingtalk-misc", "SKILL.md"),
 		filepath.Join("dingtalk-misc", "references", "pat.md"),
 		filepath.Join("dingtalk-misc", "references", "contract.md"),
@@ -94,6 +96,11 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		t.Fatal("embedded misc must not retain the folded personal Event reference")
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("stat embedded misc event reference: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dingtalk-misc", "references", "deap", "manage.md")); err == nil {
+		t.Fatal("embedded misc must not retain duplicated digital employee references")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat embedded misc digital employee reference: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "schema-hints")); err == nil {
 		t.Fatal("embedded multi skill must not contain build-only schema-hints")

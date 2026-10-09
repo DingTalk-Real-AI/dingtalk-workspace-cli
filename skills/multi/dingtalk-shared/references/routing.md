@@ -12,7 +12,9 @@
 | 群聊、消息、机器人、Webhook、群成员 | [`dingtalk-chat`](../../dingtalk-chat/SKILL.md) |
 | 实时监听未来 IM 消息、reaction、已读、撤回、群生命周期或 OA 审批变化 | [`dingtalk-event`](../../dingtalk-event/SKILL.md) |
 | 已有 userId 的用户详情、部门、角色、组织关系 | [`dingtalk-contact`](../../dingtalk-contact/SKILL.md) |
-| 文档正文读取、创建、更新、块编辑、媒体和导出 | [`dingtalk-doc`](../../dingtalk-doc/SKILL.md) |
+| 白板文件、独立白板、保存到白板、独立白板课表/流程图及内容修改 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`whiteboard.md`](../../dingtalk-misc/references/whiteboard.md)（`dws whiteboard`） |
+| 文档正文读取、创建、更新、块编辑、媒体、导出，以及文档内白板卡片容器的插入、定位、删除 | [`dingtalk-doc`](../../dingtalk-doc/SKILL.md) |
+| 已有承载文档 nodeId 和 partId 的文档内嵌白板图形内容读写 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`whiteboard.md`](../../dingtalk-misc/references/whiteboard.md)（`dws whiteboard --node ... --part-id ...`） |
 | 文件搜索、上传下载、复制移动、重命名、权限 | [`dingtalk-drive`](../../dingtalk-drive/SKILL.md) |
 | 邮件查询、搜索、读取和发送 | [`dingtalk-mail`](../../dingtalk-mail/SKILL.md) |
 | 听记列表、摘要、转写、关键字和标题 | [`dingtalk-minutes`](../../dingtalk-minutes/SKILL.md) |
@@ -38,6 +40,8 @@ reference，不要加载全部长尾产品文档。
 - 不用多组语义查询模拟完整枚举，也不用产品列表扫描模拟语义召回。能否声称完整只由实际结果中的分页与完整性字段决定。
 
 ## 高频边界
+
+- 白板文件/独立白板与文档内嵌白板是互不转换的目标。前者走 `whiteboard`（`dingtalk-misc`）；后者的卡片容器插入、定位、删除走 `doc whiteboard`，只有已知承载文档 `nodeId + partId` 后才用 `whiteboard` 读写 part 内图形内容。文档内嵌目标缺少 `partId` 时停止并补齐，禁止改成独立白板。
 
 - `aisearch person`：按姓名、职责、上下级、工号或手机号线索语义找人；`contact`：
   完整手机号精确反查，或拿到 userId 后查详情、部门和角色；`mail`：邮件内容与收发。

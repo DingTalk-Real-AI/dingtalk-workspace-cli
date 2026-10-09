@@ -464,6 +464,41 @@ func TestCrossPlatformCoverageDriveWikiReviewedContractCorrections(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageChatPromoteRetirementRequiresMigrationAuthorization(t *testing.T) {
+	const toolPath = "chat/chat.promote_message_to_thread"
+	wantTransition := interfaceTransition{
+		OldMode: interfaceModeMCP,
+		OldRef:  `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		NewMode: interfaceModeMCP,
+	}
+	transition, ok := reviewedAvailabilityInterfaceRetirements[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed availability interface retirement for %s", toolPath)
+	}
+	if transition != wantTransition {
+		t.Fatalf("reviewed promote transition = %#v, want %#v", transition, wantTransition)
+	}
+	base := toolSchema{
+		PrimaryCLIPath: "chat thread promote",
+		InterfaceMode:  interfaceModeMCP,
+		InterfaceRef:   `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		Availability:   "available",
+		Parameters:     map[string]parameterSchema{},
+		Effect:         "write",
+		Risk:           "medium",
+		Confirmation:   "not_required",
+		Idempotency:    "idempotent",
+	}
+	current := base
+	current.InterfaceMode = transition.NewMode
+	current.InterfaceRef = transition.NewRef
+	current.Availability = "unavailable"
+	failures := strings.Join(checkToolCompatibility(toolPath, base, current), "\n")
+	if !strings.Contains(failures, "changed availability") || !strings.Contains(failures, "changed interface_ref") {
+		t.Fatalf("ordinary compatibility check unexpectedly authorized promote retirement: %q", failures)
+	}
+}
+
 func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
 	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
 	newTool := oldTool
@@ -1427,8 +1462,8 @@ func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testin
 			strings.HasPrefix(toolPath, "/") || strings.HasSuffix(toolPath, "/") {
 			t.Errorf("tool path %q is not <product id>/<tool id>", toolPath)
 		}
-		if transition.OldMode == transition.NewMode {
-			t.Errorf("%s: interface_mode did not change", toolPath)
+		if !validReviewedInterfaceTransitionShape(transition) {
+			t.Errorf("%s: interface tuple is not a mode transition", toolPath)
 		}
 		for _, side := range []struct {
 			name string
@@ -1441,6 +1476,10 @@ func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testin
 			switch side.mode {
 			case interfaceModeMCP:
 				if side.ref == "" {
+					if side.name == "new" && transition.OldMode == interfaceModeMCP &&
+						transition.NewMode == interfaceModeMCP && transition.OldRef != "" {
+						continue
+					}
 					t.Errorf("%s: %s mcp interface has no ref", toolPath, side.name)
 					continue
 				}
@@ -1656,6 +1695,78 @@ func TestCrossPlatformCoverageAITableGovernanceScopeIsExact(t *testing.T) {
 		"aitable/aitable.form_create": {
 			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
 		},
+		"aitable/aitable.advperm_role_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.base_copy": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.base_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.chart_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.dashboard_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.datasource_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.field_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.form_submit": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.record_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.record_create_sub": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.section_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.table_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.view_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.view_duplicate": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.shortcut_app_block_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.shortcut_app_block_get": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_block_list": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_block_update": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_get": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_page_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.shortcut_app_page_get": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_page_list": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.shortcut_app_page_update": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
 		"aitable/aitable.form_questions_delete": {
 			{Field: "effect", Old: "write", New: "destructive"},
 			{Field: "risk", Old: "medium", New: "high"},
@@ -1677,6 +1788,78 @@ func TestCrossPlatformCoverageAITableGovernanceScopeIsExact(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotSafety, wantSafety) {
 		t.Fatalf("AITable safety governance = %#v, want %#v", gotSafety, wantSafety)
+	}
+}
+
+func TestCrossPlatformCoverageAITableIdempotencyMigrationsStayNarrow(t *testing.T) {
+	var paths []string
+	for path, exceptions := range reviewedCompatibilityExceptions {
+		if strings.HasPrefix(path, "aitable/") && len(exceptions) == 1 && exceptions[0].Field == "idempotency" {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			exception := reviewedCompatibilityExceptions[path][0]
+			old := toolSchema{
+				PrimaryCLIPath: "aitable fixture", InterfaceMode: "local", Availability: "available",
+				Parameters: map[string]parameterSchema{"base-id": {Type: `"string"`, Required: true}},
+				Effect:     "write", Risk: "medium", Confirmation: "user_required", Idempotency: exception.Old,
+			}
+			current := old
+			current.Idempotency = exception.New
+			if failures := checkToolCompatibility(path, old, current); len(failures) != 0 {
+				t.Fatalf("精确幂等性迁移被拒绝: %v", failures)
+			}
+			if failures := checkToolCompatibility(path, current, current); len(failures) != 0 {
+				t.Fatalf("未变化契约被拒绝: %v", failures)
+			}
+			if failures := checkToolCompatibility(path, current, old); len(failures) == 0 {
+				t.Fatal("反向幂等性迁移被放行")
+			}
+			other := "idempotent"
+			if exception.New == other {
+				other = "non_idempotent"
+			}
+			wrongOld := old
+			wrongOld.Idempotency = other
+			if failures := checkToolCompatibility(path, wrongOld, current); len(failures) == 0 {
+				t.Fatal("未批准的起始幂等性被放行")
+			}
+			wrongCurrent := current
+			wrongCurrent.Idempotency = other
+			if failures := checkToolCompatibility(path, old, wrongCurrent); len(failures) == 0 {
+				t.Fatal("未批准的目标幂等性被放行")
+			}
+			if failures := checkToolCompatibility("aitable/aitable.unreviewed_idempotency", old, current); len(failures) == 0 {
+				t.Fatal("未登记指令借用幂等性规则被放行")
+			}
+			for _, tc := range []struct {
+				name   string
+				mutate func(*toolSchema)
+			}{
+				{"effect", func(s *toolSchema) { s.Effect = "read" }},
+				{"risk", func(s *toolSchema) { s.Risk = "low" }},
+				{"confirmation", func(s *toolSchema) { s.Confirmation = "not_required" }},
+				{"risk and confirmation", func(s *toolSchema) { s.Risk, s.Confirmation = "low", "not_required" }},
+				{"path", func(s *toolSchema) { s.PrimaryCLIPath = "aitable other" }},
+				{"interface", func(s *toolSchema) {
+					s.InterfaceMode = "mcp"
+					s.InterfaceRef = `{"product_id":"aitable","rpc_name":"other"}`
+				}},
+				{"parameter", func(s *toolSchema) { s.Parameters = map[string]parameterSchema{} }},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					changed := current
+					// 幂等性治理不能同时批准安全、接口或命令表面的变化。
+					tc.mutate(&changed)
+					if failures := checkToolCompatibility(path, old, changed); len(failures) == 0 {
+						t.Fatal("额外契约变化被幂等性规则放行")
+					}
+				})
+			}
+		})
 	}
 }
 

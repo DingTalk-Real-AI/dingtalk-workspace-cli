@@ -567,12 +567,23 @@ related but distinct contracts:
   Agent-selectable protocol alias. Agents continue to request machine output
   with `--format json`; migrated commands use the unified result directly and
   unmigrated commands retain their current legacy output.
+- **新增或新激活的 Agent 可见命令输出规则**：
+  1. **默认使用统一输出格式**：新增命令默认直接使用统一运行时输出，业务
+     代码通过 `internal/output` 返回 `CommandResult`，叶子在首次加入时将
+     `OutputRollout` 声明为 `unified_active` 或更高状态。只有存在明确理由
+     （例如纯诊断工具、试验性命令或经评审的例外）时才可偏离；偏离必须在
+     同一 PR 中说明原因并取得评审同意。始终禁止手写外层 JSON envelope。
+     渐进迁移计划只适用于既有命令。
+  2. **必须声明标准输出的 Schema 返回值**：同一 PR 必须声明并测试非空
+     叶子 `Contract.Result`（`contract.ResultSpec` 的 `outcomes` 与
+     `data_schema`，必要时包含 `sensitive_paths`），使标准返回值结构通过
+     `dws schema` 的 compact leaf 发布。新增命令缺少经评审的 Result 声明
+     属于评审阻塞，与现有 `devapp` 门禁一致。
 - Existing `dev` / `devapp` pilot coverage is gradual. Active reviewed
   `devapp` shortcuts are gated on a non-empty Result declaration, while `dev`
   currently has representative Result coverage. Do not describe that as
-  repository-wide coverage. Any newly activated Agent-visible command should
-  add and test its Result declaration; the remaining pilot gaps should shrink,
-  not expand.
+  repository-wide coverage. The remaining pilot gaps should shrink, not
+  expand.
 
 The compact/full leaf `result` object has one stable shape:
 

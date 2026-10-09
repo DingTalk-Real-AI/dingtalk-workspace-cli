@@ -1,0 +1,45 @@
+{
+  "sha": "dc3aadf93787c984b7ee83a5ea90baadc0a7873e",
+  "started_at": "2026-09-22T07:37:59.489481+00:00",
+  "command": [
+    "go",
+    "test",
+    "-json",
+    "-count=1",
+    "./internal/helpers",
+    "-run",
+    "^(TestCrossPlatformCoverageDeapAgentCreateRequiresExplicitType|TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments|TestCrossPlatformCoverageDeapAgentMainProgramTypeProfileArguments|TestCrossPlatformCoverageDeapAgentOpenAPISkillUploaderStreamsMultipartAndReturnsFileURL|TestCrossPlatformCoverageDeapAgentParseSkillUploadCredential|TestCrossPlatformCoverageDeapAgentResponseModeNormalization|TestCrossPlatformCoverageDeapAgentSkillPackageValidation|TestCrossPlatformCoverageDeapAgentSkillUploadBaseURLFollowsMCPEnvironment|TestCrossPlatformCoverageDeapAgentTemporaryCredentialUsesPublishedToolName|TestCrossPlatformCoverageDeapCommandTreeUsesManageRunAndCapability|TestCrossPlatformCoverageDeapDetailDefaultsToDraft|TestCrossPlatformCoverageDeapHelpDescribesBuiltInEndpointResolution|TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools|TestCrossPlatformCoverageDevDeapAgentCapabilityLifecycleSurface|TestCrossPlatformCoverageDevDeapAgentConfigFilesStayRedactedInDryRun|TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP|TestCrossPlatformCoverageDevDeapAgentCreateForwardsHTTPAvatarURLWithoutUpload|TestCrossPlatformCoverageDevDeapAgentCreateUploadsLocalAvatarThenSavesDraft|TestCrossPlatformCoverageDevDeapAgentHelpExplainsFullReplacementAndTraceAuthorization|TestCrossPlatformCoverageDevDeapAgentHelpMatchesCurrentMCPInputs|TestCrossPlatformCoverageDevDeapAgentMCPCheckFailureBlocksUpdate|TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden|TestCrossPlatformCoverageDevDeapAgentSaveDraftDoesNotExposeCapabilityArrays|TestCrossPlatformCoverageDevDeapAgentSaveDraftUploadsLocalAvatarBeforeUpdate|TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts|TestCrossPlatformCoverageDevDeapAgentSkillCreateLabelsStagesAndRedactsURLs|TestCrossPlatformCoverageDevDeapAgentSkillCreateUsesUploadFacadeAndSafeOutput|TestCrossPlatformCoverageDevDeapAgentSkillUpdateUploadsReplacementZIP|TestCrossPlatformCoverageDevDeapAgentUpdatesRequireExplicitChange|TestCrossPlatformCoverageDingTalkTagReplacesDeapTopLevelCommand|TestCrossPlatformCoverageEmployeeAdditionalValidation|TestCrossPlatformCoverageEmployeeEntryAndReleaseLocks|TestCrossPlatformCoverageEmployeeLoginExchangeIdentity|TestCrossPlatformCoverageEmployeeLookupAndTransportBoundaries)$"
+  ],
+  "exit_code": 0,
+  "go_version": "go1.26.1 darwin/arm64",
+  "env": {
+    "DWS_PACKAGE_VERSION": "0.0.0-test",
+    "DWS_AGENT_EXAMPLES_DRY_RUN": "1 (agent only)"
+  },
+  "agent_command": [
+    "go",
+    "test",
+    "-json",
+    "-count=1",
+    "./internal/app",
+    "-run",
+    "^(TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema|TestAgentExamplesContract|TestAgentExamplesDryRun|TestAgentSelectionScenariosCoverEveryExecutableSchemaTool)$"
+  ],
+  "evidence_kind": "Actual local test results rendered as report images; not GitHub Actions screenshots or a live-model/online end-to-end evaluation.",
+  "summaries": {
+    "agent": {
+      "top_level_pass": 4,
+      "subtest_pass": 196,
+      "fail": 0,
+      "skip": 0,
+      "jsonl_sha256": "72ffbed1a3e6e5cacb2ae5b72b73fd6801b62a16afb06bfe0df0c36871ba97e6"
+    },
+    "command": {
+      "top_level_pass": 34,
+      "subtest_pass": 116,
+      "fail": 0,
+      "skip": 0,
+      "jsonl_sha256": "43c2de89c60c5f43ae157b7979ccf657b484675ee2c96afa4dbb747dda98d109"
+    }
+  }
+}

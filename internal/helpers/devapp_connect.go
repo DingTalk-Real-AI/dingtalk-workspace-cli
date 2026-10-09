@@ -170,6 +170,18 @@ func buildConnectPlan(channel, clientID, robotCode string) map[string]any {
 				},
 			}
 		}
+		if channel == "pi" {
+			return map[string]any{
+				"method":  "stream-bridge-pi-json",
+				"summary": "Go 原生 Stream 建联，转发到官方 Pi Coding Agent JSON 事件流",
+				"steps": []string{
+					"自动定位 pi（PATH），未安装时使用官方 npm 包安装",
+					"用 clientId/clientSecret 起 Stream，注册 TOPIC_ROBOT 回调",
+					"收到消息 → 按 conversationId 隔离 Pi 会话文件 → pi --print --mode json 获取文本增量",
+					"等待 Pi 进程退出确认本轮完成，经 AI 卡片或 sessionWebhook 回复钉钉",
+				},
+			}
+		}
 		if channel == "opencode" {
 			return map[string]any{
 				"method":  "stream-bridge-opencode-server",
@@ -444,7 +456,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 		Use:   "connect",
 		Short: "建联：把现成机器人接到当前本地 agent（起 Stream，不建号）",
 		Long: "用已建好的机器人凭证把它接到当前本地 agent，不做建号。\n" +
-			"凭证两种来源：① 直接传 --robot-client-id/--robot-client-secret；② 传 --unified-app-id（复用 dev app credentials get 自动取凭证）。\n" +
+			"凭证两种来源：① 通过机器人凭证参数直接传入 Client ID 与 Secret；② 传 --unified-app-id（复用 dev app credentials get 自动取凭证）。\n" +
 			"渠道由 --channel 显式指定，或运行时信号自动探测。\n" +
 			"缺凭证请先用 `dws dev app robot submit` 建号（随后 `robot result` 轮询）拿 clientId/clientSecret。",
 		Example: "  dws dev connect --channel workbuddy --robot-client-id <id> --robot-client-secret <secret>\n" +
@@ -476,10 +488,10 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			}
 			channel, detectedBy := resolveConnectChannel(channelFlag)
 			if channel == "" {
-				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode)，或用 --agent-cmd \"<命令>\" 接入自研/未支持的 AI（custom 渠道），或设置 DWS_AGENT_CHANNEL")
+				return apperrors.NewValidation("无法探测 agent 渠道；请用 --channel 指定 (openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|pi)，或用 --agent-cmd \"<命令>\" 接入自研/未支持的 AI（custom 渠道），或设置 DWS_AGENT_CHANNEL")
 			}
 			if _, ok := connectChannels[channel]; !ok {
-				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|custom）", channel))
+				return apperrors.NewValidation(fmt.Sprintf("未知渠道 %q（支持 openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|pi|custom）", channel))
 			}
 
 			clientID := devAppStringFlag(cmd, "robot-client-id")
@@ -588,7 +600,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 		newDevAppRobotConnectListCommand(runner),
 	)
 	newHybridGroupCommand(cmd)
-	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|custom(自研/未支持的 AI，配 --agent-cmd)")
+	cmd.Flags().String("channel", "auto", "渠道：auto(默认,自动探测)|openclaw|qoder|qoderwork|hermes|workbuddy|claudecode|codebuddy|codex|gemini|opencode|pi|custom(自研/未支持的 AI，配 --agent-cmd)")
 	cmd.Flags().String("agent-cmd", "", "自研/未支持的 AI 工具命令（无头/一次性：问题作为最后一个参数追加，答案打到 stdout）；用来接入内置渠道之外的 AI（如网易有道龙虾 LobsterAI）；等价于 --channel custom + 设 DWS_AGENT_CMD；env: DWS_AGENT_CMD")
 	// 用 robot-client-* 而非 client-id/client-secret：后者是全局 OAuth 客户端覆盖
 	// 持久 flag（见 internal/app/flags.go），同名会 shadow 全局 flag。这里是要建联的
@@ -598,7 +610,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID：复用 dev app credentials get 自动取凭证（替代手填 robot-client-id/secret）")
 	cmd.Flags().String("agent-model", "", "覆盖 agent 模型（如 claude 的 sonnet/opus、gemini-2.5-pro；默认用渠道内置模型，求快）；env: DWS_AGENT_MODEL")
 	cmd.Flags().String("agent-workdir", "", "本地 agent 的运行目录（放知识文件可给机器人上下文；默认空白临时目录，求快）；env: DWS_AGENT_WORKDIR")
-	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/qoder/qoderwork/claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
+	cmd.Flags().Bool("agent-memory", true, "按会话续聊：同一群/单聊共享 agent 会话上下文（codex/opencode/pi/qoder/qoderwork/claudecode/codebuddy/workbuddy 支持；--agent-memory=false 关闭）")
 	cmd.Flags().Int("agent-timeout", 0, "每次 agent 调用的超时时间（秒），0=不限制（默认）；env: DWS_AGENT_TIMEOUT_MS（毫秒）")
 	cmd.Flags().String("agent-permission-mode", "", "agent 权限模式：bypass(默认, 最高权限)|ask(需要确认/受限)；env: DWS_AGENT_PERMISSION_MODE")
 	cmd.Flags().String("agent-approval-mode", "", "agent 审批模式：yolo(默认, 最高权限)|ask(需要确认/受限)，兼容 Gemini/Codex 社区语义；env: DWS_AGENT_APPROVAL_MODE")
@@ -795,6 +807,12 @@ func connectAgentOptionsPayload(channel string, opts connectAgentOptions) map[st
 	if channel == "codex" {
 		if opts.Memory {
 			memory = "per-conversation-app-server"
+		} else {
+			memory = "disabled"
+		}
+	} else if channel == "pi" {
+		if opts.Memory {
+			memory = "per-conversation-pi-session"
 		} else {
 			memory = "disabled"
 		}
