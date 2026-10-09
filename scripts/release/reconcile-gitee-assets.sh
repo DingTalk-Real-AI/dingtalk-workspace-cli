@@ -136,6 +136,7 @@ required_assets=(
   dws-darwin-arm64.tar.gz
   dws-linux-amd64.tar.gz
   dws-linux-arm64.tar.gz
+  dws-openharmony-arm64.tar.gz
   dws-windows-amd64.zip
   dws-windows-arm64.zip
   dws-skills.zip

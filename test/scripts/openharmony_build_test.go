@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
+func TestOpenHarmonyBuildContractIsPublicAndReleaseOwned(t *testing.T) {
 	root := repoRoot(t)
 	buildScript := readTextFile(t, filepath.Join(root, "scripts", "dev", "build-openharmony.sh"))
 	for _, want := range []string{
@@ -62,13 +62,26 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 		"dws-linux-arm64.tar.gz",
 		"dws-windows-amd64.zip",
 		"dws-windows-arm64.zip",
+		"dws-openharmony-arm64.tar.gz",
 	} {
 		if !strings.Contains(releaseVerifier, asset) {
-			t.Errorf("release verifier is missing six-platform asset %q", asset)
+			t.Errorf("release verifier is missing released asset %q", asset)
 		}
 	}
-	if strings.Contains(releaseVerifier, "openharmony") {
-		t.Fatal("OpenHarmony was admitted to the release artifact verifier")
+	if !strings.Contains(releaseVerifier, "verify-openharmony-artifact.sh") {
+		t.Fatal("the release verifier must exercise the OpenHarmony artifact contract")
+	}
+	for _, releaseScript := range []string{
+		"scripts/release/verify-github-release-assets.sh",
+		"scripts/release/download-github-release-assets.sh",
+		"scripts/release/release.sh",
+		"scripts/release/reconcile-gitee-assets.sh",
+		"scripts/release/withdraw-release.sh",
+	} {
+		content := readTextFile(t, filepath.Join(root, filepath.FromSlash(releaseScript)))
+		if !strings.Contains(content, "dws-openharmony-arm64.tar.gz") {
+			t.Errorf("%s does not carry the OpenHarmony release asset", releaseScript)
+		}
 	}
 
 	packageScript := readTextFile(t, filepath.Join(root, "scripts", "dev", "package-openharmony.sh"))
@@ -109,24 +122,26 @@ func TestOpenHarmonyBuildContractIsCompileOnlyAndPublic(t *testing.T) {
 		}
 	}
 
-	workflow := readTextFile(t, filepath.Join(root, ".github", "workflows", "openharmony.yml"))
+	releaseLane := readTextFile(t, filepath.Join(root, "scripts", "release", "build-openharmony-release.sh"))
 	for _, want := range []string{
-		"ubuntu-latest",
-		"OHOS_GO_PARTS_URL: https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain",
-		"OHOS_GO_SHA256: e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125",
+		"OHOS_GO_PARTS_URL_DEFAULT=\"https://github.com/typefield/dingtalk-workspace-cli/releases/download/ohos-go1.26.7-toolchain\"",
+		"OHOS_GO_SHA256_DEFAULT=\"e757acdc005098f1debc888cdbaa13e26faf48e2bcf38baa17cbc5df49d8d125\"",
 		"cat ohos-go.tar.gz.part-* > ohos-go.tar.gz",
 		"sha256sum -c -",
-		"DWS_REQUIRE_ELF_STATIC",
+		"DWS_REQUIRE_ELF_STATIC=1",
 		"package-openharmony.sh",
-		"actions/upload-artifact@v4",
+		"verify-openharmony-artifact.sh",
 		"checksums.txt",
 	} {
-		if !strings.Contains(workflow, want) {
-			t.Errorf("OpenHarmony workflow is missing contract %q", want)
+		if !strings.Contains(releaseLane, want) {
+			t.Errorf("OpenHarmony release lane is missing contract %q", want)
 		}
 	}
-	if strings.Contains(strings.ToLower(workflow), "alibaba-inc.com") {
-		t.Errorf("OpenHarmony public workflow contains forbidden reference to internal infrastructure")
+	if _, statErr := os.Stat(filepath.Join(root, ".github", "workflows", "openharmony.yml")); !os.IsNotExist(statErr) {
+		t.Fatal("the standalone OpenHarmony CI workflow must not exist; the release pipeline owns the package")
+	}
+	if strings.Contains(strings.ToLower(releaseLane), "alibaba-inc.com") {
+		t.Errorf("OpenHarmony public release lane contains forbidden reference to internal infrastructure")
 	}
 }
 

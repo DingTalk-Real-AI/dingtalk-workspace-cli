@@ -147,8 +147,8 @@ cp dws ~/.local/bin/         # 安装到 PATH
 ## OpenHarmony 构建
 
 本仓库支持通过 Go 1.26.7 OpenHarmony 工具链构建 `openharmony/arm64` 目标。
-Linux CI 会在相关变更时自动构建、自签并校验产物，生成的二进制已在
-HarmonyOS PC 上完成真机验证。该目标暂未纳入六个平台的正式发布产物。
+每次 beta 与正式发布都会构建、自签、校验并随六个平台归档一同发布
+`dws-openharmony-arm64.tar.gz`，该二进制已在 HarmonyOS PC 上完成真机验证。
 
 ```bash
 OHOS_GO=/path/to/openharmony-go \

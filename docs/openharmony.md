@@ -5,9 +5,10 @@ This repository supports the `openharmony/arm64` target:
 - target: `openharmony/arm64`
 - toolchain: go1.26.7 OpenHarmony toolchain (see Provisioning)
 - CGO: disabled (`CGO_ENABLED=0`), producing a static self-signed ELF
-- packaging: Linux CI builds, self-signs, and verifies the package on every
-  relevant change
-- distribution: no official release, npm, or Homebrew artifact
+- packaging: the release pipeline builds, self-signs, and verifies the package
+  for every beta and stable release
+- distribution: `dws-openharmony-arm64.tar.gz` ships as a GitHub Release asset
+  (beta and stable); no npm or Homebrew artifact
 
 The resulting binary has been verified on a HarmonyOS PC (AArch64, HongMeng
 Kernel): CLI startup, `--help`, and authenticated chat commands all work.
@@ -111,8 +112,10 @@ not implied by this statement.
 
 ## Release boundary
 
-OpenHarmony is intentionally excluded from GoReleaser, GitHub Release assets,
-npm packages, and Homebrew formulas. The official release matrix remains the six
-Darwin, Linux, and Windows amd64/arm64 targets. A caller may build and validate an
-OpenHarmony binary locally with its own toolchain, but this repository does not
-provide or host that toolchain.
+Every beta and stable release publishes `dws-openharmony-arm64.tar.gz` (with its
+SHA-256 recorded in `checksums.txt`) as a GitHub Release asset. The package is
+built and self-signed by `scripts/release/build-openharmony-release.sh` from the
+pinned OpenHarmony toolchain; GoReleaser still owns only the six Darwin, Linux,
+and Windows amd64/arm64 targets because it cannot drive the OpenHarmony
+toolchain. OpenHarmony stays out of npm packages and Homebrew formulas, and this
+repository does not provide or host the toolchain.

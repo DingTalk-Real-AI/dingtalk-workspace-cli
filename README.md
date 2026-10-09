@@ -151,9 +151,9 @@ data checkout.
 ## OpenHarmony build
 
 The repository supports an `openharmony/arm64` build with a Go 1.26.7
-OpenHarmony toolchain. Linux CI builds, self-signs, and verifies the package on
-every relevant change, and the resulting binary has been validated on a
-HarmonyOS PC. It is not part of the six official release targets yet.
+OpenHarmony toolchain. Every beta and stable release builds, self-signs,
+verifies, and publishes `dws-openharmony-arm64.tar.gz` alongside the six
+platform archives, and the binary has been validated on a HarmonyOS PC.
 
 ```bash
 OHOS_GO=/path/to/openharmony-go \

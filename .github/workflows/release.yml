@@ -1071,6 +1071,13 @@ jobs:
           rm -f "$RUNNER_TEMP/dws-developer-id.p12"
           rm -f "$RUNNER_TEMP/dws-developer-id-password"
 
+      - name: Build the self-signed OpenHarmony package
+        run: |
+          ./scripts/release/build-openharmony-release.sh \
+            --version "$RELEASE_VERSION" \
+            --commit "$RELEASE_COMMIT" \
+            --dist-dir "$GITHUB_WORKSPACE/dist"
+
       - name: Verify final release artifacts
         run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 

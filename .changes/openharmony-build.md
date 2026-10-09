@@ -2,4 +2,4 @@
 category: Added
 ---
 
-- **OpenHarmony build and self-signer** — adds a CI-built `openharmony/arm64` static self-signed package (pure-Go signer `cmd/binary-sign-tool`, deterministic archive, SHA-256 checksums), verified on a HarmonyOS PC, while keeping SafeChat, runtime payloads, and official six-platform release assets unchanged.
+- **OpenHarmony build, self-signer, and release** — builds a static self-signed `openharmony/arm64` package (pure-Go signer `cmd/binary-sign-tool`, deterministic archive) and publishes `dws-openharmony-arm64.tar.gz` with its SHA-256 in every beta and stable GitHub Release, verified on a HarmonyOS PC, while keeping SafeChat, runtime payloads, npm, and Homebrew unchanged.

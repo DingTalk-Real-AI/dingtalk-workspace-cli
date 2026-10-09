@@ -3,6 +3,7 @@ package scripts_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,6 +35,15 @@ func releaseArtifactVerificationEnv(t *testing.T) []string {
 	shimDir := t.TempDir()
 	shim := fmt.Sprintf(`#!/bin/sh
 if [ "$#" -ge 2 ] && [ "$1" = "version" ] && [ "$2" = "-m" ]; then
+  case "${3:-}" in
+    *openharmony*)
+      printf '%%s: go1.26.7\n' "${3:-dws}"
+      printf '\tbuild\tGOOS=openharmony\n'
+      printf '\tbuild\tGOARCH=arm64\n'
+      printf '\tbuild\tCGO_ENABLED=0\n'
+      exit 0
+      ;;
+  esac
   printf '%%s: go1.26.7\n' "${3:-dws}"
   printf '\tdep\tsafechat-go-sdk\tv0.0.0\n'
   printf '\tbuild\tCGO_ENABLED=1\n'
@@ -47,6 +57,22 @@ fi
 exec %q "$@"
 `, realGo)
 	mustWriteFile(t, filepath.Join(shimDir, "go"), []byte(shim), 0o755)
+	// verify-openharmony-artifact.sh needs a reader; keep the fixture
+	// platform-independent instead of depending on a host readelf.
+	mustWriteFile(t, filepath.Join(shimDir, "readelf"), []byte(`#!/bin/sh
+case "$1" in
+  -h)
+    printf 'ELF Header:\n  Type:  EXEC (Executable file)\n  Machine:  AArch64\n'
+    ;;
+  -l)
+    printf 'Elf file type is EXEC\nThere are no program headers in this file.\n'
+    ;;
+  -d)
+    printf 'There is no dynamic section in this file.\n'
+    ;;
+esac
+exit 0
+`), 0o755)
 
 	env := os.Environ()
 	pathValue := shimDir + string(os.PathListSeparator) + os.Getenv("PATH")
@@ -118,6 +144,7 @@ func writeRuntimePayloadFixture(t *testing.T, root, target, library string) {
 func writeReleaseChecksums(t *testing.T, dist string, includeSkills bool) {
 	t.Helper()
 	assets := append([]string{}, releasePlatformAssets...)
+	assets = append(assets, "dws-openharmony-arm64.tar.gz")
 	if includeSkills {
 		assets = append(assets, "dws-skills.zip")
 	}
@@ -141,8 +168,24 @@ func seedVersionedReleaseArtifacts(t *testing.T, dist, version string) {
 	for _, asset := range releasePlatformAssets {
 		writeVersionedReleaseArchive(t, dist, asset, version)
 	}
+	writeOpenHarmonyReleaseArchive(t, dist, version)
 	mustWriteFile(t, filepath.Join(dist, "dws-skills.zip"), []byte("fake skills\n"), 0o644)
 	writeReleaseChecksums(t, dist, true)
+}
+
+func writeOpenHarmonyReleaseArchive(t *testing.T, dist, version string) {
+	t.Helper()
+	stage := t.TempDir()
+	// A minimal ET_EXEC AArch64 ELF64 header keeps the real `file` command
+	// happy; readelf and go metadata come from the verification shims.
+	binaryData := append([]byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}, make([]byte, 8)...)
+	header := make([]byte, 48)
+	binary.LittleEndian.PutUint16(header[0:2], 2)   // e_type = ET_EXEC
+	binary.LittleEndian.PutUint16(header[2:4], 183) // e_machine = AArch64
+	binaryData = append(binaryData, header...)
+	binaryData = append(binaryData, []byte("fake openharmony binary\n"+version+"\n0123456789abcdef0123456789abcdef01234567\n")...)
+	mustWriteFile(t, filepath.Join(stage, "dws"), binaryData, 0o755)
+	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, "dws-openharmony-arm64.tar.gz"), "dws")
 }
 
 type releaseTestRepo struct {
@@ -707,6 +750,7 @@ esac
 		"dws-windows-amd64.zip",
 		"dws-linux-arm64.tar.gz",
 		"dws-darwin-arm64.tar.gz",
+		"dws-openharmony-arm64.tar.gz",
 	}, "\n")
 	script := filepath.Join(sourceRoot, "scripts", "release", "verify-github-release-assets.sh")
 	run := func(assets string, draft bool, releaseTag, releaseID string) (string, string, error) {
@@ -837,6 +881,7 @@ esac
 		{id: "1007", name: "dws-windows-amd64.zip"},
 		{id: "1004", name: "dws-linux-amd64.tar.gz"},
 		{id: "1006", name: "dws-skills.zip"},
+		{id: "1009", name: "dws-openharmony-arm64.tar.gz"},
 	}
 	rowsFor := func(items []releaseAsset) string {
 		var rows []string
