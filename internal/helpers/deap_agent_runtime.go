@@ -169,6 +169,7 @@ type employeeRuntime struct {
 	fwd      forwarder
 	mu       sync.Mutex
 	queues   map[string]chan employeeEvent
+	pending  map[string]int // 包含正在执行和等待投递收尾的任务；由 mu 保护。
 	wg       sync.WaitGroup
 	fatal    chan error
 	ctx      context.Context
@@ -267,7 +268,15 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if err := writeEmployeeJSON(path, record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
-	r.feedback.set(e, "排队中", false)
+	if r.pending == nil {
+		r.pending = make(map[string]int)
+	}
+	label := "思考中"
+	if r.pending[e.ConversationID] > 0 {
+		label = "排队中"
+	}
+	r.pending[e.ConversationID]++
+	r.feedback.set(e, label, false)
 	if q == nil {
 		q = make(chan employeeEvent, 32)
 		r.queues[e.ConversationID] = q
@@ -279,7 +288,11 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 				case <-r.ctx.Done():
 					return
 				case event := <-q:
-					if err := r.process(event); err != nil {
+					err := r.process(event)
+					r.mu.Lock()
+					r.pending[event.ConversationID]--
+					r.mu.Unlock()
+					if err != nil {
 						select {
 						case r.fatal <- err:
 						default:

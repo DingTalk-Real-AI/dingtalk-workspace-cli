@@ -474,3 +474,104 @@ func TestCrossPlatformCoverageEmployeeFeedbackRecoveryPreservesKnownFacts(t *tes
 		})
 	}
 }
+
+func TestCrossPlatformCoverageEmployeeFeedbackQueuesOnlyBehindPendingTurn(t *testing.T) {
+	r, e := employeeLedgerFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.ctx = ctx
+	r.feedback = newEmployeeFeedback(ctx, "corp:employee", r.dir)
+	defer func() { cancel(); r.wg.Wait(); r.feedback.wait() }()
+	entered := make(chan struct{}, 3)
+	release := make(chan struct{})
+	r.fwd = employeeFeedbackForwarder(func(ctx context.Context, _, text string) (string, error) {
+		entered <- struct{}{}
+		if text == "third" {
+			<-ctx.Done()
+			return "", ctx.Err()
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-release:
+			return "answer", nil
+		}
+	})
+	t.Setenv("DWS_EMPLOYEE_FEEDBACK_FIXTURE", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`)
+	testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeFeedbackSubprocessFixture$")
+	})
+	labels := make(chan string, 32)
+	testseam.Swap(t, &employeeFeedbackCall, func(_ context.Context, _, operation string, got employeeEvent, emotion employeeEmotion) (map[string]any, error) {
+		if operation == "add-text-emotion" {
+			labels <- got.MessageID + ":" + emotion.Label
+		}
+		return map[string]any{"success": true, "emotionId": "id-" + emotion.Label}, nil
+	})
+	if err := r.enqueue(e); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("首条消息未执行")
+	}
+	second := e
+	second.EventID, second.MessageID = "event-2", "message-2"
+	if err := r.enqueue(second); err != nil {
+		t.Fatal(err)
+	}
+	seenFirst, seenSecond := false, false
+	deadline := time.After(3 * time.Second)
+	for !seenFirst || !seenSecond {
+		select {
+		case label := <-labels:
+			if label == "message:排队中" {
+				t.Fatal("空闲会话的首条消息被标为排队")
+			}
+			seenFirst = seenFirst || label == "message:思考中"
+			seenSecond = seenSecond || label == "message-2:排队中"
+		case <-deadline:
+			t.Fatal("没有显示执行和等待的区别")
+		}
+	}
+	close(release)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("队列未继续执行")
+	}
+	// 两轮都收尾后，同一会话的新消息也不应误标为排队。
+	deadline = time.After(5 * time.Second)
+	for {
+		r.mu.Lock()
+		pending := r.pending[e.ConversationID]
+		r.mu.Unlock()
+		if pending == 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("收尾后仍计为在途任务")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	third := e
+	third.EventID, third.MessageID, third.Content = "event-3", "message-3", "third"
+	if err := r.enqueue(third); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.After(3 * time.Second)
+	for {
+		select {
+		case label := <-labels:
+			if label == "message-3:排队中" {
+				t.Fatal("已经空闲的会话仍显示排队")
+			}
+			if label == "message-3:思考中" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("空闲会话未显示思考中")
+		}
+	}
+}
