@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -45,12 +46,13 @@ type digitalEmployeeRunState struct {
 }
 
 type employeeEvent struct {
-	Type           string `json:"type"`
-	EventID        string `json:"event_id"`
-	MessageID      string `json:"message_id"`
-	ConversationID string `json:"conversation_id"`
-	SenderID       string `json:"sender_open_dingtalk_id"`
-	Content        string `json:"content"`
+	Type           string                        `json:"type"`
+	EventID        string                        `json:"event_id"`
+	MessageID      string                        `json:"message_id"`
+	ConversationID string                        `json:"conversation_id"`
+	SenderID       string                        `json:"sender_open_dingtalk_id"`
+	Content        string                        `json:"content"`
+	QuotedMessage  *personal.MessageEventContext `json:"quoted_message,omitempty"`
 }
 
 type employeeTaskRecord struct {
@@ -327,7 +329,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	// 即使执行或账本失败，也要结束处理中反馈；成功分支在持久化后覆盖该值。
 	label := "已中断，待核查"
 	defer func() { r.feedback.set(e, label, true) }()
-	answer, err := forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, e.Content)
+	answer, err := forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e))
 	record.Execution = "success"
 	if err != nil {
 		record.Status = "agent_failed"

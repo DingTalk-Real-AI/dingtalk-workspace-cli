@@ -9,6 +9,7 @@
 - 创建/管理数字员工与本地接入独立；connect 不创建、修改或发布数字员工。
 - 支持 Qoder、QoderWork、WorkBuddy、Claude Code、CodeBuddy、Codex、Gemini、OpenCode、custom 和 DSH。
 - 普通 Agent 复用 dev connect 的调用、模型、目录、会话及权限实现；传输改为员工 Event Consumer 上行、员工 Profile 引用回复下行。第一阶段仅文本。
+- 引用回复同时传递当前正文和入站 `quoted_message` 的原文、发送人及消息定位信息，以 JSON 明确区分当前问题与历史引用。普通消息输入保持不变，`/new`、`/clear` 仍按当前正文执行；引用中的命令不作为会话控制指令。只使用入站已提供的引用信息，不额外查询其他会话；原文缺失时明确提示模型不要臆测，引用正文不写入任务账本或审计。图片、附件等内容仍需独立的媒体解析能力。
 - DWS 统一管理本机 binding 和运行期望；DSH 实际管理自己的 Event Consumer、Agent 和回合，提供员工级释放确认。兼容读取旧 DSH binding（revision 0）。
 - OpenClaw、Hermes、卡片、多媒体、知识库及远程审计扩展不属于本次数字员工新链路。
 
