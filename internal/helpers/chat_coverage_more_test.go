@@ -693,6 +693,15 @@ func TestCrossPlatformCoverageChatCommandFinalBranches(t *testing.T) {
 		if err := cmd.Flags().Set("users", helperCurrentDOpenID); err != nil {
 			t.Fatal(err)
 		}
+		// 该用例验证的是群主删除保护，而非确认门禁；先显式越过 user_required
+		// 确认门禁（#1097），才能到达 owner guard 分支。RunE 为直接调用，
+		// persistent flag 需在 root 上注册并置位（BoolFlag 跨 flagset 取值）。
+		if root.PersistentFlags().Lookup("yes") == nil {
+			root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
+		}
+		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+			t.Fatal(err)
+		}
 		err = cmd.RunE(cmd, nil)
 		if err == nil || !strings.Contains(err.Error(), "refusing to remove the group owner") {
 			t.Fatalf("remove owner error = %v", err)

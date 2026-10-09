@@ -456,12 +456,12 @@ func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := schemaContractPayloadForBoundCanonicals(t, root, "calendar.remove_calendar_participant")
 	tool := snapshot.Tools["calendar.remove_calendar_participant"]
-	// Runtime does not gate this path today; Schema confirmation must follow metadata.runtime_gate.
-	if got := tool["confirmation"]; got != "not_required" {
-		t.Fatalf("calendar attendee delete confirmation = %#v, want not_required", got)
+	// Removing attendees affects others and is irreversible; confirmation must be user_required.
+	if got := tool["confirmation"]; got != "user_required" {
+		t.Fatalf("calendar attendee delete confirmation = %#v, want user_required", got)
 	}
-	if got := tool["risk"]; got != "medium" {
-		t.Fatalf("calendar attendee delete risk = %#v, want medium", got)
+	if got := tool["risk"]; got != "high" {
+		t.Fatalf("calendar attendee delete risk = %#v, want high", got)
 	}
 }
 
