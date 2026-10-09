@@ -47,12 +47,9 @@ type piForwarder struct {
 
 func newPiForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, scopeID string) forwarder {
 	f := &piForwarder{bin: bin, env: env, opts: opts, timeout: timeout}
-	if opts.Memory {
+	if opts.Memory && scopeID != "" {
 		f.sessionDir = filepath.Join(config.DefaultConfigDir(), "connect", sanitizeLockID(scopeID), "pi")
 		store := filepath.Join(f.sessionDir, "sessions.json")
-		if scopeID == "" {
-			store = ""
-		}
 		f.sessions = newConvSessions(store)
 	}
 	return f
@@ -97,7 +94,10 @@ func (f *piForwarder) forwardStream(ctx context.Context, convID, text string, on
 }
 
 func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
-	ctx, cancel := applyTimeout(parent, f.timeout)
+	// 默认 timeout=0 时也必须能由 close 取消本轮，不能依赖调用方取消。
+	turnCtx, cancelTurn := context.WithCancel(parent)
+	defer cancelTurn()
+	ctx, cancel := applyTimeout(turnCtx, f.timeout)
 	defer cancel()
 	f.turnMu.Lock()
 	defer f.turnMu.Unlock()
@@ -106,7 +106,7 @@ func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convI
 		f.mu.Unlock()
 		return "", fmt.Errorf("Pi 连接已关闭")
 	}
-	f.cancel = cancel
+	f.cancel = cancelTurn
 	f.mu.Unlock()
 	defer func() { f.mu.Lock(); f.cancel = nil; f.mu.Unlock() }()
 	args, sessionFile, err := f.commandArgs(convID)
@@ -139,6 +139,13 @@ func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convI
 	cmd.Stdout = stream
 	// 不将 stderr / 提供商错误正文转发到群或数字员工日志。
 	cmd.Stderr = io.Discard
+	completed := false
+	defer func() {
+		// 失败或取消可能留下不完整会话；解除映射，下一轮使用新的 UUID。
+		if !completed && f.sessions != nil {
+			f.sessions.reset(convID)
+		}
+	}()
 	err = cmd.Run()
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -149,6 +156,7 @@ func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convI
 	if err := stream.finish(); err != nil {
 		return "", err
 	}
+	completed = true
 	return strings.TrimSpace(stream.final), nil
 }
 

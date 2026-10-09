@@ -131,8 +131,70 @@ func TestCrossPlatformCoveragePiChannelWiring(t *testing.T) {
 	if _, ok := custom.(*execForwarder); !ok {
 		t.Fatalf("override=%T", custom)
 	}
-	if f := newPiForwarder("pi", nil, 0, connectAgentOptions{Memory: true}, "").(*piForwarder); f.sessions.path != "" {
-		t.Fatal("empty scope must not persist mapping")
+	if f := newPiForwarder("pi", nil, 0, connectAgentOptions{Memory: true}, "").(*piForwarder); f.sessions != nil || f.sessionDir != "" {
+		t.Fatal("empty scope must not enable file sessions")
+	}
+}
+
+func TestCrossPlatformCoveragePiDefaultTimeoutClose(t *testing.T) {
+	requirePOSIXShell(t)
+	root := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", root)
+	bin := writeShellExecutable(t, root, "pi", `exec python3 -c 'import json,time; print(json.dumps({"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"started"}}),flush=True); time.sleep(60)'`+"\n")
+	f := newPiForwarder(bin, nil, 0, connectAgentOptions{WorkDir: root}, "default-timeout").(*piForwarder)
+	ctx, cancel := context.WithCancel(context.Background())
+	// 未修复的实现也必须由测试父 context 回收，不能留下挂起进程。
+	t.Cleanup(func() { cancel(); _ = f.close() })
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.forwardStream(ctx, "A", "hang", func(string) { close(started) })
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Pi did not start")
+	}
+	closed := make(chan error, 1)
+	go func() { closed <- f.close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout=0: close did not terminate the running Pi process")
+	}
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Fatalf("close must cancel the turn, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Pi turn did not finish after close")
+	}
+	if ctx.Err() != nil {
+		t.Fatal("close canceled the caller's context")
+	}
+}
+
+func TestCrossPlatformCoveragePiEmptyScope(t *testing.T) {
+	requirePOSIXShell(t)
+	root := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", root)
+	bin := writeShellExecutable(t, root, "pi", `exec python3 -c 'import json,sys; a=sys.argv; p=a[a.index("--session")+1] if "--session" in a else None; p and open(p,"w").write("{}"); print(json.dumps({"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"ok"}]}})); print(json.dumps({"type":"agent_end"}))' "$@"`+"\n")
+	f := newPiForwarder(bin, nil, 0, connectAgentOptions{Memory: true, WorkDir: root}, "").(*piForwarder)
+	defer f.close()
+	args, path, err := f.commandArgs("A")
+	if err != nil || path != "" || !strings.Contains(strings.Join(args, " "), "--no-session") {
+		t.Errorf("empty scope must disable session persistence: args=%v path=%q err=%v", args, path, err)
+	}
+	if reply, err := f.forward(context.Background(), "A", "hello"); err != nil || reply != "ok" {
+		t.Fatalf("reply=%q err=%v", reply, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "connect")); !os.IsNotExist(err) {
+		t.Fatalf("empty scope created configuration session files: %v", err)
 	}
 }
 
@@ -200,14 +262,31 @@ print(json.dumps({'type':'agent_end'}),flush=True)
 		}
 	}
 	for _, prompt := range []string{"FAIL", "EXIT", "BROKEN"} {
+		previous := f.sessions.id("failure")
 		if _, err := f.forward(context.Background(), "failure", prompt); err == nil {
 			t.Fatalf("accepted %s", prompt)
+		}
+		if _, ok := f.sessions.m[convSessionKey("failure")]; ok {
+			t.Fatalf("%s retained failed session mapping", prompt)
+		}
+		reloaded := newConvSessions(f.sessions.path)
+		if _, ok := reloaded.m[convSessionKey("failure")]; ok {
+			t.Fatalf("%s restored failed session mapping after restart", prompt)
+		}
+		if f.sessions.id("failure") == previous {
+			t.Fatalf("%s reused failed session", prompt)
+		}
+		if reply, err := f.forward(context.Background(), "failure", "hello"); err != nil || reply != "轮数:1" {
+			t.Fatalf("%s recovery=%q %v", prompt, reply, err)
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	if _, err := f.forward(ctx, "timeout", "SLEEP"); err == nil {
 		t.Fatal("timeout accepted")
+	}
+	if _, ok := f.sessions.m[convSessionKey("timeout")]; ok {
+		t.Fatal("timeout retained session mapping")
 	}
 	started := make(chan struct{})
 	done := make(chan error, 1)
