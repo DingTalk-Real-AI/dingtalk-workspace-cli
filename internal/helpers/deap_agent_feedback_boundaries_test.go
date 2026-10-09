@@ -138,6 +138,7 @@ func TestCrossPlatformCoverageEmployeeUnconfirmedCompletion(t *testing.T) {
 	for _, record := range []employeeTaskRecord{
 		{Status: "completed_without_reply", Execution: "failure", Delivery: "not_required"},
 		{Status: "needs_review", Delivery: "failure"},
+		{Status: "unknown_future_state", Execution: "success", Delivery: "accepted"},
 	} {
 		if got := employeeTaskLabel(record); got != "已中断，待核查" {
 			t.Fatalf("未确认事实被标为完成：%+v => %s", record, got)
