@@ -320,6 +320,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if r == nil {
 		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
 	}
+	ctx = r.withDelegatorContext(ctx)
 	// Emit the one-shot host-owned PAT decision log. Placed here (not in
 	// the constructor) so it fires AFTER PersistentPreRunE has configured
 	// slog level per --debug / --verbose. The Once guard makes repeat
@@ -636,6 +637,7 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	ctx = r.withDelegatorContext(ctx)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
 		return r.executeStdioInvocationAtEndpoint(ctx, endpoint, invocation)

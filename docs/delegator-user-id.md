@@ -4,7 +4,9 @@
 
 Managed Agent 宿主可为一次命令注入委托人身份。DWS 校验输入组合，在内置 MCP 网关请求中透传；实际登录 token、profile 和工具 arguments 保持原有语义。参数隐藏不代表可信身份或鉴权通过。
 
-本 PR 先完成 **AI 表格（`aitable`）的 DWS 侧接入与回归验证**。三个参数在全局可解析，但其他产品尚未完成全部调用路径的迁移和验证，不能据此宣称支持委托身份透传。后续业务按[业务接入指南](delegator-business-integration.md)逐项接入并补充证据。
+委托身份由根命令的本次执行作用域持有，并在公共 `runtimeRunner` 的请求边界绑定。业务请求只要经过该 runner 且满足下文的网关边界，就会使用本次身份；旧 helper 即使重新创建 `context.Background()`，runner 也会补入身份快照，无需为透传身份逐条修改业务命令。
+
+全局可解析不代表所有传输通道均支持。独立 published MCP 客户端、直接 OpenAPI、文件字节传输、事件长连接等绕过公共 runner 的通道不在本协议范围内。各业务仍需按[业务接入指南](delegator-business-integration.md)核查实际路径，并补充真实命令测试。
 
 数字员工识别、工具白名单、ID 解析、身份一致性及业务联合权限由网关和服务端实现。本 PR 不实现或证明这些服务端能力。
 
@@ -43,21 +45,23 @@ dws aitable base list --limit 10 --delegator-open-dingtalk-id '<open-dingtalk-id
 
 ## 生命周期和透传边界
 
-- 在根命令执行入口消费参数，生成不可变的请求 context；参数解析状态随即清理。复用 Cobra 命令树的后续调用不能继承前次新增委托身份；Help 和解析失败路径也清理参数。
-- 已接入命令中的 shortcut 多请求、允许的 dry-run 辅助读取和现有重试继承相同 context。业务响应不能改写委托身份。纯本地 dry-run 保持现有零网络屏障。
-- 只向 DWS 已识别的四个 HTTPS MCP 网关主机（生产、预发及对应国际域名，默认端口或 443）添加委托输入。第三方/插件、自定义非网关端点、stdio、直接 OpenAPI、换票辅助请求和 `mcp-meta` 发现请求不支持本协议。
-- 不向共享身份 Header 注入委托信息。保留字段由本次 context 最终决定，其他 edition/credential/plugin Header 来源不能覆盖或伪造。
+- 在根命令执行入口消费参数，校验后为当前 root 建立不可变的身份快照，并绑定本次执行作用域。参数解析状态随即清理；未提供或无效输入对应空快照。复用命令树的后续调用不能继承前次身份；Help 和解析失败路径也清理参数。
+- 公共 runner 保留请求 context 已有的快照（包括显式空快照），仅在快照缺失时从当前执行作用域补入。旧 helper 丢弃 context 时也能补入本次身份；重试沿用首次捕获的快照，业务响应不能改写它。执行完成、校验失败、业务错误或 panic 时清理作用域，已经创建的请求 context 不被后续执行改写。
+- 只向 `mcp-gw.dingtalk.com`、`pre-mcp-gw.dingtalk.com`、`mcp-gw.dingtalk.io`、`pre-mcp-gw.dingtalk.io` 四个主机的 HTTPS MCP 业务请求添加委托输入，仅允许默认端口或 443。第三方/插件、自定义非网关端点、stdio、`mcp-meta` 发现请求和使用 scoped token 的登录/换票辅助请求均排除。
+- 独立 published MCP 客户端、直接 OpenAPI、文件上传下载的字节请求、事件长连接不因存在全局参数而获得委托身份。文件下载前若有经公共 runner 发出的网关元信息查询，按该查询自身的边界处理。
+- 不向进程共享身份 Header 注入委托信息，也不保存进程级“当前委托人”。保留字段由当前 root 的本次快照最终决定，其他 edition/credential/plugin Header 来源不能覆盖或伪造。
+- 纯本地 dry-run 保持现有零网络屏障；原本允许的 dry-run 辅助读取，仅在经过公共 runner 且满足传输边界时携带身份，不新增网络访问。
 - 跨源重定向清除全部委托 Header；重定向链返回原始源时也不会恢复。同源重定向保留。
 - DWS 从不发送 `delegator-uid`。该字段仅由网关依据服务端解析结果向业务系统注入。
 - 命令计时记录和结构化 Header 日志对委托字段脱敏；不增加身份原文日志。
 
-嵌入调用者应给每个并发 CLI 执行创建独立命令树；Cobra 树自身不支持并发 Execute。请求 context 可由同一执行内的并发子请求共享，禁止调用方在辅助请求中丢弃 context。
+支持同一 root 串行复用，以及多个预先构造的 root 串行执行；每次执行都重新绑定自己的快照和 runner，不沿用其他 root 或上一次调用的身份。现有 helpers/auth 仍含进程共享状态，**不承诺同一进程内多 root 并发执行安全**；需要并发 CLI 调用时使用独立进程。不可变身份快照不等于整个命令运行时具备并发安全性。
 
-### 业务调用链的上下文要求
+### 业务调用链的上下文规范
 
-全局参数可解析不等于每个业务入口已经完成透传。命令必须从 `cmd.Context()` 向 MCP 调用、分页和重试传递上下文；重新创建 `context.Background()` 会丢失委托身份。AI 表格的主服务、辅助服务、记录分页、视图更新和工作流发布已按此要求修复。其他产品仍有无上下文的旧调用入口，需要逐项迁移，当前不能宣称所有命令均已覆盖。具体 API 替换、测试范式和各产品状态见[业务接入指南](delegator-business-integration.md)。
+公共 runner 负责委托身份绑定；业务代码仍应从 `cmd.Context()` 派生并传递上下文，以保留取消、超时和其他调用信息。runner 补入身份不会自动恢复 helper 已丢弃的取消信号或 deadline。新增代码应使用带 context 的入口；既有 Background 路径的清理按业务生命周期需要推进，不再是公共 runner 路径透传身份的前提。
 
-回归测试从真实 AI 表格命令入口经过运行器到 HTTP 请求，检查三个委托 Header 的具体值，并验证同一命令树下一次不传参数时不会继承旧身份。`extra_headers_count` 仅统计额外 Header 数量，不能代替字段值检查，也不能证明服务端委托授权成功。
+本次真实命令回归矩阵包括已有 AI 表格入口，以及 `doc read`、`doc +fetch`、`calendar event get`、`todo task get`、`wiki feed list`。检查应从真实命令经过 runner 到 HTTP 请求，断言 Header 具体值、串行 root 复用及多个预建 root 的身份隔离；测试结果以实际执行报告为准。这些代表性入口不等于所有业务分支均已验证。`extra_headers_count` 仅统计额外 Header 数量，不能代替字段值检查，也不能证明服务端委托授权成功。
 
 ## 旧文档参数兼容
 

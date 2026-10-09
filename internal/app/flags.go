@@ -39,6 +39,9 @@ type GlobalFlags struct {
 	DelegatorUserID         string
 	DelegatorCorpID         string
 	DelegatorOpenDingtalkID string
+
+	// 每棵命令树独享执行状态；runner 克隆共享同一作用域，不读取已消费的参数。
+	delegatorInvocation *delegatorInvocation
 }
 
 func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {

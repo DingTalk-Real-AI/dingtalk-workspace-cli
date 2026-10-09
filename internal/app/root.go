@@ -901,7 +901,12 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	if root == nil || credentialInvocationSeen == nil {
 		return
 	}
+	var delegatorScope *delegatorInvocation
+	if flags != nil {
+		delegatorScope = flags.delegatorInvocation
+	}
 	cleanup := func(current *cobra.Command) {
+		delegatorScope.clear()
 		if principal := current.Flags().Lookup("principal-user-id"); principal != nil {
 			_ = principal.Value.Set("")
 			principal.Changed = false
@@ -941,6 +946,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 		}
 
 		cmd.SetValidationErrorFunc(validationError)
+		installDelegatorInvocationHooks(cmd, delegatorScope)
 
 		previousFlagError := cmd.FlagErrorFunc()
 		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {
@@ -955,13 +961,14 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
-	flags := &GlobalFlags{}
+	flags := &GlobalFlags{delegatorInvocation: &delegatorInvocation{}}
 	profileSelector := ""
 	if !declarationOnly {
 		profileSelector = preparseProfileFlag(os.Args[1:])
 		authpkg.SetRuntimeProfile(profileSelector)
 	}
 	runner := rootNewCommandRunnerWithFlags(flags)
+	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
 	if snapshot, ok := agentMetadataSnapshotFromContext(rootCtx); ok {
 		if runtime, ok := runner.(*runtimeRunner); ok {
 			runtime.agentMetadata = &snapshot
@@ -986,6 +993,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		Version: "",
 		RunE:    runRootHelp,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			flags.delegatorInvocation.clear()
 			defer func() {
 				if preRunErr != nil {
 					resetAuthExchangeInvocationFlags(cmd)
@@ -994,6 +1002,15 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			rootVersionShortCircuit = false
 			if err := beginDelegatorInvocation(cmd); err != nil {
 				return err
+			}
+			snapshot := cmd.Context().Value(delegatorContextKey{}).(delegatorSnapshot)
+			flags.delegatorInvocation.snapshot.Store(&snapshot)
+			// 多棵预创建树串行执行时，恢复当前树拥有的 helper caller。
+			// 显式注入的自定义 caller 仍由嵌入方拥有，不覆盖其装饰器或测试替身。
+			if current, ok := helpers.GetCaller().(recordingToolCaller); ok {
+				if owner, ok := current.inner.(*toolCallerAdapter); ok && owner.flags != nil && owner.flags.delegatorInvocation != nil {
+					helpers.InitDeps(patCaller)
+				}
 			}
 			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
 			if rootVersionRequested && cmd == cmd.Root() {
@@ -1074,6 +1091,8 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			configureLogLevel(flags)
 
 			installOutputSinkRunBoundary(cmd)
+			// 输出初始化在业务 RunE 外层，也可能失败；清理必须包住整个执行入口。
+			cmd.RunE = wrapDelegatorInvocationHook(flags.delegatorInvocation, cmd.RunE, false)
 			if fn := edition.Get().AfterPersistentPreRun; fn != nil && !isAuthStatusReadOnlyCommand(cmd) {
 				if err := fn(cmd, args); err != nil {
 					return err
@@ -1143,7 +1162,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// Wrap the caller so every MCP tool call's shape is recorded to the local
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
-	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
 	mcpCmd.AddCommand(
 		newMCPURLGroup(patCaller),
 		newMCPPublishedGroup(patCaller, newAuthenticatedMCPPublishedTransportFactory(runner, flags)),

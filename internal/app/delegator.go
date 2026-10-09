@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -79,7 +80,38 @@ func bindDelegatorFlags(cmd *cobra.Command, flags *GlobalFlags) {
 type delegatorSnapshot struct{ userID, corpID, openDingtalkID string }
 type delegatorContextKey struct{}
 
-// consumeDelegatorFlags 在执行边界消费并清理解析状态。后续请求只读取不可变的 context。
+// delegatorInvocation 属于一棵 root，而非进程全局变量。执行入口发布不可变快照，
+// 退出时清理；同次执行的并发辅助请求可以安全读取，但 Cobra 本身仍须串行执行。
+type delegatorInvocation struct {
+	snapshot atomic.Pointer[delegatorSnapshot]
+}
+
+func (s *delegatorInvocation) clear() {
+	if s != nil {
+		s.snapshot.Store(nil)
+	}
+}
+
+// withDelegatorContext 在公共 runner 补齐旧 helper 丢弃的身份。已有快照（含空快照）
+// 保持不变，派生 context 保留取消和截止时间，重试也始终沿用首次捕获的身份。
+func (r *runtimeRunner) withDelegatorContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Value(delegatorContextKey{}).(delegatorSnapshot); ok {
+		return ctx
+	}
+	if r == nil || r.globalFlags == nil || r.globalFlags.delegatorInvocation == nil {
+		return ctx
+	}
+	var snapshot delegatorSnapshot
+	if current := r.globalFlags.delegatorInvocation.snapshot.Load(); current != nil {
+		snapshot = *current
+	}
+	return context.WithValue(ctx, delegatorContextKey{}, snapshot)
+}
+
+// consumeDelegatorFlags 在执行边界消费并清理解析状态。后续请求只读取不可变快照。
 func consumeDelegatorFlags(root *cobra.Command) (delegatorSnapshot, bool) {
 	var snapshot delegatorSnapshot
 	invalid, supplied := false, false
@@ -129,6 +161,52 @@ func beginDelegatorInvocation(cmd *cobra.Command) error {
 		return apperrors.NewValidation("--principal-user-id 不能与 --delegator-* 同时使用；请选择一种委托协议", apperrors.WithReason("conflicting_delegation_protocols"))
 	}
 	return nil
+}
+
+// Cobra 的业务 hook 出错或 panic 时不会执行 PostRun，需在各阶段统一清理。
+// 成功路径保留身份到最后一个 PersistentPostRun，以覆盖业务 PostRun 的辅助请求。
+func wrapDelegatorInvocationHook(scope *delegatorInvocation, hook func(*cobra.Command, []string) error, final bool) func(*cobra.Command, []string) error {
+	if hook == nil {
+		return nil
+	}
+	return func(cmd *cobra.Command, args []string) (err error) {
+		completed := false
+		defer func() {
+			if !completed || err != nil || final {
+				scope.clear()
+			}
+		}()
+		err = hook(cmd, args)
+		completed = true
+		return err
+	}
+}
+
+func installDelegatorInvocationHooks(cmd *cobra.Command, scope *delegatorInvocation) {
+	if scope == nil {
+		return
+	}
+	for _, pair := range []struct {
+		withError *func(*cobra.Command, []string) error
+		plain     *func(*cobra.Command, []string)
+		final     bool
+	}{
+		{&cmd.PersistentPreRunE, &cmd.PersistentPreRun, false},
+		{&cmd.PreRunE, &cmd.PreRun, false},
+		{&cmd.RunE, &cmd.Run, false},
+		{&cmd.PostRunE, &cmd.PostRun, false},
+		{&cmd.PersistentPostRunE, &cmd.PersistentPostRun, true},
+	} {
+		if *pair.withError == nil && *pair.plain != nil {
+			plain := *pair.plain
+			*pair.withError = func(cmd *cobra.Command, args []string) error {
+				plain(cmd, args)
+				return nil
+			}
+			*pair.plain = nil
+		}
+		*pair.withError = wrapDelegatorInvocationHook(scope, *pair.withError, pair.final)
+	}
 }
 
 // 委托信息只交给已知的 HTTPS 网关。自定义端点、换票、发现及插件请求不继承。
