@@ -4,13 +4,16 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageDeapAgentPublishRejectsUnverifiableDraft(t *testing.T) {
@@ -18,9 +21,8 @@ func TestCrossPlatformCoverageDeapAgentPublishRejectsUnverifiableDraft(t *testin
 		`{"success":true,"data":null}`,
 		`{"success":true,"data":"invalid"}`,
 		`{"success":true,"data":{"agentUuid":"another-agent","type":"local_agent"}}`,
-		`{"success":true,"data":{"agentUuid":"agent-1","type":"local_agent","prompt":12}}`,
+		`{"success":true,"data":{"agentUuid":"agent-1","updateUserId":12}}`,
 		`{"data":{"agentUuid":"agent-1","type":"local_agent"}}`,
-		`{"success":true,"data":{"agentUuid":"agent-1"}}`,
 	} {
 		t.Run(response, func(t *testing.T) {
 			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
@@ -104,35 +106,50 @@ func TestCrossPlatformCoverageDeapAgentSaveDraftRejectsExplicitBlankFields(t *te
 	}
 }
 
-func TestCrossPlatformCoverageDeapAgentPublishDefaultsOnlyMissingLocalPrompt(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentPublishChecksEditorWithoutWritingDraft(t *testing.T) {
 	for _, tc := range []struct {
-		name, detail string
-		wantSave     bool
+		name, detail, operator, wantError string
+		resolveOperator                   bool
 	}{
-		{"local_missing", `{"agentUuid":"agent-1","type":"local_agent"}`, true},
-		{"local_blank", `{"agentUuid":"agent-1","type":"local_agent","prompt":"  "}`, true},
-		{"local_custom", `{"agentUuid":"agent-1","type":"local_agent","prompt":"custom persona"}`, false},
-		{"legacy_custom", `{"agentUuid":"agent-1","mainProgramType":"local_agent","promptConfig":{"prompt":"custom persona"}}`, false},
-		{"legacy_type", `{"agentUuid":"agent-1","digitalTagEmployeeProfile":{"type":"local_agent"}}`, true},
-		{"open_code", `{"agentUuid":"agent-1","type":"open_code"}`, false},
-		{"legacy_local", `{"agentUuid":"agent-1","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}`, true},
+		{"same_editor", `{"agentUuid":"agent-1","type":"local_agent","updateUserId":"operator-1"}`, "operator-1", "", true},
+		{"other_editor", `{"agentUuid":"agent-1","type":"local_agent","prompt":"custom","updateUserId":"other-operator"}`, "operator-1", "草稿最近更新人为 other-operator，当前操作人为 operator-1", true},
+		{"operator_unavailable", `{"agentUuid":"agent-1","updateUserId":"operator-1"}`, "", "无法确认当前操作人身份", true},
+		{"operator_missing_user_id", `{"agentUuid":"agent-1","updateUserId":"operator-1"}`, "  ", "当前操作人 Profile 缺少 userId", true},
+		{"legacy_missing_editor", `{"agentUuid":"agent-1","type":"local_agent"}`, "", "", false},
+		{"legacy_null_editor", `{"agentUuid":"agent-1","updateUserId":null}`, "", "", false},
+		{"legacy_blank_editor", `{"agentUuid":"agent-1","updateUserId":"  "}`, "", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-				"deap-dev/get_digital_employee_detail":   {`{"success":true,"data":` + tc.detail + `}`},
-				"deap-dev/update_digital_employee_draft": {`{"success":true,"data":{"agentUuid":"agent-1"}}`},
-				"deap-dev/publish_digital_employee":      {`{"success":true,"data":{"agentUuid":"agent-1","publishSuccess":true}}`},
+				"deap-dev/get_digital_employee_detail": {`{"success":true,"data":` + tc.detail + `}`},
+				"deap-dev/publish_digital_employee":    {`{"success":true,"data":{"agentUuid":"agent-1","publishSuccess":true}}`},
 			}}
 			InitDepsForTest(t, caller)
+			resolved := false
+			testseam.Swap(t, &deapAgentPublishOperatorUserID, func(context.Context) (string, error) {
+				resolved = true
+				if tc.operator == "" {
+					return "", errors.New("profile unavailable")
+				}
+				return tc.operator, nil
+			})
 			root := deapHandler{}.Command(&captureRunner{})
 			root.PersistentFlags().Bool("yes", false, "confirmation")
 			root.SetArgs([]string{"manage", "publish", "--agent-uuid", "agent-1", "--yes"})
-			if err := corecmd.ExecuteForTest(root); err != nil {
+			err := corecmd.ExecuteForTest(root)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("publish error = %v, want %q", err, tc.wantError)
+				}
+			} else if err != nil {
 				t.Fatal(err)
 			}
+			if resolved != tc.resolveOperator {
+				t.Fatalf("operator resolved = %t, want %t", resolved, tc.resolveOperator)
+			}
 			wantCalls := 2
-			if tc.wantSave {
-				wantCalls++
+			if tc.wantError != "" {
+				wantCalls = 1
 			}
 			if len(caller.calls) != wantCalls {
 				t.Fatalf("calls=%#v, want %d", caller.calls, wantCalls)
@@ -140,71 +157,49 @@ func TestCrossPlatformCoverageDeapAgentPublishDefaultsOnlyMissingLocalPrompt(t *
 			if caller.calls[0].toolName != deapAgentDetailTool || caller.calls[0].args["snapshot"] != "draft" {
 				t.Fatalf("must read draft first: %#v", caller.calls)
 			}
-			if tc.wantSave {
-				call := caller.calls[1]
-				prompt, _ := call.args["prompt"].(string)
-				if call.toolName != deapAgentSaveDraftTool || call.args["agentUuid"] != "agent-1" || strings.TrimSpace(prompt) == "" || len(call.args) != 2 {
-					t.Fatalf("default must only patch prompt: %#v", call)
-				}
-			}
-			if caller.calls[wantCalls-1].toolName != deapAgentPublishTool {
-				t.Fatalf("publish must follow initialization: %#v", caller.calls)
+			if tc.wantError == "" && caller.calls[1].toolName != deapAgentPublishTool {
+				t.Fatalf("publish must follow identity check without a draft write: %#v", caller.calls)
 			}
 		})
 	}
 }
 
-func TestCrossPlatformCoverageDeapAgentPublishStopsWhenDraftReadOrDefaultSaveFails(t *testing.T) {
-	for _, stage := range []string{"read", "save"} {
-		t.Run(stage, func(t *testing.T) {
-			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-				"deap-dev/get_digital_employee_detail":   {`{"success":true,"data":{"agentUuid":"agent-1","type":"local_agent"}}`},
-				"deap-dev/update_digital_employee_draft": {`{"success":false,"errorCode":"INVALID_PARAM","errorMsg":"save rejected"}`},
-			}}
-			if stage == "read" {
-				caller.responses["deap-dev/get_digital_employee_detail"] = []string{`{"success":false,"errorCode":"FORBIDDEN","errorMsg":"read rejected"}`}
-			}
-			InitDepsForTest(t, caller)
-			root := deapHandler{}.Command(&captureRunner{})
-			root.PersistentFlags().Bool("yes", false, "confirmation")
-			root.SetArgs([]string{"manage", "publish", "--agent-uuid", "agent-1", "--yes"})
-			if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "rejected") {
-				t.Fatalf("upstream failure must stop publishing: %v", err)
-			}
-			for _, call := range caller.calls {
-				if call.toolName == deapAgentPublishTool {
-					t.Fatal("published after precondition failure")
-				}
-			}
+func TestCrossPlatformCoverageDeapAgentPublishResolvesOperatorFromSupervisorProfile(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		setupServerBindingSupervisor(t)
+		operator, err := deapAgentPublishOperatorUserID(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if operator != "supervisor" {
+			t.Fatalf("operator = %q, want supervisor", operator)
+		}
+	})
+
+	t.Run("profile_error", func(t *testing.T) {
+		setupServerBindingSupervisor(t)
+		testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+			return nil, errors.New("profile unavailable")
 		})
-	}
+		if _, err := deapAgentPublishOperatorUserID(context.Background()); err == nil || !strings.Contains(err.Error(), "profile unavailable") {
+			t.Fatalf("operator profile error = %v", err)
+		}
+	})
 }
 
-func TestCrossPlatformCoverageDeapAgentPublishReportsPartialState(t *testing.T) {
-	for _, tc := range []struct {
-		name, save, publish, message string
-		wantCalls                    int
-	}{
-		{"unknown_save", `{}`, `{"success":true}`, "保存结果无法确认", 2},
-		{"publish_rejected", `{"success":true}`, `{"success":false,"errorCode":"INVALID_PARAM","errorMsg":"publish rejected"}`, "默认人设已保存，但发布失败", 3},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-				"deap-dev/get_digital_employee_detail":   {`{"success":true,"result":{"agentUuid":"agent-1","type":"local_agent"}}`},
-				"deap-dev/update_digital_employee_draft": {tc.save},
-				"deap-dev/publish_digital_employee":      {tc.publish},
-			}}
-			InitDepsForTest(t, caller)
-			root := deapHandler{}.Command(&captureRunner{})
-			root.PersistentFlags().Bool("yes", false, "confirmation")
-			root.SetArgs([]string{"manage", "publish", "--agent-uuid", "agent-1", "--yes"})
-			if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), tc.message) {
-				t.Fatalf("partial state must be explicit: %v", err)
-			}
-			if len(caller.calls) != tc.wantCalls {
-				t.Fatalf("unexpected operations: %#v", caller.calls)
-			}
-		})
+func TestCrossPlatformCoverageDeapAgentPublishStopsWhenDraftReadFails(t *testing.T) {
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/get_digital_employee_detail": {`{"success":false,"errorCode":"FORBIDDEN","errorMsg":"read rejected"}`},
+	}}
+	InitDepsForTest(t, caller)
+	root := deapHandler{}.Command(&captureRunner{})
+	root.PersistentFlags().Bool("yes", false, "confirmation")
+	root.SetArgs([]string{"manage", "publish", "--agent-uuid", "agent-1", "--yes"})
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "read rejected") {
+		t.Fatalf("upstream failure must stop publishing: %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != deapAgentDetailTool {
+		t.Fatalf("published after draft read failure: %#v", caller.calls)
 	}
 }
 
