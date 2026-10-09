@@ -203,13 +203,14 @@ ADMISSION_CONTEXTS
         "repos/$github_repository/releases/tags/$FROM_BETA" \
         --jq '.assets[].name'
     )" || return 1
-    [ "$(printf '%s\n' "$beta_assets" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 8 ] || {
-      printf 'beta release %s must contain exactly eight supported assets\n' "$FROM_BETA" >&2
+    [ "$(printf '%s\n' "$beta_assets" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 9 ] || {
+      printf 'beta release %s must contain exactly nine supported assets\n' "$FROM_BETA" >&2
       return 1
     }
     for beta_asset in \
       dws-darwin-amd64.tar.gz dws-darwin-arm64.tar.gz \
       dws-linux-amd64.tar.gz dws-linux-arm64.tar.gz \
+      dws-openharmony-arm64.tar.gz \
       dws-windows-amd64.zip dws-windows-arm64.zip \
       dws-skills.zip checksums.txt; do
       [ "$(printf '%s\n' "$beta_assets" | grep -Fxc "$beta_asset")" -eq 1 ] || {

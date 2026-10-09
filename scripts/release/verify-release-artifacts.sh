@@ -19,6 +19,7 @@ dws-windows-arm64.zip
 "
 EXPECTED_ASSETS="$EXPECTED_PLATFORM_ASSETS
 dws-skills.zip
+dws-openharmony-arm64.tar.gz
 "
 
 [ -f "$CHECKSUMS" ] || { printf 'missing checksums.txt in %s\n' "$DIST_DIR" >&2; exit 1; }
@@ -167,5 +168,21 @@ verify_binary_version() {
 for asset in $EXPECTED_PLATFORM_ASSETS; do
   verify_binary_version "$asset"
 done
+
+verify_openharmony_asset() {
+  asset="dws-openharmony-arm64.tar.gz"
+  extract_dir="$tmp/extract-openharmony"
+  mkdir -p "$extract_dir"
+  tar -xzf "$DIST_DIR/$asset" -C "$extract_dir"
+  binary="$extract_dir/dws"
+  [ -f "$binary" ] || {
+    printf '%s does not contain the expected dws binary\n' "$asset" >&2
+    return 1
+  }
+  # OpenHarmony is intentionally CGO-free with no SafeChat backend and no
+  # runtime payload; its contract is the static self-signed ELF shape.
+  "$ROOT/scripts/dev/verify-openharmony-artifact.sh" "$binary" "v$SEMVER" || return 1
+}
+verify_openharmony_asset
 
 printf 'Release artifacts verified for v%s.\n' "$SEMVER"

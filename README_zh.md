@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
+  <img src="https://img.shields.io/badge/Go-1.26+-green?logo=go&logoColor=white" alt="Go 1.26+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -36,6 +36,7 @@
 - [核心服务](#核心服务)
 - [安全设计](#安全设计)
 - [参考与文档](#参考与文档)
+- [OpenHarmony 构建](#openharmony-构建)
 - [贡献指南](#贡献指南)
 
 </details>
@@ -135,13 +136,34 @@ go build -o dws ./cmd       # 编译到当前目录
 cp dws ~/.local/bin/         # 安装到 PATH
 ```
 
-> 需要 Go 1.25+。在支持的 macOS、Linux、Windows amd64/arm64 平台上，默认
+> 需要 Go 1.26+。在支持的 macOS、Linux、Windows amd64/arm64 平台上，默认
 > CGO 构建无需 build tag 即包含 SafeChat 后端，因此本机构建需要可用的 C 编译器。
 > 只有明确需要 stub 时才设置 `CGO_ENABLED=0`。使用 `make package` 和 Docker
 > 可通过仓库固定的交叉编译工具链构建全部六个平台产物。
 > 静态端点数据由悟空基线生成并提交在本仓库 `internal/syncdata`，源码构建不需要额外 checkout 数据仓库。
 
 </details>
+
+## OpenHarmony 构建
+
+本仓库支持通过 Go 1.26.7 OpenHarmony 工具链构建 `openharmony/arm64` 目标。
+每次 beta 与正式发布都会构建、自签、校验并随六个平台归档一同发布
+`dws-openharmony-arm64.tar.gz`，该二进制已在 HarmonyOS PC 上完成真机验证。
+
+```bash
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/build-openharmony.sh
+
+# 或生成自签名归档包 (dws-openharmony-arm64.tar.gz)：
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/package-openharmony.sh
+```
+
+该构建固定使用 `CGO_ENABLED=0`，因此 SafeChat 不可用；OpenHarmony 也不支持
+runtime 原生 payload。脚本会校验生成的静态 AArch64 ELF 及 Go 构建元数据，
+完整边界请参见 [`docs/openharmony.md`](docs/openharmony.md)。
 
 ## 国内加速安装
 

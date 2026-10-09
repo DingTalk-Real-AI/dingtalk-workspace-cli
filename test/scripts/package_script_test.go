@@ -3469,6 +3469,9 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	if strings.Contains(goreleaser, "CGO_ENABLED=0") {
 		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
 	}
+	if !strings.Contains(goreleaser, "GOTOOLCHAIN=go1.26.7") {
+		t.Errorf("SafeChat release build is not pinned to the Go 1.26.7 baseline")
+	}
 	postGoreleaser := read("scripts/release/post-goreleaser.sh")
 	if strings.Contains(postGoreleaser, "CGO_ENABLED=0") {
 		t.Fatal("post-goreleaser must not produce CGO-disabled stub binaries")

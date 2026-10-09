@@ -15,7 +15,7 @@
 // verbatim. SafeChat is the default backend on every platform for which the
 // vendor ships libsafechat.a. CGO-disabled builds retain the fail-closed stub.
 
-//go:build cgo && (darwin || linux || windows) && (amd64 || arm64)
+//go:build cgo && (darwin || linux || windows || openharmony) && (amd64 || arm64)
 
 package msgcrypto
 

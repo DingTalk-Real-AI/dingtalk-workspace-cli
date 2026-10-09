@@ -35,6 +35,9 @@ builds:
       - CXX_windows_amd64=x86_64-w64-mingw32-g++
       - CC_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-gcc
       - CXX_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-g++
+      # The later GOTOOLCHAIN assignment overrides the 1.25.9 default above
+      # once Go 1.26.7 is the repo baseline.
+      - GOTOOLCHAIN=go1.26.7
       - 'CC={{ index .Env (print "CC_" .Os "_" .Arch) }}'
       - 'CXX={{ index .Env (print "CXX_" .Os "_" .Arch) }}'
     flags:

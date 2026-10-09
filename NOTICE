@@ -12,6 +12,13 @@ common types, and component/function catalogs; the source distribution's
 skills/multi/dingtalk-aicard/references/protocol/NOTICE records the per-file
 provenance. This CLI is not published or endorsed by the A2UI project.
 
+The statically linked SafeChat message-crypto backend
+(third_party/safechat-go-sdk/lib/*/libsafechat.a, including the
+openharmony/arm64 variant) embeds a build of OpenSSL. OpenSSL is licensed
+under the Apache License 2.0 with the OpenSSL exception
+(https://www.openssl.org/source/license.html). The archives are provided by
+the SafeChat SDK vendor; report upstream issues through the vendor channel.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at

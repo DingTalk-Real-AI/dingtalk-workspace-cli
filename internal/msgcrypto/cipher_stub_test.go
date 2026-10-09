@@ -12,6 +12,13 @@ import (
 )
 
 func TestCrossPlatformCoverageStubBackendFailsClosed(t *testing.T) {
+	if Available() {
+		t.Fatal("Available() = true; want false for unsupported or CGO-disabled builds")
+	}
+	if BackendVersion != "" {
+		t.Fatalf("BackendVersion = %q; want empty stub version", BackendVersion)
+	}
+
 	cipher, err := newBackend(context.Background(), Config{})
 	if cipher != nil || !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("newBackend() = %#v, %v; want nil, ErrUnavailable", cipher, err)

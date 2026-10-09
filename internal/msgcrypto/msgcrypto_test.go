@@ -102,14 +102,34 @@ func TestCrossPlatformCoverageConfigWithDefaultsKeepsExplicitKeystoreDir(t *test
 }
 
 func TestCrossPlatformCoverageDefaultKeystoreDirHonoursConfigDirOverride(t *testing.T) {
-	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	envDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", envDir)
 	got := DefaultKeystoreDir()
 	if !strings.HasSuffix(got, filepath.Join("safechat", "keystore")) {
 		t.Fatalf("DefaultKeystoreDir() = %q, want it to end with safechat/keystore", got)
 	}
-	if !strings.HasPrefix(got, os.Getenv("DWS_CONFIG_DIR")) {
-		t.Fatalf("DefaultKeystoreDir() = %q, want it under DWS_CONFIG_DIR", got)
+	if !dirIsUnder(got, envDir) {
+		t.Fatalf("DefaultKeystoreDir() = %q, want it under DWS_CONFIG_DIR %q", got, envDir)
 	}
+}
+
+// dirIsUnder reports whether sub lies inside dir. The env value is captured
+// once instead of re-reading os.Getenv at assertion time, and the comparison
+// is case-insensitive on Windows where CI temp roots have shown mixed casing.
+func dirIsUnder(sub, dir string) bool {
+	sub = filepath.Clean(sub)
+	dir = filepath.Clean(dir)
+	if len(sub) <= len(dir) {
+		return false
+	}
+	if sub[len(dir)] != filepath.Separator {
+		return false
+	}
+	head := sub[:len(dir)]
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(head, dir)
+	}
+	return head == dir
 }
 
 func TestCrossPlatformCoverageConfigValidateRequiresAuthCodeProvider(t *testing.T) {

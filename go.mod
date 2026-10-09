@@ -1,6 +1,6 @@
 module github.com/DingTalk-Real-AI/dingtalk-workspace-cli
 
-go 1.25.9
+go 1.26.7
 
 replace gitlab.alibaba-inc.com/aes/aem-go-sdk => ./third_party/aem-go-sdk
 
