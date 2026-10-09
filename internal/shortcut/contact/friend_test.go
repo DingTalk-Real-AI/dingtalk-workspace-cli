@@ -89,7 +89,7 @@ func TestStrictFriendListOmitsMissingNick(t *testing.T) {
 func TestStrictFriendListRejectsMissingOpenDingTalkId(t *testing.T) {
 	_, _, _, err := strictFriendList(map[string]any{
 		"success": true,
-		"result":  map[string]any{"friendList": []any{map[string]any{"alias": "Alice"}}},
+		"result":  map[string]any{"friendList": []any{map[string]any{"alias": "Alice"}}, "hasMore": false},
 	}, friendOperationList)
 	if err == nil {
 		t.Fatal("expected error for missing openDingTalkId")
@@ -99,7 +99,7 @@ func TestStrictFriendListRejectsMissingOpenDingTalkId(t *testing.T) {
 func TestStrictFriendListRejectsDuplicateOpenDingTalkId(t *testing.T) {
 	_, _, _, err := strictFriendList(map[string]any{
 		"success": true,
-		"result":  map[string]any{"friendList": []any{map[string]any{"openDingTalkId": "open-dt-alice"}, map[string]any{"openDingTalkId": "open-dt-alice"}}},
+		"result":  map[string]any{"friendList": []any{map[string]any{"openDingTalkId": "open-dt-alice"}, map[string]any{"openDingTalkId": "open-dt-alice"}}, "hasMore": false},
 	}, friendOperationList)
 	if err == nil {
 		t.Fatal("expected error for duplicate openDingTalkId")
@@ -172,7 +172,7 @@ func TestStrictFriendRequestListOmitsMissingNick(t *testing.T) {
 func TestStrictFriendRequestListRejectsMissingOpenDingTalkId(t *testing.T) {
 	_, _, _, _, err := strictFriendRequestList(map[string]any{
 		"success": true,
-		"result":  map[string]any{"friendList": []any{map[string]any{"status": 0}}},
+		"result":  map[string]any{"friendList": []any{map[string]any{"status": 0}}, "hasMore": false},
 	}, friendOperationRequestList)
 	if err == nil {
 		t.Fatal("expected error for missing openDingTalkId")
@@ -447,8 +447,10 @@ func TestStrictFriendListRejectsMalformedEnvelopes(t *testing.T) {
 	cases := []struct{ name, payload string }{
 		{"failure-envelope", `{"success":false,"errorCode":"E","errorMsg":"x"}`},
 		{"missing-result", `{"success":true}`},
-		{"non-array-friendList", `{"success":true,"result":{"friendList":"x"}}`},
-		{"non-object-item", `{"success":true,"result":{"friendList":["bad"]}}`},
+		{"non-array-friendList", `{"success":true,"result":{"hasMore":false,"friendList":"x"}}`},
+		{"non-object-item", `{"success":true,"result":{"hasMore":false,"friendList":["bad"]}}`},
+		{"missing-hasmore", `{"success":true,"result":{"cursor":7,"friendList":[]}}`},
+		{"non-bool-hasmore", `{"success":true,"result":{"cursor":7,"hasMore":"true","friendList":[]}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -476,9 +478,11 @@ func TestStrictFriendRequestListRejectsMalformedEnvelopes(t *testing.T) {
 	cases := []struct{ name, payload string }{
 		{"failure-envelope", `{"success":false,"errorCode":"E","errorMsg":"x"}`},
 		{"missing-result", `{"success":true}`},
-		{"non-array-friendList", `{"success":true,"result":{"friendList":true}}`},
-		{"non-object-item", `{"success":true,"result":{"friendList":[3]}}`},
-		{"duplicate-identity", `{"success":true,"result":{"friendList":[{"openDingTalkId":"dup-1"},{"openDingTalkId":"dup-1"}]}}`},
+		{"non-array-friendList", `{"success":true,"result":{"hasMore":false,"pendingCount":0,"friendList":true}}`},
+		{"non-object-item", `{"success":true,"result":{"hasMore":false,"pendingCount":0,"friendList":[3]}}`},
+		{"duplicate-identity", `{"success":true,"result":{"hasMore":false,"pendingCount":0,"friendList":[{"openDingTalkId":"dup-1"},{"openDingTalkId":"dup-1"}]}}`},
+		{"missing-hasmore", `{"success":true,"result":{"cursor":3,"pendingCount":0,"friendList":[]}}`},
+		{"non-bool-hasmore", `{"success":true,"result":{"cursor":3,"hasMore":1,"pendingCount":0,"friendList":[]}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -625,5 +629,46 @@ func TestFriendRequestListResumablePageWithoutCursorFailsClosed(t *testing.T) {
 	}}
 	if _, err := executeFriendShortcutForEnvelope(t, ListFriendRequests, caller, map[string]string{"size": "20"}); err == nil {
 		t.Fatal("resumable request page without cursor accepted")
+	}
+}
+
+// Execute-path proof that schema drift on hasMore fails closed with a
+// response-validation error instead of publishing endpoint_exhausted.
+func TestFriendListsExecuteRejectMalformedHasMore(t *testing.T) {
+	caller := &contactCaller{payloads: map[string]string{
+		"get_friend_list":         `{"success":true,"result":{"cursor":7,"friendList":[{"openDingTalkId":"friend-1"}]}}`,
+		"get_friend_request_list": `{"success":true,"result":{"cursor":3,"pendingCount":0,"friendList":[]}}`,
+	}}
+	helpers.InitDepsForTest(t, caller)
+
+	for _, tc := range []struct {
+		name string
+		decl shortcut.Shortcut
+	}{
+		{"list-missing-hasmore", ListFriends},
+		{"request-list-missing-hasmore", ListFriendRequests},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.decl.Execute(shortcut.RuntimeContextForTest(friendExecuteCmd(t, tc.decl, map[string]string{"size": "20"}), tc.decl)); err == nil {
+				t.Fatal("missing hasMore accepted")
+			}
+		})
+	}
+
+	caller.calls = 0
+	caller.payloads["get_friend_list"] = `{"success":true,"result":{"cursor":7,"hasMore":"true","friendList":[]}}`
+	caller.payloads["get_friend_request_list"] = `{"success":true,"result":{"cursor":3,"hasMore":1,"pendingCount":0,"friendList":[]}}`
+	for _, tc := range []struct {
+		name string
+		decl shortcut.Shortcut
+	}{
+		{"list-non-bool-hasmore", ListFriends},
+		{"request-list-non-bool-hasmore", ListFriendRequests},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.decl.Execute(shortcut.RuntimeContextForTest(friendExecuteCmd(t, tc.decl, map[string]string{"size": "20"}), tc.decl)); err == nil {
+				t.Fatal("non-bool hasMore accepted")
+			}
+		})
 	}
 }

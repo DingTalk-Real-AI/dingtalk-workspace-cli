@@ -480,9 +480,12 @@ func strictFriendList(data map[string]any, operation string) ([]map[string]any, 
 		return nil, 0, false, responsecheck.Error(operation, "malformed_result", "响应 result 应为对象")
 	}
 	cursor, _ := contactInt64(result["cursor"])
-	hasMore := false
-	if v, ok := result["hasMore"].(bool); ok {
-		hasMore = v
+	hasMore, ok := result["hasMore"].(bool)
+	if !ok {
+		// A missing or non-boolean hasMore cannot prove pagination is done;
+		// defaulting it to false would publish endpoint_exhausted and make
+		// agents stop paging early. Fail closed on schema drift instead.
+		return nil, 0, false, responsecheck.Error(operation, "malformed_pagination", "响应 result.hasMore 缺失或不是布尔值")
 	}
 	raw, present := result["friendList"]
 	if !present {
@@ -540,9 +543,11 @@ func strictFriendRequestList(data map[string]any, operation string) ([]map[strin
 		return nil, 0, false, 0, responsecheck.Error(operation, "malformed_result", "响应 result 应为对象")
 	}
 	cursor, _ := contactInt64(result["cursor"])
-	hasMore := false
-	if v, ok := result["hasMore"].(bool); ok {
-		hasMore = v
+	hasMore, ok := result["hasMore"].(bool)
+	if !ok {
+		// Same fail-closed rule as the friend list: a silently exhausted
+		// declaration would hide pending requests from the agent.
+		return nil, 0, false, 0, responsecheck.Error(operation, "malformed_pagination", "响应 result.hasMore 缺失或不是布尔值")
 	}
 	pendingCount, _ := contactInt64(result["pendingCount"])
 	raw, present := result["friendList"]
