@@ -678,8 +678,7 @@ func homeDir() string {
 }
 
 // agentSpec describes how to run (and install) one channel's local agent CLI.
-// Adding a mainstream agent is one entry in agentSpecs — no other code changes.
-// The message text is always appended as the final argv element at runtime.
+// 普通一次性 Agent 在此声明 argv；结构化协议由专用 forwarder 处理。
 type agentSpec struct {
 	app      string          // human-readable name for messages
 	bins     []string        // PATH lookup names
@@ -777,6 +776,9 @@ var agentSpecs = map[string]agentSpec{
 		modelFlag: "-m"},
 	"gemini": {app: "Gemini API",
 		hint: "设置 GEMINI_API_KEY（或 GOOGLE_API_KEY）；模型可用 --agent-model 指定；Gemini-compatible 代理可设置 GEMINI_API_BASE_URL"},
+	"pi": {app: "Pi Coding Agent", bins: []string{"pi"},
+		install: []string{"npm", "i", "-g", "@earendil-works/pi-coding-agent"},
+		hint:    "npm i -g @earendil-works/pi-coding-agent（原 @mariozechner/pi-coding-agent）", modelFlag: "--model"},
 	// opencode is resolved here only to find the local binary. The forwarder
 	// uses `opencode serve --pure` plus HTTP session/message APIs instead of
 	// parsing `opencode run` stdout.
@@ -1034,6 +1036,9 @@ func newLocalAgentForwarder(channel, scopeID string, opts connectAgentOptions) (
 	}
 	if channel == "codex" {
 		return newCodexAppServerForwarder(argv[0], env, timeout, opts, clientID), nil
+	}
+	if channel == "pi" && !overridden {
+		return newPiForwarder(argv[0], env, timeout, opts, clientID), nil
 	}
 	// opencode uses its official local HTTP server; DWS keeps the
 	// conversation→session mapping and sends one-shot group replies.
