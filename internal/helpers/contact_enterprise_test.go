@@ -5,6 +5,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -144,22 +145,6 @@ func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testin
 			},
 		},
 		{
-			name:     "get user id by dingtalk id",
-			args:     []string{"user", "get-by-dingtalk-id", "--id", "zhangsan"},
-			toolName: "get_user_id_by_dingtalk_id",
-			wantArgs: map[string]any{
-				"dingtalk_id": "zhangsan",
-			},
-		},
-		{
-			name:     "get user id by dingtalk id alias",
-			args:     []string{"user", "search-dingtalk", "--dingtalk-id", " zhangsan "},
-			toolName: "get_user_id_by_dingtalk_id",
-			wantArgs: map[string]any{
-				"dingtalk_id": "zhangsan",
-			},
-		},
-		{
 			name:     "get user id by open dingtalk id",
 			args:     []string{"user", "get-by-open-dingtalk-id", "--id", "open-dt-zhangsan"},
 			toolName: "get_user_id_by_open_dingtalk_id",
@@ -222,23 +207,6 @@ func TestCrossPlatformCoverageContactUserInviteRejectsInvalidDepartmentsJSON(t *
 	}
 }
 
-func TestCrossPlatformCoverageContactGetByDingtalkIdRejectsBlankID(t *testing.T) {
-	caller, err := runContactEnterpriseCommand(t,
-		"user", "get-by-dingtalk-id",
-		"--id", "   ",
-	)
-	if err == nil || !strings.Contains(err.Error(), "不能为空") {
-		t.Fatalf("error = %v, want blank id validation", err)
-	}
-	var appErr *apperrors.Error
-	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
-		t.Fatalf("error = %T %v, want validation error", err, err)
-	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
-	}
-}
-
 func TestCrossPlatformCoverageContactGetByOpenDingtalkIdRejectsBlankID(t *testing.T) {
 	caller, err := runContactEnterpriseCommand(t,
 		"user", "get-by-open-dingtalk-id",
@@ -253,6 +221,62 @@ func TestCrossPlatformCoverageContactGetByOpenDingtalkIdRejectsBlankID(t *testin
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
+	}
+}
+
+// TestCrossPlatformCoverageContactGetByDingtalkIdRetiredFailsClosed 锁定退役形态：
+// get-by-dingtalk-id（含别名 search-dingtalk）保留为 Hidden 历史 argv 兼容入口，
+// 执行立即以 command_retired 失败关闭，不发任何远端调用。
+func TestCrossPlatformCoverageContactGetByDingtalkIdRetiredFailsClosed(t *testing.T) {
+	caller, err := runContactEnterpriseCommand(t,
+		"user", "get-by-dingtalk-id",
+		"--id", "zhangsan",
+	)
+	requireRetiredContactGetByDingtalkId(t, err, caller)
+
+	aliasCaller, aliasErr := runContactEnterpriseCommand(t,
+		"user", "search-dingtalk",
+		"--dingtalk-id", " zhangsan ",
+	)
+	requireRetiredContactGetByDingtalkId(t, aliasErr, aliasCaller)
+}
+
+func requireRetiredContactGetByDingtalkId(t *testing.T, err error, caller *contactEnterpriseCaller) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("retired get-by-dingtalk-id should fail closed")
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("retired get-by-dingtalk-id must not call MCP: %#v", caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "command_retired" {
+		t.Fatalf("error = %v, want reason command_retired", err)
+	}
+	if !strings.Contains(err.Error(), "已下线") {
+		t.Fatalf("error = %q, want 已下线", err)
+	}
+}
+
+// TestCrossPlatformCoverageContactGetByDingtalkIdHiddenFromHelp 锁定隐藏面：
+// 退役叶子不出现在 contact user --help 输出中，别名也不可见。
+func TestCrossPlatformCoverageContactGetByDingtalkIdHiddenFromHelp(t *testing.T) {
+	var help bytes.Buffer
+	root := newContactCommand()
+	userCmd, _, err := root.Find([]string{"user"})
+	if err != nil || userCmd == nil {
+		t.Fatalf("find contact user: %v", err)
+	}
+	userCmd.SetOut(&help)
+	userCmd.SetErr(&help)
+	userCmd.SetArgs([]string{"--help"})
+	if err := userCmd.Execute(); err != nil {
+		t.Fatalf("contact user --help: %v", err)
+	}
+	for _, forbidden := range []string{"get-by-dingtalk-id", "search-dingtalk"} {
+		if strings.Contains(help.String(), forbidden) {
+			t.Fatalf("contact user --help still exposes retired %s:\n%s", forbidden, help.String())
+		}
 	}
 }
 
