@@ -34,9 +34,18 @@ type GlobalFlags struct {
 	Token        string
 	Verbose      bool
 	Yes          bool
+
+	// 委托身份仅作为本次请求上下文，不改变当前登录身份。
+	DelegatorUserID         string
+	DelegatorCorpID         string
+	DelegatorOpenDingtalkID string
+
+	// 每棵命令树独享执行状态；runner 克隆共享同一作用域，不读取已消费的参数。
+	delegatorInvocation *delegatorInvocation
 }
 
 func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
+	bindDelegatorFlags(cmd, flags)
 	cmd.PersistentFlags().StringVar(&flags.ClientID, "client-id", "", i18n.T("覆盖 OAuth 客户端 ID (钉钉 AppKey)"))
 	cmd.PersistentFlags().StringVar(&flags.ClientSecret, "client-secret", "", i18n.T("覆盖 OAuth 客户端密钥 (钉钉 AppSecret)"))
 	cmd.PersistentFlags().BoolVar(&flags.Debug, "debug", false, "显示调试日志")
