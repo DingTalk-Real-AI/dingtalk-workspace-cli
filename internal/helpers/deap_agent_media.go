@@ -18,6 +18,14 @@ import (
 var errEmployeeImageUnavailable = errors.New("employee_image_unavailable")
 var employeeImagePattern = regexp.MustCompile(`\[(?:图片消息|图片)\]\(mediaId=([^\s)]+)\)`)
 
+// 文件系统边界用于注入磁盘/权限故障；默认仍直接使用标准库。
+var (
+	employeeImageMkdirTemp  = os.MkdirTemp
+	employeeImageCreateTemp = os.CreateTemp
+	employeeImageOpen       = os.Open
+	employeeImageRename     = os.Rename
+)
+
 const employeeImageLimit = 4
 const employeeImageMaxBytes = 20 << 20
 
@@ -72,14 +80,14 @@ func prepareEmployeeImages(parent context.Context, profile, runtimeDir string, e
 	if os.MkdirAll(base, 0700) != nil || os.Chmod(base, 0700) != nil {
 		return nil, cleanup, errEmployeeImageUnavailable
 	}
-	dir, err := os.MkdirTemp(base, "turn-")
+	dir, err := employeeImageMkdirTemp(base, "turn-")
 	if err != nil {
 		return nil, cleanup, errEmployeeImageUnavailable
 	}
 	cleanup = func() { _ = os.RemoveAll(dir) }
 	var attachments []connectMediaAttachment
 	for _, ref := range refs {
-		file, err := os.CreateTemp(dir, "image-*")
+		file, err := employeeImageCreateTemp(dir, "image-*")
 		if err != nil {
 			return nil, cleanup, errEmployeeImageUnavailable
 		}
@@ -111,7 +119,7 @@ func prepareEmployeeImages(parent context.Context, profile, runtimeDir string, e
 		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > employeeImageMaxBytes {
 			return nil, cleanup, errEmployeeImageUnavailable
 		}
-		imageFile, err := os.Open(path)
+		imageFile, err := employeeImageOpen(path)
 		if err != nil {
 			return nil, cleanup, errEmployeeImageUnavailable
 		}
@@ -135,7 +143,7 @@ func prepareEmployeeImages(parent context.Context, profile, runtimeDir string, e
 			return nil, cleanup, errEmployeeImageUnavailable
 		}
 		imagePath := path + ext
-		if os.Rename(path, imagePath) != nil {
+		if employeeImageRename(path, imagePath) != nil {
 			return nil, cleanup, errEmployeeImageUnavailable
 		}
 		attachments = append(attachments, connectMediaAttachment{LocalPath: imagePath, FileName: filepath.Base(imagePath), MediaType: "image"})

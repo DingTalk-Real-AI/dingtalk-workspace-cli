@@ -5,9 +5,13 @@ package helpers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"os/exec"
@@ -135,6 +139,13 @@ func TestEmployeeImageDownloadHelper(t *testing.T) {
 			os.Exit(2)
 		}
 		switch mode {
+		case "webp":
+			data, _ := base64.StdEncoding.DecodeString("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA")
+			_, _ = f.Write(data)
+		case "jpeg":
+			_ = jpeg.Encode(f, image.NewRGBA(image.Rect(0, 0, 2, 2)), nil)
+		case "gif":
+			_ = gif.Encode(f, image.NewPaletted(image.Rect(0, 0, 2, 2), color.Palette{color.Black, color.White}), nil)
 		case "non-image":
 			_, _ = f.WriteString("this is not an image")
 		case "oversized":
@@ -326,4 +337,90 @@ func TestCrossPlatformCoverageEmployeeImageCodexInput(t *testing.T) {
 		t.Fatal("员工回合未传递 Codex 原生 localImage")
 	}
 	t.Fatal("未调用 turn/start")
+}
+
+func TestCrossPlatformCoverageEmployeeImageIOFailures(t *testing.T) {
+	for _, mode := range []string{"mkdir", "turn-dir", "create-file", "close-file", "command", "open", "read", "rename"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			e := employeeEvent{MessageID: "m", ConversationID: "c", Content: "[图片消息](mediaId=fixture)"}
+			t.Setenv("DWS_EMPLOYEE_IMAGE_HELPER", "1")
+			boom := errors.New("private IO failure")
+			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+				return exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestEmployeeImageDownloadHelper$", "--"}, args...)...)
+			})
+			switch mode {
+			case "mkdir":
+				dir = filepath.Join(dir, "not-a-directory")
+				if err := os.WriteFile(dir, []byte("fixture"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "turn-dir":
+				testseam.Swap(t, &employeeImageMkdirTemp, func(string, string) (string, error) { return "", boom })
+			case "create-file":
+				testseam.Swap(t, &employeeImageCreateTemp, func(string, string) (*os.File, error) { return nil, boom })
+			case "close-file":
+				testseam.Swap(t, &employeeImageCreateTemp, func(dir, pattern string) (*os.File, error) {
+					f, err := os.CreateTemp(dir, pattern)
+					if err != nil {
+						return nil, err
+					}
+					if err := f.Close(); err != nil {
+						t.Fatal(err)
+					}
+					return f, nil
+				})
+			case "command":
+				testseam.Swap(t, &daemonExecutable, func() (string, error) { return "", boom })
+			case "open":
+				testseam.Swap(t, &employeeImageOpen, func(string) (*os.File, error) { return nil, boom })
+			case "read":
+				testseam.Swap(t, &employeeImageOpen, func(path string) (*os.File, error) {
+					f, err := os.Open(path)
+					if err != nil {
+						return nil, err
+					}
+					if err := f.Close(); err != nil {
+						t.Fatal(err)
+					}
+					return f, nil
+				})
+			case "rename":
+				testseam.Swap(t, &employeeImageRename, func(string, string) error { return boom })
+			}
+			attachments, cleanup, err := prepareEmployeeImages(context.Background(), "corp:employee", dir, e)
+			cleanup()
+			if !errors.Is(err, errEmployeeImageUnavailable) || len(attachments) != 0 {
+				t.Fatalf("文件错误未阻止附件交付：%v %v", attachments, err)
+			}
+			entries, _ := os.ReadDir(filepath.Join(dir, "media"))
+			if len(entries) != 0 {
+				t.Fatal("失败后残留图片回合")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeImageFormatAndQuoteFailures(t *testing.T) {
+	for _, format := range []string{"jpeg", "gif", "webp"} {
+		t.Run(format, func(t *testing.T) {
+			t.Setenv("DWS_EMPLOYEE_IMAGE_HELPER", "1")
+			t.Setenv("DWS_EMPLOYEE_IMAGE_MODE", format)
+			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+				return exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestEmployeeImageDownloadHelper$", "--"}, args...)...)
+			})
+			attachments, cleanup, err := prepareEmployeeImages(context.Background(), "corp:employee", t.TempDir(), employeeEvent{MessageID: "m", ConversationID: "c", Content: "[图片消息](mediaId=fixture)"})
+			defer cleanup()
+			want := map[string]string{"jpeg": ".jpg", "gif": ".gif", "webp": ".webp"}[format]
+			if err != nil || len(attachments) != 1 || filepath.Ext(attachments[0].LocalPath) != want {
+				t.Fatalf("图片格式准备失败：%v %v", attachments, err)
+			}
+		})
+	}
+	e := employeeEvent{MessageID: "m", ConversationID: "c", Content: "当前问题", QuotedMessage: &personal.MessageEventContext{Content: "[图片消息](mediaId=fixture)"}}
+	attachments, cleanup, err := prepareEmployeeImages(context.Background(), "corp:employee", t.TempDir(), e)
+	defer cleanup()
+	if !errors.Is(err, errEmployeeImageUnavailable) || len(attachments) != 0 {
+		t.Fatal("缺少引用原消息定位仍交付图片")
+	}
 }
