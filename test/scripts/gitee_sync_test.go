@@ -408,7 +408,7 @@ func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing
 	if err != nil {
 		t.Fatalf("idempotent reconcile error = %v\noutput:\n%s", err, secondOutput)
 	}
-	if !strings.Contains(string(secondOutput), "uploaded 0, replaced 0, skipped 8") {
+	if !strings.Contains(string(secondOutput), "uploaded 0, replaced 0, skipped 9") {
 		t.Fatalf("second reconcile did not skip all verified assets:\n%s", secondOutput)
 	}
 
