@@ -217,7 +217,7 @@ var MessagesReply = shortcut.Shortcut{
 	Command:     "+messages-reply",
 	Product:     "chat",
 	Description: "统一回复已有消息：个人群/单聊引用、个人 Thread 追加、Bot 群引用",
-	Intent:      "当你要以当前用户身份对一条已有消息发送纯文本引用回复时使用；传原消息 ID，CLI 会只读定位会话和发送者；可显式传会话或 --ref-sender，所有模式均核对源消息身份。可用 --as bot 选择 Bot 群引用，--open-dingtalk-id 选择个人单聊，--reply-in-thread 追加到已核实的 Thread；所有模式先检查源消息 ID/会话归属；个人普通引用的 markdown/content 仍按纯文本解释，群聊可显式 @成员或 @所有人。成功结果在保留下层响应的同时增量返回 messageId（下层提供时）、conversationId、threadId（适用时）、deliveryStatus、idempotencyKey 和 referencedMessage 来源上下文。",
+	Intent:      "当你要以当前用户身份对一条已有消息发送引用回复时使用；传原消息 ID，CLI 会只读定位会话和发送者；可显式传会话或 --ref-sender，所有模式均核对源消息身份。可用 --as bot 选择 Bot 群引用，--open-dingtalk-id 选择个人单聊，--reply-in-thread 追加到已核实的 Thread；所有模式先检查源消息 ID/会话归属；个人普通引用以 text 类型发送正文，钉钉客户端会渲染其中的 Markdown（标题、加粗、行内代码、有序/无序列表），群聊可显式 @成员或 @所有人。成功结果在保留下层响应的同时增量返回 messageId（下层提供时）、conversationId、threadId（适用时）、deliveryStatus、idempotencyKey 和 referencedMessage 来源上下文。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "as", Type: shortcut.FlagString, Default: "user", Enum: []string{"user", "bot"}, Aliases: []string{"identity"}, Desc: "回复身份，Bot 仅普通群文本/Markdown引用" + "；" + replyExtensionConstraint},
@@ -231,7 +231,7 @@ var MessagesReply = shortcut.Shortcut{
 		{Name: "ref-msg-id", Type: shortcut.FlagString, Desc: "被引用消息 openMessageId"},
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "--ref-msg-id 的 lark-cli 对齐别名"},
 		{Name: "ref-sender", Type: shortcut.FlagString, Desc: "原消息发送者 openDingTalkId/userId（userId 通过通讯录搜索精确匹配；不传则自动读取）" + "；" + replyExtensionConstraint + "；" + replyTargetConstraint},
-		{Name: "content", Type: shortcut.FlagString, Desc: "回复正文；普通引用中 content/markdown 均按纯文本解释，Bot群引用及已有Thread追加为Markdown；@仅群聊，可用 <@openDingTalkId> 定位提及", Required: true, Aliases: []string{"text", "markdown"}},
+		{Name: "content", Type: shortcut.FlagString, Desc: "回复正文；个人普通引用以 text 类型发送、客户端渲染其中的 Markdown，Bot群引用及已有Thread追加为Markdown；@仅群聊，可用 <@openDingTalkId> 定位提及", Required: true, Aliases: []string{"text", "markdown"}},
 		{Name: "uuid", Type: shortcut.FlagString, Desc: "幂等键（可选）" + "；" + replyExtensionConstraint},
 		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "--uuid 的 lark-cli 对齐别名" + "；" + replyExtensionConstraint},
 		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "群回复中 @ 的 openDingTalkId 列表；自动补齐缺少的提及占位符；" + replyTargetConstraint},
