@@ -329,12 +329,20 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	// 即使执行或账本失败，也要结束处理中反馈；成功分支在持久化后覆盖该值。
 	label := "已中断，待核查"
 	defer func() { r.feedback.set(e, label, true) }()
-	answer, err := forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e))
+	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
+	defer cleanup()
+	var answer string
+	if err == nil {
+		answer, err = forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
+	}
 	record.Execution = "success"
 	if err != nil {
 		record.Status = "agent_failed"
 		record.Execution = "failure"
 		answer = "本次处理失败，请稍后重试。"
+		if errors.Is(err, errEmployeeImageUnavailable) {
+			answer = "本次图片读取失败，请稍后重试。"
+		}
 		if errors.Is(err, errCodexEmployeeResumeFailed) {
 			answer = "原会话暂时无法恢复，请稍后重试；如需新会话，请发送 /new。"
 		}
