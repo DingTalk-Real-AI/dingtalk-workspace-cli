@@ -74,7 +74,11 @@ func contactObjectResult(description string) *contract.ResultSpec {
 
 func finalizeContactShortcut(item *shortcut.Shortcut, result *contract.ResultSpec, available bool) {
 	item.OutputRollout = output.RolloutUnifiedActive
-	item.Safety = contactReadSafety
+	if item.Safety.Effect == "" {
+		// Read-only default. A shortcut that declares its own Safety (the
+		// friend write commands carry user_required confirmation gates) keeps it.
+		item.Safety = contactReadSafety
+	}
 	if item.Contract.Identity.Name == "" {
 		name := "shortcut_" + strings.ReplaceAll(strings.TrimPrefix(item.Command, "+"), "-", "_")
 		examples := append([]string(nil), item.Tips...)

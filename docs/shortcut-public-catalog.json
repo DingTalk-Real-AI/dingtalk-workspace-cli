@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29T15:34:05.119548",
+  "generated_at": "2026-10-09T10:34:13.296839",
   "count": 484,
   "results": [
     {
@@ -2759,7 +2759,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "查询当前用户好友列表，严格要求 success、result.friendList 数组、每项含唯一稳定 openDingTalkId 与有效状态；投影 count/cursor/hasMore 与标准化 friends 列表，预发 mcp_tool_debug 与 CLI 真实执行已验证分页非空与零命中均返回显式空结果。",
+      "semantic_delta": "查询当前用户好友列表，严格要求 success、result 对象、friendList 数组（缺失视为显式空列表）、每项含唯一稳定 openDingTalkId；status/gmtCreate/nick/alias/remark 均为存在才投影的可选字段；投影 count/cursor/hasMore 与标准化 friends 列表，预发 mcp_tool_debug 与 CLI 真实执行已验证分页非空与零命中均返回显式空结果。",
       "availability": "available"
     },
     {
@@ -2789,7 +2789,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "查询当前用户收到的好友申请列表，严格要求 success、result.friendRequestList 数组、每项含唯一稳定 openDingTalkId 与状态；投影 count/pendingCount/cursor/hasMore 与标准化 requests 列表，查询后未读申请会被标记为已读，预发真实执行已验证。",
+      "semantic_delta": "查询当前用户收到的好友申请列表，严格要求 success、result 对象、friendList 数组（缺失视为显式空列表）、每项含唯一稳定 openDingTalkId；status/remark/modifyAt/isRead 均为存在才投影的可选字段；投影 count/pendingCount/cursor/hasMore 与标准化 requests 列表，查询后未读申请会被标记为已读，预发真实执行已验证。",
       "availability": "available"
     },
     {

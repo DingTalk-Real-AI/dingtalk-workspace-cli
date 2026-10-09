@@ -119,7 +119,7 @@ metadata:
 
 **触发**：好友列表、好友申请、加好友、同意/拒绝申请、删除好友。
 
-1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。若用户只提供姓名/钉钉号，先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 或 `dws contact user get-by-dingtalk-id --id <dingtalkId> --format json` 取得 `openDingTalkId`；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
+1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。openDingTalkId 只能从好友域自身数据取得：`dws contact +friend-list --format json` / `dws contact +friend-request-list --format json` 返回项的 `openDingTalkId` 字段，或好友事件消息体（`user_contact_friend_request_received` 的 `src/dest_open_dingtalk_id`、`user_contact_friend_added` 的 `friend_open_dingtalk_id`）。`aisearch person` 与 `contact user get-by-dingtalk-id` 均只返回 userId、**取不到 openDingTalkId**；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
 2. **查好友（必须）**：`dws contact +friend-list --format json` 返回当前登录用户的好友名单（含昵称 nick、备注名 alias）、好友状态与分页信息；`dws contact +friend-request-list --format json` 返回收到的好友申请（含申请人昵称 nick、申请留言、状态）与 pending 数量。向用户展示列表时优先用 nick / alias 标识好友，openDingTalkId 非必要不展示；汇报申请 status 时必须翻译为中文状态（1=待接受、3=已成为好友），不要直接显示数字。
 3. **写操作（必须）**：发送申请 `dws contact +friend-request-send --to <openDingTalkId> --remark "<验证留言>" --format json`；同意 `dws contact +friend-request-accept --from <openDingTalkId> --format json`；拒绝 `dws contact +friend-request-reject --from <openDingTalkId> --format json`；删除好友 `dws contact +friend-remove --friend <openDingTalkId> --format json`（最后一条为不可逆高风险写操作，**必须先取得用户明确确认**）。
 
@@ -133,7 +133,7 @@ metadata:
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --query "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
 - 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
-- 好友命令（`+friend-*`）全部以 **openDingTalkId** 为身份键，不是 userId 也不是钉钉号；在缺少 openDingTalkId 时，先用 aisearch / `get-by-dingtalk-id` / `get-by-open-dingtalk-id` 取得。
+- 好友命令（`+friend-*`）全部以 **openDingTalkId** 为身份键，不是 userId 也不是钉钉号；openDingTalkId 只能从 `+friend-list` / `+friend-request-list` 响应或好友事件消息体取得（`aisearch person` / `get-by-dingtalk-id` 只返回 userId，取不到 openDingTalkId）。
 - `+friend-remove` 为不可逆高风险写操作，执行前**必须**向用户展示目标 openDingTalkId 并获取明确确认；确认后才可加 `--yes`。
 
 ## 跨产品协作

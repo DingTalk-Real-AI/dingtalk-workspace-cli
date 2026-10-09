@@ -1777,6 +1777,10 @@ user_contact_friend_added）等业务消息体中。
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_user_id_by_open_dingtalk_id"},
 			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"openDingTalkId 反查 userId 结果","properties":{"user_id":{"type":"string","description":"员工 userId"},"success":{"type":"boolean","description":"是否查询成功"},"errorCode":{"type":"number","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "根据开放钉钉号ID获取用户 userId",
 				UseWhen:      []string{"已知员工开放钉钉号ID（openDingTalkId，常见于好友事件消息体），需要获取其 userId 时"},

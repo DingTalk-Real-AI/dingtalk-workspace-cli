@@ -1118,6 +1118,14 @@ func projectFriendRequestReceivedEvent(ev transport.Event, base baseEventOutput,
 		return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
 	}
 	body := payload.Body
+	// Fail closed on missing identity: a friend request without the pairwise
+	// openDingTalkIds cannot be routed or answered by the downstream agent.
+	if strings.TrimSpace(body.SrcOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend request received payload: src_open_dingtalk_id is required")
+	}
+	if strings.TrimSpace(body.DestOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend request received payload: dest_open_dingtalk_id is required")
+	}
 	return FriendRequestReceivedOutput{
 		Type:               base.Type,
 		EventID:            base.EventID,
@@ -1139,6 +1147,17 @@ func projectFriendAddedEvent(ev transport.Event, base baseEventOutput, raw json.
 		return ev, fmt.Errorf("decode personal friend added payload: %w", err)
 	}
 	body := payload.Body
+	// Fail closed on missing identity or an unknown direction: the friend
+	// openDingTalkId is the only actionable identity and direction is an
+	// enumerated field (active=我发起, passive=对方发起).
+	if strings.TrimSpace(body.FriendOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend added payload: friend_open_dingtalk_id is required")
+	}
+	switch body.Direction {
+	case "active", "passive":
+	default:
+		return ev, fmt.Errorf("decode personal friend added payload: direction must be \"active\" or \"passive\", got %q", body.Direction)
+	}
 	return FriendAddedOutput{
 		Type:                 base.Type,
 		EventID:              base.EventID,

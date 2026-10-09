@@ -1467,6 +1467,49 @@ func TestCrossPlatformCoverageProjectOutputFriendEventsRejectFlatBody(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageProjectOutputFriendEventsFailClosedOnMissingIdentity(t *testing.T) {
+	missingRequestSrc := `{"eventKey":"user_contact_friend_request_received","payload":{"body":{"src_name":"who","dest_open_dingtalk_id":"xinhuitest"}}}`
+	missingRequestDest := `{"eventKey":"user_contact_friend_request_received","payload":{"body":{"src_open_dingtalk_id":"olz_vkqmrk6cp"}}}`
+	missingAddedFriend := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_name":"who","direction":"passive"}}}`
+	blankAddedFriend := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_open_dingtalk_id":"  ","direction":"active"}}}`
+	for _, tt := range []struct {
+		name     string
+		eventKey string
+		data     string
+		missing  string
+	}{
+		{name: "request received without src", eventKey: EventFriendRequestReceived, data: missingRequestSrc, missing: "src_open_dingtalk_id is required"},
+		{name: "request received without dest", eventKey: EventFriendRequestReceived, data: missingRequestDest, missing: "dest_open_dingtalk_id is required"},
+		{name: "friend added without friend id", eventKey: EventFriendAdded, data: missingAddedFriend, missing: "friend_open_dingtalk_id is required"},
+		{name: "friend added with blank friend id", eventKey: EventFriendAdded, data: blankAddedFriend, missing: "friend_open_dingtalk_id is required"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: tt.eventKey, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil || !strings.Contains(err.Error(), tt.missing) {
+				t.Fatalf("ProjectOutput() error = %v, want %q", err, tt.missing)
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendAddedRejectsUnknownDirection(t *testing.T) {
+	for _, direction := range []string{"", "incoming", "ACTIVE"} {
+		data := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_open_dingtalk_id":"olz_vkqmrk6cp","direction":"` + direction + `"}}}`
+		ev := transport.Event{EventID: "outer-event", EventType: EventFriendAdded, Data: data}
+		projected, err := ProjectOutput(ev)
+		if err == nil || !strings.Contains(err.Error(), "direction must be") {
+			t.Fatalf("direction %q: ProjectOutput() error = %v, want direction must be", direction, err)
+		}
+		if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+			t.Fatalf("direction %q: ProjectOutput() fallback = %#v, want %#v", direction, projected, ev)
+		}
+	}
+}
+
 func assertNoInternalActionFields(t *testing.T, projected any) {
 	t.Helper()
 	raw, err := json.Marshal(projected)

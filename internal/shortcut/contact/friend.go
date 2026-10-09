@@ -67,6 +67,10 @@ var ListFriends = shortcut.Shortcut{
 			Examples:     []string{"dws contact +friend-list", "dws contact +friend-list --cursor 100 --size 50"},
 		},
 		Parameters: []contract.ParamDecl{{Name: "cursor"}, {Name: "size"}},
+		Pagination: &contract.PaginationSpec{
+			Kind: contract.PaginationKindCursor, CursorParameter: "cursor",
+			MetaPath: contract.PaginationMetaPath, EndpointExhaustedPath: contract.PaginationExhaustedPath,
+		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor（--cursor 必须大于或等于 0）", Default: "0"},
@@ -135,6 +139,10 @@ var ListFriendRequests = shortcut.Shortcut{
 			Examples:     []string{"dws contact +friend-request-list", "dws contact +friend-request-list --size 50"},
 		},
 		Parameters: []contract.ParamDecl{{Name: "cursor"}, {Name: "size"}},
+		Pagination: &contract.PaginationSpec{
+			Kind: contract.PaginationKindCursor, CursorParameter: "cursor",
+			MetaPath: contract.PaginationMetaPath, EndpointExhaustedPath: contract.PaginationExhaustedPath,
+		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标；首页不传，翻页时传上一页返回的 cursor（--cursor 必须大于或等于 0）", Default: "0"},
@@ -418,7 +426,7 @@ func friendCollectionResult(collection, description string) *contract.ResultSpec
 			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的项目数量"},"cursor":{"type":"number","description":"分页游标"},"hasMore":{"type":"boolean","description":"是否还有更多数据"},%q:{"type":"array","description":%q,"items":%s}},"required":["count","cursor","hasMore",%q],"additionalProperties":false}`,
 			description, collection, description, itemSchema, collection,
 		)),
-		SensitivePaths: []string{"friends.openDingTalkId", "friends.alias", "friends.remark"},
+		SensitivePaths: []string{"friends.openDingTalkId", "friends.nick", "friends.alias", "friends.remark"},
 	}
 }
 
@@ -430,7 +438,7 @@ func friendRequestCollectionResult() *contract.ResultSpec {
 			`{"type":"object","description":"好友申请列表","properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的项目数量"},"pendingCount":{"type":"number","description":"待处理申请数量"},"cursor":{"type":"number","description":"分页游标"},"hasMore":{"type":"boolean","description":"是否还有更多数据"},"requests":{"type":"array","description":"好友申请列表","items":%s}},"required":["count","pendingCount","cursor","hasMore","requests"],"additionalProperties":false}`,
 			itemSchema,
 		)),
-		SensitivePaths: []string{"requests.openDingTalkId", "requests.remark"},
+		SensitivePaths: []string{"requests.openDingTalkId", "requests.nick", "requests.remark"},
 	}
 }
 
