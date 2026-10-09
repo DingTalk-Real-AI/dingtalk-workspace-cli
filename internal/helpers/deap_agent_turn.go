@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"time"
@@ -43,7 +44,14 @@ func prepareEmployeeForwarder(parent context.Context, fwd forwarder) error {
 func forwardEmployeeTurn(ctx context.Context, fwd forwarder, conversation, text string) (string, error) {
 	action, control := parseConnectControlCommand(text)
 	if !control {
-		return fwd.forward(ctx, conversation, text)
+		answer, err := fwd.forward(ctx, conversation, text)
+		if errors.Is(err, errCodexCompletedWithoutReply) {
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			return "", nil
+		}
+		return answer, err
 	}
 	if action.name == "clear" {
 		if clearer, ok := fwd.(sessionClearer); ok {

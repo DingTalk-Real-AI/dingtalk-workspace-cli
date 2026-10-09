@@ -298,7 +298,12 @@ func decodeEmployeeFeedbackResult(raw []byte) (map[string]any, error) {
 func employeeTaskLabel(record employeeTaskRecord) string {
 	switch record.Status {
 	case "delivered":
-		return "已回复"
+		return "已完成"
+	case "completed_without_reply":
+		if record.Execution == "success" && record.Delivery == "not_required" {
+			return "收到"
+		}
+		return "已中断，待核查"
 	case "agent_failed", "empty_reply":
 		return "处理失败"
 	case "cancelled":

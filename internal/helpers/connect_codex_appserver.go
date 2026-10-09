@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,6 +30,9 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
+
+// 机器人仍拒绝无正文回合；数字员工可将协议已确认完成的空正文转换为“收到”。
+var errCodexCompletedWithoutReply = errors.New("turn completed without agent message")
 
 const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。仅当用户消息明确附带了本地附件路径时，可以只读该附件或运行分析该附件所必需的只读命令，不得访问其它文件。"
 
@@ -503,7 +507,10 @@ func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text strin
 			if !ok {
 				continue
 			}
-			if status == "failed" {
+			if status == "interrupted" {
+				return "", context.Canceled
+			}
+			if status == "failed" || errMsg != "" {
 				if errMsg == "" {
 					errMsg = "turn failed"
 				}
@@ -513,7 +520,10 @@ func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text strin
 				final = strings.TrimSpace(acc.String())
 			}
 			if final == "" {
-				return "", fmt.Errorf("turn completed without agent message")
+				if status == "completed" {
+					return "", errCodexCompletedWithoutReply
+				}
+				return "", fmt.Errorf("turn completion not confirmed")
 			}
 			return final, nil
 		case "error":

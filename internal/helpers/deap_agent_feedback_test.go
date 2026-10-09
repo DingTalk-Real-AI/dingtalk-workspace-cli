@@ -65,11 +65,11 @@ func TestCrossPlatformCoverageEmployeeFeedbackSerializesAndCoalesces(t *testing.
 		t.Fatal("没有入站反馈")
 	}
 	f.set(e, "思考中", false)
-	f.set(e, "已回复", true)
+	f.set(e, "已完成", true)
 	f.set(e, "思考中", false)
 	close(release)
 	f.wait()
-	want := []string{"create-text-emotion:排队中", "add-text-emotion:排队中", "remove-text-emotion:排队中", "create-text-emotion:已回复", "add-text-emotion:已回复"}
+	want := []string{"create-text-emotion:排队中", "add-text-emotion:排队中", "remove-text-emotion:排队中", "create-text-emotion:已完成", "add-text-emotion:已完成"}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("calls = %v", calls)
 	}
@@ -81,7 +81,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackSerializesAndCoalesces(t *testing.
 	if err := json.Unmarshal(raw, &record); err != nil {
 		t.Fatal(err)
 	}
-	if record.Applied != "已回复" || record.Status != "applied" {
+	if record.Applied != "已完成" || record.Status != "applied" {
 		t.Fatalf("record = %+v", record)
 	}
 }
@@ -111,10 +111,10 @@ func TestCrossPlatformCoverageEmployeeFeedbackFailureRecoveryAndIsolation(t *tes
 				}
 				return map[string]any{"success": true, "emotionId": "new-id"}, nil
 			})
-			if err := f.apply(context.Background(), e, &record, "已回复"); err == nil {
+			if err := f.apply(context.Background(), e, &record, "已完成"); err == nil {
 				t.Fatal("忽略了表情失败")
 			}
-			if record.Status != "failed" || record.Desired != "已回复" {
+			if record.Status != "failed" || record.Desired != "已完成" {
 				t.Fatalf("record = %+v", record)
 			}
 			if failure == "remove" && record.Applied != "思考中" {
@@ -125,7 +125,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackFailureRecoveryAndIsolation(t *tes
 			}
 			fail = false
 			restarted := newEmployeeFeedback(context.Background(), "corp:employee", dir)
-			restarted.recover(e, "已回复")
+			restarted.recover(e, "已完成")
 			restarted.wait()
 			raw, err := os.ReadFile(f.path(e))
 			if err != nil {
@@ -134,7 +134,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackFailureRecoveryAndIsolation(t *tes
 			if err := json.Unmarshal(raw, &record); err != nil {
 				t.Fatal(err)
 			}
-			if record.Status != "applied" || record.Applied != "已回复" {
+			if record.Status != "applied" || record.Applied != "已完成" {
 				t.Fatalf("recovery = %+v", record)
 			}
 			for _, id := range removed {
@@ -244,7 +244,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackWireAndCommands(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageEmployeeFeedbackRejectsCorruptCache(t *testing.T) {
-	for _, body := range []string{`{"思考中":1}`, `{"思考中":""}`, `{"思考中":"real-id","已回复":1}`} {
+	for _, body := range []string{`{"思考中":1}`, `{"思考中":""}`, `{"思考中":"real-id","已完成":1}`} {
 		t.Run(body, func(t *testing.T) {
 			f := newEmployeeFeedback(context.Background(), "corp:employee", t.TempDir())
 			if err := os.WriteFile(filepath.Join(f.dir, "feedback-emotions.json"), []byte(body), 0600); err != nil {
@@ -286,7 +286,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackCorruptOwnershipStops(t *testing.T
 				t.Error("归属不明仍调用外部接口")
 				return nil, nil
 			})
-			f.set(e, "已回复", true)
+			f.set(e, "已完成", true)
 			f.wait()
 		})
 	}
@@ -304,11 +304,11 @@ func TestCrossPlatformCoverageEmployeeFeedbackFollowsExecutionAndReceipt(t *test
 		name, answer, receipt, label, execution, delivery string
 		agentErr                                          error
 	}{
-		{"reply", "answer", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`, "已回复", "success", "accepted", nil},
+		{"reply", "answer", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`, "已完成", "success", "accepted", nil},
 		{"unknown", "answer", `{"ok":true,"data":{"deliveryStatus":"unknown"}}`, "发送待确认", "success", "unknown", nil},
 		{"timeout", "answer", `{"ok":false}`, "发送待确认", "success", "unknown", nil},
 		{"agent-failure", "", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`, "处理失败", "failure", "accepted", errors.New("private model failure")},
-		{"empty", "", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`, "处理失败", "failure", "accepted", nil},
+		{"empty", "", `{"ok":true,"data":{"deliveryStatus":"delivered","openMessageId":"reply"}}`, "收到", "success", "not_required", nil},
 		{"cancelled", "", `{"ok":false}`, "已取消", "cancelled", "", context.Canceled},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackFollowsExecutionAndReceipt(t *test
 				t.Fatalf("feedback=%+v", feedback)
 			}
 			wantSent := 1
-			if scenario.name == "cancelled" {
+			if scenario.name == "cancelled" || scenario.name == "empty" {
 				wantSent = 0
 			}
 			if sent != wantSent {
@@ -410,8 +410,8 @@ func TestCrossPlatformCoverageEmployeeFeedbackDoesNotBlockExecutionOrFinishBefor
 	close(releaseFeedback)
 	mu.Lock()
 	for _, label := range labels {
-		if label == "已回复" {
-			t.Error("投递前标记已回复")
+		if label == "已完成" {
+			t.Error("投递前标记已完成")
 		}
 	}
 	mu.Unlock()
@@ -422,13 +422,13 @@ func TestCrossPlatformCoverageEmployeeFeedbackDoesNotBlockExecutionOrFinishBefor
 	r.feedback.wait()
 	mu.Lock()
 	defer mu.Unlock()
-	if len(labels) == 0 || labels[len(labels)-1] != "已回复" {
+	if len(labels) == 0 || labels[len(labels)-1] != "已完成" {
 		t.Fatalf("labels=%v", labels)
 	}
 }
 
 func TestCrossPlatformCoverageEmployeeFeedbackRecoveryPreservesKnownFacts(t *testing.T) {
-	for _, status := range []string{"accepted", "running", "sending", "delivered"} {
+	for _, status := range []string{"accepted", "running", "sending", "delivered", "completed_without_reply"} {
 		t.Run(status, func(t *testing.T) {
 			r, e := employeeLedgerFixture(t)
 			record := employeeTaskRecord{Status: status, ConversationID: e.ConversationID, MessageID: e.MessageID, Execution: "running"}
@@ -437,6 +437,9 @@ func TestCrossPlatformCoverageEmployeeFeedbackRecoveryPreservesKnownFacts(t *tes
 			}
 			if status == "delivered" {
 				record.Execution, record.Delivery = "success", "accepted"
+			}
+			if status == "completed_without_reply" {
+				record.Execution, record.Delivery = "success", "not_required"
 			}
 			if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
 				t.Fatal(err)
@@ -458,8 +461,13 @@ func TestCrossPlatformCoverageEmployeeFeedbackRecoveryPreservesKnownFacts(t *tes
 				if record.Execution != "success" || record.Delivery != "unknown" {
 					t.Fatalf("record=%+v", record)
 				}
+			case "completed_without_reply":
+				wantLabel = "收到"
+				if record.Execution != "success" || record.Delivery != "not_required" {
+					t.Fatalf("record=%+v", record)
+				}
 			case "delivered":
-				wantLabel = "已回复"
+				wantLabel = "已完成"
 				if record.Status != "delivered" || record.Delivery != "accepted" {
 					t.Fatalf("record=%+v", record)
 				}
@@ -573,5 +581,84 @@ func TestCrossPlatformCoverageEmployeeFeedbackQueuesOnlyBehindPendingTurn(t *tes
 		case <-deadline:
 			t.Fatal("空闲会话未显示思考中")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeCodexEmptyCompletion(t *testing.T) {
+	for _, scenario := range []struct {
+		name, status, label, execution, delivery string
+		sends                                    int
+	}{
+		{"completed", "completed", "收到", "success", "not_required", 0},
+		{"failed", "failed", "处理失败", "failure", "unknown", 1},
+		{"completed-with-error", "completed", "处理失败", "failure", "unknown", 1},
+		{"interrupted", "interrupted", "已取消", "cancelled", "", 0},
+		{"unconfirmed", "", "处理失败", "failure", "unknown", 1},
+		{"disconnected", "eof", "处理失败", "failure", "unknown", 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			testseam.Swap(t, &codexNewAppServerClient, func(context.Context, string, []string, string) (*codexAppServerClient, error) {
+				c := unitCodexClient(&bufferWriteCloser{},
+					codexRPCMessage{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)},
+					codexRPCMessage{ID: codexIntPtr(2), Result: json.RawMessage(`{"thread":{"id":"thread"}}`)},
+				)
+				if scenario.status == "eof" {
+					close(c.msgs)
+				} else {
+					turn := map[string]any{"status": scenario.status}
+					if scenario.name == "completed-with-error" {
+						turn["error"] = map[string]any{"message": "private error"}
+					}
+					raw, _ := json.Marshal(map[string]any{"threadId": "thread", "turn": turn})
+					c.msgs <- codexRPCMessage{Method: "turn/completed", Params: raw}
+				}
+				return c, nil
+			})
+			// 机器人仍按原契约拒绝无正文回合；仅数字员工将已确认完成转换为表情回应。
+			f := &codexAppServerForwarder{bin: "fixture"}
+			if _, err := f.forward(context.Background(), "conversation", "无需文字回复"); err == nil {
+				t.Fatal("改变了机器人空回复契约")
+			}
+			r, e := employeeLedgerFixture(t)
+			r.fwd = f
+			r.feedback = newEmployeeFeedback(context.Background(), "corp:employee", r.dir)
+			testseam.Swap(t, &employeeFeedbackCall, func(context.Context, string, string, employeeEvent, employeeEmotion) (map[string]any, error) {
+				return map[string]any{"success": true, "emotionId": "real-id"}, nil
+			})
+			sent := 0
+			testseam.Swap(t, &employeeExecCommand, func(context.Context, string, ...string) *exec.Cmd {
+				sent++
+				return exec.Command("missing-fixture-command")
+			})
+			if err := writeEmployeeJSON(r.recordPath(e), employeeTaskRecord{Status: "accepted", IdempotencyKey: "stable"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.process(e); err != nil {
+				t.Fatal(err)
+			}
+			r.feedback.wait()
+			raw, err := os.ReadFile(r.recordPath(e))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var record employeeTaskRecord
+			if err := json.Unmarshal(raw, &record); err != nil {
+				t.Fatal(err)
+			}
+			if record.Execution != scenario.execution || record.Delivery != scenario.delivery || employeeTaskLabel(record) != scenario.label || sent != scenario.sends {
+				t.Fatalf("record=%+v label=%s sent=%d", record, employeeTaskLabel(record), sent)
+			}
+			raw, err = os.ReadFile(r.feedback.path(e))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var feedback employeeFeedbackRecord
+			if err := json.Unmarshal(raw, &feedback); err != nil {
+				t.Fatal(err)
+			}
+			if feedback.Applied != scenario.label {
+				t.Fatalf("feedback=%+v", feedback)
+			}
+		})
 	}
 }

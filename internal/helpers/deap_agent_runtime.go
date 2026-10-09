@@ -338,9 +338,10 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 			answer = ""
 		}
 	} else if strings.TrimSpace(answer) == "" {
-		record.Status = "empty_reply"
-		record.Execution = "failure"
-		answer = "本次处理未生成可发送的回复，请重试。"
+		// 执行成功但无正文时仅贴“收到”；不发送占位文字或默认完成标签。
+		record.Status = "completed_without_reply"
+		record.Delivery = "not_required"
+		answer = ""
 	}
 	if answer != "" {
 		outcome := record.Status

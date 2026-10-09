@@ -131,7 +131,7 @@ func TestCrossPlatformCoverageEmployeeTaskFailureStates(t *testing.T) {
 				if err := json.Unmarshal(raw, &record); err != nil {
 					t.Fatal(err)
 				}
-				want := "empty_reply"
+				want := "completed_without_reply"
 				if scenario == "agent-failed" {
 					want = "agent_failed"
 				}
