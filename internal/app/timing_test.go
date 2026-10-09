@@ -384,10 +384,6 @@ func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "authorization code separate", args: []string{"dws", "auth", "exchange", "--code", "fixture-code", "--dry-run"}, want: "dws auth exchange --code *** --dry-run"},
-		{name: "authorization code equals", args: []string{"dws", "auth", "exchange", "--code=fixture-code"}, want: "dws auth exchange --code=***"},
-		{name: "stdin flag retained", args: []string{"dws", "auth", "exchange", "--code-stdin", "--dry-run"}, want: "dws auth exchange --code-stdin --dry-run"},
-
 		{
 			name: "no sensitive flags",
 			args: []string{"dws", "aitable", "list-records"},
@@ -412,16 +408,6 @@ func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 			name: "client-id with equals",
 			args: []string{"dws", "--client-id=abc123"},
 			want: "dws --client-id=***",
-		},
-		{
-			name: "password space-separated (drive/wiki set-share-scope, publish set)",
-			args: []string{"dws", "drive", "permission", "set-share-scope", "--node", "n1", "--visibility", "PUBLIC", "--password", "ab12"},
-			want: "dws drive permission set-share-scope --node n1 --visibility PUBLIC --password ***",
-		},
-		{
-			name: "password with equals sign",
-			args: []string{"dws", "drive", "publish", "set", "--password=ab12", "--node", "n1"},
-			want: "dws drive publish set --password=*** --node n1",
 		},
 		{
 			name: "empty args",

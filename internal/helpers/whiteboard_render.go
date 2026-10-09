@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -202,8 +203,9 @@ func callWhiteboardRenderResult(cmd *cobra.Command, _ string, args map[string]an
 }
 
 func invalidWhiteboardRenderSource(err error) error {
-	if mapped := mapOpenNodesValidationError(err); mapped != nil {
-		return mapped
+	var textError *opennodes.TextRunValidationError
+	if errors.As(err, &textError) {
+		return &CLIError{Code: CodeInvalidJSON, Message: textError.Error(), Cause: err}
 	}
 	return &CLIError{
 		Code: CodeInvalidJSON, Message: "--source 不是可预渲染的 OpenNodes V1",

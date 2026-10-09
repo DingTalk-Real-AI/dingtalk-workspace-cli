@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）业务操作。Use when 用户需要操作 AI 表格/多维表/Base/Table、应用模式/App 页面/Widget、建表、查写记录、字段、记录评论、评论回复、访问密钥（API Key）、SQL/PostgreSQL/SELECT/JOIN、筛选、排序、公式、模板、批量导入 CSV 或 JSON、导出、仪表盘、图表、上传附件、数据源配置与同步、按任务 ID 查询同步状态或审批数据同步。普通请求以完成明确的业务操作为主；当用户明确要求 CLI 契约评审、核对 aitable 合成 JSON 回执、dry-run、命令参数、Help/Schema 契约或恢复方案时，必须加载本 Skill。只评审 aitable 合成 JSON 回执也必须加载本 Skill；“不要执行线上业务”不等于免除本机离线契约核对，不能按通用 JSON 经验直接作答。这是本机 Help/Schema 契约核对，不是仓库源码审查，不从源码搜索开始；先加载正文确定入口与规则，不能仅凭摘要执行；以用户原文指定的核对入口为准，Skill 参数不得扩大范围。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。
+description: 钉钉 AI 表格（多维表）业务操作与 CLI 契约评审。只评审 aitable 合成 JSON 回执也必须加载本 Skill；“不要执行线上业务”不等于免除本机离线契约核对，不能按通用 JSON 经验直接作答。评审以用户原文指定的核对入口为准；背景写命令不是额外目标，Agent 自拟的 Skill 参数不得扩大范围。用户给出 aitable 命令、form share 合成回执、dry-run 或询问写入恢复方案时也必须加载本 Skill；这是本机 Help/Schema 契约核对，不是仓库源码审查，不从源码搜索开始。先加载正文确定入口与规则，不能仅凭摘要执行。适用于 Base/Table、字段与记录、评论、筛选排序、公式、SQL/PostgreSQL/JOIN、表单分享与 CP 同步、App 页面/Widget、模板、导入导出、仪表盘/图表、附件及审批等数据源同步。不做电子表格单元格操作（走 dingtalk-misc）或文字文档编辑（走 dingtalk-doc）。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -10,10 +10,6 @@ metadata:
 ---
 
 # 钉钉 AI 表格 Skill
-
-## 业务操作优先与契约评审边界
-
-默认目标是完成用户明确提出的 AI 表格业务操作，包括查询、创建、更新、同步和其他已授权写入。契约评审是辅助场景，仅在用户明确要求核对合成 JSON、dry-run、参数合法性、Help/Schema 或恢复方案时启用；这类请求默认只读，不把评审要求扩展成线上业务操作。用户同时提出业务操作和契约核对时，先按真实业务目标执行必要的契约校验，再继续执行已明确授权的业务操作。
 
 ## 先区分操作、用法与契约评审
 
@@ -30,7 +26,7 @@ metadata:
 | 请求意图 | 本次唯一契约查询 |
 |---|---|
 | 评审返回值、恢复方案、故障或 dry-run 样本 | 把正在核对的完整入口原样放入 `dws schema --cli-path "aitable <原入口>" --compact --format json`；保留 `+`，不改查 Help，也不切换原子/Shortcut |
-| 仅问原子 `form share update` 的写法 | 只查询 `dws schema --cli-path "aitable form share update" --compact --format json` |
+| 仅问原子 `form share update` 的写法 | 只执行 `dws aitable form share update --help`（禁止改查 Schema） |
 | 仅问 Shortcut 的写法 | 只查该 Shortcut 的 compact Schema |
 
 <!-- DWS_RUNTIME_CONTRACT_START -->
@@ -57,7 +53,7 @@ metadata:
 
 收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令；即使用户提到“help/schema”，也按入口选择，不能自行替换：
 
-- `form share update`：`dws schema --cli-path "aitable form share update" --compact --format json`
+- `form share update`：`dws aitable form share update --help`
 - `+form-share-update`：`dws schema --cli-path "aitable +form-share-update" --compact --format json`
 
 Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
@@ -143,7 +139,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
 | 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回；空评论页仍读取 `meta.pagination`，仅 `meta.pagination.endpoint_exhausted=true` 时停止，否则将 `meta.pagination.next_token` 原样传给下一次 `--cursor`；写入未知状态先 list 对账 |
 | 按业务键同步或按条件批改 | 唯一键用 `dws aitable +record-upsert-by-key ...`；有界批改用 `dws aitable +record-bulk-patch ... --max-matches <N>` | upsert 仅允许 0 条创建、1 条更新；批改必须有 query/filters/record-ids 边界。普通 update/upsert 直接执行；只有历史、分享、删除恢复、空行或特殊字段值才读 [record-ops](references/aitable-record-ops.md)；明确 AND/OR、日期或比较操作符只读 [filter-sort](references/aitable/aitable-filter-sort.md) |
-| 生成记录分享链接并发送给联系人 | `dws aitable +record-share-links --base <B> --table <T> --record-ids <IDs>` → `dws chat +dm --to <姓名> --content <完整链接文本>` | AITable 只生成链接；用户要求“发送”时还必须完成真实发送，不能停在联系人解析 |
+| 生成记录分享链接并发送给联系人 | `dws aitable +record-share-links --base <B> --table <T> --record-ids <IDs>` → `dws chat +dm --to <姓名> --text <完整链接文本>` | AITable 只生成链接；用户要求“发送”时还必须完成真实发送，不能停在联系人解析 |
 | 创建或复制视图 | 创建用 `dws aitable view create --base-id <B> --table-id <T> --view-type <Grid|FormDesigner|Gantt|Calendar|Kanban|Gallery> [--name <名称>]`；复制用 `dws aitable +view-duplicate --base-id <B> --table-id <T> --view-id <V> [--new-name <名称>]` | 创建和复制直接执行；需要配置时按下方“按需加载”选择一个 View Reference |
 | 创建并验证 Dashboard，按需创建 Chart | `dws aitable dashboard create --base-id <B> --name <名称>` → `dws aitable +dashboard-get --base-id <B> --dashboard-id <D>`；需要 Chart 时按下方“按需加载”处理 | 只使用创建返回的真实 dashboardId；失败时不要猜同义命令或更换 dashboardId |
 | 管理 AI 表格应用模式 | `dws aitable app get --base-id <B>` → `dws aitable app page list --base-id <B>` → 按需 `app page create/update/move/delete` 或 `app widget create/get/list/update/delete` | 一个 Base 只有一个面向用户的 App；页面 `pageId` 同时是对应 Dashboard ID。Widget 的 `config`/`layout` 是完整对象，更新前先读回；创建操作未知状态时不得自动重放 |
@@ -236,7 +232,6 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | 自动化工作流 | [workflow](references/aitable/aitable-workflow.md) |
 | 普通角色或高级权限 | [advperm](references/aitable/aitable-advperm.md) |
 | 数据源接入、同步管理、sourceConfig 构造或审批数据同步 | [datasource](references/aitable/aitable-datasource.md) |
-| 访问密钥创建、查询或撤销 | [api-key](references/aitable/aitable-api-key.md) |
 | SQL、PostgreSQL、SELECT 或同 Base 多表 JOIN | [psql](references/aitable/aitable-psql.md) |
 | 产品边界不明确 | [intent-guide](references/intent-guide.md) |
 | 只有上述 Reference 仍无法定位的低频原子能力 | [aitable.md](references/aitable.md) 的对应章节 |

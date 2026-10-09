@@ -42,15 +42,14 @@ var (
 // message with a per-conversation session_id, so Qoder keeps context without a
 // fresh CLI startup on every chat message.
 type qoderStreamForwarder struct {
-	privateDiagnostics bool
-	name               string
-	bin                string
-	env                []string
-	timeout            time.Duration
-	workDir            string
-	model              string
-	yolo               bool
-	sessions           *convSessions
+	name     string
+	bin      string
+	env      []string
+	timeout  time.Duration
+	workDir  string
+	model    string
+	yolo     bool
+	sessions *convSessions
 
 	mu     sync.Mutex
 	cmd    *exec.Cmd
@@ -62,15 +61,14 @@ type qoderStreamForwarder struct {
 
 func newQoderStreamForwarder(name, bin string, env []string, timeout time.Duration, opts connectAgentOptions, sessions *convSessions) forwarder {
 	return &qoderStreamForwarder{
-		privateDiagnostics: opts.PrivateDiagnostics,
-		name:               name,
-		bin:                bin,
-		env:                env,
-		timeout:            timeout,
-		workDir:            opts.WorkDir,
-		model:              opts.Model,
-		yolo:               opts.Yolo,
-		sessions:           sessions,
+		name:     name,
+		bin:      bin,
+		env:      env,
+		timeout:  timeout,
+		workDir:  opts.WorkDir,
+		model:    opts.Model,
+		yolo:     opts.Yolo,
+		sessions: sessions,
 	}
 }
 
@@ -260,12 +258,6 @@ func (f *qoderStreamForwarder) ensureLocked(ctx context.Context) error {
 			msg := ""
 			if f.stderr != nil {
 				msg = strings.TrimSpace(f.stderr.String())
-			}
-			if f.privateDiagnostics {
-				msg = ""
-				if err != nil {
-					err = fmt.Errorf("agent_process_exit")
-				}
 			}
 			f.clearProcessLocked()
 			if err != nil {

@@ -191,7 +191,7 @@ var SyncASR = shortcut.Shortcut{
 var ExportPack = shortcut.Shortcut{
 	Service: "minutes", Command: "+export-pack", Product: "minutes",
 	Description: "把听记文本产物清理签名凭据后写入受控目录并生成清理台账",
-	Intent:      "需要归档 basic/summary/keywords/transcript/todos，可选媒体文件时使用；文本签名链接替换为明确占位符并通过凭据扫描后发布。空摘要也生成产物文件；所选转写必须非空；摘要接口明确成功且 result={} 时按空摘要导出。完整性只针对所选产物的读取和导出，不证明分析已完成，不保证摘要图片离线可用。",
+	Intent:      "需要归档 basic/summary/keywords/transcript/todos，可选媒体文件时使用；文本签名链接替换为明确占位符并通过凭据扫描后发布。完整性只针对所选产物，不保证摘要图片离线可用。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: withMinutesExportResult(minutesContract("+export-pack", "把听记文本产物清理签名凭据后写入受控目录并生成清理台账",
@@ -598,7 +598,7 @@ func executeMinutesASR(rt *shortcut.RuntimeContext, syncMode bool) error {
 func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 	id := rt.Str("id")
 	artifacts := selectedWorkflowArtifacts(rt)
-	bundle, failures := collectMinutesArtifacts(rt, id, artifacts, rt.Int("page-limit"), exportSummaryText)
+	bundle, failures := collectMinutesArtifactsOnce(rt, id, artifacts, rt.Int("page-limit"))
 	if len(failures) > 0 {
 		payload := map[string]any{"operation": "minutes.export_pack", "complete": false, "taskUuid": id, "failures": failures, "published": false}
 		return outputWorkflowResult(rt, payload, true, "minutes_export_pack_incomplete", "collect")
@@ -798,21 +798,6 @@ func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool
 }
 
 func collectMinutesArtifactsOnce(rt *shortcut.RuntimeContext, id string, artifacts []string, pageLimit int) (map[string]any, []map[string]any) {
-	return collectMinutesArtifacts(rt, id, artifacts, pageLimit, minutesdata.SummaryText)
-}
-
-// exportSummaryText accepts the production summary endpoint's successful empty
-// object as an empty export. It is not evidence that asynchronous analysis ended;
-// analysis waiters and other summary consumers retain the strict parser.
-func exportSummaryText(data map[string]any) (string, error) {
-	result, ok := data["result"].(map[string]any)
-	if ok && result != nil && len(result) == 0 && (data["success"] == true || data["success"] == "true") {
-		return "", minutesdata.ValidateEnvelope(data)
-	}
-	return minutesdata.SummaryText(data)
-}
-
-func collectMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []string, pageLimit int, summaryText func(map[string]any) (string, error)) (map[string]any, []map[string]any) {
 	bundle := map[string]any{}
 	failures := []map[string]any{}
 	for _, artifact := range artifacts {
@@ -830,7 +815,10 @@ func collectMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts [
 			var data map[string]any
 			data, err = rt.CallMCPData("minutes", "get_minutes_ai_summary", map[string]any{"taskUuid": id})
 			if err == nil {
-				value, err = summaryText(data)
+				value, err = minutesdata.SummaryText(data)
+				if err == nil && strings.TrimSpace(value.(string)) == "" {
+					err = fmt.Errorf("minutes summary is explicitly empty; analysis readiness is not proven")
+				}
 			}
 		case "keywords":
 			var data map[string]any
@@ -880,23 +868,6 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 	for {
 		attempts++
 		bundle, failures := collectMinutesArtifactsOnce(rt, id, artifacts, pageLimit)
-		// A valid empty summary can be exported, but does not prove that
-		// asynchronous analysis after upload or record stop has finished.
-		for _, artifact := range artifacts {
-			value, ok := bundle[artifact]
-			if !ok {
-				continue
-			}
-			empty := false
-			switch artifact {
-			case "summary":
-				empty = strings.TrimSpace(value.(string)) == ""
-			}
-			if empty {
-				delete(bundle, artifact)
-				failures = append(failures, map[string]any{"artifact": artifact, "error": fmt.Sprintf("minutes %s is explicitly empty; analysis readiness is not proven", artifact)})
-			}
-		}
 		if len(failures) == 0 || hasTerminalMinutesArtifactFailure(failures) || minutesPollDeadlineReached(deadline, interval) {
 			return bundle, failures, attempts
 		}

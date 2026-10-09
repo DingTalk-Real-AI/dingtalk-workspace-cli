@@ -97,7 +97,7 @@ dws drive +publish-get --node <dentryUuid>
 dws drive +publish-unset --node <dentryUuid>
 ```
 
-`+publish-get` 只读；`+publish-unset` 为高风险写。Runtime 虽注册了 `+publish-set`，但当前 Catalog Availability 为 unavailable，不要用它开启互联网公开；开启互联网公开统一走 `permission set-share-scope --visibility PUBLIC`。`+publish-unset` 与 `permission set-share-scope --visibility PRIVATE` 终态等价（scope=0、同样打断继承），保留仅 CLI 兼容；`+publish-get` 与 `permission get-setting` 仅差 pendingApproval 一个字段（待服务端补齐后可完全平替），保留仅 CLI 兼容。
+`+publish-get` 只读；`+publish-unset` 为高风险写。Runtime 虽注册了 `+publish-set`，但当前普通文件和在线文档都没有经过验证的开启公开闭环，因此根 Skill 明确不将它开放给 Agent。用户要求开启公开时，说明当前 Agent 路由不支持并停止；不要查询或执行 `+publish-set`、`drive publish set` 或其他替代写入口。只有补齐受支持节点上的真实 set→get→unset 闭环证据并更新 Agent 路由后，才重新开放该能力。
 
 ## 权限
 
@@ -106,7 +106,6 @@ dws drive +publish-unset --node <dentryUuid>
 | 查看成员权限 | `drive permission list` |
 | 查询节点权限设置（权限模式/分享范围/策略） | `permission get-setting` |
 | 添加、修改、移除成员 | `permission add` / `update` / `remove` |
-| 设置节点分享范围（可见性） | `permission set-share-scope` |
 | 转移所有者 | `permission transfer-owner` |
 | 查看可申请权限和审批人 | `permission apply-info` |
 | 发起权限申请 | `permission apply` |
@@ -116,8 +115,6 @@ dws drive +publish-unset --node <dentryUuid>
 `permission get-setting` 返回 `permissionMode`（INHERITED/INDEPENDENT，未知时为 null）、`shareScope`（可见范围与链接分享，密码明文不返回；`partnerIncluded`、`defaultRole` 等仅 ORGANIZATION 有意义，`linkShare` 仅开启链接分享时返回）和 `policies[]`（code/name/description/value/disabledValues/allowedValues；name/description 为中文名与值语义说明，随行必带；未下发的策略不返回，`node_spread_scope` 仅文件夹）。`disabledValues` 为不可设置取值列表（恒返回，无被禁档位时为空数组），每项含 `value`（被禁档位取值，与 value 同一值域）与 `reason`（服务端按请求语言返回的禁用原因文案，仅供展示理解，可为 null），与 allowedValues 互斥；示例：`{"value": "READER_AND_ABOVE", "reason": "企业安全策略要求不可低于可下载角色"}`。`value` 按策略分型：开关型为 ENABLED/DISABLED；member_invite、comment 为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE；node_spread、online_content_copy 为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE 或 NOBODY；node_spread_scope 为 ALL_NODES（限制对所有文档生效）/ PREVIEWABLE_ONLY（仅对可预览的文档生效）。NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许。name/description 示例（文案与产品权限设置页一致）：external_share「添加企业外协作者」：是否允许添加企业外的人为协作者（ENABLED=允许，DISABLED=禁止）；node_spread「谁可以下载、创建副本、打印」：允许哪些角色及以上的用户下载、创建副本、打印；NOBODY=所有人禁止下载、创建副本、打印；node_move_forbidden「禁止移动」：是否禁止移动到其他知识库或团队共享文件夹（ENABLED=禁止移动，DISABLED=允许移动）。
 
 发起权限申请先只读执行 `permission apply-info`。正式 `permission apply` 会通知审批人；调用前必须向用户逐项回显并确认资源、申请角色、审批人和理由。Agent 不得默认选择第一位审批人、最高/最低角色或代写申请理由；用户未明确同意完整申请内容时停在确认环节。
-
-`permission set-share-scope` 设置节点分享范围（可见性），三档一次收敛。适用于文档空间节点与钉盘文件/文件夹；钉盘文件/文件夹不支持互联网公开（PUBLIC）档，对其设置 PUBLIC 返回 operation.notSupported。[危险] 操作，必须经用户确认后加 `--yes`。必填 `--node` + `--visibility`（PRIVATE/ORGANIZATION/PUBLIC）。档位决定可用参数：PRIVATE 无需其他参数；ORGANIZATION 用 `--role`/`--partner`/`--can-search`/`--can-recommend`；PUBLIC 用 `--role`/`--password`/`--expire-days`。不适用组合本地拒绝（exit 3）。参数装配为部分更新语义：可选参数不传即不下发、保持原值不变。`--password` 三态：不传=不改变，空串=清除，非空=设置（4位字母数字）。`--expire-days`：0=永久，正整数=N天。查询节点当前分享范围用 `permission get-setting`。互联网公开（含访问密码与有效期）统一走本命令 `--visibility PUBLIC`；`publish set` 已不在 Agent 可选面（见上方「公开状态」段），不要用它开启互联网公开。`publish unset` 与 `--visibility PRIVATE` 终态等价，新代码统一用 `set-share-scope`。需要企业内公开档或组织内搜索/推荐/合作伙伴（外包）开关时同样只能用 `set-share-scope`。
 
 ## 快捷方式节点
 

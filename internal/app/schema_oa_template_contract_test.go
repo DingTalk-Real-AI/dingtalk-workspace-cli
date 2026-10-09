@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -103,97 +102,6 @@ func TestCrossPlatformCoverageOATemplateResultContractsAreIndependent(t *testing
 					if _, ok := fields[name]; ok {
 						t.Errorf("%s declares field owned by the other API: %s", tc.command, name)
 					}
-				}
-			})
-		}
-	}
-}
-
-func TestCrossPlatformCoverageOATemplateWriteDeliveredContract(t *testing.T) {
-	for _, command := range []string{"create", "update"} {
-		for _, compact := range []bool{false, true} {
-			t.Run(command+map[bool]string{true: "/compact", false: "/full"}[compact], func(t *testing.T) {
-				root := NewRootCommand()
-				path := "oa approval template " + command
-				leafCmd := exactCommandForTest(root, path)
-				if leafCmd == nil {
-					t.Fatal("missing command")
-				}
-				var buf bytes.Buffer
-				root.SetOut(&buf)
-				args := []string{"schema", path, "--format", "json"}
-				if compact {
-					args = append(args, "--compact")
-				}
-				root.SetArgs(args)
-				if err := root.Execute(); err != nil {
-					t.Fatal(err)
-				}
-				var leaf map[string]any
-				if err := json.Unmarshal(buf.Bytes(), &leaf); err != nil {
-					t.Fatal(err)
-				}
-				if leaf["canonical_path"] != "oa."+command+"_process_template" || leaf["effect"] != "write" || leaf["risk"] != "medium" || leaf["confirmation"] != "not_required" || leaf["idempotency"] != "unknown" {
-					t.Fatalf("identity/safety: %#v", leaf)
-				}
-				params := schemaContractMap(leaf["parameters"])
-				if params["from-document"] == nil || leafCmd.Flags().Lookup("from-document") == nil {
-					t.Fatal("missing document input")
-				}
-				if params["from-document"]["property"] != nil && params["from-document"]["property"] != "" {
-					t.Fatal("local file path exposes an RPC property")
-				}
-				constraints, _ := leaf["constraints"].(map[string]any)
-				requiredGroups, _ := constraints["require_one_of"].([]any)
-				wantGroups := 2
-				if command == "update" {
-					wantGroups = 4
-				}
-				if len(requiredGroups) != wantGroups {
-					t.Fatalf("document alternative constraints: %#v", constraints)
-				}
-
-				for _, name := range []string{"name", "schema-content", "process-config", "description", "icon-url", "form-config", "node-config", "condition-rule", "plugin-configs", "visible-range", "manager-user-ids", "static-workflow", "append-enable", "duplicate-removal"} {
-					if params[name] == nil || leafCmd.Flags().Lookup(name) == nil {
-						t.Fatalf("missing parameter %s", name)
-					}
-					required := name == "name" || name == "schema-content" || command == "update" && name == "process-config"
-					if params[name]["required"] == true || (required && params[name]["required_when"] != "未提供 --from-document 时必填") {
-						t.Fatalf("wrong requiredness %s: %#v", name, params[name])
-					}
-				}
-				if command == "update" {
-					if params["expected-version"] != nil || leafCmd.Flags().Lookup("expected-version") != nil {
-						t.Fatal("update exposes expected-version")
-					}
-					if params["process-code"]["required"] == true || params["process-code"]["required_when"] != "未提供 --from-document 时必填" {
-						t.Fatal("process-code not required")
-					}
-				}
-				if !compact {
-					if schemaInterfaceObject(leaf["interface_ref"])["rpc_name"] != command+"_process_template" {
-						t.Fatal("wrong interface")
-					}
-					for name, property := range map[string]string{"schema-content": "schemaContent", "process-config": "processConfig", "plugin-configs": "pluginConfigs", "manager-user-ids": "managerUserIds", "visible-range": "visibleRange"} {
-						kind := "string"
-						if strings.Contains(name, "configs") || name == "manager-user-ids" || name == "visible-range" {
-							kind = "array"
-						}
-						interfaceType := params[name]["interface_type"]
-						if interfaceType == nil {
-							interfaceType = params[name]["type"]
-						}
-						if params[name]["property"] != property || interfaceType != kind {
-							t.Fatalf("mapping: %#v", params[name])
-						}
-					}
-					if command == "create" && (params["expected-version"]["interface_type"] != "number" || params["expected-version"]["required"] == true) {
-						t.Fatal("create version contract")
-					}
-				}
-				result := leaf["result"].(map[string]any)["data_schema"].(map[string]any)
-				if result["properties"].(map[string]any)["processCode"] == nil {
-					t.Fatal("missing result processCode")
 				}
 			})
 		}

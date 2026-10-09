@@ -34,9 +34,8 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 	create := read(filepath.Join("references", "oa-create.md"))
 	attachments := read(filepath.Join("references", "oa-attachments.md"))
 	components := read(filepath.Join("references", "oa", "oa-form-components.md"))
-	templateWrite := read(filepath.Join("references", "oa-template-write.md"))
 
-	for _, required := range []string{"oa.md", "oa-create.md", "oa-attachments.md", "oa-template-write.md"} {
+	for _, required := range []string{"oa.md", "oa-create.md", "oa-attachments.md"} {
 		if !strings.Contains(skill, required) {
 			t.Errorf("misc SKILL missing OA progressive route %q", required)
 		}
@@ -52,7 +51,6 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 		"没有固定“最多两次查询”的机械限制",
 		"[oa-create.md](oa-create.md)",
 		"[oa-attachments.md](oa-attachments.md)",
-		"[oa-template-write.md](oa-template-write.md)",
 	} {
 		if !strings.Contains(core, required) {
 			t.Errorf("OA core missing design guard %q", required)
@@ -88,12 +86,6 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 	}
 	if !strings.Contains(components, "未定义稳定格式的控件") || !strings.Contains(components, "DDHolidayField") {
 		t.Error("OA component reference must preserve the DDHolidayField unsupported-format boundary")
-	}
-	if !strings.Contains(templateWrite, "create_process_template") || !strings.Contains(templateWrite, "--from-document") {
-		t.Error("OA template-write reference must contain create/update template instructions including --from-document")
-	}
-	if !strings.Contains(templateWrite, "dingOpenErrcode=810001") {
-		t.Error("OA template-write reference must document duplicate name error code 810001")
 	}
 	if !strings.Contains(attachments, "不要因为相邻能力成功就宣称目标能力成功") {
 		t.Error("OA attachment reference must distinguish links, download authorization, and preview authorization")

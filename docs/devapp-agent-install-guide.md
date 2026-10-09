@@ -42,7 +42,7 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 `dws dev` 已在正式版里，国内用户直接用标准安装脚本的 Gitee 镜像即可（二进制和 skill 都从 Gitee 拉，避免 GitHub 网络问题）：
 
 ```bash
-curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
+DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
 ```
 
 ## 安装后验证

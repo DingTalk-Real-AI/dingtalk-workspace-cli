@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -34,131 +33,6 @@ func calendarRuntimeForTest(t *testing.T, declaration shortcut.Shortcut, values 
 		}
 	}
 	return shortcut.RuntimeContextForTest(cmd, declaration)
-}
-
-func assertCalendarReadbackFields(t *testing.T, event, requested map[string]any, wantReason string) {
-	t.Helper()
-	event["id"] = "event-1"
-	before, err := json.Marshal([]map[string]any{event, requested})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = verifyCalendarEvent(event, "event-1", requested)
-	if wantReason == "" {
-		if err != nil {
-			t.Fatalf("valid readback rejected: %v", err)
-		}
-	} else if typed, ok := err.(*apperrors.Error); !ok || typed.Reason != wantReason {
-		t.Fatalf("readback error=%v, want reason %q", err, wantReason)
-	}
-	after, err := json.Marshal([]map[string]any{event, requested})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(before, after) {
-		t.Fatalf("verification mutated event or request: before=%s after=%s", before, after)
-	}
-}
-
-func TestCrossPlatformCoverageCalendarTimeZoneReadback(t *testing.T) {
-	const zone = "Asia/Shanghai"
-	requested := map[string]any{"timeZone": " " + zone + " "}
-	aliases := []string{"timeZone", "timezone", "time_zone"}
-	for _, alias := range aliases {
-		t.Run("top-level-"+alias, func(t *testing.T) {
-			assertCalendarReadbackFields(t, map[string]any{alias: zone}, requested, "")
-		})
-		for _, endAlias := range aliases {
-			t.Run("nested-"+alias+"-"+endAlias, func(t *testing.T) {
-				assertCalendarReadbackFields(t, map[string]any{
-					"start": map[string]any{alias: " " + zone + " ", "dateTime": calendarCoverageStart},
-					"end":   map[string]any{endAlias: zone, "dateTime": calendarCoverageEnd},
-				}, requested, "")
-			})
-		}
-	}
-	cases := []struct {
-		name       string
-		event      string
-		wantReason string
-	}{
-		{"top-level-fallback-for-end", `{"timeZone":"Asia/Shanghai","start":{"timeZone":"Asia/Shanghai"},"end":{"dateTime":"2026-08-17T10:00:00+08:00"}}`, ""},
-		{"top-level-fallback-for-start", `{"timeZone":"Asia/Shanghai","start":{},"end":{"timezone":"Asia/Shanghai"}}`, ""},
-		{"matching-explicit-aliases", `{"timeZone":"Asia/Shanghai","timezone":"Asia/Shanghai","time_zone":"Asia/Shanghai","start":{"timeZone":"Asia/Shanghai","timezone":"Asia/Shanghai","time_zone":"Asia/Shanghai"},"end":{"timeZone":"Asia/Shanghai","timezone":"Asia/Shanghai","time_zone":"Asia/Shanghai"}}`, ""},
-		{"missing-everywhere", `{}`, "readback_field_missing"},
-		{"start-only", `{"start":{"timeZone":"Asia/Shanghai"}}`, "readback_field_missing"},
-		{"end-only", `{"end":{"timeZone":"Asia/Shanghai"}}`, "readback_field_missing"},
-		{"end-object-without-zone", `{"start":{"timeZone":"Asia/Shanghai"},"end":{"dateTime":"2026-08-17T10:00:00+08:00"}}`, "readback_field_missing"},
-		{"null-top-level", `{"timeZone":null,"start":{"timeZone":"Asia/Shanghai"},"end":{"timeZone":"Asia/Shanghai"}}`, "readback_field_mismatch"},
-		{"empty-top-level", `{"timeZone":" "}`, "readback_field_mismatch"},
-		{"boolean-top-level", `{"timeZone":true}`, "readback_field_mismatch"},
-		{"empty-start-despite-top-level", `{"timeZone":"Asia/Shanghai","start":{"timeZone":""}}`, "readback_field_mismatch"},
-		{"null-end-despite-top-level", `{"timeZone":"Asia/Shanghai","end":{"timeZone":null}}`, "readback_field_mismatch"},
-		{"numeric-end", `{"start":{"timeZone":"Asia/Shanghai"},"end":{"timeZone":8}}`, "readback_field_mismatch"},
-		{"object-end", `{"start":{"timeZone":"Asia/Shanghai"},"end":{"timeZone":{"value":"Asia/Shanghai"}}}`, "readback_field_mismatch"},
-		{"array-start", `{"start":{"timeZone":["Asia/Shanghai"]},"end":{"timeZone":"Asia/Shanghai"}}`, "readback_field_mismatch"},
-		{"end-conflicts-with-top-level", `{"timeZone":"Asia/Shanghai","end":{"timeZone":"UTC"}}`, "readback_field_mismatch"},
-		{"start-conflicts-with-top-level", `{"timeZone":"Asia/Shanghai","start":{"timeZone":"UTC"}}`, "readback_field_mismatch"},
-		{"end-conflicts-with-start", `{"start":{"timeZone":"Asia/Shanghai"},"end":{"timeZone":"UTC"}}`, "readback_field_mismatch"},
-		{"conflicting-top-level-alias", `{"timeZone":"Asia/Shanghai","timezone":"UTC"}`, "readback_field_mismatch"},
-		{"conflicting-endpoint-alias", `{"timeZone":"Asia/Shanghai","start":{"timeZone":"Asia/Shanghai","time_zone":"UTC"}}`, "readback_field_mismatch"},
-		{"malformed-endpoint-alias", `{"timeZone":"Asia/Shanghai","end":{"timeZone":"Asia/Shanghai","timezone":false}}`, "readback_field_mismatch"},
-		{"missing-start-and-conflicting-end", `{"end":{"timeZone":"UTC"}}`, "readback_field_mismatch"},
-		{"same-offset-different-zone", `{"timeZone":"Asia/Hong_Kong"}`, "readback_field_mismatch"},
-		{"case-sensitive-zone", `{"timeZone":"asia/shanghai"}`, "readback_field_mismatch"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var event map[string]any
-			if err := json.Unmarshal([]byte(tc.event), &event); err != nil {
-				t.Fatal(err)
-			}
-			assertCalendarReadbackFields(t, event, requested, tc.wantReason)
-		})
-	}
-	t.Run("unrequested-zone-is-not-verified", func(t *testing.T) {
-		assertCalendarReadbackFields(t, map[string]any{"timeZone": false, "start": map[string]any{"timeZone": "UTC"}}, nil, "")
-	})
-	for name, expected := range map[string]any{
-		"empty": "", "whitespace": " \t ", "non-string": true,
-	} {
-		t.Run("invalid-requested-zone-"+name, func(t *testing.T) {
-			assertCalendarReadbackFields(t, map[string]any{"timeZone": expected}, map[string]any{"timeZone": expected}, "readback_field_mismatch")
-		})
-	}
-}
-
-func TestCrossPlatformCoverageCalendarFreeBusyReadback(t *testing.T) {
-	cases := []struct {
-		name       string
-		actual     any
-		expected   any
-		wantReason string
-	}{
-		{"busy-lowercase", "busy", "busy", ""},
-		{"busy-uppercase", "BUSY", "busy", ""},
-		{"free-uppercase", "FREE", "free", ""},
-		{"mixed-case-and-whitespace", " Free ", " fReE ", ""},
-		{"different-status", "FREE", "busy", "readback_field_mismatch"},
-		{"unknown-status", "tentative", "busy", "readback_field_mismatch"},
-		{"same-unknown-status", "tentative", "tentative", "readback_field_mismatch"},
-		{"empty-status", " ", "busy", "readback_field_mismatch"},
-		{"null-status", nil, "busy", "readback_field_mismatch"},
-		{"boolean-status", true, "busy", "readback_field_mismatch"},
-		{"numeric-status", 1, "busy", "readback_field_mismatch"},
-		{"object-status", map[string]any{"value": "BUSY"}, "busy", "readback_field_mismatch"},
-		{"invalid-expected-type", "busy", true, "readback_field_mismatch"},
-	}
-	for _, alias := range []string{"freeBusy", "free_busy"} {
-		for _, tc := range cases {
-			t.Run(alias+"-"+tc.name, func(t *testing.T) {
-				assertCalendarReadbackFields(t, map[string]any{alias: tc.actual}, map[string]any{"freeBusy": tc.expected}, tc.wantReason)
-			})
-		}
-	}
-	t.Run("missing-status", func(t *testing.T) {
-		assertCalendarReadbackFields(t, map[string]any{}, map[string]any{"freeBusy": "busy"}, "readback_field_missing")
-	})
 }
 
 func TestCrossPlatformCoverageCalendarCommonBranches(t *testing.T) {

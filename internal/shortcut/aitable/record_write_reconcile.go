@@ -8,9 +8,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/google/uuid"
@@ -112,27 +110,12 @@ const recordWriteResultSchema = `{"oneOf":[
     "description":"未执行远端查询的 dry-run 请求预览，不代表已确认写入结果",
     "properties":{
       "executed":{"type":"boolean","const":false,"description":"远端查询未执行，恒为 false"},
-      "tool":{"type":"string","const":"get_record_write_result","description":"计划调用的只读核对工具"},
       "arguments":{"type":"object","description":"计划用于只读核对的请求参数","additionalProperties":true}
     },
-    "required":["executed","tool","arguments"],
+    "required":["executed","arguments"],
     "additionalProperties":false
   }
 ]}`
-
-func recordWriteResultContract() corecmd.ContractDecl {
-	declaration := aitableCompositeContractWithResult("+record-write-result", "只读核对一次记录写入的实际结果",
-		"批量写入失败或超时后，持有原 clientToken 需要确定已写入 ID 时", "普通查询用 +record-query；本命令不会补写或重放数据，不能证明 upsert 更新分组或子记录父子链接完成",
-		`dws aitable +record-write-result --base-id B --table-id T --client-token 123e4567-e89b-42d3-a456-426614174000`,
-		&contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(recordWriteResultSchema)})
-	declaration.Parameters = []contract.ParamDecl{
-		{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
-		{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
-		{Name: "client-token", Property: "clientToken", Required: boolPtr(true)},
-	}
-	declaration.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest}
-	return declaration
-}
 
 var RecordWriteResult = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
@@ -141,32 +124,30 @@ var RecordWriteResult = shortcut.Shortcut{
 	Intent:      "批量写入失败或超时且持有原 clientToken 时使用；只读核对实际已应用的记录 ID，不补写或重放，未知结果不代表未写入。unknown 或 ID 不完整时停止后续写入，下一步仍使用本命令和原 baseId/tableId/clientToken 只读对账，不能用全表查询替代；完整 ID 集合确认后才逐 ID 核对实际值。返回部分 ID 只证明这些记录已应用，不证明其余记录未写入，不能按数量差额补写或更换 token。用户评审恢复方案并要求下一步命令时，先给本命令使用原三个参数的完整只读命令并注明未执行，再解释判断；不要先展开 Schema 字段表。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
-	Contract:    recordWriteResultContract(),
+	Contract: aitableCompositeContractWithResult("+record-write-result", "只读核对一次记录写入的实际结果",
+		"批量写入失败或超时后，持有原 clientToken 需要确定已写入 ID 时", "普通查询用 +record-query；本命令不会补写或重放数据",
+		`dws aitable +record-write-result --base-id B --table-id T --client-token 123e4567-e89b-42d3-a456-426614174000`,
+		&contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(recordWriteResultSchema)}),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "原写入 Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "原写入 Table ID", Required: true},
 		{Name: "client-token", Type: shortcut.FlagString, Desc: "原写入使用的 UUID v4", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		token := strings.TrimSpace(rt.Str("client-token"))
-		if err := aitableprotocol.ValidateClientToken(token); err != nil {
-			return apperrors.NewValidation("--client-token: " + err.Error())
+		if err := aitableprotocol.ValidateClientToken(rt.Str("client-token")); err != nil {
+			return err
 		}
-		args := map[string]any{"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id"), "clientToken": token}
+		args := map[string]any{"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id"), "clientToken": rt.Str("client-token")}
 		if rt.DryRun() {
-			return rt.Output(map[string]any{
-				"executed":  false,
-				"tool":      "get_record_write_result",
-				"arguments": args,
-			})
+			return rt.Output(map[string]any{"executed": false, "arguments": args})
 		}
-		data, err := rt.CallMCPReadData(serverMain, "get_record_write_result", args)
+		data, err := rt.CallMCPData(serverMain, "get_record_write_result", args)
 		if err != nil {
 			return err
 		}
 		body := parityResponseObject(data)
-		if _, err := reconciledRecordIDs(body, rt.Str("base-id"), rt.Str("table-id"), token); err != nil {
-			return invalidRecordWriteResult(err)
+		if _, err := reconciledRecordIDs(body, rt.Str("base-id"), rt.Str("table-id"), rt.Str("client-token")); err != nil {
+			return err
 		}
 		return rt.Output(body)
 	},

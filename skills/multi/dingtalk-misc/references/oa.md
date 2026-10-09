@@ -10,9 +10,8 @@
 | 同意、拒绝、转交、评论、追加抄送、撤销 | 本文件足够；遇到错误再按 shared 契约读取对应错误 reference |
 | 发起审批、预测流程、组装表单字段 | 继续读 [oa-create.md](oa-create.md)；按其中条件加载控件和节点 reference |
 | 下载链接、下载/预览授权、上传审批附件 | 继续读 [oa-attachments.md](oa-attachments.md) |
-| 创建审批模板、更新审批模板、模板 JSON 文档模式 | 继续读 [oa-template-write.md](oa-template-write.md)；按其中索引加载控件和节点 reference |
 
-不要为普通查询预读创建、控件、节点、附件或模板写入全文。
+不要为普通查询预读创建、控件、节点或附件全文。
 
 ## 角色来源是对象身份的一部分
 
@@ -179,7 +178,3 @@ dws oa approval list-by-admin --process-code <processCode> --start "<ISO-8601>" 
 |---|---|---|
 | `dws oa +search-forms` | read | 按关键字模糊搜索当前用户可见的审批表单 |
 <!-- VISIBLE_SHORTCUTS_END -->
-
-### 创建和更新模板路由
-
-用户要创建或更新审批模板时，继续读取 [oa-template-write.md](oa-template-write.md)。不要凭本文件直接组装 `--schema-content` 或 `--process-config`。

@@ -62,7 +62,6 @@ metadata:
 
 - 删除已确认节点：`dws drive +delete --node <dentryUuid>`；恢复：`+recycle-list/+recycle-restore`；版本：`+version-history/+version-get/+version-download/+version-revert`。
 - 收藏：`+star-*`；公开状态：`+publish-get/+publish-unset`（`+publish-set` 不进入 Agent 路由）；统计/封面用 `+inspect`；快捷方式用 `+create-shortcut`。
-- 节点分享范围：`dws drive permission set-share-scope --node <ID> --visibility <PRIVATE|ORGANIZATION|PUBLIC>`（[危险] 三档收敛，设置企业内公开/互联网公开/仅协作者）。查询当前分享范围用 `permission get-setting`。
 - 目录树只用有界 `+list` 逐层遍历。
 
 兼容别名不选路：`+info`→`+inspect`，`+find-file`→`+search`，`+search-docs`→`doc +search`。
@@ -113,7 +112,7 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 |---|---|
 | URL、文件类型或跨产品边界 | [intent-guide](references/intent-guide.md) |
 | 文件夹比较、拉取、推送或双向同步 | [folder-sync](references/folder-sync.md) |
-| 低频权限、分享范围、版本、回收站、公开状态 | [drive reference](references/drive.md) 的对应章节 |
+| 低频权限、版本、回收站、公开状态 | [drive reference](references/drive.md) 的对应章节 |
 | 文档查询、导入和模板保形流程 | [lite-recipes](references/lite-recipes.md) |
 
 ## 错误最短路径

@@ -29,35 +29,6 @@ status with `pending` and only then evaluates the normal policy. The same
 workflow supplies a successful `AI Behavior` check run on protected `main`
 pushes for release governance.
 
-### PR #1463 的精确公开补丁准入
-
-维护者已单独批准 PR #1463 的完整公开补丁。`AI Behavior` 仅为这个
-PR 保留一次精确例外：仓库、作者 `haofeng0705`、分支
-`codex/sync-aitable-public-fixes`、`main` 目标及开放状态均须一致，
-Ready/Draft 和当前 base/head 的前后检查仍然生效。批准基线固定为
-`3f0fc94111b1f9cd34e47468980b1f1a723ca69a`，批准提交固定为
-`53de9d92c9b310798d7f42a385e162273330442b`；授权保存在主分支工作流，
-不读取 PR 内的可变授权声明。
-
-补丁内容来自 GitHub 只读 Git commit/tree 和 Files API，PR get/compare
-API 用于核对身份和祖先关系。四个完整 Git tree 用于比较批准及当前
-补丁的全部路径、增改状态、修改前后 blob、
-文件模式和类型；截断、额外文件、重命名、删除和非普通文件均不能
-获得例外。批准补丁必须恰为 44 个文件，其中受保护路径恰为：
-
-- `scripts/policy/skill-command-check/main.go`
-- `scripts/policy/skill-command-check/main_test.go`
-
-当前 base 必须是当前 head 的祖先。治理合入后，业务分支可以合入或
-变基到新主分支；只有完整 44 文件差异与固定批准补丁完全一致才通过。
-任何业务修复改变内容、模式、类型或修改前基线，都必须重新审核并更新
-主分支上的批准提交，不能由同一个业务 PR 扩大自己的授权。
-
-普通 AI PR 的 30 文件上限和全部保护目录规则保持不变。这个例外只
-决定 `AI Behavior` 准入，其他八项必需检查仍须成功；引入例外的治理
-PR 也仍由旧主分支规则检查，维护者的单次 bootstrap bypass 须单独
-记录，不能将它当作本规则已通过或其他 CI 已通过的证据。
-
 ## Draft pull-request feedback
 
 A Draft pull request runs the independent `Draft CI` workflow. Its single

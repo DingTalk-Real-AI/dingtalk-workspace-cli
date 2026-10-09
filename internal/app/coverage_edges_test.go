@@ -56,11 +56,6 @@ func (r *coverageRunner) Run(_ context.Context, inv executor.Invocation) (execut
 	return r.result, r.err
 }
 
-func (r *coverageRunner) RunWithToken(_ context.Context, inv executor.Invocation, _ string) (executor.Result, error) {
-	r.last = inv
-	return r.result, r.err
-}
-
 type coverageScanner struct{ report safety.Report }
 
 func (s coverageScanner) ScanPayload(any) safety.Report { return s.report }
@@ -926,14 +921,17 @@ func TestCrossPlatformCoverageAuthCommandPureCoverage(t *testing.T) {
 		[]byte(`{"result":[{"orgEmployeeModel":{}}]}`),
 		[]byte(`{"result":[{"orgEmployeeModel":{"corpId":"corp","orgName":"Corp","userid":"user","name":"Name"}}]}`),
 	} {
-		_, _ = authpkg.ContactProfileIdentityFromJSON(data)
+		_, _ = contactProfileIdentityFromJSON(data)
 	}
 	for _, result := range []*edition.ToolResult{
 		nil,
 		{},
 		{Content: []edition.ContentBlock{{Text: " "}, {Text: `{"result":[{"orgEmployeeModel":{"corpId":"corp"}}]}`}}},
 	} {
-		_, _ = authpkg.ContactProfileIdentityFromToolResult(result)
+		_, _ = contactProfileIdentityFromToolResult(result)
+	}
+	if firstNonEmptyString(" ", " value ") != "value" || firstNonEmptyString(" ") != "" {
+		t.Fatal("first non-empty string mismatch")
 	}
 
 	cmd := &cobra.Command{Use: "auth"}

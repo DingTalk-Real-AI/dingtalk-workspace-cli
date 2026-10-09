@@ -51,31 +51,6 @@ func TestCrossPlatformCoverageMinutesExportSanitizationFinalSchema(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageMinutesExportEmptyContentHelpAndSchema(t *testing.T) {
-	for _, args := range [][]string{
-		{"--cli-path", "minutes +export-pack"},
-		{"--cli-path", "minutes +export-pack", "--compact"},
-	} {
-		leaf := executeShortcutSchemaQuery(t, args...)
-		if !strings.Contains(schemaContractString(leaf["description"]), "空摘要也生成产物文件；所选转写必须非空") ||
-			!strings.Contains(schemaContractString(leaf["description"]), "不证明分析已完成") ||
-			!strings.Contains(schemaContractString(leaf["description"]), "摘要接口明确成功且 result={} 时按空摘要导出") {
-			t.Fatal("export Schema lost empty-content semantics")
-		}
-	}
-	root := NewRootCommand()
-	var help bytes.Buffer
-	root.SetOut(&help)
-	root.SetErr(&help)
-	root.SetArgs([]string{"minutes", "+export-pack", "--help"})
-	if err := root.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(help.String(), "空摘要也生成产物文件；所选转写必须非空") {
-		t.Fatal("export Help lost empty-content semantics")
-	}
-}
-
 func TestCrossPlatformCoverageMinutesPreviewPlanFinalDelivery(t *testing.T) {
 	for _, tc := range []struct {
 		path   string

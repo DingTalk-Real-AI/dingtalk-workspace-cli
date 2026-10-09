@@ -364,7 +364,6 @@ func BuildSchemaProductLocators(registry SchemaRegistry) (map[string]string, err
 
 func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]string, error) {
 	locators := make(map[string]string)
-	explicit := make(map[string]bool)
 	add := func(path, productID string) error {
 		path = strings.TrimSpace(path)
 		if path == "" {
@@ -377,7 +376,6 @@ func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]st
 		return nil
 	}
 	for _, product := range registry.Products {
-		explicit[product.ID] = true
 		if err := add(product.ID, product.ID); err != nil {
 			return nil, err
 		}
@@ -388,7 +386,6 @@ func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]st
 			}
 			paths = append(paths, tool.Identity.Aliases...)
 			for _, path := range paths {
-				explicit[strings.TrimSpace(path)] = true
 				if err := add(path, product.ID); err != nil {
 					return nil, err
 				}
@@ -402,14 +399,6 @@ func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]st
 					}
 				}
 			}
-		}
-	}
-	// CLI 根名可以不同于 Schema 产品 ID（如 sample / samplecatalog）。
-	// 完整叶子仍可查，但其前缀不是产品声明，不能伪造不可查询的缓存导航。
-	// 先完成全部碰撞检查，再移除这些合成前缀，保留精确 locator 的冲突保护。
-	for path, productID := range locators {
-		if !explicit[path] && SplitPathTokens(path)[0] != productID {
-			delete(locators, path)
 		}
 	}
 	return locators, nil

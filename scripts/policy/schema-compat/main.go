@@ -177,81 +177,6 @@ var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityExceptio
 	"aitable/aitable.record_primary_doc_create": {
 		{Field: "idempotency", Old: "unknown", New: "idempotent"},
 	},
-	// 创建操作在回执不明时不得重放；稳定 ID 的 App/Page/Widget 读取及更新
-	// 重复执行收敛到同一资源。仅批准以下精确的幂等性迁移，其他安全字段
-	// 仍须通过原有兼容检查。
-	"aitable/aitable.advperm_role_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.base_copy": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.base_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.chart_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.dashboard_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.datasource_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.field_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.form_submit": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.record_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.record_create_sub": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.section_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.table_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.view_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.view_duplicate": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.shortcut_app_block_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.shortcut_app_block_get": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_block_list": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_block_update": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_get": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_page_create": {
-		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
-	},
-	"aitable/aitable.shortcut_app_page_get": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_page_list": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
-	"aitable/aitable.shortcut_app_page_update": {
-		{Field: "idempotency", Old: "unknown", New: "idempotent"},
-	},
 	"aitable/aitable.section_delete": {
 		{Field: "confirmation", Old: "not_required", New: "user_required"},
 		{Field: "effect", Old: "write", New: "destructive"},
@@ -990,10 +915,9 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 	return false
 }
 
-// interfaceTransition identifies one reviewed interface tuple change and pins
-// both sides of the migration. A composite leaf has an empty ref. An available
-// MCP leaf carries the canonicalized ref emitted by parseTool; an unavailable
-// MCP leaf deliberately clears it.
+// interfaceTransition identifies one reviewed change in interface kind and
+// pins both sides of the migration. A composite leaf has an empty ref; an mcp
+// leaf must carry the canonicalized ref emitted by parseTool.
 type interfaceTransition struct {
 	OldMode string
 	OldRef  string
@@ -1002,9 +926,9 @@ type interfaceTransition struct {
 }
 
 // reviewedInterfaceTransitions enumerates exact changes between a single-RPC
-// leaf and an orchestrated/composite leaf. Schema shape cannot prove that the declared kind
-// matches runtime execution, so every tool and both complete interface tuples
-// must be reviewed before the product change lands.
+// leaf and an orchestrated/composite leaf. Schema shape cannot prove that the
+// declared kind matches runtime execution, so every tool and both complete
+// interface tuples must be reviewed before the product change lands.
 //
 // The table does not approve any CLI, parameter, availability, or safety drift.
 // compatibleReviewedInterfaceTransition requires every other compatibility
@@ -1085,21 +1009,6 @@ var reviewedInterfaceTransitions = map[string]interfaceTransition{
 		OldMode: "composite",
 		NewMode: "mcp",
 		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_info"}`,
-	},
-}
-
-// reviewedAvailabilityInterfaceRetirements binds an interface_ref removal to
-// an authorized schema_availability_hardening receipt. Unlike the general
-// compatibility exception tables, this table is consulted only while
-// normalizing migrations returned by AuthorizeCommandMigrations. A pending or
-// otherwise unauthorized product change therefore receives no exemption.
-var reviewedAvailabilityInterfaceRetirements = map[string]interfaceTransition{
-	// 两阶段命令退役：消费已批准的命令迁移收据后，
-	// unavailable Schema 叶子必须清除这条精确的历史 RPC 引用。
-	"chat/chat.promote_message_to_thread": {
-		OldMode: interfaceModeMCP,
-		OldRef:  `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
-		NewMode: interfaceModeMCP,
 	},
 }
 
@@ -1288,23 +1197,19 @@ func compatibleReviewedConstraintTransition(toolPath string, oldTool, newTool to
 	return want == newTool.Constraints
 }
 
-// compatibleReviewedInterfaceTransition accepts a change in interface kind only when
-// the complete old/new mode+ref tuple is registered and no other compatibility
-// failure remains. Safety corrections may be independently reviewed above;
-// arbitrary parameter or command drift remains blocking.
+// compatibleReviewedInterfaceTransition accepts a change in interface kind
+// only when the complete old/new mode+ref tuple is registered and no other
+// compatibility failure remains. Safety corrections may be independently
+// reviewed above; arbitrary parameter or command drift remains blocking.
 func compatibleReviewedInterfaceTransition(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
 	transition, ok := reviewedInterfaceTransitions[toolPath]
-	if !ok || len(otherFailures) != 0 || !validReviewedInterfaceTransitionShape(transition) {
+	if !ok || len(otherFailures) != 0 {
 		return false
 	}
 	return transition.OldMode == oldTool.InterfaceMode &&
 		transition.OldRef == oldTool.InterfaceRef &&
 		transition.NewMode == newTool.InterfaceMode &&
 		transition.NewRef == newTool.InterfaceRef
-}
-
-func validReviewedInterfaceTransitionShape(transition interfaceTransition) bool {
-	return transition.OldMode != transition.NewMode
 }
 
 // compatibleInterfaceRefRedirect accepts repointing a tool at a different
@@ -2393,14 +2298,6 @@ func normalizeSchemaCommandMigrations(
 		case interfacesnapshot.CommandMigrationAvailability:
 			change := migration.Schema.Availability
 			if change != nil && oldTool.Availability == change.After && newSource.Availability == change.After {
-				if err := normalizeAuthorizedAvailabilityInterfaceRetirement(
-					migration.Schema.ProductID+"/"+migration.Schema.SourceToolID,
-					oldTool,
-					newSource,
-					&normalizedTool,
-				); err != nil {
-					return schemaContract{}, err
-				}
 				continue
 			}
 			if change == nil || oldTool.Availability != change.Before || newSource.Availability != change.After {
@@ -2415,14 +2312,6 @@ func normalizeSchemaCommandMigrations(
 				continue
 			}
 			normalizedTool.Availability = newSource.Availability
-			if err := normalizeAuthorizedAvailabilityInterfaceRetirement(
-				migration.Schema.ProductID+"/"+migration.Schema.SourceToolID,
-				oldTool,
-				newSource,
-				&normalizedTool,
-			); err != nil {
-				return schemaContract{}, err
-			}
 
 		case interfacesnapshot.CommandMigrationMove:
 			if newSource.PrimaryCLIPath != replacementPath {
@@ -2566,36 +2455,6 @@ func normalizeSchemaCommandMigrations(
 		normalized.Products[migration.Schema.ProductID] = normalizedProduct
 	}
 	return normalized, nil
-}
-
-func normalizeAuthorizedAvailabilityInterfaceRetirement(
-	toolPath string,
-	oldTool toolSchema,
-	newTool toolSchema,
-	normalizedTool *toolSchema,
-) error {
-	transition, ok := reviewedAvailabilityInterfaceRetirements[toolPath]
-	if !ok {
-		return nil
-	}
-	oldMode, oldRef := transition.OldMode, transition.OldRef
-	if oldTool.Availability == "unavailable" {
-		oldMode, oldRef = transition.NewMode, transition.NewRef
-	}
-	if oldTool.InterfaceMode != oldMode || oldTool.InterfaceRef != oldRef ||
-		newTool.InterfaceMode != transition.NewMode || newTool.InterfaceRef != transition.NewRef {
-		return fmt.Errorf(
-			"approved availability hardening %q does not match reviewed interface tuple (%q, %q) -> (%q, %q)",
-			toolPath,
-			oldTool.InterfaceMode,
-			oldTool.InterfaceRef,
-			newTool.InterfaceMode,
-			newTool.InterfaceRef,
-		)
-	}
-	normalizedTool.InterfaceMode = newTool.InterfaceMode
-	normalizedTool.InterfaceRef = newTool.InterfaceRef
-	return nil
 }
 
 func normalizeFlagExtractionSchemaMigration(

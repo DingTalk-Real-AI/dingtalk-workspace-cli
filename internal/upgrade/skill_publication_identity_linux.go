@@ -25,9 +25,8 @@ func skillPathSameFileIdentityImpl(left, right os.FileInfo) bool {
 // lifetime and is the same witness os.SameFile compares. It anchors the
 // mkdir-claim identity of the child-move fallback: a wholesale replacement
 // of the claimed destination reports a different identity, except in the
-// classic inode-reuse race on recycled-inode filesystems. Identical content
-// defeats a fingerprint backstop too, so a published transaction retains
-// an O_PATH handle until commit or rollback. An unreadable
+// classic inode-reuse race on recycled-inode filesystems (notably tmpfs),
+// which the publication fingerprint backstop still catches. An unreadable
 // or unrecognizable path reports "" and callers treat that as "no witness".
 func skillPathFileIdentityImpl(path string) string {
 	info, err := skillPathLstat(path)

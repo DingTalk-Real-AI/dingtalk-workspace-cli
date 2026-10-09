@@ -36,7 +36,6 @@ func TestCrossPlatformCoverageAITableSemanticCatalogExactlyCoversRegisteredSurfa
 		}
 		registered[item.Command] = item
 	}
-	// +record-write-result adds one reviewed read-only leaf to the 126-command surface.
 	if len(registered) != 127 || len(source.Shortcuts) != 127 {
 		t.Fatalf("registered/catalog = %d/%d, want 127/127", len(registered), len(source.Shortcuts))
 	}

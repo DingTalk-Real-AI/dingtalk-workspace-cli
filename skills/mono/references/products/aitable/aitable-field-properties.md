@@ -2,10 +2,7 @@
 
 > 适用命令：`dws aitable field create`、`dws aitable table create --fields`、`dws aitable field update --config`
 >
-> 本文件是字段 config 的使用参考；可执行能力以当前 leaf Help/Schema 和服务端契约为准。
->
-> 2026-09-23 核对：生产 MCP `create_fields` / `update_field` 的工具 Schema 只显式列出 `config.options`，与配置说明存在缺口；这不等于已证明网关会丢弃其他键。下文 `formula`、`formatter`、`linkedTableId` 等配置需要完整契约和发布验证；不能把创建回执当作配置已生效，也不要重复试写。
-> `table create` 使用独立 config 契约。创建回执的 success 不是可读性保证；建表/建字段可使用 `--wait --wait-timeout 30` 连续两次只读核对，超时保留 receipt 和 ID，禁止重放创建。
+> 本文件是 DWS AI 表格字段 config 的 **source of truth**。创建/更新字段时，必须严格按此规范构造 JSON。
 
 ## 1. 顶层规则
 

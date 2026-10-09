@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 
 > 国内用户：`dws dev` 已在正式版里，直接用标准安装脚本的 Gitee 镜像即可（二进制和 skill 都从 Gitee 拉，避免 GitHub 网络问题）：
 > ```bash
-> curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
+> DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
 > ```
 
 装完按提示把 `~/.local/bin` 加进 `PATH`（脚本会在末尾提示），然后执行 `dws version` 确认。

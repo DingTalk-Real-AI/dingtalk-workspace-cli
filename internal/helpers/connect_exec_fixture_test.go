@@ -9,9 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -54,30 +52,9 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	cobra.MousetrapHelpText = originalMousetrapHelpText
 	if helpersShellStubBaseDir != "" {
-		if err := retryHelpersFixtureCleanup(func() error { return os.RemoveAll(helpersShellStubBaseDir) }); err != nil {
-			fmt.Fprintln(os.Stderr, "helpers executable fixture cleanup:", err)
-			code = 1
-		}
+		_ = os.RemoveAll(helpersShellStubBaseDir)
 	}
 	os.Exit(code)
-}
-
-// Windows can retain a mapped executable briefly after its process exits.
-// Remove fixture executables before testing.TempDir's one-shot cleanup runs.
-// A persistent lock still fails the test; assertions and process exits are never retried.
-func retryHelpersFixtureCleanup(remove func() error) error {
-	delays := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 4 * time.Second}
-	for attempt := 0; ; attempt++ {
-		err := remove()
-		if err == nil || os.IsNotExist(err) {
-			return nil
-		}
-		sharingFailure := os.IsPermission(err) || errors.Is(err, syscall.Errno(32)) || errors.Is(err, syscall.Errno(33))
-		if runtime.GOOS != "windows" || !sharingFailure || attempt == len(delays) {
-			return err
-		}
-		time.Sleep(delays[attempt])
-	}
 }
 
 func runHelpersShellStub() int {

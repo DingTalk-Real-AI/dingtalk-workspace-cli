@@ -69,8 +69,9 @@ func walkIdentityLeaves(cmd *cobra.Command, fn func(*cobra.Command)) {
 	if cmd == nil {
 		return
 	}
-	if runnableSchemaLeaf(cmd) {
+	if cmd.Runnable() && !cmd.HasSubCommands() {
 		fn(cmd)
+		return
 	}
 	for _, child := range cmd.Commands() {
 		if child.Name() == "help" {

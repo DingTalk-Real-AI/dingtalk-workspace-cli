@@ -743,7 +743,7 @@ func TestRefreshPreflightIgnoresUnreadableUnrelatedProfile(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageOAuthLoginCiphertextMismatchStartsAuthorization(t *testing.T) {
+func TestOAuthLoginUnreadableGlobalFailsClosedBeforeAuthorizationStart(t *testing.T) {
 	setPreflightTestCredentials(t)
 	for _, force := range []bool{false, true} {
 		t.Run("force="+map[bool]string{false: "false", true: "true"}[force], func(t *testing.T) {
@@ -763,17 +763,20 @@ func TestCrossPlatformCoverageOAuthLoginCiphertextMismatchStartsAuthorization(t 
 			provider := NewOAuthProvider(configDir, nil)
 			provider.NoBrowser = true
 			_, err := provider.Login(context.Background(), force)
-			if !errors.Is(err, listenErr) {
-				t.Fatalf("Login(force=%v) error = %v, want authorization listener error", force, err)
+			if err == nil || !strings.Contains(err.Error(), "refusing to overwrite") {
+				t.Fatalf("Login(force=%v) error = %v, want unreadable-global protection", force, err)
 			}
-			if got := calls.Load(); got != 1 {
-				t.Fatalf("Login(force=%v) listener calls = %d, want 1", force, got)
+			if errors.Is(err, listenErr) {
+				t.Fatalf("Login(force=%v) reached authorization listener: %v", force, err)
+			}
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("Login(force=%v) listener calls = %d, want 0", force, got)
 			}
 		})
 	}
 }
 
-func TestCrossPlatformCoverageExchangeAuthCodeRepairsCiphertextMismatchAfterExchange(t *testing.T) {
+func TestExchangeAuthCodeRejectsUnreadableGlobalBeforeHTTP(t *testing.T) {
 	cleanupKeychain(t)
 	setPreflightTestCredentials(t)
 	configDir := t.TempDir()
@@ -799,73 +802,22 @@ func TestCrossPlatformCoverageExchangeAuthCodeRepairsCiphertextMismatchAfterExch
 			)),
 		}, nil
 	})}
-	got, err := provider.ExchangeAuthCode(context.Background(), "auth-code", existing.UserID)
-	if err != nil || got == nil || got.AccessToken != "new-access" {
-		t.Fatalf("ExchangeAuthCode() = %#v, %v, want fresh token", got, err)
+	_, err := provider.ExchangeAuthCode(context.Background(), "auth-code", existing.UserID)
+	if err == nil || !strings.Contains(err.Error(), "legacy token slot") {
+		t.Fatalf("ExchangeAuthCode() error = %v, want target token persistence error", err)
 	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("HTTP calls = %d, want 1", got)
+	if !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("ExchangeAuthCode() error = %v, want ciphertext key mismatch in error chain", err)
 	}
-	if got := saveCalls.Load(); got != 1 {
-		t.Fatalf("SaveTokenData calls = %d, want 1", got)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("HTTP calls = %d, want 0", got)
 	}
-	legacyPath := filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy ciphertext after fresh exchange stat error = %v, want removed target", err)
-	}
-}
-
-func TestCrossPlatformCoverageExchangeAuthCodeRepairsCiphertextMismatchWithoutUID(t *testing.T) {
-	cleanupKeychain(t)
-	setPreflightTestCredentials(t)
-	configDir := t.TempDir()
-	existing := testToken("at_exchange_nouid", "corp_exchange_nouid", "Exchange NoUID Org")
-	seedUnreadableTokenStorage(t, configDir, existing)
-
-	var calls atomic.Int32
-	var saveCalls atomic.Int32
-	oldSave := oauthSaveToken
-	oauthSaveToken = func(string, *TokenData) error {
-		saveCalls.Add(1)
-		return nil
-	}
-	t.Cleanup(func() { oauthSaveToken = oldSave })
-	provider := NewOAuthProvider(configDir, nil)
-	provider.httpClient = &http.Client{Transport: preflightRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		calls.Add(1)
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     make(http.Header),
-			Body: io.NopCloser(strings.NewReader(
-				`{"accessToken":"new-access","refreshToken":"new-refresh","expiresIn":7200,"corpId":"corp_exchange_nouid"}`,
-			)),
-		}, nil
-	})}
-	// An empty uid routes through persistLoginToken: identity enrichment runs
-	// first, then the ciphertext-mismatch targets are repaired before the fresh
-	// token is written. Both the legacy and organization slots seeded under a
-	// mismatched DEK must be removed instead of failing the exchange.
-	got, err := provider.ExchangeAuthCode(context.Background(), "auth-code", "")
-	if err != nil || got == nil || got.AccessToken != "new-access" {
-		t.Fatalf("ExchangeAuthCode() = %#v, %v, want fresh token", got, err)
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("HTTP calls = %d, want 1", got)
-	}
-	if got := saveCalls.Load(); got != 1 {
-		t.Fatalf("SaveTokenData calls = %d, want 1", got)
-	}
-	legacyPath := filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy ciphertext after fresh exchange stat error = %v, want removed target", err)
-	}
-	orgPath := profileCiphertextPathForTest(existing.CorpID)
-	if _, err := os.Stat(orgPath); !os.IsNotExist(err) {
-		t.Fatalf("organization ciphertext after fresh exchange stat error = %v, want removed target", err)
+	if got := saveCalls.Load(); got != 0 {
+		t.Fatalf("SaveTokenData calls = %d, want 0", got)
 	}
 }
 
-func TestCrossPlatformCoverageDeviceFlowLoginCiphertextMismatchStartsAuthorization(t *testing.T) {
+func TestDeviceFlowLoginRejectsUnreadableGlobalBeforeDeviceCodeRequest(t *testing.T) {
 	cleanupKeychain(t)
 	setPreflightTestCredentials(t)
 	configDir := t.TempDir()
@@ -882,14 +834,11 @@ func TestCrossPlatformCoverageDeviceFlowLoginCiphertextMismatchStartsAuthorizati
 	provider.Output = io.Discard
 	provider.SetBaseURL(server.URL)
 	_, err := provider.Login(context.Background())
-	// The message guard is defensive documentation: a preflight refusal would
-	// leave the device-code request count at 0, so the calls==1 assertion below
-	// is the semantic anchor for "authorization started".
-	if err == nil || strings.Contains(err.Error(), "legacy token slot") {
-		t.Fatalf("DeviceFlowProvider.Login() error = %v, want post-request authorization failure", err)
+	if err == nil || !strings.Contains(err.Error(), "legacy token slot") {
+		t.Fatalf("DeviceFlowProvider.Login() error = %v, want unreadable-global protection", err)
 	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("device code requests = %d, want 1", got)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("device code requests = %d, want 0", got)
 	}
 }
 

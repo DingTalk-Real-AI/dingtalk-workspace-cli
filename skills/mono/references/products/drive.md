@@ -636,13 +636,12 @@ Flags:
 用户说"删除文件/删除文件夹/移到回收站" → `delete`（危险操作，需确认）
 用户说"回收站/查看回收站/回收站列表/回收站里有什么" → `recycle list`
 用户说"恢复文件/还原删除的文件/从回收站恢复/还原回收站文件" → `recycle restore`
-用户说"给文档授权/分享权限" → `permission add`（协作者级授权；链接公开的访问密码/有效期走 `permission set-share-scope --visibility PUBLIC`）
+用户说"给文档授权/分享权限" → `permission add`（协作者级授权；链接公开的访问密码/有效期走 `publish set`）
 用户说"授权并通知对方/加权限后告知他/通知一下被授权的人" → `permission add --members ... --notify`（未提通知需求时不传 `--notify`）
 用户说"权限设置/权限模式/分享范围/水印等策略配置" → `permission get-setting`
-用户说"企业内公开/合作伙伴（外包）/组织内搜索/组织内推荐/设置节点分享范围/设置节点可见性/三档可见性" → `permission set-share-scope`
-用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问/设置访问密码/公开有效期/分享链接密码" → `permission set-share-scope --visibility PUBLIC`（publish set 已退出 Agent 可选面，勿用）
-用户说"关闭公开/取消公开/取消互联网访问" → `permission set-share-scope --visibility PRIVATE`（publish unset 等价于 --visibility PRIVATE，同样可能打断权限继承）
-用户说"查看公开状态/是否公开/发布状态" → `permission get-setting`（审批态 pendingApproval 暂需 publish get，待服务端在 get-setting 暴露后移除）
+用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问/设置访问密码/公开有效期/分享链接密码" → `publish set`
+用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
+用户说"查看公开状态/是否公开/发布状态" → `publish get`
 用户说"比较本地和云盘/看哪些文件变了/同步差异/diff" → `status`
 用户说"把钉盘文件夹拉到本地/下载整个文件夹/镜像/同步到本地/pull" → `pull`
 用户说"把本地文件夹传到钉盘/推送整个文件夹/上传目录/同步到云端/push" → `push`
@@ -658,8 +657,6 @@ Flags:
 **drive upload vs doc upload**: 文件上传统一走 `drive upload`。上传到知识库/文档空间时加 `--workspace` 参数。
 
 **drive permission vs wiki member**: "给某篇文档/文件授权" → `drive permission add`（节点级）；"给某个知识库整体加成员" → `wiki member add`（空间级）
-
-**drive permission set-share-scope vs wiki permission set-share-scope**: "设置某个节点/文档/文件夹的分享范围" → `drive permission set-share-scope`（节点级）；"设置整个知识库的分享范围" → `wiki permission set-share-scope`（空间级）
 
 **通知意图 → `--notify`**（默认不通知，省略时 CLI 不向服务端发送该字段）：
 - 用户明确要求“通知 / 告知 / 提醒对方 / 让他知道” → 追加 `--notify`
@@ -765,7 +762,7 @@ dws wiki node create --type folder --name "文件夹名" --workspace <WORKSPACE_
 
 ### 权限管理（文档节点级）
 
-> 协作者写管理（add/update/remove）面向文档空间节点；查询协作者列表（list）与查询权限设置（get-setting）同时支持文档空间节点与钉盘文件/文件夹。
+> 仅适用于文档空间节点，不适用于钉盘文件。
 
 ```
 Usage:
@@ -843,74 +840,18 @@ Flags:
 ```
 
 子命令说明：
-- `publish set` — [已退出 Agent 可选面，勿用；改用 `permission set-share-scope --visibility PUBLIC`] 设置文件为互联网公开，可选指定公开权限、访问密码与有效期
-- `publish unset` — [危险] 关闭文件互联网公开（可被 `permission set-share-scope --visibility PRIVATE` 替代，保留仅 CLI 兼容）
-- `publish get` — 查询文件当前的公开发布状态（可被 `permission get-setting` 替代，保留仅 CLI 兼容；审批态 pendingApproval 待服务端在 get-setting 暴露后可完全平替）
+- `publish set` — [危险] 设置文件为互联网公开，可选指定公开权限、访问密码与有效期
+- `publish unset` — [危险] 关闭文件互联网公开
+- `publish get` — 查询文件当前的公开发布状态
 
 返回字段说明：
 - `published` — true=已公开，false=未公开
 - `publishPermission` — 当前公开权限（READER/DOWNLOADER/EDITOR）
 - `pendingApproval` — true=已提交审批待生效，false/null=无需审批或已直接生效
 - `docUrl` — 文件访问链接
-- `permissionBreakApplied` — 是否打断了权限继承
-- `requirePassword` — 是否开启访问密码保护
-- `expireAt` — 公开过期时间（RFC3339，未设置时为 null）
-- `expireDays` — 公开有效期天数（0=永久，未设置时为 null）
 
 > **注意**：导出钉盘在线文档到本地可使用 `dws drive export`（通用导出，支持 docx/xlsx/pptx/pdf/markdown），完整规则见 [`drive/drive-export.md`](./drive/drive-export.md)；`doc export` 与 `sheet export` 是分别针对在线文档与在线表格的产品级入口。
 > 导出/复制/移动的自动轮询过程可随时用 Ctrl-C 中断；已提交的服务端任务不会中止，之后可用 `dws drive task get` 查询任务状态。
-
-### 节点分享范围管理
-
-设置节点的分享范围（可见性），三档一次收敛。适用于文档空间节点与钉盘文件/文件夹；钉盘文件/文件夹不支持互联网公开（PUBLIC）档，对其设置 PUBLIC 返回 operation.notSupported。操作者须为节点的 OWNER 或 MANAGER。
-
-> **`permission set-share-scope` 为 [危险] 操作，执行前需要向用户确认。确认后传入 `--yes` 跳过交互式确认。**
-
-```
-Usage:
-  dws drive permission set-share-scope --node <ID> --visibility <PRIVATE|ORGANIZATION|PUBLIC> [flags]
-Example:
-  dws drive permission set-share-scope --node DOC_ID --visibility PRIVATE
-  dws drive permission set-share-scope --node DOC_ID --visibility ORGANIZATION --role READER --can-search
-  dws drive permission set-share-scope --node DOC_ID --visibility PUBLIC --password Ab12 --expire-days 7
-Flags:
-      --node string         目标节点 ID 或 URL (必填)
-      --visibility string   目标可见性: PRIVATE / ORGANIZATION / PUBLIC (必填)
-      --role string         链接访问者默认角色: READER / DOWNLOADER / EDITOR (选填)
-      --partner             企业内公开是否包含合作伙伴（外包）(选填，仅 ORGANIZATION)
-      --can-search          是否可被组织内搜索 (选填，仅 ORGANIZATION)
-      --can-recommend       是否可被组织内推荐 (选填，仅 ORGANIZATION)
-      --password string     互联网公开访问密码：4 位字母或数字；非空=设置，空串=清除，不传=不改变 (选填，仅 PUBLIC)
-      --expire-days int     互联网公开有效期天数：0=永久，正整数=N天 (选填，仅 PUBLIC)
-```
-
-三档语义：
-- `PRIVATE` — 仅协作者可访问（关闭企业内公开/互联网公开）。无需其他参数。
-- `ORGANIZATION` — 企业内公开：企业内成员可通过链接按默认角色访问。可附带 `--role`、`--partner`、`--can-search`、`--can-recommend`。
-- `PUBLIC` — 互联网公开：任何人通过链接即可访问。可附带 `--role`、`--password`、`--expire-days`。仅文档空间节点支持；钉盘文件/文件夹不支持互联网公开（operation.notSupported）。
-
-档位×参数适用矩阵：
-
-| 档位 | --role | --partner | --can-search | --can-recommend | --password | --expire-days |
-|------|--------|-----------|--------------|-----------------|------------|---------------|
-| PRIVATE | ✖ | ✖ | ✖ | ✖ | ✖ | ✖ |
-| ORGANIZATION | ✔ | ✔ | ✔ | ✔ | ✖ | ✖ |
-| PUBLIC | ✔ | ✖ | ✖ | ✖ | ✔ | ✔ |
-
-不适用组合本地拒绝（exit 3）。
-
-部分更新语义：可选参数不传即不下发、保持原值不变。布尔三态（`--partner`/`--can-search`/`--can-recommend`）：未设不下发，显式 `--xxx=false` 也会下发。只传 `--can-search` 或 `--can-recommend` 其一时，另一项由服务端联动跟随同值。`--password` 三态：不传=不改变密码，传空串=清除已有密码，传非空=设置密码。`--expire-days`：0=永久有效，正整数=N 天后过期，不传=保持原值，负数报错。
-
-返回字段说明：
-- `visibility` — 写入后的当前可见性
-- `permissionBreakApplied` — 是否打断了权限继承（仅 PRIVATE 关闭时可能为 true）
-- `pendingApproval` — true=已提交审批待生效（组织开启公开分享审批策略时 PUBLIC 可能触发）
-- `docUrl` — 文件访问链接
-
-与其他命令的区分：
-- `permission get-setting`（只读查询当前分享范围） vs `permission set-share-scope`（写入修改）
-- `permission add`（加协作者） vs `permission set-share-scope`（设置链接分享可见范围）
-- 互联网公开统一走 `permission set-share-scope --visibility PUBLIC`（三档收敛，含企业内公开）；`publish set` 已不在 Agent 可选面（Catalog unavailable）；`publish unset` 与 `--visibility PRIVATE` 终态等价（scope=0、同样打断继承），保留仅 CLI 兼容；`publish get` 与 `permission get-setting` 仅差 pendingApproval 一个字段（待服务端补齐后可完全平替）
 
 ### 目标位置参数规则
 

@@ -107,7 +107,7 @@ dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --so
 
 > **singleSelect/multipleSelect 过滤**：先通过 `field get` 或 `field search-options` 将用户输入唯一解析到现有选项，filter 优先传稳定 option ID；当条件涉及 multipleSelect 或其他数组型字段时，第二个 operand 必须是 option ID/稳定 ID 数组（如 `"operands":["fldMulti",["optA"]]`），不能传裸字符串；`record create/update` 仍传 option name。不要把模糊名称或未确认的原始文本直接透传。
 >
-> **人员/部门/群组过滤**：禁止把姓名、部门名或群名直接放入 filters。必须先调用 `dws aisearch person --query "<姓名>" --dimension name`、`dws contact +resolve-dept --name "<部门名>"`、`dws chat +chat-search --query "<群名>" --page-all`，唯一取得 `userId`、`deptId`、`openConversationId`，再分别传 `[{"userId":"..."}]`、`[{"departmentId":"..."}]`、`[{"cid":"..."}]`。零命中或多命中必须停止并消歧。
+> **人员/部门/群组过滤**：禁止把姓名、部门名或群名直接放入 filters。必须先调用 `dws aisearch person --keyword "<姓名>" --dimension name`、`dws contact +resolve-dept --name "<部门名>"`、`dws chat +chat-search --query "<群名>" --page-all`，唯一取得 `userId`、`deptId`、`openConversationId`，再分别传 `[{"userId":"..."}]`、`[{"departmentId":"..."}]`、`[{"cid":"..."}]`。零命中或多命中必须停止并消歧。
 
 ## 减少响应体积
 

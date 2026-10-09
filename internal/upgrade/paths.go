@@ -617,13 +617,12 @@ func backupSkillSet(homeDir string, victims []string) ([]backedUpSkillDir, error
 
 // publishStagedSkillSet switches a fully staged set into place. Any publish
 // failure removes the partial new set and restores every original directory.
-func publishStagedSkillSet(homeDir string, staged []stagedSkillDir, victims []string) (err error) {
+func publishStagedSkillSet(homeDir string, staged []stagedSkillDir, victims []string) error {
 	backups, err := backupSkillSet(homeDir, victims)
 	if err != nil {
 		return err
 	}
 	published := make([]SkillPathPublication, 0, len(staged))
-	defer func() { err = errors.Join(err, ReleaseSkillPathPublications(published)) }()
 	for _, skill := range staged {
 		publication, publishErr := upgradePublishSkillPath(skill.staged, skill.dest)
 		if publishErr != nil {

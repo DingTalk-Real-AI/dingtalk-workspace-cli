@@ -347,20 +347,11 @@ func validateWhiteboardNodes(raw json.RawMessage) (string, int, error) {
 	if err := json.Unmarshal(raw, &nodes); err != nil {
 		return "", 0, invalidWhiteboardSourceJSON(err)
 	}
-	objects := make([]map[string]any, len(nodes))
 	for i, node := range nodes {
 		var object map[string]any
 		if err := json.Unmarshal(node, &object); err != nil || object == nil {
 			return "", 0, invalidWhiteboardSourceParam(fmt.Sprintf("source.nodes[%d] must be an object", i))
 		}
-		objects[i] = object
-	}
-	if err := opennodes.ValidatePresentationOrder(objects); err != nil {
-		return "", 0, invalidWhiteboardSourceJSON(err)
-	}
-
-	if err := opennodes.ValidateText(objects); err != nil {
-		return "", 0, invalidWhiteboardSourceJSON(err)
 	}
 
 	var compact bytes.Buffer
@@ -371,8 +362,9 @@ func validateWhiteboardNodes(raw json.RawMessage) (string, int, error) {
 }
 
 func invalidWhiteboardSourceJSON(err error) error {
-	if mapped := mapOpenNodesValidationError(err); mapped != nil {
-		return mapped
+	var textError *opennodes.TextRunValidationError
+	if errors.As(err, &textError) {
+		return &CLIError{Code: CodeInvalidJSON, Message: textError.Error(), Cause: err}
 	}
 	return &CLIError{
 		Code:       CodeInvalidJSON,
@@ -380,22 +372,6 @@ func invalidWhiteboardSourceJSON(err error) error {
 		Suggestion: "检查 JSON 语法、未知字段以及 source 对象结构",
 		Cause:      err,
 	}
-}
-
-func mapOpenNodesValidationError(err error) error {
-	var presentationError *opennodes.PresentationOrderValidationError
-	if errors.As(err, &presentationError) {
-		return &CLIError{Code: CodeInvalidParam, Message: presentationError.Error(), Cause: err}
-	}
-	var alignmentError *opennodes.VerticalAlignPlacementError
-	if errors.As(err, &alignmentError) {
-		return &CLIError{Code: CodeInvalidParam, Message: alignmentError.Error(), Cause: err}
-	}
-	var textError *opennodes.TextRunValidationError
-	if errors.As(err, &textError) {
-		return &CLIError{Code: CodeInvalidParam, Message: textError.Error(), Cause: err}
-	}
-	return nil
 }
 
 func invalidWhiteboardSourceParam(message string) error {

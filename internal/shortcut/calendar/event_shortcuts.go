@@ -4,15 +4,12 @@
 package calendar
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -145,14 +142,14 @@ var EventCreate = calendarWriteShortcut(
 		}
 		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", readParams)
 		if err != nil {
-			return calendarCreateVerificationError(rt, eventID, err)
+			return err
 		}
 		event, err := requireCalendarEvent(readback, "calendar/get_calendar_detail", eventID)
 		if err != nil {
-			return calendarCreateVerificationError(rt, eventID, err)
+			return err
 		}
 		if err := verifyCalendarEvent(event, eventID, verify); err != nil {
-			return calendarCreateVerificationError(rt, eventID, err)
+			return err
 		}
 		return rt.Output(map[string]any{"success": true, "eventId": eventID, "verified": true, "event": normalizeCalendarEvent(event)})
 	},
@@ -242,26 +239,26 @@ var EventUpdate = calendarWriteShortcut(
 		}
 		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", target)
 		if err != nil {
-			return calendarUpdateVerificationError(rt, "verify_event", completed, err)
+			return calendarStageError("verify_event", completed, err)
 		}
 		event, err := requireCalendarEvent(readback, "calendar/get_calendar_detail", rt.Str("event"))
 		if err != nil {
-			return calendarUpdateVerificationError(rt, "verify_event", completed, err)
+			return calendarStageError("verify_event", completed, err)
 		}
 		if err := verifyCalendarEvent(event, rt.Str("event"), fields); err != nil {
-			return calendarUpdateVerificationError(rt, "verify_event", completed, err)
+			return calendarStageError("verify_event", completed, err)
 		}
 		if len(add)+len(remove) > 0 {
 			participants, callErr := rt.CallMCPData("calendar", "get_calendar_participants", target)
 			if callErr != nil {
-				return calendarUpdateVerificationError(rt, "verify_attendees", completed, callErr)
+				return calendarStageError("verify_attendees", completed, callErr)
 			}
 			rows, callErr := attendeeListProject(participants)
 			if callErr != nil {
-				return calendarUpdateVerificationError(rt, "verify_attendees", completed, callErr)
+				return calendarStageError("verify_attendees", completed, callErr)
 			}
 			if callErr := verifyCalendarAttendees(rows, add, remove); callErr != nil {
-				return calendarUpdateVerificationError(rt, "verify_attendees", completed, callErr)
+				return calendarStageError("verify_attendees", completed, callErr)
 			}
 		}
 		return rt.Output(map[string]any{"success": true, "eventId": rt.Str("event"), "completedSteps": completed, "verified": true, "event": normalizeCalendarEvent(event)})
@@ -577,83 +574,6 @@ func calendarStageError(stage string, completed []string, cause error) error {
 		message += ": " + cause.Error()
 	}
 	return calendarResponseError("calendar/update", "partial_or_unknown_effect", message)
-}
-
-func calendarCreateVerificationError(rt *shortcut.RuntimeContext, eventID string, cause error) error {
-	return calendarWriteVerificationError(rt, eventID, []string{"create_event"}, "verify_event", cause, cause)
-}
-
-func calendarUpdateVerificationError(rt *shortcut.RuntimeContext, stage string, completed []string, cause error) error {
-	// Preserve the update workflow's existing outer category, reason and exit
-	// code while retaining the actual read failure as its cause.
-	return calendarWriteVerificationError(rt, rt.Str("event"), completed, stage, calendarStageError(stage, completed, cause), cause)
-}
-
-// calendarWriteVerificationError is used only after every requested write has
-// returned a successful terminal receipt. It does not promote verification
-// failure into success or allow replaying the already completed writes.
-func calendarWriteVerificationError(rt *shortcut.RuntimeContext, eventID string, completed []string, stage string, reported, cause error) error {
-	var raw apperrors.RawStderrError
-	if errors.As(cause, &raw) {
-		return cause
-	}
-	receipt := map[string]any{
-		"eventId":        eventID,
-		"completedSteps": append([]string{}, completed...),
-		"failedStage":    stage,
-		"verified":       false,
-	}
-	if rt.Changed("calendar-id") {
-		receipt["calendarId"] = rt.Str("calendar-id")
-	}
-	details := map[string]any{}
-	causeMessage := cause.Error()
-	var original *apperrors.Error
-	var legacy *helpers.CLIError
-	if errors.As(cause, &original) {
-		causeMessage = original.Message
-		for key, value := range original.Details {
-			details[key] = value
-		}
-		if original.Reason != "" {
-			details["verificationReason"] = original.Reason
-		}
-	} else if errors.As(cause, &legacy) {
-		causeMessage = legacy.Message
-		for key, value := range legacy.Details {
-			details[key] = value
-		}
-	}
-	details["writeReceipt"] = receipt
-	message := fmt.Sprintf("日程已有成功写回执（eventId=%s；已完成步骤: %s），但步骤 %s 校验未完成：%s", eventID, strings.Join(completed, ","), stage, causeMessage)
-	hint := "请按回执 eventId 在同一日历只读核对；不要重复创建或重放整个更新。"
-	var typed *apperrors.Error
-	if errors.As(reported, &typed) {
-		enriched := *typed
-		enriched.Message = message
-		enriched.Details = details
-		enriched.Cause = cause
-		enriched.Hint = hint
-		enriched.Actions = nil
-		apperrors.WithExecutionStarted(true)(&enriched)
-		apperrors.WithRetryable(false)(&enriched)
-		enriched.RetryAfterSeconds = nil
-		enriched.NextRetryAt = nil
-		enriched.ServerDiag.FriendlyHint = ""
-		enriched.ServerDiag.ActionURL = ""
-		enriched.ServerDiag.ServerRetryable = nil
-		return &enriched
-	}
-	if errors.As(reported, &legacy) {
-		enriched := *legacy
-		enriched.Message = message
-		enriched.Details = details
-		enriched.Suggestion = hint
-		enriched.Cause = cause
-		return &enriched
-	}
-	encoded, _ := json.Marshal(receipt)
-	return fmt.Errorf("日程已有成功写回执（eventId=%s），但步骤 %s 校验未完成；回执=%s；%s：%w", eventID, stage, encoded, hint, cause)
 }
 
 func calendarListParams(rt *shortcut.RuntimeContext) (map[string]any, error) {

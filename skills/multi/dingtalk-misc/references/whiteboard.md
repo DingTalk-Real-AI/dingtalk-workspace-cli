@@ -1,16 +1,10 @@
-# 钉钉白板内容操作
+# 钉钉白板（独立与文档内嵌）
 
-本页覆盖两个相互独立的目标，不能互相推断、转换或回退：
-
-- 独立白板是 `.adraw` 白板文件，使用白板自身 `nodeId`，不存在文档 `partId`。
-- 文档内嵌白板是文档中的一个 part。只有已知承载文档 `nodeId` 和非空 `partId` 后，
-  才使用 `whiteboard query/+diff/+update` 读写该 part 的图形内容；卡片容器的插入、
-  定位、删除始终属于 Doc。
-
-CLI 未提供 `--part-id` 时会寻址独立白板，但 Agent 必须先确认用户目标本来就是独立
-白板。文档内嵌目标缺少 `partId` 属于身份不完整，必须停止并补齐，不能因此改成独立
-白板。接口失败后也不得切换目标类型。已知命令直接执行；仅真实 `unknown command` /
-`unknown flag` 时读一次 leaf Help，契约不确定时读一次 compact leaf Schema。
+本页是 Whiteboard 的默认入口。未提供 `--part-id` 时，`whiteboard query/+diff/+update`
+默认操作独立 `.adraw` 白板；显式提供非空 `--part-id` 时操作文档内嵌白板。
+接口失败后不得自动切换类型。Doc 只负责普通文件生命周期以及插入、定位、删除文档内
+白板卡片容器。已知命令直接执行；仅真实 `unknown command` / `unknown flag` 时读一次
+leaf Help，契约不确定时读一次 compact leaf Schema。
 
 根据本次操作只读取以下一份操作 Reference，不预加载完整协议或多个示例集：
 
@@ -46,8 +40,6 @@ Reference；只有操作页仍缺少具体字段时，才读取一份精确协�
 
 ## Agent 更新：先 diff，再确认
 
-更新只设一个用户确认点：先完成所需的 render 和必需的 +diff，再把视觉预览（如有）、差异与覆盖影响一起展示并一次确认；不要在 render 后先索要确认、获准后才补做 diff 再次询问。同一目标、revision、source 和模式已获确认后，直接提交；只有这些内容变化或出现未披露的实质风险才重新确认。
-
 对已有白板追加、修改、删除或清空内容，必须在提交前执行 `+diff`：
 先读取所需当前内容并准备 source，再按 [diff.md](./whiteboard/diff.md) 比较同一目标。
 即使已读 compose、replace 等操作页，也必须读取 diff 指引；文档数量预算不能省略此步骤。
@@ -70,9 +62,8 @@ diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过�
 - 同一 profile，目标须有真实身份：独立白板使用 `nodeId`；内嵌白板使用承载文档
   `nodeId + whiteboardId/partId`。零/多目标、身份不明或 profile 不一致时停止，
   不能取第一个候选。
-- 独立白板命令不传 `--part-id`；文档内嵌白板内容命令必须传真实非空 `--part-id`。
-  Agent 先按用户目标确定类型，再构造参数；缺少身份、空值、权限、网络、Feature
-  Switch 或 revision 冲突均须停止，不得切换或回退到另一目标。
+- `--part-id` 完全未提供时默认独立白板；显式提供空值或纯空白会报错，不能借此
+  切换类型。权限、网络、Feature Switch、revision 冲突等失败均不得跨接口回退。
 - Runtime 确认后执行层才添加 `--yes`；存储示例不得预置确认。
 - Agent 更新前必须执行 `+diff` 并等待差异确认。独立白板把 diff 返回的 `target.revision` 传给
   `+update --expected-revision`，两类白板都把 `sourceDigest` 传给
@@ -88,8 +79,7 @@ diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过�
 
 ## 调用与上下文预算
 
-- 每个已经明确的目标只建立一份 `{nodeId, partId（仅内嵌目标）, payloadFile}` 上下文；
-  禁止重复查询或搜索，且不得通过另一目标类型补全身份。
+- 每板建立 `{blockId, whiteboardId, payloadFile}`，禁止重复 fetch、insert 或搜索。
 - 每阶段最多一次 update；提交前校验错误只修相关字段一次。相同 Payload、
   `--verbose` 或 commit-unknown 不重放；commit-unknown 按同一稳定目标 query 对账。
 - 先用单次响应完整校验，再无损投影；ID、mode、verified、节点摘要和链接只是最小
@@ -105,11 +95,14 @@ diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过�
 
 | ID | 来源 | 用途 |
 |---|---|---|
-| `nodeId`（独立目标） | 独立白板文件创建或定位结果 | 独立 `.adraw` 白板文件自身 ID |
-| `nodeId`（内嵌目标） | 已知的承载文档身份 | 承载该白板 part 的文档 ID |
-| `partId`（仅内嵌目标） | 已知的文档 part 身份 | 白板内容命令的 `--part-id`；不能用于独立白板文件 |
+| `nodeId` | 独立白板创建结果 / 文档解析 | 独立白板自身 ID，或内嵌白板的承载文档 ID |
+| `blockId` | `doc whiteboard insert` | 文档块定位、排序和删除 |
+| `whiteboardId` | `doc whiteboard insert` | 白板命令的 `--part-id` |
 | 请求节点 `id` | 本地 OpenNodes 文件 | 同一请求的 parent/connector 引用 |
 | 真实节点 ID | `+query` / `+update` 读回 | 读回身份；不能直接做局部 update |
+
+insert 返回 `whiteboardId` 后直接使用；若为 null，只 fetch 一次并按本次 `blockId`
+定位，仍未落库则报 pending，禁止重复插入。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -125,30 +118,25 @@ diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过�
 
 ## 定位与调用
 
-文档内嵌白板和独立白板文件分别寻址。以下两组命令只展示各自已经明确的目标，
-不能把其中一组当作另一组的创建、发现或失败回退流程。
-
-### 文档内嵌白板 part 的图形内容
-
-必须已经取得承载文档 `nodeId` 和该 part 的 `partId`。文档中白板卡片容器的插入、
-定位和删除由 `dingtalk-doc` 处理，不在本 Reference 中编排。
-
 ```bash
-# 对身份已知的内嵌白板 part 读取与更新图形内容
+# 新建文档和白板卡片
+dws doc +create --name "<文档标题>" --format json
+dws doc whiteboard insert --node <DOC_ID> --format json
+
+# 在指定块后插入
+dws doc +fetch --node <DOC_ID> --detail with-ids --format json
+dws doc whiteboard insert --node <DOC_ID> \
+  --ref-block <BLOCK_ID> --where after --format json
+
+# 读取与更新
 dws whiteboard +query --node <DOC_ID> --part-id <PART_ID> --format json
 dws whiteboard +diff --node <DOC_ID> --part-id <PART_ID> \
   --source @whiteboard.json --format json
 dws whiteboard +update --node <DOC_ID> --part-id <PART_ID> \
   --expected-source-digest <DIFF_SOURCE_DIGEST> \
   --source @whiteboard.json --format json
-```
 
-### 独立白板文件
-
-这里的 `nodeId` 是独立 `.adraw` 白板文件自身的 ID；该目标不属于任何文档 part。
-
-```bash
-# 读取与更新已经明确的独立白板文件
+# 独立白板（无 part-id，默认独立）
 dws whiteboard +query --node <WHITEBOARD_NODE_ID> --view all --format json
 dws whiteboard +diff --node <WHITEBOARD_NODE_ID> --page-id <PAGE_ID> \
   --source @whiteboard.json --format json
@@ -232,7 +220,8 @@ SVG artifact，并返回规范化 `sourceDigest`、`fidelity` 和逐节点 warni
 `create-with-content --expected-source-digest`。摘要不一致时停止创建并重新渲染，不能
 绕过。图片、Vector 和未知节点使用占位框，不会在预览阶段拉取外链资源。
 
-`render`、`+diff` 和 `+update` 的 `--source` 接受 JSON、`@relative-file.json` 或 stdin；这些命令的本地文件必须加 `@`，裸路径会被当作 JSON。`create-with-content` 使用 JSON 或裸文件路径，不接受 `@文件` 或 stdin，不能套用 shortcut 的写法。白板 shortcut 不支持 `--jq` / `--fields`。
+`--source` 接受 JSON、`@relative-file.json` 或 stdin；本地文件必须加 `@`，裸路径
+会被当作 JSON。白板 shortcut 不支持 `--jq` / `--fields`。
 
 ## 坐标读回与稳定结构
 

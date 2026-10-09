@@ -14,10 +14,8 @@
 package app
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -89,7 +87,6 @@ func TestAgentExamplesDryRun(t *testing.T) {
 	}
 	t.Chdir(sandboxRoot)
 	files := newAgentExampleFiles(t, sandboxRoot)
-	seedAgentExampleEmployeeBinding(t, configDir)
 
 	selected := 0
 	executed := 0
@@ -273,30 +270,13 @@ func executeAgentExampleCapture(t testing.TB, args []string) (agentExampleCaptur
 }
 
 type agentExampleFiles struct {
-	root      string
-	markdown  string
-	json      string
-	batch     string
-	job       string
-	binary    string
-	image     string
-	skillZIP  string
-	mcpConfig string
-}
-
-// Unbind examples require an existing binding, but no credentials or running
-// process. Keep the real local-binding validation and exercise it offline.
-func seedAgentExampleEmployeeBinding(t testing.TB, configDir string) {
-	t.Helper()
-	dir := filepath.Join(configDir, "digital-employees")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256([]byte("example-corp:example-employee"))
-	path := filepath.Join(dir, fmt.Sprintf("%x.json", digest[:]))
-	if err := os.WriteFile(path, []byte(`{"schemaVersion":1,"agentUuid":"test_agentUuid","dwsProfile":"example-corp:example-employee","operatorOpenDingTalkId":"example-operator","channel":"codex","runtimeBindingId":"example-binding"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	root     string
+	markdown string
+	json     string
+	batch    string
+	job      string
+	binary   string
+	image    string
 }
 
 func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
@@ -307,44 +287,26 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 	job := filepath.Join(root, "job.json")
 	binary := filepath.Join(root, "report.pdf")
 	image := filepath.Join(root, "chart.png")
-	skillZIP := filepath.Join(root, "example-skill.zip")
-	mcpConfig := filepath.Join(root, "mcp.json")
-	var skillBytes bytes.Buffer
-	archive := zip.NewWriter(&skillBytes)
-	entry, err := archive.Create("example-skill/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.WriteString(entry, "---\nname: example-skill\ndescription: Offline test fixture\n---\n# Example\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := archive.Close(); err != nil {
-		t.Fatal(err)
-	}
 	for path, content := range map[string][]byte{
-		skillZIP:  skillBytes.Bytes(),
-		mcpConfig: []byte(`{"name":"offline-example","configString":"{\"mcpServers\":{\"example\":{\"url\":\"https://example.invalid/mcp\"}}}"}`),
-		markdown:  []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
-		jsonFile:  []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
-		batch:     []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
-		job:       []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
-		binary:    []byte("%PDF-1.4\n%%EOF\n"),
-		image:     {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+		markdown: []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
+		jsonFile: []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
+		batch:    []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
+		job:      []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
+		binary:   []byte("%PDF-1.4\n%%EOF\n"),
+		image:    {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
 	} {
 		if err := os.WriteFile(path, content, 0o600); err != nil {
 			t.Fatalf("write dry-run fixture %s: %v", path, err)
 		}
 	}
 	return agentExampleFiles{
-		root:      root,
-		markdown:  "./" + filepath.Base(markdown),
-		json:      "./" + filepath.Base(jsonFile),
-		batch:     "./" + filepath.Base(batch),
-		job:       "./" + filepath.Base(job),
-		binary:    "./" + filepath.Base(binary),
-		image:     "./" + filepath.Base(image),
-		skillZIP:  "./" + filepath.Base(skillZIP),
-		mcpConfig: "./" + filepath.Base(mcpConfig),
+		root:     root,
+		markdown: "./" + filepath.Base(markdown),
+		json:     "./" + filepath.Base(jsonFile),
+		batch:    "./" + filepath.Base(batch),
+		job:      "./" + filepath.Base(job),
+		binary:   "./" + filepath.Base(binary),
+		image:    "./" + filepath.Base(image),
 	}
 }
 
@@ -362,9 +324,6 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 				return `[{"remindType":"minute","remindTime":10}]`
 			case "filepath", "file-path":
 				return files.binary
-			case "key_id":
-				// SQL Sheet 凭据 ID 在请求预览中也必须是规范 UUID。
-				return "00000000-0000-4000-8000-000000000001"
 			case "uuid1,uuid2":
 				return "uuid1,uuid2"
 			default:
@@ -387,9 +346,7 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 		replacement := ""
 		switch name {
 		case "file", "file-path":
-			if strings.EqualFold(filepath.Ext(value), ".zip") {
-				replacement = files.skillZIP
-			} else if strings.Contains(strings.ToLower(value), "png") {
+			if strings.Contains(strings.ToLower(value), "png") {
 				replacement = files.image
 			} else {
 				replacement = files.binary
@@ -400,10 +357,6 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 			replacement = files.markdown
 		case "contents-file":
 			replacement = files.json
-		case "config-file":
-			if strings.HasSuffix(strings.ToLower(value), "mcp.json") {
-				replacement = files.mcpConfig
-			}
 		case "from":
 			if strings.HasSuffix(strings.ToLower(value), "job.json") {
 				replacement = files.job

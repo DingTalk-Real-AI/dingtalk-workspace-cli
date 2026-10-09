@@ -208,61 +208,8 @@ func TestCrossPlatformCoverageEnforceVisibleFlags(t *testing.T) {
 	if !enforceVisibleFlags(root, chat) {
 		t.Fatal("chat multi skill must enforce visible flags")
 	}
-	for _, path := range []string{
-		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "SKILL.md"),
-		filepath.Join(root, "skills", "mono", "references", "products", "aitable", "record.md"),
-	} {
-		if !enforceVisibleFlags(root, path) || qualifiedShortcutProduct(path) != "aitable" {
-			t.Fatalf("aitable flag audit skipped: %s", path)
-		}
-	}
-	if qualifiedShortcutProduct(filepath.Join(root, "skills", "multi", "dingtalk-aitable-extra", "SKILL.md")) != "" {
-		t.Fatal("sibling product was incorrectly matched")
-	}
 	if enforceVisibleFlags(root, filepath.Join(root, "skills", "mono", "SKILL.md")) {
 		t.Fatal("unmigrated skill unexpectedly enforces visible flags")
-	}
-}
-
-func TestCrossPlatformCoverageAitableSkillFlagReferences(t *testing.T) {
-	for _, docPath := range []string{"skills/multi/dingtalk-aitable", "skills/mono/references/products/aitable"} {
-		directory := t.TempDir()
-		path := filepath.Join(directory, filepath.FromSlash(docPath))
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("Use `+record-query --all --max-records 100`; 当前无 `+record-create`，当前没有 `+no-create`，不要猜 `+import-csv`.\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		refs, err := extractReferences(filepath.Join(directory, "skills"))
-		if err != nil || len(refs) != 1 || refs[0].Text != "dws aitable +record-query --all --max-records 100" {
-			t.Fatalf("references: %#v / %v", refs, err)
-		}
-		root := &cobra.Command{Use: "dws"}
-		product := &cobra.Command{Use: "aitable"}
-		query := &cobra.Command{Use: "+record-query", Run: func(*cobra.Command, []string) {}}
-		query.Flags().Bool("all", false, "")
-		query.Flags().Int("max-records", 10000, "")
-		product.AddCommand(query)
-		root.AddCommand(product)
-		var stdout, stderr bytes.Buffer
-		if code := run(directory, root, &stdout, &stderr); code != 0 {
-			t.Fatalf("valid flags rejected: %s", &stderr)
-		}
-		if err := query.Flags().MarkHidden("all"); err != nil {
-			t.Fatal(err)
-		}
-		stderr.Reset()
-		if code := run(directory, root, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "--all is hidden") {
-			t.Fatalf("hidden flag accepted: %s", &stderr)
-		}
-		if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("Use `+record-query --missing value`.\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		stderr.Reset()
-		if code := run(directory, root, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "--missing does not exist") {
-			t.Fatalf("missing flag accepted: %s", &stderr)
-		}
 	}
 }
 
@@ -286,21 +233,6 @@ func TestCrossPlatformCoverageExtractReferencesQualifiesChatShortcutSnippets(t *
 	}
 	if len(refs) != 1 || refs[0].Text != "dws chat +chat-create --name <name> --member-query <members>" {
 		t.Fatalf("chat shortcut refs = %#v", refs)
-	}
-}
-
-func TestCrossPlatformCoverageExtractReferencesSkipsNonShortcutPlusSnippets(t *testing.T) {
-	directory := t.TempDir()
-	path := filepath.Join(directory, "skills", "multi", "dingtalk-aitable")
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("时区 `+08:00`，命令 `+record-query --all`。\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	refs, err := extractReferences(filepath.Join(directory, "skills"))
-	if err != nil || len(refs) != 1 || refs[0].Text != "dws aitable +record-query --all" {
-		t.Fatalf("non-command plus snippet was extracted: %#v / %v", refs, err)
 	}
 }
 

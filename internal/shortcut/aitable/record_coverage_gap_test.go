@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -509,6 +510,19 @@ func TestCrossPlatformCoverageRecordReadbackPendingAndWaitBranches(t *testing.T)
 	}
 	if got := uniqueStrings([]string{"", " a ", "a", "b"}); strings.Join(got, ",") != "a,b" {
 		t.Fatalf("uniqueStrings() = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryDateFilterValidationBranches(t *testing.T) {
+	for _, filter := range []map[string]any{
+		{"operator": "and", "operands": []any{map[string]any{"operator": "before", "operands": []any{"f", map[string]any{"type": "relative"}}}}},
+		{"operator": "before", "operands": []any{"f"}},
+		{"operator": "before", "operands": []any{"f", "2026-01-01"}},
+		{"operator": "after", "operands": []any{"f", float64(1)}},
+		{"operator": "after", "operands": []any{"f", math.NaN()}},
+		{"operator": "eq", "operands": []any{"f", "v"}},
+	} {
+		_ = validateRecordQueryDateFilterValues(filter)
 	}
 }
 

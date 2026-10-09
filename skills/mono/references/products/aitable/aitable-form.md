@@ -19,9 +19,9 @@
 
 ## 仅询问分享更新用法时
 
-用法询问与返回值评审不能共用发现路径：问原子命令写法只查询 `dws schema --cli-path "aitable form share update" --compact --format json`；本专用规则优先于通用 Schema 导航。
+用法询问与返回值评审不能共用发现路径：问原子命令写法只执行 `dws aitable form share update --help`（禁止改查 Schema）；本专用规则优先于通用 Schema 导航。
 
-收到仅询问用法的请求后，第一步必须立即实际执行且仅执行对应命令：原子入口用 `dws schema --cli-path "aitable form share update" --compact --format json`；Shortcut 入口用 `dws schema --cli-path "aitable +form-share-update" --compact --format json`。Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
+收到仅询问用法的请求后，第一步必须立即实际执行且仅执行对应命令：原子入口用 `dws aitable form share update --help`；Shortcut 入口用 `dws schema --cli-path "aitable +form-share-update" --compact --format json`。Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
 
 发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。上述只读查询是唯一允许的命令。
 

@@ -14,7 +14,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -462,29 +461,17 @@ func TestCrossPlatformCoverageMinutesUploadAndAnalyzeDryRunDoesNotWriteE2E(t *te
 }
 
 func TestCrossPlatformCoverageMinutesArtifactWaitDoesNotTreatEmptyAnalysisAsReadyE2E(t *testing.T) {
-	for _, tc := range []struct{ artifact, tool, empty, ready string }{
-		{"summary empty object", "get_minutes_ai_summary", `{"success":"true","result":{}}`, `{"success":true,"result":{"fullSummary":"summary"}}`},
-		{"summary", "get_minutes_ai_summary", `{"success":true,"result":{"fullSummary":""}}`, `{"success":true,"result":{"fullSummary":"summary"}}`},
-		{"summary whitespace", "get_minutes_ai_summary", `{"success":true,"result":{"fullSummary":" \n\t"}}`, `{"success":true,"result":{"fullSummary":"summary"}}`},
-		{"transcript", "get_minutes_transcription", `{"success":true,"result":{"paragraphList":[]}}`, `{"success":true,"result":{"paragraphList":[{"paragraphId":"p1"}],"hasNext":false}}`},
-	} {
-		t.Run(tc.artifact, func(t *testing.T) {
-			artifact := strings.Fields(tc.artifact)[0]
-			key := "minutes/" + tc.tool
-			caller := &minutesE2ECaller{responses: map[string][]string{key: {tc.empty}}}
-			helpers.InitDepsForTest(t, caller)
-			rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "wait"}, UploadAndAnalyze)
-			bundle, failures, attempts := waitMinutesArtifacts(rt, "u1", []string{artifact}, 10, 0, 0)
-			if len(failures) != 1 || bundle[artifact] != nil || attempts != 1 || failures[0]["artifact"] != artifact {
-				t.Fatalf("empty analysis accepted: bundle=%#v failures=%#v attempts=%d", bundle, failures, attempts)
-			}
-			caller = &minutesE2ECaller{responses: map[string][]string{key: {tc.empty, tc.ready}}}
-			helpers.InitDepsForTest(t, caller)
-			bundle, failures, attempts = waitMinutesArtifacts(rt, "u1", []string{artifact}, 10, time.Second, 0)
-			if len(failures) != 0 || bundle[artifact] == nil || attempts != 2 || caller.counts[key] != 2 {
-				t.Fatalf("did not wait for nonempty analysis: bundle=%#v failures=%#v attempts=%d", bundle, failures, attempts)
-			}
-		})
+	caller := &minutesE2ECaller{responses: map[string][]string{
+		"minutes/get_minutes_transcription": {`{"success":true,"result":{"paragraphList":[],"hasNext":false}}`},
+	}}
+	// Exercise the same readiness collector used after upload/record stop. An
+	// explicit [] is a valid transport shape, but cannot prove asynchronous ASR
+	// has finished when the workflow promised transcript analysis.
+	helpers.InitDepsForTest(t, caller)
+	rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "+export-pack"}, ExportPack)
+	bundle, failures := collectMinutesArtifactsOnce(rt, "u1", []string{"transcript"}, 10)
+	if len(failures) != 1 || bundle["transcript"] != nil {
+		t.Fatalf("empty transcript accepted: bundle=%#v failures=%#v", bundle, failures)
 	}
 }
 

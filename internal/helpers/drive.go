@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -247,118 +246,6 @@ func validateDriveParentID(parentID string) error {
 		}
 	}
 	return fmt.Errorf("invalid drive --folder %q: pure numeric IDs are usually dentryId values for chat --dentry-id, not drive parent dentryUuid values; use a parent folder dentryUuid from drive list or omit --folder to use the space root", parentID)
-}
-
-// setShareScopePasswordPattern 是互联网公开访问密码的权威格式约束，逐字符
-// 照抄底层 needle PermissionApiServiceImpl.INTERNET_PUBLIC_PASSWORD_REGEX
-// （固定 4 位，仅允许英文字母 + 数字）。不做 trim：含空白/长度不符均被拒。
-var setShareScopePasswordPattern = regexp.MustCompile(`^[A-Za-z0-9]{4}$`)
-
-// validateSetShareScopeFlags 是 drive permission set-share-scope 的过程式校验钩子，
-// 在框架 required/enum/constraint 之后、确认门与 RPC 之前 fail-fast。一律用
-// apperrors.NewValidation（exit 3），禁裸 fmt.Errorf（会兜底成 exit 5）。
-//
-// 校验项：①档位×flag 严格拒绝（决策 A）——服务端对不适用参数静默清除，本地
-// 严格拒绝避免 Agent 误以为生效；②--expire-days 负数拒绝；③互联网公开密码格式
-// （requirePassword=true 路径，即 --password Changed 且非空）强制 4 位字母数字。
-func validateSetShareScopeFlags(cmd *cobra.Command, _ []string) error {
-	// --node / --visibility 的存在性与枚举合法性已由框架 ValidateRequired /
-	// ValidateEnums 在本 Validate 之前拦截（照 validateWorkflowRunFlags 先例，不重复校验）。
-	visibility := mustGetFlag(cmd, "visibility")
-	changed := func(name string) bool { return cmd.Flags().Changed(name) }
-
-	// 决策 A：档位×flag 严格拒绝。PRIVATE 无需其他参数；ORGANIZATION 不适用
-	// --password/--expire-days；PUBLIC 不适用 --partner/--can-search/--can-recommend。
-	switch visibility {
-	case "PRIVATE":
-		for _, flag := range []string{"role", "partner", "can-search", "can-recommend", "password", "expire-days"} {
-			if changed(flag) {
-				return apperrors.NewValidation(fmt.Sprintf("PRIVATE 档位不适用 --%s：仅协作者可访问，无需其他参数", flag))
-			}
-		}
-	case "ORGANIZATION":
-		for _, flag := range []string{"password", "expire-days"} {
-			if changed(flag) {
-				return apperrors.NewValidation(fmt.Sprintf("ORGANIZATION（企业内公开）档位不适用 --%s：密码保护与有效期仅互联网公开（PUBLIC）支持", flag))
-			}
-		}
-	case "PUBLIC":
-		for _, flag := range []string{"partner", "can-search", "can-recommend"} {
-			if changed(flag) {
-				return apperrors.NewValidation(fmt.Sprintf("PUBLIC（互联网公开）档位不适用 --%s：合作伙伴（外包）/组织内搜索/推荐仅企业内公开（ORGANIZATION）支持", flag))
-			}
-		}
-	}
-
-	// --expire-days 负数会导致服务端字段缺失、被设为永久公开，本地 fail-fast。
-	if changed("expire-days") {
-		if expireDaysVal, _ := cmd.Flags().GetInt("expire-days"); expireDaysVal < 0 {
-			return apperrors.NewValidation("--expire-days 不能为负数，请传入正整数（如 7）或 0（表示永久有效）")
-		}
-	}
-
-	// 密码格式：仅在 requirePassword=true 路径（--password Changed 且非空）校验；
-	// 空串=清除密码，合法。不 trim，含空白或长度不符均被正则拒绝。
-	if changed("password") {
-		// 读本地 flagset（不走 InheritedFlags 回落），保住“空串=清除”语义不被
-		// 未来同名持久 flag 翻转。
-		if pwdVal, _ := cmd.Flags().GetString("password"); pwdVal != "" && !setShareScopePasswordPattern.MatchString(pwdVal) {
-			return apperrors.NewValidation("互联网公开访问密码必须为4位英文字母或数字（如 ab12、1234、abcd）")
-		}
-	}
-	return nil
-}
-
-// driveSetShareScopeResultCall 是 set-share-scope 的 ResultCall 执行体。
-// 框架预装 args 已正确处理 nodeId（含 alias 回落）、targetVisibility、defaultRole（OmitEmpty）
-// 及三个布尔三态（LeafBool Changed 语义）；密码与过期天数因三态/零值语义需从 cmd 重建。
-func driveSetShareScopeResultCall(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	toolArgs := make(map[string]any, len(args)+2)
-	for k, v := range args {
-		switch k {
-		case "password", "expireDays":
-			// 由下方 Changed 逻辑接管三态语义
-		default:
-			toolArgs[k] = v
-		}
-	}
-
-	// 密码三态：不传=不改变；空串=清除（requirePassword=false）；非空=设置。
-	// 读本地 flagset（不走 InheritedFlags 回落），保住"空串=清除"语义。
-	if cmd.Flags().Changed("password") {
-		if pwdVal, _ := cmd.Flags().GetString("password"); pwdVal == "" {
-			toolArgs["requirePassword"] = false
-		} else {
-			toolArgs["requirePassword"] = true
-			toolArgs["password"] = pwdVal
-		}
-	}
-
-	// expireDays：Changed 才下发，保留 0=永久（负数已在 Validate 拦截）。
-	if cmd.Flags().Changed("expire-days") {
-		expireDaysVal, _ := cmd.Flags().GetInt("expire-days")
-		toolArgs["expireDays"] = expireDaysVal
-	}
-
-	// dry-run 预览对 password 掩码，不发业务请求。
-	if deps.Caller.DryRun() {
-		preview := make(map[string]any, len(toolArgs))
-		for k, v := range toolArgs {
-			preview[k] = v
-		}
-		if _, ok := preview["password"]; ok {
-			preview["password"] = "***"
-		}
-		return output.Success(map[string]any{
-			"tool": tool, "arguments": preview, "executed": false,
-		}, output.WithDryRun()), nil
-	}
-
-	data, err := CallMCPToolDataOnServer(cmd.Context(), "drive", tool, toolArgs)
-	if err != nil {
-		return nil, err
-	}
-	return output.Success(data), nil
 }
 
 // parseDriveUploadInfo extracts the upload URL, uploadId and headers from the
@@ -2646,8 +2533,8 @@ result.fileId。`,
 		Use:     "permission",
 		Aliases: []string{"perm"},
 		Short:   "文档节点权限管理",
-		Long: `管理节点的协作权限与分享范围：添加/更新/查询/移除协作者、查询权限设置、设置节点分享范围。
-注意: 查询协作者列表(list)、查询权限设置(get-setting)与设置分享范围(set-share-scope)同时支持文档空间节点与钉盘文件/文件夹，其中钉盘文件/文件夹不支持互联网公开(PUBLIC)档；协作者写管理(add/update/remove)面向文档空间节点。`,
+		Long: `管理文档空间节点的协作权限：添加、更新、查询、移除协作者。
+注意: 仅适用于文档空间节点，不适用于钉盘文件。`,
 		RunE: groupRunE,
 	})
 
@@ -2957,8 +2844,7 @@ result.fileId。`,
 - shareScope: 分享范围（可见范围、链接分享设置）
 - policies: 权限策略列表（水印、组织外分享、成员邀请门槛等）
 
-查询协作者列表请改用 permission list。
-修改分享范围（可见性/默认角色/组织内搜索推荐）请改用 permission set-share-scope。`,
+查询协作者列表请改用 permission list。`,
 		Example: `  dws drive permission get-setting --node DOC_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
@@ -3069,136 +2955,6 @@ result.fileId。`,
 		},
 	})
 	drivePermGetSettingCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
-
-	// set-share-scope：设置节点分享范围（三档可见性）。Tier1 NewLeafCommand +
-	// ResultCall（保 expireDays=0 与密码三态），Custom 约束声明把
-	// 「档位→适用参数」矩阵写进 --help 与 Runtime Schema，过程式严格拒绝放 Validate。
-	drivePermSetShareScopeCmd := NewLeafCommand(LeafSpec{
-		Use:   "set-share-scope",
-		Short: "[危险] 设置节点分享范围",
-		Long: `[危险] 设置节点的分享范围（可见性），三档一次收敛，执行前需要确认，或传入 --yes 跳过确认。
-适用于文档空间节点与钉盘文件/文件夹；钉盘文件/文件夹不支持互联网公开(PUBLIC)档，对其设置 PUBLIC 返回 operation.notSupported。
-
-三档可见性 (--visibility)：
-  PRIVATE       仅协作者可访问（关闭企业内公开 / 互联网公开）。若该节点原先继承上级权限，
-                关闭动作可能打断权限继承，是否打断以返回体 permissionBreakApplied 为准。
-  ORGANIZATION  企业内公开：企业内成员可通过链接按默认角色访问。可附带设置
-                --role（默认角色）、--partner（是否包含合作伙伴（外包））、
-                --can-search（组织内可搜索）、--can-recommend（组织内可推荐）。
-  PUBLIC        互联网公开：任何人通过链接即可访问，无需登录钉钉。可附带设置
-                --role（默认角色）、--password（访问密码）、--expire-days（有效期）。
-                仅文档空间节点支持；钉盘文件/文件夹不支持互联网公开。
-
-参数装配为部分更新语义：可选参数不传即不下发、保持原值不变。
-  --role: READER / DOWNLOADER / EDITOR，省略时由服务端按档位默认或降级。
-  --partner / --can-search / --can-recommend: 布尔三态，未设不下发，显式 --xxx=false 也会下发。
-          只传 --can-search 或 --can-recommend 其一时，另一项由服务端联动跟随同值。
-  --password: 三态——不传=不改变密码；传空串（--password ""）=清除已有密码；
-          传非空=设置密码，必须为 4 位英文字母或数字（如 ab12、1234、abcd）。
-  --expire-days: 0=永久有效，正整数=N 天后过期，不传=保持原值，负数会报错。
-
-档位决定适用参数（不适用组合本地拒绝，exit 3）：PRIVATE 无需其他参数；
-ORGANIZATION 用 --role/--partner/--can-search/--can-recommend；PUBLIC 用 --role/--password/--expire-days。
-操作者须为节点的 OWNER 或 MANAGER，权限不足返回 forbidden.accessDenied。
-
-查询节点当前分享范围请改用 permission get-setting。`,
-		Example: `  dws drive permission set-share-scope --node <ID> --visibility PRIVATE
-  dws drive permission set-share-scope --node <ID> --visibility ORGANIZATION --role READER --can-search
-  dws drive permission set-share-scope --node <ID> --visibility PUBLIC --password Ab12 --expire-days 7`,
-		Server:        "drive",
-		Tool:          "set_share_scope",
-		OutputRollout: output.RolloutUnifiedActive,
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "high",
-			Confirmation: "user_required", Idempotency: "non_idempotent",
-		},
-		Validate: validateSetShareScopeFlags,
-		Flags: []LeafFlag{
-			{Name: "node", Usage: "目标节点 ID 或 URL (必填)", Bind: "nodeId", Required: true, Aliases: []string{"url", "id", "node-id", "doc-id", "file-id"}},
-			{Name: "visibility", Usage: "目标可见性: PRIVATE / ORGANIZATION / PUBLIC (必填)", Bind: "targetVisibility", Required: true, Enum: []string{"PRIVATE", "ORGANIZATION", "PUBLIC"}},
-			{Name: "role", Usage: "链接访问者默认角色: READER / DOWNLOADER / EDITOR (选填)", Bind: "defaultRole", OmitEmpty: true, Enum: []string{"READER", "DOWNLOADER", "EDITOR"}},
-			{Name: "partner", Usage: "企业内公开是否包含合作伙伴（外包）(选填，仅 ORGANIZATION)", Bind: "partnerIncluded", Kind: LeafBool},
-			{Name: "can-search", Usage: "是否可被组织内搜索 (选填，仅 ORGANIZATION)", Bind: "canSearch", Kind: LeafBool},
-			{Name: "can-recommend", Usage: "是否可被组织内推荐 (选填，仅 ORGANIZATION)", Bind: "canRecommend", Kind: LeafBool},
-			{Name: "password", Usage: "互联网公开访问密码：非空=设置，空串=清除，不传=不改变 (选填，仅 PUBLIC)", Bind: "password"},
-			{Name: "expire-days", Usage: "互联网公开有效期天数：0=永久，正整数=N天 (选填，仅 PUBLIC)", Kind: LeafInt, Bind: "expireDays"},
-		},
-		Constraints: []LeafConstraint{{
-			Kind:        corecmd.Custom,
-			Flags:       []string{"visibility", "role", "partner", "can-search", "can-recommend", "password", "expire-days"},
-			Description: "档位决定适用参数：PRIVATE 无需其他参数；ORGANIZATION（企业内公开）用 --role/--partner/--can-search/--can-recommend；PUBLIC（互联网公开）用 --role/--password/--expire-days",
-		}},
-		ResultCall: driveSetShareScopeResultCall,
-		Contract: LeafContract{
-			Identity: contract.ToolIdentitySpec{
-				ProductID:      "drive",
-				Name:           "set_share_scope",
-				CanonicalPath:  "drive.set_share_scope",
-				CLIPath:        "drive permission set-share-scope",
-				PrimaryCLIPath: "drive permission set-share-scope",
-			},
-			Description: "设置节点的分享范围（PRIVATE/ORGANIZATION/PUBLIC 三档可见性；钉盘文件/文件夹不支持 PUBLIC）",
-			Interface: &contract.InterfaceSpec{
-				Mode:         "mcp",
-				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "set_share_scope"},
-			},
-			// dry-run 只回显将要发送的请求参数（password 掩码）、不发 RPC，与
-			// driveSetShareScopeResultCall 的 DryRun() 分支事实一致：request 预览、无远端读取。
-			DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
-			Selection: contract.SelectionSpec{
-				AgentSummary: "设置节点的分享范围（可见性/默认角色/合作伙伴（外包）/组织内搜索推荐/互联网公开密码与有效期；钉盘文件/文件夹不支持 PUBLIC）",
-				UseWhen: []string{
-					"用户要求把节点设为仅协作者可见（PRIVATE）、企业内公开（ORGANIZATION）或互联网公开（PUBLIC）时",
-					"需要调整企业内公开的默认角色、合作伙伴（外包）可见、组织内搜索/推荐开关时",
-					"需要为互联网公开设置访问密码或有效期（含 0=永久）时",
-				},
-				AvoidWhen: []string{
-					"只查当前分享范围用 permission get-setting",
-					"加协作者用 permission add（勿用分享范围）",
-					"仅需互联网公开两态、不需要三档收敛/企业内公开档时，本命令 --visibility PUBLIC 即可覆盖",
-				},
-				Examples: []string{
-					"dws drive permission set-share-scope --node <ID> --visibility ORGANIZATION --role READER --can-search",
-					"dws drive permission set-share-scope --node <ID> --visibility PUBLIC --password Ab12 --expire-days 7",
-				},
-			},
-			Parameters: []contract.ParamDecl{
-				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
-				{Name: "visibility", Property: "targetVisibility", Required: boolPtr(true)},
-				{Name: "role", Property: "defaultRole"},
-				{Name: "partner", Property: "partnerIncluded", InterfaceType: "boolean"},
-				{Name: "can-search", Property: "canSearch", InterfaceType: "boolean"},
-				{Name: "can-recommend", Property: "canRecommend", InterfaceType: "boolean"},
-				{Name: "password", Property: "password"},
-				{Name: "expire-days", Property: "expireDays", InterfaceType: "number"},
-			},
-			Result: &contract.ResultSpec{
-				Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-				DataSchema: json.RawMessage(`{
-  "type":"object",
-  "description":"设置节点分享范围后的回显（三态可空字段忠实回显服务端实际值）",
-  "properties":{
-    "nodeId":{"type":"string","description":"目标节点 ID（解析后的规范形式）"},
-    "visibility":{"type":["string","null"],"enum":["PRIVATE","ORGANIZATION","PUBLIC",null],"description":"操作后确认的可见性"},
-    "defaultRole":{"type":["string","null"],"enum":["READER","DOWNLOADER","EDITOR",null],"description":"链接访问者默认角色；回显服务端写入后实际生效角色，不适用时为 null"},
-    "partnerIncluded":{"type":["boolean","null"],"description":"是否包含合作伙伴（外包）。三态回显：服务端有值回显实际值，无值或该档位不涉及时为 null"},
-    "canSearch":{"type":["boolean","null"],"description":"是否可被组织内搜索。三态回显，仅 ORGANIZATION 档涉及该维度"},
-    "canRecommend":{"type":["boolean","null"],"description":"是否可被组织内推荐。三态回显，仅 ORGANIZATION 档涉及该维度"},
-    "requirePassword":{"type":["boolean","null"],"description":"互联网公开是否需要密码（仅 PUBLIC 有意义）；非 PUBLIC 时为 null"},
-    "expireDays":{"type":["number","null"],"description":"有效期天数（仅 PUBLIC 有意义）；未设置或非 PUBLIC 时为 null"},
-    "expireAt":{"type":["number","null"],"description":"互联网公开到期时间（毫秒时间戳，仅 PUBLIC 有意义）；未设置或非 PUBLIC 时为 null"},
-    "permissionBreakApplied":{"type":["boolean","null"],"description":"系统是否因变更可见性而自动打断了权限继承。服务端未回传时为 null（不代表未打断）"},
-    "pendingApproval":{"type":["boolean","null"],"description":"是否需要管理员审批后才能生效。true=已提交待审批；null=立即生效或未涉及审批"},
-    "message":{"type":["string","null"],"description":"操作结果描述（服务端按 locale 解析，CLI 仅透传）；未回传时为 null"},
-    "docUrl":{"type":"string","description":"文档访问链接，可直接在浏览器中打开"}
-  },
-  "required":["nodeId","visibility"],
-  "additionalProperties":true
-}`),
-			},
-		},
-	})
 
 	drivePermRemoveCmd := &cobra.Command{
 		Use:     "remove",
@@ -3525,7 +3281,7 @@ ORGANIZATION 用 --role/--partner/--can-search/--can-recommend；PUBLIC 用 --ro
 	drivePermApplyCmd.Flags().String("notify-mode", "", "通知方式: DEFAULT / MSG_ACCOUNT / SINGLE_CHAT")
 	drivePermApplyCmd.Flags().String("reason", "", "申请理由，最长 200 字符")
 
-	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd, drivePermSetShareScopeCmd)
+	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd)
 
 	// --node 隐藏别名（保持与迁移前 doc 命令一致）
 	driveNodeAliasCmds := []*cobra.Command{
@@ -3811,7 +3567,6 @@ ORGANIZATION 用 --role/--partner/--can-search/--can-recommend；PUBLIC 用 --ro
 					"只查公开状态用 publish get；要关闭公开用 publish unset",
 					"目标文件或公开权限范围未确认时不要开启",
 					"只要企业内部同事权限用 permission add，不要用互联网公开",
-					"需企业内公开、合作伙伴（外包）、企业内搜索/推荐开关时用 permission set-share-scope",
 				},
 				Examples: []string{
 					"dws drive publish set --node <fileId> --format json",
@@ -3872,9 +3627,8 @@ ORGANIZATION 用 --role/--partner/--can-search/--can-recommend；PUBLIC 用 --ro
 				AgentSummary: "关闭文件的互联网公开发布",
 				UseWhen:      []string{"用户明确要求关闭文件的互联网公开发布，使外部链接失效时"},
 				AvoidWhen: []string{
-					"只查状态用 permission get-setting；要开启用 permission set-share-scope --visibility PUBLIC",
+					"只查状态用 publish get；要开启用 publish set",
 					"目标文件未确认时不要关闭",
-					"publish unset 与 set-share-scope --visibility PRIVATE 终态等价；新代码统一用 permission set-share-scope --visibility PRIVATE",
 				},
 				Examples: []string{"dws drive publish unset --node <fileId> --format json"},
 			},
@@ -3921,7 +3675,7 @@ ORGANIZATION 用 --role/--partner/--can-search/--can-recommend；PUBLIC 用 --ro
 				AgentSummary: "查询文件当前是否处于互联网公开发布状态",
 				UseWhen:      []string{"查询文件是否已互联网公开发布及公开权限（READER/DOWNLOADER/EDITOR）时"},
 				AvoidWhen: []string{
-					"要开启公开改用 permission set-share-scope --visibility PUBLIC（需确认）",
+					"要开启公开改用 dws drive publish set（需确认）",
 					"要关闭公开改用 dws drive publish unset（需确认）",
 				},
 				Examples: []string{"dws drive publish get --node <fileId> --format json"},

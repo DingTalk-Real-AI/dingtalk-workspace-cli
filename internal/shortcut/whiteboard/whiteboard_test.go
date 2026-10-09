@@ -422,20 +422,19 @@ func TestCrossPlatformCoverageWhiteboardQueryRejectsFalseSuccessAndMalformedNode
 
 func TestCrossPlatformCoverageWhiteboardSourceValidationFailsClosed(t *testing.T) {
 	for name, source := range map[string]string{
-		"empty":                    "",
-		"invalid json":             "{",
-		"trailing json":            `{} {}`,
-		"missing source":           `{}`,
-		"unknown top field":        `{"extra":true}`,
-		"wrong schema":             `{"source":{"schemaVersion":"2.0","catalogVersion":"dml-v1","nodes":[]}}`,
-		"wrong catalog":            `{"source":{"schemaVersion":"1.0","catalogVersion":"v2","nodes":[]}}`,
-		"missing nodes":            `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1"}}`,
-		"nodes wrong type":         `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":{}}}`,
-		"append empty":             `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`,
-		"bad node":                 `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[1]}}`,
-		"missing node id":          `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"type":"text"}]}}`,
-		"duplicate node id":        `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"same","type":"text"},{"id":"same","type":"shape"}]}}`,
-		"shape presentation order": `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"shape","type":"shape","presentationOrder":0}]}}`,
+		"empty":             "",
+		"invalid json":      "{",
+		"trailing json":     `{} {}`,
+		"missing source":    `{}`,
+		"unknown top field": `{"extra":true}`,
+		"wrong schema":      `{"source":{"schemaVersion":"2.0","catalogVersion":"dml-v1","nodes":[]}}`,
+		"wrong catalog":     `{"source":{"schemaVersion":"1.0","catalogVersion":"v2","nodes":[]}}`,
+		"missing nodes":     `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1"}}`,
+		"nodes wrong type":  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":{}}}`,
+		"append empty":      `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`,
+		"bad node":          `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[1]}}`,
+		"missing node id":   `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"type":"text"}]}}`,
+		"duplicate node id": `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"same","type":"text"},{"id":"same","type":"shape"}]}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parseWhiteboardSource(source); err == nil {
@@ -447,7 +446,6 @@ func TestCrossPlatformCoverageWhiteboardSourceValidationFailsClosed(t *testing.T
 	for _, source := range []string{
 		`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`,
 		`{"overwrite":false,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`,
-		`{"overwrite":false,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"frame","type":"frame","presentationOrder":0}]}}`,
 	} {
 		if _, err := parseWhiteboardSource(source); err != nil {
 			t.Fatalf("valid source rejected: %v", err)

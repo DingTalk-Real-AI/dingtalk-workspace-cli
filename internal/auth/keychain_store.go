@@ -209,13 +209,7 @@ func repairHalfMigratedGlobalTokenLocked(cfg *ProfilesConfig) error {
 	}
 
 	global, err := profilesLoadLegacy()
-	if errors.Is(err, ErrTokenDataNotFound) ||
-		keychain.IsDEKMissing(err) ||
-		keychain.IsCiphertextKeyMismatch(err) {
-		// Missing or mismatched key material cannot supply migration credentials,
-		// but must not prevent reauthorization. Leave the ciphertext intact until
-		// a fresh token is available; repairLoginCiphertextMismatchTargets clears
-		// only the slots selected by that login's persistence plan.
+	if errors.Is(err, ErrTokenDataNotFound) {
 		return nil
 	}
 	if err != nil {
@@ -408,12 +402,6 @@ func preflightTokenPersistence(configDir string) error {
 // refresh so both paths stay aligned with the same identity/org/global mirror
 // isolation rules.
 func preflightTokenWritePersistence(configDir string, data *TokenData) error {
-	return preflightTokenWritePersistenceForSelector(configDir, data, RuntimeProfile())
-}
-
-// preflightTokenWritePersistenceForSelector 与最终写入使用同一个显式选择器，
-// 避免受管身份换票必须临时修改进程级 RuntimeProfile。
-func preflightTokenWritePersistenceForSelector(configDir string, data *TokenData, runtimeSelector string) error {
 	if h := edition.Get(); h.SaveToken != nil {
 		return nil
 	}
@@ -425,7 +413,7 @@ func preflightTokenWritePersistenceForSelector(configDir string, data *TokenData
 		return err
 	}
 
-	plan := planTokenPersistenceWrites(cfg, data, runtimeSelector)
+	plan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
 	if err := validateTokenPersistenceWritePlan(cfg, data, plan); err != nil {
 		return err
 	}
@@ -471,12 +459,11 @@ func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 // repairLoginCiphertextMismatchTargets is called after a fresh login (OAuth/
 // device/PAT/--token) and before persistence. The incoming token is already
 // in hand — the function exists to clear write-plan target slots whose
-// ciphertext cannot be decrypted with the current DEK or whose DEK is missing.
-// Those slots would otherwise fail preflightTokenWritePersistence and strand a
-// completed authentication. All three slot kinds (global legacy mirror,
-// identity, org) are treated equally: an unrecoverable slot is removed, and the
-// new token will overwrite the empty slot during persistence, creating a DEK
-// if needed.
+// ciphertext cannot be decrypted with the current DEK, because those slots
+// would otherwise fail preflightTokenWritePersistence and strand a completed
+// authentication. All three slot kinds (global legacy mirror, identity, org)
+// are treated equally: a mismatch slot is removed, and the new token will
+// overwrite the empty slot during persistence.
 //
 // The whole read-classify-remove sequence runs under the profiles lock, so
 // the removal cannot interleave with another writer. Every target slot is
@@ -508,29 +495,28 @@ func repairLoginCiphertextMismatchTargets(configDir string, data *TokenData) err
 		var removeGlobal, removeIdentity, removeOrganization bool
 		var globalErr, identityErr, organizationErr error
 		if plan.WriteGlobal {
-			if _, err := LoadTokenDataKeychain(); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
+			if _, err := LoadTokenDataKeychain(); keychain.IsCiphertextKeyMismatch(err) {
 				removeGlobal, globalErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 		if plan.WriteIdentity {
-			if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
+			if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); keychain.IsCiphertextKeyMismatch(err) {
 				removeIdentity, identityErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 		if plan.WriteOrganization {
-			if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); keychain.IsCiphertextKeyMismatch(err) || keychain.IsDEKMissing(err) {
+			if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); keychain.IsCiphertextKeyMismatch(err) {
 				removeOrganization, organizationErr = true, err
 			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
 				return err
 			}
 		}
 
-		// Remove phase: every slot above was readable, absent, or had a
-		// confirmed missing DEK or ciphertext mismatch.
+		// Remove phase: every slot above was readable, missing, or mismatch.
 		if removeGlobal {
 			if err := removeMismatchedLoginSlot("legacy", keychain.AccountToken, globalErr, DeleteTokenDataKeychain); err != nil {
 				return err
@@ -557,7 +543,7 @@ func repairLoginCiphertextMismatchTargets(configDir string, data *TokenData) err
 }
 
 // removeMismatchedLoginSlot logs and removes one login target slot after its
-// ciphertext mismatch or missing DEK was confirmed by the check phase.
+// ciphertext mismatch was confirmed by the check phase.
 func removeMismatchedLoginSlot(kind, account string, mismatchErr error, remove func() error) error {
 	logging.AuthDebug("auth.keychain.login_repair.ciphertext_mismatch",
 		"account_kind", authTokenAccountKind(account),
@@ -664,15 +650,6 @@ func legacyClientSecretAccountKey(clientID string) string {
 // SaveClientSecret stores the client secret for a specific client ID.
 // This is called during login to snapshot the credentials used.
 func SaveClientSecret(clientID, clientSecret string) error {
-	return saveClientSecret(clientID, clientSecret, false)
-}
-
-// 换票事务由调用方持有快照并回滚，旧槽清理失败不能降级为成功。
-func saveClientSecretTransactional(clientID, clientSecret string) error {
-	return saveClientSecret(clientID, clientSecret, true)
-}
-
-func saveClientSecret(clientID, clientSecret string, strictCleanup bool) error {
 	clientID = strings.TrimSpace(clientID)
 	clientSecret = strings.TrimSpace(clientSecret)
 	if clientID == "" || clientSecret == "" {
@@ -683,9 +660,6 @@ func saveClientSecret(clientID, clientSecret string, strictCleanup bool) error {
 		return fmt.Errorf("save client secret: %w", err)
 	}
 	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
-		if strictCleanup {
-			return fmt.Errorf("remove legacy client secret: %w", err)
-		}
 		slog.Warn("auth: failed to remove legacy Client Secret slot after save", "client_id", clientID, "error", err)
 	}
 	return nil

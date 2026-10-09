@@ -114,17 +114,12 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	foundMCPMeta := false
 	foundWhiteboard := false
 	foundRecruit := false
-	foundContract := false
 	foundDriveInternal := false
 	foundDingTalkFile := false
 	for _, server := range servers {
 		if server.ID == "recruit" {
 			foundRecruit = server.Endpoint == "https://mcp-gw.dingtalk.com/server/f69b54ada16c57b603c0e5e1c36f464ba73dcee28d64bb701ff2682c259c0cff" &&
 				len(server.Prefixes) == 2 && server.Prefixes[0] == "recruit" && server.Prefixes[1] == "job"
-		}
-		if server.ID == "contract" {
-			foundContract = server.Endpoint == "https://mcp-gw.dingtalk.com/server/571e843ffa2f7546207fcae482d0d47a43bb7e5317bc717172998e1e00691710" &&
-				len(server.Prefixes) == 0
 		}
 		if server.ID == "whiteboard" {
 			foundWhiteboard = server.Endpoint == "https://mcp-gw.dingtalk.com/server/whiteboard"
@@ -166,9 +161,6 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	}
 	if !foundRecruit {
 		t.Fatal("openSupplementServers() missing explicitly wired recruit endpoint")
-	}
-	if !foundContract {
-		t.Fatal("openSupplementServers() missing explicitly wired contract endpoint")
 	}
 	if !foundDriveInternal {
 		t.Fatal("openSupplementServers() missing helper-only drive-internal endpoint")

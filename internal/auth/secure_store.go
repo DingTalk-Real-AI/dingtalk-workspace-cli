@@ -149,7 +149,7 @@ func SaveSecureTokenData(configDir string, data *TokenData) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("closing tmp file: %w", err)
 	}
-	if err := renameAuthFile(tmpPath, finalPath, secureRename); err != nil {
+	if err := secureRename(tmpPath, finalPath); err != nil {
 		_ = secureRemove(tmpPath)
 		return fmt.Errorf("renaming tmp to final: %w", err)
 	}

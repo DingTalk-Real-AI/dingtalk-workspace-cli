@@ -5,7 +5,6 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,18 +16,12 @@ func writeStreamingAgent(t *testing.T, body string) string {
 }
 
 func streamingExecForwarder(bin string) *execForwarder {
-	timeout := 5 * time.Second
-	if runtime.GOOS == "windows" {
-		// Windows 夹具先启动带覆盖率插桩的测试二进制，再启动 sh。
-		// 本用例验证转发语义，给冷启动留出有界余量，不改生产超时。
-		timeout = 30 * time.Second
-	}
 	return &execForwarder{
 		name:       "claudecode",
 		argv:       []string{bin},
 		streamArgv: []string{bin},
 		parser:     "cc",
-		timeout:    timeout,
+		timeout:    5 * time.Second,
 	}
 }
 

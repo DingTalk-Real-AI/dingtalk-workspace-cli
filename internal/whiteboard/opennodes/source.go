@@ -90,50 +90,16 @@ func Parse(data []byte) (*Source, error) {
 			return nil, fmt.Errorf("source.nodes[%d] must be an object", index)
 		}
 		nodes[index] = node
-	}
-	if err := ValidatePresentationOrder(nodes); err != nil {
-		return nil, err
-	}
-	if err := ValidateText(nodes); err != nil {
-		return nil, err
+		if err := validateTextRuns(node["text"], fmt.Sprintf("/source/nodes/%d/text", index), node["id"]); err != nil {
+			return nil, err
+		}
+		if title, ok := node["title"].(map[string]any); ok {
+			if err := validateTextRuns(title["text"], fmt.Sprintf("/source/nodes/%d/title/text", index), node["id"]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return &Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: nodes}, nil
-}
-
-// PresentationOrderValidationError identifies presentationOrder on a node
-// type that the OpenNodes V1 server schema does not accept. Keep the source
-// unchanged so callers cannot approve a preview different from the write.
-type PresentationOrderValidationError struct {
-	NodeID   any
-	NodeType string
-	Path     string
-}
-
-func (e *PresentationOrderValidationError) Error() string {
-	return fmt.Sprintf(
-		"节点 %v 的 %s 仅允许用于 frame 节点；当前 type=%q，普通节点层叠顺序请使用 zIndex",
-		e.NodeID, e.Path, e.NodeType,
-	)
-}
-
-// ValidatePresentationOrder applies the frame-only presentationOrder guard at
-// every local OpenNodes source boundary, including preview and writes.
-func ValidatePresentationOrder(nodes []map[string]any) error {
-	for index, node := range nodes {
-		if _, present := node["presentationOrder"]; !present {
-			continue
-		}
-		nodeType, _ := node["type"].(string)
-		if nodeType == "frame" {
-			continue
-		}
-		return &PresentationOrderValidationError{
-			NodeID:   node["id"],
-			NodeType: nodeType,
-			Path:     fmt.Sprintf("/source/nodes/%d/presentationOrder", index),
-		}
-	}
-	return nil
 }
 
 // Decode the node array at one boundary, retaining exact JSON numbers and
@@ -165,43 +131,11 @@ func (e *TextRunValidationError) Error() string {
 	return fmt.Sprintf("节点 %v 的 %s 含非法换行符；请拆成独立 paragraph blocks（空行使用空文本段落），保留样式后重新 render 并确认预览", e.NodeID, e.Path)
 }
 
-// VerticalAlignPlacementError identifies verticalAlign on a text block rather
-// than on its owning text object. Keep source unchanged: a repair requires a
-// new preview and digest.
-type VerticalAlignPlacementError struct {
-	NodeID       any
-	Path         string
-	ExpectedPath string
-}
-
-func (e *VerticalAlignPlacementError) Error() string {
-	return fmt.Sprintf("节点 %v 的 %s 是未知字段（unknownField）；verticalAlign 仅允许位于 %s，不允许放在 paragraph/list block 内；请修正源文件后重新 render/+diff 并确认", e.NodeID, e.Path, e.ExpectedPath)
-}
-
-// ValidateText applies known OpenNodes V1 text guards at every local source
-// boundary, including preview and writes. It is not a full server schema check.
-func ValidateText(nodes []map[string]any) error {
-	for index, node := range nodes {
-		if err := validateTextRuns(node["text"], fmt.Sprintf("/source/nodes/%d/text", index), node["id"]); err != nil {
-			return err
-		}
-		if title, ok := node["title"].(map[string]any); ok {
-			if err := validateTextRuns(title["text"], fmt.Sprintf("/source/nodes/%d/title/text", index), node["id"]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func validateTextRuns(value any, path string, nodeID any) error {
 	text, _ := value.(map[string]any)
 	blocks, _ := text["blocks"].([]any)
 	for blockIndex, item := range blocks {
 		block, _ := item.(map[string]any)
-		if _, present := block["verticalAlign"]; present {
-			return &VerticalAlignPlacementError{NodeID: nodeID, Path: fmt.Sprintf("%s/blocks/%d/verticalAlign", path, blockIndex), ExpectedPath: path + "/verticalAlign"}
-		}
 		runs, _ := block["runs"].([]any)
 		for runIndex, item := range runs {
 			run, _ := item.(map[string]any)

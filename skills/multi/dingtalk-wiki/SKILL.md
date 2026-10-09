@@ -56,7 +56,6 @@ metadata:
 | 知识库首页放独立普通附件 | `dws drive upload --file <本地文件> --workspace <ID> --format json` | 不加 `--convert`；子目录加 `--folder <目录nodeId>`。正文内附件切 Doc 媒体，转换在线文档切 Doc 导入 |
 | 删除库内节点 | `+node-delete --workspace <ID> --node <ID>` | 删除前核对归属并确认 |
 | 列出、添加、修改或移除知识库成员 | `member list` / `+member-add` / `+member-update` / `+member-remove` | 写入 users 为 1-30 个；添加/修改须指定角色，移除不传角色；多类型、逐成员角色或通知用原生 member |
-| 设置知识库空间分享范围 | `dws wiki permission set-share-scope --workspace <ID> --visibility <PRIVATE\|ORGANIZATION\|PUBLIC>` | [危险] 作用于整个空间及其下未打断继承节点；PRIVATE 关闭会抹除未打断继承节点原有档位，空间如需恢复公开须重设；PUBLIC 仅 READER/DOWNLOADER；返回体已回显写入结果 |
 | 查看知识库动态 | `+feed-list --workspace <ID> [--exclude-file]` | 全部动态加 `--page-all`；仅用户明确要求核对过滤效果时比较两组结果，未过滤结果须实际包含该文件事件 |
 
 ## 当前最短路径
@@ -101,7 +100,7 @@ Golden Route 参数足够时不读 reference；否则最多读取一个：
 | 文档空间、知识库、Drive/Doc 边界不明 | [intent-guide](references/intent-guide.md) |
 | 节点类型、复制、移动、移出或删除细节 | [node-ops](references/wiki-node-ops.md) |
 | 成员角色、上限与验证语义 | [members](references/wiki-members.md) |
-| 分页、空间、动态、分享范围及低频错误 | [wiki reference](references/wiki.md) |
+| 分页、空间、动态及低频错误 | [wiki reference](references/wiki.md) |
 | 跨产品创建/写正文短流程 | [lite-recipes](references/lite-recipes.md) |
 
 ## 错误最短路径

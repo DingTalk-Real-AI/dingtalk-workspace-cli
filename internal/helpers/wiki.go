@@ -9,10 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -146,52 +144,9 @@ func proxySubCmd(use, targetProduct, targetPath string, flagRenames map[string]s
 	}
 }
 
-// validateWikiSetShareScopeFlags 校验 wiki permission set-share-scope 的档位×flag 组合。
-// 全部用 apperrors.NewValidation（exit 3），禁裸 fmt.Errorf（exit 5）。空间级不支持
-// 密码/有效期，故无 --password/--expire-days 分支。PUBLIC 档 --role 仅 READER/DOWNLOADER
-// （据 tool-definitions.md：空间级互联网公开底层只支持这两档，传 EDITOR 服务端返回
-// invalidRequest.inputArgs.invalid，本地提前拒绝）。
-func validateWikiSetShareScopeFlags(cmd *cobra.Command, _ []string) error {
-	// --workspace / --visibility 的存在性与枚举合法性已由框架 ValidateRequired /
-	// ValidateEnums 在本 Validate 之前拦截（照 validateWorkflowRunFlags 先例，不重复校验）。
-	visibility := mustGetFlag(cmd, "visibility")
-	changed := func(name string) bool { return cmd.Flags().Changed(name) }
-	switch visibility {
-	case "PRIVATE":
-		for _, flag := range []string{"role", "partner", "can-search", "can-recommend"} {
-			if changed(flag) {
-				return apperrors.NewValidation(fmt.Sprintf("PRIVATE 档位不适用 --%s：仅空间成员可访问，无需其他参数", flag))
-			}
-		}
-	case "PUBLIC":
-		for _, flag := range []string{"partner", "can-search", "can-recommend"} {
-			if changed(flag) {
-				return apperrors.NewValidation(fmt.Sprintf("PUBLIC（互联网公开）档位不适用 --%s：合作伙伴（外包）/组织内搜索/推荐仅企业内公开（ORGANIZATION）支持", flag))
-			}
-		}
-		if changed("role") && mustGetFlag(cmd, "role") == "EDITOR" {
-			return apperrors.NewValidation("PUBLIC（互联网公开）档位 --role 仅支持 READER 或 DOWNLOADER，空间级互联网公开不支持 EDITOR")
-		}
-	}
-	return nil
-}
-
-// wikiSetShareScopeResultCall 是 wiki set-share-scope 的 ResultCall 执行体。
-// 框架预装 args 已正确处理 workspaceId（含 alias 回落）、targetVisibility、defaultRole（OmitEmpty）
-// 及三个布尔三态（LeafBool Changed 语义）；空间级无密码/有效期，直接透传。
-func wikiSetShareScopeResultCall(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	if deps.Caller.DryRun() {
-		return output.Success(map[string]any{
-			"tool": tool, "arguments": args, "executed": false,
-		}, output.WithDryRun()), nil
-	}
-
-	data, err := CallMCPToolDataOnServer(cmd.Context(), "wiki", tool, args)
-	if err != nil {
-		return nil, err
-	}
-	return output.Success(data), nil
-}
+// ──────────────────────────────────────────────────────────
+// dws wiki — 知识库
+// ──────────────────────────────────────────────────────────
 
 func newWikiCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/wiki.json
@@ -216,8 +171,8 @@ func newWikiCommand() *cobra.Command {
 	})
 	root := newGroupCommand(&cobra.Command{
 		Use:   "wiki",
-		Short: "知识库 / 空间管理 / 节点管理 / 成员管理 / 权限管理 / 动态查询",
-		Long:  `管理钉钉文档知识库：空间管理（创建/查看/列出/搜索/删除）、节点管理（列出/创建/复制/移动/删除）、成员管理（添加/更新/列出/移除）、权限管理（设置空间分享范围/可见性）、动态查询（知识库活动动态）。`,
+		Short: "知识库 / 空间管理 / 节点管理 / 成员管理 / 动态查询",
+		Long:  `管理钉钉文档知识库：空间管理（创建/查看/列出/搜索/删除）、节点管理（列出/创建/复制/移动/删除）、成员管理（添加/更新/列出/移除）、动态查询（知识库活动动态）。`,
 		RunE:  groupRunE,
 	})
 	installDocDelegationAuth(root)
@@ -1004,142 +959,7 @@ ORG 类型授权不会出现在查询结果中。`,
 
 	memberCmd.AddCommand(memberAddCmd, memberUpdateCmd, memberListCmd, memberRemoveCmd)
 
-	// ── permission (知识库空间权限管理) ──────────────────
-	// 2 级 permission 组，与 space/member/node 同级，完全平行 drive permission。
-	// 用 newGroupCommand（RecoverySibling），不用 newDeepGroupCommand（2 级无需 RecoveryDeep）。
-	permissionCmd := newGroupCommand(&cobra.Command{
-		Use:     "permission",
-		Aliases: []string{"perm"},
-		Short:   "知识库空间权限管理",
-		Long:    `管理钉钉知识库空间的分享范围：设置空间可见性（PRIVATE/ORGANIZATION/PUBLIC）。`,
-		RunE:    groupRunE,
-	})
-
-	// set-share-scope：设置知识库空间分享范围（三档可见性）。Tier1 NewLeafCommand +
-	// ResultCall（bool 三态由框架 LeafBool 处理）。空间级不支持密码/有效期，无
-	// --password/--expire-days。PUBLIC 档 --role 仅 READER/DOWNLOADER（EDITOR 本地拒绝）。
-	wikiPermSetShareScopeCmd := NewLeafCommand(LeafSpec{
-		Use:   "set-share-scope",
-		Short: "[危险] 设置知识库空间分享范围",
-		Long: `[危险] 设置整个知识库空间（WikiSpace）的分享范围（可见性），执行前需要确认，或传入 --yes 跳过确认。
-
-⚠️ 高影响面操作：本命令作用于整个知识库空间及其下所有未打断继承的节点，
-而非单个文档/文件夹。设置企业内公开或互联网公开后，空间内所有继承空间权限的节点都会同步开放。
-
-三档可见性 (--visibility)：
-  PRIVATE       仅空间成员可访问（关闭企业内公开 / 互联网公开）。
-                ⚠️ 关闭不可逆：会把空间下所有未打断继承的节点一并恢复为仅成员可见，
-                且不保留各节点关闭前的原有档位；如需恢复公开必须重新设置。
-  ORGANIZATION  企业内公开：企业内所有成员可访问。可附带设置 --role（默认角色，
-                READER/DOWNLOADER/EDITOR）、--partner（是否包含合作伙伴（外包））、
-                --can-search（组织内可搜索）、--can-recommend（组织内可推荐）。
-  PUBLIC        互联网公开：互联网上任何人可访问（全库爆炸半径）。--role 仅接受
-                READER/DOWNLOADER（空间级互联网公开底层只支持这两档，传 EDITOR 本地拒绝）；
-                空间级不支持密码保护与有效期设置。
-
-参数装配为部分更新语义：可选参数不传即不下发、保持原值不变。
-  --partner / --can-search / --can-recommend: 布尔三态，未设不下发，显式 --xxx=false 也会下发。
-          只传 --can-search 或 --can-recommend 其一时，另一项由服务端联动跟随同值。
-
-知识库空间是权限继承根、恒独立管理，因此空间级设置不存在打断权限继承的动作，
-出参 permissionBreakApplied 恒为 false。操作者必须具备知识库的 MANAGER 或 OWNER 角色，
-否则返回 forbidden.accessDenied。当组织开启公开分享审批策略时，PUBLIC 可能进入待审批状态
-（出参 pendingApproval=true）。
-
-本命令返回体已回显写入后的 visibility / defaultRole / partnerIncluded / canSearch / canRecommend / spaceUrl 等字段，无需额外查询。`,
-		Example: `  dws wiki permission set-share-scope --workspace <workspaceId> --visibility ORGANIZATION --role READER
-  dws wiki permission set-share-scope --workspace <workspaceId> --visibility PUBLIC --role DOWNLOADER
-  dws wiki permission set-share-scope --workspace <workspaceId> --visibility PRIVATE`,
-		Server:        "wiki",
-		Tool:          "set_space_share_scope",
-		OutputRollout: output.RolloutUnifiedActive,
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "high",
-			Confirmation: "user_required", Idempotency: "non_idempotent",
-		},
-		Validate: validateWikiSetShareScopeFlags,
-		Flags: []LeafFlag{
-			{Name: "workspace", Usage: "目标知识库 ID 或 URL (必填)", Bind: "workspaceId", Required: true, Aliases: []string{"workspace-id"}},
-			{Name: "visibility", Usage: "目标可见性: PRIVATE / ORGANIZATION / PUBLIC (必填)", Bind: "targetVisibility", Required: true, Enum: []string{"PRIVATE", "ORGANIZATION", "PUBLIC"}},
-			{Name: "role", Usage: "链接访问者默认角色: READER / DOWNLOADER / EDITOR（PUBLIC 仅 READER/DOWNLOADER）(选填)", Bind: "defaultRole", OmitEmpty: true, Enum: []string{"READER", "DOWNLOADER", "EDITOR"}},
-			{Name: "partner", Usage: "企业内公开是否包含合作伙伴（外包）(选填，仅 ORGANIZATION)", Bind: "partnerIncluded", Kind: LeafBool},
-			{Name: "can-search", Usage: "是否可被组织内搜索 (选填，仅 ORGANIZATION)", Bind: "canSearch", Kind: LeafBool},
-			{Name: "can-recommend", Usage: "是否可被组织内推荐 (选填，仅 ORGANIZATION)", Bind: "canRecommend", Kind: LeafBool},
-		},
-		Constraints: []LeafConstraint{{
-			Kind:        corecmd.Custom,
-			Flags:       []string{"visibility", "role", "partner", "can-search", "can-recommend"},
-			Description: "档位决定适用参数：PRIVATE 无需其他参数；ORGANIZATION（企业内公开）用 --role/--partner/--can-search/--can-recommend；PUBLIC（互联网公开）仅用 --role（且仅 READER/DOWNLOADER）；空间级不支持密码与有效期",
-		}},
-		ResultCall: wikiSetShareScopeResultCall,
-		Contract: LeafContract{
-			Identity: contract.ToolIdentitySpec{
-				ProductID:      "wiki",
-				Name:           "set_space_share_scope",
-				CanonicalPath:  "wiki.set_space_share_scope",
-				CLIPath:        "wiki permission set-share-scope",
-				PrimaryCLIPath: "wiki permission set-share-scope",
-			},
-			Description: "设置整个知识库空间的分享范围（PRIVATE/ORGANIZATION/PUBLIC 三档可见性）",
-			Interface: &contract.InterfaceSpec{
-				Mode:         "mcp",
-				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "wiki", RPCName: "set_space_share_scope"},
-			},
-			// dry-run 只回显将要发送的请求参数、不发 RPC，与 wikiSetShareScopeResultCall
-			// 的 DryRun() 分支事实一致：request 预览、无远端读取。
-			DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
-			Selection: contract.SelectionSpec{
-				AgentSummary: "设置整个知识库空间的分享范围（可见性/默认角色/合作伙伴（外包）/组织内搜索推荐）",
-				UseWhen: []string{
-					"用户要求把整个知识库设为仅成员可见（PRIVATE）、企业内公开（ORGANIZATION）或互联网公开（PUBLIC）时",
-					"需要调整知识库企业内公开的默认角色、合作伙伴（外包）可见、组织内搜索/推荐开关时",
-				},
-				AvoidWhen: []string{
-					"只调整单个文档/文件夹的分享范围用 dws drive permission set-share-scope（节点级）",
-					"管理知识库成员（添加/移除协作者）用 wiki member，不要用分享范围",
-					"space PRIVATE 关闭不可逆（抹除未打断继承节点档位），目标知识库未确认时不要关闭",
-				},
-				Examples: []string{
-					"dws wiki permission set-share-scope --workspace <workspaceId> --visibility ORGANIZATION --role READER",
-					"dws wiki permission set-share-scope --workspace <workspaceId> --visibility PUBLIC --role DOWNLOADER",
-				},
-			},
-			Parameters: []contract.ParamDecl{
-				{Name: "workspace", Property: "workspaceId", Required: boolPtr(true)},
-				{Name: "visibility", Property: "targetVisibility", Required: boolPtr(true)},
-				{Name: "role", Property: "defaultRole"},
-				{Name: "partner", Property: "partnerIncluded", InterfaceType: "boolean"},
-				{Name: "can-search", Property: "canSearch", InterfaceType: "boolean"},
-				{Name: "can-recommend", Property: "canRecommend", InterfaceType: "boolean"},
-			},
-			Result: &contract.ResultSpec{
-				Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-				DataSchema: json.RawMessage(`{
-  "type":"object",
-  "description":"设置知识库空间分享范围后的回显（三态可空字段忠实回显服务端实际值）",
-  "properties":{
-    "workspaceId":{"type":"string","description":"目标知识库空间 ID（解析后的规范形式）"},
-    "visibility":{"type":["string","null"],"enum":["PRIVATE","ORGANIZATION","PUBLIC",null],"description":"操作后确认的可见性"},
-    "defaultRole":{"type":["string","null"],"enum":["READER","DOWNLOADER","EDITOR",null],"description":"链接访问者默认角色；回显服务端写入后实际生效角色（PUBLIC 档仅 READER/DOWNLOADER），不适用时为 null"},
-    "partnerIncluded":{"type":["boolean","null"],"description":"是否包含合作伙伴（外包）。三态回显：服务端有值回显实际值，无值或该档位不涉及时为 null"},
-    "canSearch":{"type":["boolean","null"],"description":"是否可被组织内搜索。三态回显，仅 ORGANIZATION 档涉及该维度"},
-    "canRecommend":{"type":["boolean","null"],"description":"是否可被组织内推荐。三态回显，仅 ORGANIZATION 档涉及该维度"},
-    "permissionBreakApplied":{"type":"boolean","description":"是否打断权限继承；知识库空间恒独立，此字段恒为 false"},
-    "pendingApproval":{"type":["boolean","null"],"description":"是否等待管理员审批；true=已提交待审批，null=立即生效或无审批"},
-    "message":{"type":["string","null"],"description":"操作结果描述；未回传时为 null"},
-    "spaceUrl":{"type":"string","description":"知识库空间访问链接"}
-  },
-  "required":["workspaceId","visibility"],
-  "additionalProperties":true
-}`),
-			},
-		},
-	})
-
-	permissionCmd.AddCommand(wikiPermSetShareScopeCmd)
-
-	root.AddCommand(spaceCmd, memberCmd, permissionCmd)
+	root.AddCommand(spaceCmd, memberCmd)
 
 	// ── node (知识库节点管理) ─────────────────────────────────
 	// 对齐飞书 cli-lark wiki node 设计：内建 list/create/copy/move/delete，

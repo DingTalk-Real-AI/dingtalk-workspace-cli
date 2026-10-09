@@ -14,13 +14,19 @@
 package helpers
 
 import (
+	"fmt"
 	"io"
 	"os"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
+	"path/filepath"
 )
 
-type atomicTempFile = atomicfile.TempFile
+type atomicTempFile interface {
+	io.Writer
+	Name() string
+	Chmod(os.FileMode) error
+	Sync() error
+	Close() error
+}
 
 var (
 	atomicMkdirAll   = os.MkdirAll
@@ -67,8 +73,42 @@ func AtomicWriteJSON(path string, data []byte) error {
 }
 
 func atomicWrite(path string, perm os.FileMode, writeFn func(tmp atomicTempFile) error) error {
-	return atomicfile.WriteWithOps(path, perm, atomicfile.Ops{
-		MkdirAll: atomicMkdirAll, CreateTemp: atomicCreateTemp,
-		Remove: atomicRemove, Rename: atomicRename,
-	}, writeFn)
+	dir := filepath.Dir(path)
+
+	// Ensure directory exists with secure permissions
+	if err := atomicMkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create directory: %w", err)
+	}
+
+	tmp, err := atomicCreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	success := false
+	defer func() {
+		if !success {
+			tmp.Close()
+			atomicRemove(tmpName)
+		}
+	}()
+
+	if err := tmp.Chmod(perm); err != nil {
+		return fmt.Errorf("set permissions: %w", err)
+	}
+	if err := writeFn(tmp); err != nil {
+		return fmt.Errorf("write data: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("sync to disk: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := atomicRename(tmpName, path); err != nil {
+		return fmt.Errorf("rename to final: %w", err)
+	}
+	success = true
+	return nil
 }

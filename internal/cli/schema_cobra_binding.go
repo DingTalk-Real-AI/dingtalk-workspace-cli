@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"io"
 	"reflect"
 	"sort"
@@ -871,16 +870,7 @@ func bindCommandRegistryPath(root *cobra.Command, spec CommandSpec, path string)
 }
 
 func runnableSchemaLeaf(command *cobra.Command) bool {
-	if command == nil || !command.Runnable() {
-		return false
-	}
-	if !command.HasSubCommands() {
-		return true
-	}
-	policy, declared, err := corecmd.GroupPolicyFor(command)
-	final, hasContract := contractfinal.RuntimeContractFinal(command)
-	// 仅将显式声明工具身份的 hybrid 纳入；旧位置参数兼容入口仍是导航表面。
-	return err == nil && declared && policy.Mode == corecmd.GroupHybrid && hasContract && final.Identity != nil
+	return command != nil && command.Runnable() && !command.HasSubCommands()
 }
 
 func validateCommandRegistryAnnotation(command *cobra.Command, path string, spec CommandSpec) error {

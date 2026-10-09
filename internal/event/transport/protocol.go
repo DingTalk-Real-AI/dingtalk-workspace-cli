@@ -84,8 +84,7 @@ const (
 type HelloAck struct {
 	Type               FrameType `json:"type"`
 	BusPID             int       `json:"bus_pid"`
-	SourceState        string    `json:"source_state"` // mirrors source.State string value
-	SourceObserved     bool      `json:"source_observed,omitempty"`
+	SourceState        string    `json:"source_state"`                // mirrors source.State string value
 	StateSource        string    `json:"state_source"`                // "hook" | "inferred"
 	ClientIDSource     string    `json:"client_id_source"`            // auth.CredentialSource string
 	ClientSecretSource string    `json:"client_secret_source"`        // auth.CredentialSource string
@@ -153,7 +152,6 @@ type Heartbeat struct {
 // transitions to / from connected. Consumers may render it; v1 they just
 // forward to stderr when not --quiet.
 type SourceState struct {
-	Observed    bool      `json:"observed,omitempty"`
 	Type        FrameType `json:"type"`
 	State       string    `json:"state"`        // source.State string
 	StateSource string    `json:"state_source"` // hook | inferred
@@ -228,7 +226,6 @@ type StatusBus struct {
 
 // StatusSource is the source.Machine snapshot at status RPC time.
 type StatusSource struct {
-	Observed        bool   `json:"observed,omitempty"`
 	State           string `json:"state"`
 	Source          string `json:"source"`
 	LastEventAtMS   int64  `json:"last_event_at_ms,omitempty"`
