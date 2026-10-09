@@ -4,7 +4,9 @@ This repository supports the `openharmony/arm64` target:
 
 - target: `openharmony/arm64`
 - toolchain: go1.26.7 OpenHarmony toolchain (see Provisioning)
-- CGO: disabled (`CGO_ENABLED=0`), producing a static self-signed ELF
+- CGO: release builds enable the SafeChat crypto backend via the pinned
+  OpenHarmony NDK (`DWS_OPENHARMONY_CGO=1`); the binary stays a static
+  self-signed ELF (`-extldflags -static`, no PT_INTERP/DYNAMIC/NEEDED)
 - packaging: the release pipeline builds, self-signs, and verifies the package
   for every beta and stable release
 - distribution: `dws-openharmony-arm64.tar.gz` ships as a GitHub Release asset
@@ -26,11 +28,13 @@ OHOS_GO=/path/to/openharmony-go \
   ./scripts/dev/build-openharmony.sh
 ```
 
-The script uses `GOTOOLCHAIN=local`, `-trimpath`, `CGO_ENABLED=0`, and `-d -s -w`
-(it suppresses the dynamic loader format, so the result is a static `ET_EXEC`
-ELF). It injects the version, full lowercase Git commit, and reproducible UTC
-build time into the binary, then runs
-`scripts/dev/verify-openharmony-artifact.sh`.
+The script uses `GOTOOLCHAIN=local` and `-trimpath`, injecting the version,
+Git commit, and reproducible UTC build time. `DWS_OPENHARMONY_CGO` selects the
+channel: `0` builds a pure-Go static `ET_EXEC` (SafeChat stub, `-d -s -w`);
+`1` links the SafeChat backend through the pinned OpenHarmony NDK clang with
+`-extldflags -static` (still no `PT_INTERP`/`PT_DYNAMIC`/`NEEDED`); `auto`
+picks `1` when the NDK is available. `ohos-cgo-probe.sh` isolates
+toolchain/NDK link problems from the full build.
 
 Optional environment variables:
 
@@ -42,7 +46,7 @@ Optional environment variables:
 
 The verifier fails closed unless the artifact is executable, ELF `ET_EXEC`,
 AArch64, static, and free of both an interpreter and a dynamic section. It also
-checks Go metadata for `GOOS=openharmony`, `GOARCH=arm64`, and `CGO_ENABLED=0`.
+checks Go metadata for `GOOS=openharmony` and `GOARCH=arm64` (CGO mode 0 or 1).
 
 ## Provisioning the toolchain
 
@@ -90,12 +94,13 @@ The packaging script:
 
 ### SafeChat
 
-SafeChat is unavailable on OpenHarmony. Its vendor library is a CGO/static-library
-backend supported only by the repository's Darwin, Linux, and Windows amd64/arm64
-builds. OpenHarmony uses the existing stub: `Available()` is false and attempts
-to open the backend return `ErrUnavailable`.
-
-Do not add a private SafeChat binary, NDK, header, or crypto fallback to enable it.
+SafeChat message crypto ships in OpenHarmony release builds: the vendor
+`lib/openharmony_arm64/libsafechat.a` is linked by the CGO channel above, the
+same model as the Darwin, Linux, and Windows builds. Pure-Go builds
+(`DWS_OPENHARMONY_CGO=0`) keep the fail-closed stub: `Available()` is false and
+opening the backend returns `ErrUnavailable`. The pinned NDK comes from the
+`ohos-ndk-26.0.0.851-toolchain` fork release; its SHA-256 is verified before
+use (`provision-ohos-ndk.sh`).
 
 ### Runtime native payload
 

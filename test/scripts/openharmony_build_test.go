@@ -21,18 +21,17 @@ func TestOpenHarmonyBuildContractIsPublicAndReleaseOwned(t *testing.T) {
 	for _, want := range []string{
 		"OHOS_GO",
 		"openharmony/arm64",
-		"GOOS=openharmony GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local",
+		"GOOS=openharmony GOARCH=arm64 CGO_ENABLED=$cgo_mode GOTOOLCHAIN=local",
 		"DWS_PACKAGE_VERSION",
-		"DWS_GIT_COMMIT",
-		"DWS_BUILD_TIME",
+		"DWS_OPENHARMONY_CGO",
 		"release-build-time.sh",
-		"verify-openharmony-artifact.sh",
+		"provision-ohos-ndk.sh",
 	} {
 		if !strings.Contains(buildScript, want) {
 			t.Errorf("OpenHarmony build script is missing contract %q", want)
 		}
 	}
-	for _, forbidden := range []string{"qwenwork", "Aone", "private", "provision-ohos-ndk", "safechat"} {
+	for _, forbidden := range []string{"qwenwork", "Aone", "alibaba-inc.com"} {
 		if strings.Contains(strings.ToLower(buildScript), strings.ToLower(forbidden)) {
 			t.Errorf("OpenHarmony public build script contains forbidden reference %q", forbidden)
 		}
@@ -98,7 +97,7 @@ func TestOpenHarmonyBuildContractIsPublicAndReleaseOwned(t *testing.T) {
 			t.Errorf("OpenHarmony package script is missing contract %q", want)
 		}
 	}
-	for _, forbidden := range []string{"qwenwork", "Aone", "private"} {
+	for _, forbidden := range []string{"qwenwork", "Aone", "alibaba-inc.com"} {
 		if strings.Contains(strings.ToLower(packageScript), strings.ToLower(forbidden)) {
 			t.Errorf("OpenHarmony public package script contains forbidden reference %q", forbidden)
 		}

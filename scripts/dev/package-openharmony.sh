@@ -8,8 +8,7 @@ OUTPUT_DIR="$(CDPATH='' cd "$OUTPUT_DIR" && pwd)"
 cd "$ROOT"
 archive="$OUTPUT_DIR/dws-openharmony-arm64.tar.gz"
 checksums="$OUTPUT_DIR/checksums.txt"
-# Remove stale outputs before creating temporary files so failures cannot
-# expose an older successful package.
+# temporary files so setup failures cannot expose an older successful package.
 rm -f "$archive" "$checksums"
 archive_tmp=''
 checksums_tmp=''
@@ -27,36 +26,59 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# enforce_static_elf verifies the static ELF shape: ET_EXEC with no PT_INTERP,
-# no PT_DYNAMIC, and no NEEDED entries. It only runs when DWS_REQUIRE_ELF_STATIC=1;
-# the fake-toolchain unit tests and local builds without an ELF reader skip it.
+# enforce_static_elf verifies the Huawei-reviewed "musl-free static ELF" shape:
+# ET_EXEC with no PT_INTERP, no PT_DYNAMIC, and no NEEDED entries. It only runs
+# when DWS_REQUIRE_ELF_STATIC=1 (CI); the fake-toolchain unit tests and local
+# builds without an ELF reader skip it.
 enforce_static_elf() {
   local bin="$1"
   if [ "${DWS_REQUIRE_ELF_STATIC:-0}" != "1" ]; then
     return 0
   fi
   if command -v readelf >/dev/null 2>&1 || command -v llvm-readelf >/dev/null 2>&1; then
-    local re=readelf
+    local re=readelf header='' program_headers='' dynamic=''
     command -v readelf >/dev/null 2>&1 || re=llvm-readelf
-    if ! "$re" -h "$bin" 2>/dev/null | grep -q 'Type:.*EXEC'; then
+    if ! header="$("$re" -h "$bin" 2>/dev/null)"; then
+      printf 'OpenHarmony ELF header could not be read\n' >&2
+      return 1
+    fi
+    if ! printf '%s\n' "$header" | grep -q 'Type:.*EXEC'; then
       printf 'OpenHarmony binary is not ET_EXEC\n' >&2
       return 1
     fi
-    if "$re" -l "$bin" 2>/dev/null | grep -Eq 'INTERP|DYNAMIC'; then
+    if ! program_headers="$("$re" -l "$bin" 2>/dev/null)"; then
+      printf 'OpenHarmony ELF program headers could not be read\n' >&2
+      return 1
+    fi
+    if printf '%s\n' "$program_headers" | grep -Eq 'INTERP|DYNAMIC'; then
       printf 'OpenHarmony binary has an INTERP or DYNAMIC segment\n' >&2
       return 1
     fi
-    if ! "$re" -d "$bin" 2>/dev/null | grep -q 'There is no dynamic section in this file'; then
+    if ! dynamic="$("$re" -d "$bin" 2>/dev/null)"; then
+      printf 'OpenHarmony ELF dynamic section could not be read\n' >&2
+      return 1
+    fi
+    if ! printf '%s\n' "$dynamic" | grep -q 'There is no dynamic section in this file'; then
       printf 'OpenHarmony binary has a dynamic section with NEEDED entries\n' >&2
       return 1
     fi
-  elif command -v llvm-objdump >/dev/null 2>&1; then
-    if llvm-objdump -p "$bin" 2>/dev/null | grep -Eq 'INTERP|DYNAMIC'; then
+  elif command -v llvm-objdump >/dev/null 2>&1 || command -v objdump >/dev/null 2>&1; then
+    local od=llvm-objdump headers=''
+    command -v llvm-objdump >/dev/null 2>&1 || od=objdump
+    if ! headers="$("$od" --private-headers "$bin" 2>/dev/null)"; then
+      printf 'OpenHarmony ELF headers could not be read by %s\n' "$od" >&2
+      return 1
+    fi
+    if ! printf '%s\n' "$headers" | grep -Eiq 'Type:[[:space:]]*EXEC|file type is EXEC|ET_EXEC'; then
+      printf 'OpenHarmony binary is not ET_EXEC\n' >&2
+      return 1
+    fi
+    if printf '%s\n' "$headers" | grep -Eiq 'INTERP|DYNAMIC'; then
       printf 'OpenHarmony binary has an INTERP or DYNAMIC segment\n' >&2
       return 1
     fi
   else
-    printf 'DWS_REQUIRE_ELF_STATIC=1 but no readelf/llvm-readelf/llvm-objdump available\n' >&2
+    printf 'DWS_REQUIRE_ELF_STATIC=1 but no readelf/llvm-readelf/llvm-objdump/objdump available\n' >&2
     return 1
   fi
   printf 'ELF static shape verified (ET_EXEC, no INTERP/DYNAMIC, no NEEDED)\n' >&2

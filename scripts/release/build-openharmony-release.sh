@@ -53,6 +53,7 @@ printf '%s  ohos-go.tar.gz\n' "$OHOS_GO_SHA256" | sha256sum -c -
 DWS_PACKAGE_VERSION="$version" \
 DWS_GIT_COMMIT="$commit" \
 DWS_REQUIRE_ELF_STATIC=1 \
+DWS_OPENHARMONY_CGO=1 \
 OHOS_GO_ARCHIVE="$work/toolchain/ohos-go.tar.gz" \
   "$ROOT/scripts/dev/package-openharmony.sh" "$work/package"
 

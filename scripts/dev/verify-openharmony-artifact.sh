@@ -86,10 +86,14 @@ printf '%s\n' "$build_info" | grep -Eq 'build[[:space:]]+GOARCH=arm64([[:space:]
   printf 'OpenHarmony build metadata is missing GOARCH=arm64\n' >&2
   exit 1
 }
-printf '%s\n' "$build_info" | grep -Eq 'build[[:space:]]+CGO_ENABLED=0([[:space:]]|$)' || {
-  printf 'OpenHarmony build metadata is missing CGO_ENABLED=0\n' >&2
+if ! printf '%s\n' "$build_info" | grep -Eq 'build[[:space:]]+CGO_ENABLED=(0|1)([[:space:]]|$)'; then
+  printf 'OpenHarmony build metadata is missing a CGO_ENABLED value\n' >&2
   exit 1
-}
+fi
+if [ "${DWS_EXPECT_OPENHARMONY_CGO:-}" = "1" ] && ! printf '%s\n' "$build_info" | grep -Eq 'build[[:space:]]+CGO_ENABLED=1([[:space:]]|$)'; then
+  printf 'OpenHarmony build metadata is missing CGO_ENABLED=1 (SafeChat build)\n' >&2
+  exit 1
+fi
 
 grep -aFq -- "$expected_version" "$binary" || {
   printf 'OpenHarmony artifact does not contain expected version: %s\n' "$expected_version" >&2
