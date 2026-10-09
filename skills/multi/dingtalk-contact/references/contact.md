@@ -1,6 +1,6 @@
 # 通讯录 (contact) 命令参考
 
-> **CRITICAL — 命令合法性**：contact 二级子命令包括 `user` / `dept` / `label` / `relation` / `org` / `account`。
+> **CRITICAL — 命令合法性**：contact 二级子命令包括 `user` / `dept` / `label` / `relation` / `org` / `account`；此外 contact 还提供一组 `+friend-*` shortcut（`+friend-list` / `+friend-request-list` / `+friend-request-send` / `+friend-request-accept` / `+friend-request-reject` / `+friend-remove`）用于好友关系操作。
 > 不存在 `contact search`、`contact find`、`contact list`、`contact get`、`contact user find/list`。
 > 构造命令前必须确认路径在下方「命令总览」中存在；不确定时，**根据意图对照下方「意图判断」选择正确命令**。
 >
@@ -59,6 +59,23 @@ Example:
   dws contact user search-mobile --mobile 13800138000
 Flags:
       --mobile string   手机号 (必填)
+```
+
+#### 按开放钉钉号ID获取用户ID
+```
+Usage:
+  dws contact user get-by-open-dingtalk-id [flags]
+Aliases:
+  get-by-open-dingtalk-id, get-user-by-open-dingtalk-id
+Example:
+  dws contact user get-by-open-dingtalk-id --id open-dt-xxx
+  dws contact user get-user-by-open-dingtalk-id --id open-dt-xxx  # 别名
+Flags:
+      --id string   开放钉钉号ID（openDingTalkId）(必填)
+Notes:
+  - openDingTalkId 是开放平台场景下、用于标识两个 uid 关系的开放钉钉号ID，通常出现在好友事件等业务消息体中
+  - openDingTalkId 与钉钉号（dingtalkId，如 zhangsan）不是同一概念；已知普通钉钉号时请使用 `contact user get-by-dingtalk-id`
+  - 本命令别名必须使用 `get-user-by-open-dingtalk-id`，禁止其他变体
 ```
 
 #### 批量获取用户详情
@@ -352,6 +369,121 @@ Notes:
   - 不知道角色ID时：先 `dws contact label get --names "角色名"` 或 `dws contact label list` 获取 labelId
 ```
 
+### friend (好友关系 shortcut)
+
+> **身份键**：好友 shortcut 全部以 **开放钉钉号ID（openDingTalkId）** 为身份键，不是 userId 也不是钉钉号（dingtalkId）。openDingTalkId 是成对编码值，仅在当前登录用户视角下有效；通常来自 `+friend-list` / `+friend-request-list` 的返回、好友事件消息体，或 `user get-by-open-dingtalk-id` 的入参。
+
+#### 查询好友列表
+```
+Usage:
+  dws contact +friend-list [flags]
+Example:
+  dws contact +friend-list
+  dws contact +friend-list --cursor 100 --size 50
+Flags:
+      --cursor int   分页游标；首页不传，翻页时传上一页返回的 cursor (默认 0)
+      --size int     每页数量，1-100 (默认 20)
+Returns:
+  count            int      当前页好友数量
+  cursor           int      分页游标（翻页用）
+  hasMore          bool     是否还有更多数据
+  friends          list     好友列表，每项包含：
+    openDingTalkId string   好友开放钉钉号ID（后续操作必需的内部标识）
+    nick           string   好友昵称（可选）
+    alias          string   好友备注名（可选）
+    remark         string   好友备注信息（可选）
+    status         number   好友操作状态，增量同步用途（1=新增 0=删除）；列表查询场景不可靠，展示时可忽略（可选）
+    gmtCreate      number   加好友时间，毫秒时间戳（可选）
+Notes:
+  - 向用户展示列表时优先用 nick / alias 标识好友；openDingTalkId 是执行加好友/删除等操作所必需的内部标识，仅在需要操作时展示，非必要不显示
+```
+
+#### 查询收到的好友申请列表
+```
+Usage:
+  dws contact +friend-request-list [flags]
+Example:
+  dws contact +friend-request-list
+  dws contact +friend-request-list --size 50
+Flags:
+      --cursor int   分页游标 (默认 0)
+      --size int     每页数量，1-100 (默认 20)
+Returns:
+  count            int      当前页申请数量
+  pendingCount     number   待处理申请数量
+  cursor           int      分页游标
+  hasMore          bool     是否还有更多数据
+  requests         list     好友申请列表，每项包含：
+    openDingTalkId string   申请人开放钉钉号ID（后续操作必需的内部标识）
+    nick           string   申请人昵称（可选）
+    status         number   申请状态：0=无关系 1=待接受 2=已发送 3=已接受（成为好友） 4=推荐 5=推荐完成 6=准备推荐 8=已过期 9=智能推荐（可选）
+    remark         string   申请留言（可选）
+    modifyAt       number   申请时间，毫秒时间戳（可选）
+    isRead         bool     是否已读（可选）
+Notes:
+  - 查询后未读申请会被服务端标记为已读
+  - 向用户汇报 status 时必须翻译为中文状态描述（如 1 → "待接受"、3 → "你们已成为好友"），不要直接显示数字
+  - 向用户展示申请列表时优先用 nick 标识申请人；openDingTalkId 是同意/忽略申请所必需的内部标识，仅在需要操作时展示，非必要不显示
+```
+
+#### 发送好友申请
+```
+Usage:
+  dws contact +friend-request-send [flags]
+Example:
+  dws contact +friend-request-send --to open-dt-alice
+  dws contact +friend-request-send --to open-dt-alice --remark "我是研发部的 Bob"
+Flags:
+      --to string      对方开放钉钉号ID（openDingTalkId）(必填)
+      --remark string  好友申请验证留言（可选）
+      --yes            跳过二次确认（可选）
+Notes:
+  - 写操作：执行前需用户确认；仅在已取得明确同意后才可追加 --yes
+```
+
+#### 同意好友申请
+```
+Usage:
+  dws contact +friend-request-accept [flags]
+Example:
+  dws contact +friend-request-accept --from open-dt-alice
+  dws contact +friend-request-accept --from open-dt-alice --alias "Alice Li"
+Flags:
+      --from string    申请人开放钉钉号ID（openDingTalkId）(必填)
+      --alias string   同意后为该好友设置的备注名（可选）
+      --yes            跳过二次确认（可选）
+Notes:
+  - 写操作：执行前需用户确认；仅在已取得明确同意后才可追加 --yes
+```
+
+#### 拒绝（忽略）好友申请
+```
+Usage:
+  dws contact +friend-request-reject [flags]
+Example:
+  dws contact +friend-request-reject --from open-dt-alice
+Flags:
+      --from string   申请人开放钉钉号ID（openDingTalkId）(必填)
+      --yes           跳过二次确认（可选）
+Notes:
+  - 写操作：执行前需用户确认；仅在已取得明确同意后才可追加 --yes
+  - 拒绝后该申请不再出现在好友申请列表中
+```
+
+#### 删除好友（高风险）
+```
+Usage:
+  dws contact +friend-remove [flags]
+Example:
+  dws contact +friend-remove --friend open-dt-alice
+Flags:
+      --friend string   要删除的好友开放钉钉号ID（openDingTalkId）(必填)
+      --yes             跳过二次确认（可选）
+Notes:
+  - **不可逆高风险写操作**：删除后双方不再是好友，恢复需重新发起好友申请
+  - 执行前必须向用户展示目标 openDingTalkId 并取得明确确认，确认后才可追加 --yes
+```
+
 ### org (企业管理)
 
 #### 创建企业
@@ -433,6 +565,13 @@ Notes:
 用户说"更新企业账号/修改企业账号/改企业账号信息/改企业账号姓名/改企业账号部门/改企业账号主管/改企业账号昵称/改企业账号头像"（含"账号"且含"改/更新/修改"）→ `account update`（需 userId；至少改一项）
 用户说"创建企业/新建企业/开通企业/初始化企业"（不含"账号"）→ `org create`（需企业名称 + 创建者名称）
 用户说"找部门/哪个部门" → `dept search`
+用户说"我的好友 / 好友列表 / 有哪些好友 / 查好友" → `+friend-list`（好友关系，非特别关注）
+用户说"好友申请 / 谁加我 / 待处理的好友请求 / pending 好友请求" → `+friend-request-list`
+用户说"加好友 / 添加好友 / 发送好友申请 / 想加某人为好友" → `+friend-request-send --to <openDingTalkId>`（需先取得对方 openDingTalkId）
+用户说"同意好友申请 / 接受加好友 / 通过好友申请" → `+friend-request-accept --from <openDingTalkId>`
+用户说"拒绝好友申请 / 忽略好友申请 / 不同意加好友" → `+friend-request-reject --from <openDingTalkId>`
+用户说"删除好友 / 移除好友 / 解除好友关系" → `+friend-remove --friend <openDingTalkId>`（高风险，必须确认）
+用户提供开放钉钉号ID（openDingTalkId）要查 userId → `user get-by-open-dingtalk-id --id <openDingTalkId>`
 用户说"部门详情/部门信息/部门多少人" → `dept get-info`（返回部门ID、部门名称、部门人数；需 deptId，若只有部门名称需先 `dept search`）
 用户说"子部门/下设部门/部门有哪些下级部门/枚举二级部门" → `dept list-children`（需父 deptId；只有部门名先 `dept search`）
 用户说"部门有谁/部门成员/人员名单" → `dept list-members`（需 deptId；**仅本部门不含下级**，含下级先 `dept list-children` 再合并查）
@@ -553,6 +692,27 @@ dws contact dept create --name "新产品部" --parent 12345 --create-dept-group
 
 # 22. 更新部门
 dws contact dept update --dept 12345 --name "新部门名" --parent 67890 --yes --format json
+
+# 23. 查询我的好友列表 — 提取好友 openDingTalkId
+dws contact +friend-list --format json
+
+# 24. 查询收到的好友申请（含 pendingCount）
+dws contact +friend-request-list --format json
+
+# 25. 发送好友申请
+dws contact +friend-request-send --to <openDingTalkId> --remark "我是张三" --format json
+
+# 26. 同意好友申请
+dws contact +friend-request-accept --from <openDingTalkId> --format json
+
+# 27. 拒绝（忽略）好友申请
+dws contact +friend-request-reject --from <openDingTalkId> --format json
+
+# 28. 删除好友（不可逆，必须先确认）
+dws contact +friend-remove --friend <openDingTalkId> --yes --format json
+
+# 29. 按开放钉钉号ID换取 userId
+dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json
 ```
 
 ## 上下文传递表
@@ -569,6 +729,9 @@ dws contact dept update --dept 12345 --name "新部门名" --parent 67890 --yes 
 | `dept search/list-children` | `deptId` | dismission search 的 --depts |
 | `label create` | `labelId` | `label list-members` 的 --id |
 | `dept create` | `deptId` | dept get-info/list-children/update 的 --dept；dept list-members 的 --ids |
+| `+friend-list` | `openDingTalkId` | +friend-remove 的 --friend；user get-by-open-dingtalk-id 的 --id |
+| `+friend-request-list` | `openDingTalkId` | +friend-request-accept / +friend-request-reject 的 --from |
+| `user get-by-open-dingtalk-id` | `userId` | user get / 其他产品的 --users/--executor |
 
 ## 注意事项
 
@@ -587,6 +750,11 @@ dws contact dept update --dept 12345 --name "新部门名" --parent 67890 --yes 
 - `label list-members` 需要先通过 `label list` 或 `label get` 获取 labelId，再用 --id 查询角色下的成员
 - `user update-self` 用于更新当前用户自己的昵称/头像；头像 fileId 需先上传头像到钉盘获取
 - `account update` 用于更新企业账号用户信息；`--depts` 为 JSON 数组格式，头像 fileId 需先上传钉盘获取
+- 好友命令（`+friend-*`）的身份键是 **openDingTalkId（开放钉钉号ID）**，与 userId、钉钉号（dingtalkId）均不同；openDingTalkId 可从 `+friend-list` / `+friend-request-list` 响应的 `openDingTalkId` 字段、好友事件消息体，或 `user search`（按关键词搜人，结果同时返回 userId 与 openDingTalkId）取得，`aisearch person` / `user get-by-dingtalk-id` 只返回 userId、取不到 openDingTalkId；拿到 openDingTalkId 后可用 `user get-by-open-dingtalk-id` 反查 userId
+- `+friend-list` 与 `+friend-request-list` 支持分页：翻页时把上一页返回的 `cursor` 传入 `--cursor`（或从统一 envelope 的 `meta.pagination.next_token` 取）；`hasMore=true` 表示还有下一页
+- `+friend-request-list` 查询后未读申请会被标记为已读，属正常副作用
+- `+friend-remove` 不可逆：删除后需重新发起好友申请才可恢复，执行前必须确认
+- 好友 ≠ 特别关注：特别关注（星标）列表走 `relation list-my-followings`，好友关系走 `+friend-list`，两者互不包含，禁止互路由
 
 ## 自动化脚本
 

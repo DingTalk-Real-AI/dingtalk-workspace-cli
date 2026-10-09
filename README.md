@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.25+-green?logo=go&logoColor=white" alt="Go 1.25+">
+  <img src="https://img.shields.io/badge/Go-1.26+-green?logo=go&logoColor=white" alt="Go 1.26+">
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License Apache-2.0"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases"><img src="https://img.shields.io/github/v/release/DingTalk-Real-AI/dingtalk-workspace-cli?color=red&label=release" alt="Latest Release"></a>
   <a href="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml"><img src="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -36,6 +36,7 @@
 - [Key Services](#key-services)
 - [Security by Design](#security-by-design)
 - [Reference & Docs](#reference--docs)
+- [OpenHarmony build](#openharmony-build)
 - [Contributing](#contributing)
 
 </details>
@@ -139,13 +140,37 @@ Static endpoint data is generated from the Wukong baseline and committed in this
 repository under `internal/syncdata`, so source builds do not require a sibling
 data checkout.
 
-> Requires Go 1.25+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
+> Requires Go 1.26+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
 > the default CGO build includes the SafeChat backend without a build tag and
 > therefore requires a working C compiler. Set `CGO_ENABLED=0` only when a stub
 > build is intentional. Use `make package` with Docker to build all six release
 > targets through the repository's pinned cross-compilation toolchain.
 
 </details>
+
+## OpenHarmony build
+
+The repository supports an `openharmony/arm64` build with a Go 1.26.7
+OpenHarmony toolchain. Every beta and stable release builds, self-signs,
+verifies, and publishes `dws-openharmony-arm64.tar.gz` alongside the six
+platform archives, and the binary has been validated on a HarmonyOS PC.
+
+```bash
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/build-openharmony.sh
+
+# Or create a self-signed package archive (dws-openharmony-arm64.tar.gz):
+OHOS_GO=/path/to/openharmony-go \
+  DWS_PACKAGE_VERSION=1.2.3 \
+  ./scripts/dev/package-openharmony.sh
+```
+
+The build is `CGO_ENABLED=0` and therefore keeps SafeChat unavailable. Runtime
+native payloads are also unsupported on OpenHarmony. The script verifies the
+resulting static AArch64 ELF and its Go build metadata; see
+[`docs/openharmony.md`](docs/openharmony.md) for the complete boundary.
+
 
 ## China mirror
 

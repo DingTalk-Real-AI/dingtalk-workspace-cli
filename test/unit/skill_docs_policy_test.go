@@ -389,8 +389,9 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"<!-- dws-intent: event.listen.oa -->",
 		"<!-- dws-intent: event.listen.todo -->",
 		"<!-- dws-intent: event.listen.card -->",
+		"<!-- dws-intent: event.listen.contact -->",
 		"16 个 EventKey",
-		"28 个公开个人 EventKey",
+		"30 个公开个人 EventKey",
 	} {
 		if !strings.Contains(string(skillContent), required) {
 			t.Errorf("%s missing standalone event contract %q", skillPath, required)
@@ -407,6 +408,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"event-voip.md",
 		"event-todo.md",
 		"event-card.md",
+		"event-contact.md",
 	}
 	var combined strings.Builder
 	combined.Write(skillContent)
@@ -455,6 +457,8 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"user_todo_task_update",
 		"user_todo_task_delete",
 		"user_card_action_triggered",
+		"user_contact_friend_request_received",
+		"user_contact_friend_added",
 	}
 	for _, eventKey := range allEventKeys {
 		if !strings.Contains(combined.String(), eventKey) {

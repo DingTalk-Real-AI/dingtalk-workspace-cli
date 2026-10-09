@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-16T10:44:01.546908",
-  "count": 477,
+  "generated_at": "2026-10-09T10:34:13.296839",
+  "count": 484,
   "results": [
     {
       "suite": "semantic",
@@ -569,7 +569,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "新增字段前排除重名，15 个分片并独立核对新 ID、类型和配置。",
+      "semantic_delta": "新增字段前排除重名，15 个分片并独立核对新 ID、类型和配置；CREATE_FIELD_READBACK_PENDING 保留原 ID，只继续有界读回，不重放创建。",
       "availability": "available"
     },
     {
@@ -920,6 +920,16 @@
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "先按唯一 fieldId/value 完整查询，0 条创建、1 条更新、2 条以上停止，并读回验证最终 cells。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-write-result",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "只读查询原写入 token，严格核对 Base、表和 token 身份；未知或 ID 不完整时继续原身份对账，不以全表查询替代，不能作为重新创建依据；ID 集合不承诺输入顺序或整批完整，未返回 ID 的记录不能按数量差额补写。",
       "availability": "available"
     },
     {
@@ -2740,6 +2750,66 @@
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "按部门名唯一解析 deptId 后列直属成员；搜索候选和成员集合均逐项严格校验，绝不猜测多匹配。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "查询当前用户好友列表，严格要求 success、result 对象、friendList 数组（缺失视为显式空列表）、每项含唯一稳定 openDingTalkId；status/gmtCreate/nick/alias/remark 均为存在才投影的可选字段；投影 count/cursor/hasMore 与标准化 friends 列表，预发 mcp_tool_debug 与 CLI 真实执行已验证分页非空与零命中均返回显式空结果。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-remove",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "删除指定开放钉钉号ID（targetOpenDingtalkId）的好友关系；属于不可逆高风险写操作，必须取得用户明确确认后才可加 --yes 执行，预发真实执行已验证可解除双向好友关系。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-request-accept",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "同意指定开放钉钉号ID（targetOpenDingtalkId）发来的好友申请，可选项设置备注名；写操作要求用户确认，预发真实执行已验证建立好友关系。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-request-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "查询当前用户收到的好友申请列表，严格要求 success、result 对象、friendList 数组（缺失视为显式空列表）、每项含唯一稳定 openDingTalkId；status/remark/modifyAt/isRead 均为存在才投影的可选字段；投影 count/pendingCount/cursor/hasMore 与标准化 requests 列表，查询后未读申请会被标记为已读，预发真实执行已验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-request-reject",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝指定开放钉钉号ID（targetOpenDingtalkId）发来的好友申请；写操作要求用户确认，预发真实执行已验证移除对应申请记录。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "contact",
+      "command": "+friend-request-send",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "向指定开放钉钉号ID（destOpenDingtalkId）发送好友申请，可附加验证留言；写操作要求用户确认，预发真实执行已验证成功发起申请。",
       "availability": "available"
     },
     {

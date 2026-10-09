@@ -58,6 +58,8 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventTodoTaskUpdated,
 		EventTodoTaskDeleted,
 		EventCardAction,
+		EventFriendRequestReceived,
+		EventFriendAdded,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
@@ -343,6 +345,8 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 		EventTodoTaskUpdated,
 		EventTodoTaskDeleted,
 		EventCardAction,
+		EventFriendRequestReceived,
+		EventFriendAdded,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)

@@ -1337,6 +1337,179 @@ func TestCrossPlatformCoverageProjectOutputReactionRejectsLegacyOperatorOpenIDSp
 	}
 }
 
+func personalFriendRequestReceivedData() string {
+	return `{
+		"eventId":"friend-request-event",
+		"eventKey":"user_contact_friend_request_received",
+		"occurredAtMs":1790220582912,
+		"subId":"friend-request-sub",
+		"payload":{
+			"uid":467340,
+			"bizid":"friend_trace_biz_1",
+			"body":{
+				"src_open_dingtalk_id":"olz_vkqmrk6cp",
+				"src_name":"2091-3537",
+				"dest_open_dingtalk_id":"xinhuitest",
+				"remark":"我是2091-3537",
+				"source":1,
+				"biz_type":0,
+				"apply_time":1790220582912
+			},
+			"event_time":1790220582912,
+			"orgId":2260006
+		}
+	}`
+}
+
+func personalFriendAddedData() string {
+	return `{
+		"eventId":"friend-added-event",
+		"eventKey":"user_contact_friend_added",
+		"occurredAtMs":1790233365080,
+		"subId":"friend-added-sub",
+		"payload":{
+			"uid":467340,
+			"bizid":"friend_trace_biz_2",
+			"body":{
+				"friend_open_dingtalk_id":"olz_vkqmrk6cp",
+				"friend_name":"2091-3537",
+				"establish_time":1790233365000,
+				"direction":"passive"
+			},
+			"event_time":1790233365080,
+			"orgId":2260006
+		}
+	}`
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendRequestReceived(t *testing.T) {
+	projected, err := ProjectOutput(transport.Event{
+		EventID:       "outer-event",
+		EventBornTime: 11,
+		EventType:     EventFriendRequestReceived,
+		SubscribeID:   "outer-sub",
+		Data:          personalFriendRequestReceivedData(),
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	want := FriendRequestReceivedOutput{
+		Type:               EventFriendRequestReceived,
+		EventID:            "friend-request-event",
+		Timestamp:          1790220582912,
+		SubscribeID:        "outer-sub",
+		SrcOpenDingTalkID:  "olz_vkqmrk6cp",
+		SrcName:            "2091-3537",
+		DestOpenDingTalkID: "xinhuitest",
+		Remark:             "我是2091-3537",
+		Source:             1,
+		BizType:            0,
+		ApplyTime:          1790220582912,
+	}
+	if !reflect.DeepEqual(projected, want) {
+		t.Fatalf("ProjectOutput() = %#v, want %#v", projected, want)
+	}
+	assertNoInternalActionFields(t, projected)
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendAdded(t *testing.T) {
+	projected, err := ProjectOutput(transport.Event{
+		EventID:       "outer-event",
+		EventBornTime: 11,
+		EventType:     EventFriendAdded,
+		SubscribeID:   "outer-sub",
+		Data:          personalFriendAddedData(),
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	want := FriendAddedOutput{
+		Type:                 EventFriendAdded,
+		EventID:              "friend-added-event",
+		Timestamp:            1790233365080,
+		SubscribeID:          "outer-sub",
+		FriendOpenDingTalkID: "olz_vkqmrk6cp",
+		FriendName:           "2091-3537",
+		EstablishTime:        1790233365000,
+		Direction:            "passive",
+	}
+	if !reflect.DeepEqual(projected, want) {
+		t.Fatalf("ProjectOutput() = %#v, want %#v", projected, want)
+	}
+	assertNoInternalActionFields(t, projected)
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendEventsRejectFlatBody(t *testing.T) {
+	// Regression: the lippi-friend MetaQ envelope nests business fields
+	// under the body key. A payload carrying the business fields at the
+	// top level (without body) must be rejected so empty projections can
+	// never silently pass through decodeRequiredPayload's body check.
+	flatRequest := `{"eventKey":"user_contact_friend_request_received","payload":{"src_open_dingtalk_id":"olz_vkqmrk6cp","event_time":1}}`
+	flatAdded := `{"eventKey":"user_contact_friend_added","payload":{"friend_open_dingtalk_id":"olz_vkqmrk6cp","event_time":1}}`
+	for _, tt := range []struct {
+		name     string
+		eventKey string
+		data     string
+	}{
+		{name: "request received", eventKey: EventFriendRequestReceived, data: flatRequest},
+		{name: "friend added", eventKey: EventFriendAdded, data: flatAdded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: tt.eventKey, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil || !strings.Contains(err.Error(), "payload body is missing") {
+				t.Fatalf("ProjectOutput() error = %v, want payload body is missing", err)
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendEventsFailClosedOnMissingIdentity(t *testing.T) {
+	missingRequestSrc := `{"eventKey":"user_contact_friend_request_received","payload":{"body":{"src_name":"who","dest_open_dingtalk_id":"xinhuitest"}}}`
+	missingRequestDest := `{"eventKey":"user_contact_friend_request_received","payload":{"body":{"src_open_dingtalk_id":"olz_vkqmrk6cp"}}}`
+	missingAddedFriend := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_name":"who","direction":"passive"}}}`
+	blankAddedFriend := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_open_dingtalk_id":"  ","direction":"active"}}}`
+	for _, tt := range []struct {
+		name     string
+		eventKey string
+		data     string
+		missing  string
+	}{
+		{name: "request received without src", eventKey: EventFriendRequestReceived, data: missingRequestSrc, missing: "src_open_dingtalk_id is required"},
+		{name: "request received without dest", eventKey: EventFriendRequestReceived, data: missingRequestDest, missing: "dest_open_dingtalk_id is required"},
+		{name: "friend added without friend id", eventKey: EventFriendAdded, data: missingAddedFriend, missing: "friend_open_dingtalk_id is required"},
+		{name: "friend added with blank friend id", eventKey: EventFriendAdded, data: blankAddedFriend, missing: "friend_open_dingtalk_id is required"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{EventID: "outer-event", EventType: tt.eventKey, Data: tt.data}
+			projected, err := ProjectOutput(ev)
+			if err == nil || !strings.Contains(err.Error(), tt.missing) {
+				t.Fatalf("ProjectOutput() error = %v, want %q", err, tt.missing)
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputFriendAddedRejectsUnknownDirection(t *testing.T) {
+	for _, direction := range []string{"", "incoming", "ACTIVE"} {
+		data := `{"eventKey":"user_contact_friend_added","payload":{"body":{"friend_open_dingtalk_id":"olz_vkqmrk6cp","direction":"` + direction + `"}}}`
+		ev := transport.Event{EventID: "outer-event", EventType: EventFriendAdded, Data: data}
+		projected, err := ProjectOutput(ev)
+		if err == nil || !strings.Contains(err.Error(), "direction must be") {
+			t.Fatalf("direction %q: ProjectOutput() error = %v, want direction must be", direction, err)
+		}
+		if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+			t.Fatalf("direction %q: ProjectOutput() fallback = %#v, want %#v", direction, projected, ev)
+		}
+	}
+}
+
 func assertNoInternalActionFields(t *testing.T, projected any) {
 	t.Helper()
 	raw, err := json.Marshal(projected)
@@ -1440,5 +1613,23 @@ func TestCrossPlatformCoverageSchemaReflectionSupportsNestedArraysAndPointers(t 
 	meta := properties["meta"].(map[string]any)
 	if meta["type"] != "object" || meta["additionalProperties"] != true {
 		t.Fatalf("meta schema = %#v", meta)
+	}
+}
+
+func TestCrossPlatformCoverageOutputSchemaFriendEvents(t *testing.T) {
+	for _, eventKey := range []string{EventFriendRequestReceived, EventFriendAdded} {
+		schema := outputSchema(eventKey)
+		properties, ok := schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: schema missing properties: %#v", eventKey, schema)
+		}
+		typeProperty, ok := properties["type"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: schema missing type property: %#v", eventKey, properties)
+		}
+		enum, ok := typeProperty["enum"].([]string)
+		if !ok || len(enum) != 1 || enum[0] != eventKey {
+			t.Fatalf("%s: type enum = %#v", eventKey, typeProperty["enum"])
+		}
 	}
 }

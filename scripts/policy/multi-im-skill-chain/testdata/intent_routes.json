@@ -233,6 +233,17 @@
         "skills/multi/dingtalk-event/SKILL.md",
         "skills/multi/dingtalk-event/references/event-card.md"
       ]
+    },
+    {
+      "id": "event.listen.contact",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-contact.md"
+      ]
     }
   ]
 }

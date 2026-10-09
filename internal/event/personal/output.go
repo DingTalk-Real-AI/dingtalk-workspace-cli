@@ -110,6 +110,78 @@ type baseEventOutput struct {
 	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
 }
 
+// FriendDwsRequestReceivedBody mirrors the lippi-friend event payload for
+// unmarshalling before projecting the stable CLI output.
+type FriendDwsRequestReceivedBody struct {
+	SrcOpenDingTalkID  string `json:"src_open_dingtalk_id"`
+	SrcName            string `json:"src_name"`
+	DestOpenDingTalkID string `json:"dest_open_dingtalk_id"`
+	Remark             string `json:"remark"`
+	Source             int    `json:"source"`
+	BizType            int    `json:"biz_type"`
+	ApplyTime          int64  `json:"apply_time"`
+}
+
+// FriendDwsFriendAddedBody mirrors the lippi-friend event payload for
+// unmarshalling before projecting the stable CLI output.
+type FriendDwsFriendAddedBody struct {
+	FriendOpenDingTalkID string `json:"friend_open_dingtalk_id"`
+	FriendName           string `json:"friend_name"`
+	EstablishTime        int64  `json:"establish_time"`
+	Direction            string `json:"direction"`
+}
+
+// personalFriendRequestReceivedPayload matches the DWS personal event
+// transport envelope whose business fields live under the body key.
+type personalFriendRequestReceivedPayload struct {
+	BizID     string                       `json:"bizid"`
+	EventTime int64                        `json:"event_time"`
+	UID       int64                        `json:"uid"`
+	OrgID     int64                        `json:"orgId"`
+	Body      FriendDwsRequestReceivedBody `json:"body"`
+}
+
+// personalFriendAddedPayload matches the DWS personal event transport
+// envelope whose business fields live under the body key.
+type personalFriendAddedPayload struct {
+	BizID     string                   `json:"bizid"`
+	EventTime int64                    `json:"event_time"`
+	UID       int64                    `json:"uid"`
+	OrgID     int64                    `json:"orgId"`
+	Body      FriendDwsFriendAddedBody `json:"body"`
+}
+
+// FriendRequestReceivedOutput is the reviewed projection for the contact
+// friend-request-received event. Field names match the lippi-friend
+// FriendDwsRequestReceivedBody payload contract.
+type FriendRequestReceivedOutput struct {
+	Type               string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID            string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp          int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID        string `json:"subscribe_id" description:"订阅 ID"`
+	SrcOpenDingTalkID  string `json:"src_open_dingtalk_id" description:"发起人开放 ID" format:"open_dingtalk_id"`
+	SrcName            string `json:"src_name" description:"发起人展示名"`
+	DestOpenDingTalkID string `json:"dest_open_dingtalk_id" description:"接收人开放 ID" format:"open_dingtalk_id"`
+	Remark             string `json:"remark" description:"好友申请验证留言"`
+	Source             int    `json:"source" description:"好友申请来源"`
+	BizType            int    `json:"biz_type" description:"好友申请业务类型"`
+	ApplyTime          int64  `json:"apply_time" description:"好友申请时间戳" format:"timestamp_ms"`
+}
+
+// FriendAddedOutput is the reviewed projection for the contact friend-added
+// event. Field names match the lippi-friend FriendDwsFriendAddedBody payload
+// contract.
+type FriendAddedOutput struct {
+	Type                 string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID              string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp            int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID          string `json:"subscribe_id" description:"订阅 ID"`
+	FriendOpenDingTalkID string `json:"friend_open_dingtalk_id" description:"对方开放 ID" format:"open_dingtalk_id"`
+	FriendName           string `json:"friend_name" description:"对方展示名"`
+	EstablishTime        int64  `json:"establish_time" description:"好友关系建立时间戳" format:"timestamp_ms"`
+	Direction            string `json:"direction" description:"当前用户视角：active 为主动添加对方，passive 为对方添加当前用户"`
+}
+
 // GroupLifecycleEventOutput is intentionally conservative until stable group
 // event payload samples are available. Payload keeps unknown business fields
 // while transport identity and routing metadata remain available only in raw
@@ -920,6 +992,10 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		return projectVoIPCallReceiveInviteEvent(base, data.Payload)
 	case isTodoEvent(eventType):
 		return projectTodoEvent(ev, base, data.Payload)
+	case isFriendRequestReceivedEvent(eventType):
+		return projectFriendRequestReceivedEvent(ev, base, data.Payload)
+	case isFriendAddedEvent(eventType):
+		return projectFriendAddedEvent(ev, base, data.Payload)
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
@@ -1034,6 +1110,64 @@ func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMess
 	default:
 		return ev, fmt.Errorf("unsupported personal Todo event type %q", base.Type)
 	}
+}
+
+func projectFriendRequestReceivedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalFriendRequestReceivedPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal friend request received payload: %w", err)
+	}
+	body := payload.Body
+	// Fail closed on missing identity: a friend request without the pairwise
+	// openDingTalkIds cannot be routed or answered by the downstream agent.
+	if strings.TrimSpace(body.SrcOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend request received payload: src_open_dingtalk_id is required")
+	}
+	if strings.TrimSpace(body.DestOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend request received payload: dest_open_dingtalk_id is required")
+	}
+	return FriendRequestReceivedOutput{
+		Type:               base.Type,
+		EventID:            base.EventID,
+		Timestamp:          base.Timestamp,
+		SubscribeID:        base.SubscribeID,
+		SrcOpenDingTalkID:  body.SrcOpenDingTalkID,
+		SrcName:            body.SrcName,
+		DestOpenDingTalkID: body.DestOpenDingTalkID,
+		Remark:             body.Remark,
+		Source:             body.Source,
+		BizType:            body.BizType,
+		ApplyTime:          body.ApplyTime,
+	}, nil
+}
+
+func projectFriendAddedEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalFriendAddedPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal friend added payload: %w", err)
+	}
+	body := payload.Body
+	// Fail closed on missing identity or an unknown direction: the friend
+	// openDingTalkId is the only actionable identity and direction is an
+	// enumerated field (active=我发起, passive=对方发起).
+	if strings.TrimSpace(body.FriendOpenDingTalkID) == "" {
+		return ev, fmt.Errorf("decode personal friend added payload: friend_open_dingtalk_id is required")
+	}
+	switch body.Direction {
+	case "active", "passive":
+	default:
+		return ev, fmt.Errorf("decode personal friend added payload: direction must be \"active\" or \"passive\", got %q", body.Direction)
+	}
+	return FriendAddedOutput{
+		Type:                 base.Type,
+		EventID:              base.EventID,
+		Timestamp:            base.Timestamp,
+		SubscribeID:          base.SubscribeID,
+		FriendOpenDingTalkID: body.FriendOpenDingTalkID,
+		FriendName:           body.FriendName,
+		EstablishTime:        body.EstablishTime,
+		Direction:            body.Direction,
+	}, nil
 }
 
 func projectMessageEventContext(message personalMessageContext) MessageEventContext {
@@ -1518,6 +1652,10 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(TodoTaskUpdatedOutput{})
 	case eventKey == EventTodoTaskDeleted:
 		return reflect.TypeOf(TodoTaskDeletedOutput{})
+	case isFriendRequestReceivedEvent(eventKey):
+		return reflect.TypeOf(FriendRequestReceivedOutput{})
+	case isFriendAddedEvent(eventKey):
+		return reflect.TypeOf(FriendAddedOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -1566,6 +1704,14 @@ func isTodoEvent(eventKey string) bool {
 	return eventKey == EventTodoTaskCreated ||
 		eventKey == EventTodoTaskUpdated ||
 		eventKey == EventTodoTaskDeleted
+}
+
+func isFriendRequestReceivedEvent(eventKey string) bool {
+	return eventKey == EventFriendRequestReceived
+}
+
+func isFriendAddedEvent(eventKey string) bool {
+	return eventKey == EventFriendAdded
 }
 
 func isOAApprovalTaskEvent(eventKey string) bool {

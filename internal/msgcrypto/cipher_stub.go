@@ -15,7 +15,7 @@
 // change both together. It keeps unsupported or explicitly CGO-disabled builds
 // fail-closed without changing the default supported-platform behavior.
 
-//go:build !(cgo && (darwin || linux || windows) && (amd64 || arm64))
+//go:build !(cgo && (darwin || linux || windows || openharmony) && (amd64 || arm64))
 
 package msgcrypto
 

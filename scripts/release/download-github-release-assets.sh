@@ -33,6 +33,7 @@ dws-darwin-amd64.tar.gz
 dws-darwin-arm64.tar.gz
 dws-linux-amd64.tar.gz
 dws-linux-arm64.tar.gz
+dws-openharmony-arm64.tar.gz
 dws-skills.zip
 dws-windows-amd64.zip
 dws-windows-arm64.zip
@@ -56,6 +57,7 @@ while IFS="$tab" read -r asset_id asset_name; do
       checksums.txt | \
         dws-darwin-amd64.tar.gz | dws-darwin-arm64.tar.gz | \
         dws-linux-amd64.tar.gz | dws-linux-arm64.tar.gz | \
+        dws-openharmony-arm64.tar.gz | \
         dws-windows-amd64.zip | dws-windows-arm64.zip | \
         dws-skills.zip) ;;
       *)
@@ -74,6 +76,7 @@ for asset_name in \
   dws-darwin-arm64.tar.gz \
   dws-linux-amd64.tar.gz \
   dws-linux-arm64.tar.gz \
+  dws-openharmony-arm64.tar.gz \
   dws-windows-amd64.zip \
   dws-windows-arm64.zip \
   dws-skills.zip; do

@@ -1,4 +1,4 @@
-//go:build linux && arm64
+//go:build linux && arm64 && !openharmony
 
 package safechat
 
