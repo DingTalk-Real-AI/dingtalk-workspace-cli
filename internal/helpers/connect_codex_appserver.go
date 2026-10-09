@@ -174,7 +174,7 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 		}
 	}
 
-	reply, err := cli.runTurn(ctx, threadID, text, attachments, onDelta)
+	reply, err := cli.runTurnWithContext(ctx, threadID, text, attachments, onDelta, f.developerInstructions)
 	if err != nil {
 		return "", err
 	}
@@ -464,6 +464,10 @@ func (c *codexAppServerClient) resumeThread(ctx context.Context, params map[stri
 }
 
 func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
+	return c.runTurnWithContext(ctx, threadID, text, attachments, onDelta, "")
+}
+
+func (c *codexAppServerClient) runTurnWithContext(ctx context.Context, threadID, text string, attachments []connectMediaAttachment, onDelta func(string), instructions string) (string, error) {
 	id := c.requestID()
 	input := []map[string]string{{"type": "text", "text": text}}
 	for _, attachment := range attachments {
@@ -471,13 +475,17 @@ func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text strin
 			input = append(input, map[string]string{"type": "localImage", "path": attachment.LocalPath})
 		}
 	}
+	params := map[string]any{"input": input, "threadId": threadID}
+	if instructions != "" {
+		// resume 不会重写已存历史中的开发者指令；通过本轮应用上下文更新员工策略，保留 thread。
+		params["additionalContext"] = map[string]any{
+			"dws.digital_employee_policy": map[string]string{"kind": "application", "value": instructions},
+		}
+	}
 	if err := c.send(map[string]any{
 		"id":     id,
 		"method": "turn/start",
-		"params": map[string]any{
-			"input":    input,
-			"threadId": threadID,
-		},
+		"params": params,
 	}); err != nil {
 		return "", err
 	}

@@ -93,6 +93,16 @@ func TestCrossPlatformCoverageEmployeeCodexToolPolicy(t *testing.T) {
 						t.Fatal("真实 RPC 的指令或会话恢复策略错误")
 					}
 				}
+				if request.Method == "turn/start" {
+					contexts, ok := request.Params["additionalContext"].(map[string]any)
+					if !ok {
+						t.Fatal("旧 thread 的历史指令不会被 resume 参数替换，缺少本轮应用策略")
+					}
+					policy, ok := contexts["dws.digital_employee_policy"].(map[string]any)
+					if !ok || policy["kind"] != "application" || policy["value"] != codexEmployeeDeveloperInstructions {
+						t.Fatal("员工策略没有通过应用上下文传给本轮模型")
+					}
+				}
 			}
 		}
 	}
