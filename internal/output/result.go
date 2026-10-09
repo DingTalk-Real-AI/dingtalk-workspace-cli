@@ -65,6 +65,11 @@ func WithMeta(meta *Meta) ResultOption {
 	return ResultOption{apply: func(env *Envelope) { env.Meta = cloneMeta(meta) }}
 }
 
+// WithNotice adds framework-owned notifications without changing the business result.
+func WithNotice(notice any) ResultOption {
+	return ResultOption{apply: func(env *Envelope) { env.Notice = cloneResultData(notice) }}
+}
+
 // WithTablePresentation preserves a command-specific human table view while
 // keeping JSON, jq and alternate formats on the same framework-owned result.
 // The renderer receives only the immutable business data and writes through

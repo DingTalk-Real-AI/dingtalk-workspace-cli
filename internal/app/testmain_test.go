@@ -68,6 +68,8 @@ func TestMain(m *testing.M) {
 		panic("set DWS_CONFIG_DIR: " + err.Error())
 	}
 	for key, value := range map[string]string{
+		// 普通命令测试保持离线；版本检查测试显式清除此开关并使用本地 HTTP 服务。
+		"DWS_NO_UPDATE_CHECK":  "1",
 		audit.EnvAudit:         "1",
 		audit.EnvAuditDir:      filepath.Join(tmpDir, "audit"),
 		audit.EnvRetentionDays: "1",

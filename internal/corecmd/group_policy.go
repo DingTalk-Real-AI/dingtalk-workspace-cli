@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
@@ -154,7 +155,9 @@ func ApplyGroupPolicy(cmd *cobra.Command, policy GroupPolicy) {
 	if policy.Positionals == PositionalsReject && policy.Recovery != RecoveryDisabled {
 		cmd.Args = cobra.ArbitraryArgs
 	} else if policy.Positionals == PositionalsReject {
-		cmd.Args = cobra.NoArgs
+		cmd.Args = func(cmd *cobra.Command, args []string) error {
+			return apperrors.MarkUnknownInvocation(cobra.NoArgs(cmd, args))
+		}
 	}
 
 	if cmd.Annotations == nil {

@@ -450,6 +450,11 @@ func ExitCode(err error) int {
 // byte-compatible for commands whose rollout is legacy_only or dual_validate.
 // Unified commands publish outcome/type/subtype through internal/output only.
 func PrintJSON(w io.Writer, err error) error {
+	return PrintJSONWithNotice(w, err, nil)
+}
+
+// PrintJSONWithNotice preserves the legacy error shape while adding a system notice.
+func PrintJSONWithNotice(w io.Writer, err error, notice any) error {
 	errorPayload := map[string]any{
 		"code":     ExitCode(err),
 		"category": category(err),
@@ -531,6 +536,9 @@ func PrintJSON(w io.Writer, err error) error {
 		}
 	}
 	payload := map[string]any{"error": errorPayload}
+	if notice != nil {
+		payload["_notice"] = notice
+	}
 
 	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {
