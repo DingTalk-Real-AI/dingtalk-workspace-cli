@@ -179,6 +179,121 @@ func TestCrossPlatformCoveragePiDefaultTimeoutClose(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePiConversationConcurrency(t *testing.T) {
+	requirePOSIXShell(t)
+	root := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", root)
+	bin := writeShellExecutable(t, root, "pi", `exec python3 -c 'import json,sys,time; text=sys.stdin.read(); print(json.dumps({"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"started"}}),flush=True); time.sleep(60) if text=="hang" else None; print(json.dumps({"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"ok"}]}})); print(json.dumps({"type":"agent_end"}))' "$@"`+"\n")
+	f := newPiForwarder(bin, nil, 0, connectAgentOptions{Memory: true, WorkDir: root}, "concurrent").(*piForwarder)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); _ = f.close() })
+	startHang := func(conv string) <-chan error {
+		t.Helper()
+		started := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			_, err := f.forwardStream(ctx, conv, "hang", func(string) { close(started) })
+			done <- err
+		}()
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("conversation %s blocked behind another conversation", conv)
+		}
+		return done
+	}
+	slow := startHang("slow")
+	quick := make(chan error, 1)
+	go func() {
+		reply, err := f.forward(ctx, "quick", "hello")
+		if err == nil && reply != "ok" {
+			err = fmt.Errorf("reply=%q", reply)
+		}
+		quick <- err
+	}()
+	select {
+	case err := <-quick:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("one hanging conversation blocked an unrelated reply")
+	}
+	old := f.sessions.id("quick")
+	reset := make(chan struct{})
+	go func() { f.resetSession("quick"); close(reset) }()
+	select {
+	case <-reset:
+	case <-time.After(time.Second):
+		t.Fatal("one hanging conversation blocked another conversation's /new or /clear")
+	}
+	if f.sessions.id("quick") == old {
+		t.Fatal("reset retained the previous session")
+	}
+	// 同会话仍须串行；等待中的取消不能清掉正在运行的会话映射。
+	slowID := f.sessions.id("slow")
+	waitCtx, stopWaiting := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer stopWaiting()
+	waiter := make(chan error, 1)
+	go func() { _, err := f.forward(waitCtx, "slow", "hello"); waiter <- err }()
+	select {
+	case err := <-waiter:
+		if err != context.DeadlineExceeded {
+			t.Fatalf("same-conversation waiter must wait and honor its deadline, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued turn ignored cancellation")
+	}
+	if f.sessions.id("slow") != slowID {
+		t.Fatal("canceling queued turn cleared the active session")
+	}
+	other := startHang("other")
+	queued := make(chan error, 1)
+	go func() { _, err := f.forward(ctx, "slow", "hello"); queued <- err }()
+	resetBlocked := make(chan struct{})
+	go func() { f.resetSession("slow"); close(resetBlocked) }()
+	closed := make(chan error, 1)
+	go func() { closed <- f.close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("close failed to cancel all concurrent Pi processes")
+	}
+	for _, done := range []<-chan error{slow, other} {
+		select {
+		case err := <-done:
+			if err != context.Canceled {
+				t.Fatalf("close returned %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("close left a Pi turn running")
+		}
+	}
+	select {
+	case err := <-queued:
+		if err == nil {
+			t.Fatal("queued turn ran after close")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("close left a queued turn waiting")
+	}
+	select {
+	case <-resetBlocked:
+	case <-time.After(time.Second):
+		t.Fatal("close left a reset waiting")
+	}
+	f.mu.Lock()
+	retained := len(f.turns) + len(f.cancels)
+	f.mu.Unlock()
+	if retained != 0 {
+		t.Fatal("close retained conversation gates or cancel functions")
+	}
+	f.resetSession("quick")
+}
+
 func TestCrossPlatformCoveragePiEmptyScope(t *testing.T) {
 	requirePOSIXShell(t)
 	root := t.TempDir()
@@ -350,6 +465,7 @@ func TestPiOfficialCLI(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "pi"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	concurrentStarted := make(chan struct{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Model    string `json:"model"`
@@ -392,6 +508,11 @@ func TestPiOfficialCLI(t *testing.T) {
 		}
 		if strings.Contains(last, "FAIL_PROVIDER") {
 			http.Error(w, `{"error":{"message":"private-provider-error"}}`, 400)
+			return
+		}
+		if strings.Contains(last, "CONCURRENT_HANG_PROVIDER") {
+			concurrentStarted <- struct{}{}
+			<-r.Context().Done()
 			return
 		}
 		if strings.Contains(last, "TIMEOUT_PROVIDER") {
@@ -479,7 +600,38 @@ func TestPiOfficialCLI(t *testing.T) {
 	toolForwarder := newPiForwarder(bin, nil, 30*time.Second, toolOpts, "pi-tool-acceptance").(*piForwarder)
 	defer toolForwarder.close()
 	check(toolForwarder, "tool", "READ_TOOL", "工具读取通过")
-	t.Log("PASS: 官方 Pi 流式文本、模型覆盖、会话隔离、跨重启恢复、/new、禁用记忆、附件、内置 read 工具、提供商失败、超时及恢复")
+	parallel := newPiForwarder(bin, nil, 0, opts, "pi-concurrent-acceptance").(*piForwarder)
+	defer parallel.close()
+	startHang := func(conv string) <-chan error {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			_, err := parallel.forward(context.Background(), conv, "CONCURRENT_HANG_PROVIDER")
+			done <- err
+		}()
+		select {
+		case <-concurrentStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("official Pi conversation did not reach the provider concurrently")
+		}
+		return done
+	}
+	slow := startHang("slow")
+	quickCtx, cancelQuick := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelQuick()
+	if reply, err := parallel.forward(quickCtx, "fast", "concurrent fast reply"); err != nil || reply != "用户轮数:1" {
+		t.Fatalf("official Pi cross-conversation reply=%q err=%v", reply, err)
+	}
+	other := startHang("other")
+	if err := parallel.close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, done := range []<-chan error{slow, other} {
+		if err := <-done; err != context.Canceled {
+			t.Fatalf("official Pi concurrent close=%v", err)
+		}
+	}
+	t.Log("PASS: 官方 Pi 流式文本、模型覆盖、会话隔离、跨重启恢复、/new、禁用记忆、附件、内置 read 工具、提供商失败、超时恢复、跨会话并行及关闭全部进程")
 }
 
 // 真模型验收使用已有 Pi 配置，只运行无工具文本对话。

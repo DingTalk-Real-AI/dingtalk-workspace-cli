@@ -39,20 +39,71 @@ type piForwarder struct {
 	timeout    time.Duration
 	sessions   *convSessions
 	sessionDir string
-	turnMu     sync.Mutex
 	mu         sync.Mutex
-	cancel     context.CancelFunc
+	turns      map[string]*piConversationGate
+	cancels    map[context.Context]context.CancelFunc
+	wg         sync.WaitGroup
 	closed     bool
 }
 
+type piConversationGate struct {
+	token chan struct{}
+	refs  int // 由 piForwarder.mu 保护，包含执行和等待中的操作。
+}
+
 func newPiForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, scopeID string) forwarder {
-	f := &piForwarder{bin: bin, env: env, opts: opts, timeout: timeout}
+	f := &piForwarder{
+		bin: bin, env: env, opts: opts, timeout: timeout,
+		turns: make(map[string]*piConversationGate), cancels: make(map[context.Context]context.CancelFunc),
+	}
 	if opts.Memory && scopeID != "" {
 		f.sessionDir = filepath.Join(config.DefaultConfigDir(), "connect", sanitizeLockID(scopeID), "pi")
 		store := filepath.Join(f.sessionDir, "sessions.json")
 		f.sessions = newConvSessions(store)
 	}
 	return f
+}
+
+// 同会话执行和重置互斥；不同会话不共享执行锁。等待也受取消和关闭控制。
+func (f *piForwarder) acquireTurn(ctx context.Context, cancel context.CancelFunc, convID string) (func(), error) {
+	f.mu.Lock()
+	if f.closed {
+		f.mu.Unlock()
+		return nil, fmt.Errorf("Pi 连接已关闭")
+	}
+	gate := f.turns[convID]
+	if gate == nil {
+		gate = &piConversationGate{token: make(chan struct{}, 1)}
+		gate.token <- struct{}{}
+		f.turns[convID] = gate
+	}
+	gate.refs++
+	f.cancels[ctx] = cancel
+	// Add 和 closed 检查使用同一把锁；close 开始 Wait 后不会再接收新操作。
+	f.wg.Add(1)
+	f.mu.Unlock()
+	acquired := false
+	release := func() {
+		if acquired {
+			gate.token <- struct{}{}
+		}
+		f.mu.Lock()
+		delete(f.cancels, ctx)
+		gate.refs--
+		if gate.refs == 0 {
+			delete(f.turns, convID)
+		}
+		f.mu.Unlock()
+		f.wg.Done()
+	}
+	select {
+	case <-ctx.Done():
+		release()
+		return nil, ctx.Err()
+	case <-gate.token:
+		acquired = true
+		return release, nil
+	}
 }
 
 func (f *piForwarder) label() string   { return "pi-json:" + f.bin }
@@ -99,16 +150,11 @@ func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convI
 	defer cancelTurn()
 	ctx, cancel := applyTimeout(turnCtx, f.timeout)
 	defer cancel()
-	f.turnMu.Lock()
-	defer f.turnMu.Unlock()
-	f.mu.Lock()
-	if f.closed {
-		f.mu.Unlock()
-		return "", fmt.Errorf("Pi 连接已关闭")
+	release, err := f.acquireTurn(ctx, cancelTurn, convID)
+	if err != nil {
+		return "", err
 	}
-	f.cancel = cancelTurn
-	f.mu.Unlock()
-	defer func() { f.mu.Lock(); f.cancel = nil; f.mu.Unlock() }()
+	defer release()
 	args, sessionFile, err := f.commandArgs(convID)
 	if err != nil {
 		return "", err
@@ -161,8 +207,13 @@ func (f *piForwarder) forwardStreamWithAttachments(parent context.Context, convI
 }
 
 func (f *piForwarder) resetSession(convID string) {
-	f.turnMu.Lock()
-	defer f.turnMu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	release, err := f.acquireTurn(ctx, cancel, convID)
+	if err != nil {
+		return
+	}
+	defer release()
 	if f.sessions != nil {
 		f.sessions.reset(convID)
 	}
@@ -171,12 +222,11 @@ func (f *piForwarder) resetSession(convID string) {
 func (f *piForwarder) close() error {
 	f.mu.Lock()
 	f.closed = true
-	if f.cancel != nil {
-		f.cancel()
+	for _, cancel := range f.cancels {
+		cancel()
 	}
 	f.mu.Unlock()
-	f.turnMu.Lock()
-	f.turnMu.Unlock()
+	f.wg.Wait()
 	return nil
 }
 
