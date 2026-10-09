@@ -1968,8 +1968,9 @@ func backupSkillSetupTarget(home string, planned []skillSetupBackup, out io.Writ
 	return backups, nil
 }
 
-func publishSkillSetupTarget(staged []skillSetupStagedDir, backups []skillSetupBackedUpDir) error {
+func publishSkillSetupTarget(staged []skillSetupStagedDir, backups []skillSetupBackedUpDir) (err error) {
 	published := make([]upgrade.SkillPathPublication, 0, len(staged))
+	defer func() { err = errors.Join(err, upgrade.ReleaseSkillPathPublications(published)) }()
 	for _, item := range staged {
 		publication, err := skillSetupPublishPath(item.staged, item.dest)
 		if err != nil {

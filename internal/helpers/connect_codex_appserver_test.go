@@ -33,6 +33,11 @@ func writeShellExecutable(t *testing.T, dir, name, body string) string {
 		if err := copyCurrentHelpersTestBinary(path); err != nil {
 			t.Fatalf("write Windows stub %s: %v", name, err)
 		}
+		t.Cleanup(func() {
+			if err := retryHelpersFixtureCleanup(func() error { return os.Remove(path) }); err != nil {
+				t.Errorf("remove Windows stub %s: %v", name, err)
+			}
+		})
 		if err := os.WriteFile(path+helpersShellStubBodySuffix, []byte(body), 0o600); err != nil {
 			t.Fatalf("write Windows stub body %s: %v", name, err)
 		}

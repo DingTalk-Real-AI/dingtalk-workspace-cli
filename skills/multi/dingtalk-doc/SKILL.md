@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉在线文字文档（adoc）内容：查找、创建、读取编辑、块、评论、媒体/附件、白板卡片容器、导入导出、版本、模板、权限、分享及 Markdown/JSONML。不做白板图形/原生 .md/电子表格（dingtalk-misc）、文档空间与钉盘存储（dingtalk-drive）、知识库组织（dingtalk-wiki）、AI 表格（dingtalk-aitable）。命令前缀：dws doc。
+description: 钉钉在线文档（adoc）：查找、读写、块、评论、附件、导入导出、版本、模板、权限、分享、Markdown/JSONML；文档内白板卡片容器的插入、定位、删除。白板图形内容创建或修改走 dingtalk-misc。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -105,6 +105,7 @@ Golden Route 已给出命令且参数足够时，禁止读取 reference；其余
 
 ## 产品边界
 
+- 白板创建/绘图/修改 → [白板](../dingtalk-misc/references/whiteboard.md)（`dws whiteboard`）；`dws doc whiteboard` 仅操作文档内卡片容器，不改图形。
 - 姓名/工号/部门/职责找人或解析 userId → `dingtalk-aisearch`；已有完整 userId 补详情才用 `dingtalk-contact`
 - 普通文件/目录存储与上传下载 → `dingtalk-drive`；保留原文件进入明确知识库可用 `drive +upload --workspace`；“放进/附到这篇文档”是正文附件 → `doc +media-insert`；在线转换 → `doc +import`
 - 文档节点复制、移动、模板另存 → `dingtalk-drive +copy/+move`；doc 同名命令仅兼容

@@ -36,7 +36,7 @@
 - [Key Services](#key-services)
 - [Security by Design](#security-by-design)
 - [Reference & Docs](#reference--docs)
-- [OpenHarmony compile-only build](#openharmony-compile-only-build)
+- [OpenHarmony build](#openharmony-build)
 - [Contributing](#contributing)
 
 </details>
@@ -82,7 +82,7 @@ How to pick:
 
 - **Quick install** (one-liner above): non-interactive, installs `multi`.
 - **TTY install** (download then run): `curl -O .../install.sh && bash install.sh` — prompts `1) multi  2) mono` (default 1).
-- **Override via env**: `DWS_SKILL_MODE=mono curl -fsSL ... | sh`.
+- **Override via env**: `curl -fsSL ... | DWS_SKILL_MODE=mono sh`.
 - **Switch later**: `dws skill setup --mode mono` (or `--mode multi`) — review the listed paths and confirm interactively.
 
 </details>
@@ -148,11 +148,12 @@ data checkout.
 
 </details>
 
-## OpenHarmony compile-only build
+## OpenHarmony build
 
-The repository supports a compile-only `openharmony/arm64` build when you provide
-an executable Go 1.26.7 OpenHarmony toolchain. This is not a device-tested build
-and is not part of the six official release targets.
+The repository supports an `openharmony/arm64` build with a Go 1.26.7
+OpenHarmony toolchain. Linux CI builds, self-signs, and verifies the package on
+every relevant change, and the resulting binary has been validated on a
+HarmonyOS PC. It is not part of the six official release targets yet.
 
 ```bash
 OHOS_GO=/path/to/openharmony-go \
@@ -180,7 +181,7 @@ For users in mainland China, the following channels avoid GitHub network issues.
 Repository mirror: `https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > With `DWS_GITEE_REPO` set, the installer resolves the latest version and every release asset (binary, checksums, skills) from the Gitee API instead of GitHub. If it is unset, installation defaults to GitHub.
@@ -196,7 +197,7 @@ npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
 **3. Skills only (Gitee mirror):**
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > With `DWS_GITEE_REPO` set, `install-skills.sh` resolves the version and skills package from Gitee; it also auto-falls back to the Gitee mirror when GitHub is unreachable.
@@ -346,7 +347,7 @@ Selectors support `corpId:userId`, `corpId:userName`, `corpName:userId`, and `co
 
 Cross-org reads are orchestrated by the agent rather than a built-in `--all-orgs`: list profiles, group by `corpId`, and use the unique `isOrgCurrent=true` account for each organization. If a multi-account organization has no default, ask the user to choose an account first. Writes default to the current account — confirm both organization and account before cross-org writes.
 
-On macOS, an unreadable registered token slot blocks a new OAuth login rather than risking a mixed Keychain/file-DEK state. If normal terminal commands can still read the login while a sandbox using `DWS_DISABLE_KEYCHAIN=1` cannot, migrate the legacy and profile auth entries without exposing tokens:
+On macOS, transient or unclassified Keychain read failures block a new OAuth login rather than risking a mixed Keychain/file-DEK state. A confirmed missing DEK or ciphertext/DEK mismatch is preserved through authorization and replaced only for the slots targeted by the fresh login. If normal terminal commands can still read the login while a sandbox using `DWS_DISABLE_KEYCHAIN=1` cannot, migrate the legacy and profile auth entries without exposing tokens:
 
 ```bash
 env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json

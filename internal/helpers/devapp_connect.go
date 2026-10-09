@@ -444,7 +444,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 		Use:   "connect",
 		Short: "建联：把现成机器人接到当前本地 agent（起 Stream，不建号）",
 		Long: "用已建好的机器人凭证把它接到当前本地 agent，不做建号。\n" +
-			"凭证两种来源：① 直接传 --robot-client-id/--robot-client-secret；② 传 --unified-app-id（复用 dev app credentials get 自动取凭证）。\n" +
+			"凭证两种来源：① 通过机器人凭证参数直接传入 Client ID 与 Secret；② 传 --unified-app-id（复用 dev app credentials get 自动取凭证）。\n" +
 			"渠道由 --channel 显式指定，或运行时信号自动探测。\n" +
 			"缺凭证请先用 `dws dev app robot submit` 建号（随后 `robot result` 轮询）拿 clientId/clientSecret。",
 		Example: "  dws dev connect --channel workbuddy --robot-client-id <id> --robot-client-secret <secret>\n" +

@@ -440,6 +440,63 @@ func calendarTimeEquivalent(actual any, expected string) bool {
 	}
 }
 
+func verifyCalendarTimeZone(event map[string]any, expected any) error {
+	mismatch := func() error {
+		return calendarResponseError("calendar/get_calendar_detail", "readback_field_mismatch", "写后读回字段 timeZone 与请求不一致")
+	}
+	want, ok := expected.(string)
+	if !ok || strings.TrimSpace(want) == "" {
+		return mismatch()
+	}
+	want = strings.TrimSpace(want)
+	// A valid alias must not hide a conflicting or malformed explicit field.
+	matches := func(fields map[string]any) (present, valid bool) {
+		valid = true
+		for _, key := range []string{"timeZone", "timezone", "time_zone"} {
+			value, exists := fields[key]
+			if !exists {
+				continue
+			}
+			present = true
+			zone, ok := value.(string)
+			if !ok || strings.TrimSpace(zone) != want {
+				valid = false
+			}
+		}
+		return present, valid
+	}
+	topPresent, valid := matches(event)
+	if !valid {
+		return mismatch()
+	}
+	missing := false
+	for _, endpoint := range []string{"start", "end"} {
+		fields, _ := event[endpoint].(map[string]any)
+		present, valid := matches(fields)
+		if !valid {
+			return mismatch()
+		}
+		if !present && !topPresent {
+			missing = true
+		}
+	}
+	if missing {
+		return calendarResponseError("calendar/get_calendar_detail", "readback_field_missing", "写后读回缺少字段 timeZone")
+	}
+	return nil
+}
+
+func calendarFreeBusyEquivalent(actual, expected any) bool {
+	value, actualOK := actual.(string)
+	want, expectedOK := expected.(string)
+	if !actualOK || !expectedOK {
+		return false
+	}
+	value = strings.ToLower(strings.TrimSpace(value))
+	want = strings.ToLower(strings.TrimSpace(want))
+	return (want == "busy" || want == "free") && value == want
+}
+
 func verifyCalendarEvent(event map[string]any, eventID string, requested map[string]any) error {
 	if got := calendarEventID(event); got == "" || got != eventID {
 		return calendarResponseError("calendar/get_calendar_detail", "readback_id_mismatch", "写后读回的 eventId 缺失或不一致")
@@ -449,11 +506,16 @@ func verifyCalendarEvent(event map[string]any, eventID string, requested map[str
 		"description":   {"description", "desc"},
 		"startDateTime": {"startDateTime", "start_time", "startTime", "start"},
 		"endDateTime":   {"endDateTime", "end_time", "endTime", "end"},
-		"timeZone":      {"timeZone", "timezone", "time_zone"},
 		"location":      {"location", "locationName", "location_name"},
 		"freeBusy":      {"freeBusy", "free_busy"},
 	}
 	for property, expected := range requested {
+		if property == "timeZone" {
+			if err := verifyCalendarTimeZone(event, expected); err != nil {
+				return err
+			}
+			continue
+		}
 		candidates := aliases[property]
 		if len(candidates) == 0 {
 			continue
@@ -472,6 +534,12 @@ func verifyCalendarEvent(event map[string]any, eventID string, requested map[str
 		if property == "startDateTime" || property == "endDateTime" {
 			if !calendarTimeEquivalent(actual, fmt.Sprint(expected)) {
 				return calendarResponseError("calendar/get_calendar_detail", "readback_field_mismatch", fmt.Sprintf("写后读回字段 %s 与请求不一致", property))
+			}
+			continue
+		}
+		if property == "freeBusy" {
+			if !calendarFreeBusyEquivalent(actual, expected) {
+				return calendarResponseError("calendar/get_calendar_detail", "readback_field_mismatch", "写后读回字段 freeBusy 与请求不一致")
 			}
 			continue
 		}

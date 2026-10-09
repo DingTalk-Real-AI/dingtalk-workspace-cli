@@ -1,15 +1,18 @@
-# OpenHarmony support boundary
+# OpenHarmony support
 
-This repository supports a **compile-only** OpenHarmony target:
+This repository supports the `openharmony/arm64` target:
 
 - target: `openharmony/arm64`
-- toolchain: caller-provided executable Go 1.26.7 toolchain
-- CGO: disabled (`CGO_ENABLED=0`)
+- toolchain: go1.26.7 OpenHarmony toolchain (see Provisioning)
+- CGO: disabled (`CGO_ENABLED=0`), producing a static self-signed ELF
+- packaging: Linux CI builds, self-signs, and verifies the package on every
+  relevant change
 - distribution: no official release, npm, or Homebrew artifact
 
-This support proves that the CLI can be compiled as a static AArch64 ELF with the
-public source tree. It does not claim real-device validation, production support,
-or compatibility with every OpenHarmony system image.
+The resulting binary has been verified on a HarmonyOS PC (AArch64, HongMeng
+Kernel): CLI startup, `--help`, and authenticated chat commands all work.
+This is not yet production support — validate on your own devices before
+relying on it.
 
 ## Build
 
@@ -22,9 +25,11 @@ OHOS_GO=/path/to/openharmony-go \
   ./scripts/dev/build-openharmony.sh
 ```
 
-The script uses `GOTOOLCHAIN=local`, `-trimpath`, and `CGO_ENABLED=0`. It injects
-the version, full lowercase Git commit, and reproducible UTC build time into the
-binary, then runs `scripts/dev/verify-openharmony-artifact.sh`.
+The script uses `GOTOOLCHAIN=local`, `-trimpath`, `CGO_ENABLED=0`, and `-d -s -w`
+(it suppresses the dynamic loader format, so the result is a static `ET_EXEC`
+ELF). It injects the version, full lowercase Git commit, and reproducible UTC
+build time into the binary, then runs
+`scripts/dev/verify-openharmony-artifact.sh`.
 
 Optional environment variables:
 
@@ -34,7 +39,11 @@ Optional environment variables:
 - `DWS_BUILD_TIME` — UTC build timestamp; when omitted, it is derived from the
   selected commit.
 
-### Provisioning the toolchain
+The verifier fails closed unless the artifact is executable, ELF `ET_EXEC`,
+AArch64, static, and free of both an interpreter and a dynamic section. It also
+checks Go metadata for `GOOS=openharmony`, `GOARCH=arm64`, and `CGO_ENABLED=0`.
+
+## Provisioning the toolchain
 
 When `OHOS_GO` is unset, the build script provisions the toolchain from an
 archive via `scripts/dev/provision-ohos-go.sh`:
@@ -56,10 +65,6 @@ This repository does not host the toolchain. Obtain a go1.26.7 OpenHarmony
 toolchain (one whose `go tool dist list` includes `openharmony/arm64`) from the
 OpenHarmony SIG / Huawei distribution channels, and prefer pinning
 `OHOS_GO_SHA256` for reproducible builds.
-
-The verifier fails closed unless the artifact is executable, ELF `ET_EXEC`,
-AArch64, static, and free of both an interpreter and a dynamic section. It also
-checks Go metadata for `GOOS=openharmony`, `GOARCH=arm64`, and `CGO_ENABLED=0`.
 
 ## Packaging and self-signing
 

@@ -37,6 +37,13 @@ func aitableSafetyWrite() contract.SafetySpec {
 	}
 }
 
+func aitableSafetyCreate() contract.SafetySpec {
+	return contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "not_required", Idempotency: "non_idempotent",
+	}
+}
+
 func aitableSafetyDestructive() contract.SafetySpec {
 	return contract.SafetySpec{
 		Effect: "destructive", Risk: "high",

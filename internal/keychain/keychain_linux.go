@@ -131,7 +131,7 @@ func platformGet(service, account string) (string, error) {
 	}
 	plaintext, err := decryptData(data, key)
 	if err != nil {
-		return "", err
+		return "", fileDEKCiphertextMismatchError()
 	}
 	return plaintext, nil
 }
@@ -180,7 +180,7 @@ func platformValidateAuthTokenEntries(service string) error {
 			return fmt.Errorf("read keychain entry %q: %w", filepath.Base(path), err)
 		}
 		if _, err := decryptData(ciphertext, key); err != nil {
-			return fmt.Errorf("validate keychain entry %q: %w", filepath.Base(path), err)
+			return fmt.Errorf("validate keychain entry %q: %w", filepath.Base(path), fileDEKCiphertextMismatchError())
 		}
 	}
 	return nil

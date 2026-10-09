@@ -291,8 +291,8 @@
 | 属性 | 说明 |
 |------|------|
 | `componentName` | `TableField` |
-| value 格式 | JSON 数组字符串，每个元素为一行数据的键值对 |
-| 示例 | `'[{"商品名":"笔记本","数量":"2"},{"商品名":"钢笔","数量":"1"}]'` |
+| value 格式 | JSON 序列化的二维数组字符串；每行是子控件 name/value 对象数组 |
+| 示例 | `'[[{"name":"商品名","value":"笔记本"},{"name":"数量","value":"2"}],[{"name":"商品名","value":"钢笔"},{"name":"数量","value":"1"}]]'` |
 | 约束 | **不可嵌套 TableField**；**不可包含 DDMultiSelectField 和 DDPhotoField**；最大 100 行；总长度不超过 65535 字符 |
 
 模板结构（从 `form-schema` 获取）：
@@ -307,13 +307,18 @@
 }
 ```
 
-提交时每行用子控件 label 作 key：
+提交时 `value` 是 **JSON 序列化的二维数组字符串**：外层数组表示所有明细行，每行是子控件对象数组。子控件的 `name` 必须与其 `props.label` 完全一致，`value` 按对应控件格式填写字符串（数字控件也使用数字字符串）：
+
 ```json
 {
   "name": "采购明细",
-  "value": "[{\"商品名\":\"笔记本\",\"数量\":\"2\"},{\"商品名\":\"钢笔\",\"数量\":\"1\"}]"
+  "value": "[[{\"name\":\"商品名\",\"value\":\"笔记本\"},{\"name\":\"数量\",\"value\":\"2\"}],[{\"name\":\"商品名\",\"value\":\"钢笔\"},{\"name\":\"数量\",\"value\":\"1\"}]]"
 }
 ```
+
+`--form-values` 的顶层仍是“字段 label → 字符串值”的对象；上面的 `value` 字符串作为其中“采购明细”的值。使用 `--request` 时，将上面的控件对象放入 `formComponentValues` 列表。两种入口都原样传递明细字符串，**不会把以 label 为 key 的行对象数组自动转换为二维 name/value 数组**。建议用 JSON 序列化器生成字符串，避免手动转义。
+
+格式依据：[钉钉官方创建审批实例文档](https://open.dingtalk.com/document/orgapp/create-an-approval-instance.md)中的“表格（明细）控件”。
 
 ### DDHolidayField（请假套件）
 

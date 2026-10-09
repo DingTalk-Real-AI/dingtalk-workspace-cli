@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 
@@ -1465,7 +1466,7 @@ func newContactCommand() *cobra.Command {
 		Long: `查询钉钉通讯录：用户搜索、手机号查找、部门搜索、子部门 / 成员列表、人员关系；用户花名册档案信息（学历、家庭、银行卡、合同等）与离职员工信息。
 
 通讯录功能：
-  - contact user get-self/search/search-mobile/get: 通讯录用户查询
+  - contact user get-self/search/search-mobile/get-by-dingtalk-id/get: 通讯录用户查询
   - contact user invite/update/update-self/update-ownness: 邀请与更新员工
   - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
   - contact label create/list/get/list-members: 角色创建与查询
@@ -1488,6 +1489,7 @@ func newContactCommand() *cobra.Command {
 
 【何时用哪个命令】
   - 查询用户的部门、主管、管理员权限         → contact user get
+  - 已知钉钉号（dingtalkId）获取 userId       → contact user get-by-dingtalk-id
   - 修改员工信息（姓名 / 部门 / 直属主管）   → contact user update
   - 更新当前用户自己的 profile（昵称 / 头像） → contact user update-self
   - 更新用户个人状态（如「居家办公中」）     → contact user update-ownness
@@ -1666,6 +1668,64 @@ func newContactCommand() *cobra.Command {
 				UseWhen:      []string{"已知手机号，需要精确搜索用户时"},
 				AvoidWhen:    []string{"已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"},
 				Examples:     []string{"dws contact user search-mobile --mobile 13800138000 --format json"},
+			},
+		},
+	})
+
+	contactUserGetByDingtalkIdCmd := &cobra.Command{
+		Use:     "get-by-dingtalk-id",
+		Aliases: []string{"search-dingtalk"},
+		Short:   "按钉钉号获取用户ID",
+		Long: `根据钉钉号（dingtalkId）查询组织内员工，返回其 userId。
+
+钉钉号是员工在钉钉内的唯一短标识（如 zhangsan），与手机号、userId 不同。`,
+		Example: `  dws contact user get-by-dingtalk-id --id zhangsan
+  dws contact user search-dingtalk --id zhangsan  # 别名`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "id", "dingtalk-id", "dingtalkId"); err != nil {
+				return err
+			}
+			dingtalkId := strings.TrimSpace(flagOrFallback(cmd, "id", "dingtalk-id", "dingtalkId"))
+			if dingtalkId == "" {
+				return apperrors.NewValidation(fmt.Sprintf("--%s 不能为空", contactFirstSetFlagName(cmd, "id", "dingtalk-id", "dingtalkId")))
+			}
+			return callMCPTool("get_user_id_by_dingtalk_id", map[string]any{
+				"dingtalk_id": dingtalkId,
+			})
+		},
+	}
+	DeclareLeafMetadata(contactUserGetByDingtalkIdCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_user_id_by_dingtalk_id",
+				CanonicalPath:  "contact.get_user_id_by_dingtalk_id",
+				CLIPath:        "contact user get-by-dingtalk-id",
+				PrimaryCLIPath: "contact user get-by-dingtalk-id",
+			},
+			Description: "根据钉钉号获取用户 userId",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_user_id_by_dingtalk_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "根据钉钉号获取用户 userId",
+				UseWhen:      []string{"已知员工钉钉号（dingtalkId），需要获取其 userId 时"},
+				AvoidWhen: []string{
+					"按姓名/手机号找人请用 contact user search / search-mobile",
+					"已有 userId 需要详情请用 contact user get",
+				},
+				Examples: []string{"dws contact user get-by-dingtalk-id --id zhangsan --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "dingtalk_id", Required: boolPtr(true)},
+				{Name: "dingtalk-id", Property: "dingtalk_id", Required: boolPtr(false)},
+				{Name: "dingtalkId", Property: "dingtalk_id", Required: boolPtr(false)},
 			},
 		},
 	})
@@ -2729,6 +2789,11 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserSearchCmd.Flags().MarkHidden("keyword")
 	_ = contactUserSearchCmd.Flags().MarkHidden("name")
 	contactUserSearchMobileCmd.Flags().String("mobile", "", "手机号 (必填)")
+	contactUserGetByDingtalkIdCmd.Flags().String("id", "", "钉钉号 dingtalkId (必填)")
+	contactUserGetByDingtalkIdCmd.Flags().String("dingtalk-id", "", "--id 的别名")
+	contactUserGetByDingtalkIdCmd.Flags().String("dingtalkId", "", "--id 的别名")
+	_ = contactUserGetByDingtalkIdCmd.Flags().MarkHidden("dingtalk-id")
+	_ = contactUserGetByDingtalkIdCmd.Flags().MarkHidden("dingtalkId")
 	contactUserGetCmd.Flags().String("ids", "", "用户 ID 列表 (必填)")
 	contactUserGetCmd.Flags().String("user-id", "", "--ids 的别名")
 	contactUserGetCmd.Flags().String("user-ids", "", "--ids 的别名")
@@ -2737,7 +2802,7 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserGetCmd.Flags().MarkHidden("user-ids")
 	_ = contactUserGetCmd.Flags().MarkHidden("userid")
 	userCmd.AddCommand(
-		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetCmd,
+		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetByDingtalkIdCmd, contactUserGetCmd,
 		contactUserInviteCmd,        // 邀请员工加入企业
 		contactUserUpdateCmd,        // 修改员工信息
 		contactUserUpdateSelfCmd,    // 更新当前用户自己的 profile 信息

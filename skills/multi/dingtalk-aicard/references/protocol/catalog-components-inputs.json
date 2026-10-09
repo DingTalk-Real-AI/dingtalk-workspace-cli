@@ -1,0 +1,860 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-components-inputs.json",
+  "title": "DingTalk AICard Protocol V0.8 Inputs and pickers",
+  "description": "14 components and 0 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog. Modified by DingTalk from selected entries of the A2UI v1.0 Basic Catalog; some upstream definitions and descriptions are retained. See NOTICE.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {
+    "TextField": {
+      "type": "object",
+      "description": "The public `TextField` component. `variant` unifies short and multiline text input. Clicking opens the input panel and displays the result locally; the field can be disabled. The checks field is not supported. Attach input validation to the submit Button.checks and reference the value binding with a path.",
+      "properties": {
+        "component": {
+          "const": "TextField",
+          "description": "Component type identification field."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The text label for the input field."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The value of the text field. If omitted, the initial text is empty. Configure a DataBinding to submit user input; omitting value does not create a writeback path."
+        },
+        "placeholder": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The placeholder text for the input field. If omitted, it is empty; label is not automatically used as the placeholder."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "shortText",
+            "longText"
+          ],
+          "description": "Input variant; default `shortText`. `longText` opens a multiline input panel. DingTalk has no equivalent runtime input type for the base protocol's `number` and `obscured` variants, so this enum exposes only these two values."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether to disable, default is `false`. When set to `true`, **input events are not triggered** (clicking no longer opens the input panel), **and the text is grayed out** (use the disabled color if there is a value; if there is no value, it is already placeholder gray)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "label"
+      ]
+    },
+    "ChoicePicker": {
+      "type": "object",
+      "description": "The public `ChoicePicker` component. `variant` unifies single and multiple selection, `displayStyle` selects row, chip, or dropdown presentation, and `disabled` dims the entire group.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/CheckRule"
+          },
+          "description": "Evaluated only when `action` is configured. Local state may already have been updated or echoed; a failed check blocks the subsequent Action and shows a toast, but does not guarantee preventing or rolling back the local selection. Attach form validation to the submit button."
+        },
+        "component": {
+          "const": "ChoicePicker",
+          "description": "Component type identification field."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The label for the group of options."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "multipleSelection",
+            "mutuallyExclusive"
+          ],
+          "description": "A hint for how the choice picker should be displayed and behave. Omitted means `mutuallyExclusive` (single selection); explicitly use `multipleSelection` for multiple selection."
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "$ref": "./common-types-basic.json#/$defs/DynamicString",
+                "description": "The text to display for this option."
+              },
+              "value": {
+                "type": "string",
+                "description": "The stable value associated with this option."
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ]
+          },
+          "description": "The list of available options to choose from."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicStringList",
+          "description": "The list of currently selected values. This should be bound to a string array in the data model."
+        },
+        "displayStyle": {
+          "type": "string",
+          "enum": [
+            "checkbox",
+            "chips",
+            "dropdown"
+          ],
+          "description": "Display style: `checkbox` lays out a vertical list of clickable rows; `chips` lays out a row of tags; `dropdown` renders one compact row that opens the native client picker. **If omitted, `dropdown` is used**. Values outside the enum also fall back to `dropdown` rather than a placeholder."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "**Effective only for `displayStyle: dropdown`, the default when omitted.** After the user confirms a selection in the native panel, the renderer first writes the new value to the path bound by `value` and then sends the event to the agent. Canceling the panel does not trigger the action. Inline styles (`checkbox` and `chips`) **do not trigger** `action` because they have no confirmation step. Their selected values are written to local state through the `value` binding and collected by the submit button's `context` through the parent path."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether to disable, default is `false`. When set to `true`, **click events are not triggered** (the selection panel will no longer open / options cannot be switched), **and the text, selected mark, and selected background color all switch to the disabled state**."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "options",
+        "value"
+      ]
+    },
+    "CheckBox": {
+      "type": "object",
+      "description": "Boolean selection. The required value determines the initial checked state, and label is displayed with the checkbox.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/CheckRule"
+          },
+          "description": "Evaluated only when `action` is configured. Local state may already have been updated or echoed; a failed check blocks the subsequent Action and shows a toast, but does not guarantee preventing or rolling back the local selection. Attach form validation to the submit button."
+        },
+        "component": {
+          "const": "CheckBox",
+          "description": "Component type identification field."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The text to display next to the checkbox."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "The current state of the checkbox (true for checked, false for unchecked)."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports after the checked state changes. The renderer first toggles the value locally and writes it to the path bound by `value`, then sends the event to the agent. Only the `event` branch is supported; a `functionCall` branch is ignored as if `action` were omitted."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "label",
+        "value"
+      ]
+    },
+    "Switch": {
+      "type": "object",
+      "description": "Switch state and size.",
+      "properties": {
+        "component": {
+          "const": "Switch",
+          "description": "Public component type identifier."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Whether the switch is selected. Omitted means false, initially off."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether the switch is disabled; default `false`. When `true`, the renderer sends `enabled=0`; the native client switch **cannot be toggled and is dimmed using the system style**."
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "normal",
+            "large"
+          ],
+          "description": "Size preset; default `normal`."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports after the switch state changes. The renderer first toggles the value locally, then sends the event to the agent. Only the `event` branch is supported; a `functionCall` branch is ignored as if `action` were omitted."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "DateTimeInput": {
+      "type": "object",
+      "description": "Date and time picker entry.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/CheckRule"
+          },
+          "description": "Evaluated only when `action` is configured. Local state may already have been updated or echoed; a failed check blocks the subsequent Action and shows a toast, but does not guarantee preventing or rolling back the local selection. Attach form validation to the submit button."
+        },
+        "component": {
+          "const": "DateTimeInput",
+          "description": "Component type identification field."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The selected date and/or time value in ISO 8601 format. If not yet set, initialize with an empty string."
+        },
+        "enableDate": {
+          "type": "boolean",
+          "description": "If true, allows the user to select a date. Omitted means true."
+        },
+        "enableTime": {
+          "type": "boolean",
+          "description": "If true, allows the user to select a time. Omitted means false, so omitting both flags selects dates only. enableDate and enableTime cannot both be false."
+        },
+        "min": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The minimum allowed date/time in ISO 8601 format."
+        },
+        "max": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The maximum allowed date/time in ISO 8601 format."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The text label for the input field."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports after the user confirms a value in the date/time panel. The renderer first writes the new value to the path bound by `value` and then sends the event to the agent. Canceling the picker does not report an event."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "NumberInput": {
+      "type": "object",
+      "description": "Numeric input entry that opens an input panel and displays the result. It is not currently a stepper with increment/decrement buttons. The required value supplies the initial number.",
+      "properties": {
+        "component": {
+          "const": "NumberInput",
+          "description": "Public component type identifier."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Current value."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Input label used as the numeric input panel title. It also supplies the placeholder text when placeholder is omitted or an empty string; TextField does not automatically substitute label for placeholder."
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum. If omitted, no explicit lower bound is supplied to the input panel."
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value. If omitted, no explicit upper bound is supplied to the input panel."
+        },
+        "precision": {
+          "type": "integer",
+          "description": "Decimal precision. Omitted means 0."
+        },
+        "placeholder": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Placeholder text."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether to disable, default is `false`. When it is `true`, **input events are not triggered** (clicking no longer opens the numeric input panel), **and the text is grayed out**. Implemented with the same form row as `TextField`."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports after the user completes an edit in the input panel. The renderer first writes the new value to the path bound by `value`, then sends the event to the agent. Only the `event` branch is supported; a `functionCall` branch is ignored as if `action` were omitted."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "Rating": {
+      "type": "object",
+      "description": "Star rating.",
+      "properties": {
+        "component": {
+          "const": "Rating",
+          "description": "Public component type identifier."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Rating value (0-5)."
+        },
+        "onTap": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports after the user changes the rating. The renderer **first writes the new rating to the path bound by `value`, then sends the event to the agent**. The rating is interactive only when this handler is configured; otherwise it is read-only. Only the `event` branch is supported. A `functionCall` branch is ignored as if `onTap` were omitted because a host function would occupy the star control's click slot and prevent the local rating change."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "Slider": {
+      "type": "object",
+      "description": "Numeric slider. DingTalk renders it as a **read-only progress bar** whose proportion is calculated from `value`, `min`, and `max`; it cannot be dragged.",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "./common-types-basic.json#/$defs/CheckRule"
+          },
+          "description": "Evaluated after a click only when `action` is configured. A failed check blocks the subsequent Action and shows a toast; no checks run without an action. Attach form validation to the submit button."
+        },
+        "component": {
+          "const": "Slider",
+          "description": "Component type identification field."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The label for the slider."
+        },
+        "min": {
+          "type": "number",
+          "description": "The minimum value of the slider. Omitted means 0."
+        },
+        "max": {
+          "type": "number",
+          "description": "The maximum value of the slider."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "The current value of the slider."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Report to the agent when clicking the progress bar."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "max",
+        "value"
+      ]
+    },
+    "InputList": {
+      "type": "object",
+      "description": "Input list whose rows can be added and removed.",
+      "properties": {
+        "component": {
+          "const": "InputList",
+          "description": "Public component type identifier."
+        },
+        "label": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Input-list title."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicStringList",
+          "description": "Addable and removable string array that should be bound to the Data Model. The array sent by the server determines the initial row count and values. After local additions, deletions, or edits, the submit button's `context` on the same card reads **the complete current local array**, including locally added rows, through this path."
+        },
+        "placeholder": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Placeholder hint for the new input item."
+        },
+        "addLabel": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Label for adding an item. If omitted, the runtime supplies its built-in text; explicitly set it for application-specific wording or language."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "shortText",
+            "longText"
+          ],
+          "description": "Input variant for each row; default `shortText`. `longText` renders a multiline text area, while other values use `shortText`. ⚠️ The `inline` and `dialog` values documented previously **were never implemented** and silently render as `shortText`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether the list is disabled; default `false`. When `true`, **no input events are attached, the Add control and per-row delete buttons are not rendered, and the text and label are dimmed**. The row count remains fixed at the number initially sent by the server."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Reports when Add is clicked. The renderer first adds a row locally, then sends the event to the agent. Row deletion and per-row editing **do not report events**; they update only local state and are merged into the DataModel through the path bound by `value` on submission. Only the `event` branch is supported; a `functionCall` branch is ignored as if `action` were omitted."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "CheckboxListMulti": {
+      "type": "object",
+      "description": "Multi-select list and local state.",
+      "properties": {
+        "component": {
+          "const": "CheckboxListMulti",
+          "description": "Public component type identifier."
+        },
+        "children": {
+          "description": "Dynamic `ChildList` used to declare a bindable multi-select list.",
+          "allOf": [
+            {
+              "$ref": "./common-types-basic.json#/$defs/ChildList"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "componentId": {
+                  "$ref": "./common-types-basic.json#/$defs/ComponentId",
+                  "description": "Subcomponent template reused for each row."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The absolute JSON Pointer of the Data Model array."
+                }
+              },
+              "required": [
+                "componentId",
+                "path"
+              ]
+            }
+          ]
+        },
+        "selectedIndexes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "**Initial** selected row indexes, zero-based and sent one way. User changes do not update this field itself; configure `value` to capture the result. If omitted, no rows are initially selected."
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "middle",
+            "large"
+          ],
+          "description": "Option-row size; default `middle`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether the control is disabled; default `false`. When `true`, **do not attach click events** (an attached handler still responds to clicks while the state stays unchanged, which is more confusing than being unclickable); **whether it is greyed out is decided by the renderer's checkbox**."
+        },
+        "contentCheckable": {
+          "type": "boolean",
+          "description": "Whether clicking the entire row toggles its selected state; default `true`."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "After the check status of any row is toggled, it will be reported (first change the local status on the renderer, then send the event to the agent). Only the `event` branch is supported; writing `functionCall` will not work (treated as unconfigured `action`)."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding",
+          "description": "Write-back path for the selection result. The value written back is **an array of selected row indexes**, with the same semantics as `selectedIndexes`. If omitted, no value is written back and the submit button cannot reference the selection. No write-back occurs when `disabled` is true."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "children",
+        "component"
+      ]
+    },
+    "CheckableImageList": {
+      "type": "object",
+      "description": "Selectable layout for one to nine images, cropped to 4:3 with row and column gaps of 12. Column count follows card width and falls back to 2 when width is unavailable. Desktop hosts supporting layout-time reflow recalculate 1–5 columns from actual component width; other hosts use the width-based count.",
+      "properties": {
+        "component": {
+          "const": "CheckableImageList",
+          "description": "Public component type identifier."
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Image URL."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Image title."
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 9,
+          "description": "One to nine images. The object form requires `url` and accepts an optional string `title`. If any item has a title, the title area is reserved for every item. The selected index matches the item's original position."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding",
+          "description": "DataBinding that stores the selected image indexes."
+        },
+        "previewEnabled": {
+          "type": "boolean",
+          "description": "Whether image clicks can open a preview; omitted means true. Only loadable URLs participate in preview. Setting false disables image preview, not selection."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "images",
+        "value"
+      ]
+    },
+    "UserPicker": {
+      "type": "object",
+      "description": "Opens the DingTalk contact picker to select users.",
+      "properties": {
+        "component": {
+          "const": "UserPicker",
+          "description": "Public component type identifier."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text. For an empty selection, the displayed prompt uses title first, then placeholder; omitting both uses the runtime's built-in prompt."
+        },
+        "title": {
+          "type": "string",
+          "description": "Picker-panel title."
+        },
+        "maxSelections": {
+          "type": "number",
+          "description": "Maximum selectable number of users (default 10); setting it to `1` means single selection, and greater than `1` means multiple selection."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding",
+          "description": "The DataBinding of the selected user. DingTalk currently retains the original result form of the host selector: a successful single selection writes back the user object, a successful multiple selection writes back an array of user objects, and clearing multiple selections writes back an empty array."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether to disable, default is `false`. When it is `true`, **do not trigger the click event** (no longer open the selection panel), **and the plus icon on the right is grayed out**."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "ConversationPicker": {
+      "type": "object",
+      "description": "Call the DingTalk conversation selector.",
+      "properties": {
+        "component": {
+          "const": "ConversationPicker",
+          "description": "Public component type identifier."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text. For an empty selection, the displayed prompt uses title first, then placeholder; omitting both uses the runtime's built-in prompt."
+        },
+        "title": {
+          "type": "string",
+          "description": "Picker-panel title."
+        },
+        "multiple": {
+          "type": "boolean",
+          "description": "Whether multiple selection is allowed. Omitting both multiple and maxSelections gives single selection. Explicit multiple=true or maxSelections greater than 1 enables multiple selection. Single-selection results may be an object or a one-element array depending on the host; multiple-selection results are arrays."
+        },
+        "maxSelections": {
+          "type": "number",
+          "description": "Maximum selection count. Omitted means 1 when multiple selection is not enabled; a value greater than 1 also enables multiple selection. With explicit multiple=true and no maxSelections, the host determines the limit. Set an explicit value when a fixed limit is required."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding",
+          "description": "DataBinding for selected conversations. DingTalk currently preserves the host picker's original result shape: successful single selection may write back a conversation object or a single-element object array; successful multiple selection writes back an array of conversation objects; confirming an empty selection writes back an empty array."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether the picker is disabled; default `false`. When `true`, **no click event is attached**, the conversation picker no longer opens, and **the plus icon on the right is dimmed**."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Defines an interaction handler that can either trigger an agent-side event or execute a local renderer-side function."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "ImageUpload": {
+      "type": "object",
+      "description": "Call DingTalk image upload, fill the upload result back into the `value` binding path, and list the uploaded files line by line under the button (deletable).",
+      "properties": {
+        "component": {
+          "const": "ImageUpload",
+          "description": "Public component type identifier."
+        },
+        "label": {
+          "type": "string",
+          "description": "Upload-button label. If omitted, the runtime supplies its built-in text. An empty string is not allowed; explicitly set the label for application-specific wording or language."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DataBinding",
+          "description": "DataBinding for the upload result, an array of image URLs. The initial value sent by the server renders the uploaded-file rows. After upload or deletion, the latest URL array remains in client-local state and is merged into the DataModel through this path **on submission**, allowing the same card's submit-button `context` to read the images actually uploaded by the user. A literal array is also allowed; in that case there is no write-back target, but file rows still reflect local upload results."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether upload is disabled; default `false`. When `true`, the renderer uses the **disabled style**, does not respond to upload actions, and omits delete buttons from uploaded-file rows."
+        },
+        "requiresAuth": {
+          "type": "boolean",
+          "description": "Whether to use authenticated upload; default `true`. When `true`, the write-back value is an authenticated media URL; when `false`, it is a regular URL."
+        },
+        "maxFiles": {
+          "type": "number",
+          "description": "The maximum number of images that can be selected at one time, default is `9`, must be a positive integer."
+        },
+        "action": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "**Reports after a successful upload**, not when the upload control is clicked. The renderer first appends the newly returned URLs to the path bound by `value`, then sends the event to the agent. Failed uploads and canceled image selection do not report an event. A successful retry of a failed row reports in the same way as the initial upload. Only the `event` branch is supported; a `functionCall` branch is ignored as if `action` were omitted."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    }
+  },
+  "functions": {},
+  "$defs": {
+    "anyComponent": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-components-inputs.json#/components/CheckBox"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/CheckableImageList"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/CheckboxListMulti"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/ChoicePicker"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/ConversationPicker"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/DateTimeInput"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/ImageUpload"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/InputList"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/NumberInput"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/Rating"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/Slider"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/Switch"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/TextField"
+        },
+        {
+          "$ref": "./catalog-components-inputs.json#/components/UserPicker"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "component"
+      }
+    },
+    "anyFunction": false
+  }
+}

@@ -58,6 +58,11 @@ func TestCrossPlatformCoverageSkillPublicationNoClobberAndOwnedRollback(t *testi
 		// Even a byte-for-byte identical replacement is not owned by this
 		// transaction: inode identity, not content alone, is authoritative.
 		seedUpgradeSkill(t, destination, "new", false)
+		replacement, statErr := os.Lstat(destination)
+		if statErr != nil {
+			t.Fatal(statErr)
+		}
+		t.Logf("replacement fixture: same_file=%t, original=%+v, replacement=%+v", os.SameFile(publication.identity, replacement), publication.identity.Sys(), replacement.Sys())
 
 		err = RollbackSkillPathPublications([]SkillPathPublication{publication})
 		if err == nil || !strings.Contains(err.Error(), "拒绝删除非本事务") {
@@ -104,6 +109,16 @@ func TestCrossPlatformCoverageSkillPublicationNoClobberAndOwnedRollback(t *testi
 		}
 		assertUpgradeSkillContent(t, destination, "new")
 	})
+}
+
+func TestCrossPlatformCoverageSkillPublicationOptionalPin(t *testing.T) {
+	// 非 Linux 平台没有新增句柄；原来的身份与内容检查仍然是必需的。
+	if !skillPathPinnedIdentityMatches(nil, nil) {
+		t.Fatal("optional pin must preserve existing platform identity checks")
+	}
+	if err := ReleaseSkillPathPublications([]SkillPathPublication{{}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCrossPlatformCoverageSkillPublicationFailureEdges(t *testing.T) {
@@ -528,5 +543,88 @@ func TestCrossPlatformCoverageUpgradeRollbackRetainsConcurrentReplacement(t *tes
 	content, readErr := os.ReadFile(matches[0])
 	if readErr != nil || string(content) != "old first" {
 		t.Fatalf("retained backup content = %q, %v", content, readErr)
+	}
+}
+
+// 失败处理属于所有平台；只把真实 O_PATH/inode 生命周期验证留在 Linux 测试。
+func TestCrossPlatformCoverageSkillPublicationPinFailure(t *testing.T) {
+	for _, failure := range []string{"open", "closed", "confirmation"} {
+		t.Run(failure, func(t *testing.T) {
+			root := t.TempDir()
+			staged, destination := filepath.Join(root, "staged"), filepath.Join(root, "destination")
+			if err := os.WriteFile(staged, []byte("new"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var held *os.File
+			t.Cleanup(func() {
+				if held != nil {
+					_ = held.Close()
+				}
+			})
+			testseam.Swap(t, &skillPathPinIdentity, func(path string) (*os.File, error) {
+				if failure == "open" {
+					return nil, os.ErrPermission
+				}
+				var err error
+				// 在发布改名完成后打开目标，Windows 也无需持句柄删除或改名。
+				held, err = os.Open(path)
+				if err != nil {
+					return nil, err
+				}
+				if failure == "closed" {
+					if err := held.Close(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if failure == "confirmation" {
+					original := skillPathLstat
+					testseam.Swap(t, &skillPathLstat, func(path string) (os.FileInfo, error) {
+						if path == destination {
+							return nil, os.ErrPermission
+						}
+						return original(path)
+					})
+				}
+				return held, nil
+			})
+			_, err := PublishSkillPathNoReplace(staged, destination)
+			want := error(os.ErrPermission)
+			if failure == "closed" {
+				want = ErrSkillPathPublicationUncertain
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("publication failure = %v, want %v", err, want)
+			}
+			if content, err := os.ReadFile(destination); err != nil || string(content) != "new" {
+				t.Fatalf("uncertain destination changed: content=%q err=%v", content, err)
+			}
+			if held != nil {
+				// Stat 在 Windows 返回原生句柄错误；重复 Close 统一返回 ErrClosed。
+				if err := held.Close(); !errors.Is(err, os.ErrClosed) {
+					t.Fatalf("failed publication leaked pin: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSkillPublicationPinCloseError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(path, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pin, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pin.Close() })
+	// 不直接关闭底层 FD，以免并发运行时复用编号后误关其他文件。
+	failure := errors.New("injected close failure")
+	testseam.Swap(t, &skillPathCloseIdentityPin, func(*os.File) error { return failure })
+	if err := ReleaseSkillPathPublications([]SkillPathPublication{{identityPin: pin}}); !errors.Is(err, failure) {
+		t.Fatal(err)
+	}
+	if content, err := os.ReadFile(path); err != nil || string(content) != "new" {
+		t.Fatalf("release changed published content: content=%q err=%v", content, err)
 	}
 }

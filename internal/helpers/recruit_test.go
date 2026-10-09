@@ -276,6 +276,7 @@ func TestRecruitJobCreateCallsRemoteOnceWhenConfirmed(t *testing.T) {
 	wantArgs := map[string]any{"atsAddJobParam": map[string]any{
 		"name": "Java 工程师", "description": "服务端开发", "jobNature": "FULL-TIME",
 		"requiredEdu": float64(6), "minSalary": float64(20000), "maxSalary": float64(35000),
+		"campus":        false,
 		"creatorUserId": "creator-user-id", "ownerUserIds": []any{"owner-user-id-1", "owner-user-id-2"},
 		"extData": map[string]any{
 			"headCount":       float64(1),
@@ -284,6 +285,35 @@ func TestRecruitJobCreateCallsRemoteOnceWhenConfirmed(t *testing.T) {
 	}}
 	if !reflect.DeepEqual(call.args, wantArgs) {
 		t.Fatalf("args = %#v, want %#v", call.args, wantArgs)
+	}
+}
+
+func TestCrossPlatformCoverageRecruitJobFileDefaultsCampusAndPreservesExplicitValue(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		campusJSON string
+		want       bool
+	}{
+		{name: "missing defaults false", want: false},
+		{name: "null defaults false", campusJSON: `,"campus":null`, want: false},
+		{name: "explicit false", campusJSON: `,"campus":false`, want: false},
+		{name: "explicit true", campusJSON: `,"campus":true`, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "job.json")
+			payload := `{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"extData":{},"creatorUserId":"creator-user-id"` + test.campusJSON + `}`
+			if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := loadRecruitJobFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			job, ok := loaded.(map[string]any)
+			if !ok || job["campus"] != test.want {
+				t.Fatalf("campus = %#v, want %t", job["campus"], test.want)
+			}
+		})
 	}
 }
 
@@ -782,7 +812,7 @@ func TestRecruitCommandsPublishUnwrappedConnectorResult(t *testing.T) {
 	}
 }
 
-func TestRecruitBusinessResultDataRejectsInvalidConnectorEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageRecruitBusinessResultDataRejectsInvalidConnectorEnvelope(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		data any
@@ -793,6 +823,9 @@ func TestRecruitBusinessResultDataRejectsInvalidConnectorEnvelope(t *testing.T) 
 		{name: "missing success", data: map[string]any{"result": map[string]any{}}, want: "同时包含 success 和 result"},
 		{name: "invalid success", data: map[string]any{"success": "true", "result": map[string]any{}}, want: "success 必须是布尔值"},
 		{name: "business failure", data: map[string]any{"success": false, "message": "职位不存在", "result": map[string]any{}}, want: "职位不存在"},
+		{name: "business failure without result", data: map[string]any{"success": false, "errorMsg": "职位创建被拒绝"}, want: "职位创建被拒绝"},
+		{name: "business failure errorMsg precedes message", data: map[string]any{"success": false, "errorMsg": "服务端业务错误", "message": "通用错误", "result": nil}, want: "服务端业务错误"},
+		{name: "business failure empty errorMsg uses message", data: map[string]any{"success": false, "errorMsg": "  ", "message": "职位不存在"}, want: "职位不存在"},
 		{name: "business failure without message", data: map[string]any{"success": false, "result": map[string]any{}}, want: "Connector 返回 success=false"},
 		{name: "invalid result", data: map[string]any{"success": true, "result": nil}, want: "result 必须是 JSON 对象"},
 	} {

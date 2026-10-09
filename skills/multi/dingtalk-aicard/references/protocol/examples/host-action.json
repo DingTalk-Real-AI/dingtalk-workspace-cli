@@ -1,0 +1,166 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "open-host-action",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "open-host-action",
+      "path": "/",
+      "value": {
+        "preset": {
+          "text": "Weekly progress"
+        },
+        "ui": {}
+      }
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-host-action",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "edit",
+            "hint",
+            "result",
+            "actions",
+            "title-label",
+            "title-result",
+            "note-label",
+            "note-result"
+          ]
+        },
+        {
+          "id": "edit",
+          "component": "Button",
+          "child": "edit-label",
+          "action": {
+            "functionCall": {
+              "catalogId": "urn:dingtalk:a2ui:host:v1",
+              "call": "promptText",
+              "args": {
+                "initialValue": {
+                  "path": "/preset/text"
+                }
+              }
+            }
+          },
+          "metadata": {
+            "extensions": {
+              "dt_actionBindingsV1": {
+                "action": {
+                  "resultPath": "/ui/prompt"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "edit-label",
+          "component": "Text",
+          "text": "Edit content"
+        },
+        {
+          "id": "hint",
+          "component": "Text",
+          "text": "After confirmation, the result appears below. Cancel keeps the previous result; a failed call clears it.",
+          "maxLine": 3
+        },
+        {
+          "id": "result",
+          "component": "Text",
+          "text": {
+            "path": "/ui/prompt/data/text"
+          },
+          "maxLine": 3
+        },
+        {
+          "id": "actions",
+          "component": "ButtonGroup",
+          "buttons": [
+            {
+              "label": "Edit title",
+              "action": {
+                "functionCall": {
+                  "catalogId": "urn:dingtalk:a2ui:host:v1",
+                  "call": "promptText",
+                  "args": {
+                    "initialValue": {
+                      "path": "/preset/text"
+                    }
+                  }
+                }
+              },
+              "metadata": {
+                "extensions": {
+                  "dt_actionBindingsV1": {
+                    "action": {
+                      "resultPath": "/ui/title"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "label": "Edit note",
+              "action": {
+                "functionCall": {
+                  "catalogId": "urn:dingtalk:a2ui:host:v1",
+                  "call": "promptText",
+                  "args": {
+                    "initialValue": {
+                      "path": "/preset/text"
+                    }
+                  }
+                }
+              },
+              "metadata": {
+                "extensions": {
+                  "dt_actionBindingsV1": {
+                    "action": {
+                      "resultPath": "/ui/note"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "title-label",
+          "component": "Text",
+          "text": "Title result"
+        },
+        {
+          "id": "title-result",
+          "component": "Text",
+          "text": {
+            "path": "/ui/title/data/text"
+          },
+          "maxLine": 2
+        },
+        {
+          "id": "note-label",
+          "component": "Text",
+          "text": "Note result"
+        },
+        {
+          "id": "note-result",
+          "component": "Text",
+          "text": {
+            "path": "/ui/note/data/text"
+          },
+          "maxLine": 3
+        }
+      ]
+    }
+  }
+]

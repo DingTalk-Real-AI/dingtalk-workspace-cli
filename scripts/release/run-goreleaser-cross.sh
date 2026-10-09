@@ -50,8 +50,9 @@ install_pinned_tool() {
   local tar_args=("${@:6}")
   local lock_dir="$2.lock"
   local lock_attempts=0
-  local stage actual_sha
+  local stage actual_sha cleanup_command
 
+  printf '[release-toolchain] %s: waiting for installation lock\n' "$tool_label"
   mkdir -p "$TOOL_CACHE"
   until mkdir "$lock_dir" 2>/dev/null; do
     lock_attempts=$((lock_attempts + 1))
@@ -61,23 +62,29 @@ install_pinned_tool() {
     fi
     sleep 1
   done
-  trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT HUP INT TERM
+  # EXIT trap 可能在函数局部变量失效后执行；登记已转义的具体路径而非局部变量名。
+  printf -v cleanup_command 'rmdir -- %q 2>/dev/null || true' "$lock_dir"
+  trap "$cleanup_command" EXIT HUP INT TERM
 
   if verify_cached_tool "$tool_dir" "$tool_exe" "$pinned_sha"; then
+    printf '[release-toolchain] %s: verified cache hit\n' "$tool_label"
     rmdir "$lock_dir"
     trap - EXIT HUP INT TERM
     return 0
   fi
 
   stage="$(mktemp -d "$TOOL_CACHE/.stage.XXXXXX")"
-  trap 'rm -rf "$stage"; rmdir "$lock_dir" 2>/dev/null || true' EXIT HUP INT TERM
+  printf -v cleanup_command 'rm -rf -- %q; rmdir -- %q 2>/dev/null || true' "$stage" "$lock_dir"
+  trap "$cleanup_command" EXIT HUP INT TERM
 
-  curl -fsSL "$archive_url" -o "$stage/archive"
+  printf '[release-toolchain] %s: download started\n' "$tool_label"
+  curl --retry 3 --connect-timeout 20 --max-time 300 -fsSL "$archive_url" -o "$stage/archive"
   actual_sha="$(sha256_file "$stage/archive")"
   if [ "$actual_sha" != "$pinned_sha" ]; then
     printf '%s archive checksum mismatch: got %s, want %s\n' "$tool_label" "$actual_sha" "$pinned_sha" >&2
     exit 1
   fi
+  printf '[release-toolchain] %s: archive verified; extracting\n' "$tool_label"
   tar -xf "$stage/archive" -C "$stage" "${tar_args[@]}"
   rm -f "$stage/archive"
   chmod 0755 "$stage/$tool_exe"
@@ -92,6 +99,7 @@ install_pinned_tool() {
   # new one, never a directory that is still being filled.
   rm -rf "$tool_dir"
   mv "$stage" "$tool_dir"
+  printf '[release-toolchain] %s: verified installation complete\n' "$tool_label"
   rmdir "$lock_dir"
   trap - EXIT HUP INT TERM
 }
@@ -186,7 +194,14 @@ done
 # internal, so export the same values into the container's process environment as
 # well; the template then resolves from an environment that is unambiguously
 # present. TestReleaseCrossCompilerEnvMatchesWrapper pins these to the config.
+# MACOSX_DEPLOYMENT_TARGET pins the Darwin deployment target; osxcross x86_64
+# otherwise defaults to 10.13 and ld64 emits __DATA_CONST without
+# SG_READ_ONLY, which current dyld rejects before main() (#1441). It is
+# exported unconditionally and is deliberately NOT in the --exec pass-through
+# list below: the container always gets exactly this value, so an ambient
+# host setting can neither duplicate nor weaken the pin.
 compiler_env=(
+  "MACOSX_DEPLOYMENT_TARGET=11.0"
   "CC_darwin_amd64=o64-clang"
   "CXX_darwin_amd64=o64-clang++"
   "CC_darwin_arm64=oa64-clang"

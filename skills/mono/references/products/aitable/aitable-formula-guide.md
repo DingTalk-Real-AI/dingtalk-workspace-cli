@@ -2,6 +2,8 @@
 
 > 当用户要创建 formula 类型字段、编写表内计算公式、做派生指标时，必须先读本文档。
 
+> 当前生产契约边界（2026-09-23）：`create_fields` / `update_field` 的工具 Schema 尚未显式列出 `config.formula`；下方语法和示例不是该生产入口已可用的保证。先核对服务端契约与发布状态，未确认时不要试写；不得改用建表绕过原有目标。已返回 fieldId 但 `verificationStatus=pending` 或读回 `FIELD_NOT_FOUND` 时保留原回执，只读核对，不重新创建。`--wait` 仅验证字段结构可读，不证明公式计算结果已完成。
+
 ## 1. 何时使用 formula 字段
 
 | 场景 | 用 formula | 不用 formula |

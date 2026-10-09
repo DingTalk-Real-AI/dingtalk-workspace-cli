@@ -243,7 +243,7 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 					"不能把关键禁止动作留到分节解释或末尾总结",
 					`dws schema --cli-path "aitable <原入口>" --compact --format json`,
 					"保留 `+`，不改查 Help，也不切换原子/Shortcut",
-					"`dws aitable form share update --help`（禁止改查 Schema）",
+					"`dws schema --cli-path \"aitable form share update\" --compact --format json`",
 				} {
 					if !strings.Contains(priority, rule) {
 						t.Errorf("Skill must publish review routing %q before generic runtime navigation", rule)
@@ -261,7 +261,7 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 					t.Errorf("%s missing result branch interpretation boundary %q", path, rule)
 				}
 			}
-			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布", "仅加载 Skill 或看到合成样本不满足此条件", "两种入口都必须完整保留用户指定的配置值", "Help/Schema 是离线契约查询，不调用线上业务", "只有用户明确禁止任何命令或本机查询时才不执行"} {
+			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布", "仅加载 Skill 或看到合成样本不满足此条件", "两种入口都必须完整保留用户指定的配置值", "Help/Schema 是离线契约查询，不调用线上业务", "只有用户明确禁止任何命令或本机查询时才不执行"} {
 				if !strings.Contains(body, rule) {
 					t.Errorf("%s missing discovery/interpretation boundary %q", path, rule)
 				}
@@ -288,7 +288,7 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				t.Fatalf("%s missing no-compensation boundary", path)
 			}
 			for _, discoveryCommand := range []string{
-				"dws aitable form share update --help",
+				`dws schema --cli-path "aitable form share update" --compact --format json`,
 				`dws schema --cli-path "aitable +form-share-update" --compact --format json`,
 			} {
 				if !strings.Contains(body, discoveryCommand) {
@@ -302,6 +302,33 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 			}
 			if strings.Contains(body, "可执行完整命令") || strings.Contains(body, "<完整命令>") {
 				t.Fatalf("%s still forces an executable command when required IDs are absent", path)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAITableShareFormDiscoveryRoutesStayAligned(t *testing.T) {
+	const atomicRoute = `dws schema --cli-path "aitable form share update" --compact --format json`
+	const shortcutRoute = `dws schema --cli-path "aitable +form-share-update" --compact --format json`
+	paths := []string{
+		"../../skills/multi/dingtalk-aitable/SKILL.md",
+		"../../skills/multi/dingtalk-aitable/references/aitable/aitable-form.md",
+		"../../skills/mono/references/products/aitable/aitable-form.md",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(body)
+			for _, route := range []string{atomicRoute, shortcutRoute} {
+				if !strings.Contains(text, route) {
+					t.Errorf("missing canonical form-share discovery route %q", route)
+				}
+			}
+			if strings.Contains(text, "dws aitable form share update --help") {
+				t.Error("form-share usage discovery must use Schema consistently, not leaf Help")
 			}
 		})
 	}

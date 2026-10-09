@@ -36,7 +36,7 @@
 - [核心服务](#核心服务)
 - [安全设计](#安全设计)
 - [参考与文档](#参考与文档)
-- [OpenHarmony 仅编译构建](#openharmony-仅编译构建)
+- [OpenHarmony 构建](#openharmony-构建)
 - [贡献指南](#贡献指南)
 
 </details>
@@ -82,7 +82,7 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 
 - **快速安装**（上方一行 curl）：非交互，默认装 `multi`。
 - **TTY 安装**（先下载再执行）：`curl -O .../install.sh && bash install.sh`，会弹出 `1) multi  2) mono` 选项（默认 1）。
-- **环境变量覆盖**：`DWS_SKILL_MODE=mono curl -fsSL ... | sh`。
+- **环境变量覆盖**：`curl -fsSL ... | DWS_SKILL_MODE=mono sh`。
 - **装完之后再切换**：`dws skill setup --mode mono`（或 `--mode multi`），核对列出的路径后交互确认。
 
 </details>
@@ -144,11 +144,11 @@ cp dws ~/.local/bin/         # 安装到 PATH
 
 </details>
 
-## OpenHarmony 仅编译构建
+## OpenHarmony 构建
 
-本仓库支持在用户提供可执行的 Go 1.26.7 OpenHarmony 工具链时，编译
-`openharmony/arm64` 目标。该支持仅保证编译，不代表真实设备验证，也不属于
-六个平台的正式发布产物。
+本仓库支持通过 Go 1.26.7 OpenHarmony 工具链构建 `openharmony/arm64` 目标。
+Linux CI 会在相关变更时自动构建、自签并校验产物，生成的二进制已在
+HarmonyOS PC 上完成真机验证。该目标暂未纳入六个平台的正式发布产物。
 
 ```bash
 OHOS_GO=/path/to/openharmony-go \
@@ -174,7 +174,7 @@ runtime 原生 payload。脚本会校验生成的静态 AArch64 ELF 及 Go 构�
 仓库镜像地址：`https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli`
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > 设置 `DWS_GITEE_REPO` 后，安装脚本会改从 Gitee API 解析最新版本和各个 release 产物（二进制、校验和、skills 包），而不是走 GitHub。不设置时默认从 GitHub 安装。
@@ -190,7 +190,7 @@ npm install -g dingtalk-workspace-cli --registry=https://registry.npmmirror.com
 **3. 单独安装 Skills（Gitee 镜像）：**
 
 ```bash
-DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | sh
+curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/scripts/install-skills.sh | DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli sh
 ```
 
 > 同样设置 `DWS_GITEE_REPO`，`install-skills.sh` 会从 Gitee 解析版本和 skills 包；GitHub 不可达时也会自动回退到 Gitee 镜像。
@@ -333,7 +333,7 @@ dws --profile <corpId:userId> contact user search --query "..." # 单次精确�
 
 跨组织读取由 agent 编排，而非内置 `--all-orgs`：先 `dws profile list`，每个组织使用唯一的 `isOrgCurrent=true` 账号；若多账号组织没有默认账号，先让用户指定账号。写操作默认只在当前账号执行——跨组织写之前先确认目标组织和账号。
 
-macOS 下，如果已登记的 token slot 无法解密，为避免把系统 Keychain 和 file-DEK 写成混合状态，新的 OAuth 登录会直接拒绝。如果普通终端仍能读取登录态、只有设置 `DWS_DISABLE_KEYCHAIN=1` 的沙箱读不到，可在不暴露 token 的情况下迁移 legacy 与各 profile 的认证条目：
+macOS 下，瞬态或未分类的 Keychain 读取失败仍会拒绝新的 OAuth 登录，避免把系统 Keychain 和 file-DEK 写成混合状态。已确认的 DEK 缺失或密文/DEK 不匹配会保留到授权完成，并且只替换本次新登录实际写入的 token slot。如果普通终端仍能读取登录态、只有设置 `DWS_DISABLE_KEYCHAIN=1` 的沙箱读不到，可在不暴露 token 的情况下迁移 legacy 与各 profile 的认证条目：
 
 ```bash
 env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json

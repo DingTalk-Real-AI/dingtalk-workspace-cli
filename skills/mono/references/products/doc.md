@@ -787,7 +787,7 @@ Flags:
 > - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
 
 用户说"设置分享链接密码/公开有效期/互联网公开":
-- **必须走 drive 的 `drive publish set`**（可带 `--password` 访问密码与 `--expire-days` 有效期）
+- **必须走 drive 的 `drive permission set-share-scope --visibility PUBLIC`**（可带 `--password` 访问密码与 `--expire-days` 有效期）
 - `doc permission` 是协作者级权限，不含链接公开属性（访问密码/有效期）
 
 > **关键区分**：

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -99,6 +100,15 @@ func executeRecordUpsertBatches(rt *shortcut.RuntimeContext) error {
 	records, err := parseRecordObjects(rt.Str("records"), false)
 	if err != nil {
 		return err
+	}
+	clientToken := strings.TrimSpace(rt.Str("client-token"))
+	if err := aitableprotocol.ValidateClientToken(clientToken); err != nil {
+		return apperrors.NewValidation("--client-token: " + err.Error())
+	}
+	if clientToken != "" && len(records) > recordBatchSize {
+		return apperrors.NewValidation(
+			fmt.Sprintf("--client-token 仅支持单批最多 %d 条记录；超过 %d 条请拆分后为每批使用不同的 UUID v4", recordBatchSize, recordBatchSize),
+		)
 	}
 	return executeRecordBatches(rt, "record_upsert", "record_upsert", serverHelper, records, verifyUpsertBatch)
 }
@@ -215,42 +225,88 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 	return rt.Output(result)
 }
 
-// Only trust an explicit, non-retryable MCP input error without recovery evidence.
-// Duplicate tokens and reconciliation hints mean an earlier write may have been
-// accepted; retryable=false forbids replay, but does not prove nothing was written.
-func isRecordWriteInputRejection(err error) bool {
+type recordWriteFailure struct {
+	Status string `json:"status"`
+	Error  struct {
+		Type      string `json:"type"`
+		Code      string `json:"code"`
+		Retryable *bool  `json:"retryable"`
+		Details   struct {
+			ClientToken      string   `json:"clientToken"`
+			ReconcileTool    string   `json:"reconcileTool"`
+			CreatedRecordIDs []string `json:"createdRecordIds"`
+			UpdatedRecordIDs []string `json:"updatedRecordIds"`
+		} `json:"details"`
+	} `json:"error"`
+}
+
+func decodeRecordWriteFailure(err error) recordWriteFailure {
 	var cliErr *helpers.CLIError
 	var appErr *apperrors.Error
 	var raw string
 	if errors.As(err, &cliErr) && cliErr.Code == helpers.CodeMCPToolError {
 		raw = cliErr.Message
-	} else if errors.As(err, &appErr) && appErr.Reason == "business_error" {
+	} else if errors.As(err, &appErr) && (appErr.Reason == "business_error" || appErr.Reason == "mcp_tool_error") {
 		raw = appErr.Message
 	} else {
-		return false
+		return recordWriteFailure{}
 	}
-	var body struct {
-		Status string `json:"status"`
-		Error  struct {
-			Code      string `json:"code"`
-			Type      string `json:"type"`
-			Retryable *bool  `json:"retryable"`
-			Details   struct {
-				ReconcileTool string `json:"reconcileTool"`
-			} `json:"details"`
-		} `json:"error"`
+	var body recordWriteFailure
+	if json.Unmarshal([]byte(raw), &body) != nil {
+		return recordWriteFailure{}
 	}
-	if json.Unmarshal([]byte(raw), &body) != nil || body.Status != "error" {
-		return false
-	}
-	// Honor the recovery marker even when the lower layer classifies the error
-	// as user/input; the caller reconciles using its own original token/selectors.
-	if body.Error.Code == "DUPLICATE_CLIENT_TOKEN" || body.Error.Code == "REQUEST_ID_CONFLICT" ||
-		body.Error.Details.ReconcileTool == "get_record_write_result" {
-		return false
-	}
-	return (body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
+	return body
+}
+
+func (body recordWriteFailure) needsReconciliation() bool {
+	return body.Status == "error" && (body.Error.Code == "DUPLICATE_CLIENT_TOKEN" ||
+		body.Error.Code == "REQUEST_ID_CONFLICT" ||
+		strings.HasSuffix(body.Error.Code, "_OUTCOME_UNKNOWN") ||
+		body.Error.Details.ReconcileTool == "get_record_write_result")
+}
+
+// A duplicate token rejects this attempt, not the original mutation. Even a
+// USER_ERROR can carry confirmed updates and an unknown creation group.
+func isRecordWriteInputRejection(err error) bool {
+	body := decodeRecordWriteFailure(err)
+	return body.Status == "error" && !body.needsReconciliation() &&
+		(body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
 		body.Error.Retryable != nil && !*body.Error.Retryable
+}
+
+func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result compositeResult, step compositeStep, batch []map[string]any, offset int, cause error, failure recordWriteFailure) error {
+	details := failure.Error.Details
+	step.Status = "unknown"
+	// Preserve acknowledgements separately from verification. In particular,
+	// none of these IDs proves that the entire creation group completed.
+	step.Result = map[string]any{"createdRecordIds": details.CreatedRecordIDs, "updatedRecordIds": details.UpdatedRecordIDs}
+	result.CompletedSteps = append(result.CompletedSteps, step)
+	result.Status = "unknown"
+	result.CompletedCount = offset
+	result.Verification = map[string]any{"status": "pending", "batchOffset": offset, "unverifiedCount": len(batch)}
+	for _, group := range []struct {
+		name string
+		ids  []string
+	}{{"create", details.CreatedRecordIDs}, {"update", details.UpdatedRecordIDs}} {
+		if len(group.ids) > 0 {
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"group": group.name, "recordIds": group.ids, "status": "acknowledged_not_verified"})
+		}
+	}
+	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
+	clientToken := strings.TrimSpace(rt.Str("client-token"))
+	if clientToken == "" {
+		clientToken = details.ClientToken
+	}
+	result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize, "baseId": baseID, "tableId": tableID}
+	if clientToken != "" && aitableprotocol.ValidateClientToken(clientToken) == nil {
+		result.Checkpoint["clientToken"] = clientToken
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", baseID, "--table-id", tableID, "--client-token", clientToken)
+	}
+	if ids := recordIDs(batch); len(ids) > 0 {
+		result.Checkpoint["updateReadbackCommand"] = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", strings.Join(ids, ","))
+	}
+	result.Warnings = append(result.Warnings, "创建分组结果未知；使用原 token 对账，并独立读回更新分组。禁止重放整个 upsert（包括同一 token）；没有原 token 时不能完成创建对账。")
+	return compositeError(result, cause, false)
 }
 
 func queryExistingRecordIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]string, error) {
@@ -342,6 +398,11 @@ func executeRecordBatches(
 			wireRecords = append(wireRecords, record)
 		}
 		params := map[string]any{"baseId": baseID, "tableId": tableID, "records": wireRecords}
+		if tool == "record_upsert" {
+			if clientToken := strings.TrimSpace(rt.Str("client-token")); clientToken != "" {
+				params["clientToken"] = clientToken
+			}
+		}
 		var writeData map[string]any
 		var writeErr error
 		var clientToken string
@@ -360,6 +421,9 @@ func executeRecordBatches(
 		if writeErr != nil {
 			step.Status = "unknown"
 			step.Error = writeErr.Error()
+		}
+		if failure := decodeRecordWriteFailure(writeErr); tool == "record_upsert" && failure.needsReconciliation() {
+			return recordUpsertReconciliationError(rt, result, step, batch, offset, writeErr, failure)
 		}
 		// A structured input rejection proves this batch was not accepted. Do
 		// not replace it with an unrelated read-back mismatch or suggest retry.

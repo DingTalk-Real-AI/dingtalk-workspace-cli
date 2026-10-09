@@ -375,6 +375,56 @@ Flags:
 - `wiki node search` — 限定在某个知识库空间内搜索（需要 `--workspace`）
 - `drive search` — 全局搜索，聚合钉盘 + 文档空间结果
 
+### 设置知识库空间分享范围
+
+设置整个知识库空间（WikiSpace）的分享范围（可见性）。本命令作用于整个知识库空间及其下所有未打断继承的节点，而非单个文档/文件夹。
+
+> **`permission set-share-scope` 为 [危险] 操作，执行前需要向用户确认。确认后传入 `--yes` 跳过交互式确认。**
+
+> **❗ PRIVATE 关闭不可逆**：会把空间下所有未打断继承的节点一并恢复为仅成员可见，且不保留各节点关闭前的原有档位；如需恢复公开必须重新设置。
+
+```
+Usage:
+  dws wiki permission set-share-scope --workspace <ID> --visibility <PRIVATE|ORGANIZATION|PUBLIC> [flags]
+Example:
+  dws wiki permission set-share-scope --workspace WORKSPACE_ID --visibility ORGANIZATION --role READER
+  dws wiki permission set-share-scope --workspace WORKSPACE_ID --visibility PUBLIC --role DOWNLOADER
+  dws wiki permission set-share-scope --workspace WORKSPACE_ID --visibility PRIVATE
+Flags:
+      --workspace string    目标知识库 ID 或 URL (必填)
+      --visibility string   目标可见性: PRIVATE / ORGANIZATION / PUBLIC (必填)
+      --role string         链接访问者默认角色: READER / DOWNLOADER / EDITOR（PUBLIC 仅 READER/DOWNLOADER）(选填)
+      --partner             企业内公开是否包含合作伙伴（外包）(选填，仅 ORGANIZATION)
+      --can-search          是否可被组织内搜索 (选填，仅 ORGANIZATION)
+      --can-recommend       是否可被组织内推荐 (选填，仅 ORGANIZATION)
+```
+
+三档语义：
+- `PRIVATE` — 仅空间成员可访问（关闭企业内公开/互联网公开）。无需其他参数。
+- `ORGANIZATION` — 企业内公开：企业内所有成员可访问。可附带 `--role`、`--partner`、`--can-search`、`--can-recommend`。
+- `PUBLIC` — 互联网公开：互联网上任何人可访问（全库爆炸半径）。`--role` 仅接受 READER/DOWNLOADER（传 EDITOR 本地拒绝）；空间级不支持密码保护与有效期设置。
+
+档位×参数适用矩阵：
+
+| 档位 | --role | --partner | --can-search | --can-recommend | --password | --expire-days |
+|------|--------|-----------|--------------|-----------------|------------|---------------|
+| PRIVATE | ✖ | ✖ | ✖ | ✖ | ✖ | ✖ |
+| ORGANIZATION | ✔ | ✔ | ✔ | ✔ | ✖ | ✖ |
+| PUBLIC | ✔（仅 READER/DOWNLOADER） | ✖ | ✖ | ✖ | ✖ | ✖ |
+
+不适用组合本地拒绝（exit 3）。
+
+部分更新语义：可选参数不传即不下发、保持原值不变。布尔三态（`--partner`/`--can-search`/`--can-recommend`）：未设不下发，显式 `--xxx=false` 也会下发。只传 `--can-search` 或 `--can-recommend` 其一时，另一项由服务端联动跟随同值。
+
+操作者必须具备知识库的 MANAGER 或 OWNER 角色，否则返回 `forbidden.accessDenied`。当组织开启公开分享审批策略时，PUBLIC 可能进入待审批状态（`pendingApproval=true`）。
+
+返回体已回显写入后的 `visibility`/`defaultRole`/`partnerIncluded`/`canSearch`/`canRecommend`/`spaceUrl` 等字段，无需额外查询命令。
+
+与其他命令的区分：
+- 设置单个节点/文档/文件夹的分享范围 → `drive permission set-share-scope`（节点级）
+- 管理知识库成员（添加/移除协作者） → `wiki member`，不要用分享范围
+- 查询知识库详情 → `wiki space get`，但返回体不含完整分享范围字段
+
 ## 意图判断
 
 - 用户说"创建知识库/新建知识库" → `space create`
@@ -397,6 +447,7 @@ Flags:
 - 用户说"知识库动态/最近有什么更新/谁改了什么/知识库活动" → `feed list`（需 `--workspace`）
 - 用户说"知识库最近的评论/更新记录/操作日志" → `feed list`（需 `--workspace`）
 - 用户说"删除知识库/移除知识库/把知识库删了" → `space delete`（需 `--workspace`）
+- 用户说"设置知识库分享范围/知识库可见性/知识库企业内公开/知识库互联网公开/空间分享范围/知识库可见范围" → `permission set-share-scope`（需 `--workspace` + `--visibility`）
 - 用户说"排除文件/只看创建文档/只看更新文档/只看文档操作/不要上传文件的记录/过滤掉文件动态/只看文档变更" → `feed list --exclude-file`（**必须带 flag，禁止客户端自行过滤**）
 
 > **重要 — `--exclude-file` 使用规则**：
@@ -418,6 +469,8 @@ Flags:
 - **wiki node create**（在空间中创建空文件实体）vs **doc create**（创建文档并写入内容）
 - **wiki member**（容器级，授权整个知识库）vs **drive permission**（节点级，授权单篇文档）
   - 「我的文档」**只能用** `drive permission`，不能用 `wiki member`
+- **wiki permission set-share-scope**（空间级分享范围）vs **drive permission set-share-scope**（节点级分享范围）
+  - "设置整个知识库的可见性" → `wiki permission set-share-scope`；"设置某个文档/文件夹的可见性" → `drive permission set-share-scope`
 - **wiki space list --type orgSpace/mySpace**（列出钉盘空间）vs **wiki space list**（默认列出知识库）
 
 ## 核心工作流
@@ -535,6 +588,17 @@ dws wiki space get --workspace <workspaceId> --format json
 
 # 2. 删除知识库
 dws wiki space delete --workspace <workspaceId> --format json
+
+# ── 工作流: 设置知识库分享范围 ──
+
+# 1. 确认知识库信息
+dws wiki space get --workspace <workspaceId> --format json
+
+# 2. 设置企业内公开
+dws wiki permission set-share-scope --workspace <workspaceId> --visibility ORGANIZATION --role READER --format json
+
+# 3. 设置互联网公开
+dws wiki permission set-share-scope --workspace <workspaceId> --visibility PUBLIC --role DOWNLOADER --format json
 ```
 
 ## 上下文传递表
@@ -550,6 +614,7 @@ dws wiki space delete --workspace <workspaceId> --format json
 | `node create` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
 | `feed list` | `nextToken` | feed list 的 --cursor（翻页，`hasMore` 为 true 时继续）|
 | `member list` | `name` / `role` / `type`（**不含 userId**）| 仅用于查看成员名单；**无法**从这里取 userId 去串联 member update/remove，需另行按姓名反查 userId（如 `dws contact user search --query "<姓名>"`）|
+| `permission set-share-scope` | `visibility` / `defaultRole` / `spaceUrl` | 确认写入结果，无需额外查询 |
 
 ## 相关产品
 

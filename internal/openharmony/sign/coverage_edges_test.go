@@ -344,6 +344,159 @@ func adjacentSectionELF(shstrCapacity uint32) ([]byte, []byte) {
 	return data, pattern
 }
 
+func TestCrossPlatformCoverageResignRejectsLoadableSegmentBeyondCodesign(t *testing.T) {
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	data := sectionAfterCodesignELF()
+	// Add one PT_LOAD whose file extent covers .tail at 0x2000, past the
+	// retired .codesign block at 0x1000; the layout cannot be preserved.
+	const phoff = 0x180
+	binary.LittleEndian.PutUint64(data[32:40], phoff)
+	binary.LittleEndian.PutUint16(data[54:56], 56)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	binary.LittleEndian.PutUint32(data[phoff:phoff+4], 1)
+	binary.LittleEndian.PutUint64(data[phoff+8:phoff+16], 0x2000)
+	binary.LittleEndian.PutUint64(data[phoff+32:phoff+40], 64)
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := SignFile(inputPath, outputPath)
+	if err == nil || !strings.Contains(err.Error(), "loadable segment extends beyond") {
+		t.Fatalf("SignFile() = %v, want loadable-segment rejection", err)
+	}
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Fatal("rejected re-sign must not produce an output file")
+	}
+}
+
+func TestCrossPlatformCoverageResignPreservesDeclaredAlignment(t *testing.T) {
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	if err := os.WriteFile(inputPath, sectionAfterCodesignELF(), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SignFile(inputPath, outputPath); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := elf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parsed.Close()
+	extra := parsed.Section(".extra")
+	if extra == nil {
+		t.Fatal(".extra section was dropped while re-signing")
+	}
+	if extra.Addralign != 8192 {
+		t.Fatalf(".extra sh_addralign = %d, want declared 8192", extra.Addralign)
+	}
+	if extra.Offset%8192 != 0 {
+		t.Fatalf(".extra offset %#x is not 8192-aligned", extra.Offset)
+	}
+}
+
+func TestCrossPlatformCoverageRejectsCodesignOverlappingElfHeader(t *testing.T) {
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	data := sectionAfterCodesignELF()
+	// Move the existing .codesign section to offset zero so the retired
+	// extent covers the ELF header itself.
+	binary.LittleEndian.PutUint64(data[0x200+320+24:0x200+320+32], 0)
+	if err := os.WriteFile(inputPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := SignFile(inputPath, outputPath)
+	if err == nil || !strings.Contains(err.Error(), "overlaps the ELF header") {
+		t.Fatalf("SignFile() = %v, want ELF-header overlap rejection", err)
+	}
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Fatal("rejected re-sign must not produce an output file")
+	}
+}
+
+func TestCrossPlatformCoverageRejectsInvalidSegmentExtent(t *testing.T) {
+	data := sectionAfterCodesignELF()
+	const phoff = 0x180
+	binary.LittleEndian.PutUint64(data[32:40], phoff)
+	binary.LittleEndian.PutUint16(data[54:56], 56)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	binary.LittleEndian.PutUint32(data[phoff:phoff+4], 1)
+	binary.LittleEndian.PutUint64(data[phoff+32:phoff+40], 1<<40)
+	if _, err := parseELF(data); err == nil || !strings.Contains(err.Error(), "program segment extent") {
+		t.Fatalf("parseELF() = %v, want segment extent rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageResignRejectsInvalidSectionAlignment(t *testing.T) {
+	data := sectionAfterCodesignELF()
+	// .extra declares addralign 3 (not a power of two) and lives past the
+	// retired .codesign block, so relocation must reject it.
+	binary.LittleEndian.PutUint64(data[0x200+192+48:0x200+192+56], 3)
+	image, err := parseELF(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rewriteELF(image); err == nil || !strings.Contains(err.Error(), "unsupported alignment") {
+		t.Fatalf("rewriteELF() = %v, want alignment rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageZeroSectionAlignmentRelocatesUnitAligned(t *testing.T) {
+	data := sectionAfterCodesignELF()
+	binary.LittleEndian.PutUint64(data[0x200+192+48:0x200+192+56], 0)
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SignFile(inputPath, outputPath); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := elf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parsed.Close()
+	if parsed.Section(".extra") == nil {
+		t.Fatal(".extra section was dropped")
+	}
+}
+
+func TestCrossPlatformCoverageSign32RejectsBadProgramHeader(t *testing.T) {
+	data := minimalELF32()
+	binary.LittleEndian.PutUint32(data[28:32], 0x180)
+	binary.LittleEndian.PutUint16(data[42:44], 32)
+	binary.LittleEndian.PutUint16(data[44:46], 1)
+	binary.LittleEndian.PutUint32(data[0x180:0x184], 1)
+	binary.LittleEndian.PutUint32(data[0x180+16:0x180+20], 1<<30)
+	if _, err := parseELF(data); err == nil || !strings.Contains(err.Error(), "program segment extent") {
+		t.Fatalf("parseELF32() = %v, want segment extent rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageRejectsCorruptedRewrittenOutput(t *testing.T) {
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	if err := os.WriteFile(inputPath, minimalELF(), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &validateOutput, func([]byte) (*elfImage, error) {
+		return nil, errors.New("corrupted output")
+	})
+	err := SignFile(inputPath, outputPath)
+	if err == nil || !strings.Contains(err.Error(), "self-validation") {
+		t.Fatalf("SignFile() = %v, want self-validation rejection", err)
+	}
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Fatal("failed self-validation must not produce an output file")
+	}
+}
+
 func TestCrossPlatformCoverageResignPreservesSectionsAfterCodesign(t *testing.T) {
 	directory := t.TempDir()
 	inputPath := filepath.Join(directory, "input")

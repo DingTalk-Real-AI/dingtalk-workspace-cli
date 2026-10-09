@@ -24,6 +24,7 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 		Reviewed: true,
 		Commands: []string{
 			"api",
+			"auth exchange",
 			"auth export",
 			"auth import",
 			"auth login",

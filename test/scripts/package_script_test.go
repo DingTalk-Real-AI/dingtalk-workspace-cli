@@ -440,6 +440,11 @@ func waitForProcessExit(t *testing.T, pid int, label string) {
 		if err := exec.Command("kill", "-0", strconv.Itoa(pid)).Run(); err != nil {
 			return
 		}
+		// 容器的 PID 1 可能尚未回收孤儿进程；僵尸已经退出，不能当成仍在运行。
+		if status, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output(); err == nil && strings.HasPrefix(strings.TrimSpace(string(status)), "Z") {
+			t.Logf("%s process %d exited; awaiting container init reaping", label, pid)
+			return
+		}
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("%s process %d is still running after npm wrapper exited", label, pid)
@@ -2794,6 +2799,12 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"codesign --verify --strict --verbose=4",
 		"runtime-payload materialize",
 		`test "$binary_team" = "$library_team"`,
+		"require_read_only_data",
+		"awk -f scripts/release/extract-data-const-flags.awk",
+		"for flags_entry in $data_const_flags",
+		"SG_READ_ONLY",
+		`"$stage/dws" version >/dev/null`,
+		`arch -x86_64 "$stage/dws" version >/dev/null`,
 		`doctor --json --timeout 2`,
 		`doctor-home`,
 		`doctor.json`,
@@ -3443,6 +3454,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	for _, required := range []string{
 		"CGO_ENABLED=1",
 		"GOTOOLCHAIN=go1.26.7",
+		"MACOSX_DEPLOYMENT_TARGET=11.0",
 		"CC_darwin_amd64=o64-clang",
 		"CC_darwin_arm64=oa64-clang",
 		"CC_linux_amd64=/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17",
@@ -3480,6 +3492,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		"ghcr.io/goreleaser/goreleaser-cross:v1.26.2@sha256:fadba0d4577866eb2588d46ea6b604c73ef45ee55f044acbc17cc49aa435fd04",
 		`GORELEASER_VERSION="2.16.0"`,
 		`ZIG_VERSION="0.15.2"`,
+		`MACOSX_DEPLOYMENT_TARGET=11.0`,
 		`zig_sha="02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"`,
 		`zig_sha="958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"`,
 		`--volume "$zig_dir:/opt/dws-zig:ro"`,

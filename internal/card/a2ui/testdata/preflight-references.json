@@ -1,0 +1,1202 @@
+[
+  {
+    "name": "Complete snapshot",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Missing root component",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "other",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.missing_root",
+        "pointer": "/0/createSurface/surfaceId",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Missing static child reference",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "missing"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Duplicate ID in one message",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            },
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.duplicate_component_id",
+        "pointer": "/2/updateComponents/components/1/id",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Updating an ID across messages",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Forward reference resolved by a later message",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "child"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "child",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Replacing an old reference",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "missing"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Two-node static cycle",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "root"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.cycle",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Self-reference cycle",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "root"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.cycle",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Shared child is not a cycle",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "shared"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "shared"
+              ]
+            },
+            {
+              "id": "shared",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Unreachable component is a warning",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            },
+            {
+              "id": "spare",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": [
+      {
+        "code": "reference.unreachable_component",
+        "pointer": "/2/updateComponents/components/1/id",
+        "severity": "warning"
+      }
+    ]
+  },
+  {
+    "name": "Unreachable subgraph does not block",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            },
+            {
+              "id": "spare",
+              "component": "Column",
+              "children": [
+                "missing"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": [
+      {
+        "code": "reference.unreachable_component",
+        "pointer": "/2/updateComponents/components/1/id",
+        "severity": "warning"
+      }
+    ]
+  },
+  {
+    "name": "Template relative binding is not evaluated from root",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "item",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "item",
+              "component": "Text",
+              "text": {
+                "path": "name"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Missing template target",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "item",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/children/componentId",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Dynamic template recursion is not a static cycle",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "root",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Regular container supports templates",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Row",
+              "children": {
+                "componentId": "item",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "item",
+              "component": "Text",
+              "text": {
+                "path": "name"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Nested Tabs reference",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Tabs",
+              "tabs": [
+                {
+                  "title": "页",
+                  "child": "missing"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/tabs/0/child",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Stack main child and overlay",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "child": "body",
+              "overlays": [
+                {
+                  "child": "missing",
+                  "position": "center"
+                }
+              ]
+            },
+            {
+              "id": "body",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/overlays/0/child",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "CardHeader trailing reference",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "CardHeader",
+              "title": "标题",
+              "trailing": "missing"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/trailing",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Body text and metadata are not child references",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "missing",
+              "metadata": {
+                "child": "missing"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Special-character ID reference",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "node/~"
+              ]
+            },
+            {
+              "id": "node/~",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Inline initialization",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {},
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Duplicate inline definition",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {},
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            },
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.duplicate_component_id",
+        "pointer": "/0/createSurface/components/1/id",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Resource delta does not require closure",
+    "messages": [
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "missing"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "resources",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Each Surface has its own root",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "other",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "other",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "other",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "child"
+              ]
+            },
+            {
+              "id": "child",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Child references cannot cross Surfaces",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "child"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "other",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "other",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "other",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "child"
+              ]
+            },
+            {
+              "id": "child",
+              "component": "Text",
+              "text": "正文"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.dangling_child",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  }
+]

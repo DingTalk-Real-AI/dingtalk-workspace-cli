@@ -21,7 +21,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
 )
 
-var readInputFile = os.ReadFile
+var (
+	readInputFile  = os.ReadFile
+	validateOutput = parseELF
+)
 
 // SignFile creates an OpenHarmony self-signed ELF at outputPath.
 func SignFile(inputPath, outputPath string) error {
@@ -49,5 +52,8 @@ func SignFile(inputPath, outputPath string) error {
 	}
 	block := codeSignBlock(len(rewritten.data), merkleRoot(rewritten.data, rewritten.codeOffset))
 	copy(rewritten.data[rewritten.codeOffset:], block)
+	if _, err := validateOutput(rewritten.data); err != nil {
+		return fmt.Errorf("rewritten ELF failed self-validation: %w", err)
+	}
 	return atomicfile.Write(outputPath, rewritten.data, inputInfo.Mode().Perm())
 }

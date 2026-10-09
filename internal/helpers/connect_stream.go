@@ -177,6 +177,10 @@ type forwarderCloser interface {
 // channel's built-in model, per-conversation memory on (where the CLI supports
 // it), empty scratch workdir.
 type connectAgentOptions struct {
+	// Command 是显式 custom argv；数字员工无需修改进程级环境变量。
+	Command string
+	// PrivateDiagnostics 禁止原始 Agent 错误进入数字员工运行日志。
+	PrivateDiagnostics bool
 	// Model overrides the channel CLI's model (flag --agent-model /
 	// env DWS_AGENT_MODEL). Empty keeps the spec's built-in choice.
 	Model string
@@ -950,6 +954,13 @@ func resolveExecAgent(channel string) (argv []string, env []string, err error) {
 // dependency on a live interactive session. opts applies the user-facing agent
 // tuning (--agent-model / --agent-workdir / --agent-memory).
 func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (forwarder, error) {
+	return newLocalAgentForwarder(channel, clientID, opts)
+}
+
+// newLocalAgentForwarder 是机器人 Stream 和数字员工 Event 共用的 Agent seam。
+// scopeID 只标识会话存储；不能把共享 OAuth ClientID 当成数字员工身份。
+func newLocalAgentForwarder(channel, scopeID string, opts connectAgentOptions) (forwarder, error) {
+	clientID := scopeID
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = envDurationMS("DWS_AGENT_TIMEOUT_MS", 0)
@@ -958,13 +969,19 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	if !ok {
 		return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 不是 stream-bridge 渠道，无 forwarder", channel))
 	}
-	overridden := strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "" && channel != "codex"
+	overridden := (opts.Command != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_CMD")) != "") && channel != "codex"
 	if channel == "gemini" && !overridden {
 		return newGeminiAPIForwarder(timeout, opts)
 	}
 	// Resolve the agent CLI (PATH → app bundle → auto-install → guidance) and
 	// preflight here so a missing dependency errors at connect time.
-	argv, env, err := resolveExecAgent(channel)
+	var argv, env []string
+	var err error
+	if opts.Command != "" && channel != "codex" {
+		argv = strings.Fields(opts.Command)
+	} else {
+		argv, env, err = resolveExecAgent(channel)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -973,6 +990,10 @@ func forwarderForChannel(channel, clientID string, opts connectAgentOptions) (fo
 	// override because its channel is app-server only; custom commands belong on
 	// --channel custom.
 	userPickedModel := opts.Model != "" || strings.TrimSpace(os.Getenv("DWS_AGENT_MODEL")) != ""
+	if opts.PrivateDiagnostics {
+		// extra env 覆盖继承值，数字员工 Agent 不接收 DWS 应用或 Token 凭据。
+		env = append(env, "DWS_CLIENT_ID=", "DWS_CLIENT_SECRET=", "DWS_ACCESS_TOKEN=", "DWS_TOKEN=", "DWS_DUMP_RAW=0")
+	}
 	if !overridden && opts.Model != "" {
 		if spec.modelFlag == "" {
 			return nil, apperrors.NewValidation(fmt.Sprintf("渠道 %q 的 agent CLI 不支持模型覆盖（--agent-model）", channel))

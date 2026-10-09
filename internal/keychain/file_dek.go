@@ -88,3 +88,7 @@ func fileDEKReadOnly(service string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("read dek: %w", ErrDEKMissing)
 }
+
+func fileDEKCiphertextMismatchError() error {
+	return fmt.Errorf("%w: file-DEK cannot decrypt existing entry", ErrCiphertextKeyMismatch)
+}

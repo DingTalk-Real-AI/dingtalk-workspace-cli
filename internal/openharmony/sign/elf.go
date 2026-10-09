@@ -30,6 +30,10 @@ const (
 	sectionTypeNobits   = 8
 
 	pageSize = 4096
+
+	segmentTypeLoad = 1
+
+	maxSectionAlignment = 1 << 20
 )
 
 type elfHeader struct {
@@ -42,6 +46,12 @@ type elfHeader struct {
 	shentsize uint16
 	shnum     uint16
 	shstrndx  uint16
+}
+
+type elfSegment struct {
+	typ    uint32
+	offset uint64
+	filesz uint64
 }
 
 type elfSection struct {
@@ -61,6 +71,7 @@ type elfSection struct {
 type elfImage struct {
 	header   elfHeader
 	sections []elfSection
+	segments []elfSegment
 	data     []byte
 }
 
@@ -121,8 +132,16 @@ func parseELF(data []byte) (*elfImage, error) {
 			return nil, errors.New("invalid ELF program header table")
 		}
 	}
+	segments := make([]elfSegment, h.phnum)
+	for i := range segments {
+		offset := h.phoff + uint64(i)*uint64(h.phentsize)
+		segments[i] = readSegmentHeader(data[offset:], h.class, h.order)
+		if !rangeOK(segments[i].offset, segments[i].filesz, len(data)) {
+			return nil, errors.New("invalid ELF program segment extent")
+		}
+	}
 	if h.shnum == 0 {
-		return &elfImage{header: h, data: data}, nil
+		return &elfImage{header: h, segments: segments, data: data}, nil
 	}
 	if h.shentsize != uint16(sectionHeaderSize) || !rangeOK(h.shoff, uint64(h.shentsize)*uint64(h.shnum), len(data)) {
 		return nil, errors.New("invalid ELF section header table")
@@ -150,7 +169,23 @@ func parseELF(data []byte) (*elfImage, error) {
 			return nil, fmt.Errorf("section %d data is outside the file", i)
 		}
 	}
-	return &elfImage{header: h, sections: sections, data: data}, nil
+	return &elfImage{header: h, sections: sections, segments: segments, data: data}, nil
+}
+
+// readSegmentHeader decodes one program-header entry; the caller has already
+// validated the table range and entry size.
+func readSegmentHeader(data []byte, class byte, order binary.ByteOrder) elfSegment {
+	segment := elfSegment{}
+	if class == elfClass32 {
+		segment.typ = order.Uint32(data[0:4])
+		segment.offset = uint64(order.Uint32(data[4:8]))
+		segment.filesz = uint64(order.Uint32(data[16:20]))
+		return segment
+	}
+	segment.typ = order.Uint32(data[0:4])
+	segment.offset = order.Uint64(data[8:16])
+	segment.filesz = order.Uint64(data[32:40])
+	return segment
 }
 
 // readSectionHeader decodes one complete entry; the caller has already
@@ -208,28 +243,48 @@ func rewriteELF(image *elfImage) (rewrittenELF, error) {
 			cut = section.offset
 		}
 	}
+	if cut < uint64(expectedELFHeaderSize(image.header.class)) {
+		return rewrittenELF{}, errors.New("existing .codesign section overlaps the ELF header")
+	}
+	for _, segment := range image.segments {
+		if segment.typ == segmentTypeLoad && segment.offset+segment.filesz > cut {
+			return rewrittenELF{}, errors.New("loadable segment extends beyond the retired .codesign section")
+		}
+	}
 	oldTableEnd := image.header.shoff + uint64(image.header.shentsize)*uint64(image.header.shnum)
 	base := append([]byte(nil), image.data[:cut]...)
 	if rangeOK(image.header.shoff, oldTableEnd-image.header.shoff, len(base)) {
 		zeroRange(base, image.header.shoff, oldTableEnd-image.header.shoff)
 	}
-	kept := make([]elfSection, 0, len(image.sections)+2)
-	kept = append(kept, image.sections[0])
+	// Retire the old signature and name-table extents before relocation so a
+	// section moved in front of the cut can never land inside a region that
+	// is about to be zeroed.
 	for index := 1; index < len(image.sections); index++ {
 		section := image.sections[index]
 		if index == int(image.header.shstrndx) || isSignatureSection(section.name) {
 			if section.typ != sectionTypeNobits && rangeOK(section.offset, section.size, len(base)) {
 				zeroRange(base, section.offset, section.size)
 			}
+		}
+	}
+	kept := make([]elfSection, 0, len(image.sections)+2)
+	kept = append(kept, image.sections[0])
+	for index := 1; index < len(image.sections); index++ {
+		section := image.sections[index]
+		if index == int(image.header.shstrndx) || isSignatureSection(section.name) {
 			continue
 		}
 		if section.typ != sectionTypeNobits && section.offset+section.size > cut {
 			// The section lived beyond a previous .codesign block; move its
 			// bytes in front of the cut so re-signing keeps them while the
-			// layout stays byte-stable across repeated runs.
+			// layout stays byte-stable across repeated runs. Placement honors
+			// the declared sh_addralign so the section stays loadable.
 			alignment := section.addralign
-			if alignment < 1 || alignment > pageSize {
+			if alignment == 0 {
 				alignment = 1
+			}
+			if alignment&(alignment-1) != 0 || alignment > maxSectionAlignment {
+				return rewrittenELF{}, fmt.Errorf("section %s declares unsupported alignment %d", section.name, alignment)
 			}
 			originalOffset := section.offset
 			section.offset = alignUp(uint64(len(base)), alignment)

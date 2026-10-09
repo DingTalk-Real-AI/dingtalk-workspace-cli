@@ -6,6 +6,8 @@ OpenNodes source，不调用任何白板写 Tool。
 
 ## 必经闭环
 
+更新只设一个用户确认点：先完成所需的 render 和必需的 +diff，再把视觉预览（如有）、差异与覆盖影响一起展示并一次确认；不要在 render 后先索要确认、获准后才补做 diff 再次询问。同一目标、revision、source 和模式已获确认后，直接提交；只有这些内容变化或出现未披露的实质风险才重新确认。
+
 准备 source 后执行 +diff，展示实际变化和全部风险提示，然后停止等待用户明确确认
 当前差异。确认后才执行 +update 并添加 --yes。最初的更新请求、render、dry-run
 及写后读回不能替代此确认；不得换原子 update 绕过。目标、revision、source 或模式
