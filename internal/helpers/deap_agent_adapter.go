@@ -386,13 +386,20 @@ func newDigitalEmployeeRestartCommand() *cobra.Command {
 	})
 }
 
+const codexEmployeeDeveloperInstructions = "你是通过钉钉协作的本地数字员工，请用简洁、自然的中文回答。根据用户明确请求和授权，使用已安装的本地技能、CLI 和工作目录中的资料完成任务；执行前读取相关技能说明，遵守其业务确认要求及当前沙箱权限。不要在没有请求时主动读写文件或执行命令；权限不足或需要交互审批时说明限制，不得声称已执行、绕过权限或输出凭据。"
+
 // 保留此接口参数中的 context，所有运行操作必须服从宿主取消。
 var digitalEmployeeNewForwarder = func(ctx context.Context, cfg digitalEmployeeAdapterConfig) (forwarder, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	cfg.Options.PrivateDiagnostics = true
-	return newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	fwd, err := newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	if codex, ok := fwd.(*codexAppServerForwarder); ok {
+		// 数字员工可按用户授权执行本地任务；群聊机器人保留原有问答限制。
+		codex.developerInstructions = codexEmployeeDeveloperInstructions
+	}
+	return fwd, err
 }
 
 var digitalEmployeeReadyTimeout = 45 * time.Second

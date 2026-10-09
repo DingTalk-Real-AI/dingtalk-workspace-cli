@@ -45,14 +45,15 @@ var (
 // codexAppServerForwarder uses Codex's official app-server JSON-RPC protocol to
 // keep one Codex thread per DingTalk conversation.
 type codexAppServerForwarder struct {
-	privateDiagnostics bool
-	bin                string
-	env                []string
-	timeout            time.Duration
-	workDir            string
-	model              string
-	yolo               bool
-	sessions           *codexThreadSessions
+	privateDiagnostics    bool
+	bin                   string
+	env                   []string
+	timeout               time.Duration
+	workDir               string
+	model                 string
+	yolo                  bool
+	developerInstructions string
+	sessions              *codexThreadSessions
 }
 
 func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string) forwarder {
@@ -195,10 +196,14 @@ func (f *codexAppServerForwarder) threadParams(threadID string) map[string]any {
 	if f.yolo {
 		sandbox = "workspace-write"
 	}
+	instructions := f.developerInstructions
+	if instructions == "" {
+		instructions = codexRobotDeveloperInstructions
+	}
 	params := map[string]any{
 		"approvalPolicy":        "never",
 		"cwd":                   f.cwd(),
-		"developerInstructions": codexRobotDeveloperInstructions,
+		"developerInstructions": instructions,
 		"sandbox":               sandbox,
 	}
 	if f.model != "" {
