@@ -618,3 +618,12 @@ func TestFriendListResumablePageWithoutCursorFailsClosed(t *testing.T) {
 		t.Fatal("resumable page without cursor accepted")
 	}
 }
+
+func TestFriendRequestListResumablePageWithoutCursorFailsClosed(t *testing.T) {
+	caller := &contactCaller{payloads: map[string]string{
+		"get_friend_request_list": `{"success":true,"result":{"cursor":0,"hasMore":true,"pendingCount":1,"friendList":[{"openDingTalkId":"req-1","status":1}]}}`,
+	}}
+	if _, err := executeFriendShortcutForEnvelope(t, ListFriendRequests, caller, map[string]string{"size": "20"}); err == nil {
+		t.Fatal("resumable request page without cursor accepted")
+	}
+}
