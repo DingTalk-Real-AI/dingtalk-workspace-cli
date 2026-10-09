@@ -360,7 +360,7 @@ func TestSyncToGiteeRunsTagReleaseCreationAndAssetReconciliationWithinOneBudget(
 	if err != nil {
 		t.Fatalf("full Gitee sync error = %v\noutput:\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "all 8 verified") {
+	if !strings.Contains(string(output), "all 9 verified") {
 		t.Fatalf("full Gitee sync did not reconcile every release asset:\n%s", output)
 	}
 
@@ -398,7 +398,7 @@ func TestReconcileGiteeAssetsRecoversACommittedUploadWithLostResponse(t *testing
 	if !strings.Contains(string(output), "appeared with the expected SHA after a lost upload response") {
 		t.Fatalf("sync did not recognize the committed upload after the response was lost:\n%s", output)
 	}
-	if !strings.Contains(string(output), "all 8 verified") {
+	if !strings.Contains(string(output), "all 9 verified") {
 		t.Fatalf("sync did not report complete final verification:\n%s", output)
 	}
 
@@ -476,7 +476,7 @@ func TestReconcileGiteeAssetsRetriesATransientListOutage(t *testing.T) {
 	if elapsed < 1500*time.Millisecond {
 		t.Fatalf("transient list retry elapsed = %s, want production-style backoff", elapsed)
 	}
-	if !strings.Contains(string(output), "all 8 verified") {
+	if !strings.Contains(string(output), "all 9 verified") {
 		t.Fatalf("transient-list reconciliation did not verify every asset:\n%s", output)
 	}
 
@@ -546,7 +546,7 @@ func TestReconcileGiteeAssetsDiscardsPartialOutputFromAMalformedList(t *testing.
 	if !strings.Contains(string(output), existingName+" already correct on Gitee") {
 		t.Fatalf("partial failed-list output manufactured a stale or duplicate asset:\n%s", output)
 	}
-	if !strings.Contains(string(output), "all 8 verified") {
+	if !strings.Contains(string(output), "all 9 verified") {
 		t.Fatalf("malformed-list reconciliation did not verify every asset:\n%s", output)
 	}
 
@@ -577,7 +577,7 @@ func TestReconcileGiteeAssetsDisablesExpectContinueForLargeUploads(t *testing.T)
 	if err != nil {
 		t.Fatalf("large-asset reconciliation error = %v\noutput:\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "all 8 verified") {
+	if !strings.Contains(string(output), "all 9 verified") {
 		t.Fatalf("large-asset reconciliation did not verify every asset:\n%s", output)
 	}
 }
