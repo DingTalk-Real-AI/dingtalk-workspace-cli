@@ -478,6 +478,47 @@ func TestCrossPlatformCoverageSign32RejectsBadProgramHeader(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRejectsUndersizedProgramHeaderEntry(t *testing.T) {
+	data := minimalELF()
+	// One program-header entry of one byte anchored at the end of the file:
+	// the table extent fits, but decoding the fixed-size entry would read
+	// past the buffer, so parsing must reject instead of panicking.
+	binary.LittleEndian.PutUint64(data[32:40], uint64(len(data))-8)
+	binary.LittleEndian.PutUint16(data[54:56], 1)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	if _, err := parseELF(data); err == nil || !strings.Contains(err.Error(), "program header table") {
+		t.Fatalf("parseELF() = %v, want program header table rejection", err)
+	}
+
+	data32 := minimalELF32()
+	binary.LittleEndian.PutUint32(data32[28:32], uint32(len(data32))-8)
+	binary.LittleEndian.PutUint16(data32[42:44], 4)
+	binary.LittleEndian.PutUint16(data32[44:46], 1)
+	if _, err := parseELF(data32); err == nil || !strings.Contains(err.Error(), "program header table") {
+		t.Fatalf("parseELF32() = %v, want program header table rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageSignFileRejectsPanicInputWithoutOutput(t *testing.T) {
+	directory := t.TempDir()
+	inputPath := filepath.Join(directory, "input")
+	outputPath := filepath.Join(directory, "output")
+	data := minimalELF()
+	binary.LittleEndian.PutUint64(data[32:40], uint64(len(data))-8)
+	binary.LittleEndian.PutUint16(data[54:56], 1)
+	binary.LittleEndian.PutUint16(data[56:58], 1)
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SignFile(inputPath, outputPath); err == nil ||
+		!strings.Contains(err.Error(), "program header table") {
+		t.Fatalf("SignFile() = %v, want program header table rejection", err)
+	}
+	if _, statErr := os.Stat(outputPath); !os.IsNotExist(statErr) {
+		t.Fatal("rejected input must not produce an output file")
+	}
+}
+
 func TestCrossPlatformCoverageRejectsCorruptedRewrittenOutput(t *testing.T) {
 	directory := t.TempDir()
 	inputPath := filepath.Join(directory, "input")
@@ -625,4 +666,22 @@ func pageBoundaryELF() []byte {
 	writeHeader(shoff+64, 1, 1, 0x100, 1)
 	writeHeader(shoff+128, 7, 3, uint64(fileSize-len(sectionNames)), uint64(len(sectionNames)))
 	return data
+}
+
+func FuzzParseELFNeverPanics(f *testing.F) {
+	f.Add(minimalELF())
+	f.Add(minimalELF32())
+	f.Add(bigEndianELF())
+	f.Add(sectionAfterCodesignELF())
+	seed := minimalELF()
+	binary.LittleEndian.PutUint64(seed[32:40], uint64(len(seed))-8)
+	binary.LittleEndian.PutUint16(seed[54:56], 1)
+	binary.LittleEndian.PutUint16(seed[56:58], 1)
+	f.Add(seed)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		image, err := parseELF(data)
+		if err == nil {
+			_, _ = rewriteELF(image)
+		}
+	})
 }

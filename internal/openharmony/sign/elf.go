@@ -128,7 +128,8 @@ func parseELF(data []byte) (*elfImage, error) {
 		h.shstrndx = order.Uint16(data[62:64])
 	}
 	if h.phnum > 0 {
-		if h.phentsize == 0 || !rangeOK(h.phoff, uint64(h.phentsize)*uint64(h.phnum), len(data)) {
+		if h.phentsize != uint16(expectedSegmentHeaderSize(h.class)) ||
+			!rangeOK(h.phoff, uint64(h.phentsize)*uint64(h.phnum), len(data)) {
 			return nil, errors.New("invalid ELF program header table")
 		}
 	}
@@ -399,6 +400,13 @@ func expectedSectionHeaderSize(class byte) int {
 		return 40
 	}
 	return 64
+}
+
+func expectedSegmentHeaderSize(class byte) int {
+	if class == elfClass32 {
+		return 32
+	}
+	return 56
 }
 
 func wordSize(class byte) int {
