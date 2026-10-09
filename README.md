@@ -775,7 +775,7 @@ dws chat message send-by-bot --robot-code BOT_CODE --group GROUP_ID \
 
 ## DingTalk bot — connect a robot to your local AI
 
-`dws dev connect` bridges a DingTalk robot to a local AI CLI (Claude Code / Codex / opencode / Qoder / Gemini, or any tool via `--agent-cmd`): @-mention the bot in a chat and it answers using your local agent, keeping per-conversation multi-turn memory.
+`dws dev connect` bridges a DingTalk robot to a local AI CLI (Claude Code / Codex / opencode / Qoder / Gemini / [Pi](docs/pi-agent.md), or any tool via `--agent-cmd`): @-mention the bot in a chat and it answers using your local agent, keeping per-conversation multi-turn memory.
 
 ```bash
 dws dev connect --channel auto --unified-app-id <unifiedAppId>
