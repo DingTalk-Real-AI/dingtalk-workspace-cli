@@ -17,12 +17,7 @@ builds:
     binary: dws
     env:
       - CGO_ENABLED=1
-      - GOTOOLCHAIN=go1.26.7
-      # osxcross defaults the x86_64 deployment target to 10.13, where ld64
-      # emits __DATA_CONST without SG_READ_ONLY and current dyld refuses the
-      # binary before main() (#1441). 11.0 matches the arm64 toolchain floor
-      # and Go's own minimum macOS version.
-      - MACOSX_DEPLOYMENT_TARGET=11.0
+      - GOTOOLCHAIN=go1.25.9
       - CC_darwin_amd64=o64-clang
       - CXX_darwin_amd64=o64-clang++
       - CC_darwin_arm64=oa64-clang
@@ -35,6 +30,9 @@ builds:
       - CXX_windows_amd64=x86_64-w64-mingw32-g++
       - CC_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-gcc
       - CXX_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-g++
+      # The later GOTOOLCHAIN assignment overrides the 1.25.9 default above
+      # once Go 1.26.7 is the repo baseline.
+      - GOTOOLCHAIN=go1.26.7
       - 'CC={{ index .Env (print "CC_" .Os "_" .Arch) }}'
       - 'CXX={{ index .Env (print "CXX_" .Os "_" .Arch) }}'
     flags:
