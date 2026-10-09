@@ -335,6 +335,9 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 		record.Status = "agent_failed"
 		record.Execution = "failure"
 		answer = "本次处理失败，请稍后重试。"
+		if errors.Is(err, errCodexEmployeeResumeFailed) {
+			answer = "原会话暂时无法恢复，请稍后重试；如需新会话，请发送 /new。"
+		}
 		if errors.Is(err, context.Canceled) || r.ctx.Err() != nil {
 			record.Status, record.Execution = "cancelled", "cancelled"
 			answer = ""

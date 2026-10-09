@@ -84,7 +84,7 @@ func TestCrossPlatformCoverageEmployeeQueueCapacityAndPersistence(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageEmployeeTaskFailureStates(t *testing.T) {
-	for _, scenario := range []string{"cancelled", "missing", "corrupt", "agent-failed", "empty", "sending-write", "send-failed", "audit", "final-write"} {
+	for _, scenario := range []string{"cancelled", "missing", "corrupt", "agent-failed", "resume-failed", "empty", "sending-write", "send-failed", "audit", "final-write"} {
 		t.Run(scenario, func(t *testing.T) {
 			r, e := employeeLedgerFixture(t)
 			path := r.recordPath(e)
@@ -104,6 +104,8 @@ func TestCrossPlatformCoverageEmployeeTaskFailureStates(t *testing.T) {
 				}
 			case "agent-failed":
 				r.fwd = &employeeBoundaryForwarder{err: errors.New("private model error")}
+			case "resume-failed":
+				r.fwd = &employeeBoundaryForwarder{err: errCodexEmployeeResumeFailed}
 			case "sending-write", "send-failed":
 				r.fwd = &employeeBoundaryForwarder{answer: "private answer"}
 			case "audit":
@@ -132,7 +134,7 @@ func TestCrossPlatformCoverageEmployeeTaskFailureStates(t *testing.T) {
 					t.Fatal(err)
 				}
 				want := "completed_without_reply"
-				if scenario == "agent-failed" {
+				if scenario == "agent-failed" || scenario == "resume-failed" {
 					want = "agent_failed"
 				}
 				if scenario == "send-failed" {

@@ -6,6 +6,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -126,5 +127,31 @@ func TestCrossPlatformCoverageEmployeeCustomSessionOwnership(t *testing.T) {
 		if f.sessions != nil || !reflect.DeepEqual(f.commandArgs(f.argv, conversation, "question"), []string{"exec", "question"}) {
 			t.Fatal("custom 模式被注入了未知的会话参数")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeCodexResumePreservesContext(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	f := newCodexAppServerForwarder("fixture", nil, 0, connectAgentOptions{Memory: true}, "employee").(*codexAppServerForwarder)
+	f.developerInstructions = codexEmployeeDeveloperInstructions
+	f.sessions.setThreadID("conversation", "locked-thread")
+	testseam.Swap(t, &codexNewAppServerClient, func(context.Context, string, []string, string) (*codexAppServerClient, error) {
+		return unitCodexClient(&bufferWriteCloser{},
+			codexRPCMessage{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)},
+			codexRPCMessage{ID: codexIntPtr(2), Error: &codexRPCError{Code: -32600, Message: "thread already has an active writer"}},
+			codexRPCMessage{ID: codexIntPtr(3), Result: json.RawMessage(`{"thread":{"id":"replacement-thread"}}`)},
+			codexRPCMessage{Method: "turn/completed", Params: json.RawMessage(`{"threadId":"replacement-thread","turn":{"status":"completed","items":[{"type":"agentMessage","text":"done"}]}}`)},
+		), nil
+	})
+	if _, err := f.forward(context.Background(), "conversation", "继续之前的任务"); !errors.Is(err, errCodexEmployeeResumeFailed) {
+		t.Fatal("恢复失败后静默新建了会话，或缺少可识别的恢复失败结果", err)
+	}
+	if f.sessions.threadID("conversation") != "locked-thread" {
+		t.Fatal("会话恢复失败清除了已有 thread 映射")
+	}
+	// 只有用户明确发起新会话才清除映射。
+	f.resetSession("conversation")
+	if f.sessions.threadID("conversation") != "" {
+		t.Fatal("明确的新会话指令未生效")
 	}
 }

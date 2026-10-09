@@ -33,6 +33,7 @@ import (
 
 // 机器人仍拒绝无正文回合；数字员工可将协议已确认完成的空正文转换为“收到”。
 var errCodexCompletedWithoutReply = errors.New("turn completed without agent message")
+var errCodexEmployeeResumeFailed = errors.New("employee codex thread resume failed")
 
 const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。仅当用户消息明确附带了本地附件路径时，可以只读该附件或运行分析该附件所必需的只读命令，不得访问其它文件。"
 
@@ -154,6 +155,10 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 	if threadID != "" {
 		resumed, err := cli.resumeThread(ctx, f.threadParams(threadID))
 		if err != nil {
+			if f.developerInstructions != "" {
+				// 员工恢复失败不能悄悄丢掉上下文，保留映射，等待恢复或显式 /new。
+				return "", fmt.Errorf("%w: %w", errCodexEmployeeResumeFailed, err)
+			}
 			if !f.privateDiagnostics {
 				fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
 			}
