@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -314,6 +315,54 @@ func TestCrossPlatformCoverageManagedUpgradeExecution(t *testing.T) {
 				t.Fatal("missing successful invalidation")
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageManagedNPMForceCommand(t *testing.T) {
+	for _, global := range []bool{false, true} {
+		for _, mode := range []string{"normal", "force-upgrade", "force-reinstall"} {
+			t.Run(mode+"-global-"+string(rune('0'+boolInt(global))), func(t *testing.T) {
+				root := t.TempDir()
+				manager := filepath.Join(root, "npm")
+				install := upgradeInstallation{manager: "npm", root: root, packageDir: filepath.Join(root, "node_modules", upgradeNPMPackageName), global: global}
+				testseam.Swap(t, &version, "8.0.0")
+				if mode == "force-reinstall" {
+					testseam.Swap(t, &version, "9.9.9")
+				}
+				testseam.Swap(t, &upgradeRuntimeGOOS, "linux")
+				testseam.Swap(t, &upgradeLookPath, func(string) (string, error) { return manager, nil })
+				var commands [][]string
+				testseam.Swap(t, &upgradeManagedOutput, func(cmd *exec.Cmd) ([]byte, error) {
+					commands = append(commands, append([]string(nil), cmd.Args...))
+					return nil, nil
+				})
+				testseam.Swap(t, &upgradeTryExecVersion, func(string) ([]byte, error) { return []byte("Version: 9.9.9"), nil })
+				testseam.Swap(t, &upgradeManagerReadFile, func(string) ([]byte, error) { return []byte(managedPackageManifest), nil })
+				testseam.Swap(t, &invalidateSchemaCacheAfterUpgrade, func() {})
+				if err := runManagedUpgrade(context.Background(), install, testManagedRelease(), upgradeOptions{yes: true, force: mode != "normal"}); err != nil {
+					t.Fatal(err)
+				}
+				// 断言交给进程执行边界的完整 argv，防止 --force 在安装路由中丢失。
+				wantInstall := []string{manager, "install", "--prefix", root, "--registry", "https://registry.example/npm"}
+				if global {
+					wantInstall = append(wantInstall, "--global")
+				}
+				if mode != "normal" {
+					wantInstall = append(wantInstall, "--force")
+				}
+				want := [][]string{append(wantInstall, upgradeNPMPackageName+"@9.9.9")}
+				if mode == "force-reinstall" {
+					rebuild := []string{manager, "rebuild", "--prefix", root}
+					if global {
+						rebuild = append(rebuild, "--global")
+					}
+					want = append(want, append(rebuild, upgradeNPMPackageName))
+				}
+				if !reflect.DeepEqual(commands, want) {
+					t.Fatalf("执行命令不匹配:\n got: %q\nwant: %q", commands, want)
+				}
+			})
+		}
 	}
 }
 

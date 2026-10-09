@@ -30,6 +30,8 @@ dws upgrade --version v1.0.63 --dry-run
 
 `--dry-run` 预览所选更新方案，不运行包管理器或修改安装。独立二进制支持 `--skip-skills` 和 `--rollback`。npm/pnpm 的安装脚本会更新技能，因此不支持通过 `dws upgrade --skip-skills` 跳过；包管理器安装的回退交由原包管理器操作。Homebrew 捆绑技能，安装到 Agent 目录仍使用 `dws skill setup`。
 
+npm 安装的 `--force` 会传给 `npm install`；同版本重装还会执行 `npm rebuild`，通过安装脚本从包内资产恢复二进制。此过程仍遵循 npm 的缓存和脚本配置，不保证重新下载整个包；包内资产损坏或脚本被禁用时，更新验证可能失败。
+
 Homebrew 在确认后更新 Formula 索引，再核对目标版本；显式配置的其他 Registry 或 GitHub 来源不能自动映射到原 Formula，需使用原 Homebrew 命令升级。Windows 包管理器安装暂时给出手动升级命令，需退出当前 DWS 进程后执行；无法确认安装归属的 pnpm 存储布局也会给出原管理器指引，不尝试原生覆盖。
 
 包完整性、清单身份或文件校验失败会终止更新，不通过换源绕过校验。当前 npm 发布包包含全部平台归档，因此原生更新的下载量大于单个平台归档；版本检查只获取元数据，不下载发布包。

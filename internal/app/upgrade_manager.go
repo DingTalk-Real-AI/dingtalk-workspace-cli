@@ -207,6 +207,9 @@ func managedUpgradeArgs(install upgradeInstallation, release *upgrade.ReleaseInf
 		if install.global {
 			args = append(args, "--global")
 		}
+		if opts.force {
+			args = append(args, "--force")
+		}
 		return append(args, pkg), nil
 	}
 	args := []string{"add", "--registry", release.NPM.RegistryURL}
