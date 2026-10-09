@@ -595,20 +595,3 @@ func strictFriendRequestList(data map[string]any, operation string) ([]map[strin
 	}
 	return out, cursor, hasMore, pendingCount, nil
 }
-
-// parseFriendCursor normalizes an optional integer cursor. A zero or absent
-// value is returned as the empty string so the caller can omit the field.
-func parseFriendCursor(value string) (int64, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, nil
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	if parsed < 0 {
-		return 0, fmt.Errorf("cursor must be non-negative")
-	}
-	return parsed, nil
-}

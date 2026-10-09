@@ -506,21 +506,6 @@ func TestStrictFriendRequestListRejectsMalformedEnvelopes(t *testing.T) {
 	}
 }
 
-func TestParseFriendCursorVariants(t *testing.T) {
-	if value, err := parseFriendCursor(""); err != nil || value != 0 {
-		t.Fatalf("empty cursor = %d, %v", value, err)
-	}
-	if value, err := parseFriendCursor(" 42 "); err != nil || value != 42 {
-		t.Fatalf("trimmed cursor = %d, %v", value, err)
-	}
-	if _, err := parseFriendCursor("abc"); err == nil {
-		t.Fatal("non-numeric cursor accepted")
-	}
-	if _, err := parseFriendCursor("-1"); err == nil {
-		t.Fatal("negative cursor accepted")
-	}
-}
-
 // executeFriendShortcutForEnvelope mounts the shortcut through the real
 // corecmd tree, runs Execute with a unified result store, and decodes the
 // final JSON envelope so pagination contract assertions see what callers see.
