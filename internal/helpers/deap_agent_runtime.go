@@ -60,6 +60,8 @@ type employeeTaskRecord struct {
 	Status         string    `json:"status"`
 	IdempotencyKey string    `json:"idempotencyKey"`
 	ReplyID        string    `json:"replyId,omitempty"`
+	Execution      string    `json:"execution,omitempty"`
+	Delivery       string    `json:"delivery,omitempty"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
@@ -162,14 +164,15 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 }
 
 type employeeRuntime struct {
-	cfg    digitalEmployeeAdapterConfig
-	dir    string
-	fwd    forwarder
-	mu     sync.Mutex
-	queues map[string]chan employeeEvent
-	wg     sync.WaitGroup
-	fatal  chan error
-	ctx    context.Context
+	cfg      digitalEmployeeAdapterConfig
+	dir      string
+	fwd      forwarder
+	mu       sync.Mutex
+	queues   map[string]chan employeeEvent
+	wg       sync.WaitGroup
+	fatal    chan error
+	ctx      context.Context
+	feedback *employeeFeedback
 }
 
 func (r *employeeRuntime) audit(record employeeTaskRecord) error {
@@ -264,6 +267,7 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if err := writeEmployeeJSON(path, record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
+	r.feedback.set(e, "排队中", false)
 	if q == nil {
 		q = make(chan employeeEvent, 32)
 		r.queues[e.ConversationID] = q
@@ -301,24 +305,51 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	if err != nil || json.Unmarshal(raw, &record) != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
+	record.Status, record.Execution = "running", "running"
+	record.UpdatedAt = time.Now()
+	if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
+		return employeeTerminal("ledger_unavailable")
+	}
+	r.feedback.set(e, "思考中", false)
+	// 即使执行或账本失败，也要结束处理中反馈；成功分支在持久化后覆盖该值。
+	label := "已中断，待核查"
+	defer func() { r.feedback.set(e, label, true) }()
 	answer, err := forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, e.Content)
+	record.Execution = "success"
 	if err != nil {
 		record.Status = "agent_failed"
+		record.Execution = "failure"
+		answer = "本次处理失败，请稍后重试。"
+		if errors.Is(err, context.Canceled) || r.ctx.Err() != nil {
+			record.Status, record.Execution = "cancelled", "cancelled"
+			answer = ""
+		}
 	} else if strings.TrimSpace(answer) == "" {
 		record.Status = "empty_reply"
-	} else {
+		record.Execution = "failure"
+		answer = "本次处理未生成可发送的回复，请重试。"
+	}
+	if answer != "" {
+		outcome := record.Status
 		record.Status = "sending"
+		record.Delivery = "pending"
+		record.UpdatedAt = time.Now()
 		if err = writeEmployeeJSON(r.recordPath(e), record); err != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
 		payload := digitalEmployeeReplyInput{BindingRevision: r.cfg.Binding.BindingRevision, SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: r.cfg.Binding.AgentUUID, EventID: e.EventID, ConversationID: e.ConversationID, ReferenceMessageID: e.MessageID, Text: answer, IdempotencyKey: record.IdempotencyKey}
 		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, payload, "dingtalk-tag", "channel", "reply", "--channel", r.cfg.Binding.Channel, "--stdin", "--format", "json")
 		record.Status = "needs_review"
+		record.Delivery = "unknown"
 		if sendErr == nil {
 			record.ReplyID = jsonScalar(result["openMessageId"])
 			if jsonScalar(result["deliveryStatus"]) == "delivered" && record.ReplyID != "" {
 				record.Status = "delivered"
+				record.Delivery = "accepted"
 			}
+		}
+		if record.Execution == "failure" {
+			record.Status = outcome
 		}
 	}
 	record.UpdatedAt = time.Now()
@@ -330,6 +361,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
+	label = employeeTaskLabel(record)
 	return nil
 }
 
@@ -400,6 +432,8 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		return employeeTerminal("state_unavailable")
 	}
 	r := &employeeRuntime{cfg: cfg, dir: dir, fwd: fwd, queues: map[string]chan employeeEvent{}, fatal: make(chan error, 1), ctx: ctx}
+	r.feedback = newEmployeeFeedback(ctx, cfg.Binding.DWSProfile, dir)
+	defer r.feedback.wait()
 	if err = r.audit(employeeTaskRecord{Status: "starting", UpdatedAt: time.Now()}); err != nil {
 		return err
 	}
@@ -688,7 +722,12 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 		if json.Unmarshal(data, &record) != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		if record.Status == "accepted" || record.Status == "sending" {
+		if record.Status == "accepted" || record.Status == "running" || record.Status == "sending" {
+			if record.Status == "sending" {
+				record.Delivery = "unknown"
+			} else {
+				record.Execution = "unknown"
+			}
 			record.Status = "needs_review"
 			record.UpdatedAt = time.Now()
 			if e = r.audit(record); e != nil {
@@ -698,6 +737,7 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 				return employeeTerminal("ledger_unavailable")
 			}
 		}
+		r.feedback.recover(employeeEvent{ConversationID: record.ConversationID, MessageID: record.MessageID}, employeeTaskLabel(record))
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -115,7 +116,11 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 				}
 			}
 			writes, tasks := 0, 0
+			var storageMu sync.Mutex
 			testseam.Swap(t, &atomicRename, func(src, dst string) error {
+				// 状态投影与任务账本可并发落盘；故障计数只在此 seam 内串行维护。
+				storageMu.Lock()
+				defer storageMu.Unlock()
 				if filepath.Base(dst) == "state.json" {
 					writes++
 				}
