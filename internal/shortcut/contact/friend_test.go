@@ -4,11 +4,15 @@
 package contact
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -510,5 +514,107 @@ func TestParseFriendCursorVariants(t *testing.T) {
 	}
 	if _, err := parseFriendCursor("-1"); err == nil {
 		t.Fatal("negative cursor accepted")
+	}
+}
+
+// executeFriendShortcutForEnvelope mounts the shortcut through the real
+// corecmd tree, runs Execute with a unified result store, and decodes the
+// final JSON envelope so pagination contract assertions see what callers see.
+func executeFriendShortcutForEnvelope(t *testing.T, decl shortcut.Shortcut, caller *contactCaller, flags map[string]string) (map[string]any, error) {
+	t.Helper()
+	helpers.InitDepsForTest(t, caller)
+	cmd := corecmd.New(shortcut.FromShortcut(decl))
+	for name, value := range flags {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set --%s=%s: %v", name, value, err)
+		}
+	}
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	rt := shortcut.RuntimeContextForTest(cmd, decl)
+	if err := decl.Validate(rt); err != nil {
+		return nil, err
+	}
+	if err := decl.Execute(rt); err != nil {
+		return nil, err
+	}
+	code, emitted, err := output.EmitStoredResult(cmd)
+	if err != nil || !emitted {
+		t.Fatalf("emit result: code=%d emitted=%t err=%v", code, emitted, err)
+	}
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, stdout.String())
+	}
+	return envelope, nil
+}
+
+func TestFriendListEnvelopePaginationTwoStates(t *testing.T) {
+	caller := &contactCaller{payloads: map[string]string{
+		"get_friend_list": `{"success":true,"result":{"cursor":7,"hasMore":true,"friendList":[{"openDingTalkId":"friend-1","nick":"Ann"}]}}`,
+	}}
+	envelope, err := executeFriendShortcutForEnvelope(t, ListFriends, caller, map[string]string{"cursor": "7", "size": "50"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	pagination := envelope["meta"].(map[string]any)["pagination"].(map[string]any)
+	if envelope["outcome"] != "success" || data["hasMore"] != true || data["cursor"] != float64(7) {
+		t.Fatalf("resumable envelope = %#v", envelope)
+	}
+	if pagination["endpoint_exhausted"] != false || pagination["next_token"] != "7" {
+		t.Fatalf("resumable pagination = %#v", pagination)
+	}
+
+	caller.calls = 0
+	caller.payloads["get_friend_list"] = `{"success":true,"result":{"cursor":0,"hasMore":false,"friendList":[{"openDingTalkId":"friend-1"}]}}`
+	envelope, err = executeFriendShortcutForEnvelope(t, ListFriends, caller, map[string]string{"size": "20"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagination = envelope["meta"].(map[string]any)["pagination"].(map[string]any)
+	if pagination["endpoint_exhausted"] != true || pagination["next_token"] != nil {
+		t.Fatalf("exhausted pagination = %#v", pagination)
+	}
+}
+
+func TestFriendRequestListEnvelopePaginationTwoStates(t *testing.T) {
+	caller := &contactCaller{payloads: map[string]string{
+		"get_friend_request_list": `{"success":true,"result":{"cursor":3,"hasMore":true,"pendingCount":2,"friendList":[{"openDingTalkId":"req-1","status":1}]}}`,
+	}}
+	envelope, err := executeFriendShortcutForEnvelope(t, ListFriendRequests, caller, map[string]string{"cursor": "3", "size": "20"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagination := envelope["meta"].(map[string]any)["pagination"].(map[string]any)
+	if pagination["endpoint_exhausted"] != false || pagination["next_token"] != "3" {
+		t.Fatalf("resumable pagination = %#v", pagination)
+	}
+
+	caller.calls = 0
+	caller.payloads["get_friend_request_list"] = `{"success":true,"result":{"cursor":0,"hasMore":false,"pendingCount":0,"friendList":[]}}`
+	envelope, err = executeFriendShortcutForEnvelope(t, ListFriendRequests, caller, map[string]string{"size": "20"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := envelope["data"].(map[string]any)
+	pagination = envelope["meta"].(map[string]any)["pagination"].(map[string]any)
+	if data["count"] != float64(0) || pagination["endpoint_exhausted"] != true || pagination["next_token"] != nil {
+		t.Fatalf("exhausted envelope = %#v", envelope)
+	}
+}
+
+func TestFriendListResumablePageWithoutCursorFailsClosed(t *testing.T) {
+	caller := &contactCaller{payloads: map[string]string{
+		"get_friend_list": `{"success":true,"result":{"cursor":0,"hasMore":true,"friendList":[{"openDingTalkId":"friend-1"}]}}`,
+	}}
+	if _, err := executeFriendShortcutForEnvelope(t, ListFriends, caller, map[string]string{"size": "20"}); err == nil {
+		t.Fatal("resumable page without cursor accepted")
 	}
 }

@@ -750,8 +750,8 @@ dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json
 - `label list-members` 需要先通过 `label list` 或 `label get` 获取 labelId，再用 --id 查询角色下的成员
 - `user update-self` 用于更新当前用户自己的昵称/头像；头像 fileId 需先上传头像到钉盘获取
 - `account update` 用于更新企业账号用户信息；`--depts` 为 JSON 数组格式，头像 fileId 需先上传钉盘获取
-- 好友命令（`+friend-*`）的身份键是 **openDingTalkId（开放钉钉号ID）**，与 userId、钉钉号（dingtalkId）均不同；openDingTalkId 只能从 `+friend-list` / `+friend-request-list` 响应的 `openDingTalkId` 字段或好友事件消息体取得，`aisearch person` / `user get-by-dingtalk-id` 只返回 userId、取不到 openDingTalkId；拿到 openDingTalkId 后可用 `user get-by-open-dingtalk-id` 反查 userId
-- `+friend-list` 与 `+friend-request-list` 支持分页：翻页时把上一页返回的 `cursor` 传入 `--cursor`；`hasMore=true` 表示还有下一页
+- 好友命令（`+friend-*`）的身份键是 **openDingTalkId（开放钉钉号ID）**，与 userId、钉钉号（dingtalkId）均不同；openDingTalkId 可从 `+friend-list` / `+friend-request-list` 响应的 `openDingTalkId` 字段、好友事件消息体，或 `user search`（按关键词搜人，结果同时返回 userId 与 openDingTalkId）取得，`aisearch person` / `user get-by-dingtalk-id` 只返回 userId、取不到 openDingTalkId；拿到 openDingTalkId 后可用 `user get-by-open-dingtalk-id` 反查 userId
+- `+friend-list` 与 `+friend-request-list` 支持分页：翻页时把上一页返回的 `cursor` 传入 `--cursor`（或从统一 envelope 的 `meta.pagination.next_token` 取）；`hasMore=true` 表示还有下一页
 - `+friend-request-list` 查询后未读申请会被标记为已读，属正常副作用
 - `+friend-remove` 不可逆：删除后需重新发起好友申请才可恢复，执行前必须确认
 - 好友 ≠ 特别关注：特别关注（星标）列表走 `relation list-my-followings`，好友关系走 `+friend-list`，两者互不包含，禁止互路由

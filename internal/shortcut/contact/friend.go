@@ -105,7 +105,12 @@ var ListFriends = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"count": len(friends), "cursor": cursor, "hasMore": hasMore, "friends": friends})
+		payload := map[string]any{"count": len(friends), "cursor": cursor, "hasMore": hasMore, "friends": friends}
+		meta, err := friendListPagination(friendOperationList, hasMore, cursor)
+		if err != nil {
+			return err
+		}
+		return rt.OutputWithMeta(payload, meta)
 	},
 }
 
@@ -179,13 +184,18 @@ var ListFriendRequests = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{
+		payload := map[string]any{
 			"count":        len(requests),
 			"pendingCount": pendingCount,
 			"cursor":       cursor,
 			"hasMore":      hasMore,
 			"requests":     requests,
-		})
+		}
+		meta, err := friendListPagination(friendOperationRequestList, hasMore, cursor)
+		if err != nil {
+			return err
+		}
+		return rt.OutputWithMeta(payload, meta)
 	},
 }
 
@@ -440,6 +450,24 @@ func friendRequestCollectionResult() *contract.ResultSpec {
 		)),
 		SensitivePaths: []string{"requests.openDingTalkId", "requests.nick", "requests.remark"},
 	}
+}
+
+// friendListPagination builds the framework-owned meta.pagination block that
+// the declared PaginationSpec (MetaPath meta.pagination, exhausted path
+// meta.pagination.endpoint_exhausted) promises. A resumable page must carry
+// the server cursor as next_token; an exhausted page must not carry one.
+func friendListPagination(operation string, hasMore bool, cursor int64) (*output.Meta, error) {
+	token := ""
+	if hasMore && cursor > 0 {
+		token = strconv.FormatInt(cursor, 10)
+	}
+	pagination, err := output.NewPagination(!hasMore, token)
+	if err != nil {
+		// A resumable page without a usable cursor fails closed instead of
+		// promising a resume handle the server never provided.
+		return nil, responsecheck.Error(operation, "invalid_pagination", err.Error())
+	}
+	return &output.Meta{Pagination: pagination}, nil
 }
 
 func strictFriendList(data map[string]any, operation string) ([]map[string]any, int64, bool, error) {
