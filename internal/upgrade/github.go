@@ -119,8 +119,11 @@ type Client struct {
 	anonymous   bool // 自动检查不继承显式升级请求的凭据权限。
 }
 
-// NewClient creates a GitHub release client with default settings.
+// NewClient 默认查询 npm；显式 GitHub 配置继续使用原有升级源。
 func NewClient() *Client {
+	if !hasExplicitGitHubSource() {
+		return newRegistryClient()
+	}
 	baseURL := gitHubAPIBase
 	if env := os.Getenv("DWS_UPGRADE_URL"); env != "" {
 		baseURL = strings.TrimRight(env, "/")
