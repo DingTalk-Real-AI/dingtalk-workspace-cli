@@ -228,6 +228,22 @@
       },
       "state": "consumed",
       "reason": "Retire legacy contract review result from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contact user get-by-dingtalk-id",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contact",
+        "source_tool_id": "contact.get_user_id_by_dingtalk_id",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Retire legacy contact user get-by-dingtalk-id from Agent Schema and public help while keeping a hidden historical argv compatibility command that fails closed with aisearch person / search-mobile / get-by-open-dingtalk-id alternatives."
     }
   ]
 }
