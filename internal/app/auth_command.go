@@ -36,6 +36,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/charmbracelet/huh"
@@ -563,6 +564,7 @@ func newAuthStatusCommand() *cobra.Command {
 
 指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。
 使用 --readonly 只读本地快照，不获取认证锁、不访问认证服务、不刷新、不迁移或修复。
+普通模式检查 CLI 最新版本（24 小时缓存）；--readonly 仅读取已有版本缓存，不联网或写入。
 只读模式与普通模式使用相同输出字段，但不执行刷新，可能返回不同的 token 有效性。
 并发更新时可能读到旧快照或无法判断的状态；系统 Keychain 读取仍可能等待。`,
 		Example: `  dws auth status
@@ -652,10 +654,11 @@ func newAuthStatusCommand() *cobra.Command {
 
 // Both status modes render through the same compatibility-preserving path.
 func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, tokenData *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+	check := commandVersionCheck(cmd, false)
 	// Check if JSON output is requested
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if strings.EqualFold(strings.TrimSpace(format), "json") {
-		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic)
+		return writeAuthStatusJSON(cmd.OutOrStdout(), authenticated, refreshed, tokenData, diagnostic, check)
 	}
 
 	// Default table output
@@ -696,6 +699,7 @@ func writeAuthStatusResult(cmd *cobra.Command, authenticated, refreshed bool, to
 			fmt.Fprintln(w, "运行 dws auth login --recommend 进行登录")
 		}
 	}
+	_ = writeVersionCheck(cmd.ErrOrStderr(), check)
 	return nil
 }
 
@@ -1876,20 +1880,22 @@ func authStatusUpdatedAt(data *authpkg.TokenData) string {
 
 // authStatusResponse is the JSON response for auth status command.
 type authStatusResponse struct {
-	Success           bool   `json:"success"`
-	Authenticated     bool   `json:"authenticated"`
-	Message           string `json:"message,omitempty"`
-	Reason            string `json:"reason,omitempty"`
-	Hint              string `json:"hint,omitempty"`
-	Refreshed         bool   `json:"refreshed,omitempty"`
-	TokenValid        bool   `json:"token_valid,omitempty"`
-	RefreshTokenValid bool   `json:"refresh_token_valid,omitempty"`
-	ExpiresAt         string `json:"expires_at,omitempty"`
-	RefreshExpiresAt  string `json:"refresh_expires_at,omitempty"`
-	CorpID            string `json:"corp_id,omitempty"`
-	CorpName          string `json:"corp_name,omitempty"`
-	UserID            string `json:"user_id,omitempty"`
-	UserName          string `json:"user_name,omitempty"`
+	VersionCheck      *upgrade.CheckResult `json:"version_check,omitempty"`
+	Notice            *versionNotices      `json:"_notice,omitempty"`
+	Success           bool                 `json:"success"`
+	Authenticated     bool                 `json:"authenticated"`
+	Message           string               `json:"message,omitempty"`
+	Reason            string               `json:"reason,omitempty"`
+	Hint              string               `json:"hint,omitempty"`
+	Refreshed         bool                 `json:"refreshed,omitempty"`
+	TokenValid        bool                 `json:"token_valid,omitempty"`
+	RefreshTokenValid bool                 `json:"refresh_token_valid,omitempty"`
+	ExpiresAt         string               `json:"expires_at,omitempty"`
+	RefreshExpiresAt  string               `json:"refresh_expires_at,omitempty"`
+	CorpID            string               `json:"corp_id,omitempty"`
+	CorpName          string               `json:"corp_name,omitempty"`
+	UserID            string               `json:"user_id,omitempty"`
+	UserName          string               `json:"user_name,omitempty"`
 }
 
 type authStatusDiagnostic struct {
@@ -1951,10 +1957,14 @@ func authStatusRefreshDiagnostic(err error) *authStatusDiagnostic {
 	}
 }
 
-func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData, diagnostic *authStatusDiagnostic) error {
+func writeAuthStatusJSON(w io.Writer, authenticated, refreshed bool, data *authpkg.TokenData, diagnostic *authStatusDiagnostic, checks ...upgrade.CheckResult) error {
 	resp := authStatusResponse{
 		Success:       true,
 		Authenticated: authenticated,
+	}
+	if len(checks) > 0 {
+		resp.VersionCheck = &checks[0]
+		resp.Notice = noticeForVersion(checks[0], false)
 	}
 
 	if !authenticated {

@@ -179,6 +179,41 @@ func TestCrossPlatformCoverageCommandResolutionHelperBranches(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCommandResolutionLocalRecovery(t *testing.T) {
+	parent := &cobra.Command{Use: "dws"}
+	for _, test := range []struct {
+		name        string
+		suggestions []string
+		authored    string
+		want        bool
+	}{
+		{name: "normalized candidate", suggestions: []string{" ", " status ", "status"}, want: true},
+		{name: "authored path", authored: " use: dws auth status ", want: true},
+		{name: "help only"},
+		{name: "empty candidates", suggestions: []string{" ", "\t"}, authored: "\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := NewCommandResolution(parent, "missing", ResolutionUnknownSubcommand, test.suggestions, test.authored).Err()
+			if apperrors.HasLocalRecovery(err) != test.want || !apperrors.IsUnknownInvocationError(err) {
+				t.Fatalf("recovery=%v, unknown=%v; want recovery=%v", apperrors.HasLocalRecovery(err), apperrors.IsUnknownInvocationError(err), test.want)
+			}
+			structured := requireTypedCommandResolution(t, err, ResolutionUnknownSubcommand)
+			if !test.want && structured.Hint != "Run 'dws --help' for the full list" {
+				t.Fatalf("help-only hint = %q", structured.Hint)
+			}
+		})
+	}
+	for _, authored := range []string{"use: dws auth status", " \t"} {
+		hint := HintSubCmd("status", authored)
+		parent.AddCommand(hint)
+		err := hint.RunE(hint, nil)
+		if apperrors.HasLocalRecovery(err) != (strings.TrimSpace(authored) != "") || !apperrors.IsUnknownInvocationError(err) {
+			t.Fatalf("HintSubCmd(%q) lost recovery classification: %v", authored, err)
+		}
+		parent.RemoveCommand(hint)
+	}
+}
+
 func requireTypedCommandResolution(t *testing.T, err error, reason ResolutionReason) *apperrors.Error {
 	t.Helper()
 	var structured *apperrors.Error

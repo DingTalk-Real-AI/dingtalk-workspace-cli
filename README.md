@@ -198,6 +198,8 @@ dws upgrade -y                 # skip confirmation prompt
 
 `dws upgrade` 默认选择正式渠道；`--beta` 选择 npm 的 beta 渠道。显式配置的 GitHub 升级来源仍使用原有协议。
 
+`auth status`、`version` 和 `--version` 也会显示版本检查结果；未知命令或参数报错时，发现新版会提示升级。检查不会自动安装软件，详见[版本检查与升级提示](docs/version-checks.md)。
+
 ### Six-channel post-release verification
 
 Maintainers and release validators can run the release-quality smoke checks for curl, PowerShell, npm stable, npm beta, Homebrew, and `dws upgrade`:
