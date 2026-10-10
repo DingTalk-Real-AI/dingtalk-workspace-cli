@@ -7334,7 +7334,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd := &cobra.Command{
 		Use:     "send-a2ui-card",
 		Short:   "创建并推送 A2UI 卡片",
-		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，创建时默认 flowStatus=PROCESSING。",
+		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组；--summary 可指定会话列表中的可读摘要，省略时沿用消息数组拼接结果。创建时默认 flowStatus=PROCESSING。",
 		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID := mustGetFlag(cmd, "conversation-id")
@@ -7358,6 +7358,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			supportForward, _ := cmd.Flags().GetBool("support-forward")
+			summary := strings.Join(messages, "\n")
+			if cmd.Flags().Changed("summary") {
+				summary = strings.TrimSpace(mustGetFlag(cmd, "summary"))
+				if summary == "" {
+					return fmt.Errorf("--summary must not be blank")
+				}
+			}
 			toolArgs := map[string]any{
 				"requestId":       uuid.NewString(),
 				"bizCardId":       uuid.NewString(),
@@ -7365,7 +7372,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				"supportForward":  supportForward,
 				"flowStatus":      defaultA2UIFlowStatus,
 				"a2uiMessages":    messages,
-				"summary":         strings.Join(messages, "\n"),
+				"summary":         summary,
 			}
 			if cmd.Flags().Changed("a2ui-annotations") {
 				toolArgs["a2uiAnnotations"] = annotations
@@ -7409,6 +7416,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "summary", Property: "summary", Required: boolPtr(false), InterfaceType: "string"},
 				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "support-forward", Property: "supportForward", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
@@ -7421,6 +7429,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
 	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", false, "允许转发 A2UI 卡片（默认不允许）")
 	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	chatMessageSendA2UICardCmd.Flags().String("summary", "", "会话列表中的可读摘要；省略时拼接卡片消息，显式传入时不能为空")
 	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
 	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{{"conversation-id", "open-dingtalk-id"}},
