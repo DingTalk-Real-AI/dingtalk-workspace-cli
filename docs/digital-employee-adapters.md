@@ -63,9 +63,9 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel qoder --daemon --alw
 
 connect 使用主管取得一次性授权码，严格使用返回的 Client ID 换票，按发布详情校验员工身份后保存独立 Profile，不切换主管 Current。普通 Agent 的进程、会话及处理记录按员工 Profile 摘要和 Adapter 隔离，不用共享 OAuth Client ID 隔离员工。
 
-`manage create` 创建并通过 connect 绑定的 `local_agent`，聊天权限以 DEAP 已发布可见范围为准：`manage set-visibility` 保存草稿后仍需 publish。每条入站消息重新查询 published，成员范围使用员工身份精确转换开放 ID，ALL 必须确认本企业成员，部门范围包含子部门（遍历最多 256 个部门，超限或查询失败拒绝处理）。私聊与群聊均按发送者校验，不叠加本地用户/群白名单；operator 不绕过聊天权限，但敏感操作审批仍只接受绑定 operator。
+`manage create` 创建并通过 connect 绑定的 `local_agent`，聊天权限以 DEAP 已发布可见范围为准：`manage set-visibility` 保存草稿后仍需 publish。每条入站消息重新查询 published，成员范围使用员工身份精确转换开放 ID，ALL 必须确认本企业成员，部门范围包含子部门（遍历最多 256 个部门，超限或查询失败拒绝处理）。私聊按发送者校验；local_agent 已被拉入群即视为群内可见，群消息不再叠加个人可见范围或本地用户/群白名单。受管员工自动订阅群消息，入队前核实已发布身份、类型与在线状态；operator 不绕过聊天权限，但敏感操作审批仍只接受绑定 operator。
 
-绑定固定保存管理账号 Profile，不受全局 current 切换影响。旧服务端绑定使用原管理账号执行 connect restart 迁移；缺管理账号、身份冲突或查询失败时停止授权，不回退本地白名单。`channel binding --stdin` 可选接收 senderOpenDingTalkId、senderName，返回 accessPolicy 和 DEAP allowed 判定；仅有本地配置的旧通道、非 local_agent 和机器人继续采用本地白名单。名称仅作检索提示，必须精确匹配开放 ID 并确认企业成员身份，绝不按同名放行。
+绑定固定保存管理账号 Profile，不受全局 current 切换影响。旧服务端绑定使用原管理账号执行 connect restart 迁移；缺管理账号、身份冲突或查询失败时停止授权，不回退本地白名单。`channel binding --stdin` 可选接收 senderOpenDingTalkId、senderName、conversationType（direct/group，省略为 direct），返回 accessPolicy 和 DEAP allowed 判定；Adapter 仅在 capabilities.groupMembershipAccess=true 时发送 conversationType，以兼容旧 DWS；仅有本地配置的旧通道、非 local_agent 和机器人继续采用本地白名单。名称仅作检索提示，必须精确匹配开放 ID 并确认企业成员身份，绝不按同名放行。
 
 不同 Adapter 的已有绑定返回冲突，不隐式替换 DSH。
 

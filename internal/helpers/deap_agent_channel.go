@@ -349,7 +349,7 @@ func newDeapChannelCapabilitiesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return writeDWSMachineEnvelope(cmd, map[string]any{
 				"schemaVersion": 1, "protocolVersion": 1, "channel": devAppStringFlag(cmd, "channel"), "auditMode": "local_required",
-				"capabilities": map[string]any{"eventConsume": true, "chatDelivery": true, "visibilityAccess": true},
+				"capabilities": map[string]any{"eventConsume": true, "chatDelivery": true, "visibilityAccess": true, "groupMembershipAccess": true},
 			})
 		},
 		Contract: c,

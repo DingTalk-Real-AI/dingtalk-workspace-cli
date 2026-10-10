@@ -259,7 +259,11 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 		return nil
 	}
 	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
-		policy, allowed, err := employeeVisibilityAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName)
+		conversationType := "group"
+		if e.Type == "user_im_message_receive_o2o_all" || e.Type == "user_im_message_receive_o2o" {
+			conversationType = "direct"
+		}
+		policy, allowed, err := employeeConversationAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName, conversationType)
 		if err != nil {
 			return &employeeRunError{Code: "visibility_access_unavailable"}
 		}
@@ -505,7 +509,8 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	}
 	defer func() { cancel(); r.wg.Wait() }()
 	args := []string{"event", "consume", "user_im_message_receive_o2o_all"}
-	if len(cfg.Options.AllowedGroups) > 0 {
+	// 受管员工不能用旧群白名单关闭订阅；事件入队前仍核实 published 类型与对应权限。
+	if cfg.Binding.SupervisorProfile != "" || cfg.Binding.RuntimeBindingID != "" || len(cfg.Options.AllowedGroups) > 0 {
 		args = append(args, "user_im_message_receive_group_all")
 	}
 	args = append(args, "--flatten", "--format", "ndjson")

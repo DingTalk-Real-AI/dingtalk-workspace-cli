@@ -52,6 +52,14 @@ func employeeVisibilityProfileCall(ctx context.Context, profile, server, tool st
 }
 
 func employeeVisibilityAccess(ctx context.Context, b digitalEmployeeBinding, sender, senderName string) (string, bool, error) {
+	return employeeConversationAccess(ctx, b, sender, senderName, "direct")
+}
+
+// 群事件来自员工自身订阅；local_agent 已入群即有群内访问权，私聊仍查个人可见范围。
+func employeeConversationAccess(ctx context.Context, b digitalEmployeeBinding, sender, senderName, conversationType string) (string, bool, error) {
+	if conversationType != "direct" && conversationType != "group" {
+		return "deap_visibility", false, fmt.Errorf("visibility_conversation_type_invalid")
+	}
 	if b.SupervisorProfile == "" && b.RuntimeBindingID == "" {
 		return "local_allowlist", false, nil
 	}
@@ -79,6 +87,9 @@ func employeeVisibilityAccess(ctx context.Context, b digitalEmployeeBinding, sen
 	}
 	if jsonScalar(data["status"]) != "online" || sender == identity.OpenDingTalkID {
 		return policy, false, nil
+	}
+	if conversationType == "group" {
+		return policy, true, nil
 	}
 	scope := jsonScalar(data["visibility"])
 	if scope != "ALL" && scope != "PARTIAL" {

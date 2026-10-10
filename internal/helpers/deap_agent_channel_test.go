@@ -186,9 +186,10 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 			ProtocolVersion int    `json:"protocolVersion"`
 			AuditMode       string `json:"auditMode"`
 			Capabilities    struct {
-				EventConsume     bool `json:"eventConsume"`
-				ChatDelivery     bool `json:"chatDelivery"`
-				VisibilityAccess bool `json:"visibilityAccess"`
+				EventConsume          bool `json:"eventConsume"`
+				ChatDelivery          bool `json:"chatDelivery"`
+				VisibilityAccess      bool `json:"visibilityAccess"`
+				GroupMembershipAccess bool `json:"groupMembershipAccess"`
 			} `json:"capabilities"`
 		} `json:"data"`
 	}
@@ -196,7 +197,7 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 		t.Fatalf("decode output %q: %v", output.String(), err)
 	}
 	if !envelope.OK || envelope.Outcome != "success" || envelope.Data.ProtocolVersion != 1 || envelope.Data.AuditMode != "local_required" ||
-		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ChatDelivery || !envelope.Data.Capabilities.VisibilityAccess {
+		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ChatDelivery || !envelope.Data.Capabilities.VisibilityAccess || !envelope.Data.Capabilities.GroupMembershipAccess {
 		t.Fatalf("capability envelope = %#v", envelope)
 	}
 }
