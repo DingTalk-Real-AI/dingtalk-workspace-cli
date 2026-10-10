@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -330,6 +331,9 @@ func defaultHTTPPutFile(ctx context.Context, url string, headers map[string]stri
 	}
 
 	client := &http.Client{Timeout: 5 * time.Minute}
+	if uploadInsecureSkipVerify() {
+		client.Transport = insecureUploadTransport()
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("file upload failed: %w", err)
@@ -343,6 +347,28 @@ func defaultHTTPPutFile(ctx context.Context, url string, headers map[string]stri
 	}
 
 	return nil
+}
+
+// uploadInsecureSkipVerify mirrors the SAFECHAT_INSECURE_SKIP_VERIFY escape
+// hatch already used by third_party/safechat-go-sdk: the default is false
+// (secure). Set DWS_UPLOAD_INSECURE_SKIP_VERIFY=true only in dedicated
+// deployments whose storage endpoints (often raw IPs) serve self-signed
+// certificates; stock behaviour stays unchanged everywhere else.
+func uploadInsecureSkipVerify() bool {
+	if envVal := os.Getenv("DWS_UPLOAD_INSECURE_SKIP_VERIFY"); envVal != "" {
+		if parsed, err := strconv.ParseBool(envVal); err == nil {
+			return parsed
+		}
+	}
+	return false
+}
+
+// insecureUploadTransport clones the default transport so proxy and timeout
+// behaviour stays intact, disabling only TLS certificate verification.
+func insecureUploadTransport() http.RoundTripper {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	return transport
 }
 
 // httpGetFile downloads file content via HTTP GET. Package-level for test injection.
