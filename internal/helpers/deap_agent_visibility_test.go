@@ -177,12 +177,12 @@ func TestCrossPlatformCoverageEmployeeJoinedGroupAccess(t *testing.T) {
 		name, kind, eventType string
 		allow, fail           bool
 	}{
-		{"local group outside personal visibility", "local_agent", "user_im_message_receive_group_all", true, false},
+		{"ordinary group does not trigger", "local_agent", "user_im_message_receive_group_all", false, false},
 		{"local mention outside personal visibility", "local_agent", "user_im_message_receive_at", true, false},
 		{"private remains restricted", "local_agent", "user_im_message_receive_o2o_all", false, false},
 		{"other type keeps allowlist", "open_code", "user_im_message_receive_group_all", false, false},
-		{"unknown type fails closed", "unknown", "user_im_message_receive_group_all", false, true},
-		{"query failure fails closed", "error", "user_im_message_receive_group_all", false, true},
+		{"unknown type fails closed", "unknown", "user_im_message_receive_at", false, true},
+		{"query failure fails closed", "error", "user_im_message_receive_at", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, e := employeeLedgerFixture(t)

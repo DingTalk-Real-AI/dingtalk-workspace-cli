@@ -100,8 +100,8 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 			t.Setenv("DWS_STREAM_BOUNDARY", scenario)
 			t.Setenv("DWS_STREAM_BOUNDARY_DIR", dir)
 			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-				if scenario == "group-subscription" && !strings.Contains(strings.Join(args, " "), "user_im_message_receive_group_all") {
-					t.Error("managed employee did not subscribe to joined groups")
+				if scenario == "group-subscription" && (!strings.Contains(strings.Join(args, " "), "user_im_message_receive_at") || strings.Contains(strings.Join(args, " "), "user_im_message_receive_group_all")) {
+					t.Error("managed employee must subscribe only to group mentions")
 				}
 				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeStreamBoundaryFixture$", "--", "employee-stream-boundary")
 				if scenario == "hang-exit" {
