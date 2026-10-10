@@ -146,6 +146,9 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 	}
 	if payload != nil {
 		data, e := json.Marshal(payload)
+		if body, ok := payload.(employeeChatBody); ok {
+			data, e = []byte(body), nil
+		}
 		if e != nil || len(data) > digitalEmployeeStdinLimit {
 			return nil, employeeTerminal("invalid_payload")
 		}
@@ -159,11 +162,19 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 		OK   bool           `json:"ok"`
 		Data map[string]any `json:"data"`
 	}
+	if !stdout.overflow && err == nil && len(args) > 0 && args[0] == "chat" {
+		var receipt map[string]any
+		if json.Unmarshal(stdout.Bytes(), &receipt) == nil && receipt["ok"] == nil && receipt["error"] == nil && jsonScalar(receipt["openMessageId"]) != "" && receipt["deliveryStatus"] != nil {
+			return receipt, nil
+		}
+	}
 	if stdout.overflow || err != nil || json.Unmarshal(stdout.Bytes(), &envelope) != nil || !envelope.OK || envelope.Data == nil {
 		return nil, &employeeRunError{Code: "dws_machine_failed"}
 	}
 	return envelope.Data, nil
 }
+
+type employeeChatBody string
 
 type employeeRuntime struct {
 	cfg      digitalEmployeeAdapterConfig
@@ -364,8 +375,12 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 		if err = writeEmployeeJSON(r.recordPath(e), record); err != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		payload := digitalEmployeeReplyInput{BindingRevision: r.cfg.Binding.BindingRevision, SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: r.cfg.Binding.AgentUUID, EventID: e.EventID, ConversationID: e.ConversationID, ReferenceMessageID: e.MessageID, Text: answer, IdempotencyKey: record.IdempotencyKey}
-		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, payload, "dingtalk-tag", "channel", "reply", "--channel", r.cfg.Binding.Channel, "--stdin", "--format", "json")
+		metadata, _ := json.Marshal(EmployeeChatContext{AgentUUID: r.cfg.Binding.AgentUUID, Channel: bindingChannel(r.cfg.Binding), BindingRevision: r.cfg.Binding.BindingRevision})
+		// connect 已授权自动回传；chat 的确认规则保持不变，绑定上下文限制每次发送。
+		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, employeeChatBody(answer),
+			"chat", "+messages-reply", "--group", e.ConversationID, "--message-id", e.MessageID,
+			"--content", "-", "--body-stdin", "--wait-delivery", "--employee-context", string(metadata),
+			"--idempotency-key", record.IdempotencyKey, "--yes", "--format", "json")
 		record.Status = "needs_review"
 		record.Delivery = "unknown"
 		if sendErr == nil {

@@ -248,8 +248,14 @@ func TestCrossPlatformCoverageEmployeeRuntimeRealNDJSONAndReceiptEnvelope(t *tes
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	t.Setenv("DWS_EMPLOYEE_FIXTURE", "reply")
 	testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-		if !strings.Contains(strings.Join(args, " "), "channel reply") {
+		if !strings.Contains(strings.Join(args, " "), "chat +messages-reply") || strings.Contains(strings.Join(args, " "), "answer-not-in-audit") {
 			t.Fatalf("unexpected command %v", args)
+		}
+		joined := strings.Join(args, " ")
+		for _, flag := range []string{"--body-stdin", "--wait-delivery", "--employee-context", "--idempotency-key", "--yes"} {
+			if !strings.Contains(joined, flag) {
+				t.Fatalf("missing %s in worker command", flag)
+			}
 		}
 		return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeSubprocessFixture$")
 	})
@@ -330,11 +336,11 @@ func TestEmployeeSubprocessFixture(t *testing.T) {
 	if os.Getenv("DWS_EMPLOYEE_FIXTURE") != "reply" {
 		return
 	}
-	var input digitalEmployeeReplyInput
-	if json.NewDecoder(os.Stdin).Decode(&input) != nil || input.Text != "answer-not-in-audit" {
+	input, err := io.ReadAll(os.Stdin)
+	if err != nil || string(input) != "answer-not-in-audit" {
 		os.Exit(2)
 	}
-	fmt.Print(`{"ok":true,"data":{"openMessageId":"reply","deliveryStatus":"delivered"}}`)
+	fmt.Print(`{"openMessageId":"reply","deliveryStatus":"delivered"}`)
 	os.Exit(0)
 }
 
