@@ -212,6 +212,7 @@ func TestCrossPlatformCoverageEmployeeLifecycleRestartFailures(t *testing.T) {
 	for _, scenario := range []string{"missing", "cancelled", "unbound", "binding-write", "stop", "pending", "consume", "unbinding", "running-write", "register", "start", "not-ready", "ready", "missing-adapter", "local-adapter"} {
 		t.Run(scenario, func(t *testing.T) {
 			_, b := lifecycleFixture(t)
+			b.SupervisorProfile = "corp:supervisor"
 			cmd := newDigitalEmployeeRestartCommand()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

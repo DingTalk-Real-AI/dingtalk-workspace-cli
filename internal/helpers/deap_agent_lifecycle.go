@@ -255,15 +255,17 @@ func validateEmployeeMachineRevision(cmd *cobra.Command, id string, revision uin
 }
 
 func newEmployeeBindingCommand() *cobra.Command {
-	c := digitalEmployeeChannelContract("channel_binding", "binding", "读取数字员工权威绑定；用于宿主启动前校验，不访问凭据或其他宿主。", "DSH 启动员工之前核验绑定版本与运行期望")
-	c.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"agentUuid":{"type":"string","description":"员工 ID"},"dwsProfile":{"type":"string","description":"精确员工 Profile"},"channel":{"type":"string","description":"绑定 Adapter"},"bindingRevision":{"type":"integer","description":"绑定代数"},"bindingState":{"type":"string","description":"绑定状态"},"desiredState":{"type":"string","description":"运行期望"}}}`)}
+	c := digitalEmployeeChannelContract("channel_binding", "binding", "读取数字员工权威绑定；可选传入发送者，按已发布 DEAP 范围返回访问判定。", "DSH 启动员工之前核验绑定版本与运行期望")
+	c.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"agentUuid":{"type":"string","description":"员工 ID"},"dwsProfile":{"type":"string","description":"精确员工 Profile"},"channel":{"type":"string","description":"绑定 Adapter"},"bindingRevision":{"type":"integer","description":"绑定代数"},"bindingState":{"type":"string","description":"绑定状态"},"desiredState":{"type":"string","description":"运行期望"},"accessPolicy":{"type":"string","description":"访问权威：deap_visibility 或 local_allowlist"},"allowed":{"type":"boolean","description":"DEAP 对指定发送者的访问判定；本地白名单策略不返回"}}}`)}
 	return NewLeafCommand(LeafSpec{Use: "binding", Short: "读取员工绑定权威状态", PostMount: deapAgentNoArgs, OutputRollout: output.RolloutUnifiedActive,
-		Flags:  []LeafFlag{{Name: "channel", Required: true, Enum: digitalEmployeeChannels(), Usage: "绑定 Adapter"}, {Name: "stdin", Kind: LeafBool, Required: true, Usage: "员工身份与绑定版本 JSON"}},
+		Flags:  []LeafFlag{{Name: "channel", Required: true, Enum: digitalEmployeeChannels(), Usage: "绑定 Adapter"}, {Name: "stdin", Kind: LeafBool, Required: true, Usage: "JSON：agentUuid、bindingRevision；可选 senderOpenDingTalkId、senderName 查询访问权限"}},
 		Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}, Contract: c,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var in struct {
 				AgentUUID       string `json:"agentUuid"`
 				BindingRevision uint64 `json:"bindingRevision"`
+				SenderID        string `json:"senderOpenDingTalkId,omitempty"`
+				SenderName      string `json:"senderName,omitempty"`
 			}
 			if err := decodeBoundedDigitalEmployeeStdin(cmd, &in); err != nil {
 				return err
@@ -275,7 +277,25 @@ func newEmployeeBindingCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return writeDWSMachineEnvelope(cmd, map[string]any{"agentUuid": b.AgentUUID, "dwsProfile": b.DWSProfile, "channel": bindingChannel(b), "bindingRevision": b.BindingRevision, "bindingState": employeeBindingState(b), "desiredState": employeeDesiredState(b)})
+			result := map[string]any{"agentUuid": b.AgentUUID, "dwsProfile": b.DWSProfile, "channel": bindingChannel(b), "bindingRevision": b.BindingRevision, "bindingState": employeeBindingState(b), "desiredState": employeeDesiredState(b)}
+			if in.SenderID != "" {
+				policy, allowed, err := employeeVisibilityAccess(cmd.Context(), b, in.SenderID, in.SenderName)
+				if err != nil {
+					return err
+				}
+				if err := validateEmployeeMachineRevision(cmd, in.AgentUUID, in.BindingRevision); err != nil {
+					return err
+				}
+				current, err := deapChannelLoadBinding(deapConnectConfigDir(), auth.RuntimeProfile())
+				if err != nil || employeeDesiredState(current) != "running" {
+					return fmt.Errorf("binding_not_running")
+				}
+				result["accessPolicy"] = policy
+				if policy == "deap_visibility" {
+					result["allowed"] = allowed
+				}
+			}
+			return writeDWSMachineEnvelope(cmd, result)
 		},
 	})
 }

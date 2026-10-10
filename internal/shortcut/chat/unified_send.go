@@ -73,7 +73,7 @@ var MessagesSend = shortcut.Shortcut{
 			},
 		},
 	},
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "identity", Type: shortcut.FlagString, Default: "user", Enum: []string{"user", "bot", "webhook"}, Desc: "发送身份；目标、凭据和幂等参数受发送身份能力矩阵约束"},
 		{Name: "as", Type: shortcut.FlagString, Enum: []string{"user", "bot", "webhook"}, Desc: "--identity 的 lark-cli 对齐别名；受发送身份能力矩阵约束"},
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（user/bot 群聊）；受发送身份能力矩阵约束"},
@@ -113,7 +113,7 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号（webhook）"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人"},
 		shortcut.AIMessageTagFlag(),
-	},
+	}, chatDeliveryFlags()...),
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"text", "markdown", "media-id", "file", "file-path", "image-url", "contact-id", "share-chat-id", "a2ui-messages"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"text", "markdown", "media-id", "file", "file-path", "image-url", "contact-id", "share-chat-id", "a2ui-messages"}},
@@ -137,6 +137,21 @@ var MessagesSend = shortcut.Shortcut{
 }
 
 func validateMessagesSend(rt *shortcut.RuntimeContext) error {
+	if err := prepareChatBody(rt, "text", "markdown"); err != nil {
+		return err
+	}
+	if rt.Bool("wait-delivery") || rt.Str("employee-context") != "" {
+		if messagesSendIdentity(rt) != "user" || (rt.Str("text") == "" && rt.Str("markdown") == "") || (rt.Str("msg-type") != "" && rt.Str("msg-type") != "text" && rt.Str("msg-type") != "markdown") {
+			return fmt.Errorf("delivery options require personal text or Markdown")
+		}
+	}
+	if rt.Str("employee-context") != "" && (rt.StrFirst("chat-id", "group", "chat-query", "user", "user-query") != "") {
+		return fmt.Errorf("employee operator messages require an explicit operator openDingTalkId")
+	}
+	if err := validateEmployeeSend(rt); err != nil {
+		return err
+	}
+
 	identity := messagesSendIdentity(rt)
 	group := rt.StrFirst("chat-id", "group")
 	botGroups, botGroupsErr := messagesSendBotGroups(rt)
@@ -508,9 +523,15 @@ func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool strin
 			}},
 		})
 	}
+	if err := validateEmployeeSend(rt); err != nil {
+		return err
+	}
 	data, err := rt.CallMCPWriteData(product, tool, arguments)
 	if err != nil {
 		return err
+	}
+	if rt.Bool("wait-delivery") {
+		return helpers.WriteChatDelivery(rt.Command(), data, chatSendConversation(arguments), rt.StrFirst("idempotency-key", "uuid"))
 	}
 	payload := map[string]any{
 		"ok":       true,
@@ -883,4 +904,9 @@ func shortcutMessageTitle(text string) string {
 
 func init() {
 	shortcut.Register(withReviewedChatShortcutContracts(MessagesSend)...)
+}
+
+func chatSendConversation(arguments map[string]any) string {
+	value, _ := arguments["openConversationId"].(string)
+	return value
 }

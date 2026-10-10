@@ -63,7 +63,11 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel qoder --daemon --alw
 
 connect 使用主管取得一次性授权码，严格使用返回的 Client ID 换票，按发布详情校验员工身份后保存独立 Profile，不切换主管 Current。普通 Agent 的进程、会话及处理记录按员工 Profile 摘要和 Adapter 隔离，不用共享 OAuth Client ID 隔离员工。
 
-默认仅主管能触发；其他用户通过精确 userId 白名单开放，并在员工上下文解析开放 ID。群消息同时检查群和发送人。不同 Adapter 的已有绑定返回冲突，不隐式替换 DSH。
+`manage create` 创建并通过 connect 绑定的 `local_agent`，聊天权限以 DEAP 已发布可见范围为准：`manage set-visibility` 保存草稿后仍需 publish。每条入站消息重新查询 published，成员范围使用员工身份精确转换开放 ID，ALL 必须确认本企业成员，部门范围包含子部门（遍历最多 256 个部门，超限或查询失败拒绝处理）。私聊与群聊均按发送者校验，不叠加本地用户/群白名单；operator 不绕过聊天权限，但敏感操作审批仍只接受绑定 operator。
+
+绑定固定保存管理账号 Profile，不受全局 current 切换影响。旧服务端绑定使用原管理账号执行 connect restart 迁移；缺管理账号、身份冲突或查询失败时停止授权，不回退本地白名单。`channel binding --stdin` 可选接收 senderOpenDingTalkId、senderName，返回 accessPolicy 和 DEAP allowed 判定；仅有本地配置的旧通道、非 local_agent 和机器人继续采用本地白名单。名称仅作检索提示，必须精确匹配开放 ID 并确认企业成员身份，绝不按同名放行。
+
+不同 Adapter 的已有绑定返回冲突，不隐式替换 DSH。
 
 重启使用保存的员工 Profile，不重新向主管换票。显式 connect 完成新的授权后才开始新的重试预算。订阅错误遵守已知不可重试 0 次、可重试 2 次、未知 1 次的预算，并遵守服务端冷却时间；terminal hold 不自动解除。
 
@@ -75,7 +79,7 @@ connect 使用主管取得一次性授权码，严格使用返回的 Client ID �
 
 | 事实 | 期望标签 |
 |---|---|
-| 消息通过白名单、去重和容量检查，已保存接收记录，且同会话仍有未结束任务 | 排队中 |
+| 消息通过访问权限、去重和容量检查，已保存接收记录，且同会话仍有未结束任务 | 排队中 |
 | 会话空闲，新消息已接收并即将执行 | 思考中 |
 | 开始调用本地 Agent | 思考中 |
 | 回复接口返回明确成功结果及消息 ID，且本地记录已保存 | 已完成 |

@@ -173,7 +173,7 @@ func TestCrossPlatformCoverageEmployeeBindingRevisionFencesOldReplies(t *testing
 	_, b := lifecycleFixture(t)
 	auth.SetRuntimeProfile(b.DWSProfile)
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	cmd := newDeapChannelReplyCommand()
+	cmd := newEmployeeBindingCommand()
 	_ = cmd.Flags().Set("channel", "dsh")
 	if err := validateEmployeeMachineRevision(cmd, b.AgentUUID, b.BindingRevision); err != nil {
 		t.Fatal(err)
