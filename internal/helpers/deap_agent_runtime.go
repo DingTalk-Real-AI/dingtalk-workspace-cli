@@ -235,7 +235,7 @@ func (r *employeeRuntime) accept(e employeeEvent) bool {
 	}
 	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
 		switch e.Type {
-		case "user_im_message_receive_o2o_all", "user_im_message_receive_o2o", "user_im_message_receive_group_all", "user_im_message_receive_group", "user_im_message_receive_at":
+		case "user_im_message_receive_o2o_all", "user_im_message_receive_o2o", "user_im_message_receive_at":
 			return true
 		default:
 			return false
@@ -259,7 +259,11 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 		return nil
 	}
 	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
-		policy, allowed, err := employeeVisibilityAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName)
+		conversationType := "group"
+		if e.Type == "user_im_message_receive_o2o_all" || e.Type == "user_im_message_receive_o2o" {
+			conversationType = "direct"
+		}
+		policy, allowed, err := employeeConversationAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName, conversationType)
 		if err != nil {
 			return &employeeRunError{Code: "visibility_access_unavailable"}
 		}
@@ -505,7 +509,10 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	}
 	defer func() { cancel(); r.wg.Wait() }()
 	args := []string{"event", "consume", "user_im_message_receive_o2o_all"}
-	if len(cfg.Options.AllowedGroups) > 0 {
+	// 入群授权与响应触发独立：受管员工只订阅原生 @ 事件，普通群消息不交给模型。
+	if cfg.Binding.SupervisorProfile != "" || cfg.Binding.RuntimeBindingID != "" {
+		args = append(args, "user_im_message_receive_at")
+	} else if len(cfg.Options.AllowedGroups) > 0 {
 		args = append(args, "user_im_message_receive_group_all")
 	}
 	args = append(args, "--flatten", "--format", "ndjson")

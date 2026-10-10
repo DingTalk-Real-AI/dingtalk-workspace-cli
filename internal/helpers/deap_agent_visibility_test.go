@@ -171,3 +171,40 @@ func TestCrossPlatformCoverageEmployeeVisibilityMigration(t *testing.T) {
 		})
 	}
 }
+
+func TestCrossPlatformCoverageEmployeeJoinedGroupAccess(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, eventType string
+		allow, fail           bool
+	}{
+		{"ordinary group does not trigger", "local_agent", "user_im_message_receive_group_all", false, false},
+		{"local mention outside personal visibility", "local_agent", "user_im_message_receive_at", true, false},
+		{"private remains restricted", "local_agent", "user_im_message_receive_o2o_all", false, false},
+		{"other type keeps allowlist", "open_code", "user_im_message_receive_group_all", false, false},
+		{"unknown type fails closed", "unknown", "user_im_message_receive_at", false, true},
+		{"query failure fails closed", "error", "user_im_message_receive_at", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, e := employeeLedgerFixture(t)
+			r.cfg.Binding = digitalEmployeeBinding{AgentUUID: "agent", DWSProfile: "corp:employee", SupervisorProfile: "corp:manager"}
+			r.cfg.Options.AllowedUsers = nil
+			r.cfg.Options.AllowedGroups = nil
+			e.Type = tc.eventType
+			q := make(chan employeeEvent, 1)
+			r.queues[e.ConversationID] = q
+			testseam.Swap(t, &employeeVisibilityCall, func(_ context.Context, _, _, tool string, _ map[string]any) (map[string]any, error) {
+				if tc.kind == "error" {
+					return nil, fmt.Errorf("unavailable")
+				}
+				if tool != deapAgentDetailTool {
+					t.Fatal("group must not resolve personal visibility")
+				}
+				return map[string]any{"data": map[string]any{"agentUuid": "agent", "type": tc.kind, "snapshot": "published", "status": "online", "visibility": "PARTIAL", "staffIds": []any{}, "profile": map[string]any{"corpId": "corp", "userId": "employee"}}}, nil
+			})
+			err := r.enqueue(e)
+			if (err != nil) != tc.fail || (len(q) > 0) != tc.allow {
+				t.Fatalf("queued=%d err=%v", len(q), err)
+			}
+		})
+	}
+}

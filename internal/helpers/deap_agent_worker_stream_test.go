@@ -80,11 +80,15 @@ func TestEmployeeStreamBoundaryFixture(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
-	for _, scenario := range []string{"prepare", "executor-state", "audit", "ledger", "command", "transport-state", "running-state", "exit-before-ready", "stderr-oversized", "stdout-oversized", "exit-after-ready", "unobserved", "transport-write", "enqueue", "fatal", "cancel-start", "cancel-running", "hang-exit", "flood-stdout", "flood-stderr"} {
+	for _, scenario := range []string{"group-subscription", "prepare", "executor-state", "audit", "ledger", "command", "transport-state", "running-state", "exit-before-ready", "stderr-oversized", "stdout-oversized", "exit-after-ready", "unobserved", "transport-write", "enqueue", "fatal", "cancel-start", "cancel-running", "hang-exit", "flood-stdout", "flood-stderr"} {
 		t.Run(scenario, func(t *testing.T) {
 			cfg := employeeBoundaryConfig(t)
 			cfg.Options.AllowedUsers = []string{"owner"}
 			cfg.Options.AllowedGroups = []string{"group"}
+			if scenario == "group-subscription" {
+				cfg.Options.AllowedGroups = nil
+				cfg.Binding.SupervisorProfile = "corp:manager"
+			}
 			dir := digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile)
 			closed := false
 			testseam.Swap(t, &digitalEmployeeNewForwarder, func(context.Context, digitalEmployeeAdapterConfig) (forwarder, error) {
@@ -95,7 +99,10 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 			})
 			t.Setenv("DWS_STREAM_BOUNDARY", scenario)
 			t.Setenv("DWS_STREAM_BOUNDARY_DIR", dir)
-			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+				if scenario == "group-subscription" && (!strings.Contains(strings.Join(args, " "), "user_im_message_receive_at") || strings.Contains(strings.Join(args, " "), "user_im_message_receive_group_all")) {
+					t.Error("managed employee must subscribe only to group mentions")
+				}
 				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeStreamBoundaryFixture$", "--", "employee-stream-boundary")
 				if scenario == "hang-exit" {
 					cmd.Cancel = func() error { return nil }
@@ -138,7 +145,7 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 			if scenario == "hang-exit" {
 				testseam.Swap(t, &employeeConsumerStopTimeout, time.Millisecond)
 			}
-			graceful := scenario == "cancel-start" || scenario == "cancel-running" || scenario == "hang-exit" || strings.HasPrefix(scenario, "flood-")
+			graceful := scenario == "group-subscription" || scenario == "cancel-start" || scenario == "cancel-running" || scenario == "hang-exit" || strings.HasPrefix(scenario, "flood-")
 			if graceful {
 				done := make(chan struct{})
 				go func() {
