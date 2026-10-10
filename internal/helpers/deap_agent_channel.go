@@ -334,11 +334,13 @@ func newDeapChannelCommand() *cobra.Command {
 		TraverseChildren: true, DisableAutoGenTag: true, RunE: groupRunE,
 	}
 	newGroupCommand(cmd)
-	cmd.AddCommand(newDeapChannelCapabilitiesCommand(), newDeapChannelReplyCommand(), newDeapChannelOperatorPrivateCommand(), newEmployeeBindingCommand())
+	cmd.AddCommand(newDeapChannelCapabilitiesCommand(), newEmployeeBindingCommand())
 	return cmd
 }
 
 func newDeapChannelCapabilitiesCommand() *cobra.Command {
+	c := digitalEmployeeChannelContract("channel_capabilities", "capabilities", "查询 DSH 数字员工机器协议能力", "读取本地 DSH Channel 协议能力")
+	c.Result = digitalEmployeeCapabilitiesResultSpec()
 	return NewLeafCommand(LeafSpec{
 		OutputRollout: output.RolloutUnifiedActive,
 		Use:           "capabilities", Short: "查询 DSH Channel 协议能力",
@@ -347,38 +349,10 @@ func newDeapChannelCapabilitiesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return writeDWSMachineEnvelope(cmd, map[string]any{
 				"schemaVersion": 1, "protocolVersion": 1, "channel": devAppStringFlag(cmd, "channel"), "auditMode": "local_required",
-				"capabilities": map[string]any{"eventConsume": true, "replyStdin": true, "operatorPrivateStdin": true, "chatDelivery": true, "visibilityAccess": true},
+				"capabilities": map[string]any{"eventConsume": true, "chatDelivery": true, "visibilityAccess": true},
 			})
 		},
-		Contract: digitalEmployeeChannelContract("channel_capabilities", "capabilities", "查询 DSH 数字员工机器协议能力", "读取本地 DSH Channel 协议能力"),
-	})
-}
-
-func newDeapChannelReplyCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
-		OutputRollout: output.RolloutUnifiedActive,
-		Use:           "reply", Short: "通过 stdin 引用回复数字员工消息",
-		Flags: []LeafFlag{
-			{Name: "channel", Usage: "已绑定的数字员工 Adapter", Required: true, Trim: true, Enum: digitalEmployeeChannels()},
-			{Name: "stdin", Usage: "从 stdin 读取受限 JSON；正文不得进入 argv", Kind: LeafBool, Required: true},
-		},
-		Safety:   contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
-		RunE:     runDeapChannelReply,
-		Contract: digitalEmployeeChannelContract("channel_reply", "reply", "通过 stdin 安全引用回复数字员工消息", "DSH 以数字员工 Profile 引用回复事件消息时"),
-	})
-}
-
-func newDeapChannelOperatorPrivateCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
-		OutputRollout: output.RolloutUnifiedActive,
-		Use:           "operator-private", Short: "通过 stdin 向固定 operator 发单聊",
-		Flags: []LeafFlag{
-			{Name: "channel", Usage: "已绑定的数字员工 Adapter", Required: true, Trim: true, Enum: digitalEmployeeChannels()},
-			{Name: "stdin", Usage: "从 stdin 读取受限 JSON；正文不得进入 argv", Kind: LeafBool, Required: true},
-		},
-		Safety:   contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
-		RunE:     runDeapChannelOperatorPrivate,
-		Contract: digitalEmployeeChannelContract("channel_operator_private", "operator-private", "通过 stdin 安全向 connect 固化的 operator 发送单聊", "DSH 需要向数字员工主管发起私聊审批时"),
+		Contract: c,
 	})
 }
 
@@ -390,13 +364,12 @@ func digitalEmployeeChannelContract(name, leaf, description, useWhen string) Lea
 		parameters = append(parameters, contract.ParamDecl{Name: "stdin", Property: "stdin", InterfaceType: "boolean"})
 	}
 	return LeafContract{
-		Result: digitalEmployeeMachineResultSpec(leaf == "capabilities"),
 		Identity: contract.ToolIdentitySpec{
 			ProductID: dingtalkTagProductID, Name: name, CanonicalPath: "dingtalk-tag." + name,
 			CLIPath: "dingtalk-tag channel " + leaf, PrimaryCLIPath: "dingtalk-tag channel " + leaf, Group: "channel",
 		},
 		Description: description,
-		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "受限 stdin、本地协议校验与现有 DWS 消息 MCP 能力组合"},
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "本地 Channel 能力发现、绑定与访问判定"},
 		Selection: contract.SelectionSpec{
 			AgentSummary: description, UseWhen: []string{useWhen},
 			AvoidWhen: []string{"面向终端用户的普通消息发送使用 chat；本命令只供已绑定 Adapter 的机器协议调用"},
@@ -404,101 +377,6 @@ func digitalEmployeeChannelContract(name, leaf, description, useWhen string) Lea
 		},
 		Parameters: parameters,
 	}
-}
-
-type digitalEmployeeReplyInput struct {
-	BindingRevision    uint64 `json:"bindingRevision,omitempty"`
-	SchemaVersion      int    `json:"schemaVersion"`
-	ProtocolVersion    int    `json:"protocolVersion"`
-	AgentUUID          string `json:"agentUuid"`
-	EventID            string `json:"eventId"`
-	SessionID          string `json:"sessionId"`
-	ConversationID     string `json:"conversationId"`
-	ReferenceMessageID string `json:"referenceMessageId"`
-	Text               string `json:"text"`
-	IdempotencyKey     string `json:"idempotencyKey"`
-}
-
-type digitalEmployeeOperatorInput struct {
-	BindingRevision        uint64 `json:"bindingRevision,omitempty"`
-	SchemaVersion          int    `json:"schemaVersion"`
-	ProtocolVersion        int    `json:"protocolVersion"`
-	AgentUUID              string `json:"agentUuid"`
-	OperatorOpenDingTalkID string `json:"operatorOpenDingTalkId"`
-	Text                   string `json:"text"`
-	IdempotencyKey         string `json:"idempotencyKey"`
-}
-
-func runDeapChannelReply(cmd *cobra.Command, _ []string) error {
-	var input digitalEmployeeReplyInput
-	if err := decodeBoundedDigitalEmployeeStdin(cmd, &input); err != nil {
-		return err
-	}
-	if input.SchemaVersion != 1 || input.ProtocolVersion != 1 || !validMachineString(input.AgentUUID) ||
-		!validMachineString(input.EventID) || !validMachineString(input.ConversationID) ||
-		!validMachineString(input.ReferenceMessageID) || !validMachineString(input.IdempotencyKey) || strings.TrimSpace(input.Text) == "" {
-		return apperrors.NewValidation("invalid digital employee reply payload")
-	}
-	if err := validateEmployeeMachineRevision(cmd, input.AgentUUID, input.BindingRevision); err != nil {
-		return err
-	}
-	lookup, err := callMachineMCPJSON(cmd.Context(), "im", "list_messages_by_ids", map[string]any{"openMsgIds": []string{input.ReferenceMessageID}})
-	if err != nil {
-		return fmt.Errorf("resolve referenced message sender: %w", err)
-	}
-	sender := findJSONScalar(lookup, "senderOpenDingTalkId")
-	if sender == "" {
-		sender = findJSONScalar(lookup, "sender_open_dingtalk_id")
-	}
-	if sender == "" {
-		return apperrors.NewValidation("referenced message did not return senderOpenDingTalkId")
-	}
-	content := ChatQuoteContent(input.ReferenceMessageID, sender, input.Text)
-	result, err := callMachineMCPJSON(cmd.Context(), "chat", "send_personal_message", map[string]any{
-		"openConversationId": input.ConversationID, "msgType": "reply", "content": string(content), "uuid": input.IdempotencyKey,
-	})
-	if err != nil {
-		return fmt.Errorf("send digital employee reply: %w", err)
-	}
-	delivery, err := resolveDigitalEmployeeDelivery(cmd.Context(), result, input.ConversationID, input.IdempotencyKey)
-	if err != nil {
-		return fmt.Errorf("resolve digital employee reply receipt: %w", err)
-	}
-	return writeDWSMachineEnvelope(cmd, delivery)
-}
-
-func runDeapChannelOperatorPrivate(cmd *cobra.Command, _ []string) error {
-	var input digitalEmployeeOperatorInput
-	if err := decodeBoundedDigitalEmployeeStdin(cmd, &input); err != nil {
-		return err
-	}
-	if input.SchemaVersion != 1 || input.ProtocolVersion != 1 || !validMachineString(input.AgentUUID) ||
-		!validMachineString(input.OperatorOpenDingTalkID) || !validMachineString(input.IdempotencyKey) || strings.TrimSpace(input.Text) == "" {
-		return apperrors.NewValidation("invalid digital employee operator-private payload")
-	}
-	if err := validateEmployeeMachineRevision(cmd, input.AgentUUID, input.BindingRevision); err != nil {
-		return err
-	}
-	profile := strings.TrimSpace(auth.RuntimeProfile())
-	if profile == "" {
-		return apperrors.NewValidation("operator-private requires an explicit digital employee --profile")
-	}
-	binding, err := deapChannelLoadBinding(deapConnectConfigDir(), profile)
-	if err != nil || binding.AgentUUID != input.AgentUUID || binding.OperatorOpenDingTalkID != input.OperatorOpenDingTalkID {
-		return apperrors.NewValidation("operator-private target does not match the operator fixed by connect")
-	}
-	content, _ := json.Marshal(map[string]string{"title": "数字员工审批", "text": input.Text})
-	result, err := callMachineMCPJSON(cmd.Context(), "chat", "send_personal_message", map[string]any{
-		"receiverOpenDingTalkId": input.OperatorOpenDingTalkID, "msgType": "markdown", "content": string(content), "uuid": input.IdempotencyKey,
-	})
-	if err != nil {
-		return fmt.Errorf("send digital employee operator message: %w", err)
-	}
-	delivery, err := resolveDigitalEmployeeDelivery(cmd.Context(), result, findJSONScalar(result, "openConvThreadId"), input.IdempotencyKey)
-	if err != nil {
-		return fmt.Errorf("resolve digital employee operator message receipt: %w", err)
-	}
-	return writeDWSMachineEnvelope(cmd, delivery)
 }
 
 func decodeBoundedDigitalEmployeeStdin(cmd *cobra.Command, target any) error {

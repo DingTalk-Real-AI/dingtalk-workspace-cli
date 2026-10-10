@@ -5,6 +5,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -418,5 +419,32 @@ func TestCrossPlatformCoverageEmployeeVisibilityBindingFinalSchema(t *testing.T)
 	}
 	if tool["effect"] != "read" || tool["confirmation"] != "not_required" {
 		t.Fatal("binding access query must remain read only")
+	}
+}
+
+// 删除入口必须同时退出实际命令树与最终 Schema，避免仍被 Agent 发现。
+func TestCrossPlatformCoverageEmployeeChannelOnlyDiscoveryAndBinding(t *testing.T) {
+	root := NewRootCommand()
+	for _, name := range []string{"reply", "operator-private"} {
+		cmd, rest, err := root.Find([]string{"dingtalk-tag", "channel", name})
+		if err == nil && len(rest) == 0 && cmd.Runnable() {
+			t.Fatalf("已删除命令仍可运行: %s", name)
+		}
+		var out bytes.Buffer
+		schema := NewRootCommand()
+		schema.SetOut(&out)
+		schema.SetErr(&out)
+		schema.SetArgs([]string{"schema", "--cli-path", "dingtalk-tag channel " + name, "--format", "json"})
+		if err := schema.Execute(); err == nil {
+			t.Fatalf("已删除命令仍可查询 Schema: %s", name)
+		}
+	}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.channel_capabilities", "dingtalk-tag.channel_binding")
+	raw, err := json.Marshal(payload.Tools["dingtalk-tag.channel_capabilities"]["result"])
+	if err != nil || bytes.Contains(raw, []byte("replyStdin")) || bytes.Contains(raw, []byte("operatorPrivateStdin")) || !bytes.Contains(raw, []byte("chatDelivery")) || !bytes.Contains(raw, []byte("visibilityAccess")) {
+		t.Fatalf("最终能力契约未同步: %s, %v", raw, err)
+	}
+	if len(payload.Tools) != 2 {
+		t.Fatalf("保留入口不完整: %v", payload.Tools)
 	}
 }

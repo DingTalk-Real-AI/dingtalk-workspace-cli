@@ -216,7 +216,7 @@ func TestCrossPlatformCoverageEmployeeConnectRegistrationLockPrecedesAuthorizati
 func TestCrossPlatformCoverageEmployeeMachineCommandProfileAndPrivateInput(t *testing.T) {
 	t.Setenv("DWS_CLIENT_SECRET", "must-not-leak")
 	t.Setenv("DWS_DUMP_RAW", "1")
-	cmd, err := employeeCommand(context.Background(), "corp:employee", "dingtalk-tag", "channel", "reply", "--stdin")
+	cmd, err := employeeCommand(context.Background(), "corp:employee", "chat", "+messages-reply", "--body-stdin")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,7 +14,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-// ChatQuoteContent 统一普通聊天和兼容 Channel 入口的文本引用格式。
+// ChatQuoteContent 统一聊天与数字员工的文本引用格式。
 func ChatQuoteContent(messageID, sender, text string) string {
 	content, _ := json.Marshal(map[string]string{
 		"referenceOpenMessageId": messageID, "srcMsgSendOpenDingTalkId": sender,

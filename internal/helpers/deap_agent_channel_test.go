@@ -150,7 +150,7 @@ func TestCrossPlatformCoverageDingTalkTagExposesIndependentConnectAndChannelProt
 	if err != nil || len(rest) != 0 || channel == root || !channel.HasSubCommands() {
 		t.Fatalf("find channel group: command=%v rest=%v err=%v", channel, rest, err)
 	}
-	for _, name := range []string{"capabilities", "reply", "operator-private"} {
+	for _, name := range []string{"capabilities", "binding"} {
 		leaf, remaining, findErr := channel.Find([]string{name})
 		if findErr != nil || len(remaining) != 0 || leaf == channel || !leaf.Runnable() {
 			t.Fatalf("find channel leaf %q: command=%v rest=%v err=%v", name, leaf, remaining, findErr)
@@ -176,6 +176,9 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 	if err := leaf.RunE(leaf, nil); err != nil {
 		t.Fatalf("capabilities RunE() error = %v", err)
 	}
+	if strings.Contains(output.String(), "replyStdin") || strings.Contains(output.String(), "operatorPrivateStdin") {
+		t.Fatal("capabilities 仍声明已删除的发送入口")
+	}
 	var envelope struct {
 		OK      bool   `json:"ok"`
 		Outcome string `json:"outcome"`
@@ -183,9 +186,9 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 			ProtocolVersion int    `json:"protocolVersion"`
 			AuditMode       string `json:"auditMode"`
 			Capabilities    struct {
-				EventConsume         bool `json:"eventConsume"`
-				ReplyStdin           bool `json:"replyStdin"`
-				OperatorPrivateStdin bool `json:"operatorPrivateStdin"`
+				EventConsume     bool `json:"eventConsume"`
+				ChatDelivery     bool `json:"chatDelivery"`
+				VisibilityAccess bool `json:"visibilityAccess"`
 			} `json:"capabilities"`
 		} `json:"data"`
 	}
@@ -193,132 +196,8 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 		t.Fatalf("decode output %q: %v", output.String(), err)
 	}
 	if !envelope.OK || envelope.Outcome != "success" || envelope.Data.ProtocolVersion != 1 || envelope.Data.AuditMode != "local_required" ||
-		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ReplyStdin || !envelope.Data.Capabilities.OperatorPrivateStdin {
+		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ChatDelivery || !envelope.Data.Capabilities.VisibilityAccess {
 		t.Fatalf("capability envelope = %#v", envelope)
-	}
-}
-
-func TestCrossPlatformCoverageDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
-	installEmployeeReplyBinding(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
-		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
-	}}
-	InitDepsForTest(t, caller)
-	root := deapHandler{}.Command(&captureRunner{})
-	leaf, _, err := root.Find([]string{"channel", "reply"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
-		if err := leaf.Flags().Set(name, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	input := `{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"正文不应进入 argv 或输出","idempotencyKey":"idem-1"}`
-	leaf.SetIn(strings.NewReader(input))
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("reply RunE() error = %v", err)
-	}
-	if len(caller.calls) != 2 || caller.calls[1].toolName != "send_personal_message" {
-		t.Fatalf("calls = %#v", caller.calls)
-	}
-	if caller.calls[1].args["uuid"] != "idem-1" || caller.calls[1].args["openConversationId"] != "conversation-1" {
-		t.Fatalf("send args = %#v", caller.calls[1].args)
-	}
-	if strings.Contains(output.String(), "正文不应进入") {
-		t.Fatalf("machine output leaked message body: %s", output.String())
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			OpenMessageID  string `json:"openMessageId"`
-			ConversationID string `json:"conversationId"`
-			DeliveryStatus string `json:"deliveryStatus"`
-			IdempotencyKey string `json:"idempotencyKey"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
-		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
-		t.Fatalf("reply envelope = %#v", envelope)
-	}
-
-	bad := deapHandler{}.Command(&captureRunner{})
-	badLeaf, _, _ := bad.Find([]string{"channel", "reply"})
-	_ = badLeaf.Flags().Set("channel", "dsh")
-	_ = badLeaf.Flags().Set("stdin", "true")
-	badLeaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"a","eventId":"e","conversationId":"c","referenceMessageId":"m","text":"secret","idempotencyKey":"i","unknown":true}`))
-	if err := badLeaf.RunE(badLeaf, nil); err == nil || !strings.Contains(err.Error(), "invalid digital employee stdin JSON") {
-		t.Fatalf("unknown field error = %v", err)
-	}
-	if len(caller.calls) != 2 {
-		t.Fatalf("bad stdin made MCP call: %#v", caller.calls)
-	}
-
-	oversized := deapHandler{}.Command(&captureRunner{})
-	oversizedLeaf, _, _ := oversized.Find([]string{"channel", "reply"})
-	_ = oversizedLeaf.Flags().Set("channel", "dsh")
-	_ = oversizedLeaf.Flags().Set("stdin", "true")
-	oversizedLeaf.SetIn(strings.NewReader(strings.Repeat("x", digitalEmployeeStdinLimit+1)))
-	if err := oversizedLeaf.RunE(oversizedLeaf, nil); err == nil || !strings.Contains(err.Error(), "exceeds 256 KiB") {
-		t.Fatalf("oversized stdin error = %v", err)
-	}
-	if len(caller.calls) != 2 {
-		t.Fatalf("oversized stdin made MCP call: %#v", caller.calls)
-	}
-}
-
-func TestCrossPlatformCoverageDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
-	installEmployeeReplyBinding(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
-		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
-		"im/query_message_send_status": {
-			`{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`,
-			`{"result":{"openTaskId":"task-1","openMessageId":"reply-1","openConversationId":"conversation-1","status":"SUCCESS"}}`,
-		},
-	}}
-	InitDepsForTest(t, caller)
-	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { return nil })
-	root := deapHandler{}.Command(&captureRunner{})
-	leaf, _, err := root.Find([]string{"channel", "reply"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
-		if err := leaf.Flags().Set(name, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"异步回执正文","idempotencyKey":"idem-1"}`))
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("reply RunE() error = %v", err)
-	}
-	if len(caller.calls) != 4 || caller.calls[3].productID != "im" || caller.calls[3].toolName != "query_message_send_status" || caller.calls[3].args["openTaskId"] != "task-1" {
-		t.Fatalf("async receipt calls = %#v", caller.calls)
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			OpenMessageID  string `json:"openMessageId"`
-			ConversationID string `json:"conversationId"`
-			DeliveryStatus string `json:"deliveryStatus"`
-			IdempotencyKey string `json:"idempotencyKey"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
-		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
-		t.Fatalf("async reply envelope = %#v", envelope)
 	}
 }
 
@@ -804,31 +683,5 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 	}
 	if !envelope.OK || envelope.Data.Status != "created" || envelope.Data.DWSProfile != "employee-corp:employee-user" || !envelope.Data.RestartRequired {
 		t.Fatalf("connect envelope = %#v", envelope)
-	}
-}
-
-func TestCrossPlatformCoverageDingTalkTagOperatorPrivateRejectsTargetDifferentFromConnectBinding(t *testing.T) {
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
-	InitDepsForTest(t, caller)
-	auth.SetRuntimeProfile("employee-corp:employee-user")
-	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapChannelLoadBinding, func(string, string) (digitalEmployeeBinding, error) {
-		return digitalEmployeeBinding{
-			SchemaVersion: 1, AgentUUID: "agent-1", DWSProfile: "employee-corp:employee-user", OperatorOpenDingTalkID: "fixed-operator",
-		}, nil
-	})
-	root := deapHandler{}.Command(&captureRunner{})
-	leaf, _, err := root.Find([]string{"channel", "operator-private"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = leaf.Flags().Set("channel", "dsh")
-	_ = leaf.Flags().Set("stdin", "true")
-	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","operatorOpenDingTalkId":"attacker-target","text":"不应发送","idempotencyKey":"idem-1"}`))
-	if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), "does not match") {
-		t.Fatalf("mismatched operator error = %v", err)
-	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("mismatched operator made MCP call: %#v", caller.calls)
 	}
 }
