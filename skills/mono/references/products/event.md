@@ -313,3 +313,10 @@ dws event stop --all --yes
 - OA reference: `skills/multi/dingtalk-event/references/event-oa.md`
 - VoIP reference: `skills/multi/dingtalk-event/references/event-voip.md`
 - Todo reference: `skills/multi/dingtalk-event/references/event-todo.md`
+
+### Thread 消息归属
+
+扁平消息输出仅在上游提供时保留 `thread_id`、`parent_conversation_id`、
+`root_message_id`，对应原始 `payload.body.openConvThreadId`、`parentConversationId`、
+`rootMessageId`。字段缺失不证明消息在 Thread 外，也不能由群 ID 推断话题；原始事件
+本身缺少字段时，取消 `--flatten` 无法恢复，需要上游补齐或提供精确归属查询。
