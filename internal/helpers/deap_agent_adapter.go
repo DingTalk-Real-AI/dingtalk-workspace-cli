@@ -221,8 +221,8 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 		{Name: "agent-permission-mode", Enum: []string{"ask", "bypass"}, Usage: "Agent 权限模式；同 dev connect"},
 		{Name: "agent-approval-mode", Enum: []string{"ask", "yolo"}, Usage: "Agent 审批模式；同 dev connect"},
 		{Name: "yolo", Kind: LeafBool, Usage: "显式选择 Agent 最高权限模式"},
-		{Name: "allowed-users", Usage: "额外允许的精确 userId，以逗号分隔；在员工身份下解析"},
-		{Name: "allowed-groups", Usage: "允许的员工上下文 openConversationId，以逗号分隔；群内仍检查发送人"},
+		{Name: "allowed-users", Usage: "其他本地场景的额外 userId 白名单；local_agent 使用 DEAP 已发布可见范围"},
+		{Name: "allowed-groups", Usage: "其他本地场景的群白名单；local_agent 按 DEAP 已发布范围校验发送者"},
 		{Name: "daemon", Kind: LeafBool, Usage: "在后台启动 Event 和 Agent（Windows 不支持）"},
 		{Name: "alwayson", Kind: LeafBool, Usage: "配合 --daemon 在允许的重试预算内恢复 worker"},
 		{Name: "local-worker", Kind: LeafBool, Hidden: true, Usage: "internal: 从员工 Profile 的已保存配置运行"},
@@ -300,6 +300,8 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err := checkEmployeeServerOperation(b); err != nil {
 		return cfg, err
 	}
+	// 主管 Profile 等运行策略只以权威绑定为准，旧 adapter 快照不覆盖迁移结果。
+	cfg.Binding = b
 	return cfg, nil
 }
 
@@ -307,11 +309,8 @@ func digitalEmployeeResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"deviceId":{"type":"string","description":"稳定设备标识"},"runtimeBindingId":{"type":"string","description":"最后确认的服务端绑定 ID；解绑后保留历史 ID"},"serverBindingState":{"type":"string","description":"本地服务端回执状态，不代表在线；bound/unbound/unregistered/unknown/commit_pending"},"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}},"bindingState":{"type":"string","description":"本机绑定状态"},"desiredState":{"type":"string","description":"期望运行状态"},"runtimeState":{"type":"string","description":"实际运行状态或 unknown"},"bindingRevision":{"type":"integer","description":"绑定版本"},"runtimeInstanceId":{"type":"string","description":"运行实例标识"},"sourceState":{"type":"string","description":"事件上游连接状态；未知来源不推断为已连接"},"transportReady":{"type":"boolean","description":"已观测的事件传输就绪，不代表业务消息送达"},"executorReady":{"type":"boolean","description":"Agent 初始化就绪"},"observedAt":{"type":"string","description":"状态观察时间"},"operationId":{"type":"string","description":"解绑或换绑操作 ID"},"reasonCode":{"type":"string","description":"稳定阻塞原因"},"nextAction":{"type":"string","description":"安全恢复建议"}}}`)}
 }
 
-func digitalEmployeeMachineResultSpec(capabilities bool) *contract.ResultSpec {
-	if capabilities {
-		return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"schemaVersion":{"type":"integer","description":"输入 Schema 版本"},"protocolVersion":{"type":"integer","description":"机器协议版本"},"channel":{"type":"string","description":"Adapter 类型"},"auditMode":{"type":"string","description":"审计要求"},"capabilities":{"type":"object","description":"支持的协议操作","properties":{"eventConsume":{"type":"boolean","description":"支持 Event Consumer"},"replyStdin":{"type":"boolean","description":"支持 stdin 引用回复"},"operatorPrivateStdin":{"type":"boolean","description":"支持 stdin 主管私聊"}}}}}`)}
-	}
-	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"openMessageId":{"type":"string","description":"已确认的开放消息 ID"},"conversationId":{"type":"string","description":"目标会话 ID"},"deliveryStatus":{"type":"string","description":"delivered 或 unknown"},"idempotencyKey":{"type":"string","description":"发送幂等键"}}}`)}
+func digitalEmployeeCapabilitiesResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"schemaVersion":{"type":"integer","description":"输入 Schema 版本"},"protocolVersion":{"type":"integer","description":"机器协议版本"},"channel":{"type":"string","description":"Adapter 类型"},"auditMode":{"type":"string","description":"审计要求"},"capabilities":{"type":"object","description":"支持的协议操作","properties":{"eventConsume":{"type":"boolean","description":"支持 Event Consumer"},"chatDelivery":{"type":"boolean","description":"通用 chat 支持 stdin、员工上下文和统一发送回执"},"visibilityAccess":{"type":"boolean","description":"支持绑定查询的访问判定"},"groupMembershipAccess":{"type":"boolean","description":"支持 conversationType 区分 local_agent 已入群授权与私聊可见范围"}}}}}`)}
 }
 
 func newDigitalEmployeeStatusCommand() *cobra.Command {
@@ -386,13 +385,20 @@ func newDigitalEmployeeRestartCommand() *cobra.Command {
 	})
 }
 
+const codexEmployeeDeveloperInstructions = "你是通过钉钉协作的本地数字员工，请用简洁、自然的中文回答。根据用户明确请求和授权，使用已安装的本地技能、CLI 和工作目录中的资料完成任务；执行前读取相关技能说明，遵守其业务确认要求及当前沙箱权限。不要在没有请求时主动读写文件或执行命令；权限不足或需要交互审批时说明限制，不得声称已执行、绕过权限或输出凭据。"
+
 // 保留此接口参数中的 context，所有运行操作必须服从宿主取消。
 var digitalEmployeeNewForwarder = func(ctx context.Context, cfg digitalEmployeeAdapterConfig) (forwarder, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	cfg.Options.PrivateDiagnostics = true
-	return newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	fwd, err := newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	if codex, ok := fwd.(*codexAppServerForwarder); ok {
+		// 数字员工可按用户授权执行本地任务；群聊机器人保留原有问答限制。
+		codex.developerInstructions = codexEmployeeDeveloperInstructions
+	}
+	return fwd, err
 }
 
 var digitalEmployeeReadyTimeout = 45 * time.Second

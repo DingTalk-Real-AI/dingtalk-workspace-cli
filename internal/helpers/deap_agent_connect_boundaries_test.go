@@ -127,9 +127,11 @@ func TestCrossPlatformCoverageEmployeeMissingDependenciesAndInputLimits(t *testi
 	if _, err := callPrivateMCPJSON(context.Background(), "server", "tool", nil); err == nil {
 		t.Fatal("private call without caller accepted")
 	}
-	cmd := newDeapChannelReplyCommand()
+	cmd := newEmployeeBindingCommand()
 	cmd.SetIn(strings.NewReader(`{} {}`))
-	if err := decodeBoundedDigitalEmployeeStdin(cmd, new(digitalEmployeeReplyInput)); err == nil {
+	if err := decodeBoundedDigitalEmployeeStdin(cmd, new(struct {
+		AgentUUID string `json:"agentUuid"`
+	})); err == nil {
 		t.Fatal("multiple payloads accepted")
 	}
 }

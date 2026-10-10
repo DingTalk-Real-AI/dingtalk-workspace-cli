@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -219,7 +220,7 @@ var MessagesReply = shortcut.Shortcut{
 	Description: "统一回复已有消息：个人群/单聊引用、个人 Thread 追加、Bot 群引用",
 	Intent:      "当你要以当前用户身份对一条已有消息发送纯文本引用回复时使用；传原消息 ID，CLI 会只读定位会话和发送者；可显式传会话或 --ref-sender，所有模式均核对源消息身份。可用 --as bot 选择 Bot 群引用，--open-dingtalk-id 选择个人单聊，--reply-in-thread 追加到已核实的 Thread；所有模式先检查源消息 ID/会话归属；个人普通引用的 markdown/content 仍按纯文本解释，群聊可显式 @成员或 @所有人。成功结果在保留下层响应的同时增量返回 messageId（下层提供时）、conversationId、threadId（适用时）、deliveryStatus、idempotencyKey 和 referencedMessage 来源上下文。",
 	Risk:        shortcut.RiskWrite,
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "as", Type: shortcut.FlagString, Default: "user", Enum: []string{"user", "bot"}, Aliases: []string{"identity"}, Desc: "回复身份，Bot 仅普通群文本/Markdown引用" + "；" + replyExtensionConstraint},
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "Bot 回复所用 robotCode" + "；" + replyExtensionConstraint},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "个人单聊接收者；可省略 --group，自动读取源消息会话核实" + "；" + replyExtensionConstraint + "；" + replyTargetConstraint},
@@ -237,15 +238,26 @@ var MessagesReply = shortcut.Shortcut{
 		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "群回复中 @ 的 openDingTalkId 列表；自动补齐缺少的提及占位符；" + replyTargetConstraint},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "群回复中 @所有人；" + replyTargetConstraint},
 		shortcut.AIMessageTagFlag(),
-	},
+	}, chatDeliveryFlags()...),
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"as", "robot-code", "open-dingtalk-id", "reply-in-thread", "thread-id", "ref-sender", "uuid", "idempotency-key"}, Description: replyExtensionConstraint},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"group", "ref-sender", "open-dingtalk-id", "at-open-dingtalk-ids", "at-all"}, Description: replyTargetConstraint},
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"ref-msg-id", "message-id"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"uuid", "idempotency-key"}},
 	},
-	Tips:     []string{`dws chat +messages-reply --group <openConversationId> --message-id <openMessageId> --content "收到" --idempotency-key <key>`},
-	Validate: validateReplyExtensions,
+	Tips: []string{`dws chat +messages-reply --group <openConversationId> --message-id <openMessageId> --content "收到" --idempotency-key <key>`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := prepareChatBody(rt, "content", "text", "markdown"); err != nil {
+			return err
+		}
+		if (rt.Bool("wait-delivery") || rt.Str("employee-context") != "") && (rt.StrFirst("identity", "as") == "bot" || rt.Bool("reply-in-thread") || rt.Str("open-dingtalk-id") != "") {
+			return fmt.Errorf("delivery options require an ordinary personal quote reply")
+		}
+		if err := validateEmployeeReply(rt); err != nil {
+			return err
+		}
+		return validateReplyExtensions(rt)
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		target, err := resolveReplyTarget(rt)
 		if err != nil {
@@ -256,12 +268,7 @@ var MessagesReply = shortcut.Shortcut{
 		}
 		refSender := target.sender
 		body := replyMentionBody(rt, true)
-		content, _ := json.Marshal(map[string]string{
-			"referenceOpenMessageId":   replyMessageID(rt),
-			"srcMsgSendOpenDingTalkId": refSender,
-			"replyMsgType":             "text",
-			"content":                  body,
-		})
+		content := helpers.ChatQuoteContent(replyMessageID(rt), refSender, body)
 		params := rt.AddAIMessageTag(map[string]any{
 			"openConversationId": target.conversationID,
 			"msgType":            "reply",
@@ -285,9 +292,15 @@ var MessagesReply = shortcut.Shortcut{
 				},
 			})
 		}
+		if err := validateEmployeeReply(rt); err != nil {
+			return err
+		}
 		data, err := rt.CallMCPWriteData("chat", "send_personal_message", params)
 		if err != nil {
 			return err
+		}
+		if rt.Bool("wait-delivery") {
+			return helpers.WriteChatDelivery(rt.Command(), data, target.conversationID, rt.StrFirst("idempotency-key", "uuid"))
 		}
 		enrichReplyResult(data, rt, refSender)
 		data["conversationId"] = target.conversationID

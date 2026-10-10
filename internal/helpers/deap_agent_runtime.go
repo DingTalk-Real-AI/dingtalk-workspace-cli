@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -45,12 +46,14 @@ type digitalEmployeeRunState struct {
 }
 
 type employeeEvent struct {
-	Type           string `json:"type"`
-	EventID        string `json:"event_id"`
-	MessageID      string `json:"message_id"`
-	ConversationID string `json:"conversation_id"`
-	SenderID       string `json:"sender_open_dingtalk_id"`
-	Content        string `json:"content"`
+	Type           string                        `json:"type"`
+	EventID        string                        `json:"event_id"`
+	MessageID      string                        `json:"message_id"`
+	ConversationID string                        `json:"conversation_id"`
+	SenderName     string                        `json:"sender"`
+	SenderID       string                        `json:"sender_open_dingtalk_id"`
+	Content        string                        `json:"content"`
+	QuotedMessage  *personal.MessageEventContext `json:"quoted_message,omitempty"`
 }
 
 type employeeTaskRecord struct {
@@ -60,6 +63,8 @@ type employeeTaskRecord struct {
 	Status         string    `json:"status"`
 	IdempotencyKey string    `json:"idempotencyKey"`
 	ReplyID        string    `json:"replyId,omitempty"`
+	Execution      string    `json:"execution,omitempty"`
+	Delivery       string    `json:"delivery,omitempty"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
@@ -142,6 +147,9 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 	}
 	if payload != nil {
 		data, e := json.Marshal(payload)
+		if body, ok := payload.(employeeChatBody); ok {
+			data, e = []byte(body), nil
+		}
 		if e != nil || len(data) > digitalEmployeeStdinLimit {
 			return nil, employeeTerminal("invalid_payload")
 		}
@@ -155,21 +163,31 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 		OK   bool           `json:"ok"`
 		Data map[string]any `json:"data"`
 	}
+	if !stdout.overflow && err == nil && len(args) > 0 && args[0] == "chat" {
+		var receipt map[string]any
+		if json.Unmarshal(stdout.Bytes(), &receipt) == nil && receipt["ok"] == nil && receipt["error"] == nil && jsonScalar(receipt["openMessageId"]) != "" && receipt["deliveryStatus"] != nil {
+			return receipt, nil
+		}
+	}
 	if stdout.overflow || err != nil || json.Unmarshal(stdout.Bytes(), &envelope) != nil || !envelope.OK || envelope.Data == nil {
 		return nil, &employeeRunError{Code: "dws_machine_failed"}
 	}
 	return envelope.Data, nil
 }
 
+type employeeChatBody string
+
 type employeeRuntime struct {
-	cfg    digitalEmployeeAdapterConfig
-	dir    string
-	fwd    forwarder
-	mu     sync.Mutex
-	queues map[string]chan employeeEvent
-	wg     sync.WaitGroup
-	fatal  chan error
-	ctx    context.Context
+	cfg      digitalEmployeeAdapterConfig
+	dir      string
+	fwd      forwarder
+	mu       sync.Mutex
+	queues   map[string]chan employeeEvent
+	pending  map[string]int // 包含正在执行和等待投递收尾的任务；由 mu 保护。
+	wg       sync.WaitGroup
+	fatal    chan error
+	ctx      context.Context
+	feedback *employeeFeedback
 }
 
 func (r *employeeRuntime) audit(record employeeTaskRecord) error {
@@ -215,6 +233,14 @@ func (r *employeeRuntime) accept(e employeeEvent) bool {
 	if !validMachineString(e.EventID) || !validMachineString(e.MessageID) || !validMachineString(e.ConversationID) || !validMachineString(e.SenderID) || strings.TrimSpace(e.Content) == "" {
 		return false
 	}
+	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
+		switch e.Type {
+		case "user_im_message_receive_o2o_all", "user_im_message_receive_o2o", "user_im_message_receive_at":
+			return true
+		default:
+			return false
+		}
+	}
 	if !employeeContains(r.cfg.Options.AllowedUsers, e.SenderID) {
 		return false
 	}
@@ -231,6 +257,22 @@ func (r *employeeRuntime) accept(e employeeEvent) bool {
 func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if !r.accept(e) {
 		return nil
+	}
+	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
+		conversationType := "group"
+		if e.Type == "user_im_message_receive_o2o_all" || e.Type == "user_im_message_receive_o2o" {
+			conversationType = "direct"
+		}
+		policy, allowed, err := employeeConversationAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName, conversationType)
+		if err != nil {
+			return &employeeRunError{Code: "visibility_access_unavailable"}
+		}
+		if policy == "local_allowlist" {
+			allowed = employeeContains(r.cfg.Options.AllowedUsers, e.SenderID) && (strings.Contains(e.Type, "o2o") || employeeContains(r.cfg.Options.AllowedGroups, e.ConversationID))
+		}
+		if !allowed {
+			return nil
+		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -264,6 +306,15 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if err := writeEmployeeJSON(path, record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
+	if r.pending == nil {
+		r.pending = make(map[string]int)
+	}
+	label := "思考中"
+	if r.pending[e.ConversationID] > 0 {
+		label = "排队中"
+	}
+	r.pending[e.ConversationID]++
+	r.feedback.set(e, label, false)
 	if q == nil {
 		q = make(chan employeeEvent, 32)
 		r.queues[e.ConversationID] = q
@@ -275,7 +326,11 @@ func (r *employeeRuntime) enqueue(e employeeEvent) error {
 				case <-r.ctx.Done():
 					return
 				case event := <-q:
-					if err := r.process(event); err != nil {
+					err := r.process(event)
+					r.mu.Lock()
+					r.pending[event.ConversationID]--
+					r.mu.Unlock()
+					if err != nil {
 						select {
 						case r.fatal <- err:
 						default:
@@ -301,24 +356,67 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	if err != nil || json.Unmarshal(raw, &record) != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
-	answer, err := forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, e.Content)
+	record.Status, record.Execution = "running", "running"
+	record.UpdatedAt = time.Now()
+	if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
+		return employeeTerminal("ledger_unavailable")
+	}
+	r.feedback.set(e, "思考中", false)
+	// 即使执行或账本失败，也要结束处理中反馈；成功分支在持久化后覆盖该值。
+	label := "已中断，待核查"
+	defer func() { r.feedback.set(e, label, true) }()
+	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
+	defer cleanup()
+	var answer string
+	if err == nil {
+		answer, err = forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
+	}
+	record.Execution = "success"
 	if err != nil {
 		record.Status = "agent_failed"
+		record.Execution = "failure"
+		answer = "本次处理失败，请稍后重试。"
+		if errors.Is(err, errEmployeeImageUnavailable) {
+			answer = "本次图片读取失败，请稍后重试。"
+		}
+		if errors.Is(err, errCodexEmployeeResumeFailed) {
+			answer = "原会话暂时无法恢复，请稍后重试；如需新会话，请发送 /new。"
+		}
+		if errors.Is(err, context.Canceled) || r.ctx.Err() != nil {
+			record.Status, record.Execution = "cancelled", "cancelled"
+			answer = ""
+		}
 	} else if strings.TrimSpace(answer) == "" {
-		record.Status = "empty_reply"
-	} else {
+		// 执行成功但无正文时仅贴“收到”；不发送占位文字或默认完成标签。
+		record.Status = "completed_without_reply"
+		record.Delivery = "not_required"
+		answer = ""
+	}
+	if answer != "" {
+		outcome := record.Status
 		record.Status = "sending"
+		record.Delivery = "pending"
+		record.UpdatedAt = time.Now()
 		if err = writeEmployeeJSON(r.recordPath(e), record); err != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		payload := digitalEmployeeReplyInput{BindingRevision: r.cfg.Binding.BindingRevision, SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: r.cfg.Binding.AgentUUID, EventID: e.EventID, ConversationID: e.ConversationID, ReferenceMessageID: e.MessageID, Text: answer, IdempotencyKey: record.IdempotencyKey}
-		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, payload, "dingtalk-tag", "channel", "reply", "--channel", r.cfg.Binding.Channel, "--stdin", "--format", "json")
+		metadata, _ := json.Marshal(EmployeeChatContext{AgentUUID: r.cfg.Binding.AgentUUID, Channel: bindingChannel(r.cfg.Binding), BindingRevision: r.cfg.Binding.BindingRevision})
+		// connect 已授权自动回传；chat 的确认规则保持不变，绑定上下文限制每次发送。
+		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, employeeChatBody(answer),
+			"chat", "+messages-reply", "--group", e.ConversationID, "--message-id", e.MessageID,
+			"--content", "-", "--body-stdin", "--wait-delivery", "--employee-context", string(metadata),
+			"--idempotency-key", record.IdempotencyKey, "--yes", "--format", "json")
 		record.Status = "needs_review"
+		record.Delivery = "unknown"
 		if sendErr == nil {
 			record.ReplyID = jsonScalar(result["openMessageId"])
 			if jsonScalar(result["deliveryStatus"]) == "delivered" && record.ReplyID != "" {
 				record.Status = "delivered"
+				record.Delivery = "accepted"
 			}
+		}
+		if record.Execution == "failure" {
+			record.Status = outcome
 		}
 	}
 	record.UpdatedAt = time.Now()
@@ -330,6 +428,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
+	label = employeeTaskLabel(record)
 	return nil
 }
 
@@ -400,6 +499,8 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		return employeeTerminal("state_unavailable")
 	}
 	r := &employeeRuntime{cfg: cfg, dir: dir, fwd: fwd, queues: map[string]chan employeeEvent{}, fatal: make(chan error, 1), ctx: ctx}
+	r.feedback = newEmployeeFeedback(ctx, cfg.Binding.DWSProfile, dir)
+	defer r.feedback.wait()
 	if err = r.audit(employeeTaskRecord{Status: "starting", UpdatedAt: time.Now()}); err != nil {
 		return err
 	}
@@ -408,7 +509,10 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	}
 	defer func() { cancel(); r.wg.Wait() }()
 	args := []string{"event", "consume", "user_im_message_receive_o2o_all"}
-	if len(cfg.Options.AllowedGroups) > 0 {
+	// 入群授权与响应触发独立：受管员工只订阅原生 @ 事件，普通群消息不交给模型。
+	if cfg.Binding.SupervisorProfile != "" || cfg.Binding.RuntimeBindingID != "" {
+		args = append(args, "user_im_message_receive_at")
+	} else if len(cfg.Options.AllowedGroups) > 0 {
 		args = append(args, "user_im_message_receive_group_all")
 	}
 	args = append(args, "--flatten", "--format", "ndjson")
@@ -688,7 +792,12 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 		if json.Unmarshal(data, &record) != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		if record.Status == "accepted" || record.Status == "sending" {
+		if record.Status == "accepted" || record.Status == "running" || record.Status == "sending" {
+			if record.Status == "sending" {
+				record.Delivery = "unknown"
+			} else {
+				record.Execution = "unknown"
+			}
 			record.Status = "needs_review"
 			record.UpdatedAt = time.Now()
 			if e = r.audit(record); e != nil {
@@ -698,6 +807,7 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 				return employeeTerminal("ledger_unavailable")
 			}
 		}
+		r.feedback.recover(employeeEvent{ConversationID: record.ConversationID, MessageID: record.MessageID}, employeeTaskLabel(record))
 	}
 	return nil
 }

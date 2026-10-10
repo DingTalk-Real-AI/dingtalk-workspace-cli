@@ -716,6 +716,25 @@ func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit summary preserves card payload", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", "--conversation-id=cid", "--content=[\"message\"]", "--summary=等待你确认操作")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.args["summary"] != "等待你确认操作" || !reflect.DeepEqual(caller.args["a2uiMessages"], []string{"message"}) {
+			t.Fatalf("args = %#v", caller.args)
+		}
+	})
+
+	t.Run("blank explicit summary fails before send", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", "--conversation-id=cid", "--content=[\"message\"]", "--summary=  ")
+		if err == nil || !strings.Contains(err.Error(), "--summary must not be blank") || caller.calls != 0 {
+			t.Fatalf("error = %v, calls = %d", err, caller.calls)
+		}
+	})
+
 	t.Run("direct message passes through D-form receiver", func(t *testing.T) {
 		caller := &scriptedToolCaller{}
 		err := runChatCoverageCommand(t, caller,

@@ -173,7 +173,7 @@ func TestCrossPlatformCoverageEmployeeBindingRevisionFencesOldReplies(t *testing
 	_, b := lifecycleFixture(t)
 	auth.SetRuntimeProfile(b.DWSProfile)
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	cmd := newDeapChannelReplyCommand()
+	cmd := newEmployeeBindingCommand()
 	_ = cmd.Flags().Set("channel", "dsh")
 	if err := validateEmployeeMachineRevision(cmd, b.AgentUUID, b.BindingRevision); err != nil {
 		t.Fatal(err)
@@ -187,5 +187,45 @@ func TestCrossPlatformCoverageEmployeeBindingRevisionFencesOldReplies(t *testing
 	}
 	if err := validateEmployeeMachineRevision(cmd, b.AgentUUID, b.BindingRevision); err == nil {
 		t.Fatal("unbound reply accepted")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeBindingGroupContext(t *testing.T) {
+	for _, typ := range []string{"group", "direct", "", "invalid"} {
+		t.Run("type_"+typ, func(t *testing.T) {
+			dir, b := lifecycleFixture(t)
+			b.SupervisorProfile = "corp:manager"
+			if err := saveDigitalEmployeeBinding(dir, b); err != nil {
+				t.Fatal(err)
+			}
+			auth.SetRuntimeProfile(b.DWSProfile)
+			t.Cleanup(func() { auth.SetRuntimeProfile("") })
+			testseam.Swap(t, &employeeVisibilityCall, func(_ context.Context, _, _, tool string, _ map[string]any) (map[string]any, error) {
+				if tool != deapAgentDetailTool {
+					t.Fatalf("unexpected lookup %s", tool)
+				}
+				return map[string]any{"data": map[string]any{"agentUuid": b.AgentUUID, "type": "local_agent", "snapshot": "published", "status": "online", "visibility": "PARTIAL", "staffIds": []any{}, "profile": map[string]any{"corpId": "corp", "userId": "employee"}}}, nil
+			})
+			cmd := newEmployeeBindingCommand()
+			cmd.SetContext(context.Background())
+			_ = cmd.Flags().Set("channel", "dsh")
+			_ = cmd.Flags().Set("stdin", "true")
+			cmd.SetIn(strings.NewReader(fmt.Sprintf(`{"agentUuid":%q,"bindingRevision":7,"senderOpenDingTalkId":"outsider","conversationType":%q}`, b.AgentUUID, typ)))
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			err := cmd.RunE(cmd, nil)
+			if typ == "invalid" {
+				if err == nil {
+					t.Fatal("invalid context accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out.String(), `"allowed": true`) != (typ == "group") {
+				t.Fatalf("output=%s", out.String())
+			}
+		})
 	}
 }
