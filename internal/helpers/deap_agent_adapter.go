@@ -221,8 +221,8 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 		{Name: "agent-permission-mode", Enum: []string{"ask", "bypass"}, Usage: "Agent 权限模式；同 dev connect"},
 		{Name: "agent-approval-mode", Enum: []string{"ask", "yolo"}, Usage: "Agent 审批模式；同 dev connect"},
 		{Name: "yolo", Kind: LeafBool, Usage: "显式选择 Agent 最高权限模式"},
-		{Name: "allowed-users", Usage: "额外允许的精确 userId，以逗号分隔；在员工身份下解析"},
-		{Name: "allowed-groups", Usage: "允许的员工上下文 openConversationId，以逗号分隔；群内仍检查发送人"},
+		{Name: "allowed-users", Usage: "其他本地场景的额外 userId 白名单；local_agent 使用 DEAP 已发布可见范围"},
+		{Name: "allowed-groups", Usage: "其他本地场景的群白名单；local_agent 按 DEAP 已发布范围校验发送者"},
 		{Name: "daemon", Kind: LeafBool, Usage: "在后台启动 Event 和 Agent（Windows 不支持）"},
 		{Name: "alwayson", Kind: LeafBool, Usage: "配合 --daemon 在允许的重试预算内恢复 worker"},
 		{Name: "local-worker", Kind: LeafBool, Hidden: true, Usage: "internal: 从员工 Profile 的已保存配置运行"},
@@ -300,6 +300,8 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err := checkEmployeeServerOperation(b); err != nil {
 		return cfg, err
 	}
+	// 主管 Profile 等运行策略只以权威绑定为准，旧 adapter 快照不覆盖迁移结果。
+	cfg.Binding = b
 	return cfg, nil
 }
 

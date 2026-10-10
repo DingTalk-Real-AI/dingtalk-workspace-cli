@@ -6,6 +6,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+- `local_agent` 数字员工的私聊与群聊发送者权限统一采用 DEAP 已发布可见范围；DWS/DSH 复用绑定查询判定，管理账号固定绑定、每条消息重新查询，查询失败不回退白名单；其他通道保留本地白名单。
+
 ## [1.0.64-beta.1] - 2026-10-09
 
 ### Added

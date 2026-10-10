@@ -403,3 +403,20 @@ func TestCrossPlatformCoverageEmployeeRemovedBindingCommandsAbsentFromSchema(t *
 		}
 	}
 }
+
+func TestCrossPlatformCoverageEmployeeVisibilityBindingFinalSchema(t *testing.T) {
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.channel_binding")
+	tool := payload.Tools["dingtalk-tag.channel_binding"]
+	result := tool["result"].(map[string]any)
+	schema := result["data_schema"].(map[string]any)
+	properties := schema["properties"].(map[string]any)
+	for _, key := range []string{"accessPolicy", "allowed"} {
+		if properties[key] == nil {
+			t.Fatalf("missing delivered %s", key)
+		}
+	}
+	if tool["effect"] != "read" || tool["confirmation"] != "not_required" {
+		t.Fatal("binding access query must remain read only")
+	}
+}

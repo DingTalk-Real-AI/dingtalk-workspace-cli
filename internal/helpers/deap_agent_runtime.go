@@ -50,6 +50,7 @@ type employeeEvent struct {
 	EventID        string                        `json:"event_id"`
 	MessageID      string                        `json:"message_id"`
 	ConversationID string                        `json:"conversation_id"`
+	SenderName     string                        `json:"sender"`
 	SenderID       string                        `json:"sender_open_dingtalk_id"`
 	Content        string                        `json:"content"`
 	QuotedMessage  *personal.MessageEventContext `json:"quoted_message,omitempty"`
@@ -232,6 +233,14 @@ func (r *employeeRuntime) accept(e employeeEvent) bool {
 	if !validMachineString(e.EventID) || !validMachineString(e.MessageID) || !validMachineString(e.ConversationID) || !validMachineString(e.SenderID) || strings.TrimSpace(e.Content) == "" {
 		return false
 	}
+	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
+		switch e.Type {
+		case "user_im_message_receive_o2o_all", "user_im_message_receive_o2o", "user_im_message_receive_group_all", "user_im_message_receive_group", "user_im_message_receive_at":
+			return true
+		default:
+			return false
+		}
+	}
 	if !employeeContains(r.cfg.Options.AllowedUsers, e.SenderID) {
 		return false
 	}
@@ -248,6 +257,18 @@ func (r *employeeRuntime) accept(e employeeEvent) bool {
 func (r *employeeRuntime) enqueue(e employeeEvent) error {
 	if !r.accept(e) {
 		return nil
+	}
+	if r.cfg.Binding.SupervisorProfile != "" || r.cfg.Binding.RuntimeBindingID != "" {
+		policy, allowed, err := employeeVisibilityAccess(r.ctx, r.cfg.Binding, e.SenderID, e.SenderName)
+		if err != nil {
+			return &employeeRunError{Code: "visibility_access_unavailable"}
+		}
+		if policy == "local_allowlist" {
+			allowed = employeeContains(r.cfg.Options.AllowedUsers, e.SenderID) && (strings.Contains(e.Type, "o2o") || employeeContains(r.cfg.Options.AllowedGroups, e.ConversationID))
+		}
+		if !allowed {
+			return nil
+		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

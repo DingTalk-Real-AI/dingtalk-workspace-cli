@@ -291,6 +291,9 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 				if employeeBindingState(b) != "bound" {
 					return fmt.Errorf("绑定操作未完成；解绑未完成时请重试原 connect unbind，其他状态请先核对服务端结果")
 				}
+				if err := migrateEmployeeVisibilitySupervisor(cmd.Context(), &b); err != nil {
+					return err
+				}
 				b.DesiredState = "running"
 				if err := updateEmployeeBinding(b); err != nil {
 					return err

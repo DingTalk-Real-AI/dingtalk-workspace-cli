@@ -68,6 +68,7 @@ const (
 )
 
 type digitalEmployeeBinding struct {
+	SupervisorProfile      string `json:"supervisorProfile,omitempty"`
 	RuntimeBindingID       string `json:"runtimeBindingId,omitempty"`
 	DeviceID               string `json:"deviceId,omitempty"`
 	BindingRevision        uint64 `json:"bindingRevision,omitempty"`
@@ -240,7 +241,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	binding := digitalEmployeeBinding{
 		SchemaVersion: 1, AgentUUID: agentUUID, DWSProfile: digitalProfile, OperatorOpenDingTalkID: operatorID, Channel: channel,
-		BindingRevision: 1, BindingState: "bound", DesiredState: "running",
+		BindingRevision: 1, BindingState: "bound", DesiredState: "running", SupervisorProfile: session.SupervisorProfile,
 	}
 	if previous, e := loadDigitalEmployeeBinding(configDir, digitalProfile); e == nil {
 		binding.RuntimeBindingID = previous.RuntimeBindingID
@@ -346,7 +347,7 @@ func newDeapChannelCapabilitiesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return writeDWSMachineEnvelope(cmd, map[string]any{
 				"schemaVersion": 1, "protocolVersion": 1, "channel": devAppStringFlag(cmd, "channel"), "auditMode": "local_required",
-				"capabilities": map[string]any{"eventConsume": true, "replyStdin": true, "operatorPrivateStdin": true, "chatDelivery": true},
+				"capabilities": map[string]any{"eventConsume": true, "replyStdin": true, "operatorPrivateStdin": true, "chatDelivery": true, "visibilityAccess": true},
 			})
 		},
 		Contract: digitalEmployeeChannelContract("channel_capabilities", "capabilities", "查询 DSH 数字员工机器协议能力", "读取本地 DSH Channel 协议能力"),
