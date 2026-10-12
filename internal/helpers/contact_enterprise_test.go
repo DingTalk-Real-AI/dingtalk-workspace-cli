@@ -260,22 +260,24 @@ func requireRetiredContactGetByDingtalkId(t *testing.T, err error, caller *conta
 
 // TestCrossPlatformCoverageContactGetByDingtalkIdHiddenFromHelp 锁定隐藏面：
 // 退役叶子不出现在 contact user --help 输出中，别名也不可见。
+// 从 root 执行并经 corecmd.ExecuteForTest 预备命令树（与仓库自建树测试规则
+// 一致）；先正向断言确实渲染了 user 组 help，再检查禁止名。
 func TestCrossPlatformCoverageContactGetByDingtalkIdHiddenFromHelp(t *testing.T) {
 	var help bytes.Buffer
 	root := newContactCommand()
-	userCmd, _, err := root.Find([]string{"user"})
-	if err != nil || userCmd == nil {
-		t.Fatalf("find contact user: %v", err)
-	}
-	userCmd.SetOut(&help)
-	userCmd.SetErr(&help)
-	userCmd.SetArgs([]string{"--help"})
-	if err := userCmd.Execute(); err != nil {
+	root.SetOut(&help)
+	root.SetErr(&help)
+	root.SetArgs([]string{"user", "--help"})
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("contact user --help: %v", err)
 	}
+	rendered := help.String()
+	if !strings.Contains(rendered, "contact user") || !strings.Contains(rendered, "get-by-open-dingtalk-id") {
+		t.Fatalf("contact user --help did not render the user group help:\n%s", rendered)
+	}
 	for _, forbidden := range []string{"get-by-dingtalk-id", "search-dingtalk"} {
-		if strings.Contains(help.String(), forbidden) {
-			t.Fatalf("contact user --help still exposes retired %s:\n%s", forbidden, help.String())
+		if strings.Contains(rendered, forbidden) {
+			t.Fatalf("contact user --help still exposes retired %s:\n%s", forbidden, rendered)
 		}
 	}
 }
