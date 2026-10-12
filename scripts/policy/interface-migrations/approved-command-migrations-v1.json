@@ -242,7 +242,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire legacy contact user get-by-dingtalk-id from Agent Schema and public help while keeping a hidden historical argv compatibility command that fails closed with aisearch person / search-mobile / get-by-open-dingtalk-id alternatives."
     }
   ]
