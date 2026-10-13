@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -117,14 +118,14 @@ var valueRenderOptionEnum = map[string]bool{
 func runSheetExportCsv(cmd *cobra.Command, _ []string) error {
 	nodeID := mustGetFlag(cmd, "node")
 	if nodeID == "" {
-		return fmt.Errorf("flag --node is required")
+		return apperrors.NewValidation("flag --node is required")
 	}
 	sheetID, _ := cmd.Flags().GetString("sheet-id")
 	rangeAddr, _ := cmd.Flags().GetString("range")
 	valueRenderOption, _ := cmd.Flags().GetString("value-render-option")
 	valueRenderOption = strings.ToLower(strings.TrimSpace(valueRenderOption))
 	if valueRenderOption != "" && !valueRenderOptionEnum[valueRenderOption] {
-		return fmt.Errorf("--value-render-option 必须为 formatted_value / raw_value / formula，当前值: %s", valueRenderOption)
+		return apperrors.NewValidation(fmt.Sprintf("--value-render-option 必须为 formatted_value / raw_value / formula，当前值: %s", valueRenderOption))
 	}
 	outputPath, _ := cmd.Flags().GetString("output")
 	allowTruncated, _ := cmd.Flags().GetBool("allow-truncated")
