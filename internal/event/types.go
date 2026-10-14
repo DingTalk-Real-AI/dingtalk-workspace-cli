@@ -60,8 +60,7 @@ type EmitFn func(*RawEvent)
 // personal subscriptions can deliver the same EventID to different consumers.
 // Scope by routing identity before dedup, otherwise an unconsumed subscription
 // can suppress a live subscription's copy. Prefers EventID; falls back to a
-// content-derived hash when the
-// SDK does not populate EventID (rare, but observed on legacy event types
+// content-derived hash when the SDK does not populate EventID (rare, but observed on legacy event types
 // per the P0 escape-hatch verification).
 func (e *RawEvent) DedupKey() string {
 	if e == nil {

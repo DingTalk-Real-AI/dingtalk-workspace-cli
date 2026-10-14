@@ -27,7 +27,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
-func TestDaemonEmit_OverlappingSubscriptionsCannotSuppressCurrentDelivery(t *testing.T) {
+func TestCrossPlatformCoverageEventDeliveryOverlappingSubscriptions(t *testing.T) {
 	for name, order := range map[string][]string{
 		"old-target-first":       {"old", "current", "current"},
 		"all-direct-first":       {"all-direct", "current", "current"},
@@ -53,7 +53,7 @@ func TestDaemonEmit_OverlappingSubscriptionsCannotSuppressCurrentDelivery(t *tes
 	}
 }
 
-func TestDaemonEmit_SameEventIDDifferentTypesAndFallbackSubscriptions(t *testing.T) {
+func TestCrossPlatformCoverageEventDeliveryDifferentTypesAndFallback(t *testing.T) {
 	for _, eventID := range []string{"same-event", ""} {
 		hub := NewHub(10)
 		consumer, err := hub.Register(transport.Hello{SubscribeID: "current"})
@@ -74,7 +74,7 @@ func TestDaemonEmit_SameEventIDDifferentTypesAndFallbackSubscriptions(t *testing
 	}
 }
 
-func TestDeliveryAudit_MetadataOnlyAndDistinctOutcomes(t *testing.T) {
+func TestCrossPlatformCoverageEventDeliveryAuditMetadataOnly(t *testing.T) {
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	hub := NewHub(10)
@@ -111,7 +111,7 @@ func TestDeliveryAudit_MetadataOnlyAndDistinctOutcomes(t *testing.T) {
 	}
 }
 
-func TestDeliveryAudit_AnomaliesVisibleWithoutDebugAndQueueDoesNotBlockDelivery(t *testing.T) {
+func TestCrossPlatformCoverageEventDeliveryAuditNonBlockingQueue(t *testing.T) {
 	var logs bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
 	audit := newDeliveryAudit(log)

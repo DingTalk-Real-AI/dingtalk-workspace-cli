@@ -74,7 +74,7 @@ func TestRawEvent_DedupKey_FallbackHashWhenIDEmpty(t *testing.T) {
 	}
 }
 
-func TestRawEvent_DedupKey_IsolatesRoutingIdentity(t *testing.T) {
+func TestCrossPlatformCoverageRawEventDedupRoutingIdentity(t *testing.T) {
 	for _, eventID := range []string{"same-business-event", ""} {
 		for name, mutate := range map[string]func(*RawEvent){
 			"subscription": func(e *RawEvent) { e.SubscribeID = "another-sub" },
@@ -99,7 +99,7 @@ func TestRawEvent_DedupKey_IsolatesRoutingIdentity(t *testing.T) {
 	}
 }
 
-func TestRawEvent_DedupKey_FieldBoundariesAndIdentityKind(t *testing.T) {
+func TestCrossPlatformCoverageRawEventDedupFieldBoundariesAndIdentityKind(t *testing.T) {
 	a := RawEvent{SourceID: "a:b", EventCorpID: "c", EventID: "same"}
 	b := RawEvent{SourceID: "a", EventCorpID: "b:c", EventID: "same"}
 	if a.DedupKey() == b.DedupKey() {
