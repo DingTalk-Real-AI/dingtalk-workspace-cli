@@ -184,6 +184,7 @@ func Run(ctx context.Context, cfg Config) error {
 		listener: listener,
 		hub:      hub,
 		dedup:    dd,
+		audit:    newDeliveryAudit(log),
 		started:  time.Now().UTC(),
 		idleStop: make(chan struct{}),
 		stopReq:  make(chan string, 1),
@@ -226,22 +227,15 @@ func Run(ctx context.Context, cfg Config) error {
 		defer close(dropWarnDone)
 		dropWarnWatcher(runCtx, hub.Counters(), log, cfg.DropWarnPercent)
 	}()
+	auditDone := make(chan struct{})
+	go func() {
+		defer close(auditDone)
+		d.audit.run(runCtx)
+	}()
 
 	srcErr := make(chan error, 1)
 	go func() {
-		// emit is called from inside the SDK callback goroutine. It MUST
-		// NOT block (plan invariant #1) — dedup + Hub.Deliver are both
-		// non-blocking by construction.
-		emit := func(raw *dwsevent.RawEvent) {
-			if raw == nil {
-				return
-			}
-			if dd.Seen(raw.DedupKey()) {
-				return // duplicate redelivery from the cloud
-			}
-			hub.Deliver(raw)
-		}
-		srcErr <- cfg.Source.Start(runCtx, emit)
+		srcErr <- cfg.Source.Start(runCtx, d.emit)
 	}()
 
 	// 6. Wait for shutdown trigger.
@@ -277,6 +271,7 @@ func Run(ctx context.Context, cfg Config) error {
 	d.shutdown(acceptDone, shutdownReason)
 	<-idleDone
 	<-dropWarnDone
+	<-auditDone
 
 	return exitErr
 }
@@ -289,6 +284,7 @@ type daemon struct {
 	listener transport.Listener
 	hub      *Hub
 	dedup    *dedup.LRU
+	audit    *deliveryAudit
 	started  time.Time
 
 	consumerWG   sync.WaitGroup // tracks live connection handler goroutines

@@ -56,20 +56,32 @@ type RawEvent struct {
 // callback can ACK without delay — see plan invariant #1.
 type EmitFn func(*RawEvent)
 
-// DedupKey returns the LRU dedup key for this event. Prefers EventID (the
-// SDK-provided identifier); falls back to a content-derived hash when the
+// DedupKey identifies a delivery, not just a business event: overlapping
+// personal subscriptions can deliver the same EventID to different consumers.
+// Scope by routing identity before dedup, otherwise an unconsumed subscription
+// can suppress a live subscription's copy. Prefers EventID; falls back to a
+// content-derived hash when the
 // SDK does not populate EventID (rare, but observed on legacy event types
 // per the P0 escape-hatch verification).
 func (e *RawEvent) DedupKey() string {
 	if e == nil {
 		return ""
 	}
-	if e.EventID != "" {
-		return e.EventID
+	identityKind, identity := "id", e.EventID
+	if identity == "" {
+		h := sha256.Sum256([]byte(e.Data))
+		identityKind, identity = "content", itoa(e.EventBornTime)+":"+hex.EncodeToString(h[:8])
 	}
-	// Fallback: type + born_time + sha256(data)[:16]
-	h := sha256.Sum256([]byte(e.Data))
-	return e.EventType + ":" + itoa(e.EventBornTime) + ":" + hex.EncodeToString(h[:8])
+	fields := [...]string{e.SourceID, e.EventCorpID, e.EventUnifiedAppID, e.EventScope,
+		e.EventType, e.SubscribeID, identityKind, identity}
+	var key strings.Builder
+	// Length-prefixed fields avoid collisions even when IDs contain separators.
+	for _, field := range fields {
+		key.WriteString(itoa(int64(len(field))))
+		key.WriteByte(':')
+		key.WriteString(field)
+	}
+	return key.String()
 }
 
 func itoa(n int64) string {
