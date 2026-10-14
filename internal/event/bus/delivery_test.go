@@ -144,6 +144,32 @@ func TestCrossPlatformCoverageEventDeliveryAuditNonBlockingQueue(t *testing.T) {
 	}
 }
 
+// A misbehaving source can keep enqueueing after cancellation. Refill one
+// record on each write to prove shutdown stops at its bounded drain budget.
+type deliveryAuditRefillWriter struct {
+	audit  *deliveryAudit
+	writes int
+}
+
+func (w *deliveryAuditRefillWriter) Write(p []byte) (int, error) {
+	w.writes++
+	w.audit.records <- deliveryRecord{outcome: "no_matching_consumer"}
+	return len(p), nil
+}
+
+func TestCrossPlatformCoverageEventDeliveryAuditShutdownDrainBound(t *testing.T) {
+	writer := &deliveryAuditRefillWriter{}
+	audit := newDeliveryAudit(slog.New(slog.NewTextHandler(writer, nil)))
+	writer.audit = audit
+	audit.records <- deliveryRecord{outcome: "no_matching_consumer"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	audit.run(ctx)
+	if writer.writes < cap(audit.records) || len(audit.records) != 1 {
+		t.Fatalf("bounded drain did not leave the continuing source alone: writes=%d queued=%d", writer.writes, len(audit.records))
+	}
+}
+
 func BenchmarkDaemonEmit_OverlappingSubscription(b *testing.B) {
 	hub := NewHub(100)
 	if _, err := hub.Register(transport.Hello{SubscribeID: "current"}); err != nil {
