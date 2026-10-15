@@ -51,7 +51,7 @@ metadata:
 | 已知消息 ID 批量取详情 | `dws chat +messages-mget` | 看 leaf Schema；保留会话上下文 |
 | <!-- dws-intent: chat.send.dm -->按姓名发文本/Markdown | `dws chat +dm --to <姓名> --content <内容>` | 唯一解析；多候选停止 |
 | <!-- dws-intent: chat.send.group -->按群名/ID 发文本/Markdown | `dws chat +send-to-group --group <群名或ID> --content <内容>` | 多候选停止 |
-| <!-- dws-intent: chat.send.advanced -->文件/Bot/Webhook/复杂 @ | `dws chat +messages-send` | Bot 多群检查逐项 ledger |
+| <!-- dws-intent: chat.send.advanced -->图文/文件/Bot/Webhook/复杂 @ | `dws chat +messages-send` | 本地图文先读[资源](references/chat/message-media.md)；Bot 多群检查逐项 ledger |
 | 全部会话 | `dws chat +conversation-list --page-all` | 含群聊/单聊，非正文 |
 | 查加入/管理的群 | `+my-groups --page-all` / `+chat-list-mine` | 后者无 `--page-all`；flag 不跨 leaf |
 | 搜群或查看全部成员 | `+chat-search --query <词>` / `+chat-members-list --group <群名或ID>` | 多候选停止；检查 buckets/完整性 |
@@ -73,7 +73,6 @@ metadata:
 ## 关键结果语义
 
 - 查询保留范围、数量、完整性、停止原因、失败/下载 ledger；不完整不得称成功。消息仅 `--page-all` 翻页，达预算返回有界 partial。
-- 本地图片仅已有 `mediaId` 才发内联 image，否则发 file；只上传不发送用 `conversation-file upload`。
 - 子消息用自身 messageId；缺 CID 才继承父 conversationId。写操作沿真实结果传 ID。
 
 ## 写生命周期

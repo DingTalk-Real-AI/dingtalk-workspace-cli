@@ -477,12 +477,18 @@ func TestCrossPlatformCoverageChatThreadSurfaceAndLegacyCompatibility(t *testing
 	if legacySendErr != nil {
 		t.Fatalf("find legacy message send: %v", legacySendErr)
 	}
+	if !strings.Contains(legacySend.Flags().Lookup("content").Usage, "行内本地图文") {
+		t.Fatalf("message send --content help lacks local Markdown image guidance: %q", legacySend.Flags().Lookup("content").Usage)
+	}
 	for _, path := range [][]string{{"thread", "send"}, {"thread", "reply"}} {
 		threadSend, _, threadSendErr := root.Find(path)
 		if threadSendErr != nil {
 			t.Fatalf("find %v: %v", path, threadSendErr)
 		}
-		for _, name := range []string{"content", "file", "at-all", "at-open-dingtalk-ids"} {
+		if got := threadSend.Flags().Lookup("content").Usage; got != "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）" {
+			t.Fatalf("%v --content help changed: %q", path, got)
+		}
+		for _, name := range []string{"file", "at-all", "at-open-dingtalk-ids"} {
 			if legacySend.Flags().Lookup(name).Usage != threadSend.Flags().Lookup(name).Usage {
 				t.Fatalf("%v --%s help = %q, want legacy %q", path, name, threadSend.Flags().Lookup(name).Usage, legacySend.Flags().Lookup(name).Usage)
 			}

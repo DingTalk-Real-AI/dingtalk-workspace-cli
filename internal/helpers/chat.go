@@ -4051,7 +4051,10 @@ func newChatCommand() *cobra.Command {
 
 纯文本 / Markdown 消息（默认）：
   无需指定 --msg-type，直接传消息内容即可。推荐使用 --content flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
-  图文混排时，公网图片 URL 需要写成 Markdown 图片语法：![图片标题](https://example.com/image.png)，才会以内联图片展示。
+  图文混排时，正文可写 ![图片标题](./image.png)：CLI 会先上传本地图片，再一次发送 Markdown 富文本。
+  支持相对路径、原生命令绝对路径、file://、HTTPS URL 和 mediaid:已有ID；最多同时上传 3 张。
+  本地图片暂不支持引用式 Markdown（![说明][id] 加定义行），请使用行内写法。
+  --dry-run 仅展示脱敏计划，不读图、上传或发送。
   如果省略开头的 !，例如 [图片标题](https://example.com/image.png)，将按链接/URL 展示，不会渲染为图片。
 
 返回值与后续操作：
@@ -4061,15 +4064,15 @@ func newChatCommand() *cobra.Command {
 
 本地图片 / 文件消息：
   统一使用 --msg-type file --file <本地路径>。CLI 会完成上传并按 file 消息发送；
-  .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。
+  .png/.jpg 也会显示为可下载的文件附件；要内联展示请把图片写进 Markdown 正文。
 
 旧版内联图片消息：
-  仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。
-  当前 CLI 不提供本地文件到 mediaId 的上传能力。`,
+  仅当上游已经提供有效 mediaId 且要发送独立图片消息时，使用 --msg-type image --media-id。`,
 		Example: `  dws chat message send --conversation-id <openconversation_id> --content "hello"
   dws chat message send --user <userId> --content "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> --content "请查收"
   dws chat message send --conversation-id <openconversation_id> --title "周报提醒" --content "请大家本周五前提交周报"
+  dws chat message send --conversation-id <openconversation_id> --content $'部署结果：\n![截图](./console.png)\n请确认'
   # 图文混排 Markdown：公网图片 URL 需要写成 ![图片标题](URL) 才会以内联图片展示
   dws chat message send --conversation-id <openconversation_id> --content $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
   # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
@@ -4290,8 +4293,33 @@ func newChatCommand() *cobra.Command {
 				)
 			}
 			title, _ := cmd.Flags().GetString("title")
+			titleExplicit := title != ""
 			if title == "" {
 				title = sanitizeTitleFromText(text)
+			}
+			if strings.Contains(text, "![") {
+				resolved, report, err := ResolveMarkdownLocalImages(cmd.Context(), text, MarkdownImageOptions{DryRun: deps.Caller.DryRun()})
+				if err != nil {
+					return err
+				}
+				if report.LocalCount > 0 && !titleExplicit {
+					prefix := strings.TrimSpace(strings.SplitN(text, "![", 2)[0])
+					if prefix == "" {
+						title = "图文消息"
+					} else {
+						title = sanitizeTitleFromText(prefix)
+					}
+				}
+				if report.LocalCount > 0 && deps.Caller.DryRun() {
+					preview := map[string]any{"msgType": "markdown", "imageCount": report.LocalCount, "uniquePathCount": report.UniqueCount, "content": "[本地图文内容已脱敏]"}
+					if groupID != "" {
+						preview["openConversationId"] = groupID
+					} else {
+						preview["receiverOpenDingTalkId"] = openDingTalkID
+					}
+					return storeChatThreadDryRun(cmd, resolveProductID(), "send_personal_message", preview)
+				}
+				text = resolved
 			}
 			if groupID != "" {
 				atAll, _ := cmd.Flags().GetBool("at-all")
@@ -4349,7 +4377,10 @@ func newChatCommand() *cobra.Command {
 				AgentSummary: "以当前用户身份发送群聊或单聊消息",
 				UseWhen:      []string{"明确需要 chat +messages-send 未公开的底层字段、原始响应或不同执行语义，并以个人身份发送消息时"},
 				AvoidWhen:    []string{"常规个人/Bot/Webhook 或高级发送使用 chat +messages-send"},
-				Examples:     []string{"dws chat message send --group <openConversationId> --content \"项目已更新\""},
+				Examples: []string{
+					"dws chat message send --group <openConversationId> --content \"项目已更新\"",
+					"dws chat message send --group <openConversationId> --content \"结果：![截图](./console.png)\"",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "ai-tag", Property: "clawType", InterfaceType: "string"},
@@ -5732,7 +5763,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageSendCmd.Flags().String("title", "", "消息标题，显示在消息列表（可选，未指定时使用消息内容）")
 	corecmd.RegisterFlags(chatMessageSendCmd, []corecmd.FlagSpec{{
 		Name:    "content",
-		Usage:   "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）",
+		Usage:   "消息内容（可含 ![说明](./image.png) 行内本地图文；换行/特殊字符建议使用此 flag）",
 		Aliases: []string{"text"},
 	}})
 	for _, alias := range []string{"body", "message", "markdown"} {
@@ -5741,8 +5772,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	}
 	chatMessageSendCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
 	chatMessageSendCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
-	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）")
-	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file；image 仅接受已有 mediaId）")
+	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅独立 msgType=image；Markdown 内联本地图片请写在 --content 中）")
+	chatMessageSendCmd.Flags().String("msg-type", "", "独立富媒体消息类型: image/file/audio/video/location/profile（内联本地图文无需此 flag；附件用 file --file）")
 	chatMessageSendCmd.Flags().String("latitude", "", "位置消息纬度（msgType=location 时必填）")
 	chatMessageSendCmd.Flags().String("longitude", "", "位置消息经度（msgType=location 时必填）")
 	chatMessageSendCmd.Flags().String("location-name", "", "位置消息地址名称（msgType=location 时必填）")
@@ -7623,6 +7654,10 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 流程:
   1. 根据 resourceType + resource-id + message-id + open-conversation-id 向服务端获取下载 URL
   2. HTTP GET 下载文件到本地
+
+下载成功后 JSON 中的 downloadUrl 是临时地址，会过期。
+后续需要下载时，请使用原 mediaId（--resource-id）、消息 ID（--message-id）和会话 ID（--open-conversation-id），
+再次调用 dws chat message download-media --type mediaId 下载。
 
 --output 指定本地保存路径，可以是文件路径或目录。
 如果指定目录，文件名从下载 URL 中自动推断。默认保存到当前目录。`,
