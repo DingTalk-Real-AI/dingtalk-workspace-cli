@@ -483,3 +483,32 @@ func TestCrossPlatformCoverageAcquireDualLockCanceledDuringFileAcquire(t *testin
 	}
 	unlockFile(probe)
 }
+
+func TestCrossPlatformCoverageAcquireTokenLockCancellationAtBoundaries(t *testing.T) {
+	for _, phase := range []string{"opened", "contended"} {
+		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var opened *os.File
+			openFile := fileLockOpenFile
+			testseam.Swap(t, &fileLockOpenFile, func(path string, flag int, mode os.FileMode) (*os.File, error) {
+				f, err := openFile(path, flag, mode)
+				opened = f
+				if phase == "opened" {
+					cancel()
+				}
+				return f, err
+			})
+			if phase == "contended" {
+				testseam.Swap(t, &fileLockTry, func(*os.File) error { cancel(); return errors.New("fixture contention") })
+			}
+			lock, err := acquireTokenLockContext(ctx, t.TempDir())
+			if lock != nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("取消后仍取得锁: %v %v", lock, err)
+			}
+			if opened == nil || !errors.Is(opened.Close(), os.ErrClosed) {
+				t.Fatal("取消后未关闭文件")
+			}
+		})
+	}
+}

@@ -4,8 +4,11 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -73,5 +76,66 @@ func TestCrossPlatformCoverageEmployeeSupervisorSnapshotFailures(t *testing.T) {
 				t.Fatal("unverified supervisor snapshot accepted")
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeChannelFailureBoundaries(t *testing.T) {
+	for _, operation := range []string{"reply", "operator"} {
+		for _, scenario := range []string{"malformed", "invalid-payload", "binding-mismatch", "lookup-failed", "sender-missing", "send-failed", "receipt-failed", "success-alias"} {
+			t.Run(operation+"/"+scenario, func(t *testing.T) {
+				installEmployeeReplyBinding(t)
+				caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+					"im/list_messages_by_ids":    {`{"sender_open_dingtalk_id":"sender"}`},
+					"chat/send_personal_message": {`{"openMessageId":"delivered","status":"success"}`},
+				}}
+				InitDepsForTest(t, caller)
+				cmd := newDeapChannelReplyCommand()
+				var input any = digitalEmployeeReplyInput{SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: "agent-1", EventID: "event", ConversationID: "conversation", ReferenceMessageID: "original", Text: "private body", IdempotencyKey: "unique"}
+				if operation == "operator" {
+					cmd = newDeapChannelOperatorPrivateCommand()
+					input = digitalEmployeeOperatorInput{SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: "agent-1", OperatorOpenDingTalkID: "operator-open", Text: "private body", IdempotencyKey: "unique"}
+				}
+				cmd.SetContext(context.Background())
+				cmd.SetOut(&bytes.Buffer{})
+				_ = cmd.Flags().Set("channel", "dsh")
+				_ = cmd.Flags().Set("stdin", "true")
+				raw, err := json.Marshal(input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch scenario {
+				case "malformed":
+					raw = []byte("{")
+				case "invalid-payload":
+					raw = []byte(`{}`)
+				case "binding-mismatch":
+					auth.SetRuntimeProfile("")
+				case "lookup-failed":
+					if operation == "reply" {
+						delete(caller.responses, "im/list_messages_by_ids")
+					} else {
+						raw = bytes.ReplaceAll(raw, []byte("operator-open"), []byte("another-operator"))
+					}
+				case "sender-missing":
+					if operation == "reply" {
+						caller.responses["im/list_messages_by_ids"] = []string{`{}`}
+					} else {
+						raw = bytes.ReplaceAll(raw, []byte("operator-open"), []byte("another-operator"))
+					}
+				case "send-failed":
+					delete(caller.responses, "chat/send_personal_message")
+				case "receipt-failed":
+					caller.responses["chat/send_personal_message"] = []string{`{}`}
+				}
+				cmd.SetIn(bytes.NewReader(raw))
+				err = cmd.RunE(cmd, nil)
+				if (err == nil) != (scenario == "success-alias") {
+					t.Fatalf("err=%v", err)
+				}
+				if err != nil && strings.Contains(err.Error(), "private body") {
+					t.Fatal("failure exposed message body")
+				}
+			})
+		}
 	}
 }

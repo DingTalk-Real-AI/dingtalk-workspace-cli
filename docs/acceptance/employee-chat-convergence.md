@@ -1,6 +1,6 @@
 # 数字员工发送收敛与本地联合验收
 
-通用 `chat +messages-reply` 和 `chat +messages-send` 承载数字员工的消息发送。`channel capabilities` 和 `channel binding` 继续负责能力发现与绑定读取；删除 `channel reply` 和 `channel operator-private`，发送统一使用 chat。
+通用 `chat +messages-reply` 和 `chat +messages-send` 承载数字员工的消息发送。`channel capabilities` 和 `channel binding` 继续负责能力发现与绑定读取；已发布的 `channel reply` 和 `channel operator-private` 保留兼容入口，复用统一发送回执；新版宿主发送使用 chat。
 
 ## 调用约定
 
