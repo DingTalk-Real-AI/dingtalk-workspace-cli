@@ -1357,7 +1357,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`go test -v -count=1 -timeout=10m "${packages[@]}"`,
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
-		`[ "$TEST_SHARD" = "smoke" ]; then`,
+		`[ "$TEST_SHARD" = "smoke" ] ||`,
+		`[ "$TEST_SHARD" = "helpers" ]; then`,
+		"timeout_budget=18m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
 		"- release-scripts",
@@ -1376,18 +1378,18 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	// internal/app is carried by three balanced lanes. Process-global command
 	// registries are still released with each logical partition process, and each
 	// lane resolves back to the same single internal/app package.
-	// Other full race shards retain the dynamic package timeout: default/floor
-	// 12m, with cli/smoke raised to 35m on slower hosted runners so Schema
-	// cache assembly under -race can finish (15m then 25m timed out
-	// internal/cli; latest: run 34513601170 hit the 25m alarm after a main
-	// merge, with green run 34507346541 already needing 23m15s).
+	// 其他 race 分片默认 12m；cli/smoke 的 Schema 装配以及 helpers 的
+	// 命令矩阵和图片压缩使用 18m。锁定预算和完整 race 命令，避免超时
+	// 修复意外改变测试范围或关闭 race 检测。
 	for _, want := range []string{
 		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
 		`./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"`,
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
-		`[ "$TEST_SHARD" = "smoke" ]; then`,
+		`[ "$TEST_SHARD" = "smoke" ] ||`,
+		`[ "$TEST_SHARD" = "helpers" ]; then`,
+		"timeout_budget=18m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
 	} {
