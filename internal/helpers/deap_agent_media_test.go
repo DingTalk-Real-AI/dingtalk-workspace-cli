@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -98,7 +99,8 @@ func TestCrossPlatformCoverageEmployeeImageInput(t *testing.T) {
 				t.Fatalf("Agent 只收到 mediaId 文本，未收到图片内容：attachments=%v download_calls=%d", fwd.inputs, calls)
 			}
 			path := fwd.inputs[0].LocalPath
-			if !strings.Contains(fwd.text, path) {
+			paths := employeeImagePromptPaths(t, fwd.text)
+			if len(paths) != 1 || paths[0] != path {
 				t.Fatal("Agent 文本缺少可读附件路径")
 			}
 			if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -203,7 +205,7 @@ func TestCrossPlatformCoverageEmployeeImageBoundaries(t *testing.T) {
 					}
 					for _, path := range []string{attachments[0].LocalPath, filepath.Dir(attachments[0].LocalPath), filepath.Join(r.dir, "media")} {
 						info, err := os.Stat(path)
-						if err != nil || info.Mode().Perm()&0077 != 0 {
+						if err != nil || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 							t.Fatalf("图片不是私有文件：%s %v", path, err)
 						}
 					}
@@ -284,18 +286,47 @@ func TestCrossPlatformCoverageEmployeeImageReferences(t *testing.T) {
 	}
 }
 
+func employeeImagePromptPaths(t *testing.T, text string) []string {
+	t.Helper()
+	lines := strings.Split(text, "\n")
+	var paths []string
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &paths); err != nil {
+		t.Fatalf("附件路径列表不是有效 JSON: %v", err)
+	}
+	return paths
+}
+
+func TestEmployeeImageCustomCommandHelper(t *testing.T) {
+	if os.Getenv("DWS_EMPLOYEE_CUSTOM_IMAGE_HELPER") != "1" {
+		return
+	}
+	for i, arg := range os.Args {
+		if arg == "--" {
+			if err := json.NewEncoder(os.Stdout).Encode(os.Args[i+1:]); err != nil {
+				os.Exit(2)
+			}
+			os.Exit(0)
+		}
+	}
+	os.Exit(2)
+}
+
 func TestCrossPlatformCoverageEmployeeImageCustomCommand(t *testing.T) {
 	dir := t.TempDir()
-	bin := writeShellExecutable(t, dir, "image-custom", `printf '%s\n' "$#" "$@"`)
-	fwd := &execForwarder{name: "custom", argv: []string{bin, "--fixture-option"}, timeout: 5 * time.Second}
+	t.Setenv("DWS_EMPLOYEE_CUSTOM_IMAGE_HELPER", "1")
+	fwd := &execForwarder{name: "custom", argv: []string{os.Args[0], "-test.run=^TestEmployeeImageCustomCommandHelper$", "--", "--fixture-option"}, timeout: 5 * time.Second}
 	path := filepath.Join(dir, "图片.png")
 	answer, err := forwardEmployeeTurn(context.Background(), fwd, "conversation", "看图", connectMediaAttachment{LocalPath: path, MediaType: "image"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(answer, "\n")
-	if len(lines) < 3 || lines[0] != "2" || lines[1] != "--fixture-option" || !strings.Contains(answer, path) {
-		t.Fatalf("custom 注入未知参数或丢失附件路径：%q", answer)
+	var args []string
+	if err := json.Unmarshal([]byte(answer), &args); err != nil || len(args) != 2 || args[0] != "--fixture-option" {
+		t.Fatalf("custom 注入未知参数: %q %v", answer, err)
+	}
+	paths := employeeImagePromptPaths(t, args[1])
+	if len(paths) != 1 || paths[0] != path {
+		t.Fatalf("custom 丢失附件路径: %q", args[1])
 	}
 }
 
