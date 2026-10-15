@@ -996,8 +996,9 @@ func TestCrossPlatformCoverageResolveSkillSrcLayouts(t *testing.T) {
 	os.WriteFile(filepath.Join(rootOnly, "SKILL.md"), []byte("# m"), 0o644)
 	child := filepath.Join(rootOnly, "extract-child")
 	os.MkdirAll(child, 0o755)
-	if got := resolveMonoSkillSrc(child); got != rootOnly {
-		t.Errorf("parent root = %q, want %q", got, rootOnly)
+	// filepath.Dir 会规范化 Windows 混合分隔符，预期路径采用相同规范。
+	if got, want := resolveMonoSkillSrc(child), filepath.Clean(rootOnly); got != want {
+		t.Errorf("parent root = %q, want %q", got, want)
 	}
 
 	// (d) child mono/ inside the extracted dir.

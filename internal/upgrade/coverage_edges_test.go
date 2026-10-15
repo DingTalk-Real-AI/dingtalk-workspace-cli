@@ -302,8 +302,9 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 	if err := EnsureUpgradeDirectories(); err != nil {
 		t.Fatal(err)
 	}
-	if got := DownloadCacheDir(); !strings.HasPrefix(got, home) {
-		t.Fatalf("download cache dir = %q", got)
+	// Windows CI 的临时根目录可能混用分隔符，按平台规范化后比较完整路径。
+	if got, want := DownloadCacheDir(), filepath.Join(home, ".dws", "cache", "downloads"); got != want {
+		t.Fatalf("download cache dir = %q, want %q", got, want)
 	}
 
 	modeDir := filepath.Join(t.TempDir(), "mode")
