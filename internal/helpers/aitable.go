@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -1246,6 +1247,66 @@ func callAitableToolContext(ctx context.Context, toolName string, args map[strin
 		return struct{}{}, callMCPToolContext(callCtx, toolName, args)
 	})
 	return err
+}
+
+// An incomplete get_fields success may be retried internally because the tool
+// is read-only. After retries are exhausted, callers receive the stable public
+// target_invalid_response reason with retryable=false.
+const aitableFieldGetIncompleteReason = "aitable_get_fields_incomplete_success"
+
+func incompleteAitableFieldGetResponse(detail string) error {
+	return apperrors.NewAPI(detail,
+		apperrors.WithOperation("aitable/get_fields"),
+		apperrors.WithReason(aitableFieldGetIncompleteReason),
+		apperrors.WithRetryable(true))
+}
+
+func validateAitableFieldGetResponse(raw string) error {
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil || envelope == nil {
+		return incompleteAitableFieldGetResponse("get_fields 返回值不是 JSON 对象")
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok {
+		return incompleteAitableFieldGetResponse("get_fields 返回值缺少 data.fields 数组")
+	}
+	fields, ok := data["fields"].([]any)
+	if !ok {
+		return incompleteAitableFieldGetResponse("get_fields 返回值缺少 data.fields 数组")
+	}
+	for index, field := range fields {
+		if _, ok := field.(map[string]any); !ok {
+			return incompleteAitableFieldGetResponse(fmt.Sprintf("get_fields 返回值的 data.fields[%d] 不是对象", index))
+		}
+	}
+	return nil
+}
+
+func callAitableFieldGetContext(ctx context.Context, args map[string]any) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolContext(ctx, "get_fields", args)
+	}
+	raw, err := callAitableReadWithRetry(ctx, "get_fields", func(callCtx context.Context) (string, error) {
+		text, callErr := callMCPToolReturnTextOnServer(callCtx, "aitable", "get_fields", args)
+		if callErr != nil {
+			return "", callErr
+		}
+		if shapeErr := validateAitableFieldGetResponse(text); shapeErr != nil {
+			return "", shapeErr
+		}
+		return text, nil
+	})
+	if err != nil {
+		var apiErr *apperrors.Error
+		if errors.As(err, &apiErr) && apiErr.Reason == aitableFieldGetIncompleteReason {
+			return apperrors.NewAPI(apiErr.Message,
+				apperrors.WithOperation("aitable/get_fields"),
+				apperrors.WithReason("target_invalid_response"),
+				apperrors.WithRetryable(false))
+		}
+		return err
+	}
+	return renderLegacyMCPText("get_fields", raw, false)
 }
 
 // callAitableUnifiedDataContext executes an AI Table tool through the same
@@ -3117,7 +3178,7 @@ config 结构参考：
 			if v, _ := cmd.Flags().GetString("field-ids"); v != "" {
 				toolArgs["fieldIds"] = parseCSVValues(v)
 			}
-			return callAitableToolContext(cmd.Context(), "get_fields", toolArgs)
+			return callAitableFieldGetContext(cmd.Context(), toolArgs)
 		},
 	}
 	DeclareLeafMetadata(fieldGetCmd, LeafSpec{
