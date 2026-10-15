@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestCrossPlatformCoverageEmployeeCodexToolPolicy(t *testing.T) {
 	for _, yolo := range []bool{false, true} {
 		cfg := digitalEmployeeAdapterConfig{
 			Binding: digitalEmployeeBinding{Channel: "codex", DWSProfile: "corp:employee"},
-			Options: connectAgentOptions{Memory: true, WorkDir: t.TempDir(), Yolo: yolo},
+			Options: connectAgentOptions{Memory: true, WorkDir: filepath.Clean(t.TempDir()), Yolo: yolo},
 		}
 		fwd, err := digitalEmployeeNewForwarder(context.Background(), cfg)
 		if err != nil {

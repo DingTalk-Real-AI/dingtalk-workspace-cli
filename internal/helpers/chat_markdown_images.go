@@ -135,6 +135,11 @@ func collectMarkdownImageRefs(body string, safePath func(string) (string, error)
 	return refs, report, err
 }
 
+// 盘符路径在 URL 解析前识别，避免把 C: 当成网络协议。
+func markdownWindowsDrivePath(path string) bool {
+	return len(path) >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && (path[2] == '/' || path[2] == '\\')
+}
+
 func classifyMarkdownImageDestination(dest string) (string, string, error) {
 	if (strings.HasPrefix(dest, "@") || strings.HasPrefix(dest, "$")) && !strings.ContainsAny(dest, "/\\") {
 		return "media", dest, nil
@@ -145,6 +150,13 @@ func classifyMarkdownImageDestination(dest string) (string, string, error) {
 			return "", "", fmt.Errorf("图片 mediaid 不能为空")
 		}
 		return "media", id, nil
+	}
+	if markdownWindowsDrivePath(dest) {
+		path, err := url.PathUnescape(dest)
+		if err != nil {
+			return "", "", fmt.Errorf("图片地址格式无效")
+		}
+		return "local", filepath.FromSlash(path), nil
 	}
 	parsed, err := url.Parse(dest)
 	if err != nil {
@@ -162,7 +174,11 @@ func classifyMarkdownImageDestination(dest string) (string, string, error) {
 		if path == "" {
 			return "", "", fmt.Errorf("file 图片路径无效")
 		}
-		return "local", path, nil
+		// 标准 Windows file URI 的 /C:/ 前缀映射回本机盘符路径。
+		if strings.HasPrefix(path, "/") && markdownWindowsDrivePath(path[1:]) {
+			path = path[1:]
+		}
+		return "local", filepath.FromSlash(path), nil
 	case "":
 		if dest == "" {
 			return "", "", fmt.Errorf("本地图片路径不能为空")

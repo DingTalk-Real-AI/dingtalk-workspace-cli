@@ -93,7 +93,7 @@ func TestCrossPlatformCoverageEmployeeRuntimeScopeAndBindingCompatibility(t *tes
 
 func TestCrossPlatformCoverageEmployeeCommonAgentOptionsMatchDevConnect(t *testing.T) {
 	cmd := newDeapConnectCommand()
-	for k, v := range map[string]string{"channel": "codex", "agent-model": "model-test", "agent-workdir": t.TempDir(), "agent-memory": "false", "agent-timeout": "9", "agent-permission-mode": "ask"} {
+	for k, v := range map[string]string{"channel": "codex", "agent-model": "model-test", "agent-workdir": filepath.Clean(t.TempDir()), "agent-memory": "false", "agent-timeout": "9", "agent-permission-mode": "ask"} {
 		_ = cmd.Flags().Set(k, v)
 	}
 	opts, err := digitalEmployeeOptions(cmd)
