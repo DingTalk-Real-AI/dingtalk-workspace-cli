@@ -78,7 +78,8 @@ func TestCrossPlatformCoverageEmployeeCIBindingReadBoundaries(t *testing.T) {
 func TestCrossPlatformCoverageEmployeeCILifecycleFailures(t *testing.T) {
 	t.Run("lock-directory", func(t *testing.T) {
 		_, b := lifecycleFixture(t)
-		if err := os.Remove(employeeBindingLockPath(b.DWSProfile)); err != nil {
+		b.DWSProfile = "corp:blocked-binding"
+		if err := os.MkdirAll(filepath.Dir(employeeBindingLockPath(b.DWSProfile)), 0700); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(employeeBindingLockPath(b.DWSProfile), []byte("blocked"), 0600); err != nil {
