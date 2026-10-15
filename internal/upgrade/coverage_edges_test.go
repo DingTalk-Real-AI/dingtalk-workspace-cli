@@ -277,7 +277,7 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 		t.Fatalf("directory home error = %v", err)
 	}
 
-	home := t.TempDir()
+	home := filepath.ToSlash(t.TempDir())
 	upgradeUserHomeDir = func() (string, error) { return home, nil }
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "SKILL.md"), []byte("skill"), 0o600); err != nil {
@@ -302,8 +302,9 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 	if err := EnsureUpgradeDirectories(); err != nil {
 		t.Fatal(err)
 	}
-	if got := DownloadCacheDir(); !strings.HasPrefix(got, home) {
-		t.Fatalf("download cache dir = %q", got)
+	// Windows 接受正斜杠输入，filepath.Join 返回原生分隔符；比较完整目标路径。
+	if got, want := DownloadCacheDir(), filepath.Join(home, ".dws", "cache", "downloads"); got != want {
+		t.Fatalf("download cache dir = %q, want %q", got, want)
 	}
 
 	modeDir := filepath.Join(t.TempDir(), "mode")

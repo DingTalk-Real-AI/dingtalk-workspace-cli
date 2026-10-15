@@ -49,6 +49,8 @@ var (
 	newUpgradeReleaseClient           = func() upgradeReleaseClient { return upgrade.NewClient() }
 	newUpgradeRollback                = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
 	prepareUpgradeNPMPackage          = upgrade.PrepareNPMPackage
+	resolveUpgradePlatformRelease     = upgrade.ResolvePlatformRelease
+	downloadUpgradePlatformAsset      = upgrade.DownloadPlatformAsset
 	ensureUpgradeDirs                 = upgrade.EnsureUpgradeDirectories
 	cleanupUpgradeStale               = upgrade.CleanupStaleFiles
 	upgradeNeedsUpgrade               = upgrade.NeedsUpgrade
@@ -450,6 +452,19 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		return runManagedUpgrade(ctx, install, release, opts)
 	}
 
+	platformRelease, err := resolveUpgradePlatformRelease(ctx, release, opts.skipSkills)
+	if err != nil {
+		return err
+	}
+	if platformRelease != nil {
+		release = platformRelease
+		var total int64
+		for _, asset := range release.Assets {
+			total += asset.Size
+		}
+		fmt.Printf("  下载来源: GitHub 同版本平台资产 (%.2f MiB)\n", float64(total)/1024/1024)
+	}
+
 	// --dry-run: preview only. Resolve the platform asset so a missing build is
 	// still reported, then describe the steps that *would* run and return before
 	// any side effect (no backup, no download, no replace). Matches the global
@@ -516,7 +531,23 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	}
 
 	var checksumsContent, binaryArchivePath, skillsZipPath string
-	if release.NPM != nil {
+	if platformRelease != nil {
+		for _, asset := range release.Assets {
+			archivePath := filepath.Join(tmpDir, asset.Name)
+			err := downloadUpgradePlatformAsset(ctx, asset, archivePath, func(percent float64, downloaded, total int64) {
+				fmt.Printf("\r  %s 下载 %s [%s] %5.1f%% (%.2f/%.2f MiB)", stepFmt(2), asset.Name, ugCyan(progressBar(percent)), percent, float64(downloaded)/1024/1024, float64(total)/1024/1024)
+			})
+			fmt.Println()
+			if err != nil {
+				return fmt.Errorf("准备平台资产 %s 失败: %w", asset.Name, err)
+			}
+			if asset.Name == binaryAsset.Name {
+				binaryArchivePath = archivePath
+			} else {
+				skillsZipPath = archivePath
+			}
+		}
+	} else if release.NPM != nil {
 		fmt.Printf("  %s 下载并校验 npm 发布包...\n", stepFmt(2))
 		prepared, prepareErr := prepareUpgradeNPMPackage(ctx, *release.NPM, tmpDir, opts.skipSkills, func(percent float64, downloaded, total int64) {
 			fmt.Printf("\r  %s 下载 npm 发布包 [%s] %5.1f%% (%.1fMB)", stepFmt(2), ugCyan(progressBar(percent)), percent, float64(downloaded)/1024/1024)

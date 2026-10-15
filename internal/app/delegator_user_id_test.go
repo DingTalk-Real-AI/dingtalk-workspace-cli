@@ -139,6 +139,7 @@ func TestCrossPlatformCoverageDelegatorInputMatrix(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorReusableRoot(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	var contexts []context.Context
 	leaf := &cobra.Command{Use: "delegator-fixture", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		contexts = append(contexts, cmd.Context())
@@ -252,6 +253,7 @@ func TestCrossPlatformCoverageDelegatorHeaderBoundary(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorHTTPExecution(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	t.Setenv("DINGTALK_DOC_MCP_URL", "https://mcp-gw.dingtalk.com/v1/mcp")
 	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 		return AccessTokenSnapshot{AccessToken: "actor-token"}, nil
@@ -397,6 +399,7 @@ func TestCrossPlatformCoverageDelegatorReservedAndRedacted(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorAuthRetry(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	original := edition.Get()
 	t.Cleanup(func() { edition.Override(original) })
 	edition.Override(&edition.Hooks{ClassifyToolResult: func(content map[string]any) error {
@@ -436,6 +439,7 @@ func TestCrossPlatformCoverageDelegatorAuthRetry(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorRequiredValidationCleanup(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	leaf := &cobra.Command{Use: "delegator-required", RunE: func(*cobra.Command, []string) error { return nil }}
 	leaf.Flags().String("required", "", "")
 	_ = leaf.MarkFlagRequired("required")
@@ -477,6 +481,7 @@ func (r *delegatorLegacyFixtureRunner) Run(_ context.Context, inv executor.Invoc
 
 func TestCrossPlatformCoverageDelegatorLegacyDocCheckPreserved(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	fixture := &delegatorLegacyFixtureRunner{}
 	testseam.Swap(t, &rootNewCommandRunnerWithFlags, func(*GlobalFlags) executor.Runner { return fixture })
 	root := NewRootCommand()

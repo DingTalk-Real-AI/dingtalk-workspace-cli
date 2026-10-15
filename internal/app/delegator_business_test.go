@@ -205,6 +205,7 @@ func TestCrossPlatformCoverageDelegatorBusinessSequentialRoots(t *testing.T) {
 func stubDelegatorBusinessAuth(t *testing.T) func(*testing.T) {
 	t.Helper()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 		return AccessTokenSnapshot{AccessToken: "fixture-actor-token"}, nil
 	})
