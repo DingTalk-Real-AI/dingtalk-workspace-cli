@@ -14,6 +14,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
@@ -52,4 +53,47 @@ func TestAgentSelectionScenariosCoverEveryExecutableSchemaTool(t *testing.T) {
 		t.Fatal("selection fixture digest is empty")
 	}
 	t.Logf("validated %d bound tools, %d positive assertions, %d negative assertions (%s)", report.Tools, report.PositiveAssertions, report.NegativeAssertions, report.FixtureSHA256)
+}
+
+func TestAgentSelectionRetiredPromoteRejectsCapabilityIntent(t *testing.T) {
+	root := NewRootCommand()
+	effective, err := cli.BuildEffectiveCommandRegistry(root)
+	if err != nil {
+		t.Fatalf("BuildEffectiveCommandRegistry() error = %v", err)
+	}
+	bound, err := cli.BindEffectiveCommandRegistry(root, effective)
+	if err != nil {
+		t.Fatalf("BindEffectiveCommandRegistry() error = %v", err)
+	}
+	fixture, _, err := cli.BuildAgentSelectionEvalFixture(bound)
+	if err != nil {
+		t.Fatalf("BuildAgentSelectionEvalFixture() error = %v", err)
+	}
+
+	const canonical = "chat.promote_message_to_thread"
+	foundRetirementOnlyPositive := false
+	foundCapabilityNegative := false
+	for _, testCase := range fixture.Cases {
+		if testCase.ExpectedCanonical == canonical {
+			if !strings.Contains(testCase.Scenario, "下线") && !strings.Contains(testCase.Scenario, "历史") {
+				t.Fatalf("retired promote has active positive selection scenario: %q", testCase.Scenario)
+			}
+			foundRetirementOnlyPositive = true
+		}
+		if testCase.ID == canonical+"/avoid_when/0" && strings.Contains(testCase.Scenario, "已有消息升级") {
+			if testCase.ForbiddenCanonical != canonical {
+				t.Fatalf("retired promote capability case forbidden canonical = %q, want %q", testCase.ForbiddenCanonical, canonical)
+			}
+			if testCase.ExpectedCanonical != "" {
+				t.Fatalf("retired promote capability case unexpectedly selects %q", testCase.ExpectedCanonical)
+			}
+			foundCapabilityNegative = true
+		}
+	}
+	if !foundRetirementOnlyPositive {
+		t.Fatal("retired promote is missing a retirement-only positive selection scenario")
+	}
+	if !foundCapabilityNegative {
+		t.Fatal("retired promote is missing a negative selection scenario for the former capability intent")
+	}
 }

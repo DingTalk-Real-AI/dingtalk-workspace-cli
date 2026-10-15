@@ -526,6 +526,120 @@ func TestChatHelpAndSchemaHideRetiredMediaUpload(t *testing.T) {
 	}
 }
 
+func TestChatHelpAndSchemaHideRetiredThreadPromote(t *testing.T) {
+	root := NewRootCommand()
+	promote := mustFindCommand(t, root, "chat", "thread", "promote")
+	if promote.Deprecated == "" || !promote.Hidden || !promote.Runnable() {
+		t.Fatalf("chat thread promote compatibility contract: deprecated=%q hidden=%v runnable=%v", promote.Deprecated, promote.Hidden, promote.Runnable())
+	}
+	for _, flag := range []string{"conversation-id", "message-id"} {
+		if promote.Flags().Lookup(flag) == nil {
+			t.Fatalf("chat thread promote missing --%s", flag)
+		}
+	}
+
+	for _, args := range [][]string{
+		{"chat", "--help"},
+		{"chat", "thread", "--help"},
+	} {
+		helpRoot := NewRootCommand()
+		var output bytes.Buffer
+		helpRoot.SetOut(&output)
+		helpRoot.SetErr(&output)
+		helpRoot.SetArgs(args)
+		if err := helpRoot.Execute(); err != nil {
+			t.Fatalf("dws %s: %v\n%s", strings.Join(args, " "), err, output.String())
+		}
+		for _, line := range strings.Split(output.String(), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 && fields[0] == "promote" {
+				t.Fatalf("dws %s exposes retired command in Help line %q:\n%s", strings.Join(args, " "), line, output.String())
+			}
+		}
+	}
+	directHelpRoot := NewRootCommand()
+	var directHelp bytes.Buffer
+	directHelpRoot.SetOut(&directHelp)
+	directHelpRoot.SetErr(&directHelp)
+	directHelpRoot.SetArgs([]string{"chat", "thread", "promote", "--help"})
+	if err := directHelpRoot.Execute(); err != nil {
+		t.Fatalf("dws chat thread promote --help: %v\n%s", err, directHelp.String())
+	}
+	for _, want := range []string{"已下线优化中", "chat thread send", "chat thread reply", "command_retired"} {
+		if !strings.Contains(directHelp.String(), want) {
+			t.Fatalf("direct retired help missing %q:\n%s", want, directHelp.String())
+		}
+	}
+	for _, forbidden := range []string{"转换成功后返回", "When to use:", "promote --conversation-id"} {
+		if strings.Contains(directHelp.String(), forbidden) {
+			t.Fatalf("direct retired help still recommends command via %q:\n%s", forbidden, directHelp.String())
+		}
+	}
+
+	tool := executeShortcutSchemaQuery(t, "--cli-path", "chat thread promote")
+	if got := schemaContractString(tool["canonical_path"]); got != "chat.promote_message_to_thread" {
+		t.Fatalf("retired chat thread promote canonical_path = %q", got)
+	}
+	if got := schemaContractString(tool["availability"]); got != contract.InterfaceUnavailable {
+		t.Fatalf("retired chat thread promote availability = %q, want unavailable", got)
+	}
+	if tool["interface_ref"] != nil {
+		t.Fatalf("retired chat thread promote interface_ref = %#v, want nil", tool["interface_ref"])
+	}
+	if got := schemaContractString(tool["interface_reason"]); !strings.Contains(got, "已下线") {
+		t.Fatalf("retired chat thread promote interface_reason = %q, want retirement reason", got)
+	}
+	for field, value := range map[string]string{
+		"description":   schemaContractString(tool["description"]),
+		"agent_summary": schemaContractString(tool["agent_summary"]),
+		"use_when":      strings.Join(schemaContractStringSlice(tool["use_when"]), "\n"),
+	} {
+		if !strings.Contains(value, "下线") && !strings.Contains(value, "历史") {
+			t.Fatalf("retired chat thread promote %s still lacks retirement semantics: %q", field, value)
+		}
+	}
+	selectionText := strings.Join([]string{
+		schemaContractString(tool["description"]),
+		schemaContractString(tool["agent_summary"]),
+		strings.Join(schemaContractStringSlice(tool["use_when"]), "\n"),
+	}, "\n")
+	for _, stale := range []string{
+		"将普通群中的已有消息升级为 Thread 根消息",
+		"用户明确要求把普通群里一条已存在的消息转成 Thread 或群内话题时",
+		"转换成功后返回 openConvThreadId",
+	} {
+		if strings.Contains(selectionText, stale) {
+			t.Fatalf("retired chat thread promote still publishes active capability text %q: %q", stale, selectionText)
+		}
+	}
+	avoidWhen := strings.Join(schemaContractStringSlice(tool["avoid_when"]), "\n")
+	if !strings.Contains(avoidWhen, "已有消息升级") || !strings.Contains(avoidWhen, "不要选择") {
+		t.Fatalf("retired chat thread promote avoid_when does not forbid capability routing: %q", avoidWhen)
+	}
+
+	got, execErr := executeRootCaptureStdout(t, []string{
+		"chat", "thread", "promote",
+		"--conversation-id", "group-1",
+		"--message-id", "message-1",
+	})
+	if execErr == nil {
+		t.Fatalf("retired chat thread promote error = nil\n%s", got)
+	}
+	var structured *apperrors.Error
+	if !stderrors.As(execErr, &structured) || structured.Category != apperrors.CategoryValidation {
+		t.Fatalf("retired chat thread promote error = %v, want validation category", execErr)
+	}
+	if structured.Reason != "command_retired" {
+		t.Fatalf("retired chat thread promote reason = %q, want command_retired", structured.Reason)
+	}
+	if exitCode := apperrors.ExitCode(execErr); exitCode != 3 {
+		t.Fatalf("retired chat thread promote exit code = %d, want 3", exitCode)
+	}
+	if !strings.HasSuffix(structured.Message, "下线优化中") {
+		t.Fatalf("retired chat thread promote message = %q, want suffix 下线优化中", structured.Message)
+	}
+}
+
 func TestRootChatMediaUploadWithoutAppCredentialsReturnsMigrationValidation(t *testing.T) {
 	for _, key := range []string{"DWS_CLIENT_ID", "DWS_CLIENT_SECRET"} {
 		value, existed := os.LookupEnv(key)

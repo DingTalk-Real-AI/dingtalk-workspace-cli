@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -116,7 +117,7 @@ func TestCrossPlatformCoverageAITableExplicitUnlimitedPaginationE2E(t *testing.T
 	}
 	caller := &aitableTestCaller{responses: responses}
 	out := installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 0); err != nil {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 0); err != nil {
 		t.Fatalf("explicit unlimited pagination failed: %v", err)
 	}
 	if len(caller.calls) != len(responses) {

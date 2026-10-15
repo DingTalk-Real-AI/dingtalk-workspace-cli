@@ -127,7 +127,6 @@ func TestCrossPlatformCoverageAtomicThreadDryRunStoresOneResult(t *testing.T) {
 	}{
 		{name: "create", args: []string{"thread", "create-group", "--name", "话题圈", "--users", "user-1"}},
 		{name: "send", args: []string{"thread", "send", "--conversation-id", "topic-1", "--text", "新话题"}},
-		{name: "promote", args: []string{"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1"}},
 		{name: "list", args: []string{"thread", "list", "--conversation-id", "topic-1"}},
 		{name: "reply", args: []string{"thread", "reply", "--conversation-id", "thread-1", "--text", "回复"}},
 		{name: "reply file", args: []string{"thread", "reply", "--conversation-id", "thread-1", "--msg-type", "file", "--file", filePath}},
@@ -154,58 +153,50 @@ func TestCrossPlatformCoverageAtomicThreadDryRunStoresOneResult(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageAtomicThreadPromoteReturnsThreadIdentity(t *testing.T) {
-	caller := &chatThreadCaller{responses: map[string]string{
-		"im/convert_message_to_thread": `{"success":true,"result":{"openConversationId":" group-1 ","openMessageId":" message-1 ","openConvThreadId":" thread-1 "}}`,
-	}}
-	stdout, err := executeAtomicThreadDryRun(t, caller,
-		"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantArgs := map[string]any{"openConversationId": "group-1", "openMessageId": "message-1"}
-	if len(caller.calls) != 1 || caller.calls[0].product != "im" ||
-		caller.calls[0].tool != "convert_message_to_thread" || !reflect.DeepEqual(caller.calls[0].args, wantArgs) {
-		t.Fatalf("calls = %#v, want im/convert_message_to_thread %#v", caller.calls, wantArgs)
-	}
-	var envelope map[string]any
-	if err := json.Unmarshal(stdout, &envelope); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := envelope["data"].(map[string]any)
-	if envelope["outcome"] != "success" || data["openConversationId"] != "group-1" ||
-		data["openMessageId"] != "message-1" || data["openConvThreadId"] != "thread-1" {
-		t.Fatalf("promote envelope = %#v", envelope)
-	}
-}
-
-func TestCrossPlatformCoverageAtomicThreadPromoteRejectsInvalidResponses(t *testing.T) {
-	for _, test := range []struct {
-		name     string
-		response string
-		want     string
-	}{
-		{name: "non object", response: `[]`, want: "响应不是 JSON 对象"},
-		{name: "missing result", response: `{}`, want: "响应缺少 result 对象"},
-		{name: "missing field", response: `{"result":{"openConversationId":"group-1","openMessageId":"message-1","openConvThreadId":""}}`, want: "result.openConvThreadId"},
-		{name: "identity mismatch", response: `{"result":{"openConversationId":"group-2","openMessageId":"message-1","openConvThreadId":"thread-1"}}`, want: "与请求不一致"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			caller := &chatThreadCaller{responses: map[string]string{"im/convert_message_to_thread": test.response}}
-			_, err := executeAtomicThreadDryRun(t, caller,
-				"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want containing %q", err, test.want)
-			}
-		})
-	}
-
-	want := errors.New("promote unavailable")
-	caller := &chatThreadCaller{errors: map[string]error{"im/convert_message_to_thread": want}}
+func TestCrossPlatformCoverageAtomicThreadPromoteRetired(t *testing.T) {
+	caller := &chatThreadCaller{}
 	_, err := executeAtomicThreadDryRun(t, caller,
 		"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
-	if err == nil || !strings.Contains(err.Error(), want.Error()) {
-		t.Fatalf("error = %v, want containing %q", err, want)
+	if err == nil {
+		t.Fatal("retired promote must fail closed")
+	}
+	for _, want := range []string{"已下线优化中"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("retired promote error = %q, want containing %q", err.Error(), want)
+		}
+	}
+	if !strings.HasSuffix(err.Error(), "下线优化中") {
+		t.Errorf("retired promote error = %q, want suffix 下线优化中 (official cli_to_mcp testcase contract)", err.Error())
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("retired promote must not call any MCP tool, calls = %#v", caller.calls)
+	}
+
+	root := newChatCommand()
+	command, remaining, findErr := root.Find([]string{"thread", "promote"})
+	if findErr != nil || len(remaining) != 0 || command == nil {
+		t.Fatalf("find chat thread promote: command=%v remaining=%v error=%v", command, remaining, findErr)
+	}
+	if command.Deprecated == "" {
+		t.Fatal("retired chat thread promote must stay deprecated")
+	}
+	if !command.Hidden {
+		t.Fatal("retired chat thread promote must stay hidden")
+	}
+	for _, flag := range []string{"conversation-id", "message-id"} {
+		if command.Flags().Lookup(flag) == nil {
+			t.Errorf("retired chat thread promote must keep --%s as argv compatibility", flag)
+		}
+	}
+	var help bytes.Buffer
+	command.SetOut(&help)
+	if err := command.Help(); err != nil {
+		t.Fatalf("retired chat thread promote help: %v", err)
+	}
+	for _, want := range []string{"已下线优化中", "chat thread send", "chat thread reply", "command_retired"} {
+		if !strings.Contains(help.String(), want) {
+			t.Errorf("retired promote help missing %q:\n%s", want, help.String())
+		}
 	}
 }
 
@@ -400,12 +391,12 @@ func TestCrossPlatformCoverageChatThreadSurfaceAndLegacyCompatibility(t *testing
 	}
 	visible := map[string]bool{}
 	for _, command := range thread.Commands() {
-		if !command.Hidden {
+		if !command.Hidden && command.Deprecated == "" {
 			visible[command.Name()] = true
 		}
 	}
 	want := map[string]bool{
-		"create-group": true, "send": true, "promote": true, "list": true, "reply": true, "list-replies": true, "forward": true,
+		"create-group": true, "send": true, "list": true, "reply": true, "list-replies": true, "forward": true,
 		"recall-message": true, "add-emoji": true, "remove-emoji": true,
 		"list-emotion-replies": true, "add-text-emotion": true, "remove-text-emotion": true, "update-text-emotion": true,
 	}
@@ -486,12 +477,18 @@ func TestCrossPlatformCoverageChatThreadSurfaceAndLegacyCompatibility(t *testing
 	if legacySendErr != nil {
 		t.Fatalf("find legacy message send: %v", legacySendErr)
 	}
+	if !strings.Contains(legacySend.Flags().Lookup("content").Usage, "行内本地图文") {
+		t.Fatalf("message send --content help lacks local Markdown image guidance: %q", legacySend.Flags().Lookup("content").Usage)
+	}
 	for _, path := range [][]string{{"thread", "send"}, {"thread", "reply"}} {
 		threadSend, _, threadSendErr := root.Find(path)
 		if threadSendErr != nil {
 			t.Fatalf("find %v: %v", path, threadSendErr)
 		}
-		for _, name := range []string{"content", "file", "at-all", "at-open-dingtalk-ids"} {
+		if got := threadSend.Flags().Lookup("content").Usage; got != "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）" {
+			t.Fatalf("%v --content help changed: %q", path, got)
+		}
+		for _, name := range []string{"file", "at-all", "at-open-dingtalk-ids"} {
 			if legacySend.Flags().Lookup(name).Usage != threadSend.Flags().Lookup(name).Usage {
 				t.Fatalf("%v --%s help = %q, want legacy %q", path, name, threadSend.Flags().Lookup(name).Usage, legacySend.Flags().Lookup(name).Usage)
 			}
@@ -511,10 +508,9 @@ func TestCrossPlatformCoverageChatThreadHelpExplainsRoutingAndIdentifiers(t *tes
 		path []string
 		want []string
 	}{
-		{path: []string{"thread"}, want: []string{"普通群和话题圈", "create-group", "promote", "父群 openConversationId", "Thread 的 openConvThreadId", "list-replies"}},
+		{path: []string{"thread"}, want: []string{"普通群和话题圈", "create-group", "父群 openConversationId", "Thread 的 openConvThreadId", "list-replies"}},
 		{path: []string{"thread", "create-group"}, want: []string{"开启 Thread 模式", "当前登录用户会自动加入", "已有普通群或话题圈"}},
 		{path: []string{"thread", "send"}, want: []string{"普通群和话题圈", "父群 openConversationId", "openTaskId"}},
-		{path: []string{"thread", "promote"}, want: []string{"已有消息", "同一个普通群", "openConvThreadId", "幂等"}},
 		{path: []string{"thread", "reply"}, want: []string{"普通群和话题圈", "Thread 的 openConvThreadId", "不是父群 ID"}},
 		{path: []string{"thread", "list"}, want: []string{"Thread 主消息", "不返回某个 Thread 的逐条回复", "chat thread list-replies"}},
 		{path: []string{"thread", "list-replies"}, want: []string{"逐条回复", "父群 openConversationId", "chat +thread-replies --page-all"}},

@@ -6,6 +6,62 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.65-beta.1] - 2026-10-15
+
+### Added
+
+- **本地图文混排** — `chat message send --content` 和 `chat +messages-send --as user --markdown` 自动上传行内本地图片，保留前后文字；支持预览、内容去重及最多三路并发上传。
+- **图文图片上传** — 使用上传返回的 `mediaIdV2` 构建图文消息；缺少 V2 时终止发送，避免使用不符合图片下载接口契约的编号。个人收藏表情保留原有媒体编号选择行为。
+- **图文图片编号复用** — 发送时识别裸 V2 图片编号；读取 Markdown 和富文本图片后生成带消息、会话身份的下载参数。
+- **图文图片错误提示** — 使用固定诊断区分文件读取、路径校验和上传失败，保留敏感路径保护，并提供对应的处理建议。
+
+- 新增全局隐藏参数 `--delegator-user-id`、`--delegator-corp-id` 和 `--delegator-open-dingtalk-id`。根命令在本次执行作用域持有校验后的不可变身份快照，公共 runner 统一向四个内置 HTTPS MCP 网关透传；旧 helper 丢弃 context 时也能补入身份，无需按业务逐条改造。无效输入整组省略；旧文档委托入口保持兼容，新旧协议禁止混用。实际委托授权依赖网关和业务服务接入。
+- 修复 AI 表格主服务、辅助服务、分页、重试、视图更新和工作流发布的上下文传递，保留取消信号；扩展真实命令到 HTTP Header 的回归矩阵，并覆盖串行 root 复用和多个预建 root 的身份隔离。同进程多 root 并发执行不在支持范围，并发调用使用独立 CLI 进程。
+- 更新 DWS 业务接入指南：说明公共 runner 覆盖条件、真实命令测试和绕行通道的接入要求；插件、stdio、发现、scoped 换票、独立 published MCP、直接 OpenAPI、文件字节传输及事件长连接继续排除，跨源重定向清理和 UID 发送边界保持不变。
+
+### Fixed
+
+- **媒体下载提示** — `dws chat message download-media` 的 Help 说明返回的下载地址临时有效，提示使用原 mediaId 及消息、会话信息重新下载。
+
+
+## [1.0.64] - 2026-10-14
+
+本版本将已交付的 `v1.0.64-beta.1` 晋级正式版，汇总该 beta 的变化，并纳入下方列出的 beta 后变更。
+
+### Added
+
+- **Pi Coding Agent 接入** — 新增 `--channel pi`，支持官方 JSON 流式文本、模型覆盖、按会话隔离和重启续聊；ask 模式禁用工具。
+- **通讯录好友与事件** — 增加好友列表、申请列表、发送和处理申请、删除好友，以及好友申请和添加事件；统一使用 `openDingTalkId`，提供到 `userId` 的查询入口，补齐昵称、备注、状态和 Agent 使用说明。写操作要求明确确认，删除好友属于高风险操作。
+- **OpenHarmony 发布包** — 增加静态自签名的 `openharmony/arm64` 归档和 SHA256，集成 SafeChat 消息加密；npm 与 Homebrew 的平台范围保持原有配置。
+- **版本检查与升级提示** — `auth status`、`version` 和 `--version` 提供限时、可缓存、可关闭的更新检查；未知输入优先给出具体纠错建议，仅在缺少明确建议时检查新版，保留原错误类别、退出码和机器输出。
+
+### Changed
+
+- **AI 表格契约与公开同步** — 精确登记 24 项幂等性声明纠正，并限定已审查的公开同步补丁；未登记接口及风险、确认要求和执行效果的兼容保护继续生效。
+
+### Fixed
+
+- **AI 表格写入、等待与筛选** — 保留原始 clientToken，未知写入停止重放并通过只读对账恢复；补齐批次分组与旧回执兼容。建表、建字段提供有时限的结构核对，超时或取消不重复创建；统一查询、批量更新的筛选校验及 Help、Schema、Skill 说明。
+- **日历、白板与 AI 卡片** — 修复日历嵌套时区与忙闲字段的写后核验，读回失败时保留写入回执；白板在预览或远端调用前校验 OpenNodes 层级与文本样式。更新 AI 卡片协议索引、兼容预检、预览及业务标识处理，补齐白板和卡片使用说明。
+- **升级来源与安装方式** — 开源版默认通过 npm Registry 查询版本；包管理器安装交由对应工具升级，独立二进制校验 npm 包完整性与资产 SHA256 后自更新，无需 npm 或 Node.js。保留备份、回滚和 Skill 更新，修复 npm 强制升级、同版本重装及安装文档中的环境变量传递。
+
+### Changes since `v1.0.64-beta.1`
+
+### Removed
+
+- **Chat Thread** — 下线 `chat thread promote`，历史调用返回 `command_retired`，帮助与 Skill 不再推荐该命令。已有消息转为话题暂无等价替代；新建话题使用 `chat thread send`，回复已有话题使用 `chat thread reply`。
+
+- **招聘产品下线** — 开源版移除 `dws recruit job list`、`get`、`create` 及整个招聘产品域的内置注册、Schema、MCP 端点和 Skill 入口。招聘能力仅在千问办公专属版维护。
+
+### Fixed
+
+- **wget-only install of the latest release** (#1456) — resolving `latest` without curl now requests the GitHub releases URL directly, so wget can read the release tag instead of failing before the download.
+
+- 修正 npm 包的问题反馈、仓库和主页链接，统一指向 `DingTalk-Real-AI/dingtalk-workspace-cli`，避免 `npm bugs` 打开 404 页面。
+
+- **招聘退役兼容检查** — 精确登记已批准的开源招聘产品退役，避免仍含招聘能力的旧稳定版阻塞后续 PR 和发布兼容检查；其他产品和接口的兼容保护保持生效。
+
+
 ## [1.0.64-beta.1] - 2026-10-09
 
 ### Added

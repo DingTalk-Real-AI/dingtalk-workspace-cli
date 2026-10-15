@@ -1251,7 +1251,7 @@ func TestPersonalEmotionUploadMediaIDParsingFallbackErrorDetails(t *testing.T) {
 	}
 }
 
-func TestPersonalEmotionUploadImageUsesBackgroundForNilContextAndWrapsUploadError(t *testing.T) {
+func TestCrossPlatformCoveragePersonalEmotionUploadImageUsesBackgroundForNilContextAndWrapsUploadError(t *testing.T) {
 	installHelpersCoreDeps(t, &personalEmotionUploadCaller{uploadErr: errors.New("network down")})
 	_, err := uploadPersonalEmotionImage(nil, &personalEmotionImage{
 		path:      "sticker.png",

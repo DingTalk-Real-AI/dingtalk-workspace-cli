@@ -35,6 +35,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -319,6 +320,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if r == nil {
 		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
 	}
+	ctx = r.withDelegatorContext(ctx)
 	// Emit the one-shot host-owned PAT decision log. Placed here (not in
 	// the constructor) so it fires AFTER PersistentPreRunE has configured
 	// slog level per --debug / --verbose. The Once guard makes repeat
@@ -635,6 +637,7 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	ctx = r.withDelegatorContext(ctx)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
 		return r.executeStdioInvocationAtEndpoint(ctx, endpoint, invocation)
@@ -784,6 +787,8 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
 		}
 	}
+
+	tc.ExtraHeaders = applyDelegatorHeaders(ctx, tc.ExtraHeaders, endpoint, invocation, hasPluginAuth || hasRequestToken)
 
 	callCtx := ctx
 	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
@@ -1304,6 +1309,7 @@ func resolveIdentityHeaders() map[string]string {
 	// every case variant potentially supplied by an edition or credential hook
 	// so shared consumers such as A2A cannot inherit them.
 	removeAgentMetadataHeaders(headers)
+	requestmeta.RemoveDelegatorHeaders(headers)
 	return headers
 }
 

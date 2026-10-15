@@ -564,7 +564,7 @@ Flags:
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
   - 自动翻页：显式加 `--page-all` 后 CLI 按边界时间连续拉取全部页并按消息 ID 去重，`--page-limit` 控制最多请求页数（默认 50，范围 1-500），`--max-items` 控制最多输出条数（默认 0 不限制，精确截断并置 `truncatedByResultLimit=true`），`--page-delay` 控制页间等待毫秒数（默认 200，0 表示不等待）；只传这些分页控制参数但不传 `--page-all` 时仍保持原单页调用
   - 处理引用回复时读取 quotedMessage，不要只看回复正文；合并转发与图片引用的原消息内容也在该上下文中
-  - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。把普通群已有消息升级为 Thread 使用 `dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`；浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
+  - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
 ```
 
 #### 以当前用户身份发送消息 — --group 群聊 / --user 或 --open-dingtalk-id 单聊
@@ -831,19 +831,6 @@ Flags:
   - **换行符**：--content 按 Markdown 渲染，换行规则同 `chat message send`：
     1. 必须使用**真实换行符**（`U+000A`），而非字面量 `\n`，否则全部内容会渲染在同一行
     2. 单个换行不产生换行效果，需用空行（`\n\n`）做段落分隔，或行尾两空格 + 换行/`<br>` 做硬换行
-```
-
-#### 将普通群已有消息升级为 Thread
-
-将普通群中一条已经存在的消息升级为 Thread 根消息。会话和消息必须属于同一个普通群；单聊消息不支持。成功后返回新的 `openConvThreadId`。
-```
-Usage:
-  dws chat thread promote [flags]
-Example:
-  dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>
-Flags:
-      --conversation-id string  消息所属普通群的 openConversationId (必填)
-      --message-id string       待升级消息的 openMessageId (必填)
 ```
 
 #### 拉取话题回复消息列表
@@ -2168,7 +2155,6 @@ Flags:
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
 用户说"Webhook 发消息/告警消息" → `chat message send-by-webhook`
 用户说"回复话题" → `chat thread reply --conversation-id <openConvThreadId>`
-用户说"把普通群已有消息转成Thread/升级成群内话题" → `chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`
 用户说"查看话题回复/拉取话题回复/列出每条回复内容/核实某条回复是否还在" → `chat thread list-replies`
 用户说"指定时间以来有消息的会话/最近活跃会话/哪些单聊群聊有新消息" → `chat +recent-conversations`
 用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息正文/我的消息正文/我今天的消息正文/查我的钉钉消息正文" → `chat message list-all`

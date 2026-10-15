@@ -114,7 +114,7 @@
         "parameters": [],
         "availability": {"before": "available", "after": "unavailable"}
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Retire chat thread promote from Agent Schema and public help while preserving a hidden historical argv command that fails closed with send/reply alternatives."
     },
     {

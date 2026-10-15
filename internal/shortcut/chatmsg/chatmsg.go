@@ -756,6 +756,15 @@ func recordResourceName(
 func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
+		if targetKey == "mediaid" && typed["type"] == "image" {
+			if data, ok := typed["data"].(map[string]any); ok {
+				if destination, ok := data["url"].(string); ok {
+					if id := imageMediaID(destination); id != "" {
+						*out = append(*out, id)
+					}
+				}
+			}
+		}
 		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceIdType", "resource_id_type", "resourceType", "resource_type")))
 		for key, child := range typed {
 			normalizedKey := normalizeMessageKey(key)
@@ -779,18 +788,22 @@ func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp,
 			collectResourceIDs(child, targetKey, textPattern, out)
 		}
 	case string:
-		for _, match := range textPattern.FindAllStringSubmatch(typed, -1) {
-			if len(match) > 1 {
-				if id := resourceIDScalar(match[1]); id != "" {
-					*out = append(*out, id)
-				}
-			}
-		}
 		trimmed := strings.TrimSpace(typed)
 		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 			var decoded any
 			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
 				collectResourceIDs(decoded, targetKey, textPattern, out)
+				return
+			}
+		}
+		if targetKey == "mediaid" {
+			*out = append(*out, markdownImageMediaIDs(typed)...)
+		}
+		for _, match := range textPattern.FindAllStringSubmatch(typed, -1) {
+			if len(match) > 1 {
+				if id := resourceIDScalar(match[1]); id != "" {
+					*out = append(*out, id)
+				}
 			}
 		}
 	}

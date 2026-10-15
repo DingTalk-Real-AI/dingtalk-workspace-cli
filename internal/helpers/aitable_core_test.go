@@ -487,31 +487,31 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 	if err := printViewSubBlock(nil); err != nil || !strings.Contains(out.String(), "status") {
 		t.Fatalf("print view sub-block = %q, %v", out.String(), err)
 	}
-	if err := callUpdateViewWithBlock("b", "t", "v", "kanbanCard", map[string]any{"x": 1}, map[string]any{"extra": true}); err != nil {
+	if err := callUpdateViewWithBlock(context.Background(), "b", "t", "v", "kanbanCard", map[string]any{"x": 1}, map[string]any{"extra": true}); err != nil {
 		t.Fatalf("update view block: %v", err)
 	}
-	if err := callUpdateViewWithBlock("b", "t", "v", "", nil, map[string]any{"newViewName": "name"}); err != nil {
+	if err := callUpdateViewWithBlock(context.Background(), "b", "t", "v", "", nil, map[string]any{"newViewName": "name"}); err != nil {
 		t.Fatalf("update view top-level: %v", err)
 	}
 
 	caller = &aitableTestCaller{responses: []string{`{"data":{"records":[{"id":1}],"totalCount":17}}`}}
 	out = installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 1); err != nil || !strings.Contains(out.String(), `"totalCount": 17`) || !strings.Contains(out.String(), `"fetchedCount": 1`) {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 1); err != nil || !strings.Contains(out.String(), `"totalCount": 17`) || !strings.Contains(out.String(), `"fetchedCount": 1`) {
 		t.Fatalf("paginated records = %q, %v", out.String(), err)
 	}
 	caller = &aitableTestCaller{responses: []string{"not-json"}}
 	out = installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil || out.Len() != 0 {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 1); err == nil || out.Len() != 0 {
 		t.Fatalf("invalid first page must fail without success output = %q, %v", out.String(), err)
 	}
 	caller = &aitableTestCaller{responses: []string{`{"records":[{"id":1}]}`}}
 	installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 0); err != nil {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 0); err != nil {
 		t.Fatalf("flat records pagination: %v", err)
 	}
 	caller = &aitableTestCaller{errors: []error{errors.New("offline")}}
 	installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 1); err == nil {
 		t.Fatal("first-page pagination error should fail")
 	}
 

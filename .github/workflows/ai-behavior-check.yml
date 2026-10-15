@@ -120,27 +120,44 @@ jobs:
                   .filter(isProtectedPath)
               )];
 
-              // 本次公开同步由维护者单独批准；批准对象固定在公共提交，
+              // 精确公开补丁须由维护者通过独立治理评审；批准对象固定在公共提交，
               // 不从 PR 代码、标签或可变分支读取授权，也不执行 PR 代码。
-              const reviewed = {
-                repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
-                number: 1463,
-                author: 'haofeng0705',
-                headRef: 'codex/sync-aitable-public-fixes',
-                base: '3f0fc94111b1f9cd34e47468980b1f1a723ca69a',
-                head: '53de9d92c9b310798d7f42a385e162273330442b',
-                count: 44,
-                protectedPaths: [
-                  'scripts/policy/skill-command-check/main.go',
-                  'scripts/policy/skill-command-check/main_test.go',
-                ],
-              };
+              const reviewedPatches = [
+                {
+                  repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
+                  number: 1463,
+                  author: 'haofeng0705',
+                  headRef: 'codex/sync-aitable-public-fixes',
+                  base: '3f0fc94111b1f9cd34e47468980b1f1a723ca69a',
+                  head: '53de9d92c9b310798d7f42a385e162273330442b',
+                  count: 44,
+                  protectedPaths: [
+                    'scripts/policy/skill-command-check/main.go',
+                    'scripts/policy/skill-command-check/main_test.go',
+                  ],
+                },
+                {
+                  repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
+                  number: 1502,
+                  author: 'haofeng0705',
+                  headRef: 'codex/fix-chat-thread-promote-retirement',
+                  base: '59d1da576c6983582d5be11401e7efe07aaaa238',
+                  head: 'c70ede29e0860a88e309bb540f27d888e9d8a8ab',
+                  count: 15,
+                  protectedPaths: [
+                    'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
+                  ],
+                },
+              ];
+              const reviewed = reviewedPatches.find(({ number }) => number === context.issue.number);
               const hasReviewedIdentity = (pull) =>
+                reviewed !== undefined &&
                 `${context.repo.owner}/${context.repo.repo}` === reviewed.repository &&
                 context.issue.number === reviewed.number &&
                 pull.number === reviewed.number &&
                 pull.state === 'open' &&
                 pull.base.ref === 'main' &&
+                pull.base.repo?.full_name === reviewed.repository &&
                 pull.head.repo?.full_name === reviewed.repository &&
                 pull.head.ref === reviewed.headRef &&
                 pull.user?.login === reviewed.author;
@@ -235,12 +252,12 @@ jobs:
                   !matchesFiles ||
                   JSON.stringify([...protectedPaths].sort()) !== JSON.stringify(expectedProtected)
                 ) {
-                  await setStatus('failure', 'PR #1463 differs from the reviewed public patch');
-                  core.setFailed('PR #1463 must preserve the exact reviewed 44-file public patch; re-review any change.');
+                  await setStatus('failure', `PR #${reviewed.number} differs from the reviewed public patch`);
+                  core.setFailed(`PR #${reviewed.number} must preserve the exact reviewed ${reviewed.count}-file public patch; re-review any change.`);
                   return;
                 }
-                await setStatus('success', 'Reviewed PR #1463 exact 44-file public patch');
-                core.notice('PR #1463 matches the base-owned reviewed patch, including its two approved policy files.');
+                await setStatus('success', `Reviewed PR #${reviewed.number} exact ${reviewed.count}-file public patch`);
+                core.notice(`PR #${reviewed.number} matches the base-owned reviewed patch, including its ${reviewed.protectedPaths.length} approved policy files.`);
                 return;
               }
 

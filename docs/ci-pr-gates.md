@@ -58,6 +58,36 @@ API 用于核对身份和祖先关系。四个完整 Git tree 用于比较批准
 PR 也仍由旧主分支规则检查，维护者的单次 bootstrap bypass 须单独
 记录，不能将它当作本规则已通过或其他 CI 已通过的证据。
 
+### PR #1502 的精确 Chat Thread 退役补丁准入
+
+本治理记录仅针对 PR #1502 的完整公开补丁。固定身份为仓库
+`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
+`codex/fix-chat-thread-promote-retirement`、同仓 `main` 目标及开放状态；
+批准基线为 `59d1da576c6983582d5be11401e7efe07aaaa238`，批准提交为
+`c70ede29e0860a88e309bb540f27d888e9d8a8ab`。完整差异必须恰为 15 个文件，
+唯一受保护路径为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
+
+该路径只将已经由主分支批准的 `chat thread promote` 退役记录从
+`pending` 改为 `consumed`。CLI 已达到隐藏后的 after 状态时，迁移检查器
+要求同步消费；保留 `pending` 会失败。在业务变化之前单独消费也会失败，
+因此状态更新必须与完整退役补丁一起交付，不能删除或提前拆出以避开政策。
+
+#1502 复用上述四个完整 Git tree 与 Files API 交叉校验，严格比较所有路径、
+增改状态、修改前后 blob、模式和类型。Ready/Draft、base/head、仓库、作者、
+分支和开放状态仍在读取前后核对，当前 base 必须是当前 head 的祖先。
+治理合入后可以纳入新 main，但业务差异必须仍与固定的完整 15 文件补丁
+完全一致；任何额外文件、删除、重命名或内容变化都须重新审核。原 #1463
+记录和普通 AI PR 的 30 文件上限、受保护路径规则继续生效，未向整个迁移
+清单或任何目录授予通用写权限。
+
+本记录只有经维护者评审、通过独立治理流程进入 main 后，才成为后续
+#1502 运行的 base-owned authority；提交治理 PR 本身不授予合并或 bypass
+权限，治理 PR 也不能消费 #1502 的例外。保留业务 PR 的 `ai-generated`
+标记，不在业务 PR 内修改授权工作流。其他八项必需检查和独立评审仍须
+完成；如治理流程需要 bootstrap bypass，必须另行明确授权并记录。
+
 ## Draft pull-request feedback
 
 A Draft pull request runs the independent `Draft CI` workflow. Its single

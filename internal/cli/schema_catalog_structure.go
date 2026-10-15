@@ -290,8 +290,18 @@ func validateCatalogInterface(toolID string, entry map[string]any, violations *[
 		})
 	}
 	mode, _ := entry["interface_mode"].(string)
+	availability, _ := entry["availability"].(string)
 	ref, hasRef := entry["interface_ref"]
 	reason, _ := entry["interface_reason"].(string)
+	if availability == contract.InterfaceUnavailable {
+		if hasRef {
+			report("availability=unavailable must not set interface_ref")
+		}
+		if strings.TrimSpace(reason) == "" {
+			report("availability=unavailable requires a non-empty interface_reason")
+		}
+		return
+	}
 	switch mode {
 	case contract.InterfaceModeMCP:
 		if !hasRef {

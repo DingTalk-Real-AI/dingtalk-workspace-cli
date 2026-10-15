@@ -43,7 +43,7 @@ var MessagesSend = shortcut.Shortcut{
 	Command:     "+messages-send",
 	Product:     "chat",
 	Description: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
-	Intent:      "当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。user 另支持名片、群邀请和 A2UI 卡片创建；bot 支持 --image-url 图片及单目标 --file 上传，图片支持多目标 ledger；webhook 仍仅文本/Markdown。",
+	Intent:      "按身份发送消息；user 的 Markdown 可内联本地图片，先上传并以单条富文本发送。bot/webhook 不支持本地 Markdown 图片。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -65,11 +65,11 @@ var MessagesSend = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
-			UseWhen:      []string{"当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。user 另支持名片、群邀请和 A2UI 卡片创建；bot 支持 --image-url 图片及单目标 --file 上传，图片支持多目标 ledger；webhook 仍仅文本/Markdown。"},
+			UseWhen:      []string{"以 user、bot 或 webhook 身份发送消息；user 的 Markdown 正文需要内联本地图片时先上传并发送单条富文本"},
 			AvoidWhen:    []string{"Bot 原生音视频、Webhook 富媒体及任意 Lark Card JSON 未接入；Thread 直接回复使用 +messages-reply --reply-in-thread，A2UI 创建可用 --a2ui-messages，更新仍用 chat message update-a2ui-card"},
 			Examples: []string{
 				"dws chat +messages-send --as user --chat-id <openConversationId> --markdown \"## 周报\" --idempotency-key <key>",
-				"dws chat +messages-send --as user --user <userId> --msg-type file --file ./report.pdf",
+				"dws chat +messages-send --as user --chat-id <openConversationId> --markdown \"结果：![截图](./console.png)\"",
 			},
 		},
 	},
@@ -93,7 +93,7 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "webhook-token", Type: shortcut.FlagString, Desc: "自定义机器人 Webhook token（identity=webhook 时使用）；受发送身份能力矩阵约束"},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题（不传则从正文生成）"},
 		{Name: "text", Type: shortcut.FlagString, Desc: "纯文本正文"},
-		{Name: "markdown", Type: shortcut.FlagString, Desc: "Markdown 正文"},
+		{Name: "markdown", Type: shortcut.FlagString, Desc: "Markdown 正文；user 可用 ![说明](./image.png) 内联本地图片（不支持引用式图片，dry-run 仅脱敏预览）；bot/webhook 不支持本地图片"},
 		{Name: "msg-type", Type: shortcut.FlagString, Enum: []string{"text", "markdown", "image", "file", "audio", "video", "profile", "share-chat", "a2ui"}, Desc: "内容类型；省略时根据正文、--media-id 或 --file 自动推断"},
 		{Name: "media-id", Type: shortcut.FlagString, Desc: "已有图片 mediaId（仅 user 的 image）"},
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内安全相对文件路径（user 的 file/audio/video；bot 仅单目标 file）"},
@@ -355,6 +355,7 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 	identity := messagesSendIdentity(rt)
 	body := messagesSendBody(rt)
 	title := rt.Str("title")
+	titleExplicit := title != ""
 	if title == "" {
 		title = shortcutMessageTitle(body)
 	}
@@ -402,6 +403,30 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 			}
 			return executeUnifiedMessageWrite(rt, "chat", "send_personal_message", params)
 		}
+		if strings.Contains(body, "![") {
+			resolved, report, err := helpers.ResolveMarkdownLocalImages(rt.Command().Context(), body, helpers.MarkdownImageOptions{
+				SafePath: apperrors.SafeInputPath, DryRun: rt.DryRun(),
+			})
+			if err != nil {
+				return err
+			}
+			if report.LocalCount > 0 && !titleExplicit {
+				prefix := strings.TrimSpace(strings.SplitN(body, "![", 2)[0])
+				if prefix == "" {
+					title = "图文消息"
+				} else {
+					title = shortcutMessageTitle(prefix)
+				}
+			}
+			if report.LocalCount > 0 && rt.DryRun() {
+				return rt.Output(map[string]any{
+					"dry_run": true, "executed": false, "preview_kind": "plan",
+					"tool": "send_personal_message", "imageCount": report.LocalCount,
+					"uniquePathCount": report.UniqueCount, "content": "[本地图文内容已脱敏]",
+				})
+			}
+			body = resolved
+		}
 		params := resolvedUserMarkdownParams(rt, ResolvedUserMessageTarget{
 			GroupID:        group,
 			OpenDingTalkID: openID,
@@ -414,6 +439,9 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		}
 		if contentType == "image" || contentType == "file" {
 			return executeMessagesSendBotMedia(rt, contentType)
+		}
+		if err := rejectNonUserMarkdownLocalImages(rt, body); err != nil {
+			return err
 		}
 		body = helpers.NormalizeMessageMentions(
 			body,
@@ -478,6 +506,9 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		}
 		return executeUnifiedMessageWrite(rt, "bot", "batch_send_robot_msg_to_users", params)
 	case "webhook":
+		if err := rejectNonUserMarkdownLocalImages(rt, body); err != nil {
+			return err
+		}
 		body = helpers.NormalizeMessageMentions(
 			body,
 			append(
@@ -505,6 +536,20 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 	default:
 		return fmt.Errorf("unsupported identity %q", identity)
 	}
+}
+
+func rejectNonUserMarkdownLocalImages(rt *shortcut.RuntimeContext, body string) error {
+	if rt.Str("markdown") == "" || !strings.Contains(body, "![") {
+		return nil
+	}
+	_, report, err := helpers.ResolveMarkdownLocalImages(rt.Command().Context(), body, helpers.MarkdownImageOptions{DryRun: true})
+	if err != nil {
+		return err
+	}
+	if report.LocalCount > 0 {
+		return apperrors.NewValidation("本地 Markdown 图片仅支持 --as user；bot/webhook 不支持本地图片上传")
+	}
+	return nil
 }
 
 func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool string, arguments map[string]any) error {

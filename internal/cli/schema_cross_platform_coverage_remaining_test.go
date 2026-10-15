@@ -948,6 +948,30 @@ func TestCrossPlatformCoverageAgentExamplePlanAndTokenizerRemaining(t *testing.T
 			t.Fatalf("execution dry_run = %#v", plan.Examples[0])
 		}
 	})
+
+	t.Run("unavailable tool retains contract but does not execute dry run", func(t *testing.T) {
+		bound, registry := crossPlatformAgentExampleFixture(t, func(_ *cobra.Command, payload *contract.ContractFinalPayload) {
+			payload.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan}
+			payload.Interface = &contract.InterfaceSpec{
+				Mode:         contract.InterfaceModeMCP,
+				Availability: contract.InterfaceUnavailable,
+				Reason:       "retired",
+			}
+		})
+		plan, err := BuildAgentExampleExecutionPlan(bound, registry)
+		if err != nil {
+			t.Fatalf("plan error = %v", err)
+		}
+		if len(plan.Examples) != 1 || plan.Examples[0].Mode != AgentExampleModeContract {
+			t.Fatalf("execution plan = %#v, want one contract-validation runtime mode", plan)
+		}
+		if plan.Examples[0].DryRun == nil || plan.Examples[0].DryRun.PreviewKind != contract.DryRunPreviewPlan {
+			t.Fatalf("historical dry_run contract was not preserved: %#v", plan.Examples[0])
+		}
+		if plan.Contract != 1 || plan.DryRun != 0 {
+			t.Fatalf("plan counts = contract:%d dry_run:%d, want 1/0", plan.Contract, plan.DryRun)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageSchemaMetaIndexMoreBranches(t *testing.T) {
