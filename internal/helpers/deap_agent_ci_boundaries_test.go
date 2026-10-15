@@ -67,9 +67,18 @@ func TestCrossPlatformCoverageEmployeeCIBindingReadBoundaries(t *testing.T) {
 			cmd := newEmployeeBindingCommand()
 			cmd.SetContext(context.Background())
 			_ = cmd.Flags().Set("channel", "dsh")
+			_ = cmd.Flags().Set("stdin", "true")
 			cmd.SetIn(strings.NewReader(fmt.Sprintf(`{"agentUuid":%q,"bindingRevision":7}`, b.AgentUUID)))
 			if err := cmd.RunE(cmd, nil); err == nil {
 				t.Fatal("绑定重读变化仍返回成功")
+			} else {
+				want := "revision is no longer authorized"
+				if scenario == "server-operation" {
+					want = "server_binding_unknown"
+				}
+				if !strings.Contains(err.Error(), want) || calls < 3 {
+					t.Fatalf("未触达绑定重读失败: calls=%d err=%v", calls, err)
+				}
 			}
 		})
 	}
@@ -109,6 +118,15 @@ func TestCrossPlatformCoverageEmployeeCILifecycleFailures(t *testing.T) {
 		defer cancel()
 		if err := runEmployeeWorker(ctx, cfg, 0); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("activation 未保留取消: %v", err)
+		}
+	})
+	t.Run("worker-server-operation", func(t *testing.T) {
+		cfg := employeeBoundaryConfig(t)
+		if err := writeEmployeeJSON(employeeServerOperationPath(cfg.Binding.DWSProfile), employeeServerOperation{Phase: "requested"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := runEmployeeWorker(context.Background(), cfg, 0); err == nil || !strings.Contains(err.Error(), "server_binding_unknown") {
+			t.Fatalf("未完成服务端操作仍启动: %v", err)
 		}
 	})
 	t.Run("worker-self", func(t *testing.T) {

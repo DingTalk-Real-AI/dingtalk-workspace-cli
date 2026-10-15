@@ -90,3 +90,17 @@ func TestCrossPlatformCoverageChatDeliveryRevalidatesBeforeWrite(t *testing.T) {
 		})
 	}
 }
+
+// Cobra 的互斥检查先于 Validate；这里在真实 Shortcut 的校验 seam 固定第二道正文防线。
+func TestCrossPlatformCoverageChatDeliveryRejectsTwoSelectedBodies(t *testing.T) {
+	cmd := corecmd.New(shortcut.FromShortcut(MessagesSend))
+	for k, v := range map[string]string{"text": "-", "markdown": "-", "body-stdin": "true"} {
+		if err := cmd.Flags().Set(k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := MessagesSend.Validate(shortcut.RuntimeContextForTest(cmd, MessagesSend))
+	if err == nil || !strings.Contains(err.Error(), "exactly one body flag") {
+		t.Fatalf("重复正文未被拒绝: %v", err)
+	}
+}
