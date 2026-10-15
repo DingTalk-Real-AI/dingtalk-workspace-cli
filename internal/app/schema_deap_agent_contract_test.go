@@ -439,7 +439,7 @@ func TestCrossPlatformCoverageEmployeeChannelCompatibilitySurface(t *testing.T) 
 	}
 	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.channel_capabilities", "dingtalk-tag.channel_binding")
 	raw, err := json.Marshal(payload.Tools["dingtalk-tag.channel_capabilities"]["result"])
-	if err != nil || bytes.Contains(raw, []byte("replyStdin")) || bytes.Contains(raw, []byte("operatorPrivateStdin")) || !bytes.Contains(raw, []byte("chatDelivery")) || !bytes.Contains(raw, []byte("bindingAccessPolicy")) {
+	if err != nil || !bytes.Contains(raw, []byte("replyStdin")) || !bytes.Contains(raw, []byte("operatorPrivateStdin")) || !bytes.Contains(raw, []byte("chatDelivery")) || !bytes.Contains(raw, []byte("bindingAccessPolicy")) {
 		t.Fatalf("最终能力契约未同步: %s, %v", raw, err)
 	}
 	if len(payload.Tools) != 2 {

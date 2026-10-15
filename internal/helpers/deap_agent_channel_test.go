@@ -176,8 +176,8 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 	if err := leaf.RunE(leaf, nil); err != nil {
 		t.Fatalf("capabilities RunE() error = %v", err)
 	}
-	if strings.Contains(output.String(), "replyStdin") || strings.Contains(output.String(), "operatorPrivateStdin") {
-		t.Fatal("capabilities 仍声明已删除的发送入口")
+	if !strings.Contains(output.String(), "replyStdin") || !strings.Contains(output.String(), "operatorPrivateStdin") {
+		t.Fatal("capabilities 缺少已发布兼容入口")
 	}
 	var envelope struct {
 		OK      bool   `json:"ok"`
