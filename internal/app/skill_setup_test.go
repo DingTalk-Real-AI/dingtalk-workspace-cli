@@ -1088,6 +1088,9 @@ func assertNoEventMigrationStages(t *testing.T, agentHome string) {
 }
 
 func TestCrossPlatformCoverageSkillSetupSelectiveEventMigratesOnlyFoldedTargets(t *testing.T) {
+	// 两次安装共用隔离的备份根目录，不读取或写入 runner 的真实用户目录。
+	home := t.TempDir()
+	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
 	src := writeMultiSkillSource(t, []string{
 		multiEventSkill, multiSharedSkill, multiMiscSkill, "dingtalk-doc",
 	})
