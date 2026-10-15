@@ -49,6 +49,7 @@ func TestCrossPlatformCoverageRegistrySourceSelection(t *testing.T) {
 	}
 	t.Run("private edition requires explicit source", func(t *testing.T) {
 		testseam.Swap(t, &upgradeEditionName, func() string { return "internal" })
+		t.Setenv("DWS_UPGRADE_NPM_MIRROR", "https://mirror.example.com")
 		if _, err := NewVersionClient().FetchLatestRelease(); err == nil {
 			t.Fatal("private edition accepted public default")
 		}

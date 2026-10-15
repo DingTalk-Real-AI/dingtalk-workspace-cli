@@ -67,6 +67,10 @@ func PrepareNPMPackageWithEvents(ctx context.Context, pkg NPMPackage, destDir st
 			return PreparedNPMPackage{}, artifactErr
 		}
 	}
+	urls, err := npmTarballURLs(pkg)
+	if err != nil {
+		return PreparedNPMPackage{}, err
+	}
 	stage, err := os.MkdirTemp(destDir, "npm-package-")
 	if err != nil {
 		return PreparedNPMPackage{}, fmt.Errorf("创建 npm 校验目录失败: %w", err)
@@ -92,7 +96,7 @@ func PrepareNPMPackageWithEvents(ctx context.Context, pkg NPMPackage, destDir st
 			showProgress(percent, downloaded, total)
 		}
 	}
-	size, err := downloadFromSources(ctx, npmTarballURLs(pkg), archive, cfg)
+	size, err := downloadFromSources(ctx, urls, archive, cfg)
 	if err != nil {
 		return PreparedNPMPackage{}, err
 	}

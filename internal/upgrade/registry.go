@@ -48,6 +48,13 @@ func init() {
 		DefaultValue: defaultNPMRegistry,
 		Example:      "https://registry.npmmirror.com",
 	})
+	configmeta.Register(configmeta.ConfigItem{
+		Name:         "DWS_UPGRADE_NPM_MIRROR",
+		Category:     configmeta.CategoryNetwork,
+		Description:  "独立升级的公开 npm 全包下载镜像；版本及校验仍来自原 Registry，设为官方源可禁用镜像",
+		DefaultValue: "https://registry.npmmirror.com",
+		Example:      "https://registry.npmjs.org",
+	})
 }
 
 var upgradeEditionName = func() string { return edition.Get().Name }

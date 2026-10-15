@@ -59,13 +59,25 @@ func validateNPMArtifacts(artifacts *NPMArtifacts) error {
 	return nil
 }
 
-// 仅允许默认公开源的规范包使用已知镜像；自定义发行版与 Registry 保持来源隔离。
-func npmTarballURLs(pkg NPMPackage) []string {
+// 仅允许默认公开源的规范包使用下载镜像；镜像不提供版本或完整性权威。
+// 自定义 Registry 与非规范 tarball 保持来源隔离，不继承全局镜像配置。
+func npmTarballURLs(pkg NPMPackage) ([]string, error) {
 	canonical := defaultNPMRegistry + "/" + npmPackageName + "/-/" + npmPackageName + "-" + pkg.Version + ".tgz"
-	if pkg.RegistryURL == defaultNPMRegistry && pkg.TarballURL == canonical {
-		return []string{"https://registry.npmmirror.com/" + npmPackageName + "/-/" + npmPackageName + "-" + pkg.Version + ".tgz", canonical}
+	if pkg.RegistryURL != defaultNPMRegistry || pkg.TarballURL != canonical {
+		return []string{pkg.TarballURL}, nil
 	}
-	return []string{pkg.TarballURL}
+	mirror := os.Getenv("DWS_UPGRADE_NPM_MIRROR")
+	if mirror == "" {
+		mirror = "https://registry.npmmirror.com"
+	}
+	if !validRegistryURL(mirror) {
+		return nil, fmt.Errorf("DWS_UPGRADE_NPM_MIRROR 必须是无凭据、查询参数或片段的 HTTPS Registry 根地址")
+	}
+	address := strings.TrimRight(mirror, "/") + "/" + npmPackageName + "/-/" + npmPackageName + "-" + pkg.Version + ".tgz"
+	if address == canonical {
+		return []string{canonical}, nil
+	}
+	return []string{address, canonical}, nil
 }
 
 func downloadCanFallback(err error) bool {

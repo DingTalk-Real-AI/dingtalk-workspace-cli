@@ -6,6 +6,7 @@ package upgrade
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,10 @@ import (
 func TestCrossPlatformCoverageNPMPlatformArtifactsAndFallback(t *testing.T) {
 	for _, scenario := range []string{"platform", "skip-skills", "network-fallback", "bad-hash", "bad-size", "missing-platform", "invalid-manifest"} {
 		t.Run(scenario, func(t *testing.T) {
+			if scenario == "platform" {
+				// 全包镜像不参与按平台下载，也不改变平台清单的来源。
+				t.Setenv("DWS_UPGRADE_NPM_MIRROR", "unused-invalid-mirror")
+			}
 			binary := npmPackageBinaryName(runtime.GOOS, runtime.GOARCH)
 			requests := []string{}
 			legacy := npmPackageTestGzip(t, npmPackageTestTar(t, npmPackageTestEntries(runtime.GOOS, runtime.GOARCH)))
@@ -196,16 +201,16 @@ func TestCrossPlatformCoverageNPMArtifactManifestValidation(t *testing.T) {
 func TestCrossPlatformCoverageNPMSourcesRespectExplicitRegistry(t *testing.T) {
 	manifest := registryFixture("1.2.3")
 	pkg := *npmManifestToRelease(manifest, defaultNPMRegistry).NPM
-	if urls := npmTarballURLs(pkg); len(urls) != 2 || !strings.HasPrefix(urls[0], "https://registry.npmmirror.com/") || urls[1] != pkg.TarballURL {
+	if urls, err := npmTarballURLs(pkg); err != nil || len(urls) != 2 || !strings.HasPrefix(urls[0], "https://registry.npmmirror.com/") || urls[1] != pkg.TarballURL {
 		t.Fatalf("默认源=%v", urls)
 	}
 	pkg.RegistryURL = "https://private.test/npm"
-	if urls := npmTarballURLs(pkg); !reflect.DeepEqual(urls, []string{pkg.TarballURL}) {
+	if urls, err := npmTarballURLs(pkg); err != nil || !reflect.DeepEqual(urls, []string{pkg.TarballURL}) {
 		t.Fatalf("自定义 Registry 被切换来源: %v", urls)
 	}
 	pkg.RegistryURL = defaultNPMRegistry
 	pkg.TarballURL = "https://other.test/package.tgz"
-	if urls := npmTarballURLs(pkg); len(urls) != 1 {
+	if urls, err := npmTarballURLs(pkg); err != nil || len(urls) != 1 {
 		t.Fatalf("非规范 URL 被改写: %v", urls)
 	}
 
@@ -228,5 +233,129 @@ func TestCrossPlatformCoverageNPMSourcesRespectExplicitRegistry(t *testing.T) {
 	}
 	if _, err := prepareNPMArtifacts(t.Context(), pkg, file, false, nil, nil); err == nil {
 		t.Fatal("目录创建失败被忽略")
+	}
+}
+
+func TestCrossPlatformCoverageNPMCustomDownloadMirror(t *testing.T) {
+	for _, scenario := range []string{"success", "unavailable", "integrity-failure", "official-only", "private-registry", "noncanonical-tarball", "invalid-mirror"} {
+		t.Run(scenario, func(t *testing.T) {
+			mirror := "https://mirror.example.test/repository/npm/"
+			if scenario == "official-only" {
+				mirror = defaultNPMRegistry
+			}
+			if scenario == "invalid-mirror" {
+				mirror = "http://mirror.example.test"
+			}
+			t.Setenv("DWS_UPGRADE_NPM_MIRROR", mirror)
+			body := npmPackageTestGzip(t, npmPackageTestTar(t, npmPackageTestEntries(runtime.GOOS, runtime.GOARCH)))
+			pkg := *npmManifestToRelease(registryFixture("1.2.3"), defaultNPMRegistry).NPM
+			pkg.Integrity = npmPackageTestSRI(body)
+			if scenario == "private-registry" {
+				pkg.RegistryURL = "https://private.example.test/npm"
+				pkg.TarballURL = "https://private.example.test/archive.tgz"
+			}
+			if scenario == "noncanonical-tarball" {
+				pkg.TarballURL = "https://custom.example.test/archive.tgz"
+			}
+			var requests []string
+			testseam.Swap(t, &http.DefaultTransport, http.RoundTripper(upgradeRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+				requests = append(requests, r.URL.String())
+				if r.Header.Get("Authorization") != "" {
+					t.Error("下载镜像请求携带了凭据")
+				}
+				data, status := body, http.StatusOK
+				if r.URL.Host == "mirror.example.test" {
+					if scenario == "unavailable" {
+						status = http.StatusNotFound
+					}
+					if scenario == "integrity-failure" {
+						data = []byte("tampered package")
+					}
+				}
+				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(data)), ContentLength: int64(len(data)), Request: r}, nil
+			})))
+			var events []DownloadEvent
+			_, err := PrepareNPMPackageWithEvents(t.Context(), pkg, t.TempDir(), false, nil, func(e DownloadEvent) { events = append(events, e) })
+			wantError := scenario == "integrity-failure" || scenario == "invalid-mirror"
+			if (err != nil) != wantError {
+				t.Fatalf("err=%v, wantError=%v", err, wantError)
+			}
+			want := []string{"https://mirror.example.test/repository/npm/dingtalk-workspace-cli/-/dingtalk-workspace-cli-1.2.3.tgz"}
+			switch scenario {
+			case "unavailable":
+				want = append(want, pkg.TarballURL)
+				if len(events) != 2 || events[1].Err == nil {
+					t.Fatalf("没有报告回退原因: %v", events)
+				}
+			case "official-only", "private-registry", "noncanonical-tarball":
+				want = []string{pkg.TarballURL}
+			case "invalid-mirror":
+				want = nil
+				if err == nil || !strings.Contains(err.Error(), "DWS_UPGRADE_NPM_MIRROR") {
+					t.Fatalf("没有指出无效配置项: %v", err)
+				}
+			}
+			if !reflect.DeepEqual(requests, want) {
+				t.Fatalf("下载来源=%v, want=%v", requests, want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageNPMMirrorKeepsOfficialVersionAuthority(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_URL", "")
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	t.Setenv("DWS_UPGRADE_REGISTRY", "")
+	t.Setenv("DWS_UPGRADE_NPM_MIRROR", "https://download.example.test")
+	body := npmPackageTestGzip(t, npmPackageTestTar(t, npmPackageTestEntries(runtime.GOOS, runtime.GOARCH)))
+	manifest := registryFixture("1.2.3")
+	manifest.Dist.Integrity = npmPackageTestSRI(body)
+	metadata, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests []string
+	testseam.Swap(t, &http.DefaultTransport, http.RoundTripper(upgradeRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.URL.String())
+		data := body
+		if r.URL.Path == "/dingtalk-workspace-cli/latest" {
+			data = metadata
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(data)), ContentLength: int64(len(data)), Request: r}, nil
+	})))
+	release, err := NewVersionClient().FetchLatestRelease()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareNPMPackage(t.Context(), *release.NPM, t.TempDir(), false, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		defaultNPMRegistry + "/dingtalk-workspace-cli/latest",
+		"https://download.example.test/dingtalk-workspace-cli/-/dingtalk-workspace-cli-1.2.3.tgz",
+	}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("版本查询或下载来源错误: %v", requests)
+	}
+}
+
+func TestCrossPlatformCoverageNPMMirrorURLValidation(t *testing.T) {
+	pkg := *npmManifestToRelease(registryFixture("1.2.3"), defaultNPMRegistry).NPM
+	for _, raw := range []string{
+		"http://remote.test", "https://user:secret@example.test", "https://example.test?key=secret",
+		"https://example.test#fragment", "https://example.test/../npm", "https://example.test/%2e%2e/npm",
+		"https://example.test\\npm", " https://example.test", "not-a-url",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("DWS_UPGRADE_NPM_MIRROR", raw)
+			if urls, err := npmTarballURLs(pkg); err == nil || urls != nil || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("非法配置未拒绝或错误包含凭据: urls=%v err=%v", urls, err)
+			}
+		})
+	}
+	t.Setenv("DWS_UPGRADE_NPM_MIRROR", "http://127.0.0.1:12345/npm/")
+	urls, err := npmTarballURLs(pkg)
+	if err != nil || len(urls) != 2 || urls[0] != "http://127.0.0.1:12345/npm/dingtalk-workspace-cli/-/dingtalk-workspace-cli-1.2.3.tgz" {
+		t.Fatalf("本机测试镜像不支持: urls=%v err=%v", urls, err)
 	}
 }
