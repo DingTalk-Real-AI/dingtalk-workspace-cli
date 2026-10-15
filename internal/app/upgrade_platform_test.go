@@ -31,6 +31,7 @@ func (f platformUpgradeTransport) RoundTrip(r *http.Request) (*http.Response, er
 
 // 从真实 Registry 查询、资产解析和 HTTP 下载进入升级流程；仅隔离本机安装和二进制执行。
 func TestCrossPlatformCoverageUpgradePlatformDownloads(t *testing.T) {
+	upgrade.SwapPlatformGitHubTokenForTest(t, func(context.Context) string { return "fixture-local-token" })
 	for _, mode := range []string{"success", "skip-skills", "dry-run", "managed-preview", "tampered", "wrong-version", "missing-release", "missing-skills"} {
 		t.Run(mode, func(t *testing.T) {
 			for _, key := range []string{"DWS_UPGRADE_REGISTRY", "DWS_UPGRADE_URL", "DWS_UPGRADE_REPOSITORY", "GITHUB_TOKEN", "GH_TOKEN"} {
@@ -60,8 +61,12 @@ func TestCrossPlatformCoverageUpgradePlatformDownloads(t *testing.T) {
 				mu.Lock()
 				paths = append(paths, r.URL.Path)
 				mu.Unlock()
-				if r.Header.Get("Authorization") != "" {
-					t.Error("公开资产请求不应携带凭据")
+				wantAuth := ""
+				if r.URL.Path == releasePath {
+					wantAuth = "Bearer fixture-local-token"
+				}
+				if r.Header.Get("Authorization") != wantAuth {
+					t.Error("凭据必须仅用于官方 Release 元数据，不能进入 Registry 或资产请求")
 				}
 				switch r.URL.Path {
 				case "/dingtalk-workspace-cli/latest":

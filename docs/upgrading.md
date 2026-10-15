@@ -37,7 +37,11 @@ Homebrew 在确认后更新 Formula 索引，再核对目标版本；显式配�
 
 ## 官方平台资产下载
 
-版本选择仍由 npm 的正式版、beta 或精确版本元数据决定；下载器只查询同一个 `v<version>` tag，不另取 GitHub latest。平台和技能必须来自已公开的 immutable Release，具有有效大小及 SHA256，下载地址必须属于该仓库和精确 tag。元数据与资产请求不携带 GitHub Token。纯 `--check` / `--list` 仍只查询 npm。
+版本选择仍由 npm 的正式版、beta 或精确版本元数据决定；下载器只查询同一个 `v<version>` tag，不另取 GitHub latest。平台和技能必须来自已公开的 immutable Release，具有有效大小及 SHA256，下载地址必须属于该仓库和精确 tag。纯 `--check` / `--list` 仍只查询 npm。
+
+官方 GitHub Release 元数据查询依次使用 `GITHUB_TOKEN`、`GH_TOKEN`、本机 GitHub CLI（`gh`）已有的 `github.com` 登录凭据；均不可用时使用默认匿名请求，没有内置共享 Token。读取 `gh` 凭据最多等待 2 秒，不触发登录；未安装、未登录、读取失败或超时均回退匿名。已选凭据被服务器拒绝时保留错误，不自动改用匿名重试。
+
+凭据仅用于 `https://api.github.com`，不会写入 DWS 配置或日志，也不会附加到 npm Registry、归档/CDN 下载或跳转后的其他站点。此自动发现逻辑仅适用于官方平台下载路径，显式 GitHub 源保留原有环境变量认证行为。
 
 资产缺失、GitHub API 限流或下载失败会返回错误，不自动回退到全平台 npm 包。大小、SHA256 或二进制版本不匹配时，在替换现有安装前终止。显式 GitHub 配置继续使用原有协议；自定义 Registry 不继承官方平台映射。
 

@@ -30,8 +30,11 @@ func ResolvePlatformRelease(ctx context.Context, release *ReleaseInfo, skipSkill
 	if pkg.TarballURL != expectedTarball {
 		return nil, fmt.Errorf("npm 包来源与官方发布不一致，拒绝解析平台资产")
 	}
-	// 复用无凭据、限制响应大小和 HTTPS 重定向的元数据读取器。
-	client := &Client{httpClient: &http.Client{Timeout: httpTimeout}}
+	// 复用有界元数据读取；本机凭据仅通过专属 transport 附加到官方 GitHub API。
+	client := &Client{httpClient: &http.Client{
+		Timeout:   httpTimeout,
+		Transport: githubMetadataTransport{base: http.DefaultTransport, token: platformGitHubToken(ctx)},
+	}}
 	return resolvePlatformRelease(ctx, client, release, skipSkills, runtime.GOOS, runtime.GOARCH)
 }
 

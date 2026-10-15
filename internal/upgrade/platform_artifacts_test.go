@@ -18,6 +18,7 @@ import (
 )
 
 func TestCrossPlatformCoveragePlatformSourceBoundary(t *testing.T) {
+	SwapPlatformGitHubTokenForTest(t, func(context.Context) string { return "" })
 	for _, mode := range []string{"official", "github", "custom-registry", "private-edition", "wrong-name", "wrong-version", "invalid-version", "custom-tarball"} {
 		t.Run(mode, func(t *testing.T) {
 			r := npmManifestToRelease(registryFixture("1.2.3"), defaultNPMRegistry)

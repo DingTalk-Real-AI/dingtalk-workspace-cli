@@ -227,7 +227,8 @@ func (c *Client) getRegistryJSON(ctx context.Context, endpoint string, target an
 	return c.getBoundedJSON(ctx, endpoint, target, limit, "npm Registry", "npm 元数据")
 }
 
-// getBoundedJSON 为公开发行元数据共用有界读取；任何来源都不继承 GitHub 凭据。
+// getBoundedJSON 为公开发行元数据共用有界读取，本层不读取或附加凭据。
+// 官方 GitHub 平台元数据可使用独立的认证 transport，Registry 仍不携带 GitHub 凭据。
 func (c *Client) getBoundedJSON(ctx context.Context, endpoint string, target any, limit int64, source, metadata string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
