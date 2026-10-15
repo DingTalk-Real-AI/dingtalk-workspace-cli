@@ -151,9 +151,10 @@ func TestCrossPlatformCoverageEmployeeCIReceiptBoundaries(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				InitDepsForTest(t, &digitalEmployeeProtocolCaller{responses: map[string][]string{"im/query_message_send_status": {`{}`}}})
 				marker := errors.New("fixture wait failure")
-				testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error {
+				testseam.Swap(t, &deapChannelReceiptWait, func(ctx context.Context, _ time.Duration) error {
 					if deadline {
 						time.Sleep(2 * time.Second)
+						<-ctx.Done()
 						return nil
 					}
 					return marker
