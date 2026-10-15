@@ -6,6 +6,24 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.65-beta.1] - 2026-10-15
+
+### Added
+
+- **本地图文混排** — `chat message send --content` 和 `chat +messages-send --as user --markdown` 自动上传行内本地图片，保留前后文字；支持预览、内容去重及最多三路并发上传。
+- **图文图片上传** — 使用上传返回的 `mediaIdV2` 构建图文消息；缺少 V2 时终止发送，避免使用不符合图片下载接口契约的编号。个人收藏表情保留原有媒体编号选择行为。
+- **图文图片编号复用** — 发送时识别裸 V2 图片编号；读取 Markdown 和富文本图片后生成带消息、会话身份的下载参数。
+- **图文图片错误提示** — 使用固定诊断区分文件读取、路径校验和上传失败，保留敏感路径保护，并提供对应的处理建议。
+
+- 新增全局隐藏参数 `--delegator-user-id`、`--delegator-corp-id` 和 `--delegator-open-dingtalk-id`。根命令在本次执行作用域持有校验后的不可变身份快照，公共 runner 统一向四个内置 HTTPS MCP 网关透传；旧 helper 丢弃 context 时也能补入身份，无需按业务逐条改造。无效输入整组省略；旧文档委托入口保持兼容，新旧协议禁止混用。实际委托授权依赖网关和业务服务接入。
+- 修复 AI 表格主服务、辅助服务、分页、重试、视图更新和工作流发布的上下文传递，保留取消信号；扩展真实命令到 HTTP Header 的回归矩阵，并覆盖串行 root 复用和多个预建 root 的身份隔离。同进程多 root 并发执行不在支持范围，并发调用使用独立 CLI 进程。
+- 更新 DWS 业务接入指南：说明公共 runner 覆盖条件、真实命令测试和绕行通道的接入要求；插件、stdio、发现、scoped 换票、独立 published MCP、直接 OpenAPI、文件字节传输及事件长连接继续排除，跨源重定向清理和 UID 发送边界保持不变。
+
+### Fixed
+
+- **媒体下载提示** — `dws chat message download-media` 的 Help 说明返回的下载地址临时有效，提示使用原 mediaId 及消息、会话信息重新下载。
+
+
 ## [1.0.64] - 2026-10-14
 
 本版本将已交付的 `v1.0.64-beta.1` 晋级正式版，汇总该 beta 的变化，并纳入下方列出的 beta 后变更。
