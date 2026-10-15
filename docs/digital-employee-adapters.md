@@ -8,9 +8,17 @@
 
 - 创建/管理数字员工与本地接入独立；connect 不创建、修改或发布数字员工。
 - 支持 Qoder、QoderWork、WorkBuddy、Claude Code、CodeBuddy、Codex、Gemini、OpenCode、custom 和 DSH。
-- 普通 Agent 复用 dev connect 的调用、模型、目录、会话及权限实现；传输改为员工 Event Consumer 上行、员工 Profile 引用回复下行。第一阶段仅文本。
+- 普通 Agent 复用 dev connect 的调用、模型、目录、会话及权限实现；传输改为员工 Event Consumer 上行、员工 Profile 引用回复下行。支持文字及入站消息中的图片。
+- 引用回复同时传递当前正文和入站 `quoted_message` 的原文、发送人及消息定位信息，以 JSON 明确区分当前问题与历史引用。普通消息输入保持不变，`/new`、`/clear` 仍按当前正文执行；引用中的命令不作为会话控制指令。只使用入站已提供的引用信息，不额外查询其他会话；原文缺失时明确提示模型不要臆测，引用正文不写入任务账本或审计。直发图片及引用图片会按各自原消息的定位信息，以员工自身 Profile 下载并传递本地图片附件，不要求用户补内部 ID。
+- `codex` 使用 app-server，`--agent-memory=true` 时按员工和钉钉会话保存 thread ID；每轮启动新的 app-server 进程后仍恢复原 thread，重启本地 worker 也可延续上下文。数字员工按用户明确请求使用本地技能与 CLI，不继承群聊机器人的附件问答限制；技能发现取决于 Codex 的用户技能目录和 `--agent-workdir`，命令发现取决于 worker 继承的 PATH。
+- 已有 thread 的历史指令不会因 `thread/resume` 传入新指令而被重写。数字员工通过每轮 `turn/start.additionalContext` 的 `application` 类型传递固定员工策略，使旧会话也能采用新策略，不清空历史或重建 thread；用户正文和引用内容不进入该可信策略字段。本机 Codex CLI 0.154.0 的实验协议已验证，其他版本的兼容性需单独验证。
+- 若 Codex 恢复已有 thread 失败（如被另一进程占用），数字员工保留原 thread 映射并发送会话恢复失败提示，不静默新建会话。可待占用解除后重试，或明确发送 `/new` 开始新会话；机器人原有恢复策略保持不变。
+- 当前 `codex` 的受限模式使用 `read-only` 沙箱，`bypass`/`yolo` 使用 `workspace-write`；两者均不接入交互审批，也不等同于不受限的终端环境。需要联网、写入工作目录以外位置或交互授权的 CLI 仍可能受限，不能仅凭技能已加载判断可执行所有业务动作。
+- `custom` 每条消息执行一次 `--agent-cmd`，将消息作为最后一个参数，stdout 作为回复。DWS 不为未知命令注入模型、权限或会话参数，`--agent-memory=true` 也不自动恢复其 Codex 会话；持续会话需要自定义命令自行管理。不要用全局“最近会话”作为多员工、多会话的共同上下文。
 - DWS 统一管理本机 binding 和运行期望；DSH 实际管理自己的 Event Consumer、Agent 和回合，提供员工级释放确认。兼容读取旧 DSH binding（revision 0）。
-- OpenClaw、Hermes、卡片、多媒体、知识库及远程审计扩展不属于本次数字员工新链路。
+- 图片支持 PNG、JPEG、GIF、WebP，每轮最多 4 张；下载准备总超时 60 秒，下载后仅接受非空且不超过 20 MiB 的单图。该大小检查不是网络流量或落盘字节硬上限。图片保存于员工运行目录的私有回合子目录，在本轮调用结束后清理；强制杀进程可能留下待人工清理的文件。下载失败、定位缺失或格式不支持时保留失败事实并回复“本次图片读取失败，请稍后重试。”，不退化为模型仅凭 mediaId 回答。
+- 内置 Agent 复用已有附件接口，Codex 使用原生 `localImage` 输入；custom 在问题末尾得到本地图片绝对路径，由自定义命令自身的读图能力处理，DWS 不猜测或注入未知的图片参数。图片和引用内容不授予额外权限；签名下载 URL 不进入 Agent 输入、任务账本或审计。
+- OpenClaw、Hermes、卡片、音视频和普通文件解析、知识库及远程审计扩展不属于本次数字员工新链路。
 
 ## 命令
 
@@ -55,11 +63,45 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel qoder --daemon --alw
 
 connect 使用主管取得一次性授权码，严格使用返回的 Client ID 换票，按发布详情校验员工身份后保存独立 Profile，不切换主管 Current。普通 Agent 的进程、会话及处理记录按员工 Profile 摘要和 Adapter 隔离，不用共享 OAuth Client ID 隔离员工。
 
-默认仅主管能触发；其他用户通过精确 userId 白名单开放，并在员工上下文解析开放 ID。群消息同时检查群和发送人。不同 Adapter 的已有绑定返回冲突，不隐式替换 DSH。
+`manage create` 创建并通过正式 `connect` 取得 `bind_local_agent` 回执的 `local_agent`，入站访问策略为 `platform`。钉钉平台保证私聊可见即可以聊天；移出可见范围后，即使使用已有私聊窗口，也不再向员工投递。已入群后的原生 @ 消息可回复，不叠加个人可见范围或本地白名单。员工类型从 local_agent 改为其他类型时，平台停止原绑定投递，必须重新绑定。这些是平台侧确认的投递契约，本地单元测试不能代替服务端实测。
+
+本地只核验绑定、事件格式及归属，过滤自身消息、非 @ 群消息并去重；不查询 published 可见范围、成员通讯录或部门。`manage set-visibility` 保存草稿后仍需 publish，投递权限由平台生效。其他本地通道和机器人保留本地用户/群白名单。敏感操作审批始终仅接受绑定的 `operatorOpenDingTalkId`，平台聊天权限不授予审批权。
+
+`channel capabilities.bindingAccessPolicy=true` 声明新协议；`channel binding --stdin` 仅接收 agentUuid、bindingRevision，始终返回 `accessPolicy: platform | local_allowlist`，平台策略同时返回用于自消息过滤的 `selfOpenDingTalkId`。Adapter 启动时核对 Profile、channel、revision、bound/running 与策略，再订阅员工消息；旧版本缺少该能力时提示升级，不猜测策略。受管判据是正式服务端绑定的有效 `runtimeBindingId`，仅有历史主管字段不会启用平台策略。
+
+旧绑定缺 `supervisorProfile` 可以正常启动，不再枚举本机账号或迁移主管身份。该字段仅为历史 JSON 读取保留，新绑定不写入；审批使用固定 operator，管理操作仍使用本次显式选择且已登录的主管 Profile。升级无需主管登录或修改原模型、权限、工作区和会话。自身开放 ID 必须在员工自己的 Token 上下文精确解析，不能使用主管查询的发布详情同名字段。新 adapter 保存 `selfIdentityProfile` 标记其员工 Profile 作用域，仅在作用域及绑定均匹配时复用自身 ID；旧配置缺少该标记或自身 ID 时，原生 worker 和 DSH 启动阶段只用员工自己的精确 Profile 解析一次，失败返回 self_identity_unavailable，不带主管身份、不查询可见范围、不在逐消息路径重试，也不改写旧配置或绑定。
+
+不同 Adapter 的已有绑定返回冲突，不隐式替换 DSH。
 
 重启使用保存的员工 Profile，不重新向主管换票。显式 connect 完成新的授权后才开始新的重试预算。订阅错误遵守已知不可重试 0 次、可重试 2 次、未知 1 次的预算，并遵守服务端冷却时间；terminal hold 不自动解除。
 
 每会话排队；已接收消息按会话和消息 ID 去重，稳定幂等键用于下行。发送结果 unknown 或处理途中崩溃均标为 needs_review，不盲目重发、不重复调用 Agent。本地无正文审计可靠落盘失败后停止接收新任务。没有服务端业务 ACK/replay/cursor 时不承诺 exactly-once 或断线不丢消息。
+
+## 原消息状态反馈（普通本地 Agent）
+
+数字员工通过 `chat +messages-reply` / `chat +messages-send` 的 `--wait-delivery` 等待发送回执。发送响应只有 `openTaskId` 时立即查询原任务；查询成功但未取得消息 ID 时继续轮询。对于错误响应，仅在回执查询接口返回结构化错误码 `1001`，或 `PARAM_ERROR` 且详情精确为“消息不存在”时重试。后续查询间隔 250ms，最多 8 次，从首次查询开始共享 2 秒总预算（包含接口耗时），并遵守调用方更短的 deadline 或取消。超时后返回 `delivery_unknown`，消息可能已经送达，禁止重发正文或重跑 Agent；其他接口的 `1001` 不适用此规则。
+
+普通本地 Agent 使用员工自己的 Profile，在触发消息上添加文字表情，帮助用户判断消息是否进入处理流程。DSH 的回合由宿主管理，不使用这里的反馈实现；机器人 `dev connect` 也保留原链路。
+
+| 事实 | 期望标签 |
+|---|---|
+| 消息通过访问权限、去重和容量检查，已保存接收记录，且同会话仍有未结束任务 | 排队中 |
+| 会话空闲，新消息已接收并即将执行 | 思考中 |
+| 开始调用本地 Agent | 思考中 |
+| 回复接口返回明确成功结果及消息 ID，且本地记录已保存 | 已完成 |
+| Agent 正常结束，未生成回复文字 | 收到，仅更新原消息表情 |
+| Agent 调用失败 | 处理失败，并尝试发送不含底层错误的文字提示 |
+| 当前执行收到取消信号 | 已取消 |
+| 正文发送失败或回执结果未知 | 发送待确认 |
+| 进程中断、账本收尾失败，或恢复时无法确定执行结果 | 已中断，待核查 |
+
+“已完成”沿用 qoderwake 的展示文案，表示本轮处理结束且必要的文字回复已获发送确认，不表示对方已读或业务目标已通过验收。任务记录分别保存 `execution`（Agent 调用结果）和 `delivery`（发送确认），不从模型回复推断业务验收。原有 `status=delivered` 保持兼容；新增 `delivery=accepted` 明确其显示语义。失败提示发送成功仍显示“处理失败”。
+
+表情更新在独立协程中进行，每条消息串行提交，合并尚未发送的中间状态。因此快速回复可能直接显示“已完成”，不会为了显示所有阶段延迟回复。撤旧、贴新不是原子操作；只撤除本员工在该消息上记录的表情。不同员工使用独立 Profile 和账本，同员工并发 worker 继续由运行锁拒绝。
+
+状态定义通过现有 `create-text-emotion` 获取真实 ID，按员工持久化复用。私有 `feedback/` 记录期望标签、已确认的应用标签、尝试添加的表情 ID 以及更新结果；接口成功不等于客户端已经显示，当前没有额外的客户端读回证明。每次更新最多使用 5 秒请求预算，退出时另给一次最多 5 秒的清理机会。权限不足、接口拒绝或网络异常只记录 `message_feedback_failed`，不输出原始错误，不阻塞 Agent，不重跑业务或重发正文。进程强制退出时仍可能残留表情；下次启动仅对已有反馈记录尝试收敛，失败留待后续启动核查，不无限重试。
+
+本次实现覆盖文本问答、正常结束但无文字时的“收到”回应、错误提示和中断恢复。无文字成功单独记录为 `completed_without_reply`、`execution=success`、`delivery=not_required`，表情期望与实际应用仍分别记录；失败或未知结果不能因正文为空而转换为“收到”。Codex 必须收到明确的 `completed` 通知且没有协议错误，断流、失败和取消保留异常事实；机器人原有空正文契约保持不变。业务验收证据、模型自由选择其他表情、审批等待标签、跨机器的多 Waker 聚合及流式状态卡片仍需独立设计。当前自动化测试验证本地时序与协议参数，真实渠道已验证普通问答最终显示“已完成”，正常无正文最终只贴“收到”，以及此前的失败提示。连接 readiness 只验证协议初始化，不代表所选模型已获账号授权；遇到模型不支持时，应使用该账号可用的模型并通过 `--agent-model` 显式指定，不能把反复重试当作修复。
 
 正文仅通过受限 stdin 进入 DWS 下行命令；Agent 自身协议按现有实现运行，custom 的问题仍作为末参传递。DWS 凭据不传给 Agent，但这不是操作系统级沙箱；Agent 自身访问权限由权限参数和宿主控制。
 

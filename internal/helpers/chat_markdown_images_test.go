@@ -8,8 +8,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -117,7 +119,7 @@ func TestCrossPlatformCoverageShouldRejectWhenResolveMarkdownLocalImagesGivenUns
 func TestCrossPlatformCoverageShouldDecodeWhenResolveMarkdownLocalImagesGivenFileURI(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "with space.png")
 	writeMarkdownTestPNG(t, path)
-	uri := "file://" + strings.ReplaceAll(path, " ", "%20")
+	uri := markdownTestFileURI(path)
 	var calls atomic.Int32
 	result, report, err := ResolveMarkdownLocalImages(t.Context(), "![一]("+uri+")", MarkdownImageOptions{
 		Upload: func(context.Context, *personalEmotionImage) (string, error) {
@@ -134,7 +136,7 @@ func TestCrossPlatformCoverageShouldDecodeWhenResolveMarkdownLocalImagesGivenFil
 func TestCrossPlatformCoverageShouldDecodeOnceWhenResolveMarkdownLocalImagesGivenEncodedPercent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "literal%20name.png")
 	writeMarkdownTestPNG(t, path)
-	uri := "file://" + strings.ReplaceAll(path, "%", "%25")
+	uri := markdownTestFileURI(path)
 	result, _, err := ResolveMarkdownLocalImages(t.Context(), "![图]("+uri+")", MarkdownImageOptions{
 		Upload: func(context.Context, *personalEmotionImage) (string, error) { return "@once", nil },
 	})
@@ -315,6 +317,14 @@ func TestCrossPlatformCoverageMarkdownImageDestinationParseErrors(t *testing.T) 
 func TestCrossPlatformCoverageResolveLiteralQueryAndFragmentFilenames(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, name := range []string{"a#b.png", "a?b.png"} {
+		if runtime.GOOS == "windows" && strings.Contains(name, "?") {
+			// Windows 不允许问号文件名；仍验证分类器保留字面值。
+			kind, path, err := classifyMarkdownImageDestination("./" + name)
+			if err != nil || kind != "local" || path != "./"+name {
+				t.Fatalf("字面问号未保留: %q %v", path, err)
+			}
+			continue
+		}
 		writeMarkdownTestPNG(t, name)
 		got, _, err := ResolveMarkdownLocalImages(t.Context(), "![图](./"+name+")", MarkdownImageOptions{
 			Upload: func(context.Context, *personalEmotionImage) (string, error) { return "@literal", nil },
@@ -586,5 +596,52 @@ func TestCrossPlatformCoverageMarkdownImageUploadUntrustedClassification(t *test
 	var typed *apperrors.Error
 	if !errors.As(result, &typed) || typed.Category != apperrors.CategoryAuth || typed.Reason != "image_upload_failed" || typed.ServerDiag.ServerErrorCode != "" || typed.RPCCode != -32000 {
 		t.Fatalf("err=%#v", result)
+	}
+}
+
+func TestCrossPlatformCoverageMarkdownWindowsDrivePaths(t *testing.T) {
+	for _, tc := range []struct {
+		input, want string
+		bad         bool
+	}{
+		{`C:\images\a.png`, `C:\images\a.png`, false},
+		{`d:/images/a%20b.png`, `d:/images/a b.png`, false},
+		{`file:///C:/images/a%20b.png`, `C:/images/a b.png`, false},
+		{`file://localhost/d:/images/a%2520b.png`, `d:/images/a%20b.png`, false},
+		{`C:/images/bad%zz.png`, "", true},
+	} {
+		kind, path, err := classifyMarkdownImageDestination(tc.input)
+		if tc.bad {
+			if err == nil {
+				t.Fatalf("无效转义被接受: %q", tc.input)
+			}
+			continue
+		}
+		if err != nil || kind != "local" || path != filepath.FromSlash(tc.want) {
+			t.Fatalf("Windows 路径分类失败: %q kind=%q path=%q err=%v", tc.input, kind, path, err)
+		}
+	}
+}
+
+func markdownTestFileURI(path string) string {
+	path = filepath.ToSlash(filepath.Clean(path))
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String()
+}
+
+func TestCrossPlatformCoverageResolveWindowsDriveMarkdownImage(t *testing.T) {
+	local := filepath.Join(t.TempDir(), "image.png")
+	writeMarkdownTestPNG(t, local)
+	for _, dest := range []string{`C:\images\a.png`, `file:///C:/images/a.png`} {
+		seen := ""
+		got, report, err := ResolveMarkdownLocalImages(t.Context(), "![图]("+dest+")", MarkdownImageOptions{
+			SafePath: func(path string) (string, error) { seen = path; return local, nil },
+			Upload:   func(context.Context, *personalEmotionImage) (string, error) { return "@windows", nil },
+		})
+		if err != nil || got != "![图](@windows)" || report.LocalCount != 1 || seen != filepath.FromSlash(`C:/images/a.png`) && seen != `C:\images\a.png` {
+			t.Fatalf("盘符未贯穿 Markdown 解析: dest=%q seen=%q got=%q err=%v", dest, seen, got, err)
+		}
 	}
 }

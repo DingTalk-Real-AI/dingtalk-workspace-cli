@@ -131,28 +131,6 @@ func TestCrossPlatformCoverageEmployeeLocalDaemonDispatch(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageEmployeeOperatorRejectsProfileSwitch(t *testing.T) {
-	installEmployeeReplyBinding(t)
-	old := deapChannelLoadBinding
-	calls := 0
-	testseam.Swap(t, &deapChannelLoadBinding, func(dir, profile string) (digitalEmployeeBinding, error) {
-		b, err := old(dir, profile)
-		calls++
-		if calls == 2 {
-			auth.SetRuntimeProfile("")
-		}
-		return b, err
-	})
-	cmd := newDeapChannelOperatorPrivateCommand()
-	cmd.SetContext(context.Background())
-	_ = cmd.Flags().Set("channel", "dsh")
-	_ = cmd.Flags().Set("stdin", "true")
-	cmd.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","operatorOpenDingTalkId":"operator-open","text":"body","idempotencyKey":"fixture"}`))
-	if err := runDeapChannelOperatorPrivate(cmd, nil); err == nil || !strings.Contains(err.Error(), "explicit") {
-		t.Fatal(err)
-	}
-}
-
 func TestCrossPlatformCoverageEmployeeStopTimeoutRetainsBinding(t *testing.T) {
 	cfg := employeeBoundaryConfig(t)
 	dir := digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile)

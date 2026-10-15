@@ -2634,7 +2634,7 @@ func TestCrossPlatformCoverageSecureIdentityKeychainAndLockEdges(t *testing.T) {
 		dualAcquireProcessLock = func(context.Context, string) (func(), bool, error) {
 			return func() { released = true }, true, nil
 		}
-		dualAcquireTokenLock = func(string) (*tokenFileLock, error) { return nil, fail }
+		dualAcquireTokenLock = func(context.Context, string) (*tokenFileLock, error) { return nil, fail }
 		if _, err := AcquireDualLock(context.Background(), t.TempDir()); !errors.Is(err, fail) || !released {
 			t.Fatalf("dual file lock error = %v released=%v", err, released)
 		}

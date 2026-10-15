@@ -116,7 +116,7 @@ func TestCrossPlatformCoverageEmployeeUnbindThenConnect(t *testing.T) {
 				t.Fatal(err)
 			}
 			current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-			if err != nil || current.RuntimeBindingID != "binding-created" || current.BindingRevision != 9 || current.BindingState != "bound" || current.Channel != "dsh" || !registered {
+			if err != nil || current.RuntimeBindingID != "binding-created" || current.BindingRevision != 9 || current.BindingState != "bound" || current.Channel != "dsh" || current.SupervisorProfile != "" || !registered {
 				t.Fatalf("新绑定未生效: %+v err=%v", current, err)
 			}
 			if tc.device == "" && current.DeviceID != b.DeviceID {

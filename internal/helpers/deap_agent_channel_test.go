@@ -150,7 +150,7 @@ func TestCrossPlatformCoverageDingTalkTagExposesIndependentConnectAndChannelProt
 	if err != nil || len(rest) != 0 || channel == root || !channel.HasSubCommands() {
 		t.Fatalf("find channel group: command=%v rest=%v err=%v", channel, rest, err)
 	}
-	for _, name := range []string{"capabilities", "reply", "operator-private"} {
+	for _, name := range []string{"capabilities", "binding"} {
 		leaf, remaining, findErr := channel.Find([]string{name})
 		if findErr != nil || len(remaining) != 0 || leaf == channel || !leaf.Runnable() {
 			t.Fatalf("find channel leaf %q: command=%v rest=%v err=%v", name, leaf, remaining, findErr)
@@ -176,6 +176,9 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 	if err := leaf.RunE(leaf, nil); err != nil {
 		t.Fatalf("capabilities RunE() error = %v", err)
 	}
+	if !strings.Contains(output.String(), "replyStdin") || !strings.Contains(output.String(), "operatorPrivateStdin") {
+		t.Fatal("capabilities 缺少已发布兼容入口")
+	}
 	var envelope struct {
 		OK      bool   `json:"ok"`
 		Outcome string `json:"outcome"`
@@ -183,9 +186,9 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 			ProtocolVersion int    `json:"protocolVersion"`
 			AuditMode       string `json:"auditMode"`
 			Capabilities    struct {
-				EventConsume         bool `json:"eventConsume"`
-				ReplyStdin           bool `json:"replyStdin"`
-				OperatorPrivateStdin bool `json:"operatorPrivateStdin"`
+				EventConsume        bool `json:"eventConsume"`
+				ChatDelivery        bool `json:"chatDelivery"`
+				BindingAccessPolicy bool `json:"bindingAccessPolicy"`
 			} `json:"capabilities"`
 		} `json:"data"`
 	}
@@ -193,132 +196,8 @@ func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelo
 		t.Fatalf("decode output %q: %v", output.String(), err)
 	}
 	if !envelope.OK || envelope.Outcome != "success" || envelope.Data.ProtocolVersion != 1 || envelope.Data.AuditMode != "local_required" ||
-		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ReplyStdin || !envelope.Data.Capabilities.OperatorPrivateStdin {
+		!envelope.Data.Capabilities.EventConsume || !envelope.Data.Capabilities.ChatDelivery || !envelope.Data.Capabilities.BindingAccessPolicy {
 		t.Fatalf("capability envelope = %#v", envelope)
-	}
-}
-
-func TestCrossPlatformCoverageDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
-	installEmployeeReplyBinding(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
-		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
-	}}
-	InitDepsForTest(t, caller)
-	root := deapHandler{}.Command(&captureRunner{})
-	leaf, _, err := root.Find([]string{"channel", "reply"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
-		if err := leaf.Flags().Set(name, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	input := `{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"正文不应进入 argv 或输出","idempotencyKey":"idem-1"}`
-	leaf.SetIn(strings.NewReader(input))
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("reply RunE() error = %v", err)
-	}
-	if len(caller.calls) != 2 || caller.calls[1].toolName != "send_personal_message" {
-		t.Fatalf("calls = %#v", caller.calls)
-	}
-	if caller.calls[1].args["uuid"] != "idem-1" || caller.calls[1].args["openConversationId"] != "conversation-1" {
-		t.Fatalf("send args = %#v", caller.calls[1].args)
-	}
-	if strings.Contains(output.String(), "正文不应进入") {
-		t.Fatalf("machine output leaked message body: %s", output.String())
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			OpenMessageID  string `json:"openMessageId"`
-			ConversationID string `json:"conversationId"`
-			DeliveryStatus string `json:"deliveryStatus"`
-			IdempotencyKey string `json:"idempotencyKey"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
-		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
-		t.Fatalf("reply envelope = %#v", envelope)
-	}
-
-	bad := deapHandler{}.Command(&captureRunner{})
-	badLeaf, _, _ := bad.Find([]string{"channel", "reply"})
-	_ = badLeaf.Flags().Set("channel", "dsh")
-	_ = badLeaf.Flags().Set("stdin", "true")
-	badLeaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"a","eventId":"e","conversationId":"c","referenceMessageId":"m","text":"secret","idempotencyKey":"i","unknown":true}`))
-	if err := badLeaf.RunE(badLeaf, nil); err == nil || !strings.Contains(err.Error(), "invalid digital employee stdin JSON") {
-		t.Fatalf("unknown field error = %v", err)
-	}
-	if len(caller.calls) != 2 {
-		t.Fatalf("bad stdin made MCP call: %#v", caller.calls)
-	}
-
-	oversized := deapHandler{}.Command(&captureRunner{})
-	oversizedLeaf, _, _ := oversized.Find([]string{"channel", "reply"})
-	_ = oversizedLeaf.Flags().Set("channel", "dsh")
-	_ = oversizedLeaf.Flags().Set("stdin", "true")
-	oversizedLeaf.SetIn(strings.NewReader(strings.Repeat("x", digitalEmployeeStdinLimit+1)))
-	if err := oversizedLeaf.RunE(oversizedLeaf, nil); err == nil || !strings.Contains(err.Error(), "exceeds 256 KiB") {
-		t.Fatalf("oversized stdin error = %v", err)
-	}
-	if len(caller.calls) != 2 {
-		t.Fatalf("oversized stdin made MCP call: %#v", caller.calls)
-	}
-}
-
-func TestCrossPlatformCoverageDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
-	installEmployeeReplyBinding(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
-		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
-		"im/query_message_send_status": {
-			`{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`,
-			`{"result":{"openTaskId":"task-1","openMessageId":"reply-1","openConversationId":"conversation-1","status":"SUCCESS"}}`,
-		},
-	}}
-	InitDepsForTest(t, caller)
-	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { return nil })
-	root := deapHandler{}.Command(&captureRunner{})
-	leaf, _, err := root.Find([]string{"channel", "reply"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
-		if err := leaf.Flags().Set(name, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"异步回执正文","idempotencyKey":"idem-1"}`))
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("reply RunE() error = %v", err)
-	}
-	if len(caller.calls) != 4 || caller.calls[3].productID != "im" || caller.calls[3].toolName != "query_message_send_status" || caller.calls[3].args["openTaskId"] != "task-1" {
-		t.Fatalf("async receipt calls = %#v", caller.calls)
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			OpenMessageID  string `json:"openMessageId"`
-			ConversationID string `json:"conversationId"`
-			DeliveryStatus string `json:"deliveryStatus"`
-			IdempotencyKey string `json:"idempotencyKey"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
-		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
-		t.Fatalf("async reply envelope = %#v", envelope)
 	}
 }
 
@@ -595,10 +474,10 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","type":"local_agent"}}`,
-			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user"}}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user","openDingTalkId":"employee-self"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":         {authResponse},
-		"contact/search_contact_by_key_word": {contactResponse},
+		"contact/search_contact_by_key_word": {contactResponse, `{"result":[{"userId":"employee-user","openDingTalkId":"employee-self"}]}`},
 	}}
 }
 
@@ -675,13 +554,13 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
-			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user"}}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","userId":"employee-user","openDingTalkId":"employee-self"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":         {`{"success":true,"data":{"dwsClientId":"returned-client","dwsAuthCode":"one-time-secret"}}`},
 		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-supervisor-scope"}]}`},
 	}, tokenResponses: map[string][]string{
 		"contact/get_current_user_profile":   {`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`},
-		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-employee-scope"}]}`},
+		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-employee-scope"}]}`, `{"result":[{"userId":"employee-user","openDingTalkId":"self-employee-scope"}]}`},
 	}}
 	InitDepsForTest(t, caller)
 	t.Setenv("DWS_DUMP_RAW", "1")
@@ -771,11 +650,11 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
 		t.Fatalf("managed exchange = %#v", exchange)
 	}
-	if len(caller.tokenCalls) != 3 || len(caller.tokens) != 3 || caller.tokens[2] != "supervisor-test-token" || caller.tokenCalls[2].toolName != "bind_local_agent" ||
+	if len(caller.tokenCalls) != 4 || len(caller.tokens) != 4 || caller.tokens[3] != "supervisor-test-token" || caller.tokenCalls[3].toolName != "bind_local_agent" ||
 		caller.tokens[0] != "managed-access-secret" || caller.tokens[1] != "managed-access-secret" ||
 		caller.tokenCalls[0].productID != "contact" || caller.tokenCalls[0].toolName != "get_current_user_profile" ||
 		caller.tokenCalls[1].productID != "contact" || caller.tokenCalls[1].toolName != "search_contact_by_key_word" ||
-		caller.tokenCalls[1].args["keyword"] != "supervisor-user" {
+		caller.tokenCalls[1].args["keyword"] != "supervisor-user" || caller.tokenCalls[2].args["keyword"] != "employee-user" || caller.tokens[2] != "managed-access-secret" {
 		t.Fatalf("managed identity lookup calls=%#v tokens=%#v", caller.tokenCalls, caller.tokens)
 	}
 	for _, call := range caller.calls {
@@ -804,6 +683,130 @@ func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesRet
 	}
 	if !envelope.OK || envelope.Data.Status != "created" || envelope.Data.DWSProfile != "employee-corp:employee-user" || !envelope.Data.RestartRequired {
 		t.Fatalf("connect envelope = %#v", envelope)
+	}
+}
+
+func TestCrossPlatformCoverageDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
+	installEmployeeReplyBinding(t)
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
+		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
+	}}
+	InitDepsForTest(t, caller)
+	root := deapHandler{}.Command(&captureRunner{})
+	leaf, _, err := root.Find([]string{"channel", "reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
+		if err := leaf.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := `{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"正文不应进入 argv 或输出","idempotencyKey":"idem-1"}`
+	leaf.SetIn(strings.NewReader(input))
+	var output bytes.Buffer
+	leaf.SetOut(&output)
+	if err := leaf.RunE(leaf, nil); err != nil {
+		t.Fatalf("reply RunE() error = %v", err)
+	}
+	if len(caller.calls) != 2 || caller.calls[1].toolName != "send_personal_message" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	if caller.calls[1].args["uuid"] != "idem-1" || caller.calls[1].args["openConversationId"] != "conversation-1" {
+		t.Fatalf("send args = %#v", caller.calls[1].args)
+	}
+	if strings.Contains(output.String(), "正文不应进入") {
+		t.Fatalf("machine output leaked message body: %s", output.String())
+	}
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			OpenMessageID  string `json:"openMessageId"`
+			ConversationID string `json:"conversationId"`
+			DeliveryStatus string `json:"deliveryStatus"`
+			IdempotencyKey string `json:"idempotencyKey"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
+		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
+		t.Fatalf("reply envelope = %#v", envelope)
+	}
+
+	bad := deapHandler{}.Command(&captureRunner{})
+	badLeaf, _, _ := bad.Find([]string{"channel", "reply"})
+	_ = badLeaf.Flags().Set("channel", "dsh")
+	_ = badLeaf.Flags().Set("stdin", "true")
+	badLeaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"a","eventId":"e","conversationId":"c","referenceMessageId":"m","text":"secret","idempotencyKey":"i","unknown":true}`))
+	if err := badLeaf.RunE(badLeaf, nil); err == nil || !strings.Contains(err.Error(), "invalid digital employee stdin JSON") {
+		t.Fatalf("unknown field error = %v", err)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("bad stdin made MCP call: %#v", caller.calls)
+	}
+
+	oversized := deapHandler{}.Command(&captureRunner{})
+	oversizedLeaf, _, _ := oversized.Find([]string{"channel", "reply"})
+	_ = oversizedLeaf.Flags().Set("channel", "dsh")
+	_ = oversizedLeaf.Flags().Set("stdin", "true")
+	oversizedLeaf.SetIn(strings.NewReader(strings.Repeat("x", digitalEmployeeStdinLimit+1)))
+	if err := oversizedLeaf.RunE(oversizedLeaf, nil); err == nil || !strings.Contains(err.Error(), "exceeds 256 KiB") {
+		t.Fatalf("oversized stdin error = %v", err)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("oversized stdin made MCP call: %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
+	installEmployeeReplyBinding(t)
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
+		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
+		"im/query_message_send_status": {
+			`{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`,
+			`{"result":{"openTaskId":"task-1","openMessageId":"reply-1","openConversationId":"conversation-1","status":"SUCCESS"}}`,
+		},
+	}}
+	InitDepsForTest(t, caller)
+	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { return nil })
+	root := deapHandler{}.Command(&captureRunner{})
+	leaf, _, err := root.Find([]string{"channel", "reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
+		if err := leaf.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"异步回执正文","idempotencyKey":"idem-1"}`))
+	var output bytes.Buffer
+	leaf.SetOut(&output)
+	if err := leaf.RunE(leaf, nil); err != nil {
+		t.Fatalf("reply RunE() error = %v", err)
+	}
+	if len(caller.calls) != 4 || caller.calls[3].productID != "im" || caller.calls[3].toolName != "query_message_send_status" || caller.calls[3].args["openTaskId"] != "task-1" {
+		t.Fatalf("async receipt calls = %#v", caller.calls)
+	}
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			OpenMessageID  string `json:"openMessageId"`
+			ConversationID string `json:"conversationId"`
+			DeliveryStatus string `json:"deliveryStatus"`
+			IdempotencyKey string `json:"idempotencyKey"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
+		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
+		t.Fatalf("async reply envelope = %#v", envelope)
 	}
 }
 

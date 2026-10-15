@@ -31,6 +31,7 @@ func runEmployeeLease(cmd *cobra.Command) error {
 	if err != nil || profile == "" || instanceErr != nil {
 		return fmt.Errorf("invalid lease identity")
 	}
+	// 获取 worker 锁必须早于宿主的 12 秒租约看门狗结束。
 	waitCtx, stopWait := context.WithTimeout(ctx, 10*time.Second)
 	defer stopWait()
 	lock, err := auth.AcquireDualLock(waitCtx, filepath.Join(digitalEmployeeRuntimeDir(profile), "worker"))

@@ -3,3 +3,6 @@ internal/runtimepayload/assets/*.payload binary
 skills/multi/dingtalk-aicard/references/protocol/*.json text eol=lf
 # Preserve the upstream README byte-for-byte for Cobra provenance checks.
 third_party/cobra/README.md whitespace=-blank-at-eol
+
+# 内嵌解释资源由 validator 固定原始字节摘要，Windows 检出也保持 LF。
+internal/card/a2ui/*.json text eol=lf

@@ -52,4 +52,4 @@ metadata:
 
 - `manage login` 在内部完成 AuthCode 换票、在线身份核验，并保存精确 `corpId:userId` Profile；不得输出或转存 AuthCode/Token。只登录或仅保存 Profile 使用 `manage login`；真正接入本地 Agent/DSH 使用 `connect`。
 - 删除不可逆；修改、发布、删除和 connect 按 Schema 的确认要求执行。
-- Channel 的 `reply` / `operator-private` 只供已绑定的本地 Adapter/DSH 机器协议使用，必须指定员工 Profile，正文只能走受限 stdin；不要为普通用户消息直接调用。
+- Channel 仅保留 `capabilities` / `binding` 用于能力发现和绑定、访问判定。数字员工发送使用 `chat +messages-reply` / `chat +messages-send`，必须指定员工 Profile，并以 `--body-stdin --wait-delivery --employee-context` 传入受限正文与绑定上下文。DSH 要求 `chatDelivery=true`，缺少时提示升级 DWS。

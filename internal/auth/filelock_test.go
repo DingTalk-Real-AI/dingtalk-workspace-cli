@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestAcquireTokenLock_Basic(t *testing.T) {
@@ -349,5 +352,163 @@ func TestAcquireDualLock_ConcurrentGoroutines(t *testing.T) {
 
 	if counter != numGoroutines {
 		t.Fatalf("counter = %d, want %d (race condition detected)", counter, numGoroutines)
+	}
+}
+
+func TestCrossPlatformCoverageAcquireDualLockFileContentionContext(t *testing.T) {
+	for _, explicitCancel := range []bool{false, true} {
+		name := "deadline"
+		if explicitCancel {
+			name = "cancel"
+		}
+		t.Run(name, func(t *testing.T) {
+			configDir := t.TempDir()
+			// 独立 fd 持有真实系统文件锁，绕开进程内锁以覆盖跨进程等待路径。
+			held, err := acquireTokenLock(configDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(held.release)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+			wantErr := error(context.DeadlineExceeded)
+			if explicitCancel {
+				cancel()
+				ctx, cancel = context.WithCancel(context.Background())
+				timer := time.AfterFunc(150*time.Millisecond, cancel)
+				defer timer.Stop()
+				wantErr = context.Canceled
+			}
+			defer cancel()
+			started := time.Now()
+			got, err := AcquireDualLock(ctx, configDir)
+			elapsed := time.Since(started)
+			if got != nil {
+				got.Release()
+				t.Fatal("competing file lock unexpectedly acquired")
+			}
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("error = %v, want %v", err, wantErr)
+			}
+			if elapsed > time.Second {
+				t.Fatalf("context budget exceeded: %v", elapsed)
+			}
+			t.Logf("real file lock wait returned after %v: %v", elapsed, err)
+			if _, exists := processLocks.Load(processLockKey(configDir)); exists {
+				t.Fatal("process lock leaked after file lock cancellation")
+			}
+
+			probe, err := os.OpenFile(filepath.Join(configDir, lockFileName), os.O_RDWR, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer probe.Close()
+			if err := lockFile(probe); err == nil {
+				unlockFile(probe)
+				t.Fatal("cancellation released another holder's lock")
+			}
+			held.release()
+			retryCtx, retryCancel := context.WithTimeout(context.Background(), time.Second)
+			defer retryCancel()
+			retry, err := AcquireDualLock(retryCtx, configDir)
+			if err != nil {
+				t.Fatalf("reacquire after cancellation: %v", err)
+			}
+			retry.Release()
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAcquireDualLockNilContext(t *testing.T) {
+	configDir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		lock, err := AcquireDualLock(nil, configDir)
+		if err != nil {
+			t.Fatalf("nil context acquisition %d: %v", i, err)
+		}
+		lock.Release()
+	}
+	if _, exists := processLocks.Load(processLockKey(configDir)); exists {
+		t.Fatal("process lock leaked with nil context")
+	}
+}
+
+func TestCrossPlatformCoverageAcquireDualLockAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	configDir := t.TempDir()
+	testseam.Swap(t, &fileLockMkdirAll, func(string, os.FileMode) error {
+		t.Fatal("canceled lock acquisition must not create a directory")
+		return nil
+	})
+	if lock, err := AcquireDualLock(ctx, configDir); lock != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled acquisition = %v, %v", lock, err)
+	}
+	if _, exists := processLocks.Load(processLockKey(configDir)); exists {
+		t.Fatal("process lock leaked for canceled context")
+	}
+}
+
+func TestCrossPlatformCoverageAcquireDualLockCanceledDuringFileAcquire(t *testing.T) {
+	configDir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var attemptedFile *os.File
+	testseam.Swap(t, &fileLockTry, func(f *os.File) error {
+		attemptedFile = f
+		err := lockFile(f)
+		cancel()
+		return err
+	})
+	if lock, err := AcquireDualLock(ctx, configDir); lock != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled during acquisition = %v, %v", lock, err)
+	}
+	if attemptedFile == nil {
+		t.Fatal("file lock attempt was not exercised")
+	}
+	// Windows 对已关闭句柄的 Stat 返回系统错误；重复 Close 在各平台统一返回 ErrClosed。
+	if err := attemptedFile.Close(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("file descriptor not closed after cancellation: %v", err)
+	}
+	if _, exists := processLocks.Load(processLockKey(configDir)); exists {
+		t.Fatal("process lock leaked after successful-but-canceled file acquisition")
+	}
+	probe, err := os.OpenFile(filepath.Join(configDir, lockFileName), os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probe.Close()
+	if err := lockFile(probe); err != nil {
+		t.Fatalf("file lock leaked after cancellation: %v", err)
+	}
+	unlockFile(probe)
+}
+
+func TestCrossPlatformCoverageAcquireTokenLockCancellationAtBoundaries(t *testing.T) {
+	for _, phase := range []string{"opened", "contended"} {
+		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var opened *os.File
+			openFile := fileLockOpenFile
+			testseam.Swap(t, &fileLockOpenFile, func(path string, flag int, mode os.FileMode) (*os.File, error) {
+				f, err := openFile(path, flag, mode)
+				opened = f
+				if phase == "opened" {
+					cancel()
+				}
+				return f, err
+			})
+			if phase == "contended" {
+				testseam.Swap(t, &fileLockTry, func(*os.File) error { cancel(); return errors.New("fixture contention") })
+			}
+			lock, err := acquireTokenLockContext(ctx, t.TempDir())
+			if lock != nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("取消后仍取得锁: %v %v", lock, err)
+			}
+			if opened == nil || !errors.Is(opened.Close(), os.ErrClosed) {
+				t.Fatal("取消后未关闭文件")
+			}
+		})
 	}
 }

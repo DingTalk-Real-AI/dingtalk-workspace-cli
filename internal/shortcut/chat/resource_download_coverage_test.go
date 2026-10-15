@@ -727,8 +727,10 @@ func TestCrossPlatformCoverageMessageExportFailureBoundaries(t *testing.T) {
 	})
 	t.Run("parent escapes", func(t *testing.T) {
 		base := baseSetup(t)
-		resourceEvalSymlinks = func(path string) (string, error) {
-			if path == base {
+		calls := 0
+		resourceEvalSymlinks = func(string) (string, error) {
+			calls++
+			if calls == 1 {
 				return base, nil
 			}
 			return filepath.Dir(base), nil
