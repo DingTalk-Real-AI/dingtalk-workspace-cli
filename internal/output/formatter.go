@@ -26,6 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
+	"github.com/rivo/uniseg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -697,12 +698,14 @@ func truncate(s string, maxWidth int) string {
 	var b strings.Builder
 	used := 0
 	limit := maxWidth - 1
-	for _, r := range s {
-		width := runeWidth(string(r))
+	clusters := uniseg.NewGraphemes(s)
+	for clusters.Next() {
+		cluster := clusters.Str()
+		width := runeWidth(cluster)
 		if used+width > limit {
 			break
 		}
-		b.WriteRune(r)
+		b.WriteString(cluster)
 		used += width
 	}
 	return b.String() + "…"
