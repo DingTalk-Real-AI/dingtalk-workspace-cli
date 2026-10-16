@@ -31,6 +31,7 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 			"auth logout",
 			"auth migrate-keychain",
 			"auth reset",
+			"auth provider-login",
 			"auth status",
 			"completion",
 			"config list",

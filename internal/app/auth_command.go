@@ -101,7 +101,7 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 	}
 
 	if !edition.Get().HideAuthLogin {
-		cmd.AddCommand(newAuthLoginCommand(patCaller))
+		cmd.AddCommand(newAuthLoginCommand(patCaller), newAuthProviderLoginCommand(patCaller))
 	}
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
@@ -139,7 +139,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
-      自有应用的 Client ID/Client Secret 必须完整成对，且仅在授权成功后持久化到 app config/Keychain。
+      自有应用的 Client ID/Client Secret 必须完整成对；普通登录在授权成功后持久化到 app config/Keychain。
 
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
@@ -319,23 +319,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			if err := runPostLoginAuthorization(); err != nil {
 				return err
 			}
-			fmt.Fprintln(w)
-			fmt.Fprintln(w, authLoginStatusLine(i18n.T("登录成功！")))
-			if tokenData != nil {
-				if tokenData.CorpName != "" {
-					fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业"), tokenData.CorpName))
-				}
-				if tokenData.CorpID != "" {
-					fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业 ID"), tokenData.CorpID))
-				}
-				if tokenData.UserName != "" {
-					fmt.Fprintln(w, authLoginInfoLine(i18n.T("用户"), tokenData.UserName))
-				}
-				if expiry := authLoginDisplayExpiry(tokenData); expiry != "" {
-					fmt.Fprintln(w, authLoginInfoLine(i18n.T("有效期"), expiry))
-				}
-			}
-			fmt.Fprintln(w, authLoginMutedStyle().Render(i18n.T("Token 将自动刷新，无需重复登录")))
+			authLoginPrintHumanResult(w, tokenData)
 			return nil
 		},
 	}
@@ -2008,6 +1992,29 @@ type authLoginResponse struct {
 	CorpName          string `json:"corp_name,omitempty"`
 	UserID            string `json:"user_id,omitempty"`
 	UserName          string `json:"user_name,omitempty"`
+}
+
+// authLoginPrintHumanResult prints the shared post-login human-readable
+// result. Provider (OIDC SDK) login reuses it so every login mode reports
+// success the same way.
+func authLoginPrintHumanResult(w io.Writer, data *authpkg.TokenData) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, authLoginStatusLine(i18n.T("登录成功！")))
+	if data != nil {
+		if data.CorpName != "" {
+			fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业"), data.CorpName))
+		}
+		if data.CorpID != "" {
+			fmt.Fprintln(w, authLoginInfoLine(i18n.T("企业 ID"), data.CorpID))
+		}
+		if data.UserName != "" {
+			fmt.Fprintln(w, authLoginInfoLine(i18n.T("用户"), data.UserName))
+		}
+		if expiry := authLoginDisplayExpiry(data); expiry != "" {
+			fmt.Fprintln(w, authLoginInfoLine(i18n.T("有效期"), expiry))
+		}
+	}
+	fmt.Fprintln(w, authLoginMutedStyle().Render(i18n.T("Token 将自动刷新，无需重复登录")))
 }
 
 func writeAuthLoginJSON(w io.Writer, data *authpkg.TokenData, forced bool) error {
