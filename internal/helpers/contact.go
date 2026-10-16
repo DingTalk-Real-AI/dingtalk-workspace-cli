@@ -82,6 +82,16 @@ func contactAnyFlagChanged(cmd *cobra.Command, names ...string) bool {
 	return false
 }
 
+// retiredContactGetByDingtalkIdError 是 get-by-dingtalk-id 历史兼容入口的失败关闭错误：
+// 旧版钉钉号查 userId 的 MCP 已下线，执行不再发任何远端调用，直接引导用户改走替代命令。
+func retiredContactGetByDingtalkIdError() error {
+	return apperrors.NewValidation(
+		"dws contact user get-by-dingtalk-id: 旧版钉钉号查 userId 的 MCP 已下线，本命令不再可用",
+		apperrors.WithReason("command_retired"),
+		apperrors.WithHint("已知钉钉号请用 dws aisearch person 按姓名/关键词找人；已知手机号请用 dws contact user search-mobile；持有好友事件 openDingTalkId 请用 dws contact user get-by-open-dingtalk-id。"),
+	)
+}
+
 func contactGetBoolWithAliases(cmd *cobra.Command, names ...string) (bool, bool) {
 	for _, name := range names {
 		if flag := cmd.Flag(name); flag != nil && flag.Changed {
@@ -1466,7 +1476,7 @@ func newContactCommand() *cobra.Command {
 		Long: `查询钉钉通讯录：用户搜索、手机号查找、部门搜索、子部门 / 成员列表、人员关系；用户花名册档案信息（学历、家庭、银行卡、合同等）与离职员工信息。
 
 通讯录功能：
-  - contact user get-self/search/search-mobile/get-by-dingtalk-id/get: 通讯录用户查询
+  - contact user get-self/search/search-mobile/get: 通讯录用户查询
   - contact user invite/update/update-self/update-ownness: 邀请与更新员工
   - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
   - contact label create/list/get/list-members: 角色创建与查询
@@ -1489,7 +1499,6 @@ func newContactCommand() *cobra.Command {
 
 【何时用哪个命令】
   - 查询用户的部门、主管、管理员权限         → contact user get
-  - 已知钉钉号（dingtalkId）获取 userId       → contact user get-by-dingtalk-id
   - 已知开放钉钉号ID（openDingTalkId）获取 userId → contact user get-by-open-dingtalk-id
   - 修改员工信息（姓名 / 部门 / 直属主管）   → contact user update
   - 更新当前用户自己的 profile（昵称 / 头像） → contact user update-self
@@ -1673,26 +1682,18 @@ func newContactCommand() *cobra.Command {
 		},
 	})
 
+	// get-by-dingtalk-id（历史 argv 兼容；Help / Schema 已下线）────────────
+
 	contactUserGetByDingtalkIdCmd := &cobra.Command{
 		Use:     "get-by-dingtalk-id",
 		Aliases: []string{"search-dingtalk"},
-		Short:   "按钉钉号获取用户ID",
-		Long: `根据钉钉号（dingtalkId）查询组织内员工，返回其 userId。
-
-钉钉号是员工在钉钉内的唯一短标识（如 zhangsan），与手机号、userId 不同。`,
-		Example: `  dws contact user get-by-dingtalk-id --id zhangsan
-  dws contact user search-dingtalk --id zhangsan  # 别名`,
+		Short:   "按钉钉号获取用户ID（已下线）",
+		Long:    `历史兼容入口。旧版钉钉号查 userId 的 MCP 已下线；本叶子 Hidden 且可解析，执行立即以 command_retired 失败关闭。`,
+		Example: `  dws contact user get-by-dingtalk-id --id zhangsan --format json
+  dws contact user search-dingtalk --id zhangsan --format json  # 别名`,
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "id", "dingtalk-id", "dingtalkId"); err != nil {
-				return err
-			}
-			dingtalkId := strings.TrimSpace(flagOrFallback(cmd, "id", "dingtalk-id", "dingtalkId"))
-			if dingtalkId == "" {
-				return apperrors.NewValidation(fmt.Sprintf("--%s 不能为空", contactFirstSetFlagName(cmd, "id", "dingtalk-id", "dingtalkId")))
-			}
-			return callMCPTool("get_user_id_by_dingtalk_id", map[string]any{
-				"dingtalk_id": dingtalkId,
-			})
+			return retiredContactGetByDingtalkIdError()
 		},
 	}
 	DeclareLeafMetadata(contactUserGetByDingtalkIdCmd, LeafSpec{
@@ -1708,25 +1709,27 @@ func newContactCommand() *cobra.Command {
 				CLIPath:        "contact user get-by-dingtalk-id",
 				PrimaryCLIPath: "contact user get-by-dingtalk-id",
 			},
-			Description: "根据钉钉号获取用户 userId",
+			Description: "历史兼容入口：旧版钉钉号查 userId MCP 已下线；执行仅返回 command_retired，不能获取 userId。",
 			Interface: &contract.InterfaceSpec{
-				Mode:         "mcp",
-				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_user_id_by_dingtalk_id"},
+				Mode:         "composite",
+				Availability: "unavailable",
+				Reason:       "旧版钉钉号查 userId MCP 已下线；本叶子仅为 Hidden 的历史 argv 兼容入口，运行时以 command_retired 失败关闭，不可被 Agent 调用",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "根据钉钉号获取用户 userId",
-				UseWhen:      []string{"已知员工钉钉号（dingtalkId），需要获取其 userId 时"},
+				AgentSummary: "已下线的历史 argv 兼容入口，不能根据钉钉号获取 userId。",
+				UseWhen:      []string{"用户明确只要旧版 dws contact user get-by-dingtalk-id 的下线说明"},
 				AvoidWhen: []string{
-					"按姓名/手机号找人请用 contact user search / search-mobile",
-					"已有 userId 需要详情请用 contact user get",
+					"已知员工钉钉号需要获取 userId（请用 aisearch person 按姓名/关键词找人）",
+					"已知手机号需要查人（请用 contact user search-mobile）",
+					"持有好友事件的 openDingTalkId 需要 userId（请用 contact user get-by-open-dingtalk-id）",
 				},
 				Examples: []string{"dws contact user get-by-dingtalk-id --id zhangsan --format json"},
 			},
+			// 保留历史 id 参数的精确 property，避免退役后 flag_name_inference
+			// 把 dingtalk_id 退化成推断值；required 从 true 放宽为 false，
+			// 与 fail-closed 的历史 argv 兼容入口保持一致。
 			Parameters: []contract.ParamDecl{
-				{Name: "id", Property: "dingtalk_id", Required: boolPtr(true)},
-				{Name: "dingtalk-id", Property: "dingtalk_id", Required: boolPtr(false)},
-				{Name: "dingtalkId", Property: "dingtalk_id", Required: boolPtr(false)},
+				{Name: "id", Property: "dingtalk_id", Required: boolPtr(false)},
 			},
 		},
 	})
@@ -1741,8 +1744,7 @@ openDingTalkId 是开放平台场景下、用于标识两个 uid 关系的开放
 通常出现在好友事件（如 user_contact_friend_request_received、
 user_contact_friend_added）等业务消息体中。
 
-注意：openDingTalkId 与钉钉号（dingtalkId，如 zhangsan）不是同一概念。
-已知普通钉钉号时请使用 contact user get-by-dingtalk-id。`,
+注意：openDingTalkId 与钉钉号（dingtalkId，如 zhangsan）不是同一概念，二者不可互换。`,
 		Example: `  dws contact user get-by-open-dingtalk-id --id open-dt-xxx
   dws contact user get-user-by-open-dingtalk-id --id open-dt-xxx  # 别名`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1785,7 +1787,6 @@ user_contact_friend_added）等业务消息体中。
 				AgentSummary: "根据开放钉钉号ID获取用户 userId",
 				UseWhen:      []string{"已知员工开放钉钉号ID（openDingTalkId，常见于好友事件消息体），需要获取其 userId 时"},
 				AvoidWhen: []string{
-					"已知普通钉钉号（dingtalkId）请用 contact user get-by-dingtalk-id",
 					"按姓名/手机号找人请用 contact user search / search-mobile",
 					"已有 userId 需要详情请用 contact user get",
 				},
@@ -2858,7 +2859,9 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserSearchCmd.Flags().MarkHidden("keyword")
 	_ = contactUserSearchCmd.Flags().MarkHidden("name")
 	contactUserSearchMobileCmd.Flags().String("mobile", "", "手机号 (必填)")
-	contactUserGetByDingtalkIdCmd.Flags().String("id", "", "钉钉号 dingtalkId (必填)")
+	// Historical flags for the retired get-by-dingtalk-id entry so existing
+	// argv still parses; RunE fails closed before any flag is read.
+	contactUserGetByDingtalkIdCmd.Flags().String("id", "", "钉钉号 dingtalkId（命令已下线，仅兼容解析）")
 	contactUserGetByDingtalkIdCmd.Flags().String("dingtalk-id", "", "--id 的别名")
 	contactUserGetByDingtalkIdCmd.Flags().String("dingtalkId", "", "--id 的别名")
 	_ = contactUserGetByDingtalkIdCmd.Flags().MarkHidden("dingtalk-id")
