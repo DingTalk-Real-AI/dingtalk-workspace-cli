@@ -786,6 +786,25 @@ scenario("empty multi/ tree falls back to mono and keeps the old multi cache", (
   }
 });
 
+scenario("DWS_NO_SKILLS=1 installs the binary and skips skills entirely", () => {
+  const { tmp, pkg, home } = stagePkg({
+    "mono/SKILL.md": "# mono fixture\n",
+    "multi/dingtalk-test/SKILL.md": "# dingtalk-test\n",
+  });
+  try {
+    const res = runInstall(pkg, home, "multi", { DWS_NO_SKILLS: "1" });
+    assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
+    assert.match(res.stdout, /DWS_NO_SKILLS=1; skipping skill installation/);
+    // The CLI binary is still unpacked — that is the whole point of the flag.
+    assert.ok(fs.existsSync(path.join(pkg, "vendor")), "binary must still be extracted");
+    // No agent home was touched and no user-level cache was published.
+    assert.ok(!fs.existsSync(path.join(home, ".agents", "skills")), "no agent skills installed");
+    assert.ok(!fs.existsSync(path.join(home, ".dws", "skills")), "no user skill cache published");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 scenario("bogus DWS_SKILL_MODE fails fast with a clear error", () => {
   const { tmp, pkg, home } = stagePkg({
     "mono/SKILL.md": "# mono fixture\n",
