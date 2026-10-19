@@ -190,8 +190,8 @@ func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 					}
 					if patch == "public_sync_1529" {
 						anchors = []string{
-							"ca900aa3f802151591ddb59ca42ca37a4c950102",
-							"0c75478b9d12316b566595177a45ce6b420003f9",
+							"a391c42c7de6c7e86fc19f92aa1f18e630ed402e",
+							"4fdf11c739e22d348d3e2878c20a168540b92b1d",
 						}
 					}
 					for _, sha := range anchors {
@@ -221,10 +221,10 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const chatThreadPromote = input.patch === 'chat_thread_promote';
 const publicSync = input.patch === 'public_sync_1529';
 const reviewedNumber = publicSync ? 1529 : chatThreadPromote ? 1502 : 1463;
-const reviewedBase = publicSync ? 'ca900aa3f802151591ddb59ca42ca37a4c950102' : chatThreadPromote
+const reviewedBase = publicSync ? 'a391c42c7de6c7e86fc19f92aa1f18e630ed402e' : chatThreadPromote
   ? '59d1da576c6983582d5be11401e7efe07aaaa238'
   : '3f0fc94111b1f9cd34e47468980b1f1a723ca69a';
-const reviewedHead = publicSync ? '0c75478b9d12316b566595177a45ce6b420003f9' : chatThreadPromote
+const reviewedHead = publicSync ? '4fdf11c739e22d348d3e2878c20a168540b92b1d' : chatThreadPromote
   ? 'c70ede29e0860a88e309bb540f27d888e9d8a8ab'
   : '53de9d92c9b310798d7f42a385e162273330442b';
 const reviewedRef = publicSync ? 'codex/sync-qwenwork-1.0.65' : chatThreadPromote
@@ -240,7 +240,7 @@ const protectedPaths = chatThreadPromote || publicSync ? [
   'scripts/policy/skill-command-check/main.go',
   'scripts/policy/skill-command-check/main_test.go',
 ];
-// #1529 路径与增改状态固定取自 G0→C0，不从被测工作流反读审批内容。
+// #1529 路径与增改状态固定取自 M→C1，不从被测工作流反读审批内容。
 const paths = publicSync ? [
   '.changes/1421-skill-setup-fail-closed-staging.md',
   '.changes/1425-windows-skill-setup-junction.md',
