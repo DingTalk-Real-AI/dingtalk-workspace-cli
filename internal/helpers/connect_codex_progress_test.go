@@ -100,6 +100,32 @@ func TestCrossPlatformCoverageCodexProgressInterruptedIsNotSuccess(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageCodexProgressRequiresCompletedConfirmation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		turn string
+	}{
+		{"missing_status", `{"items":[{"type":"agentMessage","text":"已有最终正文"}]}`},
+		{"in_progress", `{"status":"inProgress","items":[{"type":"agentMessage","text":"已有最终正文"}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.WithValue(context.Background(), agentProgressKey{}, func(agentProgress) {})
+			c := unitCodexClient(&bufferWriteCloser{},
+				codexRPCMessage{Method: "item/agentMessage/delta", Params: json.RawMessage(`{"threadId":"thread","delta":"已有流式正文"}`)},
+				codexRPCMessage{Method: "turn/completed", Params: json.RawMessage(`{"threadId":"thread","turn":` + tc.turn + `}`)},
+			)
+			var delta string
+			answer, err := c.runTurn(ctx, "thread", "question", nil, func(text string) { delta = text })
+			if delta != "已有流式正文" {
+				t.Fatalf("流式正文未进入真实消息处理路径：%q", delta)
+			}
+			if err == nil || err.Error() != "agent turn did not complete" || answer != "" {
+				t.Fatalf("缺少 completed 确认时不得将已有正文作为成功结果：answer=%q err=%v", answer, err)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageCodexManagedThreadResetAndCancelledFrames(t *testing.T) {
 	f := &codexAppServerForwarder{sessions: newCodexThreadSessions("")}
 	f.sessions.setThreadID("conv", "legacy")

@@ -306,6 +306,110 @@ func TestCrossPlatformCoverageEmployeeCardBoundedPublicView(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageEmployeeCardRuntimeFailurePropagation(t *testing.T) {
+	for _, stage := range []string{"process-card-ledger", "finish-record-audit"} {
+		t.Run(stage, func(t *testing.T) {
+			r, e := employeeLedgerFixture(t)
+			r.cfg.ReplyMode = "a2ui"
+			path := r.recordPath(e)
+			if err := writeEmployeeJSON(path, employeeTaskRecord{Status: "accepted", IdempotencyKey: "event-stable"}); err != nil {
+				t.Fatal(err)
+			}
+			var feedbackLabels []string
+			testseam.Swap(t, &employeeFeedbackCall, func(_ context.Context, _, _ string, _ employeeEvent, emotion employeeEmotion) (map[string]any, error) {
+				feedbackLabels = append(feedbackLabels, emotion.Label)
+				return map[string]any{"emotionId": "fixture-" + emotion.Label}, nil
+			})
+			r.feedback = newEmployeeFeedback(r.ctx, "corp:employee", r.dir)
+			defer r.feedback.wait()
+
+			injected := false
+			if stage == "process-card-ledger" {
+				// 只阻断卡片创建前的账本提交，让运行态落盘与反馈记录保持真实成功。
+				testseam.Swap(t, &atomicRename, func(from, to string) error {
+					if to == path {
+						raw, err := os.ReadFile(from)
+						var pending employeeTaskRecord
+						if err != nil {
+							return err
+						}
+						if err := json.Unmarshal(raw, &pending); err != nil {
+							return err
+						}
+						if pending.Status == "card_creating" {
+							injected = true
+							return errors.New("private card ledger fault")
+						}
+					}
+					return os.Rename(from, to)
+				})
+			} else {
+				// 卡片交付完成后，真实审计文件打开失败，不能把最终账本写成完成。
+				if err := os.Mkdir(filepath.Join(r.dir, "audit.jsonl"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cardCalls, agentCalls := 0, 0
+			testseam.Swap(t, &employeeA2UICall, func(_ context.Context, _ digitalEmployeeBinding, _ []map[string]any, args ...string) (map[string]any, error) {
+				cardCalls++
+				if args[0] == "send-a2ui-card" {
+					return map[string]any{"bizId": "server-biz"}, nil
+				}
+				return map[string]any{"flowStatus": args[4]}, nil
+			})
+			r.fwd = &employeeProgressFixture{run: func(func(agentProgress)) (string, error) {
+				agentCalls++
+				return "final answer", nil
+			}}
+
+			err := r.process(e)
+			r.feedback.wait()
+			wantCode, wantStatus := "ledger_unavailable", "running"
+			if stage == "finish-record-audit" {
+				wantCode, wantStatus = "audit_unavailable", "card_streaming"
+			}
+			var classified *employeeRunError
+			if !errors.As(err, &classified) || classified.Code != wantCode || classified.Retryable == nil || *classified.Retryable || err.Error() != wantCode {
+				t.Fatalf("运行时未保留稳定的不可重试错误：%v", err)
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var record employeeTaskRecord
+			if err := json.Unmarshal(raw, &record); err != nil {
+				t.Fatal(err)
+			}
+			if record.Status != wantStatus || record.IdempotencyKey != "event-stable" {
+				t.Fatalf("失败后丢失原账本或错误提交完成状态：%+v", record)
+			}
+			if stage == "process-card-ledger" {
+				if !injected || cardCalls != 0 || agentCalls != 0 || record.BizID != "" || record.Execution != "running" {
+					t.Fatalf("卡片账本失败后继续执行：injected=%v card=%d agent=%d record=%+v", injected, cardCalls, agentCalls, record)
+				}
+			} else if cardCalls != 2 || agentCalls != 1 || record.BizID != "server-biz" || record.FlowStatus != "FINISH" || record.Delivery != "accepted" {
+				t.Fatalf("未在已确认交付后的审计阶段失败：card=%d agent=%d record=%+v", cardCalls, agentCalls, record)
+			}
+			for _, label := range feedbackLabels {
+				if label == "已完成" {
+					t.Fatal("运行时失败仍发布成功反馈")
+				}
+			}
+			raw, err = os.ReadFile(r.feedback.path(e))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var feedback employeeFeedbackRecord
+			if err := json.Unmarshal(raw, &feedback); err != nil {
+				t.Fatal(err)
+			}
+			if feedback.Desired != "已中断，待核查" || feedback.Applied != "已中断，待核查" || feedback.Status != "applied" {
+				t.Fatalf("错误透传后未收敛到待核查反馈：%+v", feedback)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageEmployeeCardInvalidConfigAndLedger(t *testing.T) {
 	cfg := employeeBoundaryConfig(t)
 	cfg.ReplyMode = "invalid"
