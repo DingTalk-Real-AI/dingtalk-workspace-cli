@@ -1793,7 +1793,8 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: macos-latest
-    timeout-minutes: 20
+    # 原生覆盖率须完成所有应用批次，并为编译、上传和 runner 波动留出时间。
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
