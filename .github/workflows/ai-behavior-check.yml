@@ -148,6 +148,18 @@ jobs:
                     'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
                   ],
                 },
+                {
+                  repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
+                  number: 1529,
+                  author: 'haofeng0705',
+                  headRef: 'codex/sync-qwenwork-1.0.65',
+                  base: 'ca900aa3f802151591ddb59ca42ca37a4c950102',
+                  head: '0c75478b9d12316b566595177a45ce6b420003f9',
+                  count: 100,
+                  protectedPaths: [
+                    'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
+                  ],
+                },
               ];
               const reviewed = reviewedPatches.find(({ number }) => number === context.issue.number);
               const hasReviewedIdentity = (pull) =>
