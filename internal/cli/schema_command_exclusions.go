@@ -25,6 +25,7 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 		Commands: []string{
 			"api",
 			"auth exchange",
+			"auth exchange-prepare",
 			"auth export",
 			"auth import",
 			"auth login",
@@ -33,6 +34,7 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 			"auth reset",
 			"auth provider-login",
 			"auth status",
+			"auth token-exchange",
 			"completion",
 			"config list",
 			"doctor",

@@ -19,12 +19,11 @@ import (
 var authProviderLogin = loginWithProviderLogin
 
 func loginWithProviderLogin(ctx context.Context, configDir, provider, baseURL string, caller edition.ToolCaller, credentials *authpkg.OIDCExchangeCredentials) (*authpkg.TokenData, error) {
-	// This selects local business code. Both paths check backend configuration
-	// before attempting authorization or reporting an unavailable implementation.
-	login := authpkg.NewOIDCLoginProvider(provider, baseURL, nil)
-	if provider == "ant" {
-		login = authpkg.NewAntSDKOIDCProvider(baseURL).OIDCLoginProvider
+	authorizer, err := resolveOIDCAuthorizer(provider)
+	if err != nil {
+		return nil, err
 	}
+	login := authpkg.NewOIDCLoginProvider(provider, baseURL, authorizer)
 	login.ExchangeCredentials = credentials
 	login.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
 		return enrichAuthLoginProfileFromContact(ctx, configDir, caller, data)
@@ -66,8 +65,8 @@ func newAuthProviderLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 密码，接入方 SDK 会话也不写入本地。
 
 参数:
-  --client-id/--client-secret  可选，仅传给服务端 exchange 的 DWS 应用凭据，
-                               必须成对非空，不写入本地应用配置
+  --client-id/--client-secret  可选的自定义 DWS 应用凭据，必须成对非空，
+                               随登录安全保存以便刷新，不改变全局应用配置；不传则由服务端托管
   --mcp-url                    覆盖本次登录的 MCP 端点
   --login-timeout              登录超时秒数（默认 12 分钟）
 

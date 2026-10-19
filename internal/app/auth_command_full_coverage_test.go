@@ -95,8 +95,8 @@ func TestCrossPlatformCoverageAuthCoverageFormsParentAndTargets(t *testing.T) {
 		t.Fatal("auth parent should render help")
 	}
 	edition.Override(&edition.Hooks{HideAuthLogin: true})
-	if got := buildAuthCommand(nil).Commands(); len(got) != 7 {
-		t.Fatalf("hidden-login subcommands = %d, want 7", len(got))
+	if got := buildAuthCommand(nil).Commands(); len(got) != 9 {
+		t.Fatalf("hidden-login subcommands = %d, want 9", len(got))
 	}
 
 	authRunForm = func(*huh.Form) error { return nil }

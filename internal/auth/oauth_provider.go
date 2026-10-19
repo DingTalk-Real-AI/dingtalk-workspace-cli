@@ -1177,6 +1177,10 @@ func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid stri
 }
 
 func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenData) error {
+	return p.persistLoginTokenWithSecret(ctx, tokenData, "")
+}
+
+func (p *OAuthProvider) persistLoginTokenWithSecret(ctx context.Context, tokenData *TokenData, secret string) error {
 	corpID, userID, userName := "", "", ""
 	if tokenData != nil {
 		corpID = strings.TrimSpace(tokenData.CorpID)
@@ -1203,6 +1207,14 @@ func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenD
 	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
+	if secret != "" {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return withProfilesLock(p.configDir, func() error {
+			return saveTokenDataLockedForSelectorAndSecret(p.configDir, tokenData, RuntimeProfile(), secret)
+		})
 	}
 	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
 		return err

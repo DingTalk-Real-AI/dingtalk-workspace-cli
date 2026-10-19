@@ -14,8 +14,9 @@ import (
 )
 
 // AntSDKOIDCProvider reuses the common OIDC flow and implements Ant authorization.
-// The current SDK implementation uses the selected portal backend Mock. A real Ant SDK
-// belongs in Authorize; transaction, exchange and persistence remain shared.
+// This explicit development/test implementation uses the portal backend Mock.
+// Production provider-login selects SDKs registered via edition.Hooks instead;
+// this mock is never an automatic fallback for an unregistered or failed SDK.
 type AntSDKOIDCProvider struct {
 	*OIDCLoginProvider
 }

@@ -261,7 +261,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*TokenData, error) {
 	// Use stored clientId from token data
 	clientID := data.ClientID
-	if clientID == "" {
+	if clientID == "" && !data.MCPClientSecretRequired {
 		// Fallback for legacy tokens
 		clientID = ClientID()
 	}
@@ -270,23 +270,57 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId，请重新登录")
 	}
 
-	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPRefreshTokenPath
+	baseURL := MCPBaseURLForLoginRegion(p.loginRegion())
+	if data.MCPBaseURL != "" {
+		if _, err := oidcBaseURL(data.MCPBaseURL); err != nil {
+			return nil, fmt.Errorf("invalid saved OIDC Portal URL; log in again")
+		}
+		baseURL = data.MCPBaseURL
+	}
+	url := baseURL + MCPRefreshTokenPath
 	body := map[string]string{
 		"clientId":     clientID,
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
-	resp, err := p.postJSON(ctx, url, body)
+	if data.MCPClientSecretRequired {
+		if data.MCPBaseURL == "" {
+			return nil, fmt.Errorf("missing OIDC Portal binding; log in again")
+		}
+		secret, err := LoadClientSecretStrict(clientID)
+		if err != nil || strings.TrimSpace(secret) == "" {
+			return nil, fmt.Errorf("cannot load the saved OIDC application secret; log in again")
+		}
+		body["clientSecret"] = secret
+	}
+	var resp []byte
+	var err error
+	if data.MCPBaseURL != "" {
+		// A redirect must never forward the saved application secret. Preserve
+		// HTTP status for refresh retry classification without exposing bodies.
+		var status int
+		status, resp, err = oidcJSONRequest(ctx, p.httpClient, url, body, "")
+		if status != 0 && status != http.StatusOK {
+			err = &HTTPStatusError{StatusCode: status}
+		}
+	} else {
+		resp, err = p.postJSON(ctx, url, body)
+	}
 	if err != nil {
 		return nil, err
 	}
 	updated, err := p.parseMCPTokenResponse(resp)
 	if err != nil {
+		if data.MCPBaseURL != "" {
+			return nil, oidcSafeError(ctx, err, "OIDC refresh returned an invalid token response")
+		}
 		return nil, err
 	}
 	// Preserve original credentials info
 	updated.ClientID = data.ClientID
 	updated.Source = data.Source
+	updated.MCPBaseURL = data.MCPBaseURL
+	updated.MCPClientSecretRequired = data.MCPClientSecretRequired
 	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID

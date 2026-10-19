@@ -17,7 +17,8 @@ import (
 	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-const oidcTestState = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const oidcTestRandom = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const oidcTestState = oidcTestRandom + ".1792023000." + oidcTestRandom
 
 func TestCrossPlatformCoverageOIDCSDKTransactionBeforeLogin(t *testing.T) {
 	var calls []string
@@ -60,11 +61,11 @@ func TestCrossPlatformCoverageOIDCSDKTransactionBeforeLogin(t *testing.T) {
 }
 
 func oidcTestCompleted() map[string]any {
-	return map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "corp", "corpName": "测试组织"}
+	return map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "corp", "corpName": "测试组织", "clientId": "dws-app"}
 }
 
 func oidcTestCreated(endpoint, redirect string) map[string]any {
-	return map[string]any{"provider": "ant", "expires_in": 600, "authorization_request": map[string]any{"authorization_endpoint": endpoint, "parameters": map[string]string{"client_id": "registered-app", "response_type": "code", "scope": "openid", "redirect_uri": redirect, "state": oidcTestState, "nonce": oidcTestState, "code_challenge": oidcTestState, "code_challenge_method": "S256"}}}
+	return map[string]any{"provider": "ant", "expires_in": 600, "authorization_request": map[string]any{"authorization_endpoint": endpoint, "parameters": map[string]string{"client_id": "registered-app", "response_type": "code", "scope": "openid", "redirect_uri": redirect, "state": oidcTestState, "nonce": oidcTestRandom, "code_challenge": oidcTestRandom, "code_challenge_method": "S256"}}}
 }
 
 func oidcTestProvider(t *testing.T, exchange http.HandlerFunc) *OIDCLoginProvider {
@@ -129,7 +130,7 @@ func TestCrossPlatformCoverageOIDCProviderHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if data.AccessToken != "secret-access" || data.RefreshToken != "secret-refresh" || data.Source != "mcp" || data.UserID != "" || data.ClientID != "" || data.CorpID != "corp" || data.CorpName != "测试组织" || data.RefreshExpAt.Sub(data.ExpiresAt) < 22*time.Hour {
+	if data.AccessToken != "secret-access" || data.RefreshToken != "secret-refresh" || data.Source != "mcp" || data.UserID != "" || data.ClientID != "dws-app" || data.CorpID != "corp" || data.CorpName != "测试组织" || data.RefreshExpAt.Sub(data.ExpiresAt) < 22*time.Hour {
 		t.Fatalf("incorrect session projection: %#v", data)
 	}
 	if count.Load() != 1 {
@@ -484,7 +485,7 @@ func TestCrossPlatformCoverageOIDCAuthorizationRequestBoundaries(t *testing.T) {
 				case "redirect":
 					params["redirect_uri"] = "not-an-absolute-uri"
 				case "state":
-					params["state"] = "short"
+					params["state"] = strings.Repeat("a", 1025)
 				case "nonce":
 					delete(params, "nonce")
 				case "pkce":
@@ -605,8 +606,8 @@ func TestCrossPlatformCoverageOIDCUsesOAuthIdentityAndPersistence(t *testing.T) 
 
 func TestCrossPlatformCoverageOIDCTokenResponseMatchesMCPParser(t *testing.T) {
 	for _, body := range []string{
-		`{"accessToken":"encrypted-access"}`,
-		`{"accessToken":"encrypted-access","refreshToken":"encrypted-refresh","expiresIn":7200,"corpId":"corp","corpName":"Org"}`,
+		`{"accessToken":"encrypted-access","clientId":"dws-app"}`,
+		`{"accessToken":"encrypted-access","refreshToken":"encrypted-refresh","expiresIn":7200,"corpId":"corp","corpName":"Org","clientId":"dws-app"}`,
 	} {
 		p := oidcTestProvider(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) })
 		data, err := p.Login(t.Context())

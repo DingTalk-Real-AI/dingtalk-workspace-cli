@@ -23,6 +23,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/itchyny/gojq v0.12.18
 	github.com/mattn/go-isatty v0.0.20
+	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -61,7 +62,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
-	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.20.0 // indirect

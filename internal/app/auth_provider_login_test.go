@@ -195,13 +195,23 @@ func TestCrossPlatformCoverageProviderLoginCLIRealHTTPPersistence(t *testing.T) 
 					if body["code"] != "one-code" || body["state"] != state {
 						t.Error("bad exchange")
 					}
-					json.NewEncoder(w).Encode(map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "ant-corp", "corpName": "Ant Organization"})
+					json.NewEncoder(w).Encode(map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "ant-corp", "corpName": "Ant Organization", "clientId": "dws-app"})
 				default:
 					t.Error("unexpected endpoint")
 					w.WriteHeader(404)
 				}
 			}))
 			defer server.Close()
+			// Mock authorization is explicit test setup, never a core fallback.
+			withOIDCProviders(t, func() []edition.OIDCProvider {
+				return []edition.OIDCProvider{{Name: "ant", Authorize: func(ctx context.Context, request edition.OIDCAuthorizationRequest) (edition.OIDCAuthorizationResult, error) {
+					result, err := authpkg.NewAntSDKOIDCProvider(server.URL).Authorize(ctx, authpkg.OIDCAuthorizationRequest{
+						AuthorizationEndpoint: request.AuthorizationEndpoint,
+						Parameters:            request.Parameters,
+					})
+					return edition.OIDCAuthorizationResult{Code: result.Code, State: result.State}, err
+				}}}
+			})
 			root, out, stderr := providerLoginRoot()
 			args := []string{"auth", "provider-login", provider, "--mcp-url", server.URL}
 			if custom {

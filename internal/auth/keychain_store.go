@@ -674,8 +674,12 @@ func saveClientSecretTransactional(clientID, clientSecret string) error {
 
 func saveClientSecret(clientID, clientSecret string, strictCleanup bool) error {
 	clientID = strings.TrimSpace(clientID)
-	clientSecret = strings.TrimSpace(clientSecret)
-	if clientID == "" || clientSecret == "" {
+	if !strictCleanup {
+		clientSecret = strings.TrimSpace(clientSecret)
+	}
+	// A credential saved as part of an exchange must remain byte-for-byte
+	// identical to the credential accepted by the token endpoint.
+	if clientID == "" || strings.TrimSpace(clientSecret) == "" {
 		return nil // Nothing to save
 	}
 	account := secretAccountKey(clientID)

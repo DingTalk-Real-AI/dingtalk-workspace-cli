@@ -19,6 +19,7 @@ import (
 	"time"
 
 	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // OIDCAuthorizationRequest is the complete server-issued SDK input. The portal
@@ -42,7 +43,7 @@ type OIDCAuthorizer interface {
 
 var errOIDCAuthorizerUnavailable = errors.New("provider authorization is unavailable")
 
-// OIDCExchangeCredentials selects the DWS application for this exchange only.
+// OIDCExchangeCredentials selects the DWS application without changing global configuration.
 // It is separate from the server-owned OIDC client registration.
 type OIDCExchangeCredentials struct {
 	ClientID     string
@@ -76,14 +77,15 @@ func (p *OIDCLoginProvider) Validate() error {
 	if err := p.ExchangeCredentials.Validate(); err != nil {
 		return err
 	}
-	if !validLoginProviderName(p.provider) {
+	if !ValidLoginProviderName(p.provider) {
 		return dwserrors.NewValidation("login provider must match [a-z][a-z0-9_-]{0,63}")
 	}
 	_, err := oidcBaseURL(p.baseURL)
 	return err
 }
 
-func validLoginProviderName(name string) bool {
+// ValidLoginProviderName is shared by CLI input and edition registrations.
+func ValidLoginProviderName(name string) bool {
 	if len(name) == 0 || len(name) > 64 || name[0] < 'a' || name[0] > 'z' {
 		return false
 	}
@@ -105,7 +107,7 @@ func (p *OIDCLoginProvider) LoginAndSave(ctx context.Context, configDir string) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := prepareLoginPersistence(configDir); err != nil {
+	if err := p.preparePersistence(configDir); err != nil {
 		return nil, oidcSafeError(ctx, err, "local login state cannot be safely updated")
 	}
 	data, err := p.Login(ctx)
@@ -116,10 +118,29 @@ func (p *OIDCLoginProvider) LoginAndSave(ctx context.Context, configDir string) 
 		return nil, err
 	}
 	oauth := &OAuthProvider{configDir: configDir, IdentityEnricher: p.IdentityEnricher}
-	if err := oauth.persistLoginToken(ctx, data); err != nil {
+	if err := oauth.persistLoginTokenWithSecret(ctx, data, p.exchangeSecret()); err != nil {
 		return nil, oidcSafeError(ctx, err, "cannot save OIDC login profile")
 	}
 	return data, nil
+}
+
+func (p *OIDCLoginProvider) exchangeSecret() string {
+	if p.ExchangeCredentials == nil {
+		return ""
+	}
+	return p.ExchangeCredentials.ClientSecret
+}
+
+func (p *OIDCLoginProvider) preparePersistence(configDir string) error {
+	if p.ExchangeCredentials != nil {
+		if edition.Get().SaveToken != nil {
+			return fmt.Errorf("edition token hook does not support transactional client credentials")
+		}
+		if _, _, err := snapshotExchangeClientSecret(p.ExchangeCredentials.ClientID); err != nil {
+			return fmt.Errorf("cannot read existing application credentials")
+		}
+	}
+	return prepareLoginPersistence(configDir)
 }
 
 func (p *OIDCLoginProvider) Login(ctx context.Context) (*TokenData, error) {
@@ -135,18 +156,11 @@ func (p *OIDCLoginProvider) Login(ctx context.Context) (*TokenData, error) {
 		defer cancel()
 	}
 	started := time.Now()
-	var transaction oidcTransactionResponse
-	status, err := p.post(ctx, "/cli/auth/oidc/transactions", map[string]string{"provider": p.provider}, &transaction)
+	transaction, err := p.PrepareExchange(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if status != http.StatusCreated {
-		return nil, dwserrors.NewAuth(fmt.Sprintf("OIDC login transaction could not be created (HTTP %d); retry login", status))
-	}
-	request, err := p.authorizationRequest(transaction)
-	if err != nil {
-		return nil, err
-	}
+	request := transaction.AuthorizationRequest
 	if p.authorizer == nil {
 		return nil, p.sdkUnavailable()
 	}
@@ -163,12 +177,22 @@ func (p *OIDCLoginProvider) Login(ctx context.Context) (*TokenData, error) {
 		if errors.Is(err, errOIDCAuthorizerUnavailable) {
 			return nil, p.sdkUnavailable()
 		}
+		if errors.Is(err, context.Canceled) {
+			return nil, context.Canceled
+		}
+		var network net.Error
+		if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout() {
+			return nil, oidcSafeError(sdkCtx, context.DeadlineExceeded, "provider SDK login timed out")
+		}
 		var typed *dwserrors.Error
 		if errors.As(err, &typed) && typed.Reason == "NETWORK_UNREACHABLE" {
 			return nil, dwserrors.NewAPI("provider SDK connection failed", dwserrors.WithReason("NETWORK_UNREACHABLE"))
 		}
-		slog.Debug("auth.oidc.sdk_authorize_failed", "provider", p.provider, "error", err)
-		return nil, oidcSafeError(sdkCtx, err, "provider SDK login failed")
+		// Edition errors may contain SDK credentials or authorization codes.
+		slog.Debug("auth.oidc.sdk_authorize_failed", "provider", p.provider)
+		// Even a wrapper around a typed core error can contain SDK secrets.
+		// Do not attach the foreign error as a cause in CLI/JSON output.
+		return nil, dwserrors.NewAuth("provider SDK login failed")
 	}
 	if !oidcValidCode(result.Code) || subtle.ConstantTimeCompare([]byte(result.State), []byte(state)) != 1 {
 		return nil, dwserrors.NewAuth("provider SDK returned an invalid authorization result or mismatched state")
@@ -192,7 +216,9 @@ func oidcValidCode(code string) bool {
 	return true
 }
 
-type oidcTransactionResponse struct {
+// OIDCExchangePreparation contains only the validated public authorization
+// parameters. The PKCE verifier remains in the portal transaction.
+type OIDCExchangePreparation struct {
 	Provider             string                   `json:"provider"`
 	ExpiresIn            int64                    `json:"expires_in"`
 	AuthorizationRequest OIDCAuthorizationRequest `json:"authorization_request"`
@@ -210,7 +236,7 @@ func oidcBaseURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func (p *OIDCLoginProvider) authorizationRequest(tx oidcTransactionResponse) (OIDCAuthorizationRequest, error) {
+func (p *OIDCLoginProvider) authorizationRequest(tx OIDCExchangePreparation) (OIDCAuthorizationRequest, error) {
 	fail := func() (OIDCAuthorizationRequest, error) {
 		return OIDCAuthorizationRequest{}, dwserrors.NewAuth("OIDC portal returned invalid authorization information")
 	}
@@ -218,7 +244,7 @@ func (p *OIDCLoginProvider) authorizationRequest(tx oidcTransactionResponse) (OI
 		return fail()
 	}
 	params := tx.AuthorizationRequest.Parameters
-	if len(params) != 8 || !oidcText(params["redirect_uri"], 2048) || len(params["scope"]) > 2048 || params["response_type"] != "code" || params["code_challenge_method"] != "S256" || !oidcText(params["client_id"], 512) || !oidcRandomValue(params["state"]) || !oidcRandomValue(params["nonce"]) || !oidcRandomValue(params["code_challenge"]) {
+	if len(params) != 8 || !oidcText(params["redirect_uri"], 2048) || len(params["scope"]) > 2048 || params["response_type"] != "code" || params["code_challenge_method"] != "S256" || !oidcText(params["client_id"], 512) || !oidcText(params["state"], 1024) || !oidcRandomValue(params["nonce"]) || !oidcRandomValue(params["code_challenge"]) {
 		return fail()
 	}
 	redirect, err := url.Parse(params["redirect_uri"])
@@ -261,8 +287,12 @@ func (p *OIDCLoginProvider) authorizationRequest(tx oidcTransactionResponse) (OI
 }
 
 func (p *OIDCLoginProvider) exchange(ctx context.Context, code, state string) (*TokenData, error) {
-	var response json.RawMessage
 	body := map[string]string{"code": code, "state": state}
+	return p.exchangeRequest(ctx, body)
+}
+
+func (p *OIDCLoginProvider) exchangeRequest(ctx context.Context, body map[string]string) (*TokenData, error) {
+	var response json.RawMessage
 	if p.ExchangeCredentials != nil {
 		body["client_id"] = p.ExchangeCredentials.ClientID
 		body["client_secret"] = p.ExchangeCredentials.ClientSecret
@@ -278,6 +308,25 @@ func (p *OIDCLoginProvider) exchange(ctx context.Context, code, state string) (*
 	if err != nil {
 		return nil, oidcSafeError(ctx, err, "OIDC exchange returned an invalid token response")
 	}
+	var application struct {
+		ClientID string `json:"clientId"`
+	}
+	if json.Unmarshal(response, &application) != nil {
+		return nil, dwserrors.NewAuth("OIDC exchange returned an invalid application binding")
+	}
+	clientID := body["client_id"]
+	if clientID == "" {
+		clientID = application.ClientID
+	} else if application.ClientID != "" && application.ClientID != clientID {
+		return nil, dwserrors.NewAuth("OIDC exchange returned a different DWS application")
+	}
+	if !oidcText(clientID, 512) {
+		return nil, dwserrors.NewAuth("OIDC exchange returned no valid DWS application ID; update the Portal and log in again")
+	}
+	// The Portal's DWS app is distinct from the IdP's authorization client_id.
+	data.ClientID = clientID
+	data.MCPBaseURL = p.baseURL
+	data.MCPClientSecretRequired = p.ExchangeCredentials != nil
 	data.Source = "mcp"
 	data.FreshAuthorization = true
 	return data, nil
@@ -353,7 +402,7 @@ func oidcJSONRequest(ctx context.Context, configured *http.Client, endpoint stri
 	}
 	slog.Debug("auth.oidc.response", "endpoint", logEndpoint, "status", resp.StatusCode, "elapsed_ms", time.Since(started).Milliseconds())
 	if len(content) > 64<<10 || !oidcUniqueJSON(content) {
-		return 0, nil, dwserrors.NewAuth("OIDC portal returned an invalid response")
+		return resp.StatusCode, nil, dwserrors.NewAuth("OIDC portal returned an invalid response")
 	}
 	return resp.StatusCode, content, nil
 }
