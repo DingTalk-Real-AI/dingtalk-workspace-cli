@@ -337,6 +337,35 @@ class OAFormProjectionTest(unittest.TestCase):
                 self.assertFalse(projected["needsComponentReference"])
                 self.assertNotIn(title, SCRIPT.read_text(encoding="utf-8"))
 
+    def test_contact_and_photo_value_kinds_match_wire_contract(self):
+        """InnerContactField 单选也传单元素数组；DDPhotoField 接受 URL 或 mediaIdV2。"""
+        payload = {
+            "success": True,
+            "result": {
+                "content": {
+                    "items": [
+                        {
+                            "componentName": "InnerContactField",
+                            "props": {"id": "contact-1", "label": "联系人", "required": True},
+                        },
+                        {
+                            "componentName": "DDPhotoField",
+                            "props": {"id": "photo-1", "label": "证据图片", "required": True},
+                        },
+                    ]
+                }
+            },
+        }
+
+        projected = PREFLIGHT.project_form_schema(payload)
+
+        self.assertEqual([], projected["blockers"])
+        contact, photo = projected["fields"]
+        self.assertEqual("supported", contact["support"])
+        self.assertEqual("user_id_json_array", contact["valueKind"])
+        self.assertEqual("supported", photo["support"])
+        self.assertEqual("url_or_media_id_json_array_string", photo["valueKind"])
+
     def test_failed_schema_exits_nonzero_and_cannot_continue_to_create(self):
         payload = {
             "success": False,

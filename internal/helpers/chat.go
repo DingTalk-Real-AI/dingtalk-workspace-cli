@@ -59,16 +59,29 @@ func normalizeA2UIUpdateFlowStatus(raw string) (string, error) {
 
 func parseA2UIMessages(raw string) ([]string, error) {
 	if strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("--content is required")
+		return nil, apperrors.NewValidation("--content is required")
 	}
 	var messages []string
 	if err := json.Unmarshal([]byte(raw), &messages); err != nil {
-		return nil, fmt.Errorf("--content must be a JSON string array")
+		return nil, apperrors.NewValidation("--content must be a JSON string array")
 	}
 	if len(messages) == 0 {
-		return nil, fmt.Errorf("--content must contain at least one message")
+		return nil, apperrors.NewValidation("--content must contain at least one message")
 	}
 	return messages, nil
+}
+
+func readA2UIMessages(cmd *cobra.Command) ([]string, error) {
+	raw := mustGetFlag(cmd, "content")
+	if raw == "-" {
+		const limit = 10 * 1024 * 1024
+		data, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), limit+1))
+		if err != nil || len(data) > limit {
+			return nil, apperrors.NewValidation("--content stdin could not be read or exceeds 10 MB")
+		}
+		raw = strings.TrimPrefix(string(data), "\ufeff")
+	}
+	return parseA2UIMessages(raw)
 }
 
 func parseA2UIAnnotations(raw string) ([]map[string]json.RawMessage, error) {
@@ -7365,7 +7378,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd := &cobra.Command{
 		Use:     "send-a2ui-card",
 		Short:   "创建并推送 A2UI 卡片",
-		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组；--summary 可指定会话列表中的可读摘要，省略时沿用消息数组拼接结果。创建时默认 flowStatus=PROCESSING。",
+		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组；传 - 时从 stdin 读取。--summary 可指定会话列表中的可读摘要，省略时沿用消息数组拼接结果。创建时默认 flowStatus=PROCESSING。",
 		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID := mustGetFlag(cmd, "conversation-id")
@@ -7384,7 +7397,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 					return err
 				}
 			}
-			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			messages, err := readA2UIMessages(cmd)
 			if err != nil {
 				return err
 			}
@@ -7441,12 +7454,12 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并向群聊或单聊发送 A2UI 卡片",
-				UseWhen:      []string{"已准备 A2UI 消息数组，需要创建并发送 A2UI 卡片时"},
-				AvoidWhen:    []string{"创建 streaming 卡片或需要 @成员时使用 chat message send-card；只发送普通文本时使用 send 或 send-by-bot"},
+				UseWhen:      []string{"已准备 A2UI 初始消息数组，需要创建并发送 A2UI 卡片时"},
+				AvoidWhen:    []string{"只发送普通聊天消息、不创建卡片时使用 chat message send 或 chat message send-by-bot", "需要卡片内 @成员时，此入口不支持 @ 参数；明确要求 A2UI 时说明限制，不自动改发文本卡片"},
 				Examples:     []string{`dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array", Description: "非空 JSON 字符串数组；传 - 时从 stdin 读取"},
 				{Name: "summary", Property: "summary", Required: boolPtr(false), InterfaceType: "string"},
 				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "support-forward", Property: "supportForward", Required: boolPtr(false), InterfaceType: "boolean"},
@@ -7459,7 +7472,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
 	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", false, "允许转发 A2UI 卡片（默认不允许）")
-	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组，或 - 从 stdin 读取 (必填)")
 	chatMessageSendA2UICardCmd.Flags().String("summary", "", "会话列表中的可读摘要；省略时拼接卡片消息，显式传入时不能为空")
 	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
 	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
@@ -7570,7 +7583,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageUpdateA2UICardCmd := &cobra.Command{
 		Use:   "update-a2ui-card",
 		Short: "更新 A2UI 卡片内容和状态",
-		Long: `更新已发送的 A2UI 卡片。--content 必须是非空 JSON 字符串数组。
+		Long: `更新已发送的 A2UI 卡片。--content 必须是非空 JSON 字符串数组；传 - 时从 stdin 读取。
 --flow-status 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，兼容数字 1-9。`,
 		Example: `  dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]' --flow-status FINISH`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -7593,7 +7606,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 					return err
 				}
 			}
-			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			messages, err := readA2UIMessages(cmd)
 			if err != nil {
 				return err
 			}
@@ -7631,13 +7644,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新已发送 A2UI 卡片的内容和状态",
-				UseWhen:      []string{"已有 A2UI 卡片 bizId，需要更新 A2UI 消息数组和流转状态时"},
-				AvoidWhen:    []string{"更新 streaming 卡片时使用 chat message update-card；创建新 A2UI 卡片时使用 chat message send-a2ui-card"},
-				Examples:     []string{`dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\"}"]' --flow-status FINISH`},
+				UseWhen:      []string{"已有 A2UI 卡片 bizId，需要更新 A2UI 消息数组和流转状态，或在 Agent 执行中分批更新时"},
+				AvoidWhen: []string{
+					"更新由 chat message send-card 或 chat +messages-send-card 创建的流式文本卡片时，常规使用 chat +messages-update-card；需要底层原始响应、未公开参数，或由调用方自行管理确认与更新节奏时使用 chat message update-card",
+					"创建新 A2UI 卡片时使用 chat message send-a2ui-card",
+				},
+				Examples: []string{`dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\"}"]' --flow-status FINISH`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "biz-id", Property: "bizId", Required: boolPtr(true)},
-				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array", Description: "非空 JSON 字符串数组；传 - 时从 stdin 读取"},
 				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "flow-status", Property: "flowStatus", Required: boolPtr(true), InterfaceType: "string", Enum: []string{"PROCESSING", "INPUTTING", "FINISH", "EXECUTING", "ERROR", "ABORTED", "TIMEOUT", "CONFIRMING", "CONFIRMED", "1", "2", "3", "4", "5", "6", "7", "8", "9"}},
 			},
@@ -7646,7 +7662,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageUpdateA2UICardCmd.Flags().String("biz-id", "", "卡片业务 ID (必填)")
 	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("biz-id")
 	chatMessageUpdateA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
-	chatMessageUpdateA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	chatMessageUpdateA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组，或 - 从 stdin 读取 (必填)")
 	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("content")
 	chatMessageUpdateA2UICardCmd.Flags().String("flow-status", "", "A2UI 状态枚举或兼容数字 1-9 (必填)")
 	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("flow-status")
@@ -11072,6 +11088,7 @@ status 可选值:
 		Short: "发布群公告",
 		Long: `在指定群聊中发布群公告，正文为 Markdown 格式。
 支持标题、加粗、斜体、删除线、行内代码、链接、代码块、有序/无序/任务列表、表格、引用、分割线、图片、段落、换行。
+即时公告可传 --no-card 静默更新群公告，--must-read 设为新人必看。
 定时发布：传 --run-at 指定执行时间点，ISO-8601 格式（建议带时区偏移，不带时按北京时区处理）。`,
 		Example: `  dws chat group notice create --conversation-id <openConversationId> --content "今晚 22 点系统维护，请提前保存工作内容"
   dws chat group notice create --conversation-id <openConversationId> --content "# 重要通知\n请大家查收" --sticky --send-ding
@@ -11091,6 +11108,12 @@ status 可选值:
 			if v, _ := cmd.Flags().GetBool("send-ding"); v {
 				toolArgs["sendDing"] = true
 			}
+			if cmd.Flags().Changed("no-card") {
+				toolArgs["noCard"], _ = cmd.Flags().GetBool("no-card")
+			}
+			if cmd.Flags().Changed("must-read") {
+				toolArgs["mustRead"], _ = cmd.Flags().GetBool("must-read")
+			}
 			if v, _ := cmd.Flags().GetString("run-at"); v != "" {
 				toolArgs["scheduled"] = true
 				toolArgs["runAtText"] = v
@@ -11104,6 +11127,8 @@ status 可选值:
 	_ = chatGroupNoticeCreateCmd.MarkFlagRequired("content")
 	chatGroupNoticeCreateCmd.Flags().Bool("sticky", false, "是否吊顶置顶（默认 false）")
 	chatGroupNoticeCreateCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+	chatGroupNoticeCreateCmd.Flags().Bool("no-card", false, "仅发布公告，不发送群聊公告卡片")
+	chatGroupNoticeCreateCmd.Flags().Bool("must-read", false, "设为新人必看")
 	chatGroupNoticeCreateCmd.Flags().String("run-at", "", "定时发布时间 ISO-8601（如 2026-07-03T09:00:00+08:00，传入则定时发布）")
 	DeclareLeafMetadata(chatGroupNoticeCreateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
@@ -11126,7 +11151,7 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在指定群聊中发布群公告",
-				UseWhen:      []string{"需要在群聊里发布 Markdown 群公告，可选吊顶、DING 或定时发布时"},
+				UseWhen:      []string{"需要在群聊里发布 Markdown 群公告，可选静默发布、新人必看、吊顶、DING 或定时发布时"},
 				AvoidWhen:    []string{"修改已有群公告时使用 chat group notice edit"},
 				Examples:     []string{"dws chat group notice create --conversation-id <openConversationId> --content \"今晚维护\""},
 			},
@@ -11135,6 +11160,8 @@ status 可选值:
 				{Name: "content", Property: "content", Required: boolPtr(true)},
 				{Name: "run-at", Property: "runAtText", Required: boolPtr(false)},
 				{Name: "send-ding", Property: "sendDing", Required: boolPtr(false)},
+				{Name: "no-card", Property: "noCard", Required: boolPtr(false)},
+				{Name: "must-read", Property: "mustRead", Required: boolPtr(false)},
 				{Name: "sticky", Property: "sticky", Required: boolPtr(false)},
 			},
 		},
@@ -11143,7 +11170,7 @@ status 可选值:
 	chatGroupNoticeEditCmd := &cobra.Command{
 		Use:   "edit",
 		Short: "修改群公告",
-		Long:  `修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。`,
+		Long:  `修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。可传 --no-card 静默更新，--must-read 设置新人必看。`,
 		Example: `  dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content "更新后的公告内容"
   dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content "更新后的公告内容" --sticky --send-ding
   # 查询公告 ID: dws chat group notice list --conversation-id <openConversationId>`,
@@ -11162,6 +11189,12 @@ status 可选值:
 			if v, _ := cmd.Flags().GetBool("send-ding"); v {
 				toolArgs["sendDing"] = true
 			}
+			if cmd.Flags().Changed("no-card") {
+				toolArgs["noCard"], _ = cmd.Flags().GetBool("no-card")
+			}
+			if cmd.Flags().Changed("must-read") {
+				toolArgs["mustRead"], _ = cmd.Flags().GetBool("must-read")
+			}
 			return callMCPToolOnServer("im", "edit_group_notice", toolArgs)
 		},
 	}
@@ -11173,6 +11206,8 @@ status 可选值:
 	_ = chatGroupNoticeEditCmd.MarkFlagRequired("content")
 	chatGroupNoticeEditCmd.Flags().Bool("sticky", false, "是否吊顶置顶（不传按 false 处理）")
 	chatGroupNoticeEditCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+	chatGroupNoticeEditCmd.Flags().Bool("no-card", false, "仅更新公告，不发送群聊公告卡片")
+	chatGroupNoticeEditCmd.Flags().Bool("must-read", false, "设置新人必看，可传 false 关闭")
 	DeclareLeafMetadata(chatGroupNoticeEditCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -11194,7 +11229,7 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "修改指定群聊中的群公告",
-				UseWhen:      []string{"已有公告 dataId，需要替换群公告正文或调整吊顶/DING 状态时"},
+				UseWhen:      []string{"已有公告 dataId，需要替换群公告正文或调整静默发布、新人必看、吊顶/DING 状态时"},
 				AvoidWhen:    []string{"发布新公告时使用 chat group notice create"},
 				Examples:     []string{"dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content \"更新后的公告\""},
 			},
@@ -11203,6 +11238,8 @@ status 可选值:
 				{Name: "content", Property: "content", Required: boolPtr(true)},
 				{Name: "notice-id", Property: "dataId", Required: boolPtr(true)},
 				{Name: "send-ding", Property: "sendDing", Required: boolPtr(false)},
+				{Name: "no-card", Property: "noCard", Required: boolPtr(false)},
+				{Name: "must-read", Property: "mustRead", Required: boolPtr(false)},
 				{Name: "sticky", Property: "sticky", Required: boolPtr(false)},
 			},
 		},

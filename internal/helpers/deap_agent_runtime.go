@@ -63,6 +63,13 @@ type employeeTaskRecord struct {
 	Status         string    `json:"status"`
 	IdempotencyKey string    `json:"idempotencyKey"`
 	ReplyID        string    `json:"replyId,omitempty"`
+	BizID          string    `json:"bizId,omitempty"`
+	SurfaceID      string    `json:"surfaceId,omitempty"`
+	FlowStatus     string    `json:"flowStatus,omitempty"`
+	CardUpdates    int       `json:"cardUpdates,omitempty"`
+	CardCreatedAt  string    `json:"cardCreatedAt,omitempty"`
+	CardError      string    `json:"cardError,omitempty"`
+	CardErrorCode  string    `json:"cardErrorCode,omitempty"`
 	Execution      string    `json:"execution,omitempty"`
 	Delivery       string    `json:"delivery,omitempty"`
 	UpdatedAt      time.Time `json:"updatedAt"`
@@ -178,16 +185,17 @@ func employeeMachineCall(ctx context.Context, profile string, payload any, args 
 type employeeChatBody string
 
 type employeeRuntime struct {
-	cfg      digitalEmployeeAdapterConfig
-	dir      string
-	fwd      forwarder
-	mu       sync.Mutex
-	queues   map[string]chan employeeEvent
-	pending  map[string]int // 包含正在执行和等待投递收尾的任务；由 mu 保护。
-	wg       sync.WaitGroup
-	fatal    chan error
-	ctx      context.Context
-	feedback *employeeFeedback
+	cfg          digitalEmployeeAdapterConfig
+	dir          string
+	fwd          forwarder
+	mu           sync.Mutex
+	queues       map[string]chan employeeEvent
+	pending      map[string]int // 包含正在执行和等待投递收尾的任务；由 mu 保护。
+	wg           sync.WaitGroup
+	fatal        chan error
+	ctx          context.Context
+	feedback     *employeeFeedback
+	cardFailures map[string]int
 }
 
 func (r *employeeRuntime) audit(record employeeTaskRecord) error {
@@ -351,6 +359,17 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	defer func() { r.feedback.set(e, label, true) }()
 	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
 	defer cleanup()
+	_, control := parseConnectControlCommand(e.Content)
+	if fwd, ok := r.fwd.(progressForwarder); err == nil && ok && !control && r.cfg.ReplyMode == "a2ui" {
+		if err := r.processCard(e, &record, fwd, attachments...); err != nil {
+			return err
+		}
+		if err := r.finishRecord(e, record); err != nil {
+			return err
+		}
+		label = employeeTaskLabel(record)
+		return nil
+	}
 	var answer string
 	if err == nil {
 		answer, err = forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
@@ -403,6 +422,14 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 			record.Status = outcome
 		}
 	}
+	if err := r.finishRecord(e, record); err != nil {
+		return err
+	}
+	label = employeeTaskLabel(record)
+	return nil
+}
+
+func (r *employeeRuntime) finishRecord(e employeeEvent, record employeeTaskRecord) error {
 	record.UpdatedAt = time.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -412,7 +439,6 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	if err := writeEmployeeJSON(r.recordPath(e), record); err != nil {
 		return employeeTerminal("ledger_unavailable")
 	}
-	label = employeeTaskLabel(record)
 	return nil
 }
 
@@ -788,8 +814,12 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 		if json.Unmarshal(data, &record) != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		if record.Status == "accepted" || record.Status == "running" || record.Status == "sending" {
-			if record.Status == "sending" {
+		cardInterrupted := record.Status == "card_creating" || record.Status == "card_streaming" || record.Status == "card_updating"
+		if record.Status == "accepted" || record.Status == "running" || record.Status == "sending" || cardInterrupted {
+			if cardInterrupted {
+				record.Execution = "unknown"
+			}
+			if record.Status == "sending" || cardInterrupted {
 				record.Delivery = "unknown"
 			} else {
 				record.Execution = "unknown"

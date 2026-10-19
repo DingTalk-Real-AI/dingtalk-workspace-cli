@@ -263,7 +263,7 @@
         "replacement_tool_id": "aitable.create_sql_sheet_api_key",
         "parameters": []
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Scope SQL Sheet API Key creation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
     },
     {
@@ -284,7 +284,7 @@
         "replacement_tool_id": "aitable.list_sql_sheet_api_keys",
         "parameters": []
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Scope SQL Sheet API Key listing to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
     },
     {
@@ -305,7 +305,7 @@
         "replacement_tool_id": "aitable.revoke_sql_sheet_api_key",
         "parameters": []
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Scope SQL Sheet API Key revocation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
     }
   ]

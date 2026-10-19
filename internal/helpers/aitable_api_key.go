@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
@@ -83,25 +84,51 @@ var aitableAPIKeyRevokeSchema = json.RawMessage(`{
   "additionalProperties":false
 }`)
 
-func newAitableAPIKeyCommand() *cobra.Command {
-	group := newGroupCommand(&cobra.Command{Use: "api-key", Short: "管理 SQL Sheet API Key", RunE: groupRunE})
-	group.AddCommand(newAitableAPIKeyCreateCommand(), newAitableAPIKeyListCommand(), newAitableAPIKeyRevokeCommand())
-	return group
+// newAitableAPIKeyCommands mounts the primary and legacy paths from the same
+// declarations. Each leaf owns its flags; only the primary publishes an identity.
+// Only the legacy navigation group is deprecated, keeping leaf calls warning-free.
+func newAitableAPIKeyCommands() (*cobra.Command, *cobra.Command) {
+	supabase := newGroupCommand(&cobra.Command{Use: "supabase", Short: "Supabase 兼容接口", RunE: groupRunE})
+	primaryGroup := newGroupCommand(&cobra.Command{Use: "api-key", Short: "管理 SQL Sheet API Key", RunE: groupRunE})
+	legacyGroup := newGroupCommand(&cobra.Command{
+		Use:        "api-key",
+		Short:      "管理 SQL Sheet API Key",
+		Long:       "SQL Sheet API Key 管理已移至 dws aitable supabase api-key。原有 create、list、revoke 命令保持兼容。",
+		Deprecated: "请使用 dws aitable supabase api-key。",
+		RunE:       groupRunE,
+	})
+	for _, spec := range []LeafSpec{aitableAPIKeyCreateSpec(), aitableAPIKeyListSpec(), aitableAPIKeyRevokeSpec()} {
+		primary := NewLeafCommand(spec)
+		legacySpec := spec
+		// The legacy leaf keeps execution declarations; Agent metadata resolves via the primary identity.
+		legacySpec.Contract = LeafContract{}
+		legacy := NewLeafCommand(legacySpec)
+		legacy.Hidden = true
+		cli.AnnotateRuntimeCompatibilityEquivalence(primary, legacy, cli.RuntimeCompatibilityEquivalence{
+			ID:       "aitable." + spec.Tool + ".legacy-api-key",
+			Reason:   "Approved command_move: both paths share the same LeafSpec flags, constraints, safety, validation and result call; only discovery visibility and identity ownership differ.",
+			Reviewed: true,
+		})
+		primaryGroup.AddCommand(primary)
+		legacyGroup.AddCommand(legacy)
+	}
+	supabase.AddCommand(primaryGroup)
+	return supabase, legacyGroup
 }
 
-func newAitableAPIKeyCreateCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
+func aitableAPIKeyCreateSpec() LeafSpec {
+	return LeafSpec{
 		Use:           "create",
 		Short:         "创建 SQL Sheet API Key",
-		Long:          "为指定 Base 创建 SQL Sheet API Key，要求管理权限（MANAGER）。完整凭据仅创建时返回一次；已有有效凭据时创建失败。结果未知时先用 api-key list 核对，不自动重试。",
-		Example:       "dws aitable api-key create --base-id <BASE_ID> --format json",
+		Long:          "为指定 Base 创建 SQL Sheet API Key，要求管理权限（MANAGER）。完整凭据仅创建时返回一次；已有有效凭据时创建失败。结果未知时先用 supabase api-key list 核对，不自动重试。",
+		Example:       "dws aitable supabase api-key create --base-id <BASE_ID> --format json",
 		Server:        "aitable",
 		Tool:          "create_sql_sheet_api_key",
 		Flags:         []LeafFlag{{Name: "base-id", Bind: "baseId", Required: true, Trim: true, Usage: "AI 表格 Base ID"}},
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"},
 		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "create_sql_sheet_api_key", CanonicalPath: "aitable.create_sql_sheet_api_key", CLIPath: "aitable api-key create", PrimaryCLIPath: "aitable api-key create"},
+			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "create_sql_sheet_api_key", CanonicalPath: "aitable.create_sql_sheet_api_key", CLIPath: "aitable supabase api-key create", PrimaryCLIPath: "aitable supabase api-key create", Aliases: []string{"aitable api-key create"}},
 			Description: "为指定 Base 创建 SQL Sheet API Key，完整凭据仅创建时返回一次。",
 			Interface:   aitableMCPInterface("create_sql_sheet_api_key"),
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
@@ -113,27 +140,27 @@ func newAitableAPIKeyCreateCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建 SQL Sheet API Key。",
 				UseWhen:      []string{"用户需要为指定 Base 创建 SQL Sheet 访问凭据时"},
-				AvoidWhen:    []string{"查询有效凭据用 api-key list；替换凭据须先确认并撤销旧 keyId"},
-				Examples:     []string{"dws aitable api-key create --base-id <BASE_ID> --format json"},
+				AvoidWhen:    []string{"查询有效凭据用 supabase api-key list；替换凭据须先确认并撤销旧 keyId"},
+				Examples:     []string{"dws aitable supabase api-key create --base-id <BASE_ID> --format json"},
 			},
 		},
 		ResultCall: callAitableAPIKeyResult,
-	})
+	}
 }
 
-func newAitableAPIKeyListCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
+func aitableAPIKeyListSpec() LeafSpec {
+	return LeafSpec{
 		Use:           "list",
 		Short:         "查询 SQL Sheet API Key 元数据",
 		Long:          "查询指定 Base 的有效 SQL Sheet API Key，要求管理权限（MANAGER）。返回 0 或 1 个凭据的元数据，不返回完整凭据。",
-		Example:       "dws aitable api-key list --base-id <BASE_ID> --format json",
+		Example:       "dws aitable supabase api-key list --base-id <BASE_ID> --format json",
 		Server:        "aitable",
 		Tool:          "list_sql_sheet_api_keys",
 		Flags:         []LeafFlag{{Name: "base-id", Bind: "baseId", Required: true, Trim: true, Usage: "AI 表格 Base ID"}},
 		Safety:        aitableSafetyRead(),
 		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "list_sql_sheet_api_keys", CanonicalPath: "aitable.list_sql_sheet_api_keys", CLIPath: "aitable api-key list", PrimaryCLIPath: "aitable api-key list"},
+			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "list_sql_sheet_api_keys", CanonicalPath: "aitable.list_sql_sheet_api_keys", CLIPath: "aitable supabase api-key list", PrimaryCLIPath: "aitable supabase api-key list", Aliases: []string{"aitable api-key list"}},
 			Description: "查询指定 Base 的有效 SQL Sheet API Key 元数据。",
 			Interface:   aitableMCPInterface("list_sql_sheet_api_keys"),
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
@@ -144,20 +171,20 @@ func newAitableAPIKeyListCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询 SQL Sheet API Key 元数据。",
 				UseWhen:      []string{"用户需要查看有效凭据或核对创建状态时"},
-				AvoidWhen:    []string{"创建凭据用 api-key create；查询表内记录用 record query"},
-				Examples:     []string{"dws aitable api-key list --base-id <BASE_ID> --format json"},
+				AvoidWhen:    []string{"创建凭据用 supabase api-key create；查询表内记录用 record query"},
+				Examples:     []string{"dws aitable supabase api-key list --base-id <BASE_ID> --format json"},
 			},
 		},
 		ResultCall: callAitableAPIKeyResult,
-	})
+	}
 }
 
-func newAitableAPIKeyRevokeCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
+func aitableAPIKeyRevokeSpec() LeafSpec {
+	return LeafSpec{
 		Use:     "revoke",
 		Short:   "撤销 SQL Sheet API Key",
 		Long:    "撤销指定 Base 的 SQL Sheet API Key，要求管理权限（MANAGER）。keyId 使用同一 Base 创建或查询返回的标识；不存在或已经撤销时同样成功。",
-		Example: "dws aitable api-key revoke --base-id <BASE_ID> --key-id <KEY_ID> --format json",
+		Example: "dws aitable supabase api-key revoke --base-id <BASE_ID> --key-id <KEY_ID> --format json",
 		Server:  "aitable",
 		Tool:    "revoke_sql_sheet_api_key",
 		Flags: []LeafFlag{{Name: "base-id", Bind: "baseId", Required: true, Trim: true, Usage: "AI 表格 Base ID"},
@@ -166,7 +193,7 @@ func newAitableAPIKeyRevokeCommand() *cobra.Command {
 		Safety:        contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
 		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "revoke_sql_sheet_api_key", CanonicalPath: "aitable.revoke_sql_sheet_api_key", CLIPath: "aitable api-key revoke", PrimaryCLIPath: "aitable api-key revoke"},
+			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "revoke_sql_sheet_api_key", CanonicalPath: "aitable.revoke_sql_sheet_api_key", CLIPath: "aitable supabase api-key revoke", PrimaryCLIPath: "aitable supabase api-key revoke", Aliases: []string{"aitable api-key revoke"}},
 			Description: "撤销指定 Base 的 SQL Sheet API Key，不存在或已撤销时同样成功。",
 			Interface:   aitableMCPInterface("revoke_sql_sheet_api_key"),
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
@@ -177,13 +204,13 @@ func newAitableAPIKeyRevokeCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "撤销 SQL Sheet API Key。",
 				UseWhen:      []string{"用户需要撤销指定 Base 的访问凭据时"},
-				AvoidWhen:    []string{"查询有效凭据用 api-key list；创建凭据用 api-key create"},
-				Examples:     []string{"dws aitable api-key revoke --base-id <BASE_ID> --key-id <KEY_ID> --format json"},
+				AvoidWhen:    []string{"查询有效凭据用 supabase api-key list；创建凭据用 supabase api-key create"},
+				Examples:     []string{"dws aitable supabase api-key revoke --base-id <BASE_ID> --key-id <KEY_ID> --format json"},
 			},
 		},
 		Validate:   validateAitableAPIKeyRevoke,
 		ResultCall: callAitableAPIKeyResult,
-	})
+	}
 }
 
 func validateAitableAPIKeyRevoke(cmd *cobra.Command, _ []string) error {

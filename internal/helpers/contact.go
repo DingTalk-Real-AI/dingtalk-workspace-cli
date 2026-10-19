@@ -1799,6 +1799,84 @@ user_contact_friend_added）等业务消息体中。
 		},
 	})
 
+	contactUserGetOpenDingtalkIdCmd := &cobra.Command{
+		Use:     "get-open-dingtalk-id",
+		Aliases: []string{"get-open-id"},
+		Short:   "按手机号或钉钉号获取 openDingTalkId",
+		Long: `根据手机号或钉钉号（dingtalkId）查询组织内用户，返回匹配用户的 openDingTalkId（开放钉钉号ID，与查询操作人成对）和昵称列表。
+
+输入自动识别：11 位纯数字按手机号匹配，其他按钉钉号匹配。
+该能力仅对灰度名单内的企业开放，未开通企业的调用会被明确拒绝（ability_not_full_open），
+且受频次限制（单用户每日上限、企业每日上限）。`,
+		Example: `  dws contact user get-open-dingtalk-id --keyword 13800138000
+  dws contact user get-open-id --keyword zhangsan  # 别名`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "keyword"); err != nil {
+				return err
+			}
+			keyword := strings.TrimSpace(mustGetFlag(cmd, "keyword"))
+			if keyword == "" {
+				return apperrors.NewValidation("--keyword 不能为空")
+			}
+			toolArgs := map[string]any{"keyword": keyword}
+			if deps.Caller.DryRun() {
+				return output.StoreResult(cmd.Context(), output.Success(map[string]any{
+					"dry_run": true, "executed": false,
+					"tool": "get_open_dingtalk_id", "arguments": toolArgs,
+				}, output.WithDryRun()))
+			}
+			text, err := callMCPToolReturnText(cmd.Context(), "get_open_dingtalk_id", toolArgs)
+			if err != nil {
+				return err
+			}
+			var body map[string]any
+			if err := unmarshalJSONUseNumber(text, &body); err != nil || body == nil {
+				return &CLIError{Code: CodeMCPToolError, Message: "服务端返回非 JSON 对象或 null"}
+			}
+			return output.StoreResult(cmd.Context(), output.Success(body))
+		},
+	}
+	DeclareLeafMetadata(contactUserGetOpenDingtalkIdCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_open_dingtalk_id",
+				CanonicalPath:  "contact.get_open_dingtalk_id",
+				CLIPath:        "contact user get-open-dingtalk-id",
+				PrimaryCLIPath: "contact user get-open-dingtalk-id",
+				Aliases:        []string{"contact user get-open-id"},
+			},
+			Description: "按手机号或钉钉号获取用户 openDingTalkId",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_open_dingtalk_id"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"查询业务结果或未执行的请求预览","oneOf":[{"type":"object","description":"按手机号/钉钉号查询 openDingTalkId 结果","properties":{"result":{"type":"object","description":"查询结果，包含匹配的用户列表","properties":{"userList":{"type":"array","description":"匹配的用户列表","items":{"type":"object","properties":{"openDingTalkId":{"type":"string","description":"开放钉钉号ID（与查询操作人成对）"},"nick":{"type":"string","description":"用户昵称"},"exclusive":{"type":"boolean","description":"是否专属（企业）账号"},"exclusiveOrgName":{"type":"string","description":"专属账号所属企业名，非专属账号不返回该字段"},"isFriend":{"type":"boolean","description":"与操作人是否为好友"}}}}}},"success":{"type":"boolean","description":"是否查询成功"},"errorCode":{"type":"string","description":"错误码，如 ability_not_full_open（企业未开通灰度）、CONCURRENT_ERROR（超出频控）"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true,"not":{"required":["dry_run"]}},{"type":"object","description":"仅预览查询请求，不返回用户查询结果","properties":{"dry_run":{"type":"boolean","const":true,"description":"仅预览，未执行远程查询"},"executed":{"type":"boolean","const":false,"description":"远程请求未执行"},"tool":{"type":"string","const":"get_open_dingtalk_id","description":"待调用的查询工具"},"arguments":{"type":"object","description":"待提交的查询参数","properties":{"keyword":{"type":"string","minLength":1,"description":"手机号或钉钉号"}},"required":["keyword"],"additionalProperties":false}},"required":["dry_run","executed","tool","arguments"],"additionalProperties":false}]}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按手机号或钉钉号获取用户 openDingTalkId",
+				UseWhen:      []string{"已知手机号或钉钉号（dingtalkId），需要获取其 openDingTalkId（加好友、好友事件等开放平台场景的身份键）时；输入自动识别：11 位数字按手机号，其他按钉钉号"},
+				AvoidWhen: []string{
+					"按姓名找人请用 contact user search",
+					"已有 openDingTalkId 需要反查 userId 请用 contact user get-by-open-dingtalk-id",
+					"已有 userId 需要详情请用 contact user get",
+				},
+				Examples: []string{"dws contact user get-open-dingtalk-id --keyword 13800138000 --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "keyword", Property: "keyword", Required: boolPtr(true)},
+			},
+		},
+	})
+
 	contactUserGetCmd := &cobra.Command{
 		Use:   "get",
 		Short: "批量获取用户详情（组织管理信息）",
@@ -2868,6 +2946,7 @@ contact user profile fields 获取可用字段列表。
 	contactUserGetByOpenDingtalkIdCmd.Flags().String("openDingtalkId", "", "--id 的别名")
 	_ = contactUserGetByOpenDingtalkIdCmd.Flags().MarkHidden("open-dingtalk-id")
 	_ = contactUserGetByOpenDingtalkIdCmd.Flags().MarkHidden("openDingtalkId")
+	contactUserGetOpenDingtalkIdCmd.Flags().String("keyword", "", "手机号（11位数字）或钉钉号 (必填)")
 	contactUserGetCmd.Flags().String("ids", "", "用户 ID 列表 (必填)")
 	contactUserGetCmd.Flags().String("user-id", "", "--ids 的别名")
 	contactUserGetCmd.Flags().String("user-ids", "", "--ids 的别名")
@@ -2876,7 +2955,7 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserGetCmd.Flags().MarkHidden("user-ids")
 	_ = contactUserGetCmd.Flags().MarkHidden("userid")
 	userCmd.AddCommand(
-		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetByDingtalkIdCmd, contactUserGetByOpenDingtalkIdCmd, contactUserGetCmd,
+		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetByDingtalkIdCmd, contactUserGetByOpenDingtalkIdCmd, contactUserGetOpenDingtalkIdCmd, contactUserGetCmd,
 		contactUserInviteCmd,        // 邀请员工加入企业
 		contactUserUpdateCmd,        // 修改员工信息
 		contactUserUpdateSelfCmd,    // 更新当前用户自己的 profile 信息

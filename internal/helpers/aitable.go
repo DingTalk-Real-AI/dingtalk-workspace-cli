@@ -2425,7 +2425,7 @@ func newAitableCommand() *cobra.Command {
   dws aitable attachment [upload|remove]                                                附件管理
   dws aitable template   search                                                         模板搜索
   dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理
-  dws aitable api-key    [create|list|revoke]                                          SQL Sheet 访问密钥管理`,
+  dws aitable supabase api-key [create|list|revoke]                                          SQL Sheet 访问密钥管理`,
 		RunE:                       groupRunE,
 		SuggestionsMinimumDistance: 2, // Enable "Did you mean ...?" for typos
 	})
@@ -10714,7 +10714,8 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	infoAliasCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	root.AddCommand(infoAliasCmd)
 	root.AddCommand(newAitablePsqlCommand())
-	root.AddCommand(newAitableAPIKeyCommand())
+	supabase, legacyAPIKey := newAitableAPIKeyCommands()
+	root.AddCommand(supabase, legacyAPIKey)
 	// hint: dws aitable doc search → dws aitable base search
 	root.AddCommand(hintSubCmd("doc", "use: dws aitable base search --query <关键词>"))
 	// NOTE: "create" and "info" are registered as real alias commands above

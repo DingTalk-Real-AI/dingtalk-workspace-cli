@@ -1,6 +1,6 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 收发/搜索消息、建群、群治理、Bot/Webhook、文件，或仅限 IM 的消息谓词筛选。跨源主题/行为轨迹走 dingtalk-aisearch；DING/班级群走 dingtalk-misc；邮件走 dingtalk-mail。
+description: 钉钉群聊与消息。Use when 收发/搜索消息、建群、群治理、Bot/Webhook、文件、AI/A2UI 卡片流式，或仅限 IM 的消息谓词筛选。跨源主题/行为轨迹走 dingtalk-aisearch；DING/班级群走 dingtalk-misc；邮件走 dingtalk-mail。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -77,6 +77,7 @@ metadata:
 
 ## 写生命周期
 
+- 钉钉回复任务：接入方默认先发 A2UI 占位、执行中更新；主动发送默认完整投递。按[占位与流式](references/card/a2ui.md)执行。
 - 多步骤写先校验目标、限制、内容、确认，再沿稳定 ID 串行执行并验证；不截断或换目标。临时资源保留 ID/阶段，失败仅做已授权清理。
 
 ## 上下文预算
@@ -93,11 +94,11 @@ metadata:
 | 消息 | [查询](references/chat/message-query.md) / [动作](references/chat/message-actions.md) / [资源](references/chat/message-media.md) |
 | 群 | [读取](references/chat/group-discovery.md) / [治理](references/chat/group-admin.md) |
 | 会话/Bot | [会话](references/chat/chat-conversation.md) / [Bot](references/chat/chat-bot.md) |
-| 组合/话题/表情/卡片 | [组合](references/01-messaging.md) / [话题](references/chat/thread.md) / [表情](references/chat-emoji-list.md) / [卡片/A2UI](references/card/schema.md) |
+| 组合/话题/表情/卡片 | [组合](references/01-messaging.md) / [话题](references/chat/thread.md) / [表情](references/chat-emoji-list.md) / [卡片/A2UI流式](references/card/schema.md) |
 | 结果/其他原子能力 | [contracts](references/contracts.md) / [chat](references/chat.md) |
 
 ## 错误最短路径
 
 1. 零命中/多候选：停止写并消歧，禁默认第一项。
-2. 参数/确认不明查 leaf Schema；Schema 不可用才查已知 leaf Help。`unknown flag` 用同 leaf Help 修正一次；`unknown command` 不查 Help：先用错误的明确 suggestion，再用已加载 Skill/reference 的明确兼容入口；无则报漂移并停，禁全 Catalog。
+2. 参数/确认及未知 flag/command：按上方最小 DWS 执行契约处理，禁全 Catalog。
 3. 仅 `retryable=true` 按原命令重试一次；API/internal/MCP、写后不一致或无重试性即停，不换 Shortcut/atomic。保留 Trace ID、已完成/待清理项并最终答复；`confirmation_required` 等用户确认，不补 `--yes`。

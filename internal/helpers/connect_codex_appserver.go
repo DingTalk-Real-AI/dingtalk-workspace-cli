@@ -97,6 +97,7 @@ func codexThreadStorePath(clientID string) string {
 func (f *codexAppServerForwarder) resetSession(convID string) {
 	if f.sessions != nil {
 		f.sessions.reset(convID)
+		f.sessions.reset(codexManagedConversationKey(convID))
 	}
 }
 
@@ -148,12 +149,29 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 	}
 
 	_ = state // held only for its per-conversation turn lock (see above)
+	managed := agentProgressSink(ctx) != nil
+	sessionKey := convID
+	if managed {
+		sessionKey = codexManagedConversationKey(convID)
+	}
+	params := func(threadID string) map[string]any {
+		p := f.threadParams(threadID)
+		if managed {
+			if threadID == "" {
+				p["developerInstructions"] = p["developerInstructions"].(string) + "\n\n" + codexManagedReplyContext
+			} else {
+				// 沿用托管会话初始化说明；本轮员工策略继续由应用上下文维护。
+				delete(p, "developerInstructions")
+			}
+		}
+		return p
+	}
 	threadID := ""
 	if f.sessions != nil {
-		threadID = f.sessions.threadID(convID)
+		threadID = f.sessions.threadID(sessionKey)
 	}
 	if threadID != "" {
-		resumed, err := cli.resumeThread(ctx, f.threadParams(threadID))
+		resumed, err := cli.resumeThread(ctx, params(threadID))
 		if err != nil {
 			if f.developerInstructions != "" {
 				// 员工恢复失败不能悄悄丢掉上下文，保留映射，等待恢复或显式 /new。
@@ -163,23 +181,28 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 				fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
 			}
 			threadID = ""
-			f.sessions.setThreadID(convID, "")
+			f.sessions.setThreadID(sessionKey, "")
 		} else {
 			threadID = resumed
 		}
 	}
 	if threadID == "" {
-		started, err := cli.startThread(ctx, f.threadParams(""))
+		started, err := cli.startThread(ctx, params(""))
 		if err != nil {
 			return "", err
 		}
 		threadID = started
 		if f.sessions != nil {
-			f.sessions.setThreadID(convID, threadID)
+			f.sessions.setThreadID(sessionKey, threadID)
 		}
 	}
 
-	reply, err := cli.runTurnWithContext(ctx, threadID, text, attachments, onDelta, f.developerInstructions)
+	instructions := f.developerInstructions
+	if managed && instructions != "" {
+		// 保留公共员工策略更新，同时明确当前回合由运行时独占卡片投递。
+		instructions += "\n\n" + codexManagedReplyContext
+	}
+	reply, err := cli.runTurnWithContext(ctx, threadID, text, attachments, onDelta, instructions)
 	if err != nil {
 		return "", err
 	}
@@ -496,6 +519,7 @@ func (c *codexAppServerClient) runTurnWithContext(ctx context.Context, threadID,
 	}
 
 	var acc strings.Builder
+	progress := codexPublicProgress{emit: agentProgressSink(ctx)}
 	for {
 		msg, err := c.next(ctx)
 		if err != nil {
@@ -508,6 +532,7 @@ func (c *codexAppServerClient) runTurnWithContext(ctx context.Context, threadID,
 		if msg.ID != nil && *msg.ID == id && msg.Error != nil {
 			return "", fmt.Errorf("turn/start: %s", msg.Error.Message)
 		}
+		progress.handle(msg.Method, msg.Params, threadID)
 		switch msg.Method {
 		case "item/agentMessage/delta":
 			var p struct {
@@ -533,6 +558,9 @@ func (c *codexAppServerClient) runTurnWithContext(ctx context.Context, threadID,
 					errMsg = "turn failed"
 				}
 				return "", fmt.Errorf("%s", errMsg)
+			}
+			if progress.emit != nil && status != "completed" {
+				return "", fmt.Errorf("agent turn did not complete")
 			}
 			if final == "" {
 				final = strings.TrimSpace(acc.String())
@@ -586,6 +614,9 @@ func (c *codexAppServerClient) waitResponse(ctx context.Context, id int) (json.R
 }
 
 func (c *codexAppServerClient) next(ctx context.Context) (codexRPCMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return codexRPCMessage{}, err
+	}
 	// The read loop reports EOF before closing msgs, so when the process
 	// exits right after its last frame both channels are ready and select
 	// would pick one at random — drain buffered frames (e.g. the final

@@ -1592,6 +1592,7 @@ func (p *OAuthProvider) doCheckCLIAuthEnabledAttempt(ctx context.Context, access
 	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
 		req.Header.Set("x-dws-channel", ch)
 	}
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 	slog.Debug("auth.cli_auth_enabled.request",
 		"attempt", attempt,
@@ -1651,6 +1652,21 @@ func applyCLIAuthTraceHeaders(req *http.Request, traceID string) {
 	req.Header.Set("X-Dingtalk-Trace-Id", traceID)
 }
 
+// applyCLIAuthAgentCodeHeader sets x-dingtalk-dws-agent-code when a driving
+// agent host is detected, so CLI auth management endpoints can attribute the
+// request to the agent. Only detected values are sent — never synthesized
+// (same contract as resolveIdentityHeaders).
+//
+// Intentionally omits x-dws-agent-instance-id: these endpoints authenticate
+// via x-user-access-token and do not participate in PAT grant checks, so the
+// per-(machine × agent_code) instance id is not required here.
+func applyCLIAuthAgentCodeHeader(req *http.Request) {
+	agentCode, _ := DetectAgentCode()
+	if agentCode != "" {
+		req.Header.Set("x-dingtalk-dws-agent-code", agentCode)
+	}
+}
+
 func cliAuthResponseTraceID(headers http.Header) string {
 	for _, key := range []string{
 		"EagleEye-TraceId",
@@ -1701,6 +1717,7 @@ func doGetSuperAdminsForLoginRegion(ctx context.Context, accessToken string, reg
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)
@@ -1757,6 +1774,7 @@ func doSendCliAuthApplyForLoginRegion(ctx context.Context, accessToken, adminSta
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)

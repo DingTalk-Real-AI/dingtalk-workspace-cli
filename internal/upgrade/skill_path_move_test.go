@@ -449,3 +449,63 @@ func assertNoCrossDeviceStage(t *testing.T, dst string) {
 		}
 	}
 }
+
+// Regression: a link entry sorted before a read-only sibling directory must
+// not make WalkDir skip that sibling (filepath.SkipDir on a non-directory
+// skips the remaining entries of the containing directory).
+func TestCrossPlatformCoverageLinkDoesNotSkipReadonlySibling(t *testing.T) {
+	makeFixture := func(t *testing.T) string {
+		t.Helper()
+		root := t.TempDir()
+		src := filepath.Join(root, "dingtalk-chat")
+		if err := os.MkdirAll(filepath.Join(src, "z-readonly"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("chat\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, "z-readonly", "guide.md"), []byte("guide\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(root, "link-target")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// "a-link" sorts before "z-readonly" so the old SkipDir path skipped it.
+		createTestDirLink(t, target, filepath.Join(src, "a-link"))
+		if err := os.Chmod(filepath.Join(src, "z-readonly"), 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { makeSkillPathTreeWritable(src) })
+		return src
+	}
+
+	t.Run("source removal preparation", func(t *testing.T) {
+		src := makeFixture(t)
+		if err := removePublishedSkillSource(src); err != nil {
+			t.Fatalf("removePublishedSkillSource = %v", err)
+		}
+		if _, err := os.Lstat(src); !os.IsNotExist(err) {
+			t.Fatalf("source must be removed: %v", err)
+		}
+	})
+
+	t.Run("failed staging cleanup", func(t *testing.T) {
+		src := makeFixture(t)
+		dst := filepath.Join(t.TempDir(), "backups", "dingtalk-chat")
+		forceCrossDeviceRename(t, src, dst)
+		originalCopy := skillPathCopy
+		testseam.Swap(t, &skillPathCopy, func(from, to string) error {
+			if err := originalCopy(from, to); err != nil {
+				return err
+			}
+			// The staged tree now also contains a link sorted before a
+			// read-only sibling directory.
+			return errors.New("copy boom")
+		})
+		if err := moveSkillPathRecoverably(src, dst); err == nil {
+			t.Fatal("expected cross-device move to fail")
+		}
+		assertNoCrossDeviceStage(t, dst)
+	})
+}

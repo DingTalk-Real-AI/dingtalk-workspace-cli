@@ -53,6 +53,7 @@ metadata:
 | "按 userId 查详情" | `dws contact user get --ids <userId1>,<userId2>,...`（多个并行） |
 | "完整手机号反查用户" | `dws contact user search-mobile --mobile <手机号>` |
 | "按开放钉钉号ID（openDingTalkId）取 userId" | `dws contact user get-by-open-dingtalk-id --id <openDingTalkId>` |
+| "按手机号或钉钉号查 openDingTalkId" | `dws contact user get-open-dingtalk-id --keyword <手机号|钉钉号>`（企业需在能力灰度名单内） |
 | "我的好友 / 好友列表 / 有哪些好友" | `dws contact +friend-list` |
 | "好友申请 / 谁加我 /  pending 好友请求" | `dws contact +friend-request-list` |
 | "加好友 / 发送好友申请 / 添加某人为好友" | `dws contact +friend-request-send --to <openDingTalkId>` |
@@ -119,7 +120,7 @@ metadata:
 
 **触发**：好友列表、好友申请、加好友、同意/拒绝申请、删除好友。
 
-1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。openDingTalkId 的来源：①好友域自身数据——`dws contact +friend-list --format json` / `dws contact +friend-request-list --format json` 返回项的 `openDingTalkId` 字段，或好友事件消息体（`user_contact_friend_request_received` 的 `src/dest_open_dingtalk_id`、`user_contact_friend_added` 的 `friend_open_dingtalk_id`）；②按姓名等关键词搜人——`dws contact user search --query "<姓名>" --format json`（search_contact_by_key_word）结果同时返回 `userId` 与 `openDingTalkId`。注意：`aisearch person` 与 `contact user get-by-dingtalk-id` 只返回 userId、**取不到 openDingTalkId**；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
+1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。openDingTalkId 的来源：①好友域自身数据——`dws contact +friend-list --format json` / `dws contact +friend-request-list --format json` 返回项的 `openDingTalkId` 字段，或好友事件消息体（`user_contact_friend_request_received` 的 `src/dest_open_dingtalk_id`、`user_contact_friend_added` 的 `friend_open_dingtalk_id`）；②按姓名等关键词搜人——`dws contact user search --query "<姓名>" --format json`（search_contact_by_key_word）结果同时返回 `userId` 与 `openDingTalkId`；③按手机号或钉钉号反查——`dws contact user get-open-dingtalk-id --keyword <手机号|钉钉号> --format json`（11 位数字自动按手机号匹配，其他按钉钉号；仅灰度名单内企业可用，未开通时返回 ability_not_full_open）。注意：`aisearch person` 只返回 userId、**取不到 openDingTalkId**；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
 2. **查好友（必须）**：`dws contact +friend-list --format json` 返回当前登录用户的好友名单（含昵称 nick、备注名 alias）、好友状态与分页信息；`dws contact +friend-request-list --format json` 返回收到的好友申请（含申请人昵称 nick、申请留言、状态）与 pending 数量。向用户展示列表时优先用 nick / alias 标识好友，openDingTalkId 非必要不展示；汇报申请 status 时必须翻译为中文状态（1=待接受、3=已成为好友），不要直接显示数字。
 3. **写操作（必须）**：发送申请 `dws contact +friend-request-send --to <openDingTalkId> --remark "<验证留言>" --format json`；同意 `dws contact +friend-request-accept --from <openDingTalkId> --format json`；拒绝 `dws contact +friend-request-reject --from <openDingTalkId> --format json`；删除好友 `dws contact +friend-remove --friend <openDingTalkId> --format json`（最后一条为不可逆高风险写操作，**必须先取得用户明确确认**）。
 
@@ -133,7 +134,7 @@ metadata:
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --query "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
 - 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
-- 好友命令（`+friend-*`）全部以 **openDingTalkId** 为身份键，不是 userId 也不是钉钉号；openDingTalkId 可从 `+friend-list` / `+friend-request-list` 响应、好友事件消息体，或 `contact user search`（按关键词搜人，同时返回 userId 与 openDingTalkId）取得；`aisearch person` / `get-by-dingtalk-id` 只返回 userId、取不到 openDingTalkId。
+- 好友命令（`+friend-*`）全部以 **openDingTalkId** 为身份键，不是 userId 也不是钉钉号；openDingTalkId 可从 `+friend-list` / `+friend-request-list` 响应、好友事件消息体，或 `contact user search`（按关键词搜人，同时返回 userId 与 openDingTalkId）取得；`aisearch person` 只返回 userId、取不到 openDingTalkId。
 - `+friend-remove` 为不可逆高风险写操作，执行前**必须**向用户展示目标 openDingTalkId 并获取明确确认；确认后才可加 `--yes`。
 
 ## 跨产品协作

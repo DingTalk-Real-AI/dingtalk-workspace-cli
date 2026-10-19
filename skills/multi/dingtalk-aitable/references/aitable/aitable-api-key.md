@@ -1,14 +1,16 @@
 # SQL Sheet API Key 管理
 
-`dws aitable api-key ...` 管理指定 Base 的 SQL Sheet 访问凭据，使用当前登录用户的身份。
+`dws aitable supabase api-key ...` 管理指定 Base 的 SQL Sheet 访问凭据，使用当前登录用户的身份。此处 Supabase 指 AI 表格提供的兼容接口。
+
+旧路径 `dws aitable api-key ...` 继续兼容，参数和返回结果相同；新接入使用上述路径。
 
 ## 命令
 
 | 意图 | 命令 | 关键参数 |
 |---|---|---|
-| 创建访问凭据 | `api-key create` | `--base-id`；确认后再追加 `--yes` |
-| 查询有效凭据 | `api-key list` | `--base-id` |
-| 撤销指定凭据 | `api-key revoke` | `--base-id --key-id`；确认后再追加 `--yes` |
+| 创建访问凭据 | `supabase api-key create` | `--base-id`；确认后再追加 `--yes` |
+| 查询有效凭据 | `supabase api-key list` | `--base-id` |
+| 撤销指定凭据 | `supabase api-key revoke` | `--base-id --key-id`；确认后再追加 `--yes` |
 
 三个命令均要求 Base 的管理权限（MANAGER），每次选择一个 profile。使用 `--dry-run` 预览请求；预览不调用远端服务。
 

@@ -236,7 +236,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | 自动化工作流 | [workflow](references/aitable/aitable-workflow.md) |
 | 普通角色或高级权限 | [advperm](references/aitable/aitable-advperm.md) |
 | 数据源接入、同步管理、sourceConfig 构造或审批数据同步 | [datasource](references/aitable/aitable-datasource.md) |
-| 访问密钥创建、查询或撤销 | [api-key](references/aitable/aitable-api-key.md) |
+| Supabase 访问密钥创建、查询或撤销 | [supabase api-key](references/aitable/aitable-api-key.md) |
 | SQL、PostgreSQL、SELECT 或同 Base 多表 JOIN | [psql](references/aitable/aitable-psql.md) |
 | 产品边界不明确 | [intent-guide](references/intent-guide.md) |
 | 只有上述 Reference 仍无法定位的低频原子能力 | [aitable.md](references/aitable.md) 的对应章节 |

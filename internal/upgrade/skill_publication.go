@@ -244,6 +244,13 @@ func fingerprintSkillPathInto(h hash.Hash, path string) error {
 	writeFingerprintField(h, info.Mode().Type().String())
 	writeFingerprintField(h, info.Mode().Perm().String())
 	switch {
+	case isSkillPathLink(info.Mode()):
+		target, err := skillPathReadlink(path)
+		if err != nil {
+			return err
+		}
+		writeFingerprintField(h, target)
+		return nil
 	case info.IsDir():
 		entries, err := skillPathReadDir(path)
 		if err != nil {
@@ -257,13 +264,6 @@ func fingerprintSkillPathInto(h hash.Hash, path string) error {
 				return err
 			}
 		}
-		return nil
-	case info.Mode()&os.ModeSymlink != 0:
-		target, err := skillPathReadlink(path)
-		if err != nil {
-			return err
-		}
-		writeFingerprintField(h, target)
 		return nil
 	case info.Mode().IsRegular():
 		digest, err := skillPathFileDigest(path)
@@ -281,4 +281,14 @@ func fingerprintSkillPathInto(h hash.Hash, path string) error {
 func writeFingerprintField(h hash.Hash, value string) {
 	_, _ = fmt.Fprintf(h, "%d:", len(value))
 	_, _ = h.Write([]byte(value))
+}
+
+// SkillPathFileIdentity reports a stable file identity across renames for supported platforms.
+func SkillPathFileIdentity(path string) string {
+	return skillPathFileIdentity(path)
+}
+
+// SkillPathIdentityProven proves that actual matches the recorded identity of expected.
+func SkillPathIdentityProven(expected, actual os.FileInfo, expectedFileID, actualFileID string) bool {
+	return skillPathIdentityProven(expected, actual, expectedFileID, actualFileID)
 }

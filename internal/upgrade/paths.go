@@ -153,6 +153,8 @@ var (
 	upgradeStat                        = os.Stat
 	upgradeLstat                       = os.Lstat
 	upgradeSymlink                     = os.Symlink
+	upgradeCreateSkillLink             = createUpgradeSkillLink
+	upgradeReadlink                    = os.Readlink
 	upgradeRel                         = filepath.Rel
 	upgradeGetenv                      = os.Getenv
 	upgradeBuildProvenance             = skillprovenance.Build
@@ -801,8 +803,8 @@ func skillRootDetectedBase(root resolvedSkillRoot) bool {
 }
 
 func samePhysicalSkillRoot(left, right string) bool {
-	leftReal, leftErr := upgradeEvalSymlinks(left)
-	rightReal, rightErr := upgradeEvalSymlinks(right)
+	leftReal, leftErr := upgradeResolvePhysicalSkillRoot(left)
+	rightReal, rightErr := upgradeResolvePhysicalSkillRoot(right)
 	if leftErr != nil || rightErr != nil {
 		return false
 	}
@@ -857,7 +859,7 @@ func stageLinkedSkillSet(destBase, canonicalBase, prefix string, names []string)
 			return stageRoot, nil, fmt.Errorf("计算 Skill 相对链接失败 %s: %w", target, relErr)
 		}
 		stagedPath := filepath.Join(stageRoot, name)
-		if linkErr := upgradeSymlink(relTarget, stagedPath); linkErr != nil {
+		if linkErr := upgradeCreateSkillLink(realTarget, relTarget, stagedPath); linkErr != nil {
 			return stageRoot, nil, fmt.Errorf("创建 Skill 链接失败 %s -> %s: %w", stagedPath, relTarget, linkErr)
 		}
 		staged = append(staged, stagedSkillDir{staged: stagedPath, dest: filepath.Join(destBase, name)})
@@ -1121,7 +1123,7 @@ func managedMultiSkillVictims(baseDir string, managed ...map[string]bool) ([]str
 	}
 	victims := make([]string, 0)
 	for _, e := range entries {
-		if (!e.IsDir() && e.Type()&os.ModeSymlink == 0) || !isManagedMultiSkillDir(filepath.Join(baseDir, e.Name()), managed...) {
+		if !upgradeEntryIsDirLike(e) || !isManagedMultiSkillDir(filepath.Join(baseDir, e.Name()), managed...) {
 			continue
 		}
 		victims = append(victims, filepath.Join(baseDir, e.Name()))
@@ -1139,7 +1141,7 @@ func oppositeModeSkillVictims(destBase string, skillSet map[string]bool, managed
 		return nil, fmt.Errorf("读取技能目录失败 %s: %w", destBase, err)
 	}
 	for _, e := range entries {
-		if (!e.IsDir() && e.Type()&os.ModeSymlink == 0) || skillSet[e.Name()] || !isManagedMultiSkillDir(filepath.Join(destBase, e.Name()), managed...) {
+		if !upgradeEntryIsDirLike(e) || skillSet[e.Name()] || !isManagedMultiSkillDir(filepath.Join(destBase, e.Name()), managed...) {
 			continue
 		}
 		victims = append(victims, filepath.Join(destBase, e.Name()))
