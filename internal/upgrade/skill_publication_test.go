@@ -420,8 +420,22 @@ func TestCrossPlatformCoverageSkillPublicationFailureEdges(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := fingerprintSkillPath(dir); err != nil {
+			first, err := fingerprintSkillPath(dir)
+			if err != nil {
 				t.Fatal(err)
+			}
+			other := t.TempDir()
+			for _, name := range []string{"a", "b"} {
+				if err := os.WriteFile(filepath.Join(other, name), []byte(name), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			second, err := fingerprintSkillPath(other)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if first != second {
+				t.Fatalf("directory fingerprint depends on creation order: %x != %x", first, second)
 			}
 		})
 		t.Run("directory read", func(t *testing.T) {
