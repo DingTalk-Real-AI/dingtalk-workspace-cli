@@ -62,12 +62,11 @@ func newAuthProviderLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 <provider> 为登录提供方名称（如 ant）。DWS 服务端检查接入方配置并托管授权
 事务，CLI 只创建事务、把授权请求转交给接入方并兑换 DWS 登录态，不接触接入方
-密码，接入方 SDK 会话也不写入本地。
+密码，接入方 SDK 会话也不写入本地。服务地址使用系统统一的 MCP 配置。
 
 参数:
   --client-id/--client-secret  可选的自定义 DWS 应用凭据，必须成对非空，
                                随登录安全保存以便刷新，不改变全局应用配置；不传则由服务端托管
-  --mcp-url                    覆盖本次登录的 MCP 端点
   --login-timeout              登录超时秒数（默认 12 分钟）
 
 示例:
@@ -81,7 +80,6 @@ func newAuthProviderLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			return runAuthProviderLogin(cmd, patCaller, args[0])
 		},
 	}
-	cmd.Flags().String("mcp-url", "", "Override MCP base URL for this login")
 	cmd.Flags().Int("login-timeout", 0, "Login timeout seconds")
 	_ = cmd.Flags().MarkHidden("login-timeout")
 	return cmd
@@ -109,24 +107,6 @@ func runAuthProviderLogin(cmd *cobra.Command, caller edition.ToolCaller, provide
 		seconds = 12 * 60
 	}
 	base := authpkg.GetMCPBaseURL()
-	persistence := authLoginMCPUseDefault
-	if cmd.Flags().Changed("mcp-url") {
-		value, _ := cmd.Flags().GetString("mcp-url")
-		if strings.TrimSpace(value) == "" {
-			return apperrors.NewValidation("--mcp-url cannot be empty")
-		}
-		// Validate the original input before normalization; credentials/query must
-		// never be silently stripped from a provider endpoint configuration.
-		candidate := strings.TrimSpace(value)
-		if !strings.Contains(candidate, "://") {
-			candidate = "https://" + candidate
-		}
-		if err := authpkg.NewOIDCLoginProvider(provider, candidate, nil).Validate(); err != nil {
-			return err
-		}
-		base = strings.TrimRight(candidate, "/")
-		persistence = authLoginMCPUseExplicitOverride
-	}
 	if err := authpkg.NewOIDCLoginProvider(provider, base, nil).Validate(); err != nil {
 		return err
 	}
@@ -137,8 +117,6 @@ func runAuthProviderLogin(cmd *cobra.Command, caller edition.ToolCaller, provide
 	ctx, cancel := context.WithTimeout(cmd.Context(), time.Duration(seconds)*time.Second)
 	defer cancel()
 	configDir := defaultConfigDir()
-	restoreMCPBaseURL := authpkg.PushMCPBaseURLOverride(base)
-	defer restoreMCPBaseURL()
 	data, err := authProviderLogin(ctx, configDir, provider, base, caller, credentials)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -151,9 +129,6 @@ func runAuthProviderLogin(cmd *cobra.Command, caller edition.ToolCaller, provide
 	}
 	if data == nil || data.AccessToken == "" {
 		return apperrors.NewInternal("Provider login returned no token")
-	}
-	if err := persistAuthLoginMCPBaseURL(configDir, base, persistence); err != nil {
-		return apperrors.NewInternal("login profile saved but MCP endpoint could not be persisted")
 	}
 	ResetRuntimeTokenCache()
 	clearCompatCache()

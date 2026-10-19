@@ -24,13 +24,13 @@ func newAuthExchangePrepareCommand() *cobra.Command {
 业务保存原 state，将完整授权参数原样交给 IdP/SDK；取得 code 并核对返回 state 后，
 使用 auth token-exchange 兑换。code_verifier 只保存在服务端。
 本命令不执行 SDK 登录，不保存或切换本地身份，也不接受应用凭据。
+服务地址使用系统统一的 MCP 配置。
 --dry-run 仅检查参数，不创建事务。`,
 		Example:       "  dws auth exchange-prepare --provider ant --format json",
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "non_idempotent"},
 		Flags: []corecmd.FlagSpec{
 			{Name: "provider", Usage: "Portal 登记的身份源名称（如 ant）", MarkRequired: true},
-			{Name: "mcp-url", Usage: "覆盖本次请求的 MCP/Portal 地址（不修改全局配置）"},
 		},
 		PostMount: func(cmd *cobra.Command) { cmd.Args = cobra.NoArgs },
 		Validate:  func(cmd *cobra.Command, _ []string) error { _, err := oidcExchangeCommandProvider(cmd); return err },
@@ -66,7 +66,7 @@ func newAuthTokenExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 默认通过统一结果返回现有 TokenData，不保存凭证。--save 在线核验完整身份后保存，
 保留已有默认账号，输出保存结果而不回显 Token。首次保存可设为默认账号。
 自定义应用在 --save 时将密钥与 Token 一起安全保存，供后续刷新使用；不写入全局应用配置。
-保存的 Token 绑定本次 Portal 地址，后续刷新沿用该地址。
+服务地址使用系统统一的 MCP 配置；保存的 Token 绑定该地址，后续刷新沿用。
 code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 并取码，不自动重试。
 --dry-run 不读取 stdin、不联网、不保存。`,
 		Example:       "  dws auth token-exchange --provider ant --code-stdin --state <state> --format json\n  dws auth token-exchange --provider ant --code <code> --state <state> --save --format json",
@@ -78,7 +78,6 @@ code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 
 			{Name: "code-stdin", Kind: corecmd.KindBool, Usage: "从标准输入读取授权码，与 --code 二选一"},
 			{Name: "state", Usage: "exchange-prepare 返回的原始 state", MarkRequired: true},
 			{Name: "save", Kind: corecmd.KindBool, Usage: "核验身份并保存凭证，保留已有默认账号，不回显 Token"},
-			{Name: "mcp-url", Usage: "覆盖本次请求的 MCP/Portal 地址（不修改全局配置）"},
 		},
 		PostMount: func(cmd *cobra.Command) {
 			cmd.Args = cobra.NoArgs
@@ -129,9 +128,6 @@ code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 
 			if !ok {
 				return nil, apperrors.NewInternal("request-scoped identity lookup unavailable")
 			}
-			base := oidcExchangeCommandBaseURL(cmd)
-			restore := authpkg.PushMCPBaseURLOverride(base)
-			defer restore()
 			dir := defaultConfigDir()
 			data, err := p.ExchangeAndSave(ctx, dir, code, state, func(ctx context.Context, token, corp string) (authpkg.ManagedIdentity, error) {
 				result, err := tokenCaller.CallToolWithToken(ctx, token, "contact", "get_current_user_profile", nil)
@@ -172,21 +168,9 @@ func validateOIDCTokenExchangeCommand(cmd *cobra.Command, _ []string) error {
 	return p.ValidateExchange(code, state)
 }
 
-func oidcExchangeCommandBaseURL(cmd *cobra.Command) string {
-	if !cmd.Flags().Changed("mcp-url") {
-		return authpkg.GetMCPBaseURL()
-	}
-	base, _ := cmd.Flags().GetString("mcp-url")
-	base = strings.TrimSpace(base)
-	if base != "" && !strings.Contains(base, "://") {
-		base = "https://" + base
-	}
-	return strings.TrimRight(base, "/")
-}
-
 func oidcExchangeCommandProvider(cmd *cobra.Command) (*authpkg.OIDCLoginProvider, error) {
 	provider, _ := cmd.Flags().GetString("provider")
-	p := authpkg.NewOIDCLoginProvider(provider, oidcExchangeCommandBaseURL(cmd), nil)
+	p := authpkg.NewOIDCLoginProvider(provider, authpkg.GetMCPBaseURL(), nil)
 	id, secret := cmd.Flag("client-id"), cmd.Flag("client-secret")
 	idSet, secretSet := id != nil && id.Changed, secret != nil && secret.Changed
 	if cmd.Name() == "exchange-prepare" && (idSet || secretSet) {
@@ -212,7 +196,7 @@ func resetAuthOIDCExchangeInvocationFlags(cmd *cobra.Command) {
 	if !isAuthOIDCExchangeCommand(cmd) {
 		return
 	}
-	for _, name := range []string{"provider", "code", "code-stdin", "state", "save", "mcp-url"} {
+	for _, name := range []string{"provider", "code", "code-stdin", "state", "save"} {
 		if flag := cmd.Flags().Lookup(name); flag != nil {
 			_ = flag.Value.Set(flag.DefValue)
 			flag.Changed = false

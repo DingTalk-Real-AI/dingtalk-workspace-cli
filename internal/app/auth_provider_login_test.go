@@ -189,10 +189,10 @@ func TestCrossPlatformCoverageProviderLoginCLIRealHTTPPersistence(t *testing.T) 
 					}
 					json.NewEncoder(w).Encode(map[string]string{"code": "one-code", "state": state})
 				case "/cli/auth/oidc/exchange":
-					if (custom && (len(body) != 4 || body["client_id"] != "dws-app" || body["client_secret"] != "secret-custom")) || (!custom && len(body) != 2) {
+					if (custom && (len(body) != 5 || body["client_id"] != "dws-app" || body["client_secret"] != "secret-custom")) || (!custom && len(body) != 3) {
 						t.Error("exchange did not preserve optional credential pair")
 					}
-					if body["code"] != "one-code" || body["state"] != state {
+					if body["provider"] != provider || body["code"] != "one-code" || body["state"] != state {
 						t.Error("bad exchange")
 					}
 					json.NewEncoder(w).Encode(map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "ant-corp", "corpName": "Ant Organization", "clientId": "dws-app"})
@@ -213,7 +213,10 @@ func TestCrossPlatformCoverageProviderLoginCLIRealHTTPPersistence(t *testing.T) 
 				}}}
 			})
 			root, out, stderr := providerLoginRoot()
-			args := []string{"auth", "provider-login", provider, "--mcp-url", server.URL}
+			if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"auth", "provider-login", provider}
 			if custom {
 				args = append(args, "--client-id", "dws-app", "--client-secret", "secret-custom")
 			}
@@ -253,8 +256,8 @@ func TestCrossPlatformCoverageProviderLoginCLIRealHTTPPersistence(t *testing.T) 
 				t.Fatalf("normal login did not select the saved profile: %v", err)
 			}
 			base, err := os.ReadFile(filepath.Join(dir, "mcp_url"))
-			if err != nil || string(base) != server.URL {
-				t.Fatalf("mock MCP URL not persisted: %v", err)
+			if err != nil || string(base) != server.URL+"\n" {
+				t.Fatalf("configured MCP URL changed: %v", err)
 			}
 		})
 	}
@@ -278,8 +281,11 @@ func TestCrossPlatformCoverageProviderLoginProviderAvailabilityComesFromBackend(
 				io.WriteString(w, `{"error":{"code":"unsupported_provider","action":"stop"}}`)
 			}))
 			defer server.Close()
+			if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL), 0600); err != nil {
+				t.Fatal(err)
+			}
 			root, _, _ := providerLoginRoot()
-			root.SetArgs([]string{"auth", "provider-login", provider, "--mcp-url", server.URL})
+			root.SetArgs([]string{"auth", "provider-login", provider})
 			err := corecmd.ExecuteForTest(root)
 			var typed *apperrors.Error
 			if requests.Load() != 1 || !errors.As(err, &typed) || typed.Category != apperrors.CategoryAuth || !strings.Contains(err.Error(), provider) {

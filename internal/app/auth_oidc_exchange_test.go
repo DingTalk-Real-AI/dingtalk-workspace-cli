@@ -141,6 +141,9 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 				io.WriteString(w, `{"accessToken":"access-canary","refreshToken":"refresh-canary","expiresIn":3600,"corpId":"new-corp"}`)
 			}))
 			defer server.Close()
+			if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			root, out := splitOIDCRoot(t, caller)
 			args := []string{"auth", "token-exchange", "--provider", "ant", "--state", splitOIDCState, "--client-id", "dws-app", "--client-secret", "secret-canary"}
 			if scenario == "prepare" {
@@ -154,7 +157,6 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			if scenario == "save" || scenario == "save-fails" {
 				args = append(args, "--save")
 			}
-			args = append(args, "--mcp-url", server.URL)
 			err := runSplitOIDC(t, root, args...)
 			if scenario == "save-fails" {
 				if err == nil || strings.Contains(err.Error(), "access-canary") {
@@ -165,6 +167,9 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			}
 			if calls != 1 {
 				t.Fatal("command made extra portal requests")
+			}
+			if base, err := os.ReadFile(filepath.Join(dir, "mcp_url")); err != nil || string(base) != server.URL+"\n" {
+				t.Fatalf("exchange changed system MCP configuration: %v", err)
 			}
 			cfg, err := authpkg.LoadProfiles(dir)
 			if err != nil {
@@ -229,6 +234,8 @@ func TestCrossPlatformCoverageSplitOIDCPublicRootCleansOneTimeFlags(t *testing.T
 }
 
 func TestCrossPlatformCoverageSplitOIDCStdinBoundsAndPortalFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
 	for _, input := range []string{"", "\n", "code\n\n", "code\t", strings.Repeat("c", 8193), string([]byte{0xff})} {
 		root, _ := splitOIDCRoot(t, nil)
 		root.SetIn(strings.NewReader(input))
@@ -246,8 +253,11 @@ func TestCrossPlatformCoverageSplitOIDCStdinBoundsAndPortalFailure(t *testing.T)
 			w.WriteHeader(status)
 			io.WriteString(w, `{"error":{"code":"provider_mismatch","action":"restart_login","message":"code-canary"}}`)
 		}))
+		if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL), 0600); err != nil {
+			t.Fatal(err)
+		}
 		root, out := splitOIDCRoot(t, nil)
-		err := runSplitOIDC(t, root, "auth", "token-exchange", "--provider", "ant", "--code", "code-canary", "--state", splitOIDCState, "--mcp-url", server.URL)
+		err := runSplitOIDC(t, root, "auth", "token-exchange", "--provider", "ant", "--code", "code-canary", "--state", splitOIDCState)
 		server.Close()
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || !strings.Contains(typed.Hint, "exchange-prepare") || strings.Contains(err.Error()+out.String(), "code-canary") || calls != 1 {
@@ -260,6 +270,8 @@ func TestCrossPlatformCoverageSplitOIDCStdinCancellation(t *testing.T) {
 	for _, filePipe := range []bool{false, true} {
 		for _, deadline := range []bool{false, true} {
 			t.Run(fmt.Sprintf("file=%t/deadline=%t", filePipe, deadline), func(t *testing.T) {
+				dir := t.TempDir()
+				t.Setenv("DWS_CONFIG_DIR", dir)
 				var input io.ReadCloser
 				var writer io.WriteCloser
 				if filePipe {
@@ -288,12 +300,15 @@ func TestCrossPlatformCoverageSplitOIDCStdinCancellation(t *testing.T) {
 					w.WriteHeader(http.StatusInternalServerError)
 				}))
 				defer server.Close()
+				if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL), 0600); err != nil {
+					t.Fatal(err)
+				}
 				root, out := splitOIDCRoot(t, nil)
 				root.SetContext(ctx)
 				root.SetIn(reader)
 				result := make(chan error, 1)
 				go func() {
-					result <- runSplitOIDC(t, root, "auth", "token-exchange", "--provider", "ant", "--state", splitOIDCState, "--code-stdin", "--mcp-url", server.URL)
+					result <- runSplitOIDC(t, root, "auth", "token-exchange", "--provider", "ant", "--state", splitOIDCState, "--code-stdin")
 				}()
 				select {
 				case <-reader.started:
@@ -487,7 +502,10 @@ func TestCrossPlatformCoverageSplitOIDCPublicRootCredentialForwarding(t *testing
 			}
 			io.WriteString(w, `{"accessToken":"public-access","refreshToken":"public-refresh","expiresIn":3600,"corpId":"corp"}`)
 		}))
-		args := []string{"auth", "token-exchange", "--provider", "enterprise_acme", "--code", "code", "--state", splitOIDCState, "--mcp-url", server.URL, "--format", "json"}
+		if err := os.WriteFile(filepath.Join(defaultConfigDir(), "mcp_url"), []byte(server.URL), 0600); err != nil {
+			t.Fatal(err)
+		}
+		args := []string{"auth", "token-exchange", "--provider", "enterprise_acme", "--code", "code", "--state", splitOIDCState, "--format", "json"}
 		credentials := []string{"--client-id", "split-app", "--client-secret", "split-secret"}
 		if prefix {
 			args = append(credentials, args...)

@@ -1,6 +1,6 @@
 支持业务分步完成第三方登录：先执行 `dws auth exchange-prepare --provider ant` 获取服务端授权参数，再由业务调用 IdP/SDK 取码，最后执行 `dws auth token-exchange --provider ant --code <code> --state <state>` 换取 DWS Token。
 
-支持 `--code-stdin`、可选且必须成对的 `--client-id/--client-secret`，默认返回现有 TokenData；显式 `--save` 后在线核验完整身份并保存，保留已有默认账号。两个命令均支持 `--dry-run` 和不修改全局配置的 `--mcp-url`；保存 Token 时记录其刷新所用的 Portal 地址。PKCE verifier 始终由服务端保存，换票失败不会自动重试一次性 code/state。
+支持 `--code-stdin`、可选且必须成对的 `--client-id/--client-secret`，默认返回现有 TokenData；显式 `--save` 后在线核验完整身份并保存，保留已有默认账号。两个命令均支持 `--dry-run`，服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），不修改全局配置；保存 Token 时记录其刷新所用的 Portal 地址。PKCE verifier 始终由服务端保存，换票失败不会自动重试一次性 code/state。
 
 命令沿用统一结果输出及现有 auth 管理命令的精确 Schema 排除规则。
 

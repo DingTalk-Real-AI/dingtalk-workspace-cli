@@ -3,7 +3,10 @@
 状态：核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
 
 `auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
+必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含
+`provider`、`code`、`state`；显式指定 DWS 应用凭据时再加入 `client_id`、`client_secret`。
 核心不再根据 `provider == "ant"` 自动调用 Portal Mock SDK。
+服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），登录不修改端点配置。
 
 ## Overlay 接入
 
@@ -39,7 +42,7 @@ provider 一致。重复名称、空回调、非法名称均为注册错误。
 2. 核心向 Portal 创建事务，校验服务端 provider、授权参数与有效期。
 3. 核心向回调传入 `authorization_endpoint`、独立的参数 map 及受事务期限约束的 context。
 4. SDK 尊重取消与超时，原样使用服务端授权参数并返回实际取得的 `code/state`。
-5. 核心验证授权码及原事务 state，再换票、补全身份、保存 DWS profile 和 MCP 地址。
+5. 核心验证授权码及原事务 state，再换票、补全身份、保存 DWS profile。
 
 SDK 会话、密码、DWS 换票用的 client secret 和 PKCE verifier 不属于这个回调的输入输出。
 错误中不得包含认证材料；核心也不记录 SDK 原始错误文本。授权失败、取消、超时或

@@ -39,6 +39,9 @@ func TestAntOIDCPortalEndToEnd(t *testing.T) {
 		t.Fatal("DWS_OIDC_E2E_BIN must point to a built executable")
 	}
 	configDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(base), 0600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Setenv("DWS_KEYCHAIN_DIR", t.TempDir())
 	t.Setenv("DWS_DISABLE_KEYCHAIN", "1")
@@ -47,7 +50,7 @@ func TestAntOIDCPortalEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, "auth", "provider-login", "ant", "--mcp-url", base, "--login-timeout", "30", "-f", "json")
+	cmd := exec.CommandContext(ctx, binary, "auth", "provider-login", "ant", "--login-timeout", "30", "-f", "json")
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		t.Fatal("DWS did not complete Mock SDK login")
@@ -73,7 +76,7 @@ func TestAntOIDCPortalEndToEnd(t *testing.T) {
 	}
 	storedURL, err := os.ReadFile(filepath.Join(configDir, "mcp_url"))
 	if err != nil || strings.TrimSpace(string(storedURL)) != base {
-		t.Fatal("DWS did not persist the selected portal endpoint")
+		t.Fatal("DWS changed the configured portal endpoint")
 	}
 	status, err := exec.CommandContext(ctx, binary, "auth", "status", "--read-only", "-f", "json").Output()
 	var state struct {

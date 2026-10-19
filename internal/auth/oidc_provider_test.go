@@ -120,8 +120,8 @@ func TestCrossPlatformCoverageOIDCProviderHTTPFlow(t *testing.T) {
 	p := oidcTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
-		if len(body) != 2 || body["code"] != " original-code " || body["state"] != oidcTestState {
-			t.Error("exchange changed original code/state")
+		if len(body) != 3 || body["provider"] != "ant" || body["code"] != " original-code " || body["state"] != oidcTestState {
+			t.Error("exchange lost provider or changed original code/state")
 		}
 		count.Add(1)
 		json.NewEncoder(w).Encode(oidcTestCompleted())
@@ -204,8 +204,8 @@ func TestCrossPlatformCoverageOIDCBusinessAuthorizerReusesCommonFlow(t *testing.
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(created)
 		case "/cli/auth/oidc/exchange":
-			if !stage.CompareAndSwap(2, 3) || body["code"] != "enterprise-code" || body["state"] != oidcTestState || len(body) != 2 {
-				t.Error("common exchange lost the business authorization result")
+			if !stage.CompareAndSwap(2, 3) || body["provider"] != provider || body["code"] != "enterprise-code" || body["state"] != oidcTestState || len(body) != 3 {
+				t.Error("common exchange lost the selected provider or business authorization result")
 			}
 			completed := oidcTestCompleted()
 			json.NewEncoder(w).Encode(completed)
@@ -705,14 +705,14 @@ func TestCrossPlatformCoverageOIDCProviderExchangeCredentials(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			if body["code"] != " original-code " || body["state"] != oidcTestState {
-				t.Error("code/state changed")
+			if body["provider"] != "ant" || body["code"] != " original-code " || body["state"] != oidcTestState {
+				t.Error("provider missing or code/state changed")
 			}
 			if credentials == nil {
-				if len(body) != 2 {
+				if len(body) != 3 {
 					t.Error("absent credentials were included")
 				}
-			} else if len(body) != 4 || body["client_id"] != credentials.ClientID || body["client_secret"] != credentials.ClientSecret {
+			} else if len(body) != 5 || body["client_id"] != credentials.ClientID || body["client_secret"] != credentials.ClientSecret {
 				t.Error("credentials were not sent exactly")
 			}
 			json.NewEncoder(w).Encode(oidcTestCompleted())

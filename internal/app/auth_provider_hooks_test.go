@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -76,8 +77,8 @@ func TestCrossPlatformCoverageProviderLoginRegisteredHooks(t *testing.T) {
 						})
 					case "/cli/auth/oidc/exchange":
 						exchangeCalls.Add(1)
-						if sdkCalls.Load() != 1 || len(body) != 4 || body["code"] != "sdk-code" || body["state"] != state || body["client_id"] != "dws-app" || body["client_secret"] != "private-dws-secret" {
-							t.Error("exchange lost the registered SDK result or DWS credentials")
+						if sdkCalls.Load() != 1 || len(body) != 5 || body["provider"] != provider || body["code"] != "sdk-code" || body["state"] != state || body["client_id"] != "dws-app" || body["client_secret"] != "private-dws-secret" {
+							t.Error("exchange lost the selected provider, registered SDK result or DWS credentials")
 						}
 						json.NewEncoder(w).Encode(map[string]any{"accessToken": "private-access", "refreshToken": "private-refresh", "expiresIn": 3600, "corpId": "hook-corp", "userId": "hook-user", "corpName": "Hook Corp", "userName": "Hook User"})
 					default:
@@ -124,13 +125,16 @@ func TestCrossPlatformCoverageProviderLoginRegisteredHooks(t *testing.T) {
 				previousLogger := slog.Default()
 				slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 				t.Cleanup(func() { slog.SetDefault(previousLogger) })
+				if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL), 0600); err != nil {
+					t.Fatal(err)
+				}
 				root, out, stderr := providerLoginRoot()
 				if scenario == "success" {
 					root = NewRootCommand(t.Context())
 					root.SetOut(out)
 					root.SetErr(stderr)
 				}
-				root.SetArgs([]string{"auth", "provider-login", provider, "--mcp-url", server.URL, "--client-id", "dws-app", "--client-secret", "private-dws-secret", "--format", "json"})
+				root.SetArgs([]string{"auth", "provider-login", provider, "--client-id", "dws-app", "--client-secret", "private-dws-secret", "--format", "json"})
 				var err error
 				if scenario == "success" {
 					err = root.Execute()

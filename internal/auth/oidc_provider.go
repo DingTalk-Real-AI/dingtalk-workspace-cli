@@ -287,7 +287,7 @@ func (p *OIDCLoginProvider) authorizationRequest(tx OIDCExchangePreparation) (OI
 }
 
 func (p *OIDCLoginProvider) exchange(ctx context.Context, code, state string) (*TokenData, error) {
-	body := map[string]string{"code": code, "state": state}
+	body := map[string]string{"provider": p.provider, "code": code, "state": state}
 	return p.exchangeRequest(ctx, body)
 }
 

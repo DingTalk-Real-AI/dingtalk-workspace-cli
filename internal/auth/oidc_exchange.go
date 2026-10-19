@@ -60,7 +60,7 @@ func (p *OIDCLoginProvider) Exchange(ctx context.Context, code, state string) (*
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	data, err := p.exchangeRequest(ctx, map[string]string{"provider": p.provider, "code": code, "state": state})
+	data, err := p.exchange(ctx, code, state)
 	var classified *dwserrors.Error
 	if errors.As(err, &classified) {
 		// A failed request may already have consumed the transaction. Preserve
