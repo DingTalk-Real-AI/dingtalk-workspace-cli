@@ -11088,6 +11088,7 @@ status 可选值:
 		Short: "发布群公告",
 		Long: `在指定群聊中发布群公告，正文为 Markdown 格式。
 支持标题、加粗、斜体、删除线、行内代码、链接、代码块、有序/无序/任务列表、表格、引用、分割线、图片、段落、换行。
+即时公告可传 --no-card 静默更新群公告，--must-read 设为新人必看。
 定时发布：传 --run-at 指定执行时间点，ISO-8601 格式（建议带时区偏移，不带时按北京时区处理）。`,
 		Example: `  dws chat group notice create --conversation-id <openConversationId> --content "今晚 22 点系统维护，请提前保存工作内容"
   dws chat group notice create --conversation-id <openConversationId> --content "# 重要通知\n请大家查收" --sticky --send-ding
@@ -11107,6 +11108,12 @@ status 可选值:
 			if v, _ := cmd.Flags().GetBool("send-ding"); v {
 				toolArgs["sendDing"] = true
 			}
+			if cmd.Flags().Changed("no-card") {
+				toolArgs["noCard"], _ = cmd.Flags().GetBool("no-card")
+			}
+			if cmd.Flags().Changed("must-read") {
+				toolArgs["mustRead"], _ = cmd.Flags().GetBool("must-read")
+			}
 			if v, _ := cmd.Flags().GetString("run-at"); v != "" {
 				toolArgs["scheduled"] = true
 				toolArgs["runAtText"] = v
@@ -11120,6 +11127,8 @@ status 可选值:
 	_ = chatGroupNoticeCreateCmd.MarkFlagRequired("content")
 	chatGroupNoticeCreateCmd.Flags().Bool("sticky", false, "是否吊顶置顶（默认 false）")
 	chatGroupNoticeCreateCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+	chatGroupNoticeCreateCmd.Flags().Bool("no-card", false, "仅发布公告，不发送群聊公告卡片")
+	chatGroupNoticeCreateCmd.Flags().Bool("must-read", false, "设为新人必看")
 	chatGroupNoticeCreateCmd.Flags().String("run-at", "", "定时发布时间 ISO-8601（如 2026-07-03T09:00:00+08:00，传入则定时发布）")
 	DeclareLeafMetadata(chatGroupNoticeCreateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
@@ -11142,7 +11151,7 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在指定群聊中发布群公告",
-				UseWhen:      []string{"需要在群聊里发布 Markdown 群公告，可选吊顶、DING 或定时发布时"},
+				UseWhen:      []string{"需要在群聊里发布 Markdown 群公告，可选静默发布、新人必看、吊顶、DING 或定时发布时"},
 				AvoidWhen:    []string{"修改已有群公告时使用 chat group notice edit"},
 				Examples:     []string{"dws chat group notice create --conversation-id <openConversationId> --content \"今晚维护\""},
 			},
@@ -11151,6 +11160,8 @@ status 可选值:
 				{Name: "content", Property: "content", Required: boolPtr(true)},
 				{Name: "run-at", Property: "runAtText", Required: boolPtr(false)},
 				{Name: "send-ding", Property: "sendDing", Required: boolPtr(false)},
+				{Name: "no-card", Property: "noCard", Required: boolPtr(false)},
+				{Name: "must-read", Property: "mustRead", Required: boolPtr(false)},
 				{Name: "sticky", Property: "sticky", Required: boolPtr(false)},
 			},
 		},
@@ -11159,7 +11170,7 @@ status 可选值:
 	chatGroupNoticeEditCmd := &cobra.Command{
 		Use:   "edit",
 		Short: "修改群公告",
-		Long:  `修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。`,
+		Long:  `修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。可传 --no-card 静默更新，--must-read 设置新人必看。`,
 		Example: `  dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content "更新后的公告内容"
   dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content "更新后的公告内容" --sticky --send-ding
   # 查询公告 ID: dws chat group notice list --conversation-id <openConversationId>`,
@@ -11178,6 +11189,12 @@ status 可选值:
 			if v, _ := cmd.Flags().GetBool("send-ding"); v {
 				toolArgs["sendDing"] = true
 			}
+			if cmd.Flags().Changed("no-card") {
+				toolArgs["noCard"], _ = cmd.Flags().GetBool("no-card")
+			}
+			if cmd.Flags().Changed("must-read") {
+				toolArgs["mustRead"], _ = cmd.Flags().GetBool("must-read")
+			}
 			return callMCPToolOnServer("im", "edit_group_notice", toolArgs)
 		},
 	}
@@ -11189,6 +11206,8 @@ status 可选值:
 	_ = chatGroupNoticeEditCmd.MarkFlagRequired("content")
 	chatGroupNoticeEditCmd.Flags().Bool("sticky", false, "是否吊顶置顶（不传按 false 处理）")
 	chatGroupNoticeEditCmd.Flags().Bool("send-ding", false, "是否发 DING 提醒（默认 false）")
+	chatGroupNoticeEditCmd.Flags().Bool("no-card", false, "仅更新公告，不发送群聊公告卡片")
+	chatGroupNoticeEditCmd.Flags().Bool("must-read", false, "设置新人必看，可传 false 关闭")
 	DeclareLeafMetadata(chatGroupNoticeEditCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -11210,7 +11229,7 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "修改指定群聊中的群公告",
-				UseWhen:      []string{"已有公告 dataId，需要替换群公告正文或调整吊顶/DING 状态时"},
+				UseWhen:      []string{"已有公告 dataId，需要替换群公告正文或调整静默发布、新人必看、吊顶/DING 状态时"},
 				AvoidWhen:    []string{"发布新公告时使用 chat group notice create"},
 				Examples:     []string{"dws chat group notice edit --conversation-id <openConversationId> --notice-id <dataId> --content \"更新后的公告\""},
 			},
@@ -11219,6 +11238,8 @@ status 可选值:
 				{Name: "content", Property: "content", Required: boolPtr(true)},
 				{Name: "notice-id", Property: "dataId", Required: boolPtr(true)},
 				{Name: "send-ding", Property: "sendDing", Required: boolPtr(false)},
+				{Name: "no-card", Property: "noCard", Required: boolPtr(false)},
+				{Name: "must-read", Property: "mustRead", Required: boolPtr(false)},
 				{Name: "sticky", Property: "sticky", Required: boolPtr(false)},
 			},
 		},

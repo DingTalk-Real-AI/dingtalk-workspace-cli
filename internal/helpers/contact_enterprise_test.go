@@ -176,6 +176,22 @@ func TestCrossPlatformCoverageContactEnterpriseCommandsMapMCPArguments(t *testin
 			},
 		},
 		{
+			name:     "get open dingtalk id by mobile keyword",
+			args:     []string{"user", "get-open-dingtalk-id", "--keyword", "13800138000"},
+			toolName: "get_open_dingtalk_id",
+			wantArgs: map[string]any{
+				"keyword": "13800138000",
+			},
+		},
+		{
+			name:     "get open dingtalk id by dingtalk id keyword alias",
+			args:     []string{"user", "get-open-id", "--keyword", " zhangsan "},
+			toolName: "get_open_dingtalk_id",
+			wantArgs: map[string]any{
+				"keyword": "zhangsan",
+			},
+		},
+		{
 			name:     "create enterprise account with explicit false send flag",
 			args:     []string{"account", "create", "--org-user-name", "王五", "--login-id", "wangwu001", "--send-pwd-via-sms=false"},
 			toolName: "exclusive_account_create",
@@ -246,6 +262,23 @@ func TestCrossPlatformCoverageContactGetByOpenDingtalkIdRejectsBlankID(t *testin
 	)
 	if err == nil || !strings.Contains(err.Error(), "不能为空") {
 		t.Fatalf("error = %v, want blank id validation", err)
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("error = %T %v, want validation error", err, err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("invalid input made %d remote call(s)", len(caller.calls))
+	}
+}
+
+func TestCrossPlatformCoverageContactGetOpenDingtalkIdRejectsBlankKeyword(t *testing.T) {
+	caller, err := runContactEnterpriseCommand(t,
+		"user", "get-open-dingtalk-id",
+		"--keyword", "   ",
+	)
+	if err == nil || !strings.Contains(err.Error(), "不能为空") {
+		t.Fatalf("error = %v, want blank keyword validation", err)
 	}
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {

@@ -14,7 +14,7 @@
   和精确 leaf Schema 为准确认对象、动作与影响。
 - 所有自然成员和群主必须先完成唯一解析并按稳定 ID 去重，再开始任何写入；不得边解析边
   产生部分副作用。
-- 群公告会触达成员；`notice edit` 是整体替换，必须有完整新正文。
+- 群公告默认会发群聊卡片；即时公告使用 `--no-card` 可静默发布或更新。`notice edit` 是整体替换，必须有完整新正文。
 
 ## 建群与基础资料
 
@@ -113,6 +113,9 @@ dws chat group user-settings set \
 
 定时公告 `--run-at` 使用带时区时间；`notice list --scheduled` 查询待发布公告。分页时沿真实
 `nextPageCursor` 继续。修改前必须取得完整替换正文，不把增量片段当整篇公告。
+即时公告的 `create/edit` 可用 `--no-card` 静默更新，用 `--must-read` 开启新人必看；
+编辑时用 `--must-read=false` 明确关闭。`--no-card` 不与 `--send-ding` 同传，
+`--must-read` 不用于定时公告。未传这两个参数时沿用原有发布行为。
 
 ## 入群审批与群身份
 

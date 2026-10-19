@@ -150,6 +150,7 @@ dws oa approval list-by-admin --process-code <processCode> --start "<ISO-8601>" 
 | 为当前用户授权下载 | `dws oa approval attachment authorize-download` | `fileInfos` 最多 10 项；不返回下载链接 |
 | 授权审批内预览 | `dws oa approval attachment authorize-preview` | `fileIds` 最多 20 项；不等于下载授权 |
 | 上传本地审批附件 | `dws oa approval attachment upload` | 返回附件元数据，供创建审批字段使用 |
+| 上传本地审批图片 | `dws oa approval image upload` | 返回 mediaIdV2，供组装 DDPhotoField 图片控件 value |
 
 附件实例也必须来自用户指定的角色来源。生成下载链接成功不能证明下载授权成功，反之亦然。
 

@@ -71,8 +71,8 @@ func TestWukongSyncChatCommands(t *testing.T) {
 		path  []string
 		flags []string
 	}{
-		{[]string{"group", "notice", "create"}, []string{"group", "content", "sticky", "send-ding", "run-at"}},
-		{[]string{"group", "notice", "edit"}, []string{"group", "notice-id", "content", "sticky", "send-ding"}},
+		{[]string{"group", "notice", "create"}, []string{"group", "content", "sticky", "send-ding", "no-card", "must-read", "run-at"}},
+		{[]string{"group", "notice", "edit"}, []string{"group", "notice-id", "content", "sticky", "send-ding", "no-card", "must-read"}},
 		{[]string{"group", "notice", "get"}, []string{"group", "notice-id"}},
 		{[]string{"group", "notice", "list"}, []string{"group", "limit", "cursor", "scheduled"}},
 		{[]string{"group", "share-invite"}, []string{"source", "target", "receiver", "expires-seconds", "uuid"}},
@@ -83,6 +83,42 @@ func TestWukongSyncChatCommands(t *testing.T) {
 	for _, tc := range cases {
 		cmd := requireWukongSyncCommand(t, root, tc.path...)
 		requireWukongSyncFlags(t, cmd, tc.flags...)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupNoticePublishOptions(t *testing.T) {
+	baseArgs := []string{"--conversation-id=cid", "--content=notice"}
+	for _, tc := range []struct {
+		name    string
+		command string
+		flags   []string
+		want    map[string]any
+	}{
+		{"create default", "create", nil, map[string]any{"openConversationId": "cid", "content": "notice"}},
+		{"create silent must read", "create", []string{"--no-card", "--must-read"}, map[string]any{"openConversationId": "cid", "content": "notice", "noCard": true, "mustRead": true}},
+		{"create explicit false", "create", []string{"--no-card=false", "--must-read=false"}, map[string]any{"openConversationId": "cid", "content": "notice", "noCard": false, "mustRead": false}},
+		{"create existing options", "create", []string{"--sticky", "--send-ding"}, map[string]any{"openConversationId": "cid", "content": "notice", "sticky": true, "sendDing": true}},
+		{"create scheduled", "create", []string{"--run-at=2099-01-01T09:00:00+08:00"}, map[string]any{"openConversationId": "cid", "content": "notice", "scheduled": true, "runAtText": "2099-01-01T09:00:00+08:00"}},
+		{"edit default", "edit", nil, map[string]any{"openConversationId": "cid", "dataId": "notice-id", "content": "notice"}},
+		{"edit silent must read", "edit", []string{"--no-card", "--must-read"}, map[string]any{"openConversationId": "cid", "dataId": "notice-id", "content": "notice", "noCard": true, "mustRead": true}},
+		{"edit explicit false", "edit", []string{"--no-card=false", "--must-read=false"}, map[string]any{"openConversationId": "cid", "dataId": "notice-id", "content": "notice", "noCard": false, "mustRead": false}},
+		{"edit existing options", "edit", []string{"--sticky", "--send-ding"}, map[string]any{"openConversationId": "cid", "dataId": "notice-id", "content": "notice", "sticky": true, "sendDing": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			args := []string{"group", "notice", tc.command}
+			args = append(args, baseArgs...)
+			if tc.command == "edit" {
+				args = append(args, "--notice-id=notice-id")
+			}
+			args = append(args, tc.flags...)
+			if err := runChatCoverageCommand(t, caller, args...); err != nil {
+				t.Fatal(err)
+			}
+			if caller.server != "im" || caller.tool != tc.command+"_group_notice" || !reflect.DeepEqual(caller.args, tc.want) {
+				t.Fatalf("MCP call = %s/%s %#v, want im/%s_group_notice %#v", caller.server, caller.tool, caller.args, tc.command, tc.want)
+			}
+		})
 	}
 }
 
