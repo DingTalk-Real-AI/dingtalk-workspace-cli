@@ -2058,7 +2058,7 @@ var MessagesUpdateCard = shortcut.Shortcut{
 		Selection: contract.SelectionSpec{
 			AgentSummary: "流式更新卡片内容（最后一次 --flow-status 应为 3）",
 			UseWhen:      []string{"当你要向已发送的流式文本卡片持续追加/更新内容时使用；会实际更新卡片，需传 send-card 返回的 bizId、新内容及 flowStatus 1-5（最后一次应为 3 表示完成）。当前不支持 Card JSON 组件或 action callback。"},
-			AvoidWhen:    []string{"需要底层原始响应、未公开参数，或由调用方自行管理确认与更新节奏时，改用 chat message update-card"},
+			AvoidWhen:    []string{"需要底层原始响应、未公开参数，或由调用方自行管理确认与更新节奏时，改用 chat message update-card", "更新 A2UI 卡片时使用 chat message update-a2ui-card"},
 			Examples:     []string{"dws chat +messages-update-card --biz-id <bizId> --content \"内容\" --flow-status 3"},
 		},
 	},

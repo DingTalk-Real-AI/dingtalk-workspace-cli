@@ -154,14 +154,22 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				t.Errorf("%s %s = %q, want %q", canonical, field, got, expected)
 			}
 		}
-		if want.tool == "" {
+		composite := want.tool == "" || canonical == "dingtalk-tag.create_digital_employee" ||
+			canonical == "dingtalk-tag.publish_digital_employee"
+		if composite {
 			if got := schemaContractString(tool["interface_mode"]); got != "composite" {
 				t.Errorf("%s interface_mode = %q, want composite", canonical, got)
 			}
 			if ref := schemaInterfaceObject(tool["interface_ref"]); len(ref) != 0 {
 				t.Errorf("%s composite unexpectedly exposes interface_ref %#v", canonical, ref)
 			}
+			if reason := schemaContractString(tool["interface_reason"]); reason == "" {
+				t.Errorf("%s composite has no interface_reason", canonical)
+			}
 		} else {
+			if got := schemaContractString(tool["interface_mode"]); got != "mcp" {
+				t.Errorf("%s interface_mode = %q, want mcp", canonical, got)
+			}
 			ref := schemaInterfaceObject(tool["interface_ref"])
 			if got := schemaContractString(ref["product_id"]); got != "deap-dev" {
 				t.Errorf("%s interface product = %q, want deap-dev", canonical, got)
@@ -314,6 +322,13 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDeapAgentSkillUpdatePublishesExactlyOneConstraint(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.update_skill")
+	tool := payload.Tools["dingtalk-tag.update_skill"]
+	assertSchemaContractConstraintGroup(t, tool, "require_one_of", []string{"enabled", "file"})
+	assertSchemaContractConstraintGroup(t, tool, "mutually_exclusive", []string{"enabled", "file"})
+}
+
 func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
 	root := NewRootCommand()
 	cmd, args, err := root.Find([]string{"dingtalk-tag", "capability", "mcp", "create"})
@@ -363,12 +378,13 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 18 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 18", len(parameters))
+	if len(parameters) != 19 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "client-id": "clientId",
 		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
+		"reply-mode": "replyMode",
 	} {
 		parameter := parameters[name]
 		if parameter == nil {
@@ -380,6 +396,9 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	channel := parameters["channel"]
+	if got := schemaContractString(parameters["reply-mode"]["default"]); got != "a2ui" {
+		t.Errorf("reply-mode default = %q, want a2ui", got)
+	}
 	if got := schemaContractString(channel["required_when"]); got != "" {
 		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)
 	}

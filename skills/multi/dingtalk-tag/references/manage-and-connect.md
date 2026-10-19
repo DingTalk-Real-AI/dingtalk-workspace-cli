@@ -14,6 +14,12 @@ connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。�
 
 ## 接入普通本地 Agent
 
+本节回复模式仅适用于 DWS 直接托管的本地 Agent；外部宿主接入（`--channel dsh`）由宿主负责回复，详见下方“接入已有数字员工到 DSH”。
+
+新建连接的回复模式默认是 `--reply-mode a2ui`；历史配置缺少回复模式时保持文本回复和原会话，重新 connect 可显式选择模式。对已适配公开进度接口的 Agent，DWS 接入运行时在调用模型前发送“思考中…”占位，并将公开阶段、工具开始/结束状态和答案更新到同一卡片；不展示内部推理或工具原始输入输出。执行面板默认收起，运行中显示生成动画，结束时移除；最终答案在面板外展示；超出单批容量的正文分段写入同一卡片，全部成功后才完结。未适配公开进度接口的 Agent、会话控制命令仍使用最终文本。
+
+连接时指定 `--reply-mode text` 可跳过占位和卡片，只发送最终文本。首卡策略按连接配置确定，不根据自然语言临时推断；修改已运行连接的配置需先 stop，再按原绑定信息 connect。首卡创建失败或结果未确认时不启动模型、不自动回退；失败原因保留在任务账本中，连续失败写运行日志告警；核实未投递后可按需切换 text 模式重新发起任务。本地容量限制导致无法完整交付时，保留已投递内容并尝试以“完整结果未交付”结束卡片，不标记成功。其他卡片更新失败或结果未知时保留原卡并标记待核实，不重建、不自动重发最终文本；中断任务不自动重放，强制退出后不保证补发终态。
+
 ```bash
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson --dry-run --format json
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson --yes --format json
@@ -22,7 +28,7 @@ dws dingtalk-tag connect stop --agent-uuid <agentUuid> --format json
 dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
 ```
 
-连接使用数字员工 Profile 启动 Event Consumer，调用与 dev connect 共用的 Agent 协议，最终以员工身份引用回复文本。后台结果只有在 ready 后才返回运行成功；不支持的 Agent 或缺失的依赖必须明确报错。
+连接使用数字员工 Profile 启动 Event Consumer，调用与 dev connect 共用的 Agent 协议，以员工身份按回复模式更新 A2UI 卡片，或引用回复最终文本。后台结果只有在 ready 后才返回运行成功；不支持的 Agent 或缺失的依赖必须明确报错。
 
 支持 `qoder/qoderwork/workbuddy/claudecode/codebuddy/codex/gemini/opencode/custom`；custom 使用 `--agent-cmd`，问题作为最后一个参数、stdout 作为答案。模型、工作目录、会话和权限参数沿用 dev connect，模型推理是否远端执行由 Agent 自身决定。
 
@@ -44,7 +50,7 @@ dws dingtalk-tag manage create \
   --dry-run --format json
 ```
 
-create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。create 支持可选 --prompt；local_agent 创建时省略则由 DWS 自动保存默认人设，发布时仍对历史草稿兜底，已有非空人设保持不变。open_code 省略时仅提醒发布前补齐，不阻断草稿创建。显式空字符串或纯空白无效。其他发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
+create 只创建草稿并返回 `agentUuid`。名称、描述和主程序类型必填；必须显式传 `--type open_code|local_agent`，不可为空；部门可不传，由服务端补操作人的主任职部门。create 支持可选 --prompt；local_agent 创建时省略则由 DWS 自动保存默认人设，发布时不会再写入人设。open_code 省略时仅提醒发布前补齐，不阻断草稿创建。显式空字符串或纯空白无效。其他发布所需配置由服务端校验。创建成功后必须立即保存 `agentUuid`；后续失败只从 detail/save-draft/publish 恢复。
 
 ## 修改：按字段更新
 

@@ -36,6 +36,7 @@ type digitalEmployeeAdapterConfig struct {
 	Options             connectAgentOptions    `json:"options"`
 	AlwaysOn            bool                   `json:"alwaysOn"`
 	Name                string                 `json:"name,omitempty"`
+	ReplyMode           string                 `json:"replyMode,omitempty"`
 }
 
 // digitalEmployeeAdapter 接收已经完成身份准备的非敏感配置。
@@ -169,7 +170,7 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 }
 
 func digitalEmployeeAdapterFlagNames() []string {
-	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "daemon", "alwayson", "local-worker", "local-supervise"}
+	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "reply-mode", "daemon", "alwayson", "local-worker", "local-supervise"}
 }
 
 func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
@@ -211,6 +212,7 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 
 func digitalEmployeeAgentFlags() []LeafFlag {
 	return []LeafFlag{
+		{Name: "reply-mode", Default: "a2ui", Enum: []string{"a2ui", "text"}, Usage: "DWS 直接托管本地 Agent 的回复模式：a2ui 发送占位并更新；text 仅发送最终文本。未适配公开进度的 Agent 仍用文本；外部宿主接入（--channel dsh）不接受此参数"},
 		{Name: "local-lease", Kind: LeafBool, Hidden: true, Usage: "internal: DSH 员工占用凭据无关的本地运行锁"},
 		{Name: "binding-revision", Hidden: true, Usage: "internal: 精确绑定版本"},
 		{Name: "runtime-instance-id", Hidden: true, Usage: "internal: DSH 宿主运行实例"},
@@ -290,6 +292,13 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	}
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid adapter configuration")
+	}
+	// Configurations written before reply modes existed retain text and their thread.
+	if cfg.ReplyMode == "" {
+		cfg.ReplyMode = "text"
+	}
+	if cfg.ReplyMode != "a2ui" && cfg.ReplyMode != "text" {
+		return cfg, fmt.Errorf("invalid adapter reply mode")
 	}
 	if !validMachineString(cfg.SelfOpenDingTalkID) {
 		return cfg, fmt.Errorf("adapter 缺少自身开放 ID，请重新 connect 初始化，不能跳过自消息过滤")

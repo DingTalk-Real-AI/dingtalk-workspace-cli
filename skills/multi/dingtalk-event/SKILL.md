@@ -69,7 +69,7 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 - 单事件 ready：`[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`。
 - 多事件先逐条输出 subscription，全部就绪后输出 `[event] ready event_count=<n> bus_pid=<pid>`。等 ready，不用 `sleep` 猜测。
 - 有界任务用 `--max-events N`/`--duration 10m`；干净退出会取消本次新建订阅。无界任务由宿主持续读 stdout；用 SIGTERM 或 bounded exit，不用 `kill -9`。
-- 自发消息会被 self-loop 过滤。回复时把真实 `conversation_id`/`sender_open_dingtalk_id` 交给 `dws chat +messages-send`，不从显示名猜 ID。
+- 自发消息会被 self-loop 过滤。按已授权规则决定是否回复；回复用真实 `conversation_id`/`sender_open_dingtalk_id`，见[回复交接](references/event-im-output.md)。
 - 扁平消息/动作字段按事件类型读取：已读为 `reader_open_dingtalk_id`，撤回为 `recaller_open_dingtalk_id`，回应为 `reaction_name`、`operation_type`。媒体优先通过聊天读取命令加 `--download-resources`，已知消息 ID 用 `dws chat message download-media`。
 - OA 扁平事件提供审批实例、任务和状态字段；字段差异、原始回退条件及与 OA 命令的稳定 ID 交接以 [OA 事件参考](references/event-oa.md) 为准。
 - Todo 扁平事件提供 `task_id`、标题、角色、状态阶段和时间字段；用真实 `task_id` 交给 `dws todo`，字段差异见 [Todo 事件参考](references/event-todo.md)。
