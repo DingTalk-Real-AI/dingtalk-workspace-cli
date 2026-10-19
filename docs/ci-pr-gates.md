@@ -88,6 +88,53 @@ PR 也仍由旧主分支规则检查，维护者的单次 bootstrap bypass 须�
 标记，不在业务 PR 内修改授权工作流。其他八项必需检查和独立评审仍须
 完成；如治理流程需要 bootstrap bypass，必须另行明确授权并记录。
 
+### PR #1529 的精确公开同步补丁准入
+
+#1529 的接口契约审批与业务实现分开交付。治理前置提交 G0
+`ca900aa3f802151591ddb59ca42ca37a4c950102` 只修改以下三个 policy 文件，
+不提前变更命令行为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`：
+  为 `dws aitable api-key create/list/revoke` 迁至
+  `dws aitable supabase api-key create/list/revoke` 新增三条 `pending` 记录。
+  旧 argv 保留可执行但隐藏，Schema tool 标识与参数保持不变。
+- `scripts/policy/schema-compat/main.go`：精确批准数字员工 create、publish
+  两个 tool 从各自既有 MCP RPC 引用转为 `composite` 且清空引用；另批准
+  `dingtalk-tag.update_skill` 从无约束声明变为 `enabled`、`file` 必须且只能
+  选择其一。其他 tool、接口引用、模式和约束变化仍按既有规则检查。
+- `scripts/policy/schema-compat/main_test.go`：为上述两条模式迁移和一条约束
+  迁移提供回归测试，包括拒绝未获批准的邻近变化。
+
+业务批准提交 C0 为 `0c75478b9d12316b566595177a45ce6b420003f9`，已纳入 G0。
+业务实现达到迁移后的状态时，必须将同三条记录从 `pending` 改为
+`consumed`，不得更改记录的其他内容。新增审批留在治理基线，消费状态
+与实现一起交付；不能在业务 PR 中新增并消费迁移记录来自行批准自己，
+也不能为了避开受保护路径检查而漏掉 `consumed` 更新。
+
+本精确例外固定为 PR #1529、仓库
+`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
+`codex/sync-qwenwork-1.0.65`、同仓 `main` 目标及开放状态。
+批准基线与提交分别为上述 G0、C0；完整差异必须恰为 100 个文件，唯一
+受保护路径为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
+
+授权复用四个完整 Git tree 和 Files API 交叉校验，比较全部路径、增改
+状态、修改前后 blob、模式和类型，并在读取前后核对 Ready/Draft、
+base/head 与 PR 身份；当前 base 必须是当前 head 的祖先。治理工作流、
+本测试和本文档不属于获准业务补丁。治理进入 main 后，业务分支可合入
+或变基到新 main，但完整差异仍必须等于 G0→C0；最终 head 不必等于 C0。
+任何业务修复或主分支演进改变这 100 路径中任一差异的前后内容、模式、
+类型或增改状态，都须重新评审并更新主分支授权，不能沿用旧批准。
+
+本记录不扩大整个迁移清单、Schema 检查器或任何目录的写权限。#1463、
+#1502 的精确边界与普通 AI PR 的 30 文件上限、受保护路径规则保持不变。
+本治理 PR 自身由当前主分支规则检查，不能使用 #1529 的例外自授权；
+提交治理 PR 不授予合并或 bypass 权限。治理变更须经过独立维护者评审，
+如需要 bootstrap 授权，必须另行明确批准并记录。只有治理进入 main，
+这些记录才成为业务运行的 base-owned authority。业务 PR 保留
+`ai-generated` 标记，其他八项必需检查与独立评审仍须完成。
+
 ## Draft pull-request feedback
 
 A Draft pull request runs the independent `Draft CI` workflow. Its single
