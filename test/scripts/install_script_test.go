@@ -3494,6 +3494,121 @@ func lookPowerShellForScripts(t *testing.T) string {
 	return ""
 }
 
+func TestInstallPowerShellLanguageModePreflight(t *testing.T) {
+	pwsh := lookPowerShellForScripts(t)
+	for _, script := range []string{"install.ps1", "install-devapp.ps1"} {
+		t.Run(script, func(t *testing.T) {
+			scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(scriptPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cut := strings.Index(string(data), "$ErrorActionPreference =")
+			if cut < 0 || !strings.Contains(string(data[:cut]), "LanguageMode") {
+				t.Fatal("language-mode preflight must precede installer initialization")
+			}
+			for _, tc := range []struct {
+				name         string
+				fullLanguage bool
+				catchError   bool
+			}{
+				{name: "constrained mode preserves caller", catchError: true},
+				{name: "constrained mode exits nonzero"},
+				{name: "full language continues", fullLanguage: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					root := t.TempDir()
+					home := filepath.Join(root, "home")
+					temp := filepath.Join(root, "tmp")
+					if err := os.MkdirAll(temp, 0o755); err != nil {
+						t.Fatal(err)
+					}
+					binary := filepath.Join(home, "bin", "dws.exe")
+					mustWriteFile(t, binary, []byte("existing binary"), 0o644)
+					target := scriptPath
+					if tc.fullLanguage {
+						target = filepath.Join(root, "preflight.ps1")
+						mustWriteFile(t, target, append([]byte(string(data[:cut])), []byte("Write-Output 'PREFLIGHT_CONTINUED'\n")...), 0o644)
+					}
+					harness := `
+function Invoke-WebRequest { throw 'UNEXPECTED_INSTALLER_IO' }
+function Invoke-RestMethod { throw 'UNEXPECTED_INSTALLER_IO' }
+function New-Item { throw 'UNEXPECTED_INSTALLER_IO' }
+function Copy-Item { throw 'UNEXPECTED_INSTALLER_IO' }
+function Move-Item { throw 'UNEXPECTED_INSTALLER_IO' }
+function Remove-Item { throw 'UNEXPECTED_INSTALLER_IO' }
+`
+					if !tc.fullLanguage {
+						harness += "$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'\n"
+					}
+					invocation := "Get-Content -Raw -LiteralPath $env:DWS_TEST_SCRIPT | Invoke-Expression"
+					if tc.catchError {
+						harness += "try { " + invocation + "; throw 'UNEXPECTED_INSTALLER_SUCCESS' } catch { Write-Output $_.Exception.Message }\nWrite-Output 'CALLER_STILL_ALIVE'\n"
+					} else {
+						harness += invocation + "\n"
+					}
+					harnessPath := filepath.Join(root, "language-mode.ps1")
+					mustWriteFile(t, harnessPath, []byte(harness), 0o644)
+					cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", harnessPath)
+					cmd.Env = append(os.Environ(),
+						"HOME="+home, "USERPROFILE="+home, "TEMP="+temp, "TMP="+temp, "TMPDIR="+temp,
+						"XDG_CONFIG_HOME="+filepath.Join(root, "config"), "XDG_CACHE_HOME="+filepath.Join(root, "cache"), "XDG_DATA_HOME="+filepath.Join(root, "data"),
+						"DWS_INSTALL_DIR="+filepath.Dir(binary), "DWS_CONFIG_DIR="+filepath.Join(home, ".dws"),
+						"DWS_VERSION=v1.0.64", "DEVAPP_VERSION=v1.0.64", "DWS_ARCH=amd64", "DWS_NO_FALLBACK=1",
+						"POWERSHELL_TELEMETRY_OPTOUT=1", "POWERSHELL_UPDATECHECK=Off", "DWS_TEST_SCRIPT="+target)
+					output, err := cmd.CombinedOutput()
+					text := string(output)
+					wantFailure := !tc.fullLanguage && !tc.catchError
+					if (err != nil) != wantFailure {
+						t.Fatalf("preflight process failure = %v, want %v:\n%s", err, wantFailure, text)
+					}
+					if wantFailure {
+						if _, ok := err.(*exec.ExitError); !ok {
+							t.Fatalf("want a nonzero PowerShell exit, got %v", err)
+						}
+					}
+					want := "DWS installer cannot run in PowerShell ConstrainedLanguage"
+					if tc.fullLanguage {
+						want = "PREFLIGHT_CONTINUED"
+					}
+					if !strings.Contains(text, want) {
+						t.Fatalf("missing %q:\n%s", want, text)
+					}
+					if tc.catchError && !strings.Contains(text, "CALLER_STILL_ALIVE") {
+						t.Fatalf("preflight must throw without terminating the caller:\n%s", text)
+					}
+					for _, forbidden := range []string{"UNEXPECTED_INSTALLER", "DWS Installer", "Downloading", "Installation complete"} {
+						if strings.Contains(text, forbidden) {
+							t.Fatalf("preflight reached installer work (%s):\n%s", forbidden, text)
+						}
+					}
+					if got, err := os.ReadFile(binary); err != nil || string(got) != "existing binary" {
+						t.Fatalf("existing binary changed: %q, %v", got, err)
+					}
+					if err := filepath.Walk(home, func(path string, info os.FileInfo, err error) error {
+						if err != nil {
+							return err
+						}
+						if path != home && path != filepath.Dir(binary) && path != binary {
+							return fmt.Errorf("unexpected installer path %s", path)
+						}
+						return nil
+					}); err != nil {
+						t.Fatal(err)
+					}
+					entries, err := os.ReadDir(temp)
+					if err != nil || len(entries) != 0 {
+						t.Fatalf("temporary installation files remain: %v, %v", entries, err)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestInstallPowerShellPruneRemovesLinkChildrenWithoutFollowingTargets pins
 // the Blocker 2 fix: pruning a stamp root that contains a junction/symlink
 // child must delete the link itself while the link target's contents survive.

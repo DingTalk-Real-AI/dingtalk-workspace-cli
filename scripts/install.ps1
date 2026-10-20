@@ -29,6 +29,13 @@
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    # WDAC audit mode reports ConstrainedLanguage without enforcing its restrictions.
+    try { [void][System.IO.Path]::GetTempPath() } catch {
+        throw "DWS installer cannot run in PowerShell $($ExecutionContext.SessionState.LanguageMode). Use an organization-approved manual Release or npm installation where allowed. Do not disable application-control policies; ExecutionPolicy Bypass does not change the language mode."
+    }
+}
+
 $ErrorActionPreference = "Stop"
 
 $Repo = "DingTalk-Real-AI/dingtalk-workspace-cli"
