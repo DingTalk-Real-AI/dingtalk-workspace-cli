@@ -385,19 +385,21 @@ func TestGeminiParallelLive(t *testing.T) {
 	f := geminiSearchForwarder(t, func(w http.ResponseWriter, r *http.Request) {
 		var req geminiGenerateContentRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		switch len(req.Contents) {
-		case 1:
-			geminiTestFunction(w, "web_search", map[string]any{"objective": "Find the official Go programming language website", "search_queries": []string{"Go programming language official website"}})
-		case 3:
-			result := req.Contents[2].Parts[0].FunctionResponse.Response
+		if len(req.Contents) > 1 {
+			result := req.Contents[len(req.Contents)-1].Parts[0].FunctionResponse.Response
 			if result["error"] != nil {
 				if !quotaObserved.Load() {
-					t.Error("live search failed without an observed explicit anonymous quota response")
+					t.Error("live tool failed without an observed explicit anonymous quota response")
 				}
 				resultText = "quota"
 				_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"Search unavailable"}]}}]}`)
 				return
 			}
+		}
+		switch len(req.Contents) {
+		case 1:
+			geminiTestFunction(w, "web_search", map[string]any{"objective": "Find the official Go programming language website", "search_queries": []string{"Go programming language official website"}})
+		case 3:
 			geminiTestFunction(w, "web_fetch", map[string]any{"urls": []string{"https://go.dev/"}})
 		default:
 			raw, _ := json.Marshal(req.Contents[len(req.Contents)-1].Parts[0].FunctionResponse.Response)
@@ -438,7 +440,7 @@ func TestGeminiParallelLive(t *testing.T) {
 			} `json:"result"`
 		}
 		parseErr := json.Unmarshal(raw, &envelope)
-		if quota && (resp.StatusCode == 429 || (resp.StatusCode == 200 && parseErr == nil && envelope.Result.IsError)) {
+		if quota && (resp.StatusCode == 429 || (resp.StatusCode == 200 && parseErr == nil && envelope.JSONRPC == "2.0" && envelope.ID == req.ID && len(envelope.Error) == 0 && envelope.Result.IsError)) {
 			quotaObserved.Store(true)
 		} else if resp.StatusCode >= 400 {
 			t.Errorf("unexpected live HTTP %d", resp.StatusCode)
