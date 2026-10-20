@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -380,6 +381,7 @@ func TestGeminiParallelLive(t *testing.T) {
 		t.Skip("set DWS_PARALLEL_LIVE=1 for anonymous MCP validation")
 	}
 	var resultText string
+	var quotaObserved atomic.Bool
 	f := geminiSearchForwarder(t, func(w http.ResponseWriter, r *http.Request) {
 		var req geminiGenerateContentRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -389,6 +391,9 @@ func TestGeminiParallelLive(t *testing.T) {
 		case 3:
 			result := req.Contents[2].Parts[0].FunctionResponse.Response
 			if result["error"] != nil {
+				if !quotaObserved.Load() {
+					t.Error("live search failed without an observed explicit anonymous quota response")
+				}
 				resultText = "quota"
 				_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"Search unavailable"}]}}]}`)
 				return
@@ -417,24 +422,38 @@ func TestGeminiParallelLive(t *testing.T) {
 		raw, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		resp.Body = io.NopCloser(strings.NewReader(string(raw)))
-		t.Logf("%s %s status=%d UTC=%s response=%s", req.Method, req.Params.Name, resp.StatusCode, time.Now().UTC().Format(time.RFC3339), string(raw))
+		t.Logf("%s %s status=%d UTC=%s Retry-After=%q response=%s", req.Method, req.Params.Name, resp.StatusCode, time.Now().UTC().Format(time.RFC3339), resp.Header.Get("Retry-After"), string(raw))
 		if err != nil {
 			t.Error(err)
 		}
-		if resp.StatusCode >= 400 && !(resp.StatusCode == 429 && strings.Contains(strings.ToLower(string(raw)), "quota")) {
+		lower := strings.ToLower(string(raw))
+		quota := (strings.Contains(lower, "quota") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "rate_limit") || strings.Contains(lower, "usage limit")) &&
+			!strings.Contains(lower, "unauthorized") && !strings.Contains(lower, "authentication") && !strings.Contains(lower, "invalid api key")
+		var envelope struct {
+			JSONRPC string          `json:"jsonrpc"`
+			ID      int             `json:"id"`
+			Error   json.RawMessage `json:"error"`
+			Result  struct {
+				IsError bool `json:"isError"`
+			} `json:"result"`
+		}
+		parseErr := json.Unmarshal(raw, &envelope)
+		if quota && (resp.StatusCode == 429 || (resp.StatusCode == 200 && parseErr == nil && envelope.Result.IsError)) {
+			quotaObserved.Store(true)
+		} else if resp.StatusCode >= 400 {
 			t.Errorf("unexpected live HTTP %d", resp.StatusCode)
+		} else if req.Method != "notifications/initialized" && (parseErr != nil || envelope.JSONRPC != "2.0" || envelope.ID != req.ID || len(envelope.Error) > 0 || envelope.Result.IsError) {
+			t.Error("invalid live MCP response")
 		}
-		if req.Method == "tools/call" && resp.StatusCode == 200 {
-			var v map[string]any
-			if json.Unmarshal(raw, &v) != nil || v["error"] != nil {
-				t.Error("invalid live JSON-RPC response")
-			}
-		}
+
 		return resp, nil
 	})
 	reply, err := f.forward(context.Background(), "live-test", "Find official Go sources")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if quotaObserved.Load() {
+		t.Log("Explicit anonymous MCP quota observed; deterministic caller coverage is required separately")
 	}
 	if resultText != "quota" && (!strings.Contains(reply, "go.dev") || !strings.Contains(reply, "Go")) {
 		t.Fatalf("no useful consumed output: %s", reply)
