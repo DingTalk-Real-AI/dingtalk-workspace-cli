@@ -12,7 +12,7 @@ dws doc +create --name "<文档名>" --content @body.json --doc-format jsonml --
 
 - 统一输入协议：已有或临时文件先暂存到当前工作目录后传 `@相对文件`；单次生成文本可用 `--content -` 从 stdin 读取。
 - `@file` 禁止绝对路径和 `..` 逃逸；不要直接引用宿主临时目录。
-- `--name` 是文档名称；默认不要再在正文开头重复同名 H1，只有用户明确要求正文一级标题时才保留。
+- `--name` 是文档名称；省略时从 Markdown 首个一级标题提取，否则使用未命名文档。Markdown 开头与文档名相同的 H1 会自动移除，标题不同或属于缩进代码块则保留；JSONML 不做标题去重，确需保留正文同名 H1 时使用 JSONML。
 - JSONML 顶层必须是数组。用户已经明确要求 callout、代码块、表格等具体富结构时，直接构造一份完整 JSONML 并只调用一次 `+create`；这不是开放式风格设计，不读取 `style/`。字段不确定时只读 [JSONML cookbook](format/doc-jsonml-cookbook.md)，不再连读 create/update/style。
 
 `+create` 负责创建、长 Markdown 分片和最终回读验证。正常成功结果至少包含：

@@ -617,6 +617,145 @@ func TestCrossPlatformCoverageDocCreateRejectsSuccessfulMismatchedReadback(t *te
 	}
 }
 
+func TestCrossPlatformCoverageDocDuplicateTitleBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		markdown string
+		want     string
+	}{
+		{name: "empty"},
+		{name: "whitespace only", markdown: " \t\r", want: " \t\r"},
+		{name: "blank lines only", markdown: " \t\r\n\n", want: " \t\r\n\n"},
+		{name: "plain text", markdown: "正文内容", want: "正文内容"},
+		{name: "second level heading", markdown: "## 周报", want: "## 周报"},
+		{name: "different heading", markdown: "# 其他标题\n正文内容", want: "# 其他标题\n正文内容"},
+		{name: "title only", markdown: "# 周报"},
+		{name: "formatted title", markdown: "# **周报** ###\n\n正文内容", want: "正文内容"},
+		{name: "blank lines before heading", markdown: " \t\r\n   # 周报\n正文内容", want: "正文内容"},
+		{name: "indented code", markdown: "    # 周报", want: "    # 周报"},
+		{name: "tab indented code", markdown: "\t# 周报", want: "\t# 周报"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := helpers.StripDuplicateTitle(test.markdown, "周报"); got != test.want {
+				t.Fatalf("markdown = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocCreateStripsDuplicateH1(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		args         []string
+		wantName     string
+		wantMarkdown string
+	}{
+		{
+			name:         "name matches H1",
+			args:         []string{"--name", "周报", "--content", "# 周报\n正文内容"},
+			wantName:     "周报",
+			wantMarkdown: "正文内容",
+		},
+		{
+			name:         "name differs from H1",
+			args:         []string{"--name", "周报", "--content", "# 其他标题\n正文内容"},
+			wantName:     "周报",
+			wantMarkdown: "# 其他标题\n正文内容",
+		},
+		{
+			name:         "name inferred from H1",
+			args:         []string{"--content", "# 自动标题\n正文内容"},
+			wantName:     "自动标题",
+			wantMarkdown: "正文内容",
+		},
+		{
+			name:         "three space indented H1",
+			args:         []string{"--name", "周报", "--content", "   # 周报\n正文内容"},
+			wantName:     "周报",
+			wantMarkdown: "正文内容",
+		},
+		{
+			name:         "blank lines before H1",
+			args:         []string{"--name", "周报", "--content", " \t\r\n\n   # 周报\n正文内容"},
+			wantName:     "周报",
+			wantMarkdown: "正文内容",
+		},
+		{
+			name:         "four space indented code preserved",
+			args:         []string{"--name", "周报", "--content", "    # 周报"},
+			wantName:     "周报",
+			wantMarkdown: "    # 周报",
+		},
+		{
+			name:         "tab indented code preserved",
+			args:         []string{"--name", "周报", "--content", "\t# 周报"},
+			wantName:     "周报",
+			wantMarkdown: "\t# 周报",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testseam.Swap(t, &docVerifyDelays, []time.Duration{})
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": test.wantMarkdown}},
+			}}
+			envelope := runDocCoverageEnvelope(t, Create, caller, test.args...)
+			data, _ := envelope["data"].(map[string]any)
+			if data["verified"] != true {
+				t.Fatalf("verification result = %#v, want verified", data)
+			}
+			if len(caller.history) != 2 || caller.history[0].tool != "create_document" || caller.history[1].tool != "get_document_content" {
+				t.Fatalf("create calls = %#v, want one write followed by one read", caller.history)
+			}
+			createCall := caller.history[0]
+			if got := createCall.params["name"]; got != test.wantName {
+				t.Fatalf("name = %q, want %q", got, test.wantName)
+			}
+			if got := createCall.params["markdown"]; got != test.wantMarkdown {
+				t.Fatalf("markdown = %q, want %q", got, test.wantMarkdown)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocCreateDuplicateH1DryRun(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		args         []string
+		wantName     string
+		wantMarkdown string
+	}{
+		{name: "matching title", args: []string{"--name", "周报", "--content", "# 周报\n正文内容"}, wantName: "周报", wantMarkdown: "正文内容"},
+		{name: "different title", args: []string{"--name", "周报", "--content", "# 其他标题\n正文内容"}, wantName: "周报", wantMarkdown: "# 其他标题\n正文内容"},
+		{name: "inferred title", args: []string{"--content", "# 自动标题\n正文内容"}, wantName: "自动标题", wantMarkdown: "正文内容"},
+		{name: "heading only", args: []string{"--name", "周报", "--content", "# 周报"}, wantName: "周报"},
+		{name: "empty content", args: []string{"--name", "周报"}, wantName: "周报"},
+		{name: "indented code", args: []string{"--name", "周报", "--content", "    # 周报"}, wantName: "周报", wantMarkdown: "    # 周报"},
+		{name: "tab indented code", args: []string{"--name", "周报", "--content", "\t# 周报"}, wantName: "周报", wantMarkdown: "\t# 周报"},
+		{name: "jsonml title preserved", args: []string{"--name", "周报", "--doc-format", "jsonml", "--content", `["root",{},["h1",{},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"周报"]]]]`}, wantName: "周报"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &docCoverageCaller{dryRun: true}
+			args := append(append([]string{}, test.args...), "--dry-run")
+			envelope := runDocCoverageEnvelope(t, Create, caller, args...)
+			data, _ := envelope["data"].(map[string]any)
+			create, _ := data["create"].(map[string]any)
+			if create["name"] != test.wantName {
+				t.Fatalf("preview name = %#v, want %q", create["name"], test.wantName)
+			}
+			if test.wantMarkdown == "" {
+				if _, ok := create["markdown"]; ok {
+					t.Fatalf("unexpected preview markdown = %#v", create["markdown"])
+				}
+			} else if create["markdown"] != test.wantMarkdown {
+				t.Fatalf("preview markdown = %#v, want %q", create["markdown"], test.wantMarkdown)
+			}
+			if data["executed"] != false || len(caller.history) != 0 {
+				t.Fatalf("dry-run executed a write: data=%#v calls=%#v", data, caller.history)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDocJSONMLBlockVerificationUsesJSONMLReadback(t *testing.T) {
 	for _, test := range []struct {
 		name     string

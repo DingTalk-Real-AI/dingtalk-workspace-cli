@@ -1740,7 +1740,7 @@ func newDocCommand() *cobra.Command {
 			}
 			if md != "" {
 				if name, ok := toolArgs["name"].(string); ok && name != "" {
-					md = stripDuplicateTitle(md, name)
+					md = StripDuplicateTitle(md, name)
 				}
 				toolArgs["markdown"] = md
 			}
@@ -5278,14 +5278,26 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 	return "", fmt.Errorf("导出任务超时：已轮询 %d 次仍在处理中 (jobId=%s)，请稍后使用 dws doc export get --job-id %s 手动查询", maxPolls, jobID, jobID)
 }
 
-// stripDuplicateTitle removes the leading H1 heading from markdown content
+// StripDuplicateTitle removes the leading H1 heading from markdown content
 // when it matches the document name (set via --name). This prevents the title
 // from appearing twice: once as document metadata and once in the body.
-func stripDuplicateTitle(markdown, name string) string {
-	trimmed := strings.TrimLeft(markdown, " \t\n\r")
-	if !strings.HasPrefix(trimmed, "# ") {
+func StripDuplicateTitle(markdown, name string) string {
+	trimmed := markdown
+	for {
+		line, rest, hasNewline := strings.Cut(trimmed, "\n")
+		if strings.Trim(line, " \t\r") != "" {
+			break
+		}
+		if !hasNewline {
+			return markdown
+		}
+		trimmed = rest
+	}
+	heading := strings.TrimLeft(trimmed, " ")
+	if len(trimmed)-len(heading) > 3 || !strings.HasPrefix(heading, "# ") {
 		return markdown
 	}
+	trimmed = heading
 	newlineIdx := strings.Index(trimmed, "\n")
 	var headingRaw string
 	if newlineIdx < 0 {
