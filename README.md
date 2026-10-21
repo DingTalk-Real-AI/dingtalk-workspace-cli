@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 | iex
 ```
 
-If PowerShell enforces `ConstrainedLanguage`, the installer stops before downloads or installation changes with an explicit diagnostic, without closing an existing terminal. Check `$ExecutionContext.SessionState.LanguageMode`; `-ExecutionPolicy Bypass` does not remove language-mode restrictions. Do not disable organization security policies.
+The PowerShell installer requires `FullLanguage`. If `$ExecutionContext.SessionState.LanguageMode` reports another mode, including `ConstrainedLanguage` under a WDAC audit policy, the installer stops before downloads or installation changes with an explicit diagnostic, without closing an existing terminal. A successful .NET method call does not guarantee that all installer operations are available, so the script does not probe operations to exempt audit mode. `-ExecutionPolicy Bypass` does not remove language-mode restrictions. Do not disable organization security policies.
 
 On managed devices, use your IT-approved software distribution. Where policy permits, use `npm install -g dingtalk-workspace-cli`, or download the matching Windows archive and `checksums.txt` from [Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases), verify its SHA256 with `Get-FileHash`, extract it, and add the binary directory to PATH through Windows settings. In a new terminal, run `dws version` and preview `dws skill setup --dry-run` before installing skills. Application-control policies may also block npm's PowerShell extraction or the downloaded executable; these alternatives are not policy bypasses.
 

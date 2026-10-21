@@ -30,10 +30,9 @@
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-    # WDAC audit mode reports ConstrainedLanguage without enforcing its restrictions.
-    try { [void][System.IO.Path]::GetTempPath() } catch {
-        throw "DWS installer cannot run in PowerShell $($ExecutionContext.SessionState.LanguageMode). Use an organization-approved manual Release or npm installation where allowed. Do not disable application-control policies; ExecutionPolicy Bypass does not change the language mode."
-    }
+    # A successful method call does not prove that all installer operations are allowed.
+    # Require FullLanguage even when WDAC audit mode reports ConstrainedLanguage.
+    throw "DWS installer cannot run in PowerShell $($ExecutionContext.SessionState.LanguageMode). This script requires FullLanguage, including on WDAC audit-mode systems that report ConstrainedLanguage. Use an organization-approved manual Release or npm installation where allowed. Do not disable application-control policies; ExecutionPolicy Bypass does not change the language mode."
 }
 
 $ErrorActionPreference = "Stop"

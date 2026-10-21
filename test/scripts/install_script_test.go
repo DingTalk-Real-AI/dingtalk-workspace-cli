@@ -3511,13 +3511,16 @@ func TestInstallPowerShellLanguageModePreflight(t *testing.T) {
 				t.Fatal("language-mode preflight must precede installer initialization")
 			}
 			for _, tc := range []struct {
-				name         string
-				fullLanguage bool
-				catchError   bool
+				name            string
+				fullLanguage    bool
+				auditModeReport bool
+				catchError      bool
 			}{
 				{name: "constrained mode preserves caller", catchError: true},
 				{name: "constrained mode exits nonzero"},
 				{name: "full language continues", fullLanguage: true},
+				{name: "simulated audit report preserves caller", auditModeReport: true, catchError: true},
+				{name: "simulated audit report exits nonzero", auditModeReport: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					root := t.TempDir()
@@ -3532,6 +3535,12 @@ func TestInstallPowerShellLanguageModePreflight(t *testing.T) {
 					if tc.fullLanguage {
 						target = filepath.Join(root, "preflight.ps1")
 						mustWriteFile(t, target, append([]byte(string(data[:cut])), []byte("Write-Output 'PREFLIGHT_CONTINUED'\n")...), 0o644)
+					} else if tc.auditModeReport {
+						// Simulate the reported mode while keeping FullLanguage capabilities.
+						// This exercises a successful method probe without claiming a real WDAC policy.
+						prefix := strings.ReplaceAll(string(data[:cut]), "$ExecutionContext.SessionState.LanguageMode", "'ConstrainedLanguage'")
+						target = filepath.Join(root, "audit-report.ps1")
+						mustWriteFile(t, target, []byte(prefix+string(data[cut:])), 0o644)
 					}
 					harness := `
 function Invoke-WebRequest { throw 'UNEXPECTED_INSTALLER_IO' }
@@ -3541,7 +3550,9 @@ function Copy-Item { throw 'UNEXPECTED_INSTALLER_IO' }
 function Move-Item { throw 'UNEXPECTED_INSTALLER_IO' }
 function Remove-Item { throw 'UNEXPECTED_INSTALLER_IO' }
 `
-					if !tc.fullLanguage {
+					if tc.auditModeReport {
+						harness += "if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { throw 'AUDIT_SIMULATION_REQUIRES_FULL_LANGUAGE' }\n[void][System.IO.Path]::GetTempPath()\nWrite-Output 'AUDIT_SIMULATION_METHOD_ALLOWED'\n"
+					} else if !tc.fullLanguage {
 						harness += "$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'\n"
 					}
 					invocation := "Get-Content -Raw -LiteralPath $env:DWS_TEST_SCRIPT | Invoke-Expression"
@@ -3576,6 +3587,9 @@ function Remove-Item { throw 'UNEXPECTED_INSTALLER_IO' }
 					}
 					if !strings.Contains(text, want) {
 						t.Fatalf("missing %q:\n%s", want, text)
+					}
+					if tc.auditModeReport && !strings.Contains(text, "AUDIT_SIMULATION_METHOD_ALLOWED") {
+						t.Fatalf("audit report simulation must allow the method call:\n%s", text)
 					}
 					if tc.catchError && !strings.Contains(text, "CALLER_STILL_ALIVE") {
 						t.Fatalf("preflight must throw without terminating the caller:\n%s", text)

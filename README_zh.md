@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.ps1 | iex
 ```
 
-PowerShell 强制执行 `ConstrainedLanguage` 时，安装器会在下载或修改安装内容之前给出明确提示并停止，不会关闭已打开的终端。可通过 `$ExecutionContext.SessionState.LanguageMode` 查看模式；`-ExecutionPolicy Bypass` 不会解除语言模式限制，请勿关闭组织安全策略。
+PowerShell 安装脚本要求 `FullLanguage`。若 `$ExecutionContext.SessionState.LanguageMode` 报告其他模式（包括 WDAC 审计策略下报告的 `ConstrainedLanguage`），安装器会在下载或修改安装内容之前给出明确提示并停止，不会关闭已打开的终端。单次 .NET 方法调用成功不能保证后续安装操作可用，因此脚本不通过操作探针放行审计模式。`-ExecutionPolicy Bypass` 不会解除语言模式限制，请勿关闭组织安全策略。
 
 受管设备请使用 IT 批准的软件分发流程。策略允许时，可执行 `npm install -g dingtalk-workspace-cli`，或从 [Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 下载对应 Windows 归档及 `checksums.txt`，用 `Get-FileHash` 核对 SHA256，解压后通过 Windows 设置将二进制目录加入 PATH。在新终端运行 `dws version`，先用 `dws skill setup --dry-run` 预览再安装技能。应用控制策略仍可能拦截 npm 的 PowerShell 解压或下载的可执行文件，这些替代方式不能绕过策略。
 

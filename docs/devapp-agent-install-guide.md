@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.ps1 | iex
 ```
 
-若 PowerShell 强制执行 `ConstrainedLanguage`，脚本会在下载和安装前停止并给出诊断，不会关闭已有终端。`-ExecutionPolicy Bypass` 不会解除语言模式限制；请勿关闭安全策略，受管设备应使用 IT 批准的分发流程。策略允许时可改用 npm 或手动 Release 安装，详见 [Windows 安装说明](../README_zh.md#安装)。
+PowerShell 安装脚本要求 `FullLanguage`；报告其他语言模式时（包括 WDAC 审计策略下报告的 `ConstrainedLanguage`），脚本会在下载和安装前停止并给出诊断，不会关闭已有终端。脚本不使用方法调用探针区分审计与强制模式。`-ExecutionPolicy Bypass` 不会解除语言模式限制；请勿关闭安全策略，受管设备应使用 IT 批准的分发流程。策略允许时可改用 npm 或手动 Release 安装，详见 [Windows 安装说明](../README_zh.md#安装)。
 
 这个脚本会：
 
