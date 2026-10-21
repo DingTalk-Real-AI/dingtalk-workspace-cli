@@ -170,7 +170,7 @@ metadata:
 | `aitable` | `record delete` | 删除记录（支持批量） |
 | `aitable` | `chart delete` / `dashboard delete` | 删除图表/仪表盘 |
 | `calendar` | `event delete` | 删除日程，所有参与者同步取消 |
-| `calendar` | `participant delete` | 移除日程参与者 |
+| `calendar` | `attendee delete` | 移除日程参与者 |
 | `calendar` | `room delete` | 取消会议室预定 |
 | `chat` | `group members remove` | 移除群成员 |
 | `chat` | `message recall-by-bot` | 撤回机器人已发消息 |
