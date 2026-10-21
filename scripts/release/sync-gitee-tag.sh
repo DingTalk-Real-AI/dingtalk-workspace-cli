@@ -203,7 +203,7 @@ fi
 # Localized Gitee heads are absent from GitHub; fetch them so pushes reuse their reachable objects.
 if ! run_bounded git fetch --no-tags "$GITEE_PUBLIC_GIT_REMOTE" \
   '+refs/heads/*:refs/remotes/gitee/*'; then
-  err "could not fetch existing Gitee heads before pushing ${VERSION}"
+  err "could not fetch existing Gitee heads for object reuse; tag ${VERSION} push was not attempted"
 fi
 
 echo "   Pushing missing Gitee tag ${VERSION} -> ${target_commit}"

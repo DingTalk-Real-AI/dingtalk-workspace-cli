@@ -68,8 +68,19 @@ jobs:
           SOURCE_COMMIT="$(git rev-parse origin/main)"
 
           # The advertised Gitee tip is localized and absent from GitHub; fetch it to exclude shared history from the push pack.
-          git fetch --no-tags "$REMOTE" '+refs/heads/main:refs/remotes/gitee/main'
-          MIRROR_COMMIT="$(git rev-parse refs/remotes/gitee/main)"
+          MIRROR_COMMIT=""
+          if git ls-remote --exit-code --heads "$REMOTE" refs/heads/main >"$ASKPASS_DIR/main-ref"; then
+            git fetch --no-tags "$REMOTE" '+refs/heads/main:refs/remotes/gitee/main'
+            MIRROR_COMMIT="$(git rev-parse refs/remotes/gitee/main)"
+          else
+            status=$?
+            # Only exit 2 means a successful query found no matching ref. Transport/auth errors must stop the mirror.
+            if [ "$status" -ne 2 ]; then
+              printf '%s\n' "error: could not query Gitee main; push was not attempted" >&2
+              exit "$status"
+            fi
+            printf '%s\n' "Gitee main is missing — initialize with an absent-ref lease."
+          fi
 
           git checkout -B gitee-main "$SOURCE_COMMIT"
           git config user.email "actions@github.com"
@@ -96,8 +107,12 @@ jobs:
             done
           fi
 
-          git add -- README.md README_zh.md
-          if [ "$(git write-tree)" = "$(git rev-parse "${MIRROR_COMMIT}^{tree}")" ] &&
+          for f in README.md README_zh.md; do
+            [ -f "$f" ] || continue
+            git add -- "$f"
+          done
+          if [ -n "$MIRROR_COMMIT" ] &&
+             [ "$(git write-tree)" = "$(git rev-parse "${MIRROR_COMMIT}^{tree}")" ] &&
              { [ "$MIRROR_COMMIT" = "$SOURCE_COMMIT" ] ||
                [ "$(git rev-parse "${MIRROR_COMMIT}^" 2>/dev/null)" = "$SOURCE_COMMIT" ]; }; then
             printf '%s\n' "Gitee main already aligned with ${SOURCE_COMMIT} — skip push."
@@ -107,6 +122,7 @@ jobs:
             git commit -m "docs(gitee): localize install commands + coverage badge for Gitee mirror"
           fi
 
+          # An empty expected value requires main to remain absent, rejecting a concurrent first writer too.
           git push --progress "--force-with-lease=refs/heads/main:${MIRROR_COMMIT}" "$REMOTE" 'gitee-main:refs/heads/main'
           printf '%s\n' "Mirrored localized main to Gitee ${GITEE_REPO}"
 
