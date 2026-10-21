@@ -6,6 +6,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.66-beta.1] - 2026-10-21
+
+### Fixed
+
+- **Document creation title deduplication** — `dws doc +create` removes a leading Markdown H1 that matches the document name, including names inferred from Markdown, before chunking and readback verification. Different headings, indented code blocks, and JSONML content remain unchanged; inline document content preserves its surrounding whitespace.
+
+
 ## [1.0.65] - 2026-10-20
 
 This release promotes the sealed `v1.0.65-beta.2` contents to stable.
