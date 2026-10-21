@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,250 @@ var requiredGiteeAssets = []string{
 	"dws-windows-arm64.zip",
 	"dws-skills.zip",
 	"checksums.txt",
+}
+
+func TestGiteeCodeMirrorWorkflowBoundsCheckoutAndPush(t *testing.T) {
+	path := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "mirror-to-gitee.yml"))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
+	content := string(data)
+	if got := workflowTimeoutMinutesAfter(t, content, "name: Checkout main history"); got != 5 {
+		t.Fatalf("checkout timeout = %d minutes, want 5", got)
+	}
+	if got := workflowTimeoutMinutesAfter(t, content, "name: Push localized main to Gitee"); got != 15 {
+		t.Fatalf("push timeout = %d minutes, want 15", got)
+	}
+	if strings.Contains(content, "fetch-depth: 0") || !strings.Contains(content, "fetch-depth: 1") {
+		t.Fatal("checkout must not fetch all GitHub branches and tags")
+	}
+}
+
+func TestGiteeCodeMirrorReusesLocalizedHistoryAndSkipsUnchangedMain(t *testing.T) {
+	root := t.TempDir()
+	originDir := filepath.Join(root, "origin")
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, originDir, "v1.2.3")
+	mustRun(t, originDir, "git", "branch", "-M", "main")
+	for _, name := range []string{"README.md", "README_zh.md"} {
+		mustWriteFile(t, filepath.Join(originDir, name), []byte("https://raw.githubusercontent.com/owner/repo/main/scripts/install.sh\n"), 0o644)
+	}
+	mustRun(t, originDir, "git", "add", "README.md", "README_zh.md")
+	mustRun(t, originDir, "git", "commit", "-m", "installation instructions")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, originDir, "git", "push", remoteDir, "main:refs/heads/main")
+	mustRun(t, root, "git", "clone", "--no-local", "--depth", "1", "--branch", "main", originDir, workDir)
+
+	runGiteeCodeMirror(t, workDir, remoteDir, true)
+	firstCommit := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir, "rev-parse", "refs/heads/main"))
+	sourceCommit := strings.TrimSpace(mustOutput(t, originDir, "git", "rev-parse", "main"))
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", firstCommit+"^")); got != sourceCommit {
+		t.Fatalf("localized parent = %s, want source %s", got, sourceCommit)
+	}
+	for _, name := range []string{"README.md", "README_zh.md"} {
+		if got := mustOutput(t, workDir, "git", "show", firstCommit+":"+name); !strings.Contains(got, "https://gitee.com/owner/repo/raw/main/scripts/install.sh") {
+			t.Fatalf("%s was not localized: %s", name, got)
+		}
+	}
+
+	mustWriteFile(t, filepath.Join(remoteDir, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	output := runGiteeCodeMirror(t, workDir, remoteDir, true)
+	if !strings.Contains(output, "skip push") {
+		t.Fatalf("unchanged main did not skip push:\n%s", output)
+	}
+	if got := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir, "rev-parse", "refs/heads/main")); got != firstCommit {
+		t.Fatalf("unchanged main moved from %s to %s", firstCommit, got)
+	}
+
+	mustWriteFile(t, filepath.Join(remoteDir, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	mustWriteFile(t, filepath.Join(originDir, "payload.txt"), []byte("updated source bytes\n"), 0o644)
+	mustRun(t, originDir, "git", "add", "payload.txt")
+	mustRun(t, originDir, "git", "commit", "-m", "update main")
+	runGiteeCodeMirror(t, workDir, remoteDir, true)
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", "refs/remotes/gitee/main")); got != firstCommit {
+		t.Fatalf("incremental push did not fetch localized tip %s; got %s", firstCommit, got)
+	}
+	secondCommit := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir, "rev-parse", "refs/heads/main"))
+	latestSource := strings.TrimSpace(mustOutput(t, originDir, "git", "rev-parse", "main"))
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", secondCommit+"^")); got != latestSource {
+		t.Fatalf("incremental localized parent = %s, want %s", got, latestSource)
+	}
+	if got := mustOutput(t, workDir, "git", "show", secondCommit+":payload.txt"); got != "updated source bytes\n" {
+		t.Fatalf("incremental payload = %q", got)
+	}
+	if got := mustOutput(t, root, "git", "--git-dir", remoteDir, "for-each-ref", "refs/tags"); got != "" {
+		t.Fatalf("code mirror published release tags:\n%s", got)
+	}
+}
+
+func TestGiteeCodeMirrorLeaseRejectsAConcurrentMainUpdate(t *testing.T) {
+	root := t.TempDir()
+	originDir := filepath.Join(root, "origin")
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, originDir, "v1.2.3")
+	mustRun(t, originDir, "git", "branch", "-M", "main")
+	for _, name := range []string{"README.md", "README_zh.md"} {
+		mustWriteFile(t, filepath.Join(originDir, name), []byte("https://raw.githubusercontent.com/owner/repo/main/scripts/install.sh\n"), 0o644)
+	}
+	mustRun(t, originDir, "git", "add", "README.md", "README_zh.md")
+	mustRun(t, originDir, "git", "commit", "-m", "installation instructions")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, originDir, "git", "push", remoteDir, "main:refs/heads/main")
+	mustRun(t, root, "git", "clone", "--no-local", "--depth", "1", "--branch", "main", originDir, workDir)
+	sourceCommit := strings.TrimSpace(mustOutput(t, originDir, "git", "rev-parse", "main"))
+	concurrentCommit := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir,
+		"-c", "user.name=Mirror Test", "-c", "user.email=mirror-test@example.com",
+		"commit-tree", sourceCommit+"^{tree}", "-p", sourceCommit, "-m", "concurrent main update"))
+	output := runGiteeCodeMirror(t, workDir, remoteDir, false, "GIT_TEST_CONCURRENT_COMMIT="+concurrentCommit)
+	if !strings.Contains(output, "stale info") {
+		t.Fatalf("concurrent update was not rejected by the lease:\n%s", output)
+	}
+	if got := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir, "rev-parse", "refs/heads/main")); got != concurrentCommit {
+		t.Fatalf("concurrent tip %s was overwritten by %s", concurrentCommit, got)
+	}
+}
+
+func TestGiteeCodeMirrorInitializesAnEmptyRemote(t *testing.T) {
+	for _, readmes := range [][]string{{"README.md", "README_zh.md"}, {"README.md"}, {"README_zh.md"}, {}} {
+		name := strings.Join(readmes, "+")
+		if name == "" {
+			name = "no-readmes"
+		}
+		t.Run(name, func(t *testing.T) {
+			originDir, workDir, remoteDir := seedEmptyGiteeCodeMirror(t, readmes...)
+			sourceCommit := strings.TrimSpace(mustOutput(t, originDir, "git", "rev-parse", "main"))
+			// A stale local tracking ref must not turn a missing remote main into a skip.
+			mustRun(t, workDir, "git", "update-ref", "refs/remotes/gitee/main", sourceCommit)
+			output := runGiteeCodeMirror(t, workDir, remoteDir, true)
+			if !strings.Contains(output, "initialize with an absent-ref lease") {
+				t.Fatalf("empty remote did not take the initialization path:\n%s", output)
+			}
+			mirrorCommit := strings.TrimSpace(mustOutput(t, workDir, "git", "ls-remote", remoteDir, "refs/heads/main"))
+			fields := strings.Fields(mirrorCommit)
+			if len(fields) != 2 {
+				t.Fatalf("empty remote main was not created: %q", mirrorCommit)
+			}
+			if len(readmes) == 0 {
+				if fields[0] != sourceCommit {
+					t.Fatalf("unlocalized main = %s, want %s", fields[0], sourceCommit)
+				}
+			} else if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", fields[0]+"^")); got != sourceCommit {
+				t.Fatalf("localized parent = %s, want source %s", got, sourceCommit)
+			}
+			for _, readme := range readmes {
+				if got := mustOutput(t, workDir, "git", "show", fields[0]+":"+readme); !strings.Contains(got, "https://gitee.com/owner/repo/raw/main/scripts/install.sh") {
+					t.Fatalf("%s was not localized: %s", readme, got)
+				}
+			}
+			if got := mustOutput(t, workDir, "git", "ls-remote", "--tags", remoteDir); got != "" {
+				t.Fatalf("initialization published release tags:\n%s", got)
+			}
+			mustWriteFile(t, filepath.Join(remoteDir, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+			if output := runGiteeCodeMirror(t, workDir, remoteDir, true); !strings.Contains(output, "skip push") {
+				t.Fatalf("initialized remote did not skip unchanged main:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestGiteeCodeMirrorLeaseRejectsAConcurrentMainCreation(t *testing.T) {
+	originDir, workDir, remoteDir := seedEmptyGiteeCodeMirror(t, "README.md")
+	// Make the competing commit available without leaving any remote refs.
+	mustRun(t, originDir, "git", "push", remoteDir, "main:refs/heads/seed")
+	sourceCommit := strings.TrimSpace(mustOutput(t, originDir, "git", "rev-parse", "main"))
+	concurrentCommit := strings.TrimSpace(mustOutput(t, workDir, "git", "--git-dir", remoteDir,
+		"-c", "user.name=Mirror Test", "-c", "user.email=mirror-test@example.com",
+		"commit-tree", sourceCommit+"^{tree}", "-p", sourceCommit, "-m", "concurrent main creation"))
+	mustRun(t, workDir, "git", "--git-dir", remoteDir, "update-ref", "-d", "refs/heads/seed")
+	output := runGiteeCodeMirror(t, workDir, remoteDir, false, "GIT_TEST_CONCURRENT_COMMIT="+concurrentCommit)
+	if !strings.Contains(output, "stale info") {
+		t.Fatalf("concurrent main creation was not rejected by the lease:\n%s", output)
+	}
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "--git-dir", remoteDir, "rev-parse", "refs/heads/main")); got != concurrentCommit {
+		t.Fatalf("concurrent tip %s was overwritten by %s", concurrentCommit, got)
+	}
+}
+
+func TestGiteeCodeMirrorDoesNotInitializeAfterRemoteReadFailure(t *testing.T) {
+	for _, operation := range []string{"ls-remote", "fetch"} {
+		t.Run(operation, func(t *testing.T) {
+			originDir, workDir, remoteDir := seedEmptyGiteeCodeMirror(t, "README.md")
+			if operation == "fetch" {
+				mustRun(t, originDir, "git", "push", remoteDir, "main:refs/heads/main")
+			}
+			before := mustOutput(t, workDir, "git", "ls-remote", "--heads", remoteDir)
+			output := runGiteeCodeMirror(t, workDir, remoteDir, false, "GIT_TEST_FAIL_GITEE_OPERATION="+operation)
+			if !strings.Contains(output, "injected Gitee "+operation+" failure") {
+				t.Fatalf("remote read failure was not preserved:\n%s", output)
+			}
+			if strings.Contains(output, "initialize with an absent-ref lease") {
+				t.Fatalf("remote read failure was mistaken for missing main:\n%s", output)
+			}
+			if after := mustOutput(t, workDir, "git", "ls-remote", "--heads", remoteDir); after != before {
+				t.Fatalf("remote refs changed after read failure: before %q, after %q", before, after)
+			}
+		})
+	}
+}
+
+func TestSyncGiteeTagFetchesLocalizedHeadsBeforePushingAMissingTag(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, workDir, "git", "push", remoteDir, "HEAD:refs/heads/main")
+	sourceCommit := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", "HEAD"))
+	localizedCommit := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir,
+		"-c", "user.name=Mirror Test", "-c", "user.email=mirror-test@example.com",
+		"commit-tree", sourceCommit+"^{tree}", "-p", sourceCommit, "-m", "Gitee-only commit"))
+	mustRun(t, root, "git", "--git-dir", remoteDir, "update-ref", "refs/heads/main", localizedCommit)
+
+	runGiteeTagSync(t, scriptPath, workDir, remoteDir, "v1.2.3", true)
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", "refs/remotes/gitee/main")); got != localizedCommit {
+		t.Fatalf("tag push did not fetch Gitee-only tip %s; got %s", localizedCommit, got)
+	}
+	if got := peeledRemoteTag(t, workDir, remoteDir, "v1.2.3"); got != sourceCommit {
+		t.Fatalf("release tag points to %s, want %s", got, sourceCommit)
+	}
+}
+
+func TestSyncGiteeTagReportsObjectFetchFailureBeforeAnyPush(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	wrapperDir := t.TempDir()
+	logPath := filepath.Join(root, "git.log")
+	mustWriteFile(t, filepath.Join(wrapperDir, "git"), []byte(fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
+if [ "$1" = "fetch" ]; then
+  exit 128
+fi
+exec %q "$@"
+`, realGit)), 0o755)
+	output := runGiteeTagSync(t, scriptPath, workDir, remoteDir, "v1.2.3", false,
+		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"), "GIT_TEST_LOG="+logPath)
+	if !strings.Contains(output, "could not fetch existing Gitee heads for object reuse; tag v1.2.3 push was not attempted") {
+		t.Fatalf("object fetch failure did not identify the pre-push failure:\n%s", output)
+	}
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(git log) error = %v", err)
+	}
+	if strings.Contains(string(logData), "push ") {
+		t.Fatalf("tag push attempted after object fetch failure:\n%s", logData)
+	}
 }
 
 func TestSyncGiteeTagSkipsAnAlreadyAlignedImmutableTag(t *testing.T) {
@@ -167,6 +412,13 @@ func TestSyncGiteeTagUsesAskpassWithoutEmbeddingCredentials(t *testing.T) {
 	wrapper := fmt.Sprintf(`#!/bin/sh
 set -eu
 case "$1" in
+  fetch)
+    printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
+    case " $* " in *"$DWS_GITEE_TOKEN"*) exit 90 ;; esac
+    [ "$2" = "--no-tags" ]
+    [ "$3" = "https://gitee.com/owner/repo.git" ]
+    [ -x "${GIT_ASKPASS:-}" ]
+    ;;
   ls-remote)
     printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
     case " $* " in *"$DWS_GITEE_TOKEN"*) exit 91 ;; esac
@@ -853,6 +1105,142 @@ func mustAbs(t *testing.T, path string) string {
 		t.Fatalf("Abs(%s) error = %v", path, err)
 	}
 	return abs
+}
+
+func runGiteeCodeMirror(t *testing.T, workDir, remoteDir string, wantSuccess bool, extraEnv ...string) string {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("mirror workflow runs on Ubuntu and uses GNU sed")
+	}
+	workflowPath := mustAbs(t, filepath.Join("..", "..", ".github", "workflows", "mirror-to-gitee.yml"))
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", workflowPath, err)
+	}
+	content := string(data)
+	marker := "      - name: Push localized main to Gitee\n"
+	start := strings.Index(content, marker)
+	if start < 0 {
+		t.Fatal("localized mirror step not found")
+	}
+	content = content[start+len(marker):]
+	const runMarker = "        run: |\n"
+	start = strings.Index(content, runMarker)
+	if start < 0 {
+		t.Fatal("localized mirror script not found")
+	}
+	var script strings.Builder
+	for _, line := range strings.Split(content[start+len(runMarker):], "\n") {
+		if strings.TrimSpace(line) != "" && !strings.HasPrefix(line, "          ") {
+			break
+		}
+		script.WriteString(strings.TrimPrefix(line, "          "))
+		script.WriteByte('\n')
+	}
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	wrapperDir := t.TempDir()
+	logPath := filepath.Join(wrapperDir, "git.log")
+	wrapper := fmt.Sprintf(`#!/usr/bin/env bash
+set -eu
+printf '%%s\n' "$*" >>"$GIT_TEST_LOG"
+if [ "$1" = "${GIT_TEST_FAIL_GITEE_OPERATION:-}" ]; then
+  case " $* " in
+    *" https://gitee.com/owner/repo.git "*)
+      printf 'injected Gitee %%s failure\n' "$1" >&2
+      exit 128
+      ;;
+  esac
+fi
+if [ "$1" = "push" ] && [ -n "${GIT_TEST_CONCURRENT_COMMIT:-}" ]; then
+  %q --git-dir "$GIT_TEST_REMOTE" update-ref refs/heads/main "$GIT_TEST_CONCURRENT_COMMIT"
+fi
+args=()
+for arg in "$@"; do
+  if [ "$arg" = "https://gitee.com/owner/repo.git" ]; then
+    args+=("$GIT_TEST_REMOTE")
+  else
+    args+=("$arg")
+  fi
+done
+exec %q "${args[@]}"
+`, realGit, realGit)
+	mustWriteFile(t, filepath.Join(wrapperDir, "git"), []byte(wrapper), 0o755)
+	scriptPath := filepath.Join(wrapperDir, "mirror.sh")
+	mustWriteFile(t, scriptPath, []byte(script.String()), 0o644)
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GITEE_REPO=owner/repo",
+		"GITEE_USER=test-user",
+		"GITEE_TOKEN=sensitive-token",
+		"GIT_TEST_LOG="+logPath,
+		"GIT_TEST_REMOTE="+remoteDir,
+		"GIT_TEST_CONCURRENT_COMMIT=",
+		"GIT_TEST_FAIL_GITEE_OPERATION=",
+	)
+	cmd.Env = append(cmd.Env, extraEnv...)
+	output, err := cmd.CombinedOutput()
+	if wantSuccess && err != nil {
+		t.Fatalf("Gitee code mirror error = %v\noutput:\n%s", err, output)
+	}
+	if !wantSuccess && err == nil {
+		t.Fatalf("Gitee code mirror unexpectedly succeeded:\n%s", output)
+	}
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(git log) error = %v", err)
+	}
+	logText := string(logData)
+	if strings.Contains(logText, "sensitive-token") || strings.Contains(string(output), "sensitive-token") {
+		t.Fatal("Gitee token leaked into git arguments or output")
+	}
+	if pushIndex := strings.Index(logText, "push --progress "); pushIndex >= 0 {
+		for _, env := range extraEnv {
+			if strings.HasPrefix(env, "GIT_TEST_FAIL_GITEE_OPERATION=") && env != "GIT_TEST_FAIL_GITEE_OPERATION=" {
+				t.Fatal("push must not be attempted after a Gitee read failure")
+			}
+		}
+		queryIndex := strings.Index(logText, "ls-remote --exit-code --heads https://gitee.com/owner/repo.git refs/heads/main")
+		if queryIndex < 0 || queryIndex > pushIndex {
+			t.Fatal("Gitee main must be queried before pushing")
+		}
+		if strings.Contains(logText, "--force-with-lease=refs/heads/main: ") {
+			if !strings.Contains(string(output), "initialize with an absent-ref lease") {
+				t.Fatal("absent-ref lease must follow a confirmed missing remote main")
+			}
+		} else {
+			fetchIndex := strings.Index(logText, "fetch --no-tags https://gitee.com/owner/repo.git ")
+			if fetchIndex < 0 || fetchIndex > pushIndex {
+				t.Fatal("existing Gitee head must be fetched before pushing")
+			}
+		}
+	}
+	return string(output)
+}
+
+func seedEmptyGiteeCodeMirror(t *testing.T, readmes ...string) (originDir, workDir, remoteDir string) {
+	t.Helper()
+	root := t.TempDir()
+	originDir = filepath.Join(root, "origin")
+	workDir = filepath.Join(root, "work")
+	remoteDir = filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, originDir, "v1.2.3")
+	mustRun(t, originDir, "git", "branch", "-M", "main")
+	for _, name := range readmes {
+		mustWriteFile(t, filepath.Join(originDir, name), []byte("https://raw.githubusercontent.com/owner/repo/main/scripts/install.sh\n"), 0o644)
+		mustRun(t, originDir, "git", "add", name)
+	}
+	if len(readmes) > 0 {
+		mustRun(t, originDir, "git", "commit", "-m", "installation instructions")
+	}
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, root, "git", "clone", "--no-local", "--depth", "1", "--branch", "main", originDir, workDir)
+	return originDir, workDir, remoteDir
 }
 
 func seedTaggedRepository(t *testing.T, workDir, tag string) {
