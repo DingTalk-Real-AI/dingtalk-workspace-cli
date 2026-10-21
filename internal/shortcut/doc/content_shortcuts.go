@@ -103,6 +103,9 @@ var Create = shortcut.Shortcut{
 		if name == "" {
 			name = docDefaultTitle(content, format)
 		}
+		if format == "markdown" && content != "" && name != "" {
+			content = helpers.StripDuplicateTitle(content, name)
+		}
 		params := map[string]any{"name": name}
 		if rt.Str("folder") != "" {
 			params["folderId"] = rt.Str("folder")
