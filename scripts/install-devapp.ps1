@@ -14,6 +14,12 @@
 #   DWS_INSTALL_DIR  binary dir (default: ~/.local/bin)
 #   DWS_NO_SKILLS    set 1 to skip the dev skill
 
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+    # A successful method call does not prove that all installer operations are allowed.
+    # Require FullLanguage even when WDAC audit mode reports ConstrainedLanguage.
+    throw "DWS installer cannot run in PowerShell $($ExecutionContext.SessionState.LanguageMode). This script requires FullLanguage, including on WDAC audit-mode systems that report ConstrainedLanguage. Use an organization-approved manual Release or npm installation where allowed. Do not disable application-control policies; ExecutionPolicy Bypass does not change the language mode."
+}
+
 $ErrorActionPreference = "Stop"
 
 $Repo       = if ($env:DEVAPP_REPO) { $env:DEVAPP_REPO } else { "DingTalk-Real-AI/dingtalk-workspace-cli" }
