@@ -168,6 +168,9 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			if calls != 1 {
 				t.Fatal("command made extra portal requests")
 			}
+			if strings.Contains(out.String(), `"oidc_provider"`) {
+				t.Fatal("local login metadata changed the command response")
+			}
 			if base, err := os.ReadFile(filepath.Join(dir, "mcp_url")); err != nil || string(base) != server.URL+"\n" {
 				t.Fatalf("exchange changed system MCP configuration: %v", err)
 			}

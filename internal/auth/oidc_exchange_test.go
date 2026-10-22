@@ -151,6 +151,10 @@ func TestCrossPlatformCoverageOIDCSavedTokenRefreshKeepsExchangeApplication(t *t
 				t.Errorf("saved token lost refresh credentials: %v", err)
 			}
 			encoded, err := json.Marshal(data)
+			var stored map[string]any
+			if json.Unmarshal(encoded, &stored) != nil || stored["oidc_provider"] != "ant" {
+				t.Fatal("saved token lost explicit OIDC provider")
+			}
 			if err != nil || strings.Contains(string(encoded), "exchange-secret") {
 				t.Fatal("token projection exposed the application secret")
 			}
@@ -162,7 +166,7 @@ func TestCrossPlatformCoverageOIDCSavedTokenRefreshKeepsExchangeApplication(t *t
 				t.Fatal(err)
 			}
 			refreshed, err := LoadTokenDataForProfile(dir, "corp:new-user")
-			if err != nil || refreshed.ClientID != wantClient || refreshed.MCPClientSecretRequired != custom || refreshed.MCPBaseURL != server.URL || refreshCalls != 1 {
+			if err != nil || refreshed.OIDCProvider != "ant" || refreshed.ClientID != wantClient || refreshed.MCPClientSecretRequired != custom || refreshed.MCPBaseURL != server.URL || refreshCalls != 1 {
 				t.Fatalf("refresh did not preserve application binding: %v", err)
 			}
 		})
@@ -265,7 +269,7 @@ func TestCrossPlatformCoverageOIDCRefreshSecretAndEndpointBoundaries(t *testing.
 				io.WriteString(w, `{}`)
 			}))
 			defer server.Close()
-			data := &TokenData{ClientID: "app", Source: "mcp", RefreshToken: "refresh", MCPBaseURL: server.URL, MCPClientSecretRequired: scenario != "managed-secret-present"}
+			data := &TokenData{ClientID: "app", Source: "mcp", OIDCProvider: "ant", RefreshToken: "refresh", MCPBaseURL: server.URL, MCPClientSecretRequired: scenario != "managed-secret-present"}
 			if scenario == "missing-endpoint" {
 				data.MCPBaseURL = ""
 			}
@@ -287,6 +291,47 @@ func TestCrossPlatformCoverageOIDCRefreshSecretAndEndpointBoundaries(t *testing.
 			}
 			if (strings.HasPrefix(scenario, "503") || scenario == "429-empty") && ClassifyRefreshFailure(err) != RefreshFailureTransient {
 				t.Fatalf("temporary Portal failure would expire the profile: %v", err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCRefreshRejectionRetainsSafeCode(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		code         string
+		wantRejected bool
+	}{
+		{"rejected", legacyMCPRefreshRejectedCode, true},
+		{"padded-rejection", " " + legacyMCPRefreshRejectedCode + " ", true},
+		{"unknown-code", "secret-canary-code", false},
+		{"message-only", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != MCPRefreshTokenPath {
+					t.Errorf("unexpected refresh endpoint: %s", r.URL.Path)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]string{"errorCode": tc.code, "errorMsg": "secret-canary-message"})
+			}))
+			defer server.Close()
+			p := &OAuthProvider{httpClient: server.Client()}
+			_, err := p.refreshWithRefreshToken(t.Context(), &TokenData{ClientID: "app", Source: "mcp", OIDCProvider: "ant", RefreshToken: "refresh", MCPBaseURL: server.URL})
+			var classified *dwserrors.Error
+			if !errors.As(err, &classified) || classified.Category != dwserrors.CategoryAuth {
+				t.Fatalf("want classified auth error, got %v", err)
+			}
+			var business *MCPTokenExchangeError
+			if got := errors.As(err, &business); got != tc.wantRejected || isRefreshTokenRejected(err) != tc.wantRejected {
+				t.Fatalf("rejection classification = %t, want %t: %v", got, tc.wantRejected, err)
+			}
+			if business != nil && business.Code != legacyMCPRefreshRejectedCode {
+				t.Fatalf("unexpected preserved code: %q", business.Code)
+			}
+			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+				if strings.Contains(cause.Error(), "secret-canary") {
+					t.Fatal("refresh error chain retained untrusted response data")
+				}
 			}
 		})
 	}

@@ -62,7 +62,7 @@ func (p *OIDCLoginProvider) Exchange(ctx context.Context, code, state string) (*
 	}
 	data, err := p.exchange(ctx, code, state)
 	var classified *dwserrors.Error
-	if errors.As(err, &classified) {
+	if errors.As(err, &classified) && classified.Details["action"] != "stop" {
 		// A failed request may already have consumed the transaction. Preserve
 		// its classification, but never suggest retrying this same code/state.
 		copy := *classified
@@ -120,6 +120,7 @@ func (p *OIDCLoginProvider) ExchangeAndSave(ctx context.Context, configDir, code
 	if name := strings.TrimSpace(identity.CorpName); name != "" {
 		data.CorpName = name
 	}
+	data.OIDCProvider = p.provider
 	if err := persistExternalExchangeTokenWithSecret(configDir, data, p.exchangeSecret()); err != nil {
 		return nil, oidcSafeError(ctx, err, "cannot save OIDC exchange profile")
 	}

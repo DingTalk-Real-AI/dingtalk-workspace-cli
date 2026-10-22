@@ -11,3 +11,9 @@ macOS 终端按实际文件描述符识别，使用 `select` 等待输入，不�
 OIDC 换票响应增加实际 DWS `clientId`（与 IdP 的 `client_id` 不同）。`provider-login` 和 `token-exchange --save` 均保存该应用绑定和原 Portal 地址。默认应用继续由 Portal 托管密钥；显式指定的自定义应用将原始密钥保存到现有安全凭证槽，并与 Token/Profile 写入一起回滚。刷新自定义应用时从该槽读取密钥，发送给原 Portal 的 `/oauth2/refreshToken`，不回退到全局应用、不跟随重定向、不在结果或 app.json 中暴露密钥。未使用 `--save` 的分步换票不写入本地凭证。
 
 需要同步部署 Portal：默认 OIDC 响应返回实际 `clientId`，刷新接口接受可选 `clientSecret`。旧版默认响应缺少应用绑定时，新 CLI 会明确要求更新 Portal；旧的缺失绑定记录需要重新登录。
+
+OIDC 登录持久化时记录 `oidc_provider`，刷新成功继续保留；该本地元数据不加入未保存的 token-exchange 返回值。所有 OIDC 分支只通过该字段识别，不再从 Portal 地址或密钥模式推断登录来源。此前未记录该字段的开发测试凭证不做兼容迁移，需重新登录。
+
+OIDC 刷新前校验原应用、Portal 和登录来源绑定，缺失时直接报错，不使用全局应用或默认端点兜底。刷新失败不读取组织镜像或历史全局凭证，即使同用户、同组织也不能切换应用。被拒绝或失效时提示重新执行 provider-login 或原分步登录流程，自定义应用需沿用原 client-id/client-secret；网络、取消、超时、限流和 5xx 保留原凭证，不强制重新登录。普通 OAuth 既有恢复策略保持不变。
+
+已确认的 `invalidParameter.authCode.notFound` 仍保留脱敏后的错误类型和规范化业务码供分类使用；错误识别不再意味着允许 OIDC 凭证恢复。服务端原始错误文本不进入输出、日志或错误链。

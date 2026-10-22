@@ -5,7 +5,7 @@
 `auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
 必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含
 `provider`、`code`、`state`；显式指定 DWS 应用凭据时再加入 `client_id`、`client_secret`。
-核心不再根据 `provider == "ant"` 自动调用 Portal Mock SDK。
+核心通过注册项选择授权实现，具体 SDK 由 overlay 提供。
 服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），登录不修改端点配置。
 
 ## Overlay 接入
@@ -56,7 +56,6 @@ state 不匹配不会触发其他 SDK 或 Mock 兜底，也不会换票或保存
 
 核心的 Hook API 提交并推送后，overlay 需要把远程核心依赖更新到包含该 API 的提交，
 再编译上述注册代码。只修改另一 Go 包里的同名文件不会替换核心实现。
-核心保留显式调用的 `AntSDKOIDCProvider` Mock 供测试使用，生产命令不自动选择它。
 
 回归验证覆盖自定义名称和 ant 注册、真实命令入口及凭证保存、非法/重复/缺失注册、
 后端拒绝、SDK 错误脱敏、取消/超时、state 篡改、空授权码和 help/dry-run 无副作用。

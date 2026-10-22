@@ -849,6 +849,12 @@ func (p *OAuthProvider) getTokenSnapshotForProfile(ctx context.Context, profile 
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
 		}
+		if data.isOIDCSession() {
+			if ClassifyRefreshFailure(rErr) == RefreshFailureTransient {
+				return nil, rErr
+			}
+			return nil, oidcRefreshReauthorizationError(data, rErr)
+		}
 		var exchangeErr *MCPTokenExchangeError
 		if errors.As(rErr, &exchangeErr) && exchangeErr.requiresReauthorization() {
 			return nil, fmt.Errorf(
@@ -862,6 +868,9 @@ func (p *OAuthProvider) getTokenSnapshotForProfile(ctx context.Context, profile 
 		_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 	}
 
+	if data.isOIDCSession() {
+		return nil, oidcRefreshReauthorizationError(data, ErrTokenDataNotFound)
+	}
 	return nil, fmt.Errorf("%s: %w", i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"), ErrTokenDataNotFound)
 }
 
@@ -949,7 +958,9 @@ func (p *OAuthProvider) lockedRefreshForProfile(ctx context.Context, profile str
 		p.logger.Debug("refreshing token (dual-locked)")
 	}
 	refreshed, rErr := oauthRefreshToken(p, ctx, data)
-	if rErr == nil || !isRefreshTokenRejected(rErr) {
+	// OIDC credentials stay bound to the selected application and Portal. A
+	// rejected refresh never authorizes reading another credential slot.
+	if rErr == nil || data.isOIDCSession() || !isRefreshTokenRejected(rErr) {
 		return refreshed, rErr
 	}
 	// A stale identity slot can survive an older organization-only refresh.

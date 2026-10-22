@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/google/uuid"
@@ -183,6 +184,14 @@ func (p *OAuthProvider) exchangeCodeViaMCPClientID(ctx context.Context, code, cl
 }
 
 func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *TokenData) (*TokenData, error) {
+	if data.isOIDCSession() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := validateOIDCRefreshBinding(data); err != nil {
+			return nil, err
+		}
+	}
 	// Use stored Source to determine refresh path (not current runtime state)
 	// This ensures refresh works even if environment variables changed since login
 	if data.Source == "mcp" {
@@ -259,9 +268,10 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 
 // refreshViaMCP refreshes token via MCP proxy.
 func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*TokenData, error) {
+	oidcSession := data.isOIDCSession()
 	// Use stored clientId from token data
 	clientID := data.ClientID
-	if clientID == "" && !data.MCPClientSecretRequired {
+	if clientID == "" && !oidcSession {
 		// Fallback for legacy tokens
 		clientID = ClientID()
 	}
@@ -271,10 +281,8 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	}
 
 	baseURL := MCPBaseURLForLoginRegion(p.loginRegion())
-	if data.MCPBaseURL != "" {
-		if _, err := oidcBaseURL(data.MCPBaseURL); err != nil {
-			return nil, fmt.Errorf("invalid saved OIDC Portal URL; log in again")
-		}
+	if oidcSession {
+		// refreshWithRefreshToken validated the original application and Portal.
 		baseURL = data.MCPBaseURL
 	}
 	url := baseURL + MCPRefreshTokenPath
@@ -283,10 +291,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
-	if data.MCPClientSecretRequired {
-		if data.MCPBaseURL == "" {
-			return nil, fmt.Errorf("missing OIDC Portal binding; log in again")
-		}
+	if oidcSession && data.MCPClientSecretRequired {
 		secret, err := LoadClientSecretStrict(clientID)
 		if err != nil || strings.TrimSpace(secret) == "" {
 			return nil, fmt.Errorf("cannot load the saved OIDC application secret; log in again")
@@ -295,7 +300,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	}
 	var resp []byte
 	var err error
-	if data.MCPBaseURL != "" {
+	if oidcSession {
 		// A redirect must never forward the saved application secret. Preserve
 		// HTTP status for refresh retry classification without exposing bodies.
 		var status int
@@ -311,8 +316,16 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	}
 	updated, err := p.parseMCPTokenResponse(resp)
 	if err != nil {
-		if data.MCPBaseURL != "" {
-			return nil, oidcSafeError(ctx, err, "OIDC refresh returned an invalid token response")
+		if oidcSession {
+			var exchangeErr *MCPTokenExchangeError
+			if ctx.Err() == nil && errors.As(err, &exchangeErr) && exchangeErr.requiresReauthorization() {
+				// Retain only the reviewed rejection code for error classification.
+				// Never keep the server's message or original error in the chain.
+				return nil, dwserrors.NewAuth("DWS refresh token was rejected", dwserrors.WithCause(&MCPTokenExchangeError{
+					Code: legacyMCPRefreshRejectedCode, Message: "refresh credential rejected",
+				}))
+			}
+			return nil, oidcSafeError(ctx, err, "DWS refresh returned an invalid token response")
 		}
 		return nil, err
 	}
@@ -321,6 +334,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	updated.Source = data.Source
 	updated.MCPBaseURL = data.MCPBaseURL
 	updated.MCPClientSecretRequired = data.MCPClientSecretRequired
+	updated.OIDCProvider = data.OIDCProvider
 	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID

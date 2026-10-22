@@ -118,6 +118,7 @@ func (p *OIDCLoginProvider) LoginAndSave(ctx context.Context, configDir string) 
 		return nil, err
 	}
 	oauth := &OAuthProvider{configDir: configDir, IdentityEnricher: p.IdentityEnricher}
+	data.OIDCProvider = p.provider
 	if err := oauth.persistLoginTokenWithSecret(ctx, data, p.exchangeSecret()); err != nil {
 		return nil, oidcSafeError(ctx, err, "cannot save OIDC login profile")
 	}
@@ -334,47 +335,41 @@ func (p *OIDCLoginProvider) exchangeRequest(ctx context.Context, body map[string
 
 // Each portal request is sent once; failures are returned to the caller.
 func (p *OIDCLoginProvider) post(ctx context.Context, path string, body any, dst any) (int, error) {
-	status, content, err := oidcJSONRequest(ctx, p.client, p.baseURL+path, body, "")
+	status, content, trace, err := oidcJSONRequestWithTrace(ctx, p.client, p.baseURL+path, body, "")
 	if err != nil {
 		return 0, err
 	}
 	if status != http.StatusOK && status != http.StatusCreated {
-		var failure struct {
-			Error struct {
-				Code   string `json:"code"`
-				Action string `json:"action"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(content, &failure) == nil {
-			if failure.Error.Action == "stop" && path == "/cli/auth/oidc/transactions" && (failure.Error.Code == "unsupported_provider" || failure.Error.Code == "temporarily_unavailable" || failure.Error.Code == "provider_unavailable") {
-				return status, dwserrors.NewAuth(fmt.Sprintf("OIDC provider %q is not configured, disabled, or unavailable; contact the DWS administrator", p.provider), dwserrors.WithReason("OIDC_PROVIDER_UNAVAILABLE"))
-			}
-		}
-		return status, dwserrors.NewAuth(fmt.Sprintf("OIDC portal rejected the login request (HTTP %d); restart login", status))
+		return status, p.portalError(path, status, content, trace, body)
 	}
 	if json.Unmarshal(content, dst) != nil {
-		return 0, dwserrors.NewAuth("OIDC portal returned an invalid response")
+		return 0, oidcErrorWithTrace(dwserrors.NewAuth("OIDC portal returned an invalid response"), trace)
 	}
 	return status, nil
 }
 
-// Shared bounded JSON transport for the portal and provider SDK. Redirects
-// are forbidden so a response cannot forward a code or SDK session elsewhere.
+// Shared bounded JSON transport for portal login and refresh requests.
+// Redirects are forbidden so credentials cannot be forwarded elsewhere.
 func oidcJSONRequest(ctx context.Context, configured *http.Client, endpoint string, body any, bearer string) (int, []byte, error) {
+	status, content, _, err := oidcJSONRequestWithTrace(ctx, configured, endpoint, body, bearer)
+	return status, content, err
+}
+
+func oidcJSONRequestWithTrace(ctx context.Context, configured *http.Client, endpoint string, body any, bearer string) (int, []byte, string, error) {
 	started := time.Now()
 	logEndpoint := oidcLogEndpoint(endpoint)
 	if err := ctx.Err(); err != nil {
 		slog.Debug("auth.oidc.request_canceled", "endpoint", logEndpoint, "error", err)
-		return 0, nil, oidcSafeError(ctx, err, "OIDC request timed out")
+		return 0, nil, "", oidcSafeError(ctx, err, "OIDC request timed out")
 	}
 	slog.Debug("auth.oidc.request", "endpoint", logEndpoint)
 	data, err := json.Marshal(body)
 	if err != nil {
-		return 0, nil, dwserrors.NewInternal("cannot construct OIDC request")
+		return 0, nil, "", dwserrors.NewInternal("cannot construct OIDC request")
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(data))
 	if err != nil {
-		return 0, nil, dwserrors.NewValidation("invalid OIDC request endpoint")
+		return 0, nil, "", dwserrors.NewValidation("invalid OIDC request endpoint")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -392,19 +387,20 @@ func oidcJSONRequest(ctx context.Context, configured *http.Client, endpoint stri
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Debug("auth.oidc.request_failed", "endpoint", logEndpoint, "error", err, "elapsed_ms", time.Since(started).Milliseconds())
-		return 0, nil, oidcNetworkError(ctx, err, "OIDC portal connection failed")
+		return 0, nil, "", oidcNetworkError(ctx, err, "OIDC portal connection failed")
 	}
 	defer resp.Body.Close()
+	trace := oidcDiagnosticID(resp.Header.Get("X-Dws-Trace-Id"), body)
 	content, err := io.ReadAll(io.LimitReader(resp.Body, (64<<10)+1))
 	if err != nil {
 		slog.Debug("auth.oidc.read_failed", "endpoint", logEndpoint, "status", resp.StatusCode, "error", err, "elapsed_ms", time.Since(started).Milliseconds())
-		return 0, nil, oidcNetworkError(ctx, err, "cannot read OIDC portal response")
+		return 0, nil, trace, oidcErrorWithTrace(oidcNetworkError(ctx, err, "cannot read OIDC portal response"), trace)
 	}
 	slog.Debug("auth.oidc.response", "endpoint", logEndpoint, "status", resp.StatusCode, "elapsed_ms", time.Since(started).Milliseconds())
 	if len(content) > 64<<10 || !oidcUniqueJSON(content) {
-		return resp.StatusCode, nil, dwserrors.NewAuth("OIDC portal returned an invalid response")
+		return resp.StatusCode, nil, trace, oidcErrorWithTrace(dwserrors.NewAuth("OIDC portal returned an invalid response"), trace)
 	}
-	return resp.StatusCode, content, nil
+	return resp.StatusCode, content, trace, nil
 }
 
 func oidcSafeError(ctx context.Context, err error, message string) error {

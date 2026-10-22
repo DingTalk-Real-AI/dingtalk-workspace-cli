@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -141,125 +140,6 @@ func TestCrossPlatformCoverageProviderLoginFailedInvocationClearsCredentials(t *
 		if authpkg.ClientID() == "rejected-app" || authpkg.ClientSecret() == "rejected-secret" {
 			t.Fatal("next invocation consumed rejected credentials")
 		}
-	}
-}
-
-func TestCrossPlatformCoverageProviderLoginCLIRealHTTPPersistence(t *testing.T) {
-	for _, scenario := range []string{"ant", "ant_custom_client", "enterprise_acme"} {
-		t.Run(scenario, func(t *testing.T) {
-			provider := scenario
-			custom := scenario == "ant_custom_client"
-			if custom {
-				provider = "ant"
-			}
-			dir := t.TempDir()
-			t.Setenv("DWS_CONFIG_DIR", dir)
-			t.Setenv(keychain.StorageDirEnv, filepath.Join(dir, "keys"))
-			t.Setenv(keychain.DisableKeychainEnv, "1")
-			t.Setenv(keychain.TestNamespaceEnv, dir)
-			defer keychain.RemoveAuthTokenEntries(keychain.Service)
-			if err := authpkg.SaveTokenData(dir, &authpkg.TokenData{AccessToken: "existing", CorpID: "existing-corp", UserID: "existing-user", ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
-				t.Fatal(err)
-			}
-			const state = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-			var requests atomic.Int32
-			var server *httptest.Server
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requests.Add(1)
-				if provider != "ant" && r.URL.Path != "/cli/auth/oidc/transactions" {
-					t.Error("another provider entered the Ant SDK flow")
-				}
-				var body map[string]any
-				json.NewDecoder(r.Body).Decode(&body)
-				switch r.URL.Path {
-				case "/cli/auth/oidc/transactions":
-					if len(body) != 1 || body["provider"] != provider {
-						t.Error("transaction must contain only provider")
-					}
-					w.WriteHeader(201)
-					json.NewEncoder(w).Encode(map[string]any{"provider": provider, "expires_in": 600, "authorization_request": map[string]any{"authorization_endpoint": server.URL + "/cli/auth/oidc/mock/sdk/authorize", "parameters": map[string]string{"client_id": "oidc-app", "response_type": "code", "scope": "openid", "redirect_uri": "ant-sdk://oidc/callback", "state": state, "nonce": state, "code_challenge": state, "code_challenge_method": "S256"}}})
-				case "/cli/auth/oidc/mock/sdk/login":
-					if len(body) != 0 {
-						t.Error("SDK login body must be empty")
-					}
-					json.NewEncoder(w).Encode(map[string]any{"sdk_session_token": "secret-sdk", "expires_in": 60})
-				case "/cli/auth/oidc/mock/sdk/authorize":
-					if len(body) != 2 || r.Header.Get("Authorization") != "Bearer secret-sdk" || body["authorization_endpoint"] != server.URL+"/cli/auth/oidc/mock/sdk/authorize" {
-						t.Error("SDK authorization request lost its metadata or session")
-					}
-					json.NewEncoder(w).Encode(map[string]string{"code": "one-code", "state": state})
-				case "/cli/auth/oidc/exchange":
-					if (custom && (len(body) != 5 || body["client_id"] != "dws-app" || body["client_secret"] != "secret-custom")) || (!custom && len(body) != 3) {
-						t.Error("exchange did not preserve optional credential pair")
-					}
-					if body["provider"] != provider || body["code"] != "one-code" || body["state"] != state {
-						t.Error("bad exchange")
-					}
-					json.NewEncoder(w).Encode(map[string]any{"accessToken": "secret-access", "refreshToken": "secret-refresh", "expiresIn": 3600, "corpId": "ant-corp", "corpName": "Ant Organization", "clientId": "dws-app"})
-				default:
-					t.Error("unexpected endpoint")
-					w.WriteHeader(404)
-				}
-			}))
-			defer server.Close()
-			// Mock authorization is explicit test setup, never a core fallback.
-			withOIDCProviders(t, func() []edition.OIDCProvider {
-				return []edition.OIDCProvider{{Name: "ant", Authorize: func(ctx context.Context, request edition.OIDCAuthorizationRequest) (edition.OIDCAuthorizationResult, error) {
-					result, err := authpkg.NewAntSDKOIDCProvider(server.URL).Authorize(ctx, authpkg.OIDCAuthorizationRequest{
-						AuthorizationEndpoint: request.AuthorizationEndpoint,
-						Parameters:            request.Parameters,
-					})
-					return edition.OIDCAuthorizationResult{Code: result.Code, State: result.State}, err
-				}}}
-			})
-			root, out, stderr := providerLoginRoot()
-			if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL+"\n"), 0600); err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"auth", "provider-login", provider}
-			if custom {
-				args = append(args, "--client-id", "dws-app", "--client-secret", "secret-custom")
-			}
-			root.SetArgs(args)
-			err := corecmd.ExecuteForTest(root)
-			if provider != "ant" {
-				var typed *apperrors.Error
-				if !errors.As(err, &typed) || typed.Reason != "OIDC_SDK_UNAVAILABLE" || requests.Load() != 1 {
-					t.Fatalf("unimplemented provider must stop after backend check: requests=%d error=%v", requests.Load(), err)
-				}
-				profiles, loadErr := authpkg.LoadProfiles(dir)
-				if loadErr != nil || len(profiles.Profiles) != 1 || profiles.CurrentProfile != "existing-corp:existing-user" {
-					t.Fatal("unimplemented provider changed saved profiles")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if stderr.Len() != 0 {
-				t.Fatal("Provider login unexpectedly printed browser output")
-			}
-			if strings.Contains(out.String(), "secret-") || !strings.Contains(out.String(), `"success": true`) || !strings.Contains(out.String(), `"corp_id": "ant-corp"`) {
-				t.Fatalf("unsafe/missing save output: %s", out.String())
-			}
-			saved, err := authpkg.LoadTokenDataForProfile(dir, "ant-corp")
-			if err != nil || saved.RefreshToken != "secret-refresh" || saved.Source != "mcp" || saved.CorpName != "Ant Organization" || saved.UserID != "" {
-				t.Fatalf("session not saved: %v", err)
-			}
-			if custom {
-				if _, err := os.Stat(authpkg.GetAppConfigPath(dir)); !os.IsNotExist(err) {
-					t.Fatal("provider exchange credentials were persisted as the ordinary application")
-				}
-			}
-			profiles, err := authpkg.LoadProfiles(dir)
-			if err != nil || profiles.CurrentProfile != "ant-corp" || len(profiles.Profiles) != 2 {
-				t.Fatalf("normal login did not select the saved profile: %v", err)
-			}
-			base, err := os.ReadFile(filepath.Join(dir, "mcp_url"))
-			if err != nil || string(base) != server.URL+"\n" {
-				t.Fatalf("configured MCP URL changed: %v", err)
-			}
-		})
 	}
 }
 

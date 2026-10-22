@@ -96,6 +96,9 @@ type TokenData struct {
 	UserName       string    `json:"user_name,omitempty"`
 	CorpName       string    `json:"corp_name,omitempty"`
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
+	// OIDCProvider is the sole OIDC session discriminator; endpoint and secret
+	// mode fields below do not identify the login source.
+	OIDCProvider string `json:"oidc_provider,omitempty"`
 	// OIDC sessions keep their Portal and credential mode across invocations.
 	// The secret itself lives in the application keychain slot, never this DTO.
 	MCPBaseURL              string `json:"mcp_base_url,omitempty"`
@@ -411,7 +414,7 @@ func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, 
 	// OIDC login retains the normal organization-scoped login support when
 	// contact cannot resolve a user. The existing persistence plan still
 	// prevents that credential from overwriting an exact account identity.
-	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || (data.UserID == "" && !data.MCPClientSecretRequired)) {
+	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || (data.UserID == "" && !data.isOIDCSession())) {
 		return fmt.Errorf("direct login persistence requires a complete identity and application")
 	}
 
