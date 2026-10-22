@@ -18,8 +18,10 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
+	"github.com/rivo/uniseg"
 )
 
 const (
@@ -109,27 +111,61 @@ func Rule(width int) string {
 }
 
 func PlainRuneWidth(s string) int {
-	width := 0
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
+	// ASCII without escapes keeps its existing one-column-per-rune behavior.
+	ascii := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf || s[i] == '\x1b' {
+			ascii = false
+			break
 		}
-		if inEscape {
-			if r == 'm' {
-				inEscape = false
+	}
+	if ascii {
+		return len(s)
+	}
+
+	// Keep the existing escape handling while measuring joined visible characters
+	// together. Measuring each code point separately overcounts flags and emoji.
+	plain := s
+	if strings.ContainsRune(s, '\x1b') {
+		var visible strings.Builder
+		visible.Grow(len(s))
+		inEscape := false
+		for _, r := range s {
+			if r == '\x1b' {
+				inEscape = true
+				continue
 			}
+			if inEscape {
+				if r == 'm' {
+					inEscape = false
+				}
+				continue
+			}
+			visible.WriteRune(r)
+		}
+		plain = visible.String()
+	}
+
+	width := 0
+	clusters := uniseg.NewGraphemes(plain)
+	for clusters.Next() {
+		cluster := clusters.Str()
+		first, size := utf8.DecodeRuneInString(cluster)
+		if len(cluster) > size && first >= 0x20 && first != 0x7f {
+			width += clusters.Width()
 			continue
 		}
-		if isZeroWidthRune(r) {
-			continue
+		// Preserve single-rune and control-character widths used by callers.
+		for _, r := range cluster {
+			if isZeroWidthRune(r) {
+				continue
+			}
+			if isWideRune(r) {
+				width += 2
+				continue
+			}
+			width++
 		}
-		if isWideRune(r) {
-			width += 2
-			continue
-		}
-		width++
 	}
 	return width
 }
