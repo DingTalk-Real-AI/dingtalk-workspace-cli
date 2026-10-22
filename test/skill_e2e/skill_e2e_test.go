@@ -215,6 +215,11 @@ func shouldSkip(cmd string) bool {
 		// wait for the production export timeout.
 		return true
 	}
+	if strings.HasPrefix(cmd, "dws auth login") {
+		// Interactive login is validated by static help dispatch. It does not
+		// behave like a mockable product command and can block waiting for auth.
+		return true
+	}
 	if strings.HasPrefix(cmd, "dws dev ") || cmd == "dws dev" {
 		// dev (product id: devapp) is a target MCP-discovered command tree. Until the MCP product
 		// is published into the open-source registry, validate its Agent routing
