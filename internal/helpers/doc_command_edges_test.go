@@ -533,7 +533,7 @@ func TestCrossPlatformCoverageDocCreateUpdateAndBlockCommandEdges(t *testing.T) 
 	}
 
 	for _, value := range []string{"plain", "# Other\nbody", "# Name", "# **Name** ###\n\nbody"} {
-		_ = stripDuplicateTitle(value, "Name")
+		_ = StripDuplicateTitle(value, "Name")
 	}
 	for _, value := range []string{"", " Name ### ", "**Bold**", "__Under__ ~~Strike~~ `Code`"} {
 		_ = normalizeHeadingText(value)

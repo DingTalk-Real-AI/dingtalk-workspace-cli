@@ -16,10 +16,9 @@ import (
 )
 
 type digitalEmployeeLoginSession struct {
-	DigitalProfile    string
-	DigitalToken      *auth.TokenData
-	SupervisorProfile string
-	SupervisorToken   *auth.TokenData
+	DigitalProfile  string
+	DigitalToken    *auth.TokenData
+	SupervisorToken *auth.TokenData
 }
 
 type digitalEmployeeLoginResult struct {
@@ -113,6 +112,6 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 	stage = "profile_saved"
 	return &digitalEmployeeLoginSession{
 		DigitalProfile: digitalProfile, DigitalToken: token,
-		SupervisorProfile: supervisorSelector, SupervisorToken: supervisor,
+		SupervisorToken: supervisor,
 	}, nil
 }

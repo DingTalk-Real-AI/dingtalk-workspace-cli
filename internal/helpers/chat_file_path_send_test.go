@@ -45,6 +45,8 @@ func (c *chatFilePathCaller) CallTool(_ context.Context, server, tool string, ar
 	}
 
 	switch tool {
+	case "upload_media":
+		return textToolResult(`{"success":true,"mediaIdV1":"@legacy-image","mediaIdV2":"$uploaded-image"}`), nil
 	case "init_conversation_file_upload":
 		return textToolResult(`{"resourceUrl":"https://upload.example/file","uploadKey":"upload-key","headers":{"x-upload":"yes"}}`), nil
 	case "commit_conversation_file_upload":

@@ -12,10 +12,17 @@ import (
 
 var errEmployeeReceiptNotVisible = errors.New("digital employee receipt is not visible yet")
 
-// 该分类只用于已有发送任务的回执查询，不能据此重发或泛化重试其他参数错误。
+// 该分类只用于已有发送任务的回执查询，不能据此重发或泛化重试其他接口。
 func isEmployeeReceiptNotVisible(err error) bool {
 	var typed *apperrors.Error
-	if !errors.As(err, &typed) || typed == nil || typed.ServerDiag.ServerErrorCode != "PARAM_ERROR" {
+	if !errors.As(err, &typed) || typed == nil {
+		return false
+	}
+	// IM 回执尚未落库时可能只返回 1001；仅按结构化错误码识别，不解析自由文本。
+	if typed.ServerDiag.ServerErrorCode == "1001" {
+		return true
+	}
+	if typed.ServerDiag.ServerErrorCode != "PARAM_ERROR" {
 		return false
 	}
 	detail := strings.TrimSpace(typed.ServerDiag.TechnicalDetail)

@@ -80,6 +80,7 @@ func TestCrossPlatformCoverageDelegatorRunnerSnapshot(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorRunnerLifecycle(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	var runtime *runtimeRunner
 	testseam.Swap(t, &rootNewCommandRunnerWithFlags, func(flags *GlobalFlags) executor.Runner {
 		runtime = &runtimeRunner{globalFlags: flags}
@@ -189,6 +190,7 @@ func TestCrossPlatformCoverageDelegatorRunnerLifecycle(t *testing.T) {
 // 普通 Cobra hook 也必须保留当前身份，并在成功或 panic 退出后清理作用域。
 func TestCrossPlatformCoverageDelegatorPlainHooks(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	helpers.InitDepsForTest(t, helpers.GetCaller())
 	var runtime *runtimeRunner
 	testseam.Swap(t, &rootNewCommandRunnerWithFlags, func(flags *GlobalFlags) executor.Runner {
@@ -270,6 +272,7 @@ func TestCrossPlatformCoverageDelegatorPlainHooks(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorRunnerRetrySnapshot(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	originalHooks := edition.Get()
 	t.Cleanup(func() { edition.Override(originalHooks) })
 	edition.Override(&edition.Hooks{ClassifyToolResult: func(content map[string]any) error {
@@ -314,6 +317,7 @@ func TestCrossPlatformCoverageDelegatorRunnerRetrySnapshot(t *testing.T) {
 
 func TestCrossPlatformCoverageDelegatorRunnerReadOnlyClone(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	const endpoint = "https://pre-mcp-gw.dingtalk.com/server/doc"
 	t.Setenv("DINGTALK_DOC_MCP_URL", endpoint)
 	waitPrefetch := stubDelegatorBusinessAuth(t)

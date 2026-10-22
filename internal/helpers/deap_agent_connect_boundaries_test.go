@@ -42,6 +42,8 @@ func TestCrossPlatformCoverageEmployeeConnectCommitBoundaries(t *testing.T) {
 				cmd.Flags().Lookup("agent-cmd").Changed = false
 			}
 			switch scenario {
+			case "missing-self":
+				caller.responses["contact/search_contact_by_key_word"] = caller.responses["contact/search_contact_by_key_word"][:1]
 			case "draft":
 				delete(caller.responses, "deap-dev/get_digital_employee_detail")
 			case "cancelled-lock":
@@ -127,9 +129,11 @@ func TestCrossPlatformCoverageEmployeeMissingDependenciesAndInputLimits(t *testi
 	if _, err := callPrivateMCPJSON(context.Background(), "server", "tool", nil); err == nil {
 		t.Fatal("private call without caller accepted")
 	}
-	cmd := newDeapChannelReplyCommand()
+	cmd := newEmployeeBindingCommand()
 	cmd.SetIn(strings.NewReader(`{} {}`))
-	if err := decodeBoundedDigitalEmployeeStdin(cmd, new(digitalEmployeeReplyInput)); err == nil {
+	if err := decodeBoundedDigitalEmployeeStdin(cmd, new(struct {
+		AgentUUID string `json:"agentUuid"`
+	})); err == nil {
 		t.Fatal("multiple payloads accepted")
 	}
 }

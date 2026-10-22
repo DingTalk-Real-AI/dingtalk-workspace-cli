@@ -1174,13 +1174,13 @@ jobs:
             go test -v -count=1 -timeout=10m "${packages[@]}"
             exit 0
           fi
-          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
-          # give them a dedicated package timeout on slower hosted runners.
-          # 18m (was 15m): the five schema-cache concurrency regressions run
-          # under -race again, adding ~16s plus hosted-runner variance.
+          # cli/smoke 的 Schema 装配和 helpers 的命令矩阵、图片压缩在
+          # -race 下耗时较长；helpers 在 run 38711691277 耗尽了 12m。
+          # 给这些分片 18m，保留完整测试集合和 race 检测。
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
-             [ "$TEST_SHARD" = "smoke" ]; then
+             [ "$TEST_SHARD" = "smoke" ] ||
+             [ "$TEST_SHARD" = "helpers" ]; then
             timeout_budget=18m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
@@ -1250,13 +1250,13 @@ jobs:
               exit 0
               ;;
           esac
-          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
-          # give them a dedicated package timeout on slower hosted runners.
-          # 18m (was 15m): the five schema-cache concurrency regressions run
-          # under -race again, adding ~16s plus hosted-runner variance.
+          # cli/smoke 的 Schema 装配和 helpers 的命令矩阵、图片压缩在
+          # -race 下耗时较长；helpers 在 run 38711691277 耗尽了 12m。
+          # 给这些分片 18m，保留完整测试集合和 race 检测。
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
-             [ "$TEST_SHARD" = "smoke" ]; then
+             [ "$TEST_SHARD" = "smoke" ] ||
+             [ "$TEST_SHARD" = "helpers" ]; then
             timeout_budget=18m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
@@ -1793,7 +1793,8 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.platform_sensitive == 'true' }}
     runs-on: macos-latest
-    timeout-minutes: 20
+    # 原生覆盖率须完成所有应用批次，并为编译、上传和 runner 波动留出时间。
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	_ "image/png"
 
@@ -899,23 +898,14 @@ func clonePersonalEmotionGIFMeta(src *gif.GIF, width, height int) *gif.GIF {
 }
 
 func uploadPersonalEmotionImage(ctx context.Context, image *personalEmotionImage) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	text, err := callMCPToolReturnTextOnServer(ctx, personalEmotionUploadServerID, personalEmotionUploadMediaTool, map[string]any{
-		"content":   image.content,
-		"imageType": image.imageType,
-		"bizType":   "chat_emoticon",
-	})
-	if err != nil {
-		return "", fmt.Errorf("上传本地图片到 %s 失败: %w", personalEmotionUploadMediaDisplay, err)
-	}
-	return parsePersonalEmotionUploadMediaID(text)
+	return uploadChatImage(ctx, image, "chat_emoticon")
 }
 
 func parsePersonalEmotionUploadMediaID(text string) (string, error) {
+	return parseImageUploadMediaID(text, false)
+}
+
+func parseImageUploadMediaID(text string, requireV2 bool) (string, error) {
 	var payload struct {
 		Success   bool   `json:"success"`
 		MediaIDV1 string `json:"mediaIdV1"`
@@ -946,10 +936,13 @@ func parsePersonalEmotionUploadMediaID(text string) (string, error) {
 		return "", fmt.Errorf("%s 上传失败: %s", personalEmotionUploadMediaDisplay, detail)
 	}
 	mediaID := strings.TrimSpace(payload.MediaIDV1)
-	if mediaID == "" {
+	if requireV2 || mediaID == "" {
 		mediaID = strings.TrimSpace(payload.MediaIDV2)
 	}
 	if mediaID == "" {
+		if requireV2 {
+			return "", fmt.Errorf("%s 返回 success=true 但缺少聊天图片下载所需的 mediaIdV2", personalEmotionUploadMediaDisplay)
+		}
 		return "", fmt.Errorf("%s 返回 success=true 但缺少 mediaIdV1/mediaIdV2", personalEmotionUploadMediaDisplay)
 	}
 	return mediaID, nil

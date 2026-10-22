@@ -14,7 +14,7 @@
 2.【模板详情】dws oa approval form-schema --process-code <code>
    → 下钻 DDBizSuite（bizType=="attendance.supply"）的 children 取子控件
      DDDateField（bizAlias=="userCheckTime"：id/format/label，format 默认 yyyy-MM-dd HH:mm）
-   → 确认补卡理由控件（TextareaField，是否必收以 form-schema 的 required 为准）；图片控件（DDPhotoField）一期跳过并提示客户端补充
+   → 确认补卡理由控件（TextareaField，是否必收以 form-schema 的 required 为准）；图片控件（DDPhotoField）如需提交，先用 `dws oa approval image upload --file <path>` 取 mediaIdV2 再组装 value
 3.【定位缺卡（可选）】用户未给时间 → dws attendance record get --user <userId> --date <某日>
    （单日粒度，近 N 天按日循环查询）辅助定位缺卡时间
 4.【班次匹配】dws attendance approve supply-plans --time "<yyyy-MM-dd HH:mm>"
@@ -43,6 +43,6 @@
 
 > **IMPORTANT：** 班次匹配与资格判定一律以服务端（supply-plans / supply-check）为准；value 必须按子控件 `format` 格式化（禁硬编码）；步骤 9 必须走 `--request` 高级模式。流程与选人无补卡特有逻辑，一律按 [oa.md](../oa.md)「发起审批实例」第 5-7 步及其执行摘要执行。
 
-模板不支持 CLI 发起（含图片控件需上传证据等）时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+模板不支持 CLI 发起（不含图片控件——补卡图片证据可用 `dws oa approval image upload` 取 mediaIdV2 提交）时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
 
 字段级规范见 [oa-form-components.md](oa-form-components.md) 的 DDBizSuite（补卡套件）章节。

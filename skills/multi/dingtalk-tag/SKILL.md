@@ -12,6 +12,8 @@ metadata:
 
 执行任何 `dws` 操作前，先完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。先用 [dingtalk-tag-index.md](references/dingtalk-tag-index.md) 路由；生命周期读取 [manage.md](references/manage.md)，自然语言创建/恢复/DSH 接入再读 [manage-and-connect.md](references/manage-and-connect.md)；能力资源读取 [capability.md](references/capability.md)；执行排障读取 [run.md](references/run.md)。
 
+自行管理任务执行与回复的接入方，可按 [回复占位与流式](../dingtalk-chat/references/card/a2ui.md) 实现启动钩子和卡片更新。使用该流程需已安装 `dingtalk-chat`；按需安装时请同时选择该 Skill。DWS 直接托管本地 Agent 时，对已适配公开进度的 Agent，新连接默认发送 A2UI 占位并更新同一卡片，由运行时负责投递，模型不重复发卡；连接时指定 `--reply-mode text` 可只发最终文本。适配范围和首卡策略见 [接入说明](references/manage-and-connect.md)。
+
 ## 路由
 
 | 用户意图 | 命令 |
@@ -52,4 +54,4 @@ metadata:
 
 - `manage login` 在内部完成 AuthCode 换票、在线身份核验，并保存精确 `corpId:userId` Profile；不得输出或转存 AuthCode/Token。只登录或仅保存 Profile 使用 `manage login`；真正接入本地 Agent/DSH 使用 `connect`。
 - 删除不可逆；修改、发布、删除和 connect 按 Schema 的确认要求执行。
-- Channel 的 `reply` / `operator-private` 只供已绑定的本地 Adapter/DSH 机器协议使用，必须指定员工 Profile，正文只能走受限 stdin；不要为普通用户消息直接调用。
+- Channel 仅保留 `capabilities` / `binding` 用于能力发现和绑定、访问判定。数字员工发送使用 `chat +messages-reply` / `chat +messages-send`，必须指定员工 Profile，并以 `--body-stdin --wait-delivery --employee-context` 传入受限正文与绑定上下文。DSH 要求 `chatDelivery=true`，缺少时提示升级 DWS。

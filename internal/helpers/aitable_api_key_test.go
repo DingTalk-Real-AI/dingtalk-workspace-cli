@@ -37,12 +37,24 @@ import (
 // runAPIKeyCLI executes prepared Cobra declarations with an injected in-memory MCP caller.
 func runAPIKeyCLI(t *testing.T, c *recordQueryE2ECaller, args ...string) (string, error) {
 	t.Helper()
+	return runAPIKeyCLIPath(t, c, false, args...)
+}
+
+func runAPIKeyCLIPath(t *testing.T, c *recordQueryE2ECaller, legacy bool, args ...string) (string, error) {
+	t.Helper()
 	testseam.Protect(t, &deps)
 	InitDeps(c)
 	old := os.Args
 	t.Cleanup(func() { os.Args = old })
-	os.Args = append([]string{"dws", "aitable", "api-key"}, args...)
-	cmd := newAitableAPIKeyCommand()
+	prefix := []string{"supabase", "api-key"}
+	if legacy {
+		prefix = []string{"api-key"}
+	}
+	args = append(prefix, args...)
+	os.Args = append([]string{"dws", "aitable"}, args...)
+	cmd := newGroupCommand(&cobra.Command{Use: "aitable", RunE: groupRunE})
+	supabase, legacyGroup := newAitableAPIKeyCommands()
+	cmd.AddCommand(supabase, legacyGroup)
 	cmd.PersistentFlags().String("format", "json", "")
 	cmd.PersistentFlags().Bool("yes", false, "")
 	cmd.PersistentFlags().Bool("dry-run", false, "")
@@ -172,7 +184,8 @@ func TestCrossPlatformCoverageAitableAPIKeyLocalGuards(t *testing.T) {
 	if err != nil || len(c.calls) != 0 || !strings.Contains(out, `"executed": false`) {
 		t.Fatalf("dry run: %v %s", err, out)
 	}
-	for _, cmd := range []*cobra.Command{newAitableAPIKeyCreateCommand(), newAitableAPIKeyListCommand(), newAitableAPIKeyRevokeCommand()} {
+	for _, spec := range []LeafSpec{aitableAPIKeyCreateSpec(), aitableAPIKeyListSpec(), aitableAPIKeyRevokeSpec()} {
+		cmd := NewLeafCommand(spec)
 		f, ok := contractfinal.RuntimeContractFinal(cmd)
 		if !ok || f.Result == nil || f.DryRun == nil {
 			t.Fatal("missing contract")
@@ -267,5 +280,75 @@ func TestCrossPlatformCoverageAitableAPIKeyRejectsNonEmptyError(t *testing.T) {
 				t.Fatalf("malformed error accepted or replayed: %v", err)
 			}
 		})
+	}
+}
+
+// Both executable paths must preserve RPC requests, output, guards and error classification.
+func TestCrossPlatformCoverageAitableAPIKeyCompatibility(t *testing.T) {
+	const id = "00000000-0000-4000-8000-000000000001"
+	for _, action := range []string{"create", "list", "revoke"} {
+		for _, scenario := range []string{"success", "dry-run", "missing-base", "confirmation", "invalid-key", "remote-error", "malformed-response"} {
+			if scenario == "confirmation" && action == "list" || scenario == "invalid-key" && action != "revoke" {
+				continue
+			}
+			t.Run(action+"/"+scenario, func(t *testing.T) {
+				args := []string{action, "--base-id", " base1 ", "--yes"}
+				if action == "revoke" {
+					args = append(args, "--key-id", id)
+				}
+				data := `{"keyId":"` + id + `","status":"ACTIVE","createdAt":123,"apiKey":"TEST_SENTINEL_KEY"}`
+				if action == "list" {
+					data = `{"keys":[]}`
+				} else if action == "revoke" {
+					data = `{"keyId":"` + id + `","revoked":true}`
+				}
+				body := `{"status":"success","data":` + data + `}`
+				wantCalls, wantFailure := 1, false
+				switch scenario {
+				case "dry-run":
+					args = append(args, "--dry-run")
+					wantCalls = 0
+				case "missing-base":
+					args = []string{action, "--yes"}
+					wantCalls, wantFailure = 0, true
+				case "confirmation":
+					args = append(args, "--yes=false")
+					wantCalls, wantFailure = 0, true
+				case "invalid-key":
+					args = append(args, "--key-id", "INVALID")
+					wantCalls, wantFailure = 0, true
+				case "remote-error":
+					body = `{"status":"error","error":{"code":"RATE_LIMIT_EXCEEDED","message":"TEST_SENTINEL_KEY"}}`
+					wantFailure = true
+				case "malformed-response":
+					body, wantFailure = `TEST_SENTINEL_KEY`, true
+				}
+				var primaryOutput string
+				var primaryError error
+				var primaryCalls any
+				for _, legacy := range []bool{false, true} {
+					caller := &recordQueryE2ECaller{dryRun: scenario == "dry-run", steps: []recordQueryE2EStep{{result: textToolResult(body)}}}
+					out, err := runAPIKeyCLIPath(t, caller, legacy, args...)
+					if (err != nil) != wantFailure || len(caller.calls) != wantCalls {
+						t.Fatalf("legacy=%v: err=%v calls=%d, want failure=%v calls=%d", legacy, err, len(caller.calls), wantFailure, wantCalls)
+					}
+					if wantFailure && strings.Contains(out+err.Error(), "TEST_SENTINEL_KEY") {
+						t.Fatal("failure leaked response content")
+					}
+					if !legacy {
+						primaryOutput, primaryError, primaryCalls = out, err, caller.calls
+					} else {
+						// Framework usage and confirmation hints name the entry actually invoked.
+						legacyJSON, _ := json.Marshal(err)
+						primaryJSON, _ := json.Marshal(primaryError)
+						normalize := func(s string) string { return strings.ReplaceAll(s, "aitable api-key ", "aitable supabase api-key ") }
+						if out == primaryOutput && normalize(string(legacyJSON)) == string(primaryJSON) && normalize(fmt.Sprint(err)) == fmt.Sprint(primaryError) && reflect.DeepEqual(caller.calls, primaryCalls) && apperrors.ExitCode(err) == apperrors.ExitCode(primaryError) {
+							continue
+						}
+						t.Fatalf("legacy differs: output=%s error=%v calls=%#v; primary output=%s error=%v calls=%#v", out, err, caller.calls, primaryOutput, primaryError, primaryCalls)
+					}
+				}
+			})
+		}
 	}
 }

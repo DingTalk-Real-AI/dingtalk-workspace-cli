@@ -16,6 +16,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 type employeeReceiptCaller struct {
@@ -29,6 +30,12 @@ func TestCrossPlatformCoverageEmployeeReceiptRetryBoundaryAndPrivacy(t *testing.
 		err                error
 		wantRetry          bool
 	}{
+		{"receipt code 1001", "im", "query_message_send_status", receipt1001Error(), true},
+		{"wrapped code 1001", "im", "query_message_send_status", fmt.Errorf("private-wrapper: %w", receipt1001Error()), true},
+		{"send code 1001 must not retry", "chat", "send_personal_message", receipt1001Error(), false},
+		{"lookup code 1001 must not retry", "im", "list_messages_by_ids", receipt1001Error(), false},
+		{"other server code", "im", "query_message_send_status", apperrors.NewAPI("private-diagnostics", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "1002"})), false},
+		{"unstructured code 1001", "im", "query_message_send_status", errors.New("1001 private-diagnostics"), false},
 		{"exact receipt", "im", "query_message_send_status", receiptNotVisibleError(), true},
 		{"wrapped receipt", "im", "query_message_send_status", fmt.Errorf("private-wrapper: %w", receiptNotVisibleError()), true},
 		{"structured detail", "im", "query_message_send_status", apperrors.NewAPI("private-diagnostics", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PARAM_ERROR", TechnicalDetail: "消息不存在"})), true},
@@ -147,13 +154,10 @@ func receiptNotVisibleError() error {
 	}))
 }
 
-func TestCrossPlatformCoverageDingTalkTagChannelReplyRetriesNotVisibleReceiptWithoutResending(t *testing.T) {
-	installEmployeeReplyBinding(t)
+func TestCrossPlatformCoverageChatDeliveryRetriesNotVisibleReceiptWithoutResending(t *testing.T) {
 	t.Setenv("DWS_DUMP_RAW", "1")
 	caller := &employeeReceiptCaller{
 		digitalEmployeeProtocolCaller: &digitalEmployeeProtocolCaller{responses: map[string][]string{
-			"im/list_messages_by_ids":      {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
-			"chat/send_personal_message":   {`{"result":{"openTaskId":"task-1"}}`},
 			"im/query_message_send_status": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
 		}},
 		receiptErrors: []error{receiptNotVisibleError()},
@@ -161,31 +165,20 @@ func TestCrossPlatformCoverageDingTalkTagChannelReplyRetriesNotVisibleReceiptWit
 	InitDepsForTest(t, caller)
 	waits := 0
 	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { waits++; return nil })
-	leaf, _, err := deapHandler{}.Command(&captureRunner{}).Find([]string{"channel", "reply"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for key, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
-		if err := leaf.Flags().Set(key, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"private-message-body","idempotencyKey":"idem-1"}`))
+	leaf := &cobra.Command{}
+	leaf.SetContext(context.Background())
 	var out, stderr bytes.Buffer
 	leaf.SetOut(&out)
 	leaf.SetErr(&stderr)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("reply failed: %v", err)
+	if err := WriteChatDelivery(leaf, map[string]any{"openTaskId": "task-1"}, "conversation-1", "idem-1"); err != nil {
+		t.Fatalf("receipt failed: %v", err)
 	}
-	var envelope struct {
-		OK   bool           `json:"ok"`
-		Data map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+	var result map[string]any
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if !envelope.OK || envelope.Data["openMessageId"] != "reply-1" || envelope.Data["deliveryStatus"] != "delivered" {
-		t.Fatalf("unexpected result: %v", envelope)
+	if result["openMessageId"] != "reply-1" || result["deliveryStatus"] != "delivered" {
+		t.Fatalf("unexpected result: %v", result)
 	}
 	sends, queries := 0, 0
 	for _, call := range caller.calls {
@@ -199,7 +192,7 @@ func TestCrossPlatformCoverageDingTalkTagChannelReplyRetriesNotVisibleReceiptWit
 			}
 		}
 	}
-	if sends != 1 || queries != 2 || waits != 1 {
+	if sends != 0 || queries != 2 || waits != 1 {
 		t.Fatalf("sends=%d queries=%d waits=%d", sends, queries, waits)
 	}
 	for _, secret := range []string{"private-message-body", "private server diagnostics"} {

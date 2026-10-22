@@ -47,6 +47,10 @@ func TestAIBehaviorReviewedChatThreadPromotePatchExecution(t *testing.T) {
 	testAIBehaviorReviewedPatchExecution(t, "chat_thread_promote")
 }
 
+func TestAIBehaviorReviewedPublicSyncPatchExecution(t *testing.T) {
+	testAIBehaviorReviewedPatchExecution(t, "public_sync_1529")
+}
+
 func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -184,6 +188,12 @@ func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 							"c70ede29e0860a88e309bb540f27d888e9d8a8ab",
 						}
 					}
+					if patch == "public_sync_1529" {
+						anchors = []string{
+							"a391c42c7de6c7e86fc19f92aa1f18e630ed402e",
+							"4fdf11c739e22d348d3e2878c20a168540b92b1d",
+						}
+					}
 					for _, sha := range anchors {
 						if !strings.Contains(strings.Join(result.CommitReads, "\n"), sha) {
 							t.Fatalf("未读取固定评审锚点 %s: %s", sha, output)
@@ -209,27 +219,130 @@ const scenario = input.scenario;
 const clone = value => JSON.parse(JSON.stringify(value));
 // 固定业务审批输入独立于工作流中的授权列表，避免测试跟着错误授权一起改变。
 const chatThreadPromote = input.patch === 'chat_thread_promote';
-const reviewedNumber = chatThreadPromote ? 1502 : 1463;
-const reviewedBase = chatThreadPromote
+const publicSync = input.patch === 'public_sync_1529';
+const reviewedNumber = publicSync ? 1529 : chatThreadPromote ? 1502 : 1463;
+const reviewedBase = publicSync ? 'a391c42c7de6c7e86fc19f92aa1f18e630ed402e' : chatThreadPromote
   ? '59d1da576c6983582d5be11401e7efe07aaaa238'
   : '3f0fc94111b1f9cd34e47468980b1f1a723ca69a';
-const reviewedHead = chatThreadPromote
+const reviewedHead = publicSync ? '4fdf11c739e22d348d3e2878c20a168540b92b1d' : chatThreadPromote
   ? 'c70ede29e0860a88e309bb540f27d888e9d8a8ab'
   : '53de9d92c9b310798d7f42a385e162273330442b';
-const reviewedRef = chatThreadPromote
+const reviewedRef = publicSync ? 'codex/sync-qwenwork-1.0.65' : chatThreadPromote
   ? 'codex/fix-chat-thread-promote-retirement'
   : 'codex/sync-aitable-public-fixes';
 const rebased = scenario === 'reviewed_rebased';
 const base = rebased || scenario === 'changed_preimage' ? 'a'.repeat(40) : reviewedBase;
 const head = rebased ? 'b'.repeat(40) : reviewedHead;
 const blob = value => value.toString(16).padStart(40, '0');
-const protectedPaths = chatThreadPromote ? [
+const protectedPaths = chatThreadPromote || publicSync ? [
   'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
 ] : [
   'scripts/policy/skill-command-check/main.go',
   'scripts/policy/skill-command-check/main_test.go',
 ];
-const paths = chatThreadPromote ? [
+// #1529 路径与增改状态固定取自 M→C1，不从被测工作流反读审批内容。
+const paths = publicSync ? [
+  '.changes/1421-skill-setup-fail-closed-staging.md',
+  '.changes/1425-windows-skill-setup-junction.md',
+  '.changes/aitable-supabase-api-key.md',
+  '.changes/digital-employee-a2ui-replies.md',
+  '.changes/dingtalk-tag-draft-editor-schema.md',
+  '.changes/public-product-access-and-uploads.md',
+  'internal/app/schema_deap_agent_contract_test.go',
+  'internal/app/schema_product_upload_contact_test.go',
+  'internal/app/schema_sql_sheet_key_test.go',
+  'internal/app/skill_setup.go',
+  'internal/app/skill_setup_canonical_test.go',
+  'internal/app/skill_setup_cleanup_coverage_test.go',
+  'internal/app/skill_setup_entry_unix.go',
+  'internal/app/skill_setup_entry_windows.go',
+  'internal/app/skill_setup_link_unix.go',
+  'internal/app/skill_setup_link_windows.go',
+  'internal/app/skill_setup_link_windows_test.go',
+  'internal/auth/cli_auth_check_test.go',
+  'internal/auth/oauth_helpers.go',
+  'internal/cli/schema_parameter_mapping_ledger.go',
+  'internal/helpers/aitable.go',
+  'internal/helpers/aitable_api_key.go',
+  'internal/helpers/aitable_api_key_test.go',
+  'internal/helpers/chat.go',
+  'internal/helpers/connect_codex_appserver.go',
+  'internal/helpers/connect_codex_progress.go',
+  'internal/helpers/connect_codex_progress_test.go',
+  'internal/helpers/connect_progress.go',
+  'internal/helpers/contact.go',
+  'internal/helpers/contact_enterprise_test.go',
+  'internal/helpers/contact_open_id_result_test.go',
+  'internal/helpers/deap_agent.go',
+  'internal/helpers/deap_agent_adapter.go',
+  'internal/helpers/deap_agent_card.go',
+  'internal/helpers/deap_agent_card_integration_test.go',
+  'internal/helpers/deap_agent_card_payload.go',
+  'internal/helpers/deap_agent_card_publish_test.go',
+  'internal/helpers/deap_agent_card_regression_test.go',
+  'internal/helpers/deap_agent_card_review_test.go',
+  'internal/helpers/deap_agent_card_test.go',
+  'internal/helpers/deap_agent_channel.go',
+  'internal/helpers/deap_agent_draft.go',
+  'internal/helpers/deap_agent_draft_contract_test.go',
+  'internal/helpers/deap_agent_feedback.go',
+  'internal/helpers/deap_agent_runtime.go',
+  'internal/helpers/deap_agent_skill_mcp.go',
+  'internal/helpers/deap_agent_test.go',
+  'internal/helpers/image_upload.go',
+  'internal/helpers/image_upload_test.go',
+  'internal/helpers/oa.go',
+  'internal/helpers/oa_image_upload.go',
+  'internal/helpers/oa_image_upload_fifo_test.go',
+  'internal/helpers/oa_image_upload_test.go',
+  'internal/helpers/wukong_sync_commands_test.go',
+  'internal/junction/junction_stub.go',
+  'internal/junction/junction_windows.go',
+  'internal/junction/junction_windows_test.go',
+  'internal/shortcut/chat/chat_message.go',
+  'internal/upgrade/canonical_skills_test.go',
+  'internal/upgrade/paths.go',
+  'internal/upgrade/paths_junction_windows_test.go',
+  'internal/upgrade/skill_path_move.go',
+  'internal/upgrade/skill_path_move_errors_test.go',
+  'internal/upgrade/skill_path_move_test.go',
+  'internal/upgrade/skill_path_move_unix.go',
+  'internal/upgrade/skill_path_move_unix_test.go',
+  'internal/upgrade/skill_path_move_windows.go',
+  'internal/upgrade/skill_path_move_windows_test.go',
+  'internal/upgrade/skill_publication.go',
+  'internal/upgrade/skill_publication_identity_coverage_test.go',
+  'internal/upgrade/skill_publication_test.go',
+  'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
+  'skills/mono/references/products/aitable.md',
+  'skills/mono/references/products/aitable/aitable-api-key.md',
+  'skills/mono/references/products/attendance.md',
+  'skills/mono/references/products/chat.md',
+  'skills/mono/references/products/dingtalk-tag/manage-and-connect.md',
+  'skills/mono/references/products/dingtalk-tag/manage.md',
+  'skills/mono/references/products/oa.md',
+  'skills/mono/references/products/oa/oa-form-components.md',
+  'skills/mono/references/products/oa/oa-supply.md',
+  'skills/multi/dingtalk-aitable/SKILL.md',
+  'skills/multi/dingtalk-aitable/references/aitable/aitable-api-key.md',
+  'skills/multi/dingtalk-chat/SKILL.md',
+  'skills/multi/dingtalk-chat/references/card/a2ui.md',
+  'skills/multi/dingtalk-chat/references/card/schema.md',
+  'skills/multi/dingtalk-chat/references/chat/group-admin.md',
+  'skills/multi/dingtalk-contact/SKILL.md',
+  'skills/multi/dingtalk-contact/references/contact.md',
+  'skills/multi/dingtalk-event/SKILL.md',
+  'skills/multi/dingtalk-event/references/event-im-output.md',
+  'skills/multi/dingtalk-misc/references/oa-create.md',
+  'skills/multi/dingtalk-misc/references/oa.md',
+  'skills/multi/dingtalk-misc/references/oa/oa-form-components.md',
+  'skills/multi/dingtalk-misc/references/oa/oa-supply.md',
+  'skills/multi/dingtalk-misc/scripts/oa_create_preflight.py',
+  'skills/multi/dingtalk-tag/SKILL.md',
+  'skills/multi/dingtalk-tag/references/manage-and-connect.md',
+  'skills/multi/dingtalk-tag/references/manage.md',
+  'test/scripts/oa_skill_scripts_test.py',
+] : chatThreadPromote ? [
   '.changes/retire-chat-thread-promote.md',
   'internal/app/root_help_test.go',
   'internal/app/schema_agent_selection_contract_test.go',
@@ -246,12 +359,48 @@ const paths = chatThreadPromote ? [
   'skills/multi/dingtalk-shared/references/intent-guide.md',
   'test/unit/chat_thread_skill_routing_test.go',
 ] : ['.changes/aitable-public-reliability.md'];
-if (!chatThreadPromote) {
+if (!chatThreadPromote && !publicSync) {
   for (let i = 0; i < 41; i++) paths.push('internal/aitableprotocol/reviewed-fixture-' + i + '.go');
   paths.push(...protectedPaths);
 }
-const addedPaths = new Set([paths[0]]);
+const addedPaths = new Set(publicSync ? [
+  '.changes/1421-skill-setup-fail-closed-staging.md',
+  '.changes/1425-windows-skill-setup-junction.md',
+  '.changes/aitable-supabase-api-key.md',
+  '.changes/digital-employee-a2ui-replies.md',
+  '.changes/dingtalk-tag-draft-editor-schema.md',
+  '.changes/public-product-access-and-uploads.md',
+  'internal/app/schema_product_upload_contact_test.go',
+  'internal/app/skill_setup_entry_unix.go',
+  'internal/app/skill_setup_entry_windows.go',
+  'internal/app/skill_setup_link_unix.go',
+  'internal/app/skill_setup_link_windows.go',
+  'internal/app/skill_setup_link_windows_test.go',
+  'internal/helpers/connect_codex_progress.go',
+  'internal/helpers/connect_codex_progress_test.go',
+  'internal/helpers/connect_progress.go',
+  'internal/helpers/contact_open_id_result_test.go',
+  'internal/helpers/deap_agent_card.go',
+  'internal/helpers/deap_agent_card_integration_test.go',
+  'internal/helpers/deap_agent_card_payload.go',
+  'internal/helpers/deap_agent_card_publish_test.go',
+  'internal/helpers/deap_agent_card_regression_test.go',
+  'internal/helpers/deap_agent_card_review_test.go',
+  'internal/helpers/deap_agent_card_test.go',
+  'internal/helpers/image_upload.go',
+  'internal/helpers/image_upload_test.go',
+  'internal/helpers/oa_image_upload.go',
+  'internal/helpers/oa_image_upload_fifo_test.go',
+  'internal/helpers/oa_image_upload_test.go',
+  'internal/junction/junction_stub.go',
+  'internal/junction/junction_windows.go',
+  'internal/junction/junction_windows_test.go',
+  'internal/upgrade/paths_junction_windows_test.go',
+  'internal/upgrade/skill_publication_identity_coverage_test.go',
+] : [paths[0]]);
 if (chatThreadPromote) addedPaths.add('test/unit/chat_thread_skill_routing_test.go');
+// 变异既有文件，确保删除、重命名与 Files API 状态错配场景在三组中语义一致。
+const changedIndex = paths.findIndex(path => !addedPaths.has(path));
 const entry = (path, sha) => ({ path, sha, mode: '100644', type: 'blob' });
 const reviewedBaseTree = paths.filter(path => !addedPaths.has(path)).map((path, i) => entry(path, blob(1000 + i)));
 const reviewedHeadTree = paths.map((path, i) => entry(path, blob(2000 + i)));
@@ -302,7 +451,7 @@ switch (scenario) {
     break;
   case 'new_blob_same_path':
   case 'body_exception_injection':
-    currentHeadTree[1].sha = files[1].sha = blob(5000);
+    currentHeadTree[changedIndex].sha = files[changedIndex].sha = blob(5000);
     pull.body = JSON.stringify({ reviewed: { base, head, count: paths.length, protectedPaths } });
     break;
   case 'extra_file':
@@ -323,14 +472,14 @@ switch (scenario) {
     files.find(file => file.filename === protectedPaths[0]).filename = 'scripts/policy/unapproved-path.go';
     break;
   case 'changed_preimage': currentBaseTree[0].sha = blob(5000); break;
-  case 'changed_mode': currentHeadTree[1].mode = '100755'; break;
-  case 'symlink': currentHeadTree[1].mode = '120000'; break;
-  case 'submodule': currentHeadTree[1].mode = '160000'; currentHeadTree[1].type = 'commit'; break;
+  case 'changed_mode': currentHeadTree[changedIndex].mode = '100755'; break;
+  case 'symlink': currentHeadTree[changedIndex].mode = '120000'; break;
+  case 'submodule': currentHeadTree[changedIndex].mode = '160000'; currentHeadTree[changedIndex].type = 'commit'; break;
   case 'rename':
-    currentHeadTree[1].path = files[1].filename = 'internal/aitableprotocol/renamed.go';
-    files[1].previous_filename = paths[1]; files[1].status = 'renamed';
+    currentHeadTree[changedIndex].path = files[changedIndex].filename = 'internal/aitableprotocol/renamed.go';
+    files[changedIndex].previous_filename = paths[changedIndex]; files[changedIndex].status = 'renamed';
     break;
-  case 'deletion': currentHeadTree.splice(1, 1); files[1].status = 'removed'; break;
+  case 'deletion': currentHeadTree.splice(changedIndex, 1); files[changedIndex].status = 'removed'; break;
   case 'wrong_repository': context.repo.repo = 'other-repository'; break;
   case 'wrong_pr': pull.number = context.issue.number = 1464; break;
   case 'wrong_author': pull.user.login = 'other-author'; break;
@@ -340,7 +489,7 @@ switch (scenario) {
   case 'closed': pull.state = 'closed'; break;
   case 'governance_pr_self_authorization':
     pull.number = context.issue.number = 1503;
-    pull.head.ref = 'codex/authorize-chat-thread-promote-1502';
+    pull.head.ref = publicSync ? 'codex/authorize-public-sync-1529' : 'codex/authorize-chat-thread-promote-1502';
     files = [{ filename: '.github/workflows/ai-behavior-check.yml', status: 'modified', sha: blob(5000) }];
     break;
   case 'fork_head': pull.head.repo.full_name = 'other-owner/dingtalk-workspace-cli'; break;
@@ -348,11 +497,11 @@ switch (scenario) {
   case 'head_policy_injection':
     currentHeadTree[0].path = files[0].filename = '.github/workflows/injected-exception.json';
     break;
-  case 'files_api_sha_mismatch': files[1].sha = blob(5000); break;
-  case 'files_api_status_mismatch': files[1].status = 'added'; break;
+  case 'files_api_sha_mismatch': files[changedIndex].sha = blob(5000); break;
+  case 'files_api_status_mismatch': files[changedIndex].status = 'added'; break;
   case 'files_api_omission': files.pop(); break;
-  case 'files_api_duplicate': files[1] = clone(files[0]); break;
-  case 'duplicate_tree_path': currentHeadTree.push(clone(currentHeadTree[1])); break;
+  case 'files_api_duplicate': files[changedIndex] = clone(files[0]); break;
+  case 'duplicate_tree_path': currentHeadTree.push(clone(currentHeadTree[changedIndex])); break;
 }
 pull.changed_files = files.length;
 context.payload.pull_request = clone(pull);

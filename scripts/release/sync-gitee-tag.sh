@@ -200,6 +200,12 @@ if [ -n "$remote_commit" ]; then
   err "Gitee tag ${VERSION} already points to ${remote_commit}; refusing to move it to ${target_commit}"
 fi
 
+# Localized Gitee heads are absent from GitHub; fetch them so pushes reuse their reachable objects.
+if ! run_bounded git fetch --no-tags "$GITEE_PUBLIC_GIT_REMOTE" \
+  '+refs/heads/*:refs/remotes/gitee/*'; then
+  err "could not fetch existing Gitee heads for object reuse; tag ${VERSION} push was not attempted"
+fi
+
 echo "   Pushing missing Gitee tag ${VERSION} -> ${target_commit}"
 if ! run_bounded git push "$GITEE_GIT_REMOTE" \
   "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null; then

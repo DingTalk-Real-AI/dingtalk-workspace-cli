@@ -165,7 +165,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --format json
 ```
 
-简单模式的 `process-code`、`dept-id`、`form-values` 必须一次传齐。先从当前用户信息确定 `deptId`；不得用一次缺参调用来发现约束。
+简单模式的 `process-code`、`dept-id`、`form-values` 必须一次传齐；不得用一次缺参调用来发现约束。`deptId` 必须已核验：先从当前用户信息确定真实 `deptId`——`dws contact user get-self` 读 `orgEmployeeModel.depts[].deptId`，多部门时经用户确认；`-1` 仅代表根部门，禁止照抄示例。
 
 检查 `workflowActivityRuleVOs`：
 

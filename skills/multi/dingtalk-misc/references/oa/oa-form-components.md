@@ -194,10 +194,10 @@
 | 属性 | 说明                                                 |
 |------|----------------------------------------------------|
 | `componentName` | `InnerContactField`                                |
-| value 格式 | userId 字符串，多人时为 JSON 数组字符串                         |
-| 示例（单选） | `"user123"`                                        |
+| value 格式 | JSON 数组字符串（userId 数组）；单选传单元素数组，多选传多元素数组                         |
+| 示例（单选） | `'["user123"]'`                                        |
 | 示例（多选） | `'["userId1","userId2"]'`                              |
-| 约束 | `choice: "0"` 单选 / `"1"` 多选；userId 须为**当前组织下在职成员** |
+| 约束 | `choice: "0"` 单选 / `"1"` 多选；**单选也必须传单元素数组**，裸 userId 字符串会传值异常；userId 须为**当前组织下在职成员** |
 
 ```json
 { "name": "项目负责人", "value": "[\"userId1\",\"userId2\"]" }
@@ -234,17 +234,25 @@
 
 ### DDPhotoField（图片控件）
 
-> **支持通过图片 URL 提交，不支持本地文件上传。** 如果用户已有图片 URL（如公网可访问的图片链接），可直接填入 value 提交。CLI 尚未封装本地文件上传到钉盘 CDN 的流程，若用户只有本地文件而非 URL，需告知用户在钉钉客户端补充。
+> **[支持] 已支持通过 CLI 提交本地图片。** 本地图片先用 `dws oa approval image upload --file <path>` 上传获取 mediaIdV2，再将 mediaIdV2 组装为 value 随 `create-instance` 提交；用户已有公网图片 URL 时无需上传，可直接填入 value 提交。
 
 | 属性 | 说明 |
 |------|------|
 | `componentName` | `DDPhotoField` |
-| value 格式 | URL 数组转义字符串，即使只有一个 URL 也需数组形式 |
+| value 格式 | 数组转义字符串，元素为图片 URL 或 mediaIdV2，即使只有一个元素也需数组形式 |
 | 示例 | `"[\"http://example.com/img1.jpg\",\"http://example.com/img2.jpg\"]"` |
-| 约束 | 支持 URL 直接提交；**不支持本地文件上传**（CLI 未封装钉盘上传流程）； |
+| 约束 | 支持 URL 或 mediaIdV2 直接提交；本地图片先用 `dws oa approval image upload --file <path>` 取 mediaIdV2（jpg/jpeg/png/gif/webp/bmp，≤2MB 直传，>2MB 自动压缩，>10MB 拒绝） |
+
+URL 取值示例：
 
 ```json
 { "name": "图片", "value": "[\"http://example.com/photo.jpg\"]" }
+```
+
+mediaIdV2 取值示例（由 `dws oa approval image upload` 返回）：
+
+```json
+{ "name": "图片", "value": "[\"<mediaIdV2>\"]" }
 ```
 
 ### DDAttachment（附件控件）
@@ -452,7 +460,7 @@ extValue = JSON.stringify({
 > **IMPORTANT：**
 > - `bizAlias` 不组装（MCP formComponentValues 无此字段，服务端按 id 匹配）；**不构造 `repairCheckTime` 条目**（服务端回填字段，PC 提交数据无此字段名）。
 > - 班次匹配与资格判定一律以服务端为准：`supply-plans` 空 → 转告终止；多班次 → 用户按 planTip 选择；`supply-check` qualify=false → 转告 title/desc 终止。
-> - 补卡理由控件（TextareaField）是否必收以 form-schema 的 required 为准（控件必填性由模板配置决定）；图片控件（DDPhotoField）一期跳过并提示客户端补充。
+> - 补卡理由控件（TextareaField）是否必收以 form-schema 的 required 为准（控件必填性由模板配置决定）；图片控件（DDPhotoField）如需提交，先用 `dws oa approval image upload --file <path>` 取 mediaIdV2 再组装 value。
 > - 模板流程不固定（自选审批人只是常见配置之一，管理员可自由改为主管链/条件分支等）：forecast 返回 `workflowActivityRuleVOs[].targetSelect=true` 且 `workflowActor.required=true` 的节点时**必须选人**并组装 `targetSelectActioners`（actionerKey=`workflowActor.actorKey`，漏选会创建成功但流转挂起）；无自选节点则不需要选人，一切以 forecast 返回为准。
 > - `timeZoneInfo` **不本地拼接**（可选字段）：服务端 `supply-plans` 响应不含时区数据，PC 真实数据不含亦可成功。多时区 V2 灰度（multiTimeZoneV2）与补卡次数 trial（enableSupplyTimes）一期不支持。
 
@@ -598,7 +606,7 @@ children 条目（位于容器 value 字符串内部，`key`=子控件 props.id�
 | OCR 文本识别 | `OcrTextField` | 需要客户端 OCR 交互 |
 | OCR 身份证识别 | `OcrIdCardField` | 需要客户端 OCR 交互 |
 
-> **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**，但不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。详见本文 [DDPhotoField](#ddphotofield图片控件) 章节。
+> **`DDPhotoField`（图片控件）已支持通过 CLI 提交：** 本地图片先用 `dws oa approval image upload --file <path>` 上传取 mediaIdV2，再组装 value（数组转义字符串）随 `create-instance` 提交；公网图片 URL 可直接填入 value 提交。详见本文 [DDPhotoField](#ddphotofield图片控件) 章节。
 
 > **套件类控件（大部分暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作。**例外：`DDHolidayField`（请假套件）、`DDBizSuite · attendance.supply`（补卡套件）、`DDBizSuite · attendance.goout`（外出套件）与 `DDBizSuite · attendance.batchovertime`（加班套件）已支持**，按上方章节与 [oa-leave.md](oa-leave.md) / [oa-supply.md](oa-supply.md) / [oa-goout.md](oa-goout.md) / [oa-overtime.md](oa-overtime.md) 工作流发起。
 

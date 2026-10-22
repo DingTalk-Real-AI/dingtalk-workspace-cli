@@ -992,12 +992,13 @@ func TestCrossPlatformCoverageResolveSkillSrcLayouts(t *testing.T) {
 	}
 
 	// (c) extract root SKILL.md fallback.
-	rootOnly := t.TempDir()
+	// 固定使用正斜杠输入，覆盖 Windows 下父目录解析时的分隔符归一化。
+	rootOnly := filepath.ToSlash(t.TempDir())
 	os.WriteFile(filepath.Join(rootOnly, "SKILL.md"), []byte("# m"), 0o644)
 	child := filepath.Join(rootOnly, "extract-child")
 	os.MkdirAll(child, 0o755)
-	if got := resolveMonoSkillSrc(child); got != rootOnly {
-		t.Errorf("parent root = %q, want %q", got, rootOnly)
+	if got, want := resolveMonoSkillSrc(child), filepath.Clean(rootOnly); got != want {
+		t.Errorf("parent root = %q, want %q", got, want)
 	}
 
 	// (d) child mono/ inside the extracted dir.

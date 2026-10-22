@@ -5,6 +5,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -153,14 +154,22 @@ func TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				t.Errorf("%s %s = %q, want %q", canonical, field, got, expected)
 			}
 		}
-		if want.tool == "" {
+		composite := want.tool == "" || canonical == "dingtalk-tag.create_digital_employee" ||
+			canonical == "dingtalk-tag.publish_digital_employee"
+		if composite {
 			if got := schemaContractString(tool["interface_mode"]); got != "composite" {
 				t.Errorf("%s interface_mode = %q, want composite", canonical, got)
 			}
 			if ref := schemaInterfaceObject(tool["interface_ref"]); len(ref) != 0 {
 				t.Errorf("%s composite unexpectedly exposes interface_ref %#v", canonical, ref)
 			}
+			if reason := schemaContractString(tool["interface_reason"]); reason == "" {
+				t.Errorf("%s composite has no interface_reason", canonical)
+			}
 		} else {
+			if got := schemaContractString(tool["interface_mode"]); got != "mcp" {
+				t.Errorf("%s interface_mode = %q, want mcp", canonical, got)
+			}
 			ref := schemaInterfaceObject(tool["interface_ref"])
 			if got := schemaContractString(ref["product_id"]); got != "deap-dev" {
 				t.Errorf("%s interface product = %q, want deap-dev", canonical, got)
@@ -313,6 +322,13 @@ func TestCrossPlatformCoverageDeapAgentSkillMCPLeavesReachFinalSchema(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDeapAgentSkillUpdatePublishesExactlyOneConstraint(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.update_skill")
+	tool := payload.Tools["dingtalk-tag.update_skill"]
+	assertSchemaContractConstraintGroup(t, tool, "require_one_of", []string{"enabled", "file"})
+	assertSchemaContractConstraintGroup(t, tool, "mutually_exclusive", []string{"enabled", "file"})
+}
+
 func TestCrossPlatformCoverageDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
 	root := NewRootCommand()
 	cmd, args, err := root.Find([]string{"dingtalk-tag", "capability", "mcp", "create"})
@@ -362,12 +378,13 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 18 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 18", len(parameters))
+	if len(parameters) != 19 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "client-id": "clientId",
 		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
+		"reply-mode": "replyMode",
 	} {
 		parameter := parameters[name]
 		if parameter == nil {
@@ -379,6 +396,9 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	channel := parameters["channel"]
+	if got := schemaContractString(parameters["reply-mode"]["default"]); got != "a2ui" {
+		t.Errorf("reply-mode default = %q, want a2ui", got)
+	}
 	if got := schemaContractString(channel["required_when"]); got != "" {
 		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)
 	}
@@ -401,5 +421,47 @@ func TestCrossPlatformCoverageEmployeeRemovedBindingCommandsAbsentFromSchema(t *
 		if _, ok := cli.ResolveMeta(path); !ok {
 			t.Errorf("保留命令未交付到 Schema: %s", path)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeAccessPolicyBindingFinalSchema(t *testing.T) {
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.channel_binding")
+	tool := payload.Tools["dingtalk-tag.channel_binding"]
+	result := tool["result"].(map[string]any)
+	schema := result["data_schema"].(map[string]any)
+	properties := schema["properties"].(map[string]any)
+	for _, key := range []string{"accessPolicy", "selfOpenDingTalkId"} {
+		if properties[key] == nil {
+			t.Fatalf("missing delivered %s", key)
+		}
+	}
+	if properties["allowed"] != nil {
+		t.Fatal("逐发送者可见范围判定已移除")
+	}
+	if tool["effect"] != "read" || tool["confirmation"] != "not_required" {
+		t.Fatal("binding access query must remain read only")
+	}
+}
+
+// 旧机器协议仍交付兼容入口，新能力协商仅推荐通用 chat。
+func TestCrossPlatformCoverageEmployeeChannelCompatibilitySurface(t *testing.T) {
+	root := NewRootCommand()
+	for _, name := range []string{"reply", "operator-private"} {
+		cmd, rest, err := root.Find([]string{"dingtalk-tag", "channel", name})
+		if err != nil || len(rest) != 0 || !cmd.Runnable() {
+			t.Fatalf("兼容命令未交付: %s", name)
+		}
+		if _, ok := cli.ResolveMeta("dingtalk-tag channel " + name); !ok {
+			t.Fatalf("兼容命令缺少 Schema: %s", name)
+		}
+	}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.channel_capabilities", "dingtalk-tag.channel_binding")
+	raw, err := json.Marshal(payload.Tools["dingtalk-tag.channel_capabilities"]["result"])
+	if err != nil || !bytes.Contains(raw, []byte("replyStdin")) || !bytes.Contains(raw, []byte("operatorPrivateStdin")) || !bytes.Contains(raw, []byte("chatDelivery")) || !bytes.Contains(raw, []byte("bindingAccessPolicy")) {
+		t.Fatalf("最终能力契约未同步: %s, %v", raw, err)
+	}
+	if len(payload.Tools) != 2 {
+		t.Fatalf("保留入口不完整: %v", payload.Tools)
 	}
 }

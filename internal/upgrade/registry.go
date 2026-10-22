@@ -224,37 +224,43 @@ func (c *Client) fetchRegistryVersions(ctx context.Context, track ReleaseTrack) 
 }
 
 func (c *Client) getRegistryJSON(ctx context.Context, endpoint string, target any, limit int64) error {
+	return c.getBoundedJSON(ctx, endpoint, target, limit, "npm Registry", "npm 元数据")
+}
+
+// getBoundedJSON 为公开发行元数据共用有界读取，本层不读取或附加凭据。
+// 官方 GitHub 平台元数据可使用独立的认证 transport，Registry 仍不携带 GitHub 凭据。
+func (c *Client) getBoundedJSON(ctx context.Context, endpoint string, target any, limit int64, source, metadata string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json")
-	// Registry 从不继承 GitHub Token；每次重定向也执行同一 URL 安全约束。
+	// 每次重定向也执行同一 URL 安全约束。
 	client := *c.httpClient
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 || !validRegistryURL(req.URL.String()) || (via[0].URL.Scheme == "https" && req.URL.Scheme != "https") {
-			return fmt.Errorf("npm Registry 重定向无效")
+			return fmt.Errorf("%s 重定向无效", source)
 		}
 		return nil
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("无法连接 npm Registry: %w", err)
+		return fmt.Errorf("无法连接 %s: %w", source, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("npm Registry 返回 HTTP %d", resp.StatusCode)
+		return fmt.Errorf("%s 返回 HTTP %d", source, resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return fmt.Errorf("读取 npm 元数据失败: %w", err)
+		return fmt.Errorf("读取 %s失败: %w", metadata, err)
 	}
 	if int64(len(body)) > limit {
-		return fmt.Errorf("npm 元数据超过大小限制")
+		return fmt.Errorf("%s超过大小限制", metadata)
 	}
 	if err := json.Unmarshal(body, target); err != nil {
-		return fmt.Errorf("解析 npm 元数据失败: %w", err)
+		return fmt.Errorf("解析 %s失败: %w", metadata, err)
 	}
 	return nil
 }

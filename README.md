@@ -206,7 +206,7 @@ curl -fsSL https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/raw/main/sc
 
 > Requires **v1.0.7** or later. For earlier versions, please re-run the [install script](#installation) to upgrade.
 
-DWS 默认通过 npm Registry 查询发行版本。独立二进制直接下载发布包、校验完整性和平台文件后自更新，无需安装 npm；npm、pnpm 和 Homebrew 安装交由对应包管理器升级。详见[版本来源与升级方式](docs/upgrading.md)。
+DWS 默认通过 npm Registry 查询发行版本。官方开源版独立二进制从同版本 GitHub Release 下载当前平台归档和技能包，校验后自更新，无需安装 npm；npm、pnpm 和 Homebrew 安装交由对应包管理器升级。详见[版本来源与升级方式](docs/upgrading.md)。
 
 ```bash
 dws upgrade                    # interactive upgrade to latest version
@@ -242,7 +242,7 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 
 独立二进制的升级分为准备和替换两阶段：
 
-1. **准备** — 下载 npm 发布包，强制验证包完整性及目标平台归档、技能包的 SHA256，再解压并验证新二进制。验证失败时不替换现有安装。
+1. **准备** — 官方开源版下载同版本的当前平台归档和技能包，强制验证大小、SHA256 及新二进制版本。自定义 Registry 保留完整 npm 包及完整性校验。验证失败时不替换现有安装。
 2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into the canonical `~/.agents/skills` root. Agents classified by the pinned compatibility registry as supporting the universal root read it directly; other detected Agents receive links to the canonical copy, with a direct-copy fallback when links are unavailable. Older DWS-managed agent-specific copies are backed up and retired so the same Skill is not discovered twice.
 
 独立二进制升级保留自动备份和 `dws upgrade --rollback`。包管理器安装的回退由对应管理器处理；npm/pnpm 安装不支持 `--skip-skills`，因为发布包的安装脚本会更新技能。Homebrew 捆绑技能，使用 `dws skill setup` 安装到 Agent 目录。

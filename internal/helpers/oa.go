@@ -2540,7 +2540,7 @@ func newOaCommand() *cobra.Command {
 	})
 	approvalForecastCmd := &cobra.Command{
 		Use: "forecast-process", Short: "根据表单值预测审批流程与自选节点",
-		Example: "dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
+		Example: "dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '{\"金额\":\"100\"}'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
 				request, err := decodeOARequest(raw)
@@ -2587,8 +2587,8 @@ func newOaCommand() *cobra.Command {
 				UseWhen:      []string{"已知道 processCode 且已根据表单 Schema 组装字段，需要在发起前确认审批路径或自选节点时"},
 				AvoidWhen:    []string{"需要真正创建审批单时改用 create-instance；未获得字段定义时先用 form-schema"},
 				Examples: []string{
-					"dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
-					"dws oa approval forecast-process --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[[{\"name\":\"金额\",\"value\":\"100\"}]]}'",
+					"dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '{\"金额\":\"100\"}'",
+					"dws oa approval forecast-process --request '{\"processCode\":\"PROC-xxx\",\"deptId\":123,\"formComponentValues\":[[{\"name\":\"金额\",\"value\":\"100\"}]]}'",
 				},
 			},
 			// Simple-mode flags are mapping exclusions (encoded inside ProcessForecastPopRequest).
@@ -2734,7 +2734,7 @@ func newOaCommand() *cobra.Command {
 	})
 	approvalCreateCmd := &cobra.Command{
 		Use: "create-instance", Short: "发起审批实例（需要 --yes 确认）",
-		Example: "dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}' --yes",
+		Example: "dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '{\"事由\":\"测试\"}' --yes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !commandDryRun(cmd) {
 				yes, _ := cmd.Flags().GetBool("yes")
@@ -2819,8 +2819,8 @@ func newOaCommand() *cobra.Command {
 				UseWhen:      []string{"用户确认要发起审批，且已查询表单 Schema、核对字段及审批路径后使用"},
 				AvoidWhen:    []string{"只需预测流程时使用 forecast-process；用户尚未确认或字段未按 Schema 核对时不要发起"},
 				Examples: []string{
-					"dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}'",
-					"dws oa approval create-instance --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[{\"name\":\"事由\",\"value\":\"测试\"}],\"targetSelectActioners\":[{\"actionerKey\":\"manual-node\",\"actionerStaffIds\":[\"user-id\"]}]}'",
+					"dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '{\"事由\":\"测试\"}'",
+					"dws oa approval create-instance --request '{\"processCode\":\"PROC-xxx\",\"deptId\":123,\"formComponentValues\":[{\"name\":\"事由\",\"value\":\"测试\"}],\"targetSelectActioners\":[{\"actionerKey\":\"manual-node\",\"actionerStaffIds\":[\"user-id\"]}]}'",
 				},
 			},
 			// Simple-mode flags are mapping exclusions (encoded inside ProcessInstanceCreationPopRequest).
@@ -2977,6 +2977,7 @@ func newOaCommand() *cobra.Command {
 		approvalCreateCmd,
 	)
 	approvalCmd.AddCommand(newOAAttachmentCommand())
+	approvalCmd.AddCommand(newOAImageCommand())
 	approvalCmd.AddCommand(templateCmd)
 	root.AddCommand(approvalCmd)
 

@@ -30,11 +30,13 @@ func digitalEmployeeChannels() []string {
 }
 
 type digitalEmployeeAdapterConfig struct {
-	SelfOpenDingTalkID string                 `json:"selfOpenDingTalkId,omitempty"`
-	Binding            digitalEmployeeBinding `json:"binding"`
-	Options            connectAgentOptions    `json:"options"`
-	AlwaysOn           bool                   `json:"alwaysOn"`
-	Name               string                 `json:"name,omitempty"`
+	SelfOpenDingTalkID  string                 `json:"selfOpenDingTalkId,omitempty"`
+	SelfIdentityProfile string                 `json:"selfIdentityProfile,omitempty"`
+	Binding             digitalEmployeeBinding `json:"binding"`
+	Options             connectAgentOptions    `json:"options"`
+	AlwaysOn            bool                   `json:"alwaysOn"`
+	Name                string                 `json:"name,omitempty"`
+	ReplyMode           string                 `json:"replyMode,omitempty"`
 }
 
 // digitalEmployeeAdapter 接收已经完成身份准备的非敏感配置。
@@ -168,7 +170,7 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 }
 
 func digitalEmployeeAdapterFlagNames() []string {
-	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "daemon", "alwayson", "local-worker", "local-supervise"}
+	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "reply-mode", "daemon", "alwayson", "local-worker", "local-supervise"}
 }
 
 func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
@@ -210,6 +212,7 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 
 func digitalEmployeeAgentFlags() []LeafFlag {
 	return []LeafFlag{
+		{Name: "reply-mode", Default: "a2ui", Enum: []string{"a2ui", "text"}, Usage: "DWS 直接托管本地 Agent 的回复模式：a2ui 发送占位并更新；text 仅发送最终文本。未适配公开进度的 Agent 仍用文本；外部宿主接入（--channel dsh）不接受此参数"},
 		{Name: "local-lease", Kind: LeafBool, Hidden: true, Usage: "internal: DSH 员工占用凭据无关的本地运行锁"},
 		{Name: "binding-revision", Hidden: true, Usage: "internal: 精确绑定版本"},
 		{Name: "runtime-instance-id", Hidden: true, Usage: "internal: DSH 宿主运行实例"},
@@ -221,8 +224,8 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 		{Name: "agent-permission-mode", Enum: []string{"ask", "bypass"}, Usage: "Agent 权限模式；同 dev connect"},
 		{Name: "agent-approval-mode", Enum: []string{"ask", "yolo"}, Usage: "Agent 审批模式；同 dev connect"},
 		{Name: "yolo", Kind: LeafBool, Usage: "显式选择 Agent 最高权限模式"},
-		{Name: "allowed-users", Usage: "额外允许的精确 userId，以逗号分隔；在员工身份下解析"},
-		{Name: "allowed-groups", Usage: "允许的员工上下文 openConversationId，以逗号分隔；群内仍检查发送人"},
+		{Name: "allowed-users", Usage: "其他本地场景的额外 userId 白名单；local_agent 使用 DEAP 已发布可见范围"},
+		{Name: "allowed-groups", Usage: "其他本地场景的群白名单；local_agent 按 DEAP 已发布范围校验发送者"},
 		{Name: "daemon", Kind: LeafBool, Usage: "在后台启动 Event 和 Agent（Windows 不支持）"},
 		{Name: "alwayson", Kind: LeafBool, Usage: "配合 --daemon 在允许的重试预算内恢复 worker"},
 		{Name: "local-worker", Kind: LeafBool, Hidden: true, Usage: "internal: 从员工 Profile 的已保存配置运行"},
@@ -290,6 +293,13 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid adapter configuration")
 	}
+	// Configurations written before reply modes existed retain text and their thread.
+	if cfg.ReplyMode == "" {
+		cfg.ReplyMode = "text"
+	}
+	if cfg.ReplyMode != "a2ui" && cfg.ReplyMode != "text" {
+		return cfg, fmt.Errorf("invalid adapter reply mode")
+	}
 	if !validMachineString(cfg.SelfOpenDingTalkID) {
 		return cfg, fmt.Errorf("adapter 缺少自身开放 ID，请重新 connect 初始化，不能跳过自消息过滤")
 	}
@@ -300,6 +310,8 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err := checkEmployeeServerOperation(b); err != nil {
 		return cfg, err
 	}
+	// 运行策略只以权威绑定为准，旧 adapter 快照不覆盖最新绑定。
+	cfg.Binding = b
 	return cfg, nil
 }
 
@@ -307,11 +319,8 @@ func digitalEmployeeResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"deviceId":{"type":"string","description":"稳定设备标识"},"runtimeBindingId":{"type":"string","description":"最后确认的服务端绑定 ID；解绑后保留历史 ID"},"serverBindingState":{"type":"string","description":"本地服务端回执状态，不代表在线；bound/unbound/unregistered/unknown/commit_pending"},"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}},"bindingState":{"type":"string","description":"本机绑定状态"},"desiredState":{"type":"string","description":"期望运行状态"},"runtimeState":{"type":"string","description":"实际运行状态或 unknown"},"bindingRevision":{"type":"integer","description":"绑定版本"},"runtimeInstanceId":{"type":"string","description":"运行实例标识"},"sourceState":{"type":"string","description":"事件上游连接状态；未知来源不推断为已连接"},"transportReady":{"type":"boolean","description":"已观测的事件传输就绪，不代表业务消息送达"},"executorReady":{"type":"boolean","description":"Agent 初始化就绪"},"observedAt":{"type":"string","description":"状态观察时间"},"operationId":{"type":"string","description":"解绑或换绑操作 ID"},"reasonCode":{"type":"string","description":"稳定阻塞原因"},"nextAction":{"type":"string","description":"安全恢复建议"}}}`)}
 }
 
-func digitalEmployeeMachineResultSpec(capabilities bool) *contract.ResultSpec {
-	if capabilities {
-		return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"schemaVersion":{"type":"integer","description":"输入 Schema 版本"},"protocolVersion":{"type":"integer","description":"机器协议版本"},"channel":{"type":"string","description":"Adapter 类型"},"auditMode":{"type":"string","description":"审计要求"},"capabilities":{"type":"object","description":"支持的协议操作","properties":{"eventConsume":{"type":"boolean","description":"支持 Event Consumer"},"replyStdin":{"type":"boolean","description":"支持 stdin 引用回复"},"operatorPrivateStdin":{"type":"boolean","description":"支持 stdin 主管私聊"}}}}}`)}
-	}
-	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"openMessageId":{"type":"string","description":"已确认的开放消息 ID"},"conversationId":{"type":"string","description":"目标会话 ID"},"deliveryStatus":{"type":"string","description":"delivered 或 unknown"},"idempotencyKey":{"type":"string","description":"发送幂等键"}}}`)}
+func digitalEmployeeCapabilitiesResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"schemaVersion":{"type":"integer","description":"输入 Schema 版本"},"protocolVersion":{"type":"integer","description":"机器协议版本"},"channel":{"type":"string","description":"Adapter 类型"},"auditMode":{"type":"string","description":"审计要求"},"capabilities":{"type":"object","description":"支持的协议操作","properties":{"eventConsume":{"type":"boolean","description":"支持 Event Consumer"},"replyStdin":{"type":"boolean","description":"兼容 stdin 引用回复"},"operatorPrivateStdin":{"type":"boolean","description":"兼容 stdin 固定主管私聊"},"chatDelivery":{"type":"boolean","description":"通用 chat 支持 stdin、员工上下文和统一发送回执"},"bindingAccessPolicy":{"type":"boolean","description":"绑定查询始终返回 platform 或 local_allowlist 访问策略；入站不再查询远端可见范围"}}}}}`)}
 }
 
 func newDigitalEmployeeStatusCommand() *cobra.Command {
@@ -386,13 +395,20 @@ func newDigitalEmployeeRestartCommand() *cobra.Command {
 	})
 }
 
+const codexEmployeeDeveloperInstructions = "你是通过钉钉协作的本地数字员工，请用简洁、自然的中文回答。根据用户明确请求和授权，使用已安装的本地技能、CLI 和工作目录中的资料完成任务；执行前读取相关技能说明，遵守其业务确认要求及当前沙箱权限。不要在没有请求时主动读写文件或执行命令；权限不足或需要交互审批时说明限制，不得声称已执行、绕过权限或输出凭据。"
+
 // 保留此接口参数中的 context，所有运行操作必须服从宿主取消。
 var digitalEmployeeNewForwarder = func(ctx context.Context, cfg digitalEmployeeAdapterConfig) (forwarder, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	cfg.Options.PrivateDiagnostics = true
-	return newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	fwd, err := newLocalAgentForwarder(cfg.Binding.Channel, digitalEmployeeScope(cfg.Binding.DWSProfile)+"-"+cfg.Binding.Channel, cfg.Options)
+	if codex, ok := fwd.(*codexAppServerForwarder); ok {
+		// 数字员工可按用户授权执行本地任务；群聊机器人保留原有问答限制。
+		codex.developerInstructions = codexEmployeeDeveloperInstructions
+	}
+	return fwd, err
 }
 
 var digitalEmployeeReadyTimeout = 45 * time.Second

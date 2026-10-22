@@ -244,6 +244,69 @@
       },
       "state": "pending",
       "reason": "Retire legacy contact user get-by-dingtalk-id from Agent Schema and public help while keeping a hidden historical argv compatibility command that fails closed with aisearch person / search-mobile / get-by-open-dingtalk-id alternatives."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key create",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.create_sql_sheet_api_key",
+        "replacement_tool_id": "aitable.create_sql_sheet_api_key",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key creation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key list",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key list",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.list_sql_sheet_api_keys",
+        "replacement_tool_id": "aitable.list_sql_sheet_api_keys",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key listing to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key revoke",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key revoke",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.revoke_sql_sheet_api_key",
+        "replacement_tool_id": "aitable.revoke_sql_sheet_api_key",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key revocation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
     }
   ]
 }

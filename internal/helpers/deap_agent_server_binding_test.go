@@ -511,7 +511,7 @@ func TestCrossPlatformCoverageEmployeeServerPendingBlocksWorkerAndLease(t *testi
 	if err := updateEmployeeBinding(b); err != nil {
 		t.Fatal(err)
 	}
-	cfg := digitalEmployeeAdapterConfig{Binding: b, SelfOpenDingTalkID: "employee-open-id"}
+	cfg := digitalEmployeeAdapterConfig{Binding: b, SelfOpenDingTalkID: "employee-open-id", SelfIdentityProfile: b.DWSProfile}
 	if err := writeEmployeeJSON(filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "adapter.json"), cfg); err != nil {
 		t.Fatal(err)
 	}

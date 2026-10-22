@@ -34,6 +34,10 @@ func digitalEmployeeBindingPath(configDir, profile string) string {
 	return filepath.Join(configDir, "digital-employees", fmt.Sprintf("%x.json", digest[:]))
 }
 
+func employeeBindingLockPath(profile string) string {
+	return filepath.Join(deapConnectConfigDir(), "digital-employees", digitalEmployeeScope(profile), "binding-lock")
+}
+
 func saveDigitalEmployeeBinding(configDir string, binding digitalEmployeeBinding) error {
 	lock, err := auth.AcquireDualLock(context.Background(), filepath.Join(configDir, "digital-employees", digitalEmployeeScope(binding.DWSProfile), "binding-lock"))
 	if err != nil {
@@ -44,7 +48,8 @@ func saveDigitalEmployeeBinding(configDir string, binding digitalEmployeeBinding
 		return err
 	}
 	if binding.SchemaVersion != 1 || !validMachineString(binding.AgentUUID) || !validMachineString(binding.DWSProfile) ||
-		!validMachineString(binding.OperatorOpenDingTalkID) {
+		!validMachineString(binding.OperatorOpenDingTalkID) ||
+		(binding.RuntimeBindingID != "" && !validMachineString(binding.RuntimeBindingID)) {
 		return fmt.Errorf("invalid digital employee binding")
 	}
 	data, err := employeeMarshalIndent(binding, "", "  ")
@@ -78,7 +83,8 @@ func loadDigitalEmployeeBinding(configDir, profile string) (digitalEmployeeBindi
 		return digitalEmployeeBinding{}, fmt.Errorf("invalid digital employee binding")
 	}
 	if binding.SchemaVersion != 1 || binding.DWSProfile != strings.TrimSpace(profile) || !validMachineString(binding.AgentUUID) ||
-		!validMachineString(binding.OperatorOpenDingTalkID) {
+		!validMachineString(binding.OperatorOpenDingTalkID) ||
+		(binding.RuntimeBindingID != "" && !validMachineString(binding.RuntimeBindingID)) {
 		return digitalEmployeeBinding{}, fmt.Errorf("invalid digital employee binding")
 	}
 	return binding, nil

@@ -42,7 +42,7 @@ var (
 	fileLockNow            = time.Now
 	fileLockSleep          = time.Sleep
 	dualAcquireProcessLock = acquireProcessLock
-	dualAcquireTokenLock   = acquireTokenLock
+	dualAcquireTokenLock   = acquireTokenLockContext
 )
 
 // processLockKey generates a unique key for process-level locking.
@@ -103,6 +103,14 @@ type tokenFileLock struct {
 // It blocks (with timeout) if another process holds the lock.
 // The caller MUST call release() when done.
 func acquireTokenLock(configDir string) (*tokenFileLock, error) {
+	return acquireTokenLockContext(context.Background(), configDir)
+}
+
+// acquireTokenLockContext 保留默认锁超时，同时使用调用方剩余的取消/截止预算。
+func acquireTokenLockContext(ctx context.Context, configDir string) (*tokenFileLock, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := fileLockMkdirAll(configDir, config.DirPerm); err != nil {
 		return nil, fmt.Errorf("creating config dir for lock: %w", err)
 	}
@@ -112,19 +120,52 @@ func acquireTokenLock(configDir string) (*tokenFileLock, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening lock file: %w", err)
 	}
+	acquired := false
+	defer func() {
+		if !acquired {
+			_ = f.Close()
+		}
+	}()
 
 	deadline := fileLockNow().Add(config.LockTimeout)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := fileLockTry(f); err == nil {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			acquired = true
 			return &tokenFileLock{path: lockPath, file: f}, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 
-		if fileLockNow().After(deadline) {
-			_ = f.Close()
+		remaining := deadline.Sub(fileLockNow())
+		if remaining <= 0 {
 			return nil, fmt.Errorf("timeout acquiring token lock after %v (another dws process may be running)", config.LockTimeout)
 		}
 
-		fileLockSleep(lockRetryDelay)
+		if err := waitForTokenLock(ctx, min(lockRetryDelay, remaining)); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func waitForTokenLock(ctx context.Context, delay time.Duration) error {
+	if ctx.Done() == nil {
+		fileLockSleep(delay)
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
@@ -152,8 +193,12 @@ type DualLock struct {
 // 1. Multiple goroutines in the same process (sync.Map)
 // 2. Multiple CLI processes (file lock)
 //
+// ctx 的取消和截止时间覆盖两层锁的全部等待过程。
 // The caller MUST call Release() when done.
 func AcquireDualLock(ctx context.Context, configDir string) (*DualLock, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// 1. Acquire process-level lock first (fast, in-memory)
 	processRelease, waited, err := dualAcquireProcessLock(ctx, configDir)
 	if err != nil {
@@ -161,7 +206,7 @@ func AcquireDualLock(ctx context.Context, configDir string) (*DualLock, error) {
 	}
 
 	// 2. Acquire file-level lock (cross-process)
-	fileLock, err := dualAcquireTokenLock(configDir)
+	fileLock, err := dualAcquireTokenLock(ctx, configDir)
 	if err != nil {
 		processRelease() // Release process lock on failure
 		return nil, fmt.Errorf("acquiring file lock: %w", err)

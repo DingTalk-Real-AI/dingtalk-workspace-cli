@@ -6,6 +6,94 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.66-beta.1] - 2026-10-21
+
+### Fixed
+
+- **Document creation title deduplication** — `dws doc +create` removes a leading Markdown H1 that matches the document name, including names inferred from Markdown, before chunking and readback verification. Different headings, indented code blocks, and JSONML content remain unchanged; inline document content preserves its surrounding whitespace.
+
+
+## [1.0.65] - 2026-10-20
+
+This release promotes the sealed `v1.0.65-beta.2` contents to stable.
+
+### Changed
+
+- 汇总两个 beta 版本的改进：支持聊天消息内发送本地图片、跨 MCP 委托身份传递，以及数字员工的 A2UI 回复、群聊权限、引用与图片上下文和送达状态反馈。
+
+### Changes since `v1.0.65-beta.2`
+
+### Added
+
+- 数字员工新增 A2UI 回复模式：支持的本地接入先发送占位卡，再将公开进度和最终答案更新到同一卡片。新连接默认使用 A2UI，已有未配置回复模式的连接保持文本回复。
+- A2UI 创建和更新命令支持通过 `--content -` 从标准输入读取消息数组，避免长正文占用命令行参数。
+
+- **审批图片上传** — 新增 `oa approval image upload`，校验本地图片并自动压缩超出 2MB 的图片，返回 `mediaIdV2` 供审批图片控件使用；同步修正联系人控件取值格式与部门 ID 核验指引。
+- **群公告选项** — 创建和编辑公告支持 `--no-card` 静默发布及 `--must-read` 新人必看；显式传入 `false` 可关闭对应选项。
+- **联系人身份查询** — 新增 `contact user get-open-dingtalk-id`（别名 `get-open-id`），按手机号或钉钉号查询 `openDingTalkId`，提供统一结果与 Schema；服务端灰度与频次限制仍适用。
+- **登录审批来源** — CLI 授权状态、超级管理员查询及授权申请请求在识别到 Agent 宿主时携带来源标识。
+
+### Changed
+
+- **AI 表格访问密钥** — 标准命令调整为 `dws aitable supabase api-key create/list/revoke`。原 `dws aitable api-key` 三个命令继续兼容，参数、返回结果和权限要求保持不变。
+
+### Fixed
+
+- **Skill setup staging fail-closed** (#1421) — path walks no longer skip read-only sibling directories behind a link entry, and staging identity read failures no longer delete by name or silently degrade to compat install, preventing leftover staging objects and false success reports during `dws skill setup`.
+
+- **Windows Agent skill link readability** (#1425) — uses directory junctions with absolute canonical targets for Agent skill adapters on Windows, upgrades legacy directory symlinks, and validates readability before publication, preventing `EPERM` errors when followed by Node.js and Agent skill loaders.
+
+- **升级版本比较** (#556) — `dws upgrade`、`dws upgrade --check` 和 `dws doctor` 比较版本时按 SemVer 忽略 build metadata（`+...`）。此前当前或远端版本号带 `+` 时，可能把更旧或相同的版本误报为可升级，或漏报真正的新版本。
+
+- Prevent publishing a digital employee draft when its available last-editor identity differs from the current operator, while preserving compatibility for legacy drafts without that identity.
+- Describe digital employee create and publish workflows as composite Schema interfaces, and publish the exact-one constraint for Skill updates using `--enabled` or `--file`.
+
+
+## [1.0.65-beta.2] - 2026-10-15
+
+### Changed
+
+- **数字员工回复复用 chat** — 通用发送与引用回复增加 stdin 正文、投递回执和绑定上下文校验；本地数字员工 worker 使用通用 chat 回传，保留已发布的 `channel reply` / `channel operator-private` 兼容入口，新宿主改用通用 chat，配套 DSH 要求 `chatDelivery=true`，缺失时提示升级；双方须配套升级。
+- **A2UI 审批卡片兼容** — 发卡命令支持 `--summary` 自定义聊天预览，满足 DSH 数字员工的卡片能力探测；省略时继续使用原有默认摘要。
+
+local_agent 私聊权限读取 DEAP 已发布可见范围（成员及部门子树）；群聊以已入群为准，不叠加个人可见范围或本地群白名单，并修复空白名单漏订阅群内 @ 消息；群聊仅原生 @ 当前员工才触发，普通消息不进入模型。DSH 按 groupMembershipAccess 能力传递群上下文；其他场景保留本地白名单。DWS/DSH 共用绑定查询判定，固定管理 Profile，查询失败不回退放行。
+
+### Fixed
+
+- **数字员工本地 Agent 状态反馈** (#1475) — 在原消息上显示排队、思考、已完成、失败或待核查状态；执行失败时发送明确提示，正常结束但无回复文字时仅贴“收到”，并将表情更新与正文投递分开记录，避免提前显示完成或因表情失败重复执行。
+- **数字员工引用上下文** (#1475) — 本地 Agent 接收引用回复时同时获得被引用的消息内容，避免只能看到当前问题；保留普通输入、会话指令及原有授权范围。
+- **数字员工 Codex 本地任务** (#1475) — 修复内置 Codex 误用群聊机器人的附件问答限制，允许按用户请求和现有权限使用本地技能与 CLI，保留沙箱配置，并避免会话恢复失败后静默新建、丢失上下文。
+- **数字员工图片输入** (#1475) — 自动下载直发或引用图片并交给本地 Agent，Codex 使用原生图片输入，避免只有 mediaId 无法识别；下载失败明确提示并保留失败状态。
+
+- **数字员工回执查询** — 等待发送回执时，对 `im/query_message_send_status` 返回的结构化错误码 `1001` 重查原发送任务，兼容回执尚未落库的短暂窗口；查询和等待共享最多 2 秒预算，到期报告送达状态未知，不重新发送消息。
+
+- **数字员工自身消息识别** — connect 使用员工自己的登录身份精确解析自身开放 ID，避免发布详情与入站事件的身份作用域不同而产生自回复。旧配置没有员工 Profile 作用域标记时，原生 worker 和 DSH 启动阶段只解析自身一次；失败拒绝启动，不依赖主管、不逐消息查询、不修改原绑定、模型、权限或会话。
+
+- **数字员工平台入站权限** — 正式绑定的 local_agent 直接使用平台保证的私聊投递和群内 @ 权限，不再逐消息查询可见范围、通讯录或部门；其他本地通道保持白名单。旧绑定缺少主管 Profile 也可正常启动，删除仅用于可见范围的主管迁移和启动阻断。新绑定不再写入该历史字段，固定 operator 审批、绑定版本与解绑检查保留。DSH 通过 bindingAccessPolicy 能力读取明确访问策略，需配套新版插件。
+
+- **Windows 图片与卡片契约** — Markdown 本地图片识别盘符路径及标准 file URI；内嵌 A2UI 解释资源在检出时保持 LF，避免摘要因换行转换失配。修正数字员工工作目录、附件及导出路径的跨平台测试夹具。
+
+- **升级下载** — 官方开源版独立安装继续通过 npm 查询版本，改为只下载同版本 GitHub Release 的当前平台归档和技能包，避免下载包含其他平台的完整 npm 包。官方 Release 查询优先使用环境变量或本机 GitHub CLI 已有凭据，无可用凭据时匿名查询；凭据不进入 Registry 或资产下载。强制验证资产大小、SHA256 和二进制版本；失败时不自动回退全包。`--dry-run` 展示预计下载量，`--skip-skills` 省去技能包下载。自定义源和包管理器升级保持原有行为。
+
+
+## [1.0.65-beta.1] - 2026-10-15
+
+### Added
+
+- **本地图文混排** — `chat message send --content` 和 `chat +messages-send --as user --markdown` 自动上传行内本地图片，保留前后文字；支持预览、内容去重及最多三路并发上传。
+- **图文图片上传** — 使用上传返回的 `mediaIdV2` 构建图文消息；缺少 V2 时终止发送，避免使用不符合图片下载接口契约的编号。个人收藏表情保留原有媒体编号选择行为。
+- **图文图片编号复用** — 发送时识别裸 V2 图片编号；读取 Markdown 和富文本图片后生成带消息、会话身份的下载参数。
+- **图文图片错误提示** — 使用固定诊断区分文件读取、路径校验和上传失败，保留敏感路径保护，并提供对应的处理建议。
+
+- 新增全局隐藏参数 `--delegator-user-id`、`--delegator-corp-id` 和 `--delegator-open-dingtalk-id`。根命令在本次执行作用域持有校验后的不可变身份快照，公共 runner 统一向四个内置 HTTPS MCP 网关透传；旧 helper 丢弃 context 时也能补入身份，无需按业务逐条改造。无效输入整组省略；旧文档委托入口保持兼容，新旧协议禁止混用。实际委托授权依赖网关和业务服务接入。
+- 修复 AI 表格主服务、辅助服务、分页、重试、视图更新和工作流发布的上下文传递，保留取消信号；扩展真实命令到 HTTP Header 的回归矩阵，并覆盖串行 root 复用和多个预建 root 的身份隔离。同进程多 root 并发执行不在支持范围，并发调用使用独立 CLI 进程。
+- 更新 DWS 业务接入指南：说明公共 runner 覆盖条件、真实命令测试和绕行通道的接入要求；插件、stdio、发现、scoped 换票、独立 published MCP、直接 OpenAPI、文件字节传输及事件长连接继续排除，跨源重定向清理和 UID 发送边界保持不变。
+
+### Fixed
+
+- **媒体下载提示** — `dws chat message download-media` 的 Help 说明返回的下载地址临时有效，提示使用原 mediaId 及消息、会话信息重新下载。
+
+
 ## [1.0.64] - 2026-10-14
 
 本版本将已交付的 `v1.0.64-beta.1` 晋级正式版，汇总该 beta 的变化，并纳入下方列出的 beta 后变更。

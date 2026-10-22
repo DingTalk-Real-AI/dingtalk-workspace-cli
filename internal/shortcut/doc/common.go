@@ -61,18 +61,19 @@ func withDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool) corecm
 }
 
 func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, error) {
-	raw := rt.Str(flag)
-	if raw == "-" {
+	raw, _ := rt.Command().Flags().GetString(flag)
+	input := strings.TrimSpace(raw)
+	if input == "-" {
 		data, err := io.ReadAll(rt.Command().InOrStdin())
 		if err != nil {
 			return "", apperrors.NewValidation(fmt.Sprintf("--%s: 读取 stdin 失败: %v", flag, err))
 		}
 		return normalizeDocInputLineEndings(string(data)), nil
 	}
-	if !strings.HasPrefix(raw, "@") {
+	if !strings.HasPrefix(input, "@") {
 		return normalizeDocInputLineEndings(raw), nil
 	}
-	path := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
+	path := strings.TrimSpace(strings.TrimPrefix(input, "@"))
 	if path == "" || filepath.IsAbs(path) {
 		return "", apperrors.NewValidation(fmt.Sprintf("--%s 的 @file 只接受工作目录内的相对路径；请先暂存到工作目录后传 @相对路径，或改用 --%s - 从 stdin 读取", flag, flag))
 	}

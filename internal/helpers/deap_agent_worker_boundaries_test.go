@@ -21,7 +21,7 @@ func employeeBoundaryConfig(t *testing.T) digitalEmployeeAdapterConfig {
 	t.Helper()
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
-	cfg := digitalEmployeeAdapterConfig{SelfOpenDingTalkID: "self", Binding: digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent", DWSProfile: "corp:employee", OperatorOpenDingTalkID: "owner", Channel: "custom"}}
+	cfg := digitalEmployeeAdapterConfig{SelfOpenDingTalkID: "self", SelfIdentityProfile: "corp:employee", Binding: digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent", DWSProfile: "corp:employee", OperatorOpenDingTalkID: "owner", Channel: "custom"}}
 	if err := saveDigitalEmployeeBinding(dir, cfg.Binding); err != nil {
 		t.Fatal(err)
 	}

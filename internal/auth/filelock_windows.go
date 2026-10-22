@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	lockfileExclusiveLock = 0x00000002
+	lockfileExclusiveLock   = 0x00000002
+	lockfileFailImmediately = 0x00000001
 )
 
 func lockFile(f *os.File) error {
@@ -31,7 +32,7 @@ func lockFile(f *os.File) error {
 	ol := new(windows.Overlapped)
 	return windows.LockFileEx(
 		handle,
-		lockfileExclusiveLock,
+		lockfileExclusiveLock|lockfileFailImmediately,
 		0,
 		1,
 		0,

@@ -39,6 +39,7 @@ func (*delegatorAITableRunner) ResolveToolProduct(_ context.Context, products []
 
 func TestCrossPlatformCoverageDelegatorAITableRealCommands(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 		return AccessTokenSnapshot{AccessToken: "fixture-actor-token"}, nil
 	})
