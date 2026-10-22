@@ -25,7 +25,8 @@
 | `user_im_group_disbanded` | 群解散 | `--group` |
 
 `--user` 只接收 userId；明确 openDingTalkId 时用对应 flag。群目标必须是
-openConversationId。不要把两种身份混传或选择搜索第一项。
+单个 openConversationId，不接受逗号分隔的多个群 ID；多群请分别启动 consume。
+不要把两种身份混传或选择搜索第一项。
 
 ## 精确模板
 
