@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -266,16 +267,59 @@ func isMarkdownThemeFieldLine(line []byte) bool {
 	return true
 }
 
+// markdownThemeFieldTokens uses YAML positions without reserializing metadata.
+// Invalid envelopes retain the existing line-based normalization fallback.
+func markdownThemeFieldTokens(payload []byte, tokens []markdownLineToken) map[int]struct{} {
+	var document yaml.Node
+	positionsMatch := true
+	for _, token := range tokens {
+		if bytes.ContainsAny(token.content, "\r\u0085\u2028\u2029") {
+			positionsMatch = false // The byte-preserving tokenizer uses LF/CRLF only.
+		}
+	}
+	if positionsMatch && yaml.Unmarshal(payload, &document) == nil && len(document.Content) == 1 {
+		root := document.Content[0]
+		if root.Kind == yaml.MappingNode && root.Style&yaml.FlowStyle == 0 {
+			fields := make(map[int]struct{})
+			for i := 0; i+1 < len(root.Content); i += 2 {
+				key := root.Content[i]
+				if key.Kind != yaml.ScalarNode || key.Column != 1 || key.Line < 1 || key.Line > len(tokens) {
+					continue
+				}
+				if key.Value != markdownThemeFrontmatterField && !isMarkdownThemeFieldLine(tokens[key.Line-1].content) {
+					continue
+				}
+				start, end := key.Line-1, len(tokens)
+				if i+2 < len(root.Content) {
+					end = root.Content[i+2].Line - 1
+				}
+				fields[start] = struct{}{}
+				for line := start + 1; line < end; line++ {
+					// Keep unrelated inter-field comments and blank lines verbatim.
+					trimmed := bytes.TrimSpace(tokens[line].content)
+					if len(trimmed) > 0 && trimmed[0] != '#' {
+						fields[line] = struct{}{}
+					}
+				}
+			}
+			return fields
+		}
+	}
+	fields := make(map[int]struct{})
+	for index, token := range tokens {
+		if isMarkdownThemeFieldLine(token.content) {
+			fields[index] = struct{}{}
+		}
+	}
+	return fields
+}
+
 func updateMarkdownThemeField(payload, newline []byte, themeID string) []byte {
 	tokens := tokenizeMarkdownLines(payload)
-	fieldTokenIndexes := make(map[int]struct{})
+	fieldTokenIndexes := markdownThemeFieldTokens(payload, tokens)
 	firstFieldTokenIndex := -1
-	for index, token := range tokens {
-		if !isMarkdownThemeFieldLine(token.content) {
-			continue
-		}
-		fieldTokenIndexes[index] = struct{}{}
-		if firstFieldTokenIndex < 0 {
+	for index := range tokens {
+		if _, present := fieldTokenIndexes[index]; present && firstFieldTokenIndex < 0 {
 			firstFieldTokenIndex = index
 		}
 	}
