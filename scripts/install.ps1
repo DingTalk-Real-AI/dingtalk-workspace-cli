@@ -1362,9 +1362,7 @@ function Install-SkillsLocal {
             Write-Say "⚠️  multi skill tree not found or empty at $multiSrc; falling back to mono."
         }
         if (!(Test-Path $skillSrc)) {
-            Write-Say "⚠️  Local skills directory not found: $skillSrc"
-            Write-Say "   Skipping skills installation."
-            return
+            throw "Local skills directory not found: $skillSrc. Skills were NOT installed."
         }
 
         Write-Say ""
@@ -1818,8 +1816,7 @@ function Install-Skills {
                     Install-SkillsLocal -Root $localRoot
                     return
                 }
-                Write-Say "⚠️  No local source found either. Skipping skills installation."
-                return
+                throw "No usable skills found in release asset and no local source checkout found. Skills were NOT installed."
             }
             if (!(Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME)) {
                 throw "mono Skill installation failed"
