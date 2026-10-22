@@ -1,0 +1,31 @@
+Source: bfdff7809304dc8698a6a9bf39440eb80ce25ad7 (2026-09-18)
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/helpers -run "TestCalendar(EventDelete|AttendeeDelete|RoomDelete)RequiresConfirmationBeforeToolCall" -count=1 -v
+=== RUN   TestCalendarEventDeleteRequiresConfirmationBeforeToolCall
+--- PASS: TestCalendarEventDeleteRequiresConfirmationBeforeToolCall (0.00s)
+=== RUN   TestCalendarAttendeeDeleteRequiresConfirmationBeforeToolCall
+--- PASS: TestCalendarAttendeeDeleteRequiresConfirmationBeforeToolCall (0.00s)
+=== RUN   TestCalendarRoomDeleteRequiresConfirmationBeforeToolCall
+--- PASS: TestCalendarRoomDeleteRequiresConfirmationBeforeToolCall (0.00s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	0.838s
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/helpers -run "TestChatGroupMembersRemoveRequiresConfirmationBeforeToolCall" -count=1 -v
+=== RUN   TestChatGroupMembersRemoveRequiresConfirmationBeforeToolCall
+--- PASS: TestChatGroupMembersRemoveRequiresConfirmationBeforeToolCall (0.02s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	0.579s
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/helpers -run "TestMinutesReplaceTextRequiresConfirmationBeforeToolCall" -count=1 -v
+=== RUN   TestMinutesReplaceTextRequiresConfirmationBeforeToolCall
+--- PASS: TestMinutesReplaceTextRequiresConfirmationBeforeToolCall (0.00s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	0.557s
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/helpers -run "TestDocPermissionUpdateRequiresConfirmationBeforeToolCall" -count=1 -v
+=== RUN   TestDocPermissionUpdateRequiresConfirmationBeforeToolCall
+--- PASS: TestDocPermissionUpdateRequiresConfirmationBeforeToolCall (0.00s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	0.550s
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/cli/homology -run "TestUserRequiredSafetyHomologyWithRuntimeGate" -count=1 -v
+=== RUN   TestUserRequiredSafetyHomologyWithRuntimeGate
+    safety_homology_test.go:178: user_required Safety homology OK: 406 leaves gates=map[declare_leaf+sheet_marker:16 declare_leaf_confirm:124 framework_confirm_safety:266]
+--- PASS: TestUserRequiredSafetyHomologyWithRuntimeGate (0.34s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/homology	1.274s
