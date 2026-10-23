@@ -12,13 +12,18 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var (
+	oidcInputGetConsoleMode = windows.GetConsoleMode
+	oidcInputCancelIoEx     = windows.CancelIoEx
+)
+
 func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), error) {
 	if _, err := file.Stat(); err != nil {
 		return nil, nil, nil, err
 	}
 	handle := windows.Handle(file.Fd())
 	var mode uint32
-	if windows.GetConsoleMode(handle, &mode) != nil {
+	if oidcInputGetConsoleMode(handle, &mode) != nil {
 		// Redirected pipes, regular files and NUL keep the os.File path.
 		return file, nil, nil, nil
 	}
@@ -36,7 +41,7 @@ func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), 
 			// Cancellation can arrive between checking ctx and entering
 			// ReadConsole. Retry ERROR_NOT_FOUND until the read has finished
 			// or the pending I/O has actually been interrupted.
-			err := windows.CancelIoEx(handle, nil)
+			err := oidcInputCancelIoEx(handle, nil)
 			if err != nil && !errors.Is(err, windows.ERROR_NOT_FOUND) {
 				return
 			}

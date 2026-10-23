@@ -52,6 +52,9 @@ func readOIDCCodeInput(ctx context.Context, input io.Reader) ([]byte, error) {
 		data []byte
 		err  error
 	}
+	if cleanup == nil {
+		cleanup = func() {}
+	}
 	done := make(chan result, 1)
 	completed := make(chan struct{})
 	released := make(chan struct{})
@@ -61,9 +64,7 @@ func readOIDCCodeInput(ctx context.Context, input io.Reader) ([]byte, error) {
 			// Cancel and cleanup must not race when the read and context
 			// finish together. The reader owns cleanup after both are done.
 			<-released
-			if cleanup != nil {
-				cleanup()
-			}
+			cleanup()
 		}()
 		data, err := read()
 		close(completed)
