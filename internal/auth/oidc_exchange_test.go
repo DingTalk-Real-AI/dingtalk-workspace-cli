@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -491,5 +492,239 @@ func TestCrossPlatformCoverageOIDCExchangeSaveIdentityAndDefault(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCExchangeEntryProviderGuards(t *testing.T) {
+	for _, scenario := range []string{"prepare-invalid-provider", "prepare-pre-canceled", "validate-invalid-provider"} {
+		t.Run(scenario, func(t *testing.T) {
+			p := NewOIDCLoginProvider("ant", "https://portal.example", oidcAuthorizeFunc(func(context.Context, OIDCAuthorizationRequest) (OIDCAuthorizationResult, error) {
+				t.Error("exchange preparation invoked the SDK")
+				return OIDCAuthorizationResult{}, nil
+			}))
+			requests := 0
+			p.client = &http.Client{Transport: oidcPortalTransportFunc(func(*http.Request) (*http.Response, error) {
+				requests++
+				return nil, errors.New("unexpected portal request")
+			})}
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			if scenario == "prepare-pre-canceled" {
+				cancel()
+			} else {
+				p.provider = "invalid/provider"
+			}
+			var err error
+			if scenario == "validate-invalid-provider" {
+				err = p.ValidateExchange("code", oidcTestState)
+			} else {
+				var tx *OIDCExchangePreparation
+				tx, err = p.PrepareExchange(ctx)
+				if tx != nil {
+					t.Fatal("entry guard returned a preparation")
+				}
+			}
+			if err == nil || requests != 0 {
+				t.Fatalf("exchange entry guard reached portal: requests=%d error=%v", requests, err)
+			}
+			if scenario == "prepare-pre-canceled" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("preparation cancellation identity lost: %v", err)
+				}
+			} else {
+				var typed *dwserrors.Error
+				if !errors.As(err, &typed) || typed.Category != dwserrors.CategoryValidation {
+					t.Fatalf("invalid provider misclassified: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCExchangeRejectsIncompleteTokenResponse(t *testing.T) {
+	for _, scenario := range []string{"created-not-completed", "token-type-mismatch", "client-id-type-mismatch"} {
+		t.Run(scenario, func(t *testing.T) {
+			requests := 0
+			p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+			p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				var body map[string]string
+				if r.Method != http.MethodPost || r.URL.String() != "https://portal.example/cli/auth/oidc/exchange" || r.Header.Get("Authorization") != "" || json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 3 || body["provider"] != "ant" || body["code"] != "code" || body["state"] != oidcTestState {
+					t.Error("exchange changed opaque inputs or retried")
+				}
+				completed := oidcTestCompleted()
+				status := http.StatusOK
+				switch scenario {
+				case "created-not-completed":
+					status = http.StatusCreated
+				case "token-type-mismatch":
+					completed["accessToken"] = 123
+					completed["debug"] = "private-token-canary"
+				case "client-id-type-mismatch":
+					completed["clientId"] = map[string]string{"value": "private-client-canary"}
+				}
+				return oidcTestJSONResponse(t, status, completed), nil
+			})}
+			data, err := p.Exchange(t.Context(), "code", oidcTestState)
+			var typed *dwserrors.Error
+			if data != nil || requests != 1 || !errors.As(err, &typed) || typed.Category != dwserrors.CategoryAuth {
+				t.Fatalf("incomplete exchange response accepted: requests=%d error=%v", requests, err)
+			}
+			wantMessage := "invalid token response"
+			if scenario == "created-not-completed" {
+				wantMessage = "HTTP 201"
+			} else if scenario == "client-id-type-mismatch" {
+				wantMessage = "invalid application binding"
+			}
+			if !strings.Contains(err.Error(), wantMessage) {
+				t.Fatalf("response failed at the wrong boundary: %v", err)
+			}
+			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+				if strings.Contains(cause.Error(), "canary") || strings.Contains(cause.Error(), "secret-access") {
+					t.Fatal("token response escaped through the error chain")
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCExchangeAndSaveEarlyFailures(t *testing.T) {
+	for _, scenario := range []string{"invalid-code", "invalid-state", "pre-canceled", "nil-resolver", "preflight-blocked", "remote-failure", "missing-corp"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := externalExchangeTestConfig(t)
+			previousProfile := RuntimeProfile()
+			SetRuntimeProfile("")
+			t.Cleanup(func() { SetRuntimeProfile(previousProfile) })
+			requests, lookups, writes := 0, 0, 0
+			testseam.Swap(t, &authKeychainSet, func(string, string, string) error {
+				writes++
+				return errors.New("unexpected credential write")
+			})
+			testseam.Swap(t, &profilesWriteFile, func(string, []byte, os.FileMode) error {
+				writes++
+				return errors.New("unexpected profile write")
+			})
+			if scenario == "preflight-blocked" {
+				testseam.Swap(t, &profilesLoad, func(gotDir string) (*ProfilesConfig, error) {
+					if gotDir != dir {
+						t.Error("preflight used another directory")
+					}
+					return nil, errors.New("private-preflight-canary")
+				})
+			}
+			p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+			p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				var body map[string]string
+				if r.Method != http.MethodPost || r.URL.String() != "https://portal.example/cli/auth/oidc/exchange" || r.Header.Get("Authorization") != "" || json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 3 || body["provider"] != "ant" || body["code"] != "code" || body["state"] != oidcTestState {
+					t.Error("invalid exchange request")
+				}
+				if scenario == "remote-failure" {
+					return oidcTestJSONResponse(t, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "unsupported_provider", "action": "stop", "message": "private-remote-canary"}}), nil
+				}
+				if scenario != "missing-corp" {
+					t.Error("early guard reached remote exchange")
+				}
+				completed := oidcTestCompleted()
+				completed["corpId"] = " \t "
+				return oidcTestJSONResponse(t, http.StatusOK, completed), nil
+			})}
+			var resolve ManagedIdentityResolver = func(context.Context, string, string) (ManagedIdentity, error) {
+				lookups++
+				return ManagedIdentity{}, errors.New("unexpected identity lookup")
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			code, state := "code", oidcTestState
+			switch scenario {
+			case "invalid-code":
+				code = "\n"
+			case "invalid-state":
+				state = "bad state"
+			case "pre-canceled":
+				cancel()
+			case "nil-resolver":
+				resolve = nil
+			}
+			data, err := p.ExchangeAndSave(ctx, dir, code, state, resolve)
+			wantRequests := 0
+			if scenario == "remote-failure" || scenario == "missing-corp" {
+				wantRequests = 1
+			}
+			if data != nil || err == nil || requests != wantRequests || lookups != 0 || writes != 0 {
+				t.Fatalf("early failure did extra work: requests=%d lookups=%d writes=%d error=%v", requests, lookups, writes, err)
+			}
+			if scenario == "pre-canceled" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("exchange cancellation identity lost: %v", err)
+				}
+			} else {
+				want := dwserrors.CategoryAuth
+				if strings.HasPrefix(scenario, "invalid-") {
+					want = dwserrors.CategoryValidation
+				} else if scenario == "nil-resolver" {
+					want = dwserrors.CategoryInternal
+				}
+				var typed *dwserrors.Error
+				if !errors.As(err, &typed) || typed.Category != want {
+					t.Fatalf("early failure misclassified: %v", err)
+				}
+				if scenario == "missing-corp" && !strings.Contains(err.Error(), "no organization identity") {
+					t.Fatalf("missing organization rejected at the wrong boundary: %v", err)
+				}
+			}
+			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+				if strings.Contains(cause.Error(), "canary") {
+					t.Fatal("early failure retained private diagnostics")
+				}
+			}
+			cfg, loadErr := LoadProfiles(dir)
+			if loadErr != nil || len(cfg.Profiles) != 0 || cfg.CurrentProfile != "" {
+				t.Fatalf("early exchange failure changed profile registry: %v", loadErr)
+			}
+			if _, err := LoadTokenDataKeychain(); !errors.Is(err, ErrTokenDataNotFound) {
+				t.Fatalf("early exchange failure saved token material: %v", err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCExchangeAndSaveVerifiedCorpName(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	previousProfile := RuntimeProfile()
+	SetRuntimeProfile("")
+	t.Cleanup(func() { SetRuntimeProfile(previousProfile) })
+	requests, lookups := 0, 0
+	p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+	p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		var body map[string]string
+		if r.Method != http.MethodPost || r.URL.String() != "https://portal.example/cli/auth/oidc/exchange" || r.Header.Get("Authorization") != "" || json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 3 || body["provider"] != "ant" || body["code"] != "code" || body["state"] != oidcTestState {
+			t.Error("verified identity flow sent an unexpected request")
+		}
+		completed := oidcTestCompleted()
+		completed["corpId"], completed["userId"] = " corp ", " new-user "
+		return oidcTestJSONResponse(t, http.StatusOK, completed), nil
+	})}
+	data, err := p.ExchangeAndSave(t.Context(), dir, "code", oidcTestState, func(ctx context.Context, token, corpID string) (ManagedIdentity, error) {
+		lookups++
+		if ctx.Err() != nil || requests != 1 || token != "secret-access" || corpID != "corp" {
+			t.Error("resolver did not verify the new token and normalized organization")
+		}
+		return ManagedIdentity{CorpID: " corp ", UserID: " new-user ", UserName: " Verified User ", CorpName: " Verified Organization "}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data == nil || requests != 1 || lookups != 1 || data.CorpID != "corp" || data.UserID != "new-user" || data.UserName != "Verified User" || data.CorpName != "Verified Organization" || data.OIDCProvider != "ant" {
+		t.Fatal("exchange did not prefer the verified, normalized identity")
+	}
+	saved, err := LoadTokenDataForProfile(dir, "corp:new-user")
+	if err != nil || saved.CorpName != "Verified Organization" || saved.UserName != "Verified User" || saved.OIDCProvider != "ant" || saved.AccessToken != "secret-access" {
+		t.Fatalf("verified organization name was not persisted: %v", err)
+	}
+	cfg, err := LoadProfiles(dir)
+	if err != nil || len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp:new-user" {
+		t.Fatalf("verified identity did not publish exactly one profile: %v", err)
 	}
 }

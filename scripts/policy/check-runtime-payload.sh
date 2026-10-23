@@ -52,15 +52,25 @@ check_pe_arch() {
   pe_path="$PAYLOAD/$pe_relative"
 
   pe_probe="$(objdump -f "$pe_path" 2>/dev/null || true)"
-  if [ -z "$pe_probe" ] && command -v llvm-objdump >/dev/null 2>&1; then
-    pe_probe="$(llvm-objdump -f "$pe_path" 2>/dev/null || true)"
-  fi
   # Keep only the architecture line: the probe echoes the file path first, and
   # the amd64/arm64 token in that path is not architecture evidence.
   pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
-  if [ -n "$pe_arch_line" ]; then
-    printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern" || fail "invalid $pe_label library architecture"
+  if printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern"; then
     return 0
+  fi
+  if printf '%s\n' "$pe_arch_line" | grep -Eiq 'x86[_-]64|aarch64|arm64|i386|arm(v[0-9])?'; then
+    fail "invalid $pe_label library architecture"
+  fi
+
+  if command -v llvm-objdump >/dev/null 2>&1; then
+    pe_probe="$(llvm-objdump -f "$pe_path" 2>/dev/null || true)"
+    pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
+    if printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern"; then
+      return 0
+    fi
+    if printf '%s\n' "$pe_arch_line" | grep -Eiq 'x86[_-]64|aarch64|arm64|i386|arm(v[0-9])?'; then
+      fail "invalid $pe_label library architecture"
+    fi
   fi
 
   # Likewise file(1) prints "<path>: <description>"; keep the description.

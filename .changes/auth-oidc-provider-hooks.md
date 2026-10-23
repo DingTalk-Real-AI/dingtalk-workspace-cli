@@ -1,6 +1,8 @@
-# OIDC Provider 通过 edition Hook 注册
+---
+category: Added
+---
 
-状态：核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
+- OIDC Provider 通过 `edition.Hooks.OIDCProviders` 注册。核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
 
 `auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
 该命令为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。

@@ -22,6 +22,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -98,6 +99,59 @@ func TestCrossPlatformCoverageSplitOIDCDryRunDoesNotReadOrCall(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageSplitOIDCInvokeRevalidatesProvider(t *testing.T) {
+	for _, name := range []string{"exchange-prepare", "token-exchange"} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			testseam.Swap(t, &resolveOIDCExchangeCommandProvider, func(cmd *cobra.Command) (*authpkg.OIDCLoginProvider, error) {
+				calls++
+				if calls == 1 {
+					return oidcExchangeCommandProvider(cmd)
+				}
+				return nil, apperrors.NewValidation("provider changed after validation")
+			})
+			root, out := splitOIDCRoot(t, nil)
+			args := []string{"auth", name, "--provider", "ant"}
+			if name == "token-exchange" {
+				args = append(args, "--state", splitOIDCState, "--code", "code")
+			}
+			err := runSplitOIDC(t, root, args...)
+			var typed *apperrors.Error
+			if calls != 2 || !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || out.Len() != 0 {
+				t.Fatalf("runtime provider revalidation: calls=%d output=%q error=%v", calls, out.String(), err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSplitOIDCSaveRequiresIdentityCaller(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	root, out := splitOIDCRoot(t, nil)
+	err := runSplitOIDC(t, root, "auth", "token-exchange", "--provider", "ant", "--state", splitOIDCState, "--code", "code", "--save")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryInternal || out.Len() != 0 {
+		t.Fatalf("unsupported identity caller reached exchange: output=%q error=%v", out.String(), err)
+	}
+}
+
+func TestCrossPlatformCoverageSplitOIDCValidatorRejectsDirectCodeConflict(t *testing.T) {
+	root, _ := splitOIDCRoot(t, nil)
+	cmd, _, err := root.Find([]string{"auth", "token-exchange"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"provider": "ant", "state": splitOIDCState, "code": "code", "code-stdin": "true"} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err = validateOIDCTokenExchangeCommand(cmd, nil)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("direct validation accepted conflicting code sources: %v", err)
+	}
+}
+
 type splitOIDCForbiddenReader struct{ t *testing.T }
 
 func (r splitOIDCForbiddenReader) Read([]byte) (int, error) {
@@ -106,7 +160,7 @@ func (r splitOIDCForbiddenReader) Read([]byte) (int, error) {
 }
 
 func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
-	for _, scenario := range []string{"prepare", "return", "stdin", "save", "save-fails"} {
+	for _, scenario := range []string{"prepare", "return", "stdin", "save", "save-fails", "save-readback-fails"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("DWS_CONFIG_DIR", dir)
@@ -121,6 +175,11 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			caller := &externalIdentityCaller{authCoverageCaller: authCoverageCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"result":[{"orgEmployeeModel":{"corpId":"new-corp","userId":"new-user","orgUserName":"New User"}}]}`}}}}}
 			if scenario == "save-fails" {
 				caller.err = errors.New("access-canary")
+			}
+			if scenario == "save-readback-fails" {
+				testseam.Swap(t, &authLoadProfiles, func(string) (*authpkg.ProfilesConfig, error) {
+					return nil, errors.New("profile-readback-canary")
+				})
 			}
 			calls := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,16 +213,24 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			} else {
 				args = append(args, "--code", " original+code%20 ")
 			}
-			if scenario == "save" || scenario == "save-fails" {
+			if scenario == "save" || scenario == "save-fails" || scenario == "save-readback-fails" {
 				args = append(args, "--save")
 			}
 			err := runSplitOIDC(t, root, args...)
-			if scenario == "save-fails" {
+			switch scenario {
+			case "save-fails":
 				if err == nil || strings.Contains(err.Error(), "access-canary") {
 					t.Fatal("identity failure leaked or succeeded")
 				}
-			} else if err != nil {
-				t.Fatal(err)
+			case "save-readback-fails":
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Category != apperrors.CategoryInternal || strings.Contains(err.Error(), "profile-readback-canary") {
+					t.Fatalf("readback failure was not sanitized: %v", err)
+				}
+			default:
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 			if calls != 1 {
 				t.Fatal("command made extra portal requests")
@@ -181,9 +248,12 @@ func TestCrossPlatformCoverageSplitOIDCRealHTTPOutputAndSave(t *testing.T) {
 			if cfg.CurrentProfile != "old-corp:old-user" {
 				t.Fatal("existing default changed")
 			}
-			if scenario == "save" {
-				if len(cfg.Profiles) != 2 || caller.calls != 1 || caller.token != "access-canary" || !strings.Contains(out.String(), "new-corp:new-user") {
+			if scenario == "save" || scenario == "save-readback-fails" {
+				if len(cfg.Profiles) != 2 || caller.calls != 1 || caller.token != "access-canary" {
 					t.Fatal("missing verified saved profile")
+				}
+				if (scenario == "save") != strings.Contains(out.String(), "new-corp:new-user") {
+					t.Fatal("saved profile output did not match readback result")
 				}
 			} else if len(cfg.Profiles) != 1 {
 				t.Fatal("return/preparation/failure wrote credentials")
@@ -437,7 +507,7 @@ func TestCrossPlatformCoverageSplitOIDCStdinNativePipeCancellation(t *testing.T)
 		t.Fatal("native blocking stdin did not respond to its deadline")
 	}
 	if runtime.GOOS == "windows" {
-		if _, err := input.Stat(); !errors.Is(err, os.ErrClosed) {
+		if err := input.Close(); !errors.Is(err, os.ErrClosed) {
 			t.Fatalf("Windows pipe was not closed to interrupt the read: %v", err)
 		}
 		return
@@ -485,6 +555,58 @@ func TestCrossPlatformCoverageSplitOIDCStdinSuccessLeavesInputOpen(t *testing.T)
 	}
 	if _, err := input.Seek(0, io.SeekStart); err != nil {
 		t.Fatalf("successful read closed input: %v", err)
+	}
+}
+
+type splitOIDCCancelAfterReadContext struct {
+	context.Context
+	done  chan struct{}
+	calls atomic.Int32
+}
+
+func (c *splitOIDCCancelAfterReadContext) Done() <-chan struct{} { return c.done }
+
+func (c *splitOIDCCancelAfterReadContext) Err() error {
+	call := c.calls.Add(1)
+	if call < 4 {
+		return nil
+	}
+	if call == 4 {
+		close(c.done)
+	}
+	return context.Canceled
+}
+
+type splitOIDCStaticReadCloser struct{}
+
+func (splitOIDCStaticReadCloser) Read(p []byte) (int, error) {
+	return copy(p, "code"), io.EOF
+}
+
+func (splitOIDCStaticReadCloser) Close() error { return nil }
+
+func TestCrossPlatformCoverageSplitOIDCStdinLowLevelBoundaries(t *testing.T) {
+	input, err := os.CreateTemp(t.TempDir(), "closed-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := readOIDCCodeInput(t.Context(), input); err == nil || data != nil {
+		t.Fatalf("closed native input was accepted: %q, %v", data, err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if n, err := (oidcCodeContextReader{ctx: ctx, input: splitOIDCForbiddenReader{t}}).Read(make([]byte, 1)); n != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("context reader ignored pre-cancellation: n=%d error=%v", n, err)
+	}
+
+	cancelAfterRead := &splitOIDCCancelAfterReadContext{Context: t.Context(), done: make(chan struct{})}
+	data, err := readOIDCCodeInput(cancelAfterRead, splitOIDCStaticReadCloser{})
+	if data != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("completed read won over concurrent cancellation: %q, %v", data, err)
 	}
 }
 

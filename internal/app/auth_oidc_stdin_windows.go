@@ -13,6 +13,9 @@ import (
 )
 
 func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), error) {
+	if _, err := file.Stat(); err != nil {
+		return nil, nil, nil, err
+	}
 	handle := windows.Handle(file.Fd())
 	var mode uint32
 	if windows.GetConsoleMode(handle, &mode) != nil {

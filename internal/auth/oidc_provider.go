@@ -480,8 +480,7 @@ func oidcUniqueJSON(content []byte) bool {
 		if !ok {
 			return true
 		}
-		switch delim {
-		case '{':
+		if delim == json.Delim('{') {
 			seen := map[string]bool{}
 			for d.More() {
 				key, err := d.Token()
@@ -496,17 +495,15 @@ func oidcUniqueJSON(content []byte) bool {
 			}
 			end, err := d.Token()
 			return err == nil && end == json.Delim('}')
-		case '[':
-			for d.More() {
-				if !value() {
-					return false
-				}
-			}
-			end, err := d.Token()
-			return err == nil && end == json.Delim(']')
-		default:
-			return false
 		}
+		// Token rejects unmatched closing delimiters, so the only other delimiter is '['.
+		for d.More() {
+			if !value() {
+				return false
+			}
+		}
+		end, err := d.Token()
+		return err == nil && end == json.Delim(']')
 	}
 	if !value() {
 		return false

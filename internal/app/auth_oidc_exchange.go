@@ -17,6 +17,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var resolveOIDCExchangeCommandProvider = oidcExchangeCommandProvider
+
 func newAuthExchangePrepareCommand() *cobra.Command {
 	return corecmd.New(corecmd.Spec{
 		Use: "exchange-prepare", Short: "创建第三方换票事务并返回授权参数",
@@ -37,11 +39,14 @@ func newAuthExchangePrepareCommand() *cobra.Command {
 			{Name: "provider", Usage: "Portal 登记的身份源名称（如 ant）", MarkRequired: true},
 		},
 		PostMount: func(cmd *cobra.Command) { cmd.Args = cobra.NoArgs },
-		Validate:  func(cmd *cobra.Command, _ []string) error { _, err := oidcExchangeCommandProvider(cmd); return err },
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			_, err := resolveOIDCExchangeCommandProvider(cmd)
+			return err
+		},
 		ResultInvoke: func(c *corecmd.Ctx, _ map[string]any) (output.CommandResult, error) {
 			cmd := c.Command()
 			defer resetAuthOIDCExchangeInvocationFlags(cmd)
-			p, err := oidcExchangeCommandProvider(cmd)
+			p, err := resolveOIDCExchangeCommandProvider(cmd)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +101,7 @@ code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 
 		ResultInvoke: func(c *corecmd.Ctx, _ map[string]any) (output.CommandResult, error) {
 			cmd := c.Command()
 			defer resetAuthOIDCExchangeInvocationFlags(cmd)
-			p, err := oidcExchangeCommandProvider(cmd)
+			p, err := resolveOIDCExchangeCommandProvider(cmd)
 			if err != nil {
 				return nil, err
 			}
@@ -149,7 +154,7 @@ code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 
 			}
 			ResetRuntimeTokenCache()
 			clearCompatCache()
-			cfg, err := authpkg.LoadProfiles(dir)
+			cfg, err := authLoadProfiles(dir)
 			if err != nil {
 				return nil, apperrors.NewInternal("profile saved but current profile readback failed")
 			}
@@ -160,7 +165,7 @@ code/state 只兑换一次；失败或结果不确定时重新 exchange-prepare 
 }
 
 func validateOIDCTokenExchangeCommand(cmd *cobra.Command, _ []string) error {
-	p, err := oidcExchangeCommandProvider(cmd)
+	p, err := resolveOIDCExchangeCommandProvider(cmd)
 	if err != nil {
 		return err
 	}

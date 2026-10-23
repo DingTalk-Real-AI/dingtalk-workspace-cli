@@ -14,6 +14,9 @@ import (
 	"time"
 
 	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 const oidcTestRandom = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -217,4 +220,398 @@ type oidcPortalTransportFunc func(*http.Request) (*http.Response, error)
 
 func (f oidcPortalTransportFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+func oidcTestJSONResponse(t *testing.T, status int, body any) *http.Response {
+	t.Helper()
+	content, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(content)))}
+}
+
+func TestCrossPlatformCoverageOIDCLoginEntryGuards(t *testing.T) {
+	for _, entry := range []string{"login", "login-and-save"} {
+		for _, scenario := range []string{"invalid-provider", "pre-canceled", "preflight-failure"} {
+			if entry == "login" && scenario == "preflight-failure" {
+				continue
+			}
+			t.Run(entry+"/"+scenario, func(t *testing.T) {
+				dir := externalExchangeTestConfig(t)
+				preflights, requests := 0, 0
+				testseam.Swap(t, &profilesLoad, func(gotDir string) (*ProfilesConfig, error) {
+					preflights++
+					if gotDir != dir {
+						t.Error("preflight used another config directory")
+					}
+					return nil, errors.New("private-preflight-canary")
+				})
+				p := NewOIDCLoginProvider("ant", "https://portal.example", oidcAuthorizeFunc(func(context.Context, OIDCAuthorizationRequest) (OIDCAuthorizationResult, error) {
+					t.Error("entry guard invoked the authorizer")
+					return OIDCAuthorizationResult{}, nil
+				}))
+				p.client = &http.Client{Transport: oidcPortalTransportFunc(func(*http.Request) (*http.Response, error) {
+					requests++
+					return nil, errors.New("unexpected portal request")
+				})}
+				ctx, cancel := context.WithCancel(t.Context())
+				t.Cleanup(cancel)
+				if scenario == "invalid-provider" {
+					p.provider = "invalid/provider"
+				} else if scenario == "pre-canceled" {
+					cancel()
+				}
+				var data *TokenData
+				var err error
+				if entry == "login" {
+					data, err = p.Login(ctx)
+				} else {
+					data, err = p.LoginAndSave(ctx, dir)
+				}
+				if data != nil || err == nil || requests != 0 || strings.Contains(err.Error(), "private-preflight-canary") {
+					t.Fatalf("entry guard failed: requests=%d error=%v", requests, err)
+				}
+				wantPreflights := 0
+				if scenario == "preflight-failure" {
+					wantPreflights = 1
+				}
+				if preflights != wantPreflights {
+					t.Fatalf("preflights=%d, want %d", preflights, wantPreflights)
+				}
+				if scenario == "pre-canceled" {
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("cancellation identity lost: %v", err)
+					}
+				} else {
+					want := dwserrors.CategoryValidation
+					if scenario == "preflight-failure" {
+						want = dwserrors.CategoryAuth
+					}
+					var typed *dwserrors.Error
+					if !errors.As(err, &typed) || typed.Category != want {
+						t.Fatalf("wrong guard classification: %v", err)
+					}
+				}
+				cfg, err := LoadProfiles(dir)
+				if err != nil || len(cfg.Profiles) != 0 {
+					t.Fatalf("entry guard changed profiles: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOIDCPreparePersistenceCredentialGuards(t *testing.T) {
+	for _, scenario := range []string{"edition-hook", "canonical-read-failure", "legacy-read-failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := externalExchangeTestConfig(t)
+			previousEdition := edition.Get()
+			t.Cleanup(func() { edition.Override(previousEdition) })
+			hooks := &edition.Hooks{}
+			if scenario == "edition-hook" {
+				hooks.SaveToken = func(string, []byte) error {
+					t.Error("unsupported edition token hook was invoked")
+					return nil
+				}
+			}
+			edition.Override(hooks)
+			reads := 0
+			testseam.Swap(t, &authKeychainGet, func(service, account string) (string, error) {
+				reads++
+				wantAccount := secretAccountKey("app")
+				if reads == 2 {
+					wantAccount = legacyClientSecretAccountKey("app")
+				}
+				if service != keychain.Service || account != wantAccount {
+					t.Error("snapshot read an unrelated credential slot")
+				}
+				if scenario == "canonical-read-failure" || reads == 2 {
+					return "", errors.New("private-secret-read-canary")
+				}
+				return "previous-secret", nil
+			})
+			testseam.Swap(t, &profilesLoad, func(string) (*ProfilesConfig, error) {
+				t.Error("credential guard reached profile preflight")
+				return nil, errors.New("unexpected preflight")
+			})
+			p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+			p.ExchangeCredentials = &OIDCExchangeCredentials{ClientID: "app", ClientSecret: "new-secret"}
+			err := p.preparePersistence(dir)
+			wantReads := 0
+			if scenario == "canonical-read-failure" {
+				wantReads = 1
+			} else if scenario == "legacy-read-failure" {
+				wantReads = 2
+			}
+			if err == nil || reads != wantReads || strings.Contains(err.Error(), "canary") {
+				t.Fatalf("credential guard failed: reads=%d error=%v", reads, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCSDKFailureBoundaries(t *testing.T) {
+	for _, scenario := range []string{"canceled-after-authorize", "unavailable", "network-unreachable"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			requests, authorizations := 0, 0
+			p := NewOIDCLoginProvider("ant", "https://portal.example", oidcAuthorizeFunc(func(sdkCtx context.Context, request OIDCAuthorizationRequest) (OIDCAuthorizationResult, error) {
+				authorizations++
+				if sdkCtx.Err() != nil || request.Parameters["state"] != oidcTestState {
+					t.Error("authorizer received a canceled context or changed state")
+				}
+				if _, ok := sdkCtx.Deadline(); !ok {
+					t.Error("authorizer has no transaction deadline")
+				}
+				switch scenario {
+				case "canceled-after-authorize":
+					cancel()
+					return OIDCAuthorizationResult{Code: "code", State: oidcTestState}, nil
+				case "unavailable":
+					return OIDCAuthorizationResult{}, fmt.Errorf("private-sdk-canary: %w", errOIDCAuthorizerUnavailable)
+				default:
+					return OIDCAuthorizationResult{}, fmt.Errorf("private-sdk-canary: %w", dwserrors.NewAPI("private-network-canary", dwserrors.WithReason("NETWORK_UNREACHABLE"), dwserrors.WithCause(errors.New("private-cause-canary"))))
+				}
+			}))
+			p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				var body map[string]string
+				if r.Method != http.MethodPost || r.URL.String() != "https://portal.example/cli/auth/oidc/transactions" || r.Header.Get("Authorization") != "" || json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 1 || body["provider"] != "ant" {
+					t.Error("SDK failure performed an unexpected portal operation")
+				}
+				return oidcTestJSONResponse(t, http.StatusCreated, oidcTestCreated("https://idp.example/authorize", "ant-sdk://oidc/callback")), nil
+			})}
+			data, err := p.Login(ctx)
+			if data != nil || err == nil || requests != 1 || authorizations != 1 {
+				t.Fatalf("SDK failure reached exchange: requests=%d authorizations=%d error=%v", requests, authorizations, err)
+			}
+			if scenario == "canceled-after-authorize" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("SDK cancellation lost identity: %v", err)
+				}
+			} else {
+				var typed *dwserrors.Error
+				wantCategory, wantReason := dwserrors.CategoryAuth, "OIDC_SDK_UNAVAILABLE"
+				if scenario == "network-unreachable" {
+					wantCategory, wantReason = dwserrors.CategoryAPI, "NETWORK_UNREACHABLE"
+				}
+				if !errors.As(err, &typed) || typed.Category != wantCategory || typed.Reason != wantReason {
+					t.Fatalf("SDK error classification changed: %v", err)
+				}
+			}
+			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+				if strings.Contains(cause.Error(), "canary") {
+					t.Fatal("foreign SDK diagnostics escaped through the error chain")
+				}
+			}
+		})
+	}
+}
+
+type oidcCancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b oidcCancelOnCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
+func TestCrossPlatformCoverageOIDCLoginAndSaveCancellationAfterExchange(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	previousProfile := RuntimeProfile()
+	SetRuntimeProfile("")
+	t.Cleanup(func() { SetRuntimeProfile(previousProfile) })
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	requests, saves := 0, 0
+	testseam.Swap(t, &oauthSaveToken, func(string, *TokenData) error { saves++; return nil })
+	p := NewOIDCLoginProvider("ant", "https://portal.example", oidcAuthorizeFunc(func(_ context.Context, request OIDCAuthorizationRequest) (OIDCAuthorizationResult, error) {
+		return OIDCAuthorizationResult{Code: "code", State: request.Parameters["state"]}, nil
+	}))
+	p.IdentityEnricher = func(context.Context, *TokenData) error {
+		t.Error("canceled login reached identity enrichment")
+		return nil
+	}
+	p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		var body map[string]string
+		if r.Method != http.MethodPost || r.URL.Host != "portal.example" || r.Header.Get("Authorization") != "" || json.NewDecoder(r.Body).Decode(&body) != nil || body["provider"] != "ant" {
+			t.Error("invalid login request")
+		}
+		if requests == 1 {
+			if r.URL.Path != "/cli/auth/oidc/transactions" || len(body) != 1 {
+				t.Error("login did not prepare first")
+			}
+			return oidcTestJSONResponse(t, http.StatusCreated, oidcTestCreated("https://idp.example/authorize", "ant-sdk://oidc/callback")), nil
+		}
+		if requests != 2 || r.URL.Path != "/cli/auth/oidc/exchange" || len(body) != 3 || body["code"] != "code" || body["state"] != oidcTestState {
+			t.Error("login exchanged unexpected credentials or retried")
+		}
+		response := oidcTestJSONResponse(t, http.StatusOK, oidcTestCompleted())
+		// Deliver a complete token, then cancel when its response is released.
+		// This exercises cancellation between successful login and persistence.
+		response.Body = oidcCancelOnCloseBody{ReadCloser: response.Body, cancel: cancel}
+		return response, nil
+	})}
+	data, err := p.LoginAndSave(ctx, dir)
+	if data != nil || !errors.Is(err, context.Canceled) || requests != 2 || saves != 0 {
+		t.Fatalf("canceled completed login persisted: requests=%d saves=%d error=%v", requests, saves, err)
+	}
+	cfg, err := LoadProfiles(dir)
+	if err != nil || len(cfg.Profiles) != 0 {
+		t.Fatalf("canceled completed login published a profile: %v", err)
+	}
+	if _, err := LoadTokenDataKeychain(); !errors.Is(err, ErrTokenDataNotFound) {
+		t.Fatalf("canceled completed login saved token material: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOIDCAuthorizationRequestURLParsing(t *testing.T) {
+	for _, scenario := range []string{"invalid-base", "malformed-query"} {
+		t.Run(scenario, func(t *testing.T) {
+			p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+			created := oidcTestCreated("https://idp.example/authorize", "ant-sdk://oidc/callback")
+			if scenario == "invalid-base" {
+				p.baseURL = "http://portal.example"
+			} else {
+				created["authorization_request"].(map[string]any)["authorization_endpoint"] = "https://idp.example/authorize?tenant=%zz"
+			}
+			content, err := json.Marshal(created)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tx OIDCExchangePreparation
+			if err := json.Unmarshal(content, &tx); err != nil {
+				t.Fatal(err)
+			}
+			request, err := p.authorizationRequest(tx)
+			var typed *dwserrors.Error
+			if !errors.As(err, &typed) || typed.Category != dwserrors.CategoryAuth || request.AuthorizationEndpoint != "" || request.Parameters != nil {
+				t.Fatalf("unsafe authorization URL accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCPostRejectsResponseTypeMismatch(t *testing.T) {
+	requests := 0
+	p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+	p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		var body map[string]string
+		if r.Method != http.MethodPost || r.URL.Path != "/cli/auth/oidc/transactions" || json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 1 || body["provider"] != "ant" {
+			t.Error("unexpected preparation request")
+		}
+		response := oidcTestJSONResponse(t, http.StatusCreated, map[string]any{"provider": "ant", "expires_in": "private-type-canary"})
+		response.Header.Set("X-Dws-Trace-Id", "type-mismatch-trace")
+		return response, nil
+	})}
+	tx, err := p.PrepareExchange(t.Context())
+	var typed *dwserrors.Error
+	if tx != nil || requests != 1 || !errors.As(err, &typed) || typed.Category != dwserrors.CategoryAuth || typed.ServerDiag.TraceID != "type-mismatch-trace" || strings.Contains(err.Error(), "private-type-canary") {
+		t.Fatalf("response type mismatch lost safe classification or trace: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOIDCJSONRequestConstruction(t *testing.T) {
+	for _, scenario := range []string{"pre-canceled", "unmarshalable-body", "invalid-endpoint", "bearer"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			endpoint, bearer := "https://portal.example/protected", ""
+			var body any = map[string]string{"provider": "ant"}
+			switch scenario {
+			case "pre-canceled":
+				cancel()
+			case "unmarshalable-body":
+				body = func() {}
+			case "invalid-endpoint":
+				endpoint = "https://portal.example/%zz"
+			case "bearer":
+				bearer = "private-bearer-canary"
+			}
+			requests := 0
+			client := &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				var received map[string]string
+				if scenario != "bearer" || r.Context().Err() != nil || r.Method != http.MethodPost || r.URL.String() != endpoint || r.Header.Get("Content-Type") != "application/json" || r.Header.Get("Accept") != "application/json" || r.Header.Get("Authorization") != "Bearer "+bearer || json.NewDecoder(r.Body).Decode(&received) != nil || len(received) != 1 || received["provider"] != "ant" {
+					t.Error("request construction changed headers, endpoint or JSON body")
+				}
+				response := oidcTestJSONResponse(t, http.StatusOK, map[string]bool{"ok": true})
+				response.Header.Set("X-Dws-Trace-Id", "request-trace")
+				return response, nil
+			})}
+			status, content, trace, err := oidcJSONRequestWithTrace(ctx, client, endpoint, body, bearer)
+			if scenario == "bearer" {
+				if err != nil || status != http.StatusOK || string(content) != `{"ok":true}` || trace != "request-trace" || requests != 1 {
+					t.Fatalf("bearer request failed: status=%d trace=%q requests=%d error=%v", status, trace, requests, err)
+				}
+				return
+			}
+			if err == nil || status != 0 || content != nil || trace != "" || requests != 0 {
+				t.Fatalf("invalid request reached transport: status=%d requests=%d error=%v", status, requests, err)
+			}
+			if scenario == "pre-canceled" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("pre-cancellation lost identity: %v", err)
+				}
+			} else {
+				want := dwserrors.CategoryValidation
+				if scenario == "unmarshalable-body" {
+					want = dwserrors.CategoryInternal
+				}
+				var typed *dwserrors.Error
+				if !errors.As(err, &typed) || typed.Category != want {
+					t.Fatalf("request construction error misclassified: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOIDCSecurityValidatorBoundaries(t *testing.T) {
+	t.Run("random-value", func(t *testing.T) {
+		for _, value := range []string{"", strings.Repeat("a", 42), strings.Repeat("a", 44), strings.Repeat("a", 42) + "+", strings.Repeat("a", 42) + "/", strings.Repeat("a", 42) + "=", strings.Repeat("a", 42) + "\n"} {
+			if oidcRandomValue(value) {
+				t.Errorf("invalid random value accepted: %q", value)
+			}
+		}
+		if !oidcRandomValue(strings.Repeat("a", 37) + "AZ09_-") {
+			t.Fatal("valid base64url alphabet rejected")
+		}
+	})
+	t.Run("log-endpoint", func(t *testing.T) {
+		for _, endpoint := range []string{"https://portal.example/%zz", "/authorize", ""} {
+			if got := oidcLogEndpoint(endpoint); got != endpoint {
+				t.Errorf("unparseable or hostless endpoint changed: got %q, want %q", got, endpoint)
+			}
+		}
+		if got := oidcLogEndpoint("https://portal.example/authorize?state=private-state#private-fragment"); got != "https://portal.example/authorize" {
+			t.Fatalf("endpoint diagnostics retained authorization parameters: %q", got)
+		}
+	})
+	for _, tc := range []struct {
+		name, content string
+		valid         bool
+	}{
+		{"nested-duplicate-object", `{"outer":{"token":1,"token":2}}`, false},
+		{"nested-invalid-object-value", `{"outer":{"token":}}`, false},
+		{"nested-invalid-object-close", `{"outer":{"token":1]}}`, false},
+		{"duplicate-object-in-array", `[{"token":1,"token":2}]`, false},
+		{"invalid-array-value", `[1,{"token":}]`, false},
+		{"unterminated-array", `[1`, false},
+		{"empty-array", `[]`, true},
+		{"valid-nested-array", `[null,true,123456789012345678901234567890,["value"],{"token":1},{"token":2}]`, true},
+	} {
+		t.Run("unique-json/"+tc.name, func(t *testing.T) {
+			if got := oidcUniqueJSON([]byte(tc.content)); got != tc.valid {
+				t.Fatalf("unique JSON validation=%t, want %t", got, tc.valid)
+			}
+		})
+	}
 }

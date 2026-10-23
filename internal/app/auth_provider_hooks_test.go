@@ -22,6 +22,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -130,6 +131,8 @@ func TestCrossPlatformCoverageProviderLoginRegisteredHooks(t *testing.T) {
 				}
 				root, out, stderr := providerLoginRoot()
 				if scenario == "success" {
+					t.Cleanup(CloseFileLogger)
+					helpers.InitDepsForTest(t, helpers.GetCaller())
 					root = NewRootCommand(t.Context())
 					root.SetOut(out)
 					root.SetErr(stderr)
