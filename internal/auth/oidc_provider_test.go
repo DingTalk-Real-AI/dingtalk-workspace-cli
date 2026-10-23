@@ -352,7 +352,7 @@ func TestCrossPlatformCoverageOIDCPreparePersistenceCredentialGuards(t *testing.
 }
 
 func TestCrossPlatformCoverageOIDCSDKFailureBoundaries(t *testing.T) {
-	for _, scenario := range []string{"canceled-after-authorize", "unavailable", "network-unreachable"} {
+	for _, scenario := range []string{"canceled-after-authorize", "unavailable", "network-unreachable", "deadline-exceeded", "generic-failure", "invalid-code", "state-mismatch"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			t.Cleanup(cancel)
@@ -371,6 +371,14 @@ func TestCrossPlatformCoverageOIDCSDKFailureBoundaries(t *testing.T) {
 					return OIDCAuthorizationResult{Code: "code", State: oidcTestState}, nil
 				case "unavailable":
 					return OIDCAuthorizationResult{}, fmt.Errorf("private-sdk-canary: %w", errOIDCAuthorizerUnavailable)
+				case "deadline-exceeded":
+					return OIDCAuthorizationResult{}, context.DeadlineExceeded
+				case "generic-failure":
+					return OIDCAuthorizationResult{}, fmt.Errorf("private-sdk-canary: %w", errors.New("sdk boom"))
+				case "invalid-code":
+					return OIDCAuthorizationResult{Code: " ", State: oidcTestState}, nil
+				case "state-mismatch":
+					return OIDCAuthorizationResult{Code: "code", State: "mismatched"}, nil
 				default:
 					return OIDCAuthorizationResult{}, fmt.Errorf("private-sdk-canary: %w", dwserrors.NewAPI("private-network-canary", dwserrors.WithReason("NETWORK_UNREACHABLE"), dwserrors.WithCause(errors.New("private-cause-canary"))))
 				}
@@ -394,8 +402,13 @@ func TestCrossPlatformCoverageOIDCSDKFailureBoundaries(t *testing.T) {
 			} else {
 				var typed *dwserrors.Error
 				wantCategory, wantReason := dwserrors.CategoryAuth, "OIDC_SDK_UNAVAILABLE"
-				if scenario == "network-unreachable" {
+				switch scenario {
+				case "network-unreachable":
 					wantCategory, wantReason = dwserrors.CategoryAPI, "NETWORK_UNREACHABLE"
+				case "deadline-exceeded":
+					wantCategory, wantReason = dwserrors.CategoryAPI, "NETWORK_TIMEOUT"
+				case "generic-failure", "invalid-code", "state-mismatch":
+					wantReason = ""
 				}
 				if !errors.As(err, &typed) || typed.Category != wantCategory || typed.Reason != wantReason {
 					t.Fatalf("SDK error classification changed: %v", err)
@@ -468,6 +481,68 @@ func TestCrossPlatformCoverageOIDCLoginAndSaveCancellationAfterExchange(t *testi
 	}
 	if _, err := LoadTokenDataKeychain(); !errors.Is(err, ErrTokenDataNotFound) {
 		t.Fatalf("canceled completed login saved token material: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOIDCProviderValidation(t *testing.T) {
+	for _, creds := range []*OIDCExchangeCredentials{
+		{ClientID: "", ClientSecret: "secret"},
+		{ClientID: "id", ClientSecret: " "},
+		{ClientID: " ", ClientSecret: " "},
+	} {
+		if err := creds.Validate(); err == nil {
+			t.Fatalf("blank credentials accepted: %#v", creds)
+		}
+	}
+	p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+	p.ExchangeCredentials = &OIDCExchangeCredentials{ClientID: " ", ClientSecret: "secret"}
+	if err := p.Validate(); err == nil {
+		t.Fatal("provider accepted blank exchange credentials")
+	}
+	for _, name := range []string{"", strings.Repeat("a", 65), "0abc", "Aabc"} {
+		if ValidLoginProviderName(name) {
+			t.Fatalf("invalid provider name accepted: %q", name)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOIDCLoginWithoutAuthorizer(t *testing.T) {
+	requests := 0
+	p := NewOIDCLoginProvider("ant", "https://portal.example", nil)
+	p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		if r.Method != http.MethodPost || r.URL.Path != "/cli/auth/oidc/transactions" {
+			t.Error("missing-authorizer login performed an unexpected portal operation")
+		}
+		return oidcTestJSONResponse(t, http.StatusCreated, oidcTestCreated("https://idp.example/authorize", "ant-sdk://oidc/callback")), nil
+	})}
+	data, err := p.Login(t.Context())
+	if data != nil || requests != 1 {
+		t.Fatalf("missing authorizer continued: requests=%d data=%v", requests, data)
+	}
+	var typed *dwserrors.Error
+	if !errors.As(err, &typed) || typed.Category != dwserrors.CategoryAuth || typed.Reason != "OIDC_SDK_UNAVAILABLE" {
+		t.Fatalf("missing authorizer not classified: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOIDCLoginAndSavePropagatesLoginFailure(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	requests, saves := 0, 0
+	testseam.Swap(t, &oauthSaveToken, func(string, *TokenData) error { saves++; return nil })
+	p := NewOIDCLoginProvider("ant", "https://portal.example", oidcAuthorizeFunc(func(context.Context, OIDCAuthorizationRequest) (OIDCAuthorizationResult, error) {
+		return OIDCAuthorizationResult{}, context.Canceled
+	}))
+	p.client = &http.Client{Transport: oidcPortalTransportFunc(func(r *http.Request) (*http.Response, error) {
+		requests++
+		if r.Method != http.MethodPost || r.URL.Path != "/cli/auth/oidc/transactions" {
+			t.Error("login-and-save failure performed an unexpected portal operation")
+		}
+		return oidcTestJSONResponse(t, http.StatusCreated, oidcTestCreated("https://idp.example/authorize", "ant-sdk://oidc/callback")), nil
+	})}
+	data, err := p.LoginAndSave(t.Context(), dir)
+	if data != nil || !errors.Is(err, context.Canceled) || requests != 1 || saves != 0 {
+		t.Fatalf("login failure not propagated: requests=%d saves=%d error=%v", requests, saves, err)
 	}
 }
 
