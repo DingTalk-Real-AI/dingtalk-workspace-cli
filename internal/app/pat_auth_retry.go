@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -371,8 +372,13 @@ const (
 	// patMaxPollInterval caps a server-provided poll interval so a malformed
 	// response cannot make the CLI look permanently stuck.
 	patMaxPollInterval = 30 * time.Second
-	// patPollTimeout is the maximum time to wait for user authorization via device flow.
+	// patPollTimeout is the compatibility fallback when the PAT service does not
+	// provide a valid remaining lifetime for the device flow.
 	patPollTimeout = 10 * time.Minute
+	// patMaxDeviceCodeFlowExpirySeconds is the server DCF protocol/storage
+	// supported upper bound for a relative expiry. It validates server input;
+	// it is not a second business TTL or an independently configurable lifetime.
+	patMaxDeviceCodeFlowExpirySeconds int64 = 30 * 24 * 60 * 60
 )
 
 // patRetryingKey is a context key to prevent recursive PAT auth checks.
@@ -500,14 +506,15 @@ func handlePatAuthCheck(
 	var patData struct {
 		Code string `json:"code"`
 		Data struct {
-			Desc             string `json:"desc"`
-			FlowID           string `json:"flowId"`
-			URI              string `json:"uri"`
-			AuthURL          string `json:"authUrl"`
-			AuthorizationURL string `json:"authorizationUrl"`
-			ClientID         string `json:"clientId"`
-			ClientSecret     string `json:"clientSecret"`
-			PollIntervalSecs int    `json:"pollIntervalSeconds"`
+			Desc             string          `json:"desc"`
+			FlowID           string          `json:"flowId"`
+			URI              string          `json:"uri"`
+			AuthURL          string          `json:"authUrl"`
+			AuthorizationURL string          `json:"authorizationUrl"`
+			ClientID         string          `json:"clientId"`
+			ClientSecret     string          `json:"clientSecret"`
+			PollIntervalSecs int             `json:"pollIntervalSeconds"`
+			ExpiresInSeconds json.RawMessage `json:"expiresInSeconds"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(patErr.RawJSON), &patData); err != nil {
@@ -599,12 +606,14 @@ func handlePatAuthCheck(
 		}
 	}
 
-	// Poll the device flow status until user authorizes, rejects, or timeout.
+	// Poll the device flow status until user authorizes, rejects, or the
+	// server-reported remaining flow lifetime elapses.
+	pollTimeout := resolvePATPollTimeout(patData.Data.ExpiresInSeconds)
 	fmt.Fprintf(output, "%s %s\n", tui.StateMark("pending"), tui.Bold("等待用户授权..."))
-	fmt.Fprintf(output, "  %s 请在浏览器中完成授权，超时时间: %s\n", tui.Dim("ℹ"), patPollTimeout)
+	fmt.Fprintf(output, "  %s 请在浏览器中完成授权，超时时间: %s\n", tui.Dim("ℹ"), pollTimeout)
 	fmt.Fprintln(output)
 
-	pollCtx, cancel := context.WithTimeout(ctx, patPollTimeout)
+	pollCtx, cancel := context.WithTimeout(ctx, pollTimeout)
 	defer cancel()
 
 	status, authCode, err := patPollDeviceFlowWithInterval(
@@ -882,6 +891,24 @@ func resolvePATPollInterval(seconds int) time.Duration {
 		return patMaxPollInterval
 	}
 	return interval
+}
+
+func resolvePATPollTimeout(expiresInSeconds json.RawMessage) time.Duration {
+	if len(expiresInSeconds) == 0 {
+		return patPollTimeout
+	}
+
+	var seconds int64
+	if err := json.Unmarshal(expiresInSeconds, &seconds); err != nil || seconds <= 0 {
+		return patPollTimeout
+	}
+	if seconds > math.MaxInt64/int64(time.Second) {
+		return patPollTimeout
+	}
+	if seconds > patMaxDeviceCodeFlowExpirySeconds {
+		return patPollTimeout
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func browserOpenCommand(goos, rawURL string) *exec.Cmd {
