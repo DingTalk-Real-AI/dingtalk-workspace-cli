@@ -2157,8 +2157,7 @@ install_skills() {
         install_skills_local "$local_root"
         return
       else
-        say "⚠️  No local source checkout found either. Skipping skills installation."
-        return
+        err "No usable skills found in release asset and no local source checkout found. Skills were NOT installed."
       fi
     fi
     install_skills_to_homes "$skill_src"
