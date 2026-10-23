@@ -3,6 +3,7 @@
 状态：核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
 
 `auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
+该命令为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
 必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含
 `provider`、`code`、`state`；显式指定 DWS 应用凭据时再加入 `client_id`、`client_secret`。
 核心通过注册项选择授权实现，具体 SDK 由 overlay 提供。

@@ -58,6 +58,10 @@ func newAuthProviderLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "provider-login <provider>",
 		Short: "通过接入方（Provider）单点登录钉钉",
+		// Hidden: 第三方 IdP 集成入口，不出现在 dws auth --help 与 Agent Schema。
+		// 框架下 Hidden 仅当叶子不声明 ContractFinal.Identity 时才排除出 Schema；
+		// 若未来补 Identity，必须恢复 reviewed exclusion 或明确接受进入 Agent 表面。
+		Hidden: true,
 		Long: `通过接入方（Provider）单点登录（SSO）钉钉并获取认证凭证。
 
 <provider> 为登录提供方名称（如 ant）。DWS 服务端检查接入方配置并托管授权

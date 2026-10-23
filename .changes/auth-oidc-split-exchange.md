@@ -2,7 +2,7 @@
 
 支持 `--code-stdin`、可选且必须成对的 `--client-id/--client-secret`，默认返回现有 TokenData；显式 `--save` 后在线核验完整身份并保存，保留已有默认账号。两个命令均支持 `--dry-run`，服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），不修改全局配置；保存 Token 时记录其刷新所用的 Portal 地址。PKCE verifier 始终由服务端保存，换票失败不会自动重试一次性 code/state。
 
-命令沿用统一结果输出及现有 auth 管理命令的精确 Schema 排除规则。
+命令沿用统一结果输出。作为第三方 IdP 集成入口，两个命令以 Cobra Hidden 隐藏，不出现在 `dws auth --help` 与 shell 补全中，仍可显式执行；不进入 Agent Schema（Hidden 且无 Contract.Identity），也不再占用 reviewed Schema 排除列表。
 
 macOS 终端按实际文件描述符识别，使用 `select` 等待输入，不依赖 `/dev/tty` 或 `/dev/stdin` 文件名，覆盖 `< /dev/tty` 重定向；以 50ms 周期检查取消，不改变终端模式、不关闭借用句柄。高编号输入使用低编号描述符副本等待，完成后只关闭副本；低编号描述符耗尽时明确报错。
 

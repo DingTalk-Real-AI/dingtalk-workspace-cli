@@ -20,6 +20,10 @@ import (
 func newAuthExchangePrepareCommand() *cobra.Command {
 	return corecmd.New(corecmd.Spec{
 		Use: "exchange-prepare", Short: "创建第三方换票事务并返回授权参数",
+		// Hidden: 第三方 IdP 集成入口，不出现在 dws auth --help 与 Agent Schema。
+		// 框架下 Hidden 仅当叶子不声明 Contract.Identity 时才排除出 Schema；
+		// 若未来补 Identity，必须恢复 reviewed exclusion 或明确接受进入 Agent 表面。
+		Hidden: true,
 		Long: `创建服务端 OIDC 登录事务，返回 provider、expires_in 和 authorization_request。
 业务保存原 state，将完整授权参数原样交给 IdP/SDK；取得 code 并核对返回 state 后，
 使用 auth token-exchange 兑换。code_verifier 只保存在服务端。
@@ -58,6 +62,10 @@ func newAuthExchangePrepareCommand() *cobra.Command {
 func newAuthTokenExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 	return corecmd.New(corecmd.Spec{
 		Use: "token-exchange", Short: "使用第三方授权码和事务 state 换取 DWS Token",
+		// Hidden: 第三方 IdP 集成入口，不出现在 dws auth --help 与 Agent Schema。
+		// 框架下 Hidden 仅当叶子不声明 Contract.Identity 时才排除出 Schema；
+		// 若未来补 Identity，必须恢复 reviewed exclusion 或明确接受进入 Agent 表面。
+		Hidden: true,
 		Long: `兑换 auth exchange-prepare 创建的同一事务。业务须先核对 IdP/SDK 返回的 state。
 --provider 必须与事务一致；--code 为绑定该事务的一次性授权码，不是 BUC access token。
 --code 与 --code-stdin 必须且只能选择一个。标准输入仅移除末尾一个换行，保留 code 原值。

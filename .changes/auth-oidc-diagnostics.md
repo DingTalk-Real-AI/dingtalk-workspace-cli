@@ -3,6 +3,7 @@
 `auth provider-login <provider>`、`auth exchange-prepare` 和 `auth token-exchange`
 保留 Portal 的公开错误码和 trace ID，并将已定义错误码转换为可读说明。
 覆盖配置、事务/state、授权码、身份校验、限流、上游调用和 DWS 会话签发错误。
+三个命令均为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
 
 - 从 `error.code`、`error.action`、`trace_id` 解析公开诊断；响应体缺失或无效时，
   使用合法的 `X-Dws-Trace-Id`。后端日志专用 `reason` 不进入客户端输出。
