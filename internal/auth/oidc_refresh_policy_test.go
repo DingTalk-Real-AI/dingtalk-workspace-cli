@@ -233,3 +233,73 @@ func TestCrossPlatformCoverageOIDCRefreshCancellationAndExpiry(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossPlatformCoverageOIDCRefreshPreCanceledBeforeBindingAndIO(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	requests, reads, saves := 0, 0, 0
+	testseam.Swap(t, &authKeychainGet, func(string, string) (string, error) {
+		reads++
+		return "", errors.New("unexpected credential read")
+	})
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error { saves++; return nil })
+	p := &OAuthProvider{configDir: dir, httpClient: &http.Client{Transport: oidcPortalTransportFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return nil, errors.New("unexpected refresh request")
+	})}}
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	cancel()
+	// Exercise the real refresh implementation, not the oauthRefreshToken seam.
+	// Cancellation must win even when the persisted OIDC binding is incomplete.
+	for _, complete := range []bool{false, true} {
+		data := &TokenData{OIDCProvider: "ant", RefreshToken: "refresh", MCPClientSecretRequired: true}
+		if complete {
+			data.Source, data.ClientID, data.MCPBaseURL = "mcp", "original-app", "https://portal.example"
+		}
+		refreshed, err := p.refreshWithRefreshToken(ctx, data)
+		if refreshed != nil || !errors.Is(err, context.Canceled) || requests != 0 || reads != 0 || saves != 0 {
+			t.Fatalf("canceled OIDC refresh performed IO or lost cancellation: complete=%t requests=%d reads=%d saves=%d error=%v", complete, requests, reads, saves, err)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOIDCSecretPersistencePreCanceled(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	previousProfile := RuntimeProfile()
+	SetRuntimeProfile("")
+	t.Cleanup(func() { SetRuntimeProfile(previousProfile) })
+	previous := &TokenData{AccessToken: "previous-access", CorpID: "corp", UserID: "user", ClientID: "app", Source: "mcp", OIDCProvider: "ant", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := SaveTokenData(dir, previous); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveClientSecret("app", "previous-secret"); err != nil {
+		t.Fatal(err)
+	}
+	writes := 0
+	testseam.Swap(t, &authKeychainSet, func(string, string, string) error {
+		writes++
+		return errors.New("unexpected canceled credential write")
+	})
+	testseam.Swap(t, &oauthSaveToken, func(string, *TokenData) error { writes++; return nil })
+	testseam.Swap(t, &oauthSaveClientSecret, func(string, string) error { writes++; return nil })
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	cancel()
+	fresh := &TokenData{AccessToken: "new-access", CorpID: "corp", UserID: "user", ClientID: "app", Source: "mcp", OIDCProvider: "ant", MCPBaseURL: "https://portal.example", MCPClientSecretRequired: true, ExpiresAt: time.Now().Add(time.Hour)}
+	err := (&OAuthProvider{configDir: dir}).persistLoginTokenWithSecret(ctx, fresh, "new-private-secret")
+	if !errors.Is(err, context.Canceled) || writes != 0 || !fresh.FreshAuthorization {
+		t.Fatalf("canceled secret persistence wrote credentials or stopped before preparation: writes=%d error=%v", writes, err)
+	}
+	saved, err := LoadTokenDataForProfile(dir, "corp:user")
+	if err != nil || saved.AccessToken != "previous-access" {
+		t.Fatalf("canceled secret persistence replaced the previous token: %v", err)
+	}
+	secret, err := LoadClientSecretStrict("app")
+	if err != nil || secret != "previous-secret" {
+		t.Fatalf("canceled secret persistence replaced the previous application secret: %v", err)
+	}
+	cfg, err := LoadProfiles(dir)
+	if err != nil || len(cfg.Profiles) != 1 || cfg.CurrentProfile != "corp:user" {
+		t.Fatalf("canceled secret persistence changed the profile registry: %v", err)
+	}
+}

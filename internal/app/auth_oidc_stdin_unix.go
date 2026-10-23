@@ -18,6 +18,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var (
+	oidcInputDuplicateFD  = unix.FcntlInt
+	oidcInputSelect       = unix.Select
+	oidcInputCancelReader = cancelreader.NewReader
+)
+
 func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), error) {
 	info, err := file.Stat()
 	if err != nil {
@@ -36,7 +42,7 @@ func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), 
 		if monitorFD >= unix.FD_SETSIZE {
 			// select is bounded by FD_SETSIZE on macOS. A duplicate uses the
 			// lowest available descriptor without taking ownership of input.
-			monitorFD, err = unix.FcntlInt(fd, unix.F_DUPFD_CLOEXEC, 0)
+			monitorFD, err = oidcInputDuplicateFD(fd, unix.F_DUPFD_CLOEXEC, 0)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -52,7 +58,7 @@ func newOIDCFileInput(file *os.File) (io.Reader, func(<-chan struct{}), func(), 
 			<-done
 		}, cleanup, nil
 	}
-	reader, err := cancelreader.NewReader(file)
+	reader, err := oidcInputCancelReader(file)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -86,7 +92,7 @@ func (r oidcTerminalInput) Read(p []byte) (int, error) {
 		}
 		set.Set(r.fd)
 		timeout := unix.Timeval{Usec: 50000}
-		n, err := unix.Select(r.fd+1, &set, nil, nil, &timeout)
+		n, err := oidcInputSelect(r.fd+1, &set, nil, nil, &timeout)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}

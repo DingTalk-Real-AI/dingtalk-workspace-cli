@@ -20,6 +20,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -46,6 +47,8 @@ func providerLoginRoot() (*cobra.Command, *bytes.Buffer, *bytes.Buffer) {
 
 func TestCrossPlatformCoverageProviderLoginCLIValidationAndDryRun(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	testseam.Swap(t, &authProviderLogin, func(context.Context, string, string, string, edition.ToolCaller, *authpkg.OIDCExchangeCredentials) (*authpkg.TokenData, error) {
 		t.Error("validation/dry-run reached authentication")
 		return nil, nil
@@ -89,8 +92,58 @@ func TestCrossPlatformCoverageProviderLoginCLIValidationAndDryRun(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageProviderLoginResultBoundaries(t *testing.T) {
+	for _, scenario := range []string{"deadline", "nil-token", "empty-token", "human-success"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+			calls := 0
+			testseam.Swap(t, &authProviderLogin, func(context.Context, string, string, string, edition.ToolCaller, *authpkg.OIDCExchangeCredentials) (*authpkg.TokenData, error) {
+				calls++
+				switch scenario {
+				case "deadline":
+					return nil, context.DeadlineExceeded
+				case "nil-token":
+					return nil, nil
+				case "empty-token":
+					return &authpkg.TokenData{}, nil
+				default:
+					return &authpkg.TokenData{AccessToken: "private-access", CorpID: "corp", CorpName: "Example Corp", UserName: "Example User"}, nil
+				}
+			})
+			root, out, stderr := providerLoginRoot()
+			args := []string{"auth", "provider-login", "ant"}
+			if scenario == "human-success" {
+				args = append([]string{"--format", "table"}, args...)
+			}
+			root.SetArgs(args)
+			err := corecmd.ExecuteForTest(root)
+			if calls != 1 {
+				t.Fatalf("provider login calls=%d, want 1", calls)
+			}
+			switch scenario {
+			case "deadline":
+				if !errors.Is(err, context.DeadlineExceeded) || !apperrors.DeclaresClassification(err) {
+					t.Fatalf("deadline was not classified: %v", err)
+				}
+			case "nil-token", "empty-token":
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Category != apperrors.CategoryInternal {
+					t.Fatalf("missing token was not internal: %v", err)
+				}
+			default:
+				combined := out.String() + stderr.String()
+				if err != nil || !strings.Contains(combined, "Example Corp") || strings.Contains(combined, "private-access") {
+					t.Fatalf("human result was missing or exposed the token: %v, %q", err, combined)
+				}
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageProviderLoginPublicRootRejectsIncompleteCredentials(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	testseam.Swap(t, &authProviderLogin, func(context.Context, string, string, string, edition.ToolCaller, *authpkg.OIDCExchangeCredentials) (*authpkg.TokenData, error) {
 		t.Fatal("conflicting credentials started provider login")
 		return nil, nil
@@ -115,6 +168,8 @@ func TestCrossPlatformCoverageProviderLoginPublicRootRejectsIncompleteCredential
 
 func TestCrossPlatformCoverageProviderLoginFailedInvocationClearsCredentials(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	for _, args := range [][]string{
 		{"--client-id", "rejected-app", "--client-secret", "rejected-secret", "auth", "provider-login", "ant", "--device"},
 		{"--client-secret", "rejected-secret", "auth", "provider-login", "other"},
@@ -177,6 +232,8 @@ func TestCrossPlatformCoverageProviderLoginProviderAvailabilityComesFromBackend(
 
 func TestCrossPlatformCoverageProviderLoginPublicRootCredentialPair(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	stopped := errors.New("test provider stopped")
 	calls := 0
 	testseam.Swap(t, &authProviderLogin, func(_ context.Context, _, provider, _ string, _ edition.ToolCaller, credentials *authpkg.OIDCExchangeCredentials) (*authpkg.TokenData, error) {
@@ -228,6 +285,8 @@ func TestCrossPlatformCoverageProviderLoginPublicRootCredentialPair(t *testing.T
 
 func TestCrossPlatformCoverageProviderLoginPreRunFailureClearsCredentials(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	// PersistentPreRunE 校验失败发生在凭证消费之后、RunE 之前；RunE 内的 defer
 	// 与输出边界清理都不会执行，只能依赖 preRun 失败分支的清理。
 	t.Setenv(envDWSAgentHost, "bad\r\nhost")

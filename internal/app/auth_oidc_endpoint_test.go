@@ -15,6 +15,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -22,6 +23,8 @@ import (
 
 func TestCrossPlatformCoverageOIDCCommandsRejectMCPURLFlag(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	helpers.InitDepsForTest(t, helpers.GetCaller())
 	for _, args := range [][]string{
 		{"provider-login", "ant"},
 		{"exchange-prepare", "--provider", "ant"},

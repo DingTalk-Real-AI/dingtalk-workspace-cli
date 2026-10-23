@@ -1,6 +1,8 @@
-# OIDC Provider 通过 edition Hook 注册
+---
+category: Added
+---
 
-状态：核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
+- OIDC Provider 通过 `edition.Hooks.OIDCProviders` 注册。核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
 
 `auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
 必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含

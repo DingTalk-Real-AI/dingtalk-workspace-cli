@@ -1,6 +1,8 @@
-# OIDC 登录错误诊断
+---
+category: Added
+---
 
-`auth provider-login <provider>`、`auth exchange-prepare` 和 `auth token-exchange`
+- OIDC 登录错误诊断：`auth provider-login <provider>`、`auth exchange-prepare` 和 `auth token-exchange`
 保留 Portal 的公开错误码和 trace ID，并将已定义错误码转换为可读说明。
 覆盖配置、事务/state、授权码、身份校验、限流、上游调用和 DWS 会话签发错误。
 
