@@ -51,17 +51,21 @@ check_pe_arch() {
   pe_label="$4"
   pe_path="$PAYLOAD/$pe_relative"
 
-  pe_probe="$(objdump -f "$pe_path" 2>/dev/null || true)"
-  if [ -z "$pe_probe" ] && command -v llvm-objdump >/dev/null 2>&1; then
-    pe_probe="$(llvm-objdump -f "$pe_path" 2>/dev/null || true)"
-  fi
-  # Keep only the architecture line: the probe echoes the file path first, and
-  # the amd64/arm64 token in that path is not architecture evidence.
-  pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
-  if [ -n "$pe_arch_line" ]; then
+  for pe_tool in objdump llvm-objdump; do
+    command -v "$pe_tool" >/dev/null 2>&1 || continue
+    pe_probe="$("$pe_tool" -f "$pe_path" 2>/dev/null || true)"
+    # Keep only the architecture line: the probe echoes the file path first,
+    # and the amd64/arm64 token in that path is not architecture evidence.
+    pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
+    [ -n "$pe_arch_line" ] || continue
+    # GNU objdump can recognize PE while reporting UNKNOWN! for an unsupported
+    # machine. That is inconclusive, so try LLVM and file before rejecting it.
+    if printf '%s\n' "$pe_arch_line" | grep -Eiq '^architecture:[[:space:]]*unknown!?([[:space:],]|$)'; then
+      continue
+    fi
     printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern" || fail "invalid $pe_label library architecture"
     return 0
-  fi
+  done
 
   # Likewise file(1) prints "<path>: <description>"; keep the description.
   pe_probe="$(file "$pe_path" 2>/dev/null || true)"
