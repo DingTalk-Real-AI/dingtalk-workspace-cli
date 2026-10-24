@@ -181,15 +181,12 @@ var Create = shortcut.Shortcut{
 				steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 			}
 		}
-		verifyTool := "get_document_info"
-		verifyParams := map[string]any{"nodeId": nodeID}
-		if content != "" {
-			verifyTool = "get_document_content"
-			verifyParams["format"] = format
+		var verification map[string]any
+		if content == "" {
+			verification, err = readDocVerification(rt, "get_document_info", map[string]any{"nodeId": nodeID}, nil)
+		} else {
+			verification, err = readDocumentContentVerification(rt, nodeID, expected, "overwrite", format)
 		}
-		verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
-			return content == "" || verifyUpdatedDocumentContent(data, expected, "overwrite", format)
-		})
 		if err != nil {
 			return docVerificationError("doc.create", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
@@ -597,9 +594,7 @@ var CheckpointUpdate = shortcut.Shortcut{
 			}
 			steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 		}
-		verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"}, func(data map[string]any) bool {
-			return verifyUpdatedDocumentContent(data, expected, rt.Str("mode"), "markdown")
-		})
+		verification, err := readDocumentContentVerification(rt, rt.Str("node"), expected, rt.Str("mode"), "markdown")
 		if err != nil {
 			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", err,
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
@@ -965,9 +960,7 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		}
 		steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 	}
-	verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": nodeID, "format": format}, func(data map[string]any) bool {
-		return verifyUpdatedDocumentContent(data, expected, mode, format)
-	})
+	verification, err := readDocumentContentVerification(rt, nodeID, expected, mode, format)
 	if err != nil {
 		return docVerificationError("doc.update", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
@@ -999,6 +992,11 @@ func compactDocVerification(value map[string]any, expected, mode, format string,
 		summary["format"] = format
 		summary["mode"] = mode
 		summary["expectedBytes"] = len(expected)
+		if full, ok := value[tableAlignmentReadback]; ok {
+			raw, _ := json.Marshal(full)
+			digest := sha256.Sum256(raw)
+			summary["tableAlignment"] = map[string]any{"verified": true, "format": "jsonml", "readbackSha256": fmt.Sprintf("%x", digest[:])}
+		}
 		if docContentHasMentionLink(expected) {
 			// Readback proves the mention link sits at the authored position with the
 			// authored label, but not which user it resolved to: the service rewrites
@@ -1044,7 +1042,11 @@ func compactDocVerification(value map[string]any, expected, mode, format string,
 
 func matchingDocumentContent(value map[string]any, expected, mode, format string) string {
 	for _, candidate := range documentContentCandidates(value, format) {
-		if verifyUpdatedDocumentContent(map[string]any{"content": candidate}, expected, mode, format) {
+		candidateValue := map[string]any{"content": candidate}
+		if full, ok := value[tableAlignmentReadback]; ok {
+			candidateValue[tableAlignmentReadback] = full
+		}
+		if verifyUpdatedDocumentContent(candidateValue, expected, mode, format) {
 			return candidate
 		}
 	}
@@ -1262,6 +1264,17 @@ func containsText(value any, needle string) bool {
 }
 
 func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool {
+	if data, ok := value.(map[string]any); ok && format == "markdown" {
+		if full, present := data[tableAlignmentReadback]; present {
+			for _, candidate := range documentContentCandidates(value, format) {
+				if markdownMatchesJSONMLTables(candidate, expected, mode, full) ||
+					(mode == "overwrite" && markdownMatchesJSONMLTables(stripReadbackDocumentTitle(candidate), expected, mode, full)) {
+					return true
+				}
+			}
+			return false
+		}
+	}
 	expectedRaw := expected
 	expected = normalizeDocumentContentForVerification(expectedRaw, format)
 	for _, candidate := range documentContentCandidates(value, format) {
@@ -1499,11 +1512,18 @@ func markdownServiceSemanticTokens(source string) ([]string, bool) {
 }
 
 func markdownStructuralFingerprint(source string) (string, []string, bool) {
+	return markdownStructuralFingerprintWithAlignments(source, nil)
+}
+
+func markdownStructuralFingerprintWithAlignments(source string, alignments [][]extensionast.Alignment) (string, []string, bool) {
 	if len(source) > docMarkdownVerifyMax {
 		return "", nil, false
 	}
 	sourceBytes := []byte(normalizeDocInputLineEndings(source))
 	document := docMarkdown.Parser().Parse(goldmarktext.NewReader(sourceBytes))
+	if alignments != nil {
+		applyReadbackTableAlignments(document, alignments)
+	}
 	builder := markdownFingerprintBuilder{}
 	// The callback never returns an error, so Walk cannot fail here.
 	_ = goldmarkast.Walk(document, func(node goldmarkast.Node, entering bool) (goldmarkast.WalkStatus, error) {
@@ -1521,6 +1541,9 @@ func markdownStructuralFingerprint(source string) (string, []string, bool) {
 		switch typed := node.(type) {
 		case *goldmarkast.Text:
 			builder.text(string(typed.Value(sourceBytes)))
+			if typed.SoftLineBreak() || typed.HardLineBreak() {
+				builder.text("\n")
+			}
 			return goldmarkast.WalkContinue, nil
 		case *goldmarkast.String:
 			builder.text(string(typed.Value))
@@ -1590,15 +1613,9 @@ type markdownFingerprintBuilder struct {
 }
 
 func (builder *markdownFingerprintBuilder) text(value string) {
-	value = string(goldmarkutil.UnescapePunctuations([]byte(value)))
-	value = strings.Join(strings.Fields(value), " ")
-	if value == "" {
-		return
-	}
-	if builder.pendingText.Len() > 0 {
-		builder.pendingText.WriteByte(' ')
-	}
-	builder.pendingText.WriteString(value)
+	// AST text fragments can split at escaped punctuation. Their boundary
+	// is not an authored space; normalize whitespace only after joining.
+	builder.pendingText.Write(goldmarkutil.UnescapePunctuations([]byte(value)))
 }
 
 func (builder *markdownFingerprintBuilder) token(kind, value string) {
@@ -1611,7 +1628,11 @@ func (builder *markdownFingerprintBuilder) flushText() {
 	if builder.pendingText.Len() == 0 {
 		return
 	}
-	value := builder.pendingText.String()
+	value := strings.Join(strings.Fields(builder.pendingText.String()), " ")
+	builder.pendingText.Reset()
+	if value == "" {
+		return
+	}
 	fmt.Fprintf(&builder.value, "text:%d:%s;", len(value), value)
 	builder.tokens = append(builder.tokens, "text\x00"+value)
 	builder.pendingText.Reset()
