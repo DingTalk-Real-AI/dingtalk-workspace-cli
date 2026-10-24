@@ -2,4 +2,4 @@
 category: Fixed
 ---
 
-- **Runtime payload verification** — fall back to LLVM or file inspection when GNU objdump reports an unknown Windows PE architecture, while still rejecting a recognized architecture mismatch.
+- **Runtime payload verification** — verify Windows DLL architectures directly from the PE Machine field so host inspection tools cannot reject valid payloads or accept a mismatched architecture.
