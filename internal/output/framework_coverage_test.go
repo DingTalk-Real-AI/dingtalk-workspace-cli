@@ -420,6 +420,20 @@ func TestFrameworkEmitterAndRolloutEdges(t *testing.T) {
 	SetCommandRollout(&cobra.Command{Use: "bad"}, "bad")
 }
 
+func TestCrossPlatformCoverageFailureDiagnostics(t *testing.T) {
+	diag := &cobra.Command{Use: "diag"}
+	diag.Flags().String("format", "table", "")
+	var stderr bytes.Buffer
+	diag.SetErr(&stderr)
+	if _, _, err := emitResult(diag, Failure(&ErrorInfo{Type: "api", Message: "boom", TraceID: "trace-42", UpstreamCode: 456})); err != nil {
+		t.Fatalf("diagnostic failure write err=%v", err)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "Trace ID: trace-42") || !strings.Contains(out, "Server Code: 456") {
+		t.Fatalf("failure diagnostics missing: %q", out)
+	}
+}
+
 func TestFrameworkMCPAdapterErrors(t *testing.T) {
 	if _, err := AdaptMCP(nil); err == nil {
 		t.Fatal("AdaptMCP(nil) succeeded")
