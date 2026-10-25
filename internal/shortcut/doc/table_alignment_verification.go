@@ -5,7 +5,6 @@ package doc
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -46,15 +45,15 @@ func hasAuthoredTableAlignment(source string) bool {
 }
 
 // Both views are read on each existing verification attempt. JSONML is the
-// authority for alignment; the Markdown export remains the content evidence.
+// authority for alignment and highlight ranges; Markdown also checks content.
 func readDocumentContentVerification(rt *shortcut.RuntimeContext, nodeID, expected, mode, format string) (map[string]any, error) {
-	needsAlignment := format == "markdown" && hasAuthoredTableAlignment(expected)
+	needsJSONML := format == "markdown" && (hasAuthoredTableAlignment(expected) || hasAuthoredHighlight(expected))
 	var combined map[string]any
 	var jsonmlErr error
 	params := map[string]any{"nodeId": nodeID, "format": format}
 	value, err := readDocVerification(rt, "get_document_content", params, func(data map[string]any) bool {
 		combined = cloneMap(data)
-		if needsAlignment {
+		if needsJSONML {
 			var full map[string]any
 			full, jsonmlErr = rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": nodeID, "format": "jsonml"})
 			if jsonmlErr != nil {
@@ -77,20 +76,8 @@ func readDocumentContentVerification(rt *shortcut.RuntimeContext, nodeID, expect
 }
 
 func jsonmlTableElements(value any) ([][]any, bool) {
-	if !completeTableReadback(value) {
-		return nil, false
-	}
-	var root []any
-	for _, encoded := range documentContentCandidates(value, "jsonml") {
-		var element []any
-		if json.Unmarshal([]byte(encoded), &element) == nil && len(element) >= 2 && element[0] == "root" {
-			if root != nil {
-				return nil, false
-			}
-			root = element
-		}
-	}
-	if root == nil {
+	root, ok := documentJSONMLRoot(value)
+	if !ok {
 		return nil, false
 	}
 	var tables [][]any

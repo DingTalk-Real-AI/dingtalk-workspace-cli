@@ -79,6 +79,7 @@ ID/URL 直用；标题唯一命中后执行。顺序：稳定 ID → shortcut �
 - Schema 门禁：不确定时仅查一次精确 leaf：`--fields use_when,avoid_when,parameters,constraints,confirmation`；禁用产品级/`--all`。准备 Help 时，本轮仅查一次。
 - 消费本页或精确 Schema 的 `confirmation`：`user_required` 且原请求/预授权已确认目标、动作、参数时，首调即加 `--yes`；否则预览/询问；禁止靠失败探测门禁。
 - JSONML 顶层必须是单个非空元素；禁止 `[[...]]` 元素数组包裹。
+- Markdown 的 `==重点==` 是高亮语法；标识符或原文中的双等号用代码格式（如 `` `token==` ``）或转义（如 `\=\=`）保留。写入工件保持原样，核验须区分格式等价与字面原文。
 
 ## 按需加载
 

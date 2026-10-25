@@ -992,7 +992,7 @@ func compactDocVerification(value map[string]any, expected, mode, format string,
 		summary["format"] = format
 		summary["mode"] = mode
 		summary["expectedBytes"] = len(expected)
-		if full, ok := value[tableAlignmentReadback]; ok {
+		if full, ok := value[tableAlignmentReadback]; ok && hasAuthoredTableAlignment(expected) {
 			raw, _ := json.Marshal(full)
 			digest := sha256.Sum256(raw)
 			summary["tableAlignment"] = map[string]any{"verified": true, "format": "jsonml", "readbackSha256": fmt.Sprintf("%x", digest[:])}
@@ -1264,6 +1264,16 @@ func containsText(value any, needle string) bool {
 }
 
 func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool {
+	if format == "markdown" && strings.Contains(expected, "==") && len(expected) <= docMarkdownVerifyMax {
+		canonical, highlights := authoredHighlights(expected)
+		if len(highlights.ranges) > 0 {
+			data, ok := value.(map[string]any)
+			if !ok || !highlightsMatchJSONML(highlights, mode, data[tableAlignmentReadback]) {
+				return false
+			}
+			expected = canonical
+		}
+	}
 	if data, ok := value.(map[string]any); ok && format == "markdown" {
 		if full, present := data[tableAlignmentReadback]; present {
 			for _, candidate := range documentContentCandidates(value, format) {
