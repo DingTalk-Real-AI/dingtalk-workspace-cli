@@ -11,7 +11,7 @@ category: Added
 核心通过注册项选择授权实现，具体 SDK 由 overlay 提供。
 服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），登录不修改端点配置。
 
-## Overlay 接入
+#### Overlay 接入
 
 公共类型位于 `pkg/edition`，overlay 不需要也不得导入核心的 `internal/auth`。
 在已有 `NewHooks()` 中注册名称及授权回调，再沿用启动入口的 `edition.Override(h)`：
@@ -39,7 +39,7 @@ func(context.Context, edition.OIDCAuthorizationRequest) (edition.OIDCAuthorizati
 名称可由 overlay 自定义，但必须满足 `[a-z][a-z0-9_-]{0,63}`，并与 Portal 已配置的
 provider 一致。重复名称、空回调、非法名称均为注册错误。
 
-## 执行边界
+#### 执行边界
 
 1. 核心校验 CLI 参数并选择已注册的回调。
 2. 核心向 Portal 创建事务，校验服务端 provider、授权参数与有效期。
@@ -55,7 +55,7 @@ state 不匹配不会触发其他 SDK 或 Mock 兜底，也不会换票或保存
 `OIDC_SDK_UNAVAILABLE`。Help 和 dry-run 不枚举注册项、不初始化 SDK、不访问网络。
 普通 OAuth/PAT 登录和分步 `exchange-prepare` / `token-exchange` 入口保持独立。
 
-## 联调与依赖更新
+#### 联调与依赖更新
 
 核心的 Hook API 提交并推送后，overlay 需要把远程核心依赖更新到包含该 API 的提交，
 再编译上述注册代码。只修改另一 Go 包里的同名文件不会替换核心实现。
