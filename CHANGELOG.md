@@ -6,6 +6,123 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.66-beta.2] - 2026-10-26
+
+### Added
+
+- OIDC 登录错误诊断：`auth provider-login <provider>`、`auth exchange-prepare` 和 `auth token-exchange`
+保留 Portal 的公开错误码和 trace ID，并将已定义错误码转换为可读说明。
+覆盖配置、事务/state、授权码、身份校验、限流、上游调用和 DWS 会话签发错误。
+三个命令均为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
+
+- 从 `error.code`、`error.action`、`trace_id` 解析公开诊断；响应体缺失或无效时，
+  使用合法的 `X-Dws-Trace-Id`。后端日志专用 `reason` 不进入客户端输出。
+- 人类可读错误显示 `Trace ID` 和 `Server Code`。JSON 复用现有字段：
+  传统输出为 `error.server_error_code`，统一输出为 `error.upstream_code`，
+  两者均提供 `error.trace_id` 和 `error.details.action/http_status/provider`。
+- `stop` 提示检查参数/配置或联系管理员；`restart_login` 提示重新登录或重新
+  `exchange-prepare` 取码。保持单次请求，不自动重试旧 code/state。
+- 保留现有错误分类、退出码和 token 响应格式。只保留 Portal 已定义的固定公开
+  message，不回显任意异常正文、内部 reason 或请求凭证；诊断标识限制长度和字符。
+
+验证包含真实本地 HTTP 错误响应、三条命令的 JSON/人类输出、无效响应的 trace 回退、
+配置停止与重新登录提示、取消/超时分类、凭证反射过滤及不重试行为。
+
+- OIDC Provider 通过 `edition.Hooks.OIDCProviders` 注册。核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
+
+`auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
+该命令为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
+必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含
+`provider`、`code`、`state`；显式指定 DWS 应用凭据时再加入 `client_id`、`client_secret`。
+核心通过注册项选择授权实现，具体 SDK 由 overlay 提供。
+服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），登录不修改端点配置。
+
+#### Overlay 接入
+
+公共类型位于 `pkg/edition`，overlay 不需要也不得导入核心的 `internal/auth`。
+在已有 `NewHooks()` 中注册名称及授权回调，再沿用启动入口的 `edition.Override(h)`：
+
+```go
+h.OIDCProviders = func() []edition.OIDCProvider {
+    return []edition.OIDCProvider{
+        {
+            Name:      "ant",
+            Authorize: authorizeWithAntSDK,
+        },
+    }
+}
+```
+
+`authorizeWithAntSDK` 的函数签名为：
+
+```go
+func(context.Context, edition.OIDCAuthorizationRequest) (edition.OIDCAuthorizationResult, error)
+```
+
+蚂蚁适配负责调用自己的 SDK，并把 SDK 实际返回的 `code/state` 转为公共结果类型。
+若已有 `AuthorizeOIDC` 使用业务侧 DTO，只在这个回调中转换类型；不用复制核心事务、
+换票或保存凭证代码。SDK 初始化与认证发生在回调执行时，注册函数只返回声明。
+名称可由 overlay 自定义，但必须满足 `[a-z][a-z0-9_-]{0,63}`，并与 Portal 已配置的
+provider 一致。重复名称、空回调、非法名称均为注册错误。
+
+#### 执行边界
+
+1. 核心校验 CLI 参数并选择已注册的回调。
+2. 核心向 Portal 创建事务，校验服务端 provider、授权参数与有效期。
+3. 核心向回调传入 `authorization_endpoint`、独立的参数 map 及受事务期限约束的 context。
+4. SDK 尊重取消与超时，原样使用服务端授权参数并返回实际取得的 `code/state`。
+5. 核心验证授权码及原事务 state，再换票、补全身份、保存 DWS profile。
+
+SDK 会话、密码、DWS 换票用的 client secret 和 PKCE verifier 不属于这个回调的输入输出。
+错误中不得包含认证材料；核心也不记录 SDK 原始错误文本。授权失败、取消、超时或
+state 不匹配不会触发其他 SDK 或 Mock 兜底，也不会换票或保存凭证。
+
+没有注册对应实现时，核心仍先检查 Portal 配置；服务端接受 provider 后返回
+`OIDC_SDK_UNAVAILABLE`。Help 和 dry-run 不枚举注册项、不初始化 SDK、不访问网络。
+普通 OAuth/PAT 登录和分步 `exchange-prepare` / `token-exchange` 入口保持独立。
+
+#### 联调与依赖更新
+
+核心的 Hook API 提交并推送后，overlay 需要把远程核心依赖更新到包含该 API 的提交，
+再编译上述注册代码。只修改另一 Go 包里的同名文件不会替换核心实现。
+
+回归验证覆盖自定义名称和 ant 注册、真实命令入口及凭证保存、非法/重复/缺失注册、
+后端拒绝、SDK 错误脱敏、取消/超时、state 篡改、空授权码和 help/dry-run 无副作用。
+
+```bash
+DWS_PACKAGE_VERSION=0.0.0-test CGO_ENABLED=0 go test ./pkg/edition ./internal/auth ./internal/app
+```
+
+已验证：上述三个包的完整测试、Hook 定向 race 测试、`go vet ./...`、`make build`，
+以及构建后二进制的 provider-login help / dry-run。未执行真实蚂蚁网关登录。
+
+- 支持业务分步完成第三方登录：先执行 `dws auth exchange-prepare --provider ant` 获取服务端授权参数，再由业务调用 IdP/SDK 取码，最后执行 `dws auth token-exchange --provider ant --code <code> --state <state>` 换取 DWS Token。
+
+支持 `--code-stdin`、可选且必须成对的 `--client-id/--client-secret`，默认返回现有 TokenData；显式 `--save` 后在线核验完整身份并保存，保留已有默认账号。两个命令均支持 `--dry-run`，服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），不修改全局配置；保存 Token 时记录其刷新所用的 Portal 地址。PKCE verifier 始终由服务端保存，换票失败不会自动重试一次性 code/state。
+
+命令沿用统一结果输出。作为第三方 IdP 集成入口，两个命令以 Cobra Hidden 隐藏，不出现在 `dws auth --help` 与 shell 补全中，仍可显式执行；不进入 Agent Schema（Hidden 且无 Contract.Identity），也不再占用 reviewed Schema 排除列表。
+
+macOS 终端按实际文件描述符识别，使用 `select` 等待输入，不依赖 `/dev/tty` 或 `/dev/stdin` 文件名，覆盖 `< /dev/tty` 重定向；以 50ms 周期检查取消，不改变终端模式、不关闭借用句柄。高编号输入使用低编号描述符副本等待，完成后只关闭副本；低编号描述符耗尽时明确报错。
+
+`--code-stdin` 的等待输入和后续换票共享一分钟超时，并响应调用方的取消或更短截止时间。取消、超时错误保留原有身份，不归类为参数错误，也不会继续换票。Unix 标准输入使用可取消的轮询读取，取消后保留原文件描述符；Windows 控制台保留原输入模式，通过原生 API 取消读取，重定向管道则通过关闭来中断。宿主通过 `SetIn` 注入的自定义阻塞输入须支持 `Close` 中断读取（取消时会关闭，正常完成时保留）。无 `Close` 的自定义 Reader 须为非阻塞或自行响应 context。
+
+OIDC 换票响应增加实际 DWS `clientId`（与 IdP 的 `client_id` 不同）。`provider-login` 和 `token-exchange --save` 均保存该应用绑定和原 Portal 地址。默认应用继续由 Portal 托管密钥；显式指定的自定义应用将原始密钥保存到现有安全凭证槽，并与 Token/Profile 写入一起回滚。刷新自定义应用时从该槽读取密钥，发送给原 Portal 的 `/oauth2/refreshToken`，不回退到全局应用、不跟随重定向、不在结果或 app.json 中暴露密钥。未使用 `--save` 的分步换票不写入本地凭证。
+
+需要同步部署 Portal：默认 OIDC 响应返回实际 `clientId`，刷新接口接受可选 `clientSecret`。旧版默认响应缺少应用绑定时，新 CLI 会明确要求更新 Portal；旧的缺失绑定记录需要重新登录。
+
+OIDC 登录持久化时记录 `oidc_provider`，刷新成功继续保留；该本地元数据不加入未保存的 token-exchange 返回值。所有 OIDC 分支只通过该字段识别，不再从 Portal 地址或密钥模式推断登录来源。此前未记录该字段的开发测试凭证不做兼容迁移，需重新登录。
+
+OIDC 刷新前校验原应用、Portal 和登录来源绑定，缺失时直接报错，不使用全局应用或默认端点兜底。刷新失败不读取组织镜像或历史全局凭证，即使同用户、同组织也不能切换应用。被拒绝或失效时提示重新执行 provider-login 或原分步登录流程，自定义应用需沿用原 client-id/client-secret；网络、取消、超时、限流和 5xx 保留原凭证，不强制重新登录。普通 OAuth 既有恢复策略保持不变。
+
+已确认的 `invalidParameter.authCode.notFound` 仍保留脱敏后的错误类型和规范化业务码供分类使用；错误识别不再意味着允许 OIDC 凭证恢复。服务端原始错误文本不进入输出、日志或错误链。
+
+### Fixed
+
+- **Installer skill failures** (#779) — fail explicitly without an installation-success banner when a release archive has no usable skills and no local source is available; also fail when the PowerShell local mono skill directory is missing.
+
+- 修复 Gitee 补同步入口遗漏 OpenHarmony 附件的问题，使已发布稳定版本的完整九项制品能够通过附件清单校验。
+
+
 ## [1.0.66-beta.1] - 2026-10-21
 
 ### Fixed
