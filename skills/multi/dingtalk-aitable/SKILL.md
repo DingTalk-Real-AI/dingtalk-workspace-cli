@@ -150,6 +150,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 | Base 内创建 Section 并移动节点 | `dws aitable +section-create --base-id <B> --name <名称>` → `dws aitable +section-move-node --base-id <B> --node-id <N> --new-parent-section-id <S>` → `dws aitable +section-list-nodes --base-id <B>` | Table、Dashboard、Section 都是 AITable 的 nsheet 节点；禁止改走 Wiki/Drive 文件夹或移动命令 |
 | 将本地 CSV/XLSX/XLS 导入新表 | `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH>` | 存储示例不预置 `--yes`；首次调用先触发 Runtime 确认门禁，取得明确确认后由执行方追加。DWS 在进程内完成申请凭证、空 Content-Type PUT 和 `import data`，且不暴露签名 URL；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
 | 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；processCode/name/iconUrl/url 从 list-sources 原样透传，创建后用 `+datasource-sync-status` 查同步结果 |
+| 接入 AI 听记插件数据源 | `dws aitable datasource plugin-create --base-id <ID> --plugin-type minutes` | `--plugin-type` 目前仅支持 `minutes`；成功仅表示已触发首次同步。不返回 taskId，不能用 `+datasource-sync-status` 跟进；结果不明时禁止重试，先用 `table get` 只读核对是否已出现新表 |
 
 ### 简单 leaf
 
@@ -171,7 +172,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 命令接在 `dws aitable` 后；资源 ID 使用 `--base-id/--table-id/--field-id/--view-id/--dashboard-id/--page-id/--widget-id`，改名使用 `--name`。应用模式所有命令都要求 `--base-id`；`app widget create` 另要求包含 `chartType` 的 `--config` 和包含 `x/y/w/h` 的 `--layout`。`+table-copy` 参数不规则，执行前只读其 leaf Schema。不读操作 Reference、Help 或产品 Catalog。
 
-数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建、更新、同步、查状态和查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。
+数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建、更新、同步、查状态和查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。AI 听记插件数据源用原生命令 `datasource plugin-create`。
 
 ## 执行约束
 
@@ -209,7 +210,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 - 删除不可逆，按 Runtime confirmation 核对真实目标；`base list` 只是最近访问。字段零/多候选、类型不明时停止；多批写保留已完成批次和续跑位置。
 - 评论 create/reply 非幂等，评论写操作未知状态时先 `comment list` 对账，不自动重放；delete 只删除本人评论且不可恢复，关联回复处理不作保证。
 - `app get` / `app page list` 在 App 不存在时会初始化默认 App，属于幂等条件写；`app page/widget create` 非幂等且不自动重试。删除 Page 会级联删除全部 Widget，删除 Widget 会同步清理布局，均需独立确认。
-- 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。
+- 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。`datasource plugin-create` 非幂等，超时或结果不明时不得自动重试。
 
 ## 按需加载（复杂 JSON 与恢复语义）
 

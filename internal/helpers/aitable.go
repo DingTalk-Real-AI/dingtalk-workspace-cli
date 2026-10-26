@@ -10338,6 +10338,69 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	datasourceCreateCmd.Flags().String("field-ids", "", "不受支持：当前仅支持全量同步，请勿传入")
 	datasourceCreateCmd.Flags().String("auto-sync-setting", "", "自动同步频率配置 JSON 字符串，仅在 --auto=true 时生效。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
 
+	datasourcePluginCreateCmd := &cobra.Command{
+		Use:   "plugin-create",
+		Short: "创建插件数据源表并触发首次同步（目前仅支持 AI 听记）",
+		Long: "在指定 Base 中创建插件数据源表，保存并发布同步流程后触发一次手动同步。\n" +
+			"--plugin-type 目前仅支持 minutes（AI 听记）。成功仅表示已触发首次同步，不代表同步已完成。\n" +
+			"该操作非幂等：超时或结果不明时禁止直接重试，应先用 table get 只读核对 Base 中是否已出现新表。",
+		Example: `  dws aitable datasource plugin-create --base-id BASE_ID --plugin-type minutes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "plugin-type"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			pluginType := mustGetFlag(cmd, "plugin-type")
+			if pluginType != aitablePluginTypeMinutes {
+				return apperrors.NewValidation(fmt.Sprintf("--plugin-type 不支持 %q：目前仅支持 minutes（AI 听记）", pluginType))
+			}
+			toolArgs := map[string]any{"baseId": baseID, "pluginType": pluginType}
+			if result, ok := aitableUnifiedDryRunResult("create_plugin_datasource", toolArgs); ok {
+				return output.StoreResult(cmd.Context(), result)
+			}
+			data, err := callAitableUnifiedDataContext(cmd.Context(), "create_plugin_datasource", toolArgs)
+			if err != nil {
+				return aitableDatasourcePluginCreateCallError(toolArgs, err)
+			}
+			created, err := aitableDatasourcePluginCreateData(data, toolArgs)
+			if err != nil {
+				return err
+			}
+			return output.StoreResult(cmd.Context(), output.Success(created))
+		},
+	}
+	DeclareLeafMetadata(datasourcePluginCreateCmd, LeafSpec{
+		Safety:        aitableSafetyCreate(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_plugin_create",
+				CanonicalPath:  "aitable.datasource_plugin_create",
+				CLIPath:        "aitable datasource plugin-create",
+				PrimaryCLIPath: "aitable datasource plugin-create",
+			},
+			Description: "在指定 Base 中创建插件数据源表并触发首次同步；目前仅支持 AI 听记（minutes）。",
+			Interface:   aitableMCPInterface("create_plugin_datasource"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建 AI 听记插件数据源表，保存并发布同步流程后触发首次同步，返回 tableId、flowId 和文档链接。成功仅表示已触发同步，不代表同步完成；非幂等，结果不明时先只读核对，禁止直接重试。",
+				UseWhen:      []string{"需要把 AI 听记数据以插件数据源表的形式接入指定 Base 时"},
+				AvoidWhen:    []string{"接入 OA 审批等非插件数据源用 datasource create；对已有数据源表重新同步用 datasource sync"},
+				Examples:     []string{"dws aitable datasource plugin-create --base-id <BASE_ID> --plugin-type minutes"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "plugin-type", Property: "pluginType", Required: boolPtr(true), Enum: []string{aitablePluginTypeMinutes}},
+			},
+			Result: aitableDatasourcePluginCreateResultSpec(),
+		},
+	})
+	datasourcePluginCreateCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourcePluginCreateCmd.Flags().String("plugin-type", "", "插件类型，目前仅支持 minutes（AI 听记）(必填)")
+
 	datasourceUpdateCmd := &cobra.Command{
 		Use:     "update",
 		Short:   "更新数据源表同步配置并触发同步",
@@ -10537,7 +10600,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 
 	datasourceCmd.AddCommand(
 		datasourceGetConfigCmd, datasourceListSourcesCmd, datasourceGetFieldsCmd,
-		datasourceCreateCmd, datasourceUpdateCmd,
+		datasourceCreateCmd, datasourcePluginCreateCmd, datasourceUpdateCmd,
 		datasourceSyncCmd, datasourceSyncStatusCmd,
 	)
 
