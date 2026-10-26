@@ -386,6 +386,8 @@ func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 	}{
 		{name: "authorization code separate", args: []string{"dws", "auth", "exchange", "--code", "fixture-code", "--dry-run"}, want: "dws auth exchange --code *** --dry-run"},
 		{name: "authorization code equals", args: []string{"dws", "auth", "exchange", "--code=fixture-code"}, want: "dws auth exchange --code=***"},
+		{name: "OIDC state separate", args: []string{"dws", "auth", "token-exchange", "--state", "fixture-state"}, want: "dws auth token-exchange --state ***"},
+		{name: "OIDC state equals", args: []string{"dws", "auth", "token-exchange", "--state=fixture-state"}, want: "dws auth token-exchange --state=***"},
 		{name: "stdin flag retained", args: []string{"dws", "auth", "exchange", "--code-stdin", "--dry-run"}, want: "dws auth exchange --code-stdin --dry-run"},
 
 		{

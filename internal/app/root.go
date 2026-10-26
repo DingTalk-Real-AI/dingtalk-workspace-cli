@@ -932,6 +932,11 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
 			resetAuthExchangeInvocationFlags(exchange)
 		}
+		for _, name := range []string{"exchange-prepare", "token-exchange"} {
+			if cmd, _, err := root.Find([]string{"auth", name}); err == nil {
+				resetAuthOIDCExchangeInvocationFlags(cmd)
+			}
+		}
 	}
 
 	// Cobra handles --help before PersistentPreRunE. Wrap the inherited help
@@ -1012,6 +1017,8 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			defer func() {
 				if preRunErr != nil {
 					resetAuthExchangeInvocationFlags(cmd)
+					resetAuthProviderLoginInvocationFlags(cmd)
+					resetAuthOIDCExchangeInvocationFlags(cmd)
 				}
 			}()
 			rootVersionShortCircuit = false
@@ -1041,7 +1048,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// bound flag's value and Changed bit after ExecuteC returns, so consume
 			// credential flags at the execution boundary before any validation or
 			// hook can observe state left by a previous invocation.
-			if isAuthExchangeCommand(cmd) {
+			if isAuthExchangeCommand(cmd) || isAuthProviderLoginCommand(cmd) || isAuthOIDCExchangeCommand(cmd) {
 				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
 				// 清除前次调用安装的全局凭据；本次 flags 在 RunE 或早退时清理。
 				if credentialInvocationSeen {
@@ -1767,6 +1774,8 @@ func installOutputSinkRunBoundary(cmd *cobra.Command) {
 		return func(cmd *cobra.Command, args []string) error {
 			// 输出初始化也可能早退；它必须处于一次性授权参数的清理边界内。
 			defer resetAuthExchangeInvocationFlags(cmd)
+			defer resetAuthProviderLoginInvocationFlags(cmd)
+			defer resetAuthOIDCExchangeInvocationFlags(cmd)
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}

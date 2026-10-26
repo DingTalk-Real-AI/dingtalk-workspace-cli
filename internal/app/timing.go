@@ -390,6 +390,7 @@ var sensitiveFlags = map[string]bool{
 	"--delegator-open-dingtalk-id": true,
 	"--token":                      true,
 	"--code":                       true,
+	"--state":                      true,
 	"--client-secret":              true,
 	"--client-id":                  true,
 	"--password":                   true,

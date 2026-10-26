@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/google/uuid"
@@ -183,6 +184,14 @@ func (p *OAuthProvider) exchangeCodeViaMCPClientID(ctx context.Context, code, cl
 }
 
 func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *TokenData) (*TokenData, error) {
+	if data.isOIDCSession() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := validateOIDCRefreshBinding(data); err != nil {
+			return nil, err
+		}
+	}
 	// Use stored Source to determine refresh path (not current runtime state)
 	// This ensures refresh works even if environment variables changed since login
 	if data.Source == "mcp" {
@@ -259,9 +268,10 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 
 // refreshViaMCP refreshes token via MCP proxy.
 func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*TokenData, error) {
+	oidcSession := data.isOIDCSession()
 	// Use stored clientId from token data
 	clientID := data.ClientID
-	if clientID == "" {
+	if clientID == "" && !oidcSession {
 		// Fallback for legacy tokens
 		clientID = ClientID()
 	}
@@ -270,23 +280,61 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId，请重新登录")
 	}
 
-	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPRefreshTokenPath
+	baseURL := MCPBaseURLForLoginRegion(p.loginRegion())
+	if oidcSession {
+		// refreshWithRefreshToken validated the original application and Portal.
+		baseURL = data.MCPBaseURL
+	}
+	url := baseURL + MCPRefreshTokenPath
 	body := map[string]string{
 		"clientId":     clientID,
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
-	resp, err := p.postJSON(ctx, url, body)
+	if oidcSession && data.MCPClientSecretRequired {
+		secret, err := LoadClientSecretStrict(clientID)
+		if err != nil || strings.TrimSpace(secret) == "" {
+			return nil, fmt.Errorf("cannot load the saved OIDC application secret; log in again")
+		}
+		body["clientSecret"] = secret
+	}
+	var resp []byte
+	var err error
+	if oidcSession {
+		// A redirect must never forward the saved application secret. Preserve
+		// HTTP status for refresh retry classification without exposing bodies.
+		var status int
+		status, resp, err = oidcJSONRequest(ctx, p.httpClient, url, body, "")
+		if status != 0 && status != http.StatusOK {
+			err = &HTTPStatusError{StatusCode: status}
+		}
+	} else {
+		resp, err = p.postJSON(ctx, url, body)
+	}
 	if err != nil {
 		return nil, err
 	}
 	updated, err := p.parseMCPTokenResponse(resp)
 	if err != nil {
+		if oidcSession {
+			var exchangeErr *MCPTokenExchangeError
+			if ctx.Err() == nil && errors.As(err, &exchangeErr) && exchangeErr.requiresReauthorization() {
+				// Retain only the reviewed rejection code for error classification.
+				// Never keep the server's message or original error in the chain.
+				return nil, dwserrors.NewAuth("DWS refresh token was rejected", dwserrors.WithCause(&MCPTokenExchangeError{
+					Code: legacyMCPRefreshRejectedCode, Message: "refresh credential rejected",
+				}))
+			}
+			return nil, oidcSafeError(ctx, err, "DWS refresh returned an invalid token response")
+		}
 		return nil, err
 	}
 	// Preserve original credentials info
 	updated.ClientID = data.ClientID
 	updated.Source = data.Source
+	updated.MCPBaseURL = data.MCPBaseURL
+	updated.MCPClientSecretRequired = data.MCPClientSecretRequired
+	updated.OIDCProvider = data.OIDCProvider
 	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
