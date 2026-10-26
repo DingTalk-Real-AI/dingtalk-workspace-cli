@@ -578,3 +578,11 @@ func TestCrossPlatformCoverageAitableDatasourcePluginCreateKeepsDefiniteBusiness
 		t.Fatalf("definite business error rewritten: %v", err)
 	}
 }
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateKeepsPreDispatchError(t *testing.T) {
+	original := apperrors.NewAPI("request not sent", apperrors.WithExecutionStarted(false))
+	got := aitableDatasourcePluginCreateCallError(map[string]any{"baseId": "BASE", "pluginType": "minutes"}, original)
+	if got != original {
+		t.Fatalf("pre-dispatch error rewritten: got %v, want %v", got, original)
+	}
+}
