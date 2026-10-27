@@ -64,7 +64,10 @@ func TestCrossPlatformCoverageMonoDangerousCalendarPathsAreCanonical(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, section, ok := strings.Cut(string(content), "## 危险操作确认\n")
+	// Git checkouts may use CRLF on Windows; parse the same Markdown section
+	// independently of the working tree's line endings.
+	text := strings.ReplaceAll(string(content), "\r\n", "\n")
+	_, section, ok := strings.Cut(text, "## 危险操作确认\n")
 	if !ok {
 		t.Fatal("mono skill has no dangerous-operation table")
 	}
