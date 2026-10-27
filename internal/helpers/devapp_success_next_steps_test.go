@@ -219,7 +219,7 @@ func TestDevAppSuccessNextStepsScopeApplyQuotesAllDynamicValues(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesFlags(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesFlagsAndScopes(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		params map[string]any
@@ -229,6 +229,10 @@ func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesFlags(
 		{name: "hidden false", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true}, want: "--is-hidden=false"},
 		{name: "publish true", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true, "publish": true}, want: "--publish=true"},
 		{name: "publish false", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true, "publish": false}, want: "--publish=false"},
+		{name: "department scope", params: map[string]any{"unifiedAppId": "app-1", "deptVisibleScopes": "dept-1", "precheckOnly": true}, want: "--dept-visible-scopes dept-1"},
+		{name: "user scope", params: map[string]any{"unifiedAppId": "app-1", "userVisibleScopes": "user-1", "precheckOnly": true}, want: "--user-visible-scopes user-1"},
+		{name: "role scope", params: map[string]any{"unifiedAppId": "app-1", "roleVisibleScopes": "role-1", "precheckOnly": true}, want: "--role-visible-scopes role-1"},
+		{name: "dynamic group scope", params: map[string]any{"unifiedAppId": "app-1", "dynamicGroupScopes": "group-1", "precheckOnly": true}, want: "--dynamic-group-scopes group-1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			steps := devAppSuccessNextSteps(devAppScopeSetTool, tc.params, map[string]any{"outcome": "planned"})
