@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -109,8 +110,12 @@ func TestCrossPlatformCoverageAIWaitCheckpointResumesOriginalTargets(t *testing.
 	if out, err := runAITableCompositeCLI(t, first, "+field-wait-ai", args...); err != nil || !strings.Contains(out, "--resume") {
 		t.Fatalf("first wait: %s %v", out, err)
 	}
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows uses ACLs; os.FileMode does not represent POSIX privacy bits.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal("checkpoint not private")
 	}
 	resume := &upsertByKeyCaller{callFn: func(_ int, _, tool string, params map[string]any) (string, error) {

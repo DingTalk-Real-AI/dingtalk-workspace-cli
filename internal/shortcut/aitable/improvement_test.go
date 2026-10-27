@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -51,8 +52,12 @@ func TestCrossPlatformCoverageBuildPlanResumesByReadbackWithoutRecreating(t *tes
 	if saved.Steps[0].Resources["dashboardId"] != "d" || saved.Steps[0].Status != "unknown" || len(saved.Calls) != 2 {
 		t.Fatalf("lost checkpoint: %s", raw)
 	}
-	info, _ := os.Stat(checkpoint)
-	if info.Mode().Perm() != 0600 {
+	info, err := os.Stat(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows uses ACLs; os.FileMode does not represent POSIX privacy bits.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal("checkpoint not private")
 	}
 	read := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"status":"success","data":{"baseId":"b","dashboardId":"d","dashboardName":"看板"}}`}}}
