@@ -219,7 +219,7 @@ func TestDevAppSuccessNextStepsScopeApplyQuotesAllDynamicValues(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesHiddenFlag(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesFlags(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		params map[string]any
@@ -227,6 +227,8 @@ func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesHidden
 	}{
 		{name: "hidden true", params: map[string]any{"unifiedAppId": "app-1", "isHidden": true, "precheckOnly": true}, want: "--is-hidden=true"},
 		{name: "hidden false", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true}, want: "--is-hidden=false"},
+		{name: "publish true", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true, "publish": true}, want: "--publish=true"},
+		{name: "publish false", params: map[string]any{"unifiedAppId": "app-1", "isHidden": false, "precheckOnly": true, "publish": false}, want: "--publish=false"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			steps := devAppSuccessNextSteps(devAppScopeSetTool, tc.params, map[string]any{"outcome": "planned"})
