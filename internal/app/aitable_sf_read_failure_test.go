@@ -50,6 +50,7 @@ func TestCrossPlatformCoverageAITableSFReadFailureDelivery(t *testing.T) {
 			for _, delivery := range []string{"runner", "runner_is_error", "helper"} {
 				t.Run(path+"/"+code+"/"+delivery, func(t *testing.T) {
 					t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+					t.Cleanup(CloseFileLogger)
 					retryable := code == "InvalidRequest.DataNotReady" || code == "500"
 					errorType := "USER_ERROR"
 					if retryable {

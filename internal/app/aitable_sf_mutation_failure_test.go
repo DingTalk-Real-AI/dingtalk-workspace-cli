@@ -35,6 +35,7 @@ func TestCrossPlatformCoverageAITableSFMutationFailureDelivery(t *testing.T) {
 			for _, delivery := range []string{"runner", "runner_is_error", "helper"} {
 				t.Run(tc.tool+"/"+code+"/"+delivery, func(t *testing.T) {
 					t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+					t.Cleanup(CloseFileLogger)
 					// Even an erroneous true hint cannot make an unknown outcome retryable.
 					body := fmt.Sprintf(`{"status":"error","error":{"type":"SYSTEM_ERROR","code":%q,"message":"Safe stage rejection","retryable":true,"details":{"token":"private-token"}},"data":{"uid":"private-uid"}}`, code)
 					calls := 0
