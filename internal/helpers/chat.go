@@ -1995,8 +1995,13 @@ func chatListAllConversationsArgs(cmd *cobra.Command) (map[string]any, error) {
 
 func parseChatListAllConversationsPage(text string) (map[string]any, []any, any, bool, error) {
 	var envelope map[string]any
-	if err := json.Unmarshal([]byte(text), &envelope); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	if err := decoder.Decode(&envelope); err != nil {
 		return nil, nil, nil, false, fmt.Errorf("parse paged response JSON: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, nil, nil, false, fmt.Errorf("paged response must contain exactly one JSON object")
 	}
 	rawResult, ok := envelope["result"]
 	if !ok {
@@ -2059,6 +2064,13 @@ func parseChatListAllConversationsPage(text string) (map[string]any, []any, any,
 	}
 	if hasMore && !ok {
 		return nil, nil, nil, false, fmt.Errorf("paged response missing result.nextCursor")
+	}
+	if number, numeric := nextCursor.(json.Number); numeric {
+		cursor, err := number.Int64()
+		if err != nil {
+			return nil, nil, nil, false, fmt.Errorf("paged response result.nextCursor must be int64: %w", err)
+		}
+		nextCursor = cursor
 	}
 	result["conversationList"] = items
 	result["hasMore"] = hasMore

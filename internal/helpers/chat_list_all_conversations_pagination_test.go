@@ -114,6 +114,34 @@ func TestChatListAllConversationsPageAllAggregatesSupportedResponses(t *testing.
 	testChatListAllConversationsPageAllAggregatesSupportedResponses(t)
 }
 
+func TestChatListAllConversationsPreservesInt64Cursor(t *testing.T) {
+	for _, response := range []string{
+		`{"result":{"conversationList":[],"hasMore":true,"nextCursor":9007199254740993}}`,
+		`{"result":[[],9007199254740993,true]}`,
+		`{"result":{"conversationList":[],"hasMore":true,"nextCursor":9223372036854775807}}`,
+		`{"result":[[],9223372036854775807,true]}`,
+	} {
+		t.Run(response, func(t *testing.T) {
+			caller := &pagedCommandCaller{steps: []scriptedToolStep{
+				{text: response},
+				{text: `{"result":{"conversationList":[],"hasMore":false}}`},
+			}}
+			_, err := executeChatListAllConversations(t, caller,
+				"list-all-conversations", "--page-all", "--page-limit", "2", "--page-delay", "0")
+			if err != nil {
+				t.Fatalf("list-all-conversations: %v", err)
+			}
+			want := int64(9007199254740993)
+			if strings.Contains(response, "9223372036854775807") {
+				want = int64(9223372036854775807)
+			}
+			if len(caller.calls) != 2 || caller.calls[1].args["cursor"] != want {
+				t.Fatalf("calls = %#v, want second-page cursor %d", caller.calls, want)
+			}
+		})
+	}
+}
+
 func TestChatListAllConversationsDefaultKeepsSinglePageResponse(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{{
 		text: `{"result":{"conversations":[{"openConversationId":"cid-1"}],"hasMore":true,"nextCursor":2}}`,
@@ -185,6 +213,21 @@ func TestChatListAllConversationsRejectsUnsupportedPagedResponses(t *testing.T) 
 			name:      "map hasMore omits next cursor",
 			response:  `{"result":{"conversationList":[],"hasMore":true}}`,
 			wantError: "missing result.nextCursor",
+		},
+		{
+			name:      "map cursor overflows int64",
+			response:  `{"result":{"conversationList":[],"hasMore":true,"nextCursor":9223372036854775808}}`,
+			wantError: "nextCursor must be int64",
+		},
+		{
+			name:      "tuple cursor is fractional",
+			response:  `{"result":[[],1.5,true]}`,
+			wantError: "nextCursor must be int64",
+		},
+		{
+			name:      "trailing JSON",
+			response:  `{"result":[[],0,false]} {}`,
+			wantError: "exactly one JSON object",
 		},
 	}
 
