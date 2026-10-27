@@ -80,7 +80,7 @@ func TestCrossPlatformCoverageDevAppErrorProjectionEdges(t *testing.T) {
 	_, _ = devAppUpstreamCode(map[string]any{"data": []any{"skip", map[string]any{"code": "DEEP"}}}, nil, apperrors.ServerDiagnostics{})
 }
 
-func TestDevAppSharedResultMapperClassifiesServiceOutcomes(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSharedResultMapperClassifiesServiceOutcomes(t *testing.T) {
 	t.Run("normalized success", func(t *testing.T) {
 		result := DevAppCommandResultFromPayload("", map[string]any{
 			"content": map[string]any{"success": true, "result": map[string]any{"id": "a"}},
@@ -145,6 +145,20 @@ func TestDevAppSharedResultMapperClassifiesServiceOutcomes(t *testing.T) {
 				env, err := output.EnvelopeFromResult(result)
 				if err != nil {
 					t.Fatal(err)
+				}
+				canQuote := true
+				for _, key := range []string{"taskId", "unifiedAppId", "versionId"} {
+					if value, present := tc.payload[key]; present {
+						if _, ok := devAppQuoteScopeValue(value.(string)); !ok {
+							canQuote = false
+						}
+					}
+				}
+				if !canQuote {
+					if env.Outcome != output.OutcomeFailure || env.Error == nil || env.Error.Type != "internal" || !strings.Contains(env.Error.Message, "missing a recovery command") {
+						t.Fatalf("unsafe recovery identifiers must fail closed: %+v", env)
+					}
+					return
 				}
 				if env.Meta == nil || env.Meta.Operation == nil || env.Outcome != output.OutcomePending {
 					t.Fatalf("pending envelope=%+v", env)
@@ -518,7 +532,7 @@ func TestDevAppRecoveryCommandsDoNotBypassConfirmation(t *testing.T) {
 	}
 }
 
-func TestFrameworkDevAppMapperBoundaryMatrix(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkDevAppMapperBoundaryMatrix(t *testing.T) {
 	if got := devAppDataWithoutPagination("scalar"); got != "scalar" {
 		t.Fatalf("non-object data = %#v, want scalar preserved", got)
 	}
@@ -635,7 +649,7 @@ func TestFrameworkDevAppMapperBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestDevAppErrorInfoProjectsStructuredErrorDetail(t *testing.T) {
+func TestCrossPlatformCoverageDevAppErrorInfoProjectsStructuredErrorDetail(t *testing.T) {
 	result := DevAppCommandResultFromPayload("set_dev_app_scope", map[string]any{
 		"success":   false,
 		"errorCode": "BUSINESS_ERROR",
@@ -676,7 +690,7 @@ func TestDevAppErrorInfoProjectsStructuredErrorDetail(t *testing.T) {
 	}
 }
 
-func TestDevAppErrorInfoPreservesUnknownWriteState(t *testing.T) {
+func TestCrossPlatformCoverageDevAppErrorInfoPreservesUnknownWriteState(t *testing.T) {
 	result := DevAppCommandResultFromPayload("set_dev_app_scope", map[string]any{
 		"success": false,
 		"result": map[string]any{
@@ -855,7 +869,7 @@ func TestCrossPlatformCoverageDevAppResourceStateStaysCallSuccess(t *testing.T) 
 	}
 }
 
-func TestDevAppErrorInfoKeepsLegacyErrorFields(t *testing.T) {
+func TestCrossPlatformCoverageDevAppErrorInfoKeepsLegacyErrorFields(t *testing.T) {
 	result := DevAppCommandResultFromPayload("get_dev_app", map[string]any{
 		"success":   false,
 		"errorCode": 40001,

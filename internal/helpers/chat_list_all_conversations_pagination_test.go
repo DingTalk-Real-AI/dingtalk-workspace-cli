@@ -114,7 +114,7 @@ func TestChatListAllConversationsPageAllAggregatesSupportedResponses(t *testing.
 	testChatListAllConversationsPageAllAggregatesSupportedResponses(t)
 }
 
-func TestChatListAllConversationsPreservesInt64Cursor(t *testing.T) {
+func TestCrossPlatformCoverageChatListAllConversationsPreservesInt64Cursor(t *testing.T) {
 	for _, response := range []string{
 		`{"result":{"conversationList":[],"hasMore":true,"nextCursor":9007199254740993}}`,
 		`{"result":[[],9007199254740993,true]}`,
@@ -142,7 +142,7 @@ func TestChatListAllConversationsPreservesInt64Cursor(t *testing.T) {
 	}
 }
 
-func TestChatListAllConversationsDefaultKeepsSinglePageResponse(t *testing.T) {
+func TestCrossPlatformCoverageChatListAllConversationsDefaultKeepsSinglePageResponse(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{{
 		text: `{"result":{"conversations":[{"openConversationId":"cid-1"}],"hasMore":true,"nextCursor":2}}`,
 	}}}
@@ -173,7 +173,7 @@ func TestChatListAllConversationsDefaultKeepsSinglePageResponse(t *testing.T) {
 	}
 }
 
-func TestChatListAllConversationsRejectsUnsupportedPagedResponses(t *testing.T) {
+func TestCrossPlatformCoverageChatListAllConversationsRejectsUnsupportedPagedResponses(t *testing.T) {
 	tests := []struct {
 		name      string
 		response  string

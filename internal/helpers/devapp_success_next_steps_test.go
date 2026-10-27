@@ -73,7 +73,7 @@ func TestCrossPlatformCoverageDevAppWindowsNextStepValuesNeverInline(t *testing.
 	}
 }
 
-func TestDevAppNextStepsOmitUnsafeWindowsCommands(t *testing.T) {
+func TestCrossPlatformCoverageDevAppNextStepsOmitUnsafeWindowsCommands(t *testing.T) {
 	testseam.Swap(t, &devAppQuoteScopeValue, driveLatestWindowsScopeValue)
 
 	readBack := devAppSuccessNextSteps(devAppUpdateTool, map[string]any{"unifiedAppId": "app&whoami"}, map[string]any{})
@@ -219,7 +219,7 @@ func TestDevAppSuccessNextStepsScopeApplyQuotesAllDynamicValues(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsScopePrecheckPreservesHiddenFlag(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsScopePrecheckPreservesHiddenFlag(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		params map[string]any
@@ -244,7 +244,7 @@ func TestDevAppSuccessNextStepsScopePrecheckPreservesHiddenFlag(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsScopeMissingParams(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsScopeMissingParams(t *testing.T) {
 	steps := devAppSuccessNextSteps(devAppScopeSetTool, map[string]any{
 		"unifiedAppId": "app-1",
 		"precheckOnly": true,
@@ -261,7 +261,7 @@ func TestDevAppSuccessNextStepsScopeMissingParams(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsVersionStatus(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsVersionStatus(t *testing.T) {
 	steps := devAppSuccessNextSteps(devAppVersionCreateTool, nil, map[string]any{
 		"unifiedAppId": "app-1",
 		"versionId":    "version-1",
@@ -274,7 +274,7 @@ func TestDevAppSuccessNextStepsVersionStatus(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsVersionPublish(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsVersionPublish(t *testing.T) {
 	steps := devAppSuccessNextSteps(devAppRobotConfigUpsertTool, map[string]any{"unifiedAppId": "app-1"}, map[string]any{
 		"needsPublish": true,
 		"published":    false,
@@ -288,7 +288,7 @@ func TestDevAppSuccessNextStepsVersionPublish(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsDoesNotDuplicateApprovalPublish(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsDoesNotDuplicateApprovalPublish(t *testing.T) {
 	steps := devAppSuccessNextSteps(devAppVersionPublishTool, map[string]any{"precheckOnly": true}, map[string]any{
 		"requiresApproval": true,
 		"approvalMode":     "SELECT_APPROVER",
@@ -305,13 +305,13 @@ func TestDevAppSuccessNextStepsDoesNotDuplicateApprovalPublish(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsIgnoresNonSuccessStates(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsIgnoresNonSuccessStates(t *testing.T) {
 	if got := devAppSuccessNextSteps(devAppScopeSetTool, map[string]any{"precheckOnly": false}, map[string]any{"outcome": "pending"}); len(got) != 0 {
 		t.Fatalf("pending steps = %#v", got)
 	}
 }
 
-func TestAppendDevAppSuccessNextStepsDeduplicates(t *testing.T) {
+func TestCrossPlatformCoverageAppendDevAppSuccessNextStepsDeduplicates(t *testing.T) {
 	content := map[string]any{"nextSteps": []any{map[string]any{"id": "apply_scope"}}}
 	appendDevAppSuccessNextSteps(content, map[string]any{"id": "apply_scope", "command": "dws duplicate"})
 	if got := len(normalizeDevAppNextSteps(content["nextSteps"])); got != 1 {
@@ -319,7 +319,7 @@ func TestAppendDevAppSuccessNextStepsDeduplicates(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsRemainingWrites(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsRemainingWrites(t *testing.T) {
 	for tool, id := range map[string]string{
 		devAppCreateTool: "check_app", devAppUpdateTool: "check_app", devAppEnableTool: "check_app", devAppDisableTool: "check_app", devAppDeleteTool: "check_app_list",
 		devAppScopeSetTool: "check_scope", devAppWebappSetTool: "check_webapp",
@@ -346,7 +346,7 @@ func TestDevAppSuccessNextStepsRemainingWrites(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsReadTerminals(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsReadTerminals(t *testing.T) {
 	for _, tool := range []string{devAppListTool, devAppGetTool, devAppCredentialsGetTool, devAppScopeGetTool, devAppWebappGetTool, devAppPermissionListTool, devAppMemberListTool, devAppEventListTool, devAppRobotConfigGetTool, devAppRobotResultTool, devAppVersionListTool, devAppVersionDetailTool, devAppVersionStatusTool} {
 		if steps := devAppSuccessNextSteps(tool, map[string]any{"unifiedAppId": "a"}, map[string]any{"versionId": "v"}); len(steps) != 0 {
 			t.Fatalf("%s: %#v", tool, steps)
@@ -354,7 +354,7 @@ func TestDevAppSuccessNextStepsReadTerminals(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsResultPaths(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsResultPaths(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		result := devAppCommandResult(executor.Result{Invocation: executor.Invocation{Implemented: true, Kind: "helper_invocation", Tool: devAppUpdateTool, Params: map[string]any{"unifiedAppId": "a"}, DryRun: dryRun}, Response: map[string]any{"content": map[string]any{"hasMore": false, "items": []any{}}}})
 		env, err := output.EnvelopeFromResult(result)
@@ -372,7 +372,7 @@ func TestDevAppSuccessNextStepsResultPaths(t *testing.T) {
 	}
 }
 
-func TestDevAppSuccessNextStepsApprovalAndPublishGuards(t *testing.T) {
+func TestCrossPlatformCoverageDevAppSuccessNextStepsApprovalAndPublishGuards(t *testing.T) {
 	for _, options := range []any{[]any{map[string]any{"key": "A"}}, []map[string]any{{"key": "A"}}, nil} {
 		steps := devAppSuccessNextSteps(devAppVersionPublishTool, map[string]any{"precheckOnly": true}, map[string]any{"approvalMode": "SELECT_APPROVER", "approvalOptions": options, "unifiedAppId": "a", "versionId": "v"})
 		if len(steps) != 1 || steps[0]["command"] != nil {
@@ -417,7 +417,11 @@ func TestDevAppSuccessNextStepsApprovalAndPublishGuards(t *testing.T) {
 		t.Fatalf("missing ID: %#v", got)
 	}
 	steps = devAppReadBackStep(map[string]any{"unifiedAppId": "a; echo bad"}, nil, "get", "check_app", "check")
-	if !strings.Contains(steps[0]["command"].(string), ShellQuoteArg("a; echo bad")) {
-		t.Fatal("unquoted ID")
+	if quoted, ok := devAppQuoteScopeValue("a; echo bad"); ok {
+		if !strings.Contains(devAppContentString(steps[0], "command"), quoted) {
+			t.Fatal("unquoted ID")
+		}
+	} else if steps[0]["command"] != nil || !reflect.DeepEqual(steps[0]["missingParams"], []string{"unifiedAppId"}) {
+		t.Fatalf("unsafe ID must require input instead of producing a command: %#v", steps[0])
 	}
 }
