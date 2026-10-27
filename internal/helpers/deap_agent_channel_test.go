@@ -280,7 +280,7 @@ func TestCrossPlatformCoverageDingTalkTagConnectRejectsInvalidPrerequisitesBefor
 	}{
 		{
 			name:      "non local agent",
-			responses: []string{`{"success":true,"data":{"type":"open_code"}}`},
+			responses: []string{`{"success":true,"data":{"type":"qwenwork"}}`},
 			want:      "不是 local_agent",
 		},
 		{

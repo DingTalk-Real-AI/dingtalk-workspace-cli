@@ -23,6 +23,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -32,8 +33,8 @@ const (
 	// 工具名 = 服务端 op-app 网关**实际注册**的名字（已用 tools 真实联调逐个核对）。
 	// 注意：服务端这批命名本身并不统一——前缀 dev_app 与 extension 混用、list 用复数、
 	// permission 用 apply 而 member 用 add、robot 建号流程保留旧名（submit_robot_create_task/
-	// query_robot_create_result）。CLI 这里**对齐服务端现状以跑通联调**，不在 CLI 做映射；
-	// 命名统一是服务端待办，详见 obsidian《dev 命令树 - 服务端 MCP 待改造清单》。
+	// query_robot_create_result）。CLI 保留稳定的本地契约名；若远端已发布的工具名不同，
+	// 仅在派发层做显式映射，避免影响 CLI Schema 和 Agent 路由。
 	// 集中声明、调用点不写字面量，避免拼写漂移。
 	//
 	// 应用主体 + 子资源（凭证/网页/权限）。
@@ -45,6 +46,10 @@ const (
 	devAppEnableTool         = "enable_dev_app"
 	devAppDisableTool        = "disable_dev_app"
 	devAppCredentialsGetTool = "get_dev_app_credentials"
+	devAppScopeGetTool       = "get_dev_app_scope"
+	devAppScopeSetTool       = "set_dev_app_visible_scope"
+	devAppScopeSetRemoteTool = "update_dev_app_visible_scope"
+	devAppScopeGetRemoteTool = "get_dev_app_visible_scope"
 	devAppWebappGetTool      = "get_extension_webapp_config"
 	devAppWebappSetTool      = "set_extension_webapp_config"
 	devAppPermissionListTool = "list_dev_app_permissions"
@@ -109,10 +114,68 @@ func devAppCursorPagination() *contract.PaginationSpec {
 	}
 }
 
+func devAppVersionPublishResult() *contract.ResultSpec {
+	nextSteps := map[string]any{
+		"type":        "array",
+		"description": "需要用户继续执行的审批或发布步骤",
+		"items": map[string]any{
+			"type":                 "object",
+			"required":             []string{"id"},
+			"additionalProperties": true,
+			"properties": map[string]any{
+				"id":                map[string]any{"type": "string", "description": "步骤标识"},
+				"command":           map[string]any{"type": "string", "description": "可执行命令"},
+				"dryRunCommand":     map[string]any{"type": "string", "description": "对应的预演命令"},
+				"doneWhen":          map[string]any{"type": "string", "description": "步骤完成条件"},
+				"requiresUserInput": map[string]any{"type": "boolean", "description": "是否需要用户输入"},
+				"blocking":          map[string]any{"type": "boolean", "description": "是否为阻塞步骤"},
+				"missingParams": map[string]any{
+					"type":        "array",
+					"description": "生成可执行命令所缺少的参数",
+					"items":       map[string]any{"type": "string"},
+				},
+			},
+		},
+	}
+	schema, _ := json.Marshal(map[string]any{
+		"type":                 "object",
+		"description":          "应用版本审批或发布回执",
+		"additionalProperties": true,
+		"properties": map[string]any{
+			"unifiedAppId":       map[string]any{"type": "string", "description": "统一应用 ID"},
+			"versionId":          map[string]any{"type": "string", "description": "版本 ID"},
+			"requiresApproval":   map[string]any{"type": "boolean", "description": "是否需要审批"},
+			"publishable":        map[string]any{"type": "boolean", "description": "是否允许发布"},
+			"approvalMode":       map[string]any{"type": "string", "description": "审批模式"},
+			"approvalCandidates": map[string]any{"type": "array", "description": "候选审批人", "items": map[string]any{"type": "object", "additionalProperties": true}},
+			"approvalOptions":    map[string]any{"type": "array", "description": "可供用户选择的审批人选项", "items": map[string]any{"type": "object", "additionalProperties": true}},
+			"approvalPromptText": map[string]any{"type": "string", "description": "展示给用户的审批人选择提示"},
+			"completionState":    map[string]any{"type": "string", "description": "当前完成状态"},
+			"actionRequired":     map[string]any{"type": "string", "description": "要求执行的动作"},
+			"mustAskUser":        map[string]any{"type": "boolean", "description": "是否必须询问用户"},
+			"requiresUserInput":  map[string]any{"type": "boolean", "description": "是否需要用户输入"},
+			"terminal":           map[string]any{"type": "boolean", "description": "是否已到终态"},
+			"published":          map[string]any{"type": "boolean", "description": "是否已发布"},
+			"approvalSubmitted":  map[string]any{"type": "boolean", "description": "是否已提交审批"},
+			"versionStatus":      map[string]any{"type": "string", "description": "版本状态"},
+			"processStatus":      map[string]any{"type": "string", "description": "发布流程状态"},
+			"nextSteps":          nextSteps,
+		},
+	})
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePending, contract.ResultOutcomeFailure},
+		DataSchema: schema,
+	}
+}
+
 // newDevAppCommand builds the `app` subtree of `dws dev`. The cobra path is
 // `dws dev app ...` while the MCP product id stays "devapp" — the id is a
 // backend contract (SupplementServers/StaticServers injection key and the
 // pinned op-app endpoint), decoupled from the user-facing command name.
+func devAppGroupHelp(cmd *cobra.Command, _ []string) error {
+	return cmd.Help()
+}
+
 func newDevAppCommand(runner executor.Runner) *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/devapp.json
 	// products.devapp). Catalog assembly stamps provenance contract_final.
@@ -186,12 +249,26 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
+		RunE:              devAppGroupHelp,
 	}
 	newGroupCommand(credentials)
-	credentials.AddCommand(newDevAppCredentialsGetCommand(runner))
+	credentials.AddCommand(
+		newDevAppCredentialsGetCommand(runner),
+	)
+
+	scope := &cobra.Command{
+		Use:               "scope",
+		Short:             "开放平台应用可见范围",
+		Args:              cobra.NoArgs,
+		TraverseChildren:  true,
+		DisableAutoGenTag: true,
+		RunE:              devAppGroupHelp,
+	}
+	newGroupCommand(scope)
+	scope.AddCommand(
+		newDevAppScopeGetCommand(runner),
+		newDevAppScopeSetCommand(runner),
+	)
 
 	member := &cobra.Command{
 		Use:               "member",
@@ -289,6 +366,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 		newDevAppDisableCommand(runner),
 		newDevAppEnableCommand(runner),
 		credentials,
+		scope,
 		webapp,
 		permission,
 		member,
@@ -627,6 +705,86 @@ func newDevAppCredentialsGetCommand(runner executor.Runner) *cobra.Command {
 		},
 		Call:      devAppCall(runner),
 		PostMount: devAppMeta(devAppCredentialsGetTool),
+	})
+}
+
+func newDevAppScopeGetCommand(runner executor.Runner) *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use:           "get",
+		Short:         "查询应用可见范围",
+		Example:       "  dws dev app scope get --unified-app-id UNIFIED_APP_ID --format json",
+		Tool:          devAppScopeGetTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        devAppSafetyRead(),
+		Flags:         []LeafFlag{{Name: "unified-app-id", Usage: "开放平台统一应用 ID（必填）", Bind: "unifiedAppId", Trim: true, Required: true, RequiredHint: "--unified-app-id 为必填"}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: devAppScopeGetTool, CanonicalPath: "dev." + devAppScopeGetTool, CLIPath: "dev app scope get", PrimaryCLIPath: "dev app scope get"},
+			Description: "查询企业内部应用可见范围，不包含 API DataScope",
+			DryRun:      devAppDryRun,
+			Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","description":"应用可见范围查询回执","properties":{"unifiedAppId":{"type":"string","description":"统一应用 ID"},"allVisible":{"type":"boolean","description":"是否全员可见"},"hidden":{"type":"boolean","description":"是否隐藏应用"},"departmentIds":{"type":"array","description":"可见部门 ID"},"userIds":{"type":"array","description":"可见用户 ID"},"roleIds":{"type":"array","description":"可见角色 ID"},"dynamicGroupCodes":{"type":"array","description":"可见动态组编码"}},"additionalProperties":true}`)},
+			Interface:   devAppCompositeInterface(),
+			Selection:   contract.SelectionSpec{AgentSummary: "查询企业内部应用可见范围", UseWhen: []string{"需要确认应用对部门、用户、角色或动态组的可见范围时"}, AvoidWhen: []string{"不要把结果当作 API DataScope 权限范围"}, Examples: []string{"dws dev app scope get --unified-app-id <unifiedAppId> --format json"}},
+		},
+		Call:      devAppCall(runner),
+		PostMount: devAppMeta(devAppScopeGetTool),
+	})
+}
+
+func newDevAppScopeSetCommand(runner executor.Runner) *cobra.Command {
+	return NewLeafCommand(LeafSpec{
+		Use:   "set",
+		Short: "设置应用可见范围",
+		Example: "  # 服务端预检（真实调用，只生成计划不写入）；确认后正式执行改 --precheck-only=false\n" +
+			"  # --yes 由调用方在取得用户明确确认后添加\n" +
+			"  dws dev app scope set --unified-app-id UNIFIED_APP_ID --user-visible-scopes 1001,1002 --precheck-only --format json",
+		Tool:          devAppScopeSetTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        devAppSafetyHighWrite(),
+		ConfirmFirst:  true,
+		Flags: []LeafFlag{
+			{Name: "unified-app-id", Usage: "开放平台统一应用 ID（必填）", Bind: "unifiedAppId", Trim: true, Required: true, RequiredHint: "--unified-app-id 为必填"},
+			{Name: "dept-visible-scopes", Usage: "可见部门 ID，CSV 或 JSON 数组", Bind: "deptVisibleScopes", Trim: true, OmitEmpty: true, Transform: transformDevAppListParam},
+			{Name: "user-visible-scopes", Usage: "可见用户 ID，CSV 或 JSON 数组；scope set 为全量替换语义，未传入的既有范围会被移除", Bind: "userVisibleScopes", Trim: true, OmitEmpty: true, Transform: transformDevAppListParam},
+			{Name: "role-visible-scopes", Usage: "可见角色 ID，CSV 或 JSON 数组", Bind: "roleVisibleScopes", Trim: true, OmitEmpty: true, Transform: transformDevAppListParam},
+			{Name: "dynamic-group-scopes", Usage: "可见动态组编码，CSV 或 JSON 数组", Bind: "dynamicGroupScopes", Trim: true, OmitEmpty: true, Transform: transformDevAppListParam},
+			{Name: "is-hidden", Usage: "是否隐藏应用", Bind: "isHidden", Kind: LeafBool},
+			{Name: "precheck-only", Usage: "只生成计划，不创建版本或发布", Bind: "precheckOnly", Kind: LeafBool},
+			{Name: "publish", Usage: "创建版本后是否立即发布；显式传 false 可仅创建版本", Bind: "publish", Kind: LeafBool},
+		},
+		Constraints: []LeafConstraint{{
+			Kind:        "custom",
+			Flags:       []string{"dept-visible-scopes", "user-visible-scopes", "role-visible-scopes", "dynamic-group-scopes", "is-hidden"},
+			Description: "至少提供一个可见范围参数或显式传入 --is-hidden",
+		}},
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			for _, name := range []string{"dept-visible-scopes", "user-visible-scopes", "role-visible-scopes", "dynamic-group-scopes"} {
+				if !cmd.Flags().Changed(name) {
+					continue
+				}
+				value, _ := cmd.Flags().GetString(name)
+				transformed, err := transformDevAppListParam(value)
+				if err != nil {
+					return apperrors.NewValidation(err.Error())
+				}
+				if values, ok := transformed.([]string); ok && len(values) > 0 {
+					return nil
+				}
+			}
+			if cmd.Flags().Changed("is-hidden") {
+				return nil
+			}
+			return apperrors.NewValidation("至少提供一个可见范围参数或显式传入 --is-hidden")
+		},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: devAppScopeSetTool, CanonicalPath: "dev." + devAppScopeSetTool, CLIPath: "dev app scope set", PrimaryCLIPath: "dev app scope set"},
+			Description: "通过版本快照和发布链路设置企业内部应用可见范围",
+			DryRun:      devAppDryRun,
+			Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePending, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","description":"应用可见范围设置回执","properties":{"contractVersion":{"type":"string","description":"业务回执版本"},"operation":{"type":"string","description":"操作名称"},"unifiedAppId":{"type":"string","description":"统一应用 ID"},"versionId":{"type":"string","description":"创建的版本 ID"},"versionStatus":{"type":"string","description":"版本当前状态"},"precheckOnly":{"type":"boolean","description":"是否仅生成计划"},"published":{"type":"boolean","description":"是否已提交发布"},"needsPublish":{"type":"boolean","description":"是否仍需发布"},"executionStarted":{"type":"boolean","description":"远端执行是否已开始"},"retryable":{"type":"boolean","description":"是否允许安全重试"},"outcome":{"type":"string","description":"操作结果状态"},"nextCommand":{"type":"string","description":"下一步查询或恢复命令"},"scope":{"type":"object","description":"规范化后的应用可见范围"},"nextSteps":{"type":"array","description":"需要用户继续执行的后续步骤；预检结果为 planned 时包含 apply_scope","items":{"type":"object","properties":{"id":{"type":"string","description":"步骤标识"},"title":{"type":"string","description":"步骤标题"},"command":{"type":"string","description":"可执行命令；缺少用户输入时省略"},"dryRunCommand":{"type":"string","description":"对应的预演命令"},"doneWhen":{"type":"string","description":"步骤完成条件"},"requiresUserInput":{"type":"boolean","description":"是否需要用户输入"},"blocking":{"type":"boolean","description":"是否为阻塞步骤"},"missingParams":{"type":"array","description":"生成可执行命令所缺少的参数","items":{"type":"string"}}},"required":["id"],"additionalProperties":true}}},"additionalProperties":true}`)},
+			Interface:   devAppCompositeInterface(),
+			Selection:   contract.SelectionSpec{AgentSummary: "生成并发布应用可见范围版本", UseWhen: []string{"需要变更企业内部应用可见范围时，先 --precheck-only 服务端预检（--dry-run 仅为本地调用预览），核对计划后正式执行"}, AvoidWhen: []string{"不要把应用可见范围与 API DataScope 混用；unknown 状态必须先查询版本状态"}, Examples: []string{"dws dev app scope set --unified-app-id <unifiedAppId> --user-visible-scopes 1001,1002 --precheck-only --format json", "dws dev app scope set --unified-app-id <unifiedAppId> --user-visible-scopes 1001,1002 --precheck-only=false --format json"}},
+		},
+		Call:      devAppCall(runner),
+		PostMount: devAppMeta(devAppScopeSetTool),
 	})
 }
 
@@ -1643,11 +1801,12 @@ func newDevAppVersionGetCommand(runner executor.Runner) *cobra.Command {
 
 func newDevAppVersionCheckApprovalCommand(runner executor.Runner) *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use:     "check-approval",
-		Short:   "预检版本发布是否需要审批（不实际发布）",
-		Example: "  dws dev app version check-approval --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --format json",
-		Tool:    devAppVersionPublishTool,
-		Safety:  devAppSafetyRead(),
+		Use:           "check-approval",
+		Short:         "预检版本发布是否需要审批（不实际发布）",
+		Example:       "  dws dev app version check-approval --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --format json",
+		Tool:          devAppVersionPublishTool,
+		Safety:        devAppSafetyRead(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Flags: []LeafFlag{
 			{Name: "unified-app-id", Usage: "开放平台统一应用 ID（必填）", Bind: "unifiedAppId", Trim: true, Required: true, RequiredHint: "--unified-app-id 为必填"},
 			{Name: "version-id", Usage: "版本 ID (必填)", Bind: "versionId", Trim: true, Required: true, RequiredHint: "--version-id 为必填"},
@@ -1659,6 +1818,7 @@ func newDevAppVersionCheckApprovalCommand(runner executor.Runner) *cobra.Command
 				CLIPath: "dev app version check-approval", PrimaryCLIPath: "dev app version check-approval",
 			},
 			Description: "预检版本发布是否需要审批，不执行发布",
+			Result:      devAppVersionPublishResult(),
 			DryRun:      devAppDryRun,
 			Interface:   devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
@@ -1675,11 +1835,12 @@ func newDevAppVersionCheckApprovalCommand(runner executor.Runner) *cobra.Command
 
 func newDevAppVersionPublishCommand(runner executor.Runner) *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use:     "publish",
-		Short:   "发布指定版本（含高敏权限需 --confirmed-sensitive）",
-		Example: "  dws dev app version publish --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --dry-run --format json",
-		Tool:    devAppVersionPublishTool,
-		Safety:  devAppSafetyHighWrite(),
+		Use:           "publish",
+		Short:         "发布指定版本（含高敏权限需 --confirmed-sensitive）",
+		Example:       "  dws dev app version publish --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --dry-run --format json",
+		Tool:          devAppVersionPublishTool,
+		Safety:        devAppSafetyHighWrite(),
+		OutputRollout: output.RolloutUnifiedActive,
 		// devapp 旧版写守卫为 guard-first：确认门先于参数校验。
 		ConfirmFirst: true,
 		Flags: []LeafFlag{
@@ -1698,6 +1859,7 @@ func newDevAppVersionPublishCommand(runner executor.Runner) *cobra.Command {
 				PrimaryCLIPath: "dev app version publish",
 			},
 			Description: "发布指定版本（含高敏权限需 --confirmed-sensitive）",
+			Result:      devAppVersionPublishResult(),
 			DryRun:      devAppDryRun,
 			Interface:   devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
@@ -1843,11 +2005,21 @@ func devAppCompositeInterface() *contract.InterfaceSpec {
 	return &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: devAppCompositeInterfaceReason}
 }
 
+func devAppRemoteTool(tool string) string {
+	if tool == devAppScopeSetTool {
+		return devAppScopeSetRemoteTool
+	}
+	if tool == devAppScopeGetTool {
+		return devAppScopeGetRemoteTool
+	}
+	return tool
+}
+
 func runDevAppTool(runner executor.Runner, cmd *cobra.Command, tool string, params map[string]any) error {
 	invocation := executor.NewHelperInvocation(
 		cobracmd.LegacyCommandPath(cmd),
 		devAppProduct,
-		tool,
+		devAppRemoteTool(tool),
 		params,
 	)
 	invocation.DryRun = commandDryRun(cmd)
@@ -1878,12 +2050,12 @@ func devAppCommandResult(result executor.Result) output.CommandResult {
 			return failure
 		}
 		// check-approval reports what a later publish would require; it does not
-		// itself accept an asynchronous operation.
+		// itself accept an inferred asynchronous operation. An explicit pending
+		// outcome is authoritative even for precheck responses.
 		precheckOnly, _ := result.Invocation.Params["precheckOnly"].(bool)
-		if !precheckOnly {
-			if pending := devAppPendingResult(content); pending != nil {
-				return pending
-			}
+		if pending := devAppPendingResult(content); pending != nil &&
+			(!precheckOnly || strings.EqualFold(devAppFirstContentString(content, "outcome"), "pending")) {
+			return pending
 		}
 	}
 	successOptions := make([]output.ResultOption, 0, 2)
@@ -1897,7 +2069,7 @@ func devAppCommandResult(result executor.Result) output.CommandResult {
 		})
 	} else if meta != nil {
 		successOptions = append(successOptions, output.WithMeta(meta))
-		return output.Success(devAppDataWithoutPagination(data), successOptions...)
+		data = devAppDataWithoutPagination(data)
 	} else if devAppToolRequiresPagination(result.Invocation.Tool) && !result.Invocation.DryRun {
 		// A dry-run payload is a completed local invocation preview, not a
 		// server list response. Only real responses must prove pagination.
@@ -1907,6 +2079,11 @@ func devAppCommandResult(result executor.Result) output.CommandResult {
 			Message: "declared paginated response is missing hasMore and nextCursor",
 			Hint:    "保留原始响应并停止翻页；不要把当前页当作完整结果。",
 		})
+	}
+	if content, ok := data.(map[string]any); ok && !result.Invocation.DryRun {
+		appendDevAppSuccessNextSteps(content,
+			devAppSuccessNextSteps(result.Invocation.Tool, result.Invocation.Params, content)...,
+		)
 	}
 	return output.Success(data, successOptions...)
 }
@@ -2105,8 +2282,8 @@ func devAppMultiProfileResult(content map[string]any) output.CommandResult {
 		errorInfo := &output.ErrorInfo{Type: "api", Message: "profile execution failed"}
 		if errorMap, ok := entry["error"].(map[string]any); ok {
 			errorInfo = devAppErrorInfo(errorMap, "profile execution failed")
-			if category := devAppFirstContentString(errorMap, "type", "category"); category != "" {
-				errorInfo.Type = devAppWireErrorType(category)
+			if errorType := devAppFirstContentString(errorMap, "errorType", "error_type", "category", "type"); errorType != "" {
+				errorInfo.Type = devAppWireErrorType(errorType)
 			}
 			errorInfo.Subtype = devAppFirstContentString(errorMap, "subtype", "reason")
 			errorInfo.Stage = devAppFirstContentString(errorMap, "stage")
@@ -2147,8 +2324,24 @@ func devAppMultiProfileResult(content map[string]any) output.CommandResult {
 		for _, entry := range unknown {
 			details = append(details, map[string]any{"id": entry.ID, "unknown_reason": entry.Reason})
 		}
+		aggregateType := "api"
+		// With unknown outcomes present, a shared failed category (e.g. auth)
+		// would invite re-authorization and a replay of writes whose remote
+		// state is unconfirmed; the aggregate must stay api in that case.
+		if len(unknown) == 0 && len(failed) > 0 && failed[0].Error != nil && failed[0].Error.Type != "" {
+			shared := failed[0].Error.Type
+			for _, entry := range failed[1:] {
+				if entry.Error == nil || entry.Error.Type != shared {
+					shared = ""
+					break
+				}
+			}
+			if shared != "" {
+				aggregateType = shared
+			}
+		}
 		return output.Failure(&output.ErrorInfo{
-			Type:    "api",
+			Type:    aggregateType,
 			Message: "no selected profile has a confirmed success",
 			Details: map[string]any{"profiles": details},
 		})
@@ -2160,8 +2353,52 @@ func devAppMultiProfileResult(content map[string]any) output.CommandResult {
 	return output.Partial(partial)
 }
 
+// devAppCallStateString reads call-outcome state keys only from authoritative
+// envelope positions: the top level, the explicit error-detail container, and
+// the ServiceResult `result` wrapper's direct fields. Business payloads under
+// `data` (or deeper) describe queried resources — a status:FAILED there is the
+// resource's state, not this call's outcome — and must stay unread here.
+func devAppCallStateString(content map[string]any, keys ...string) string {
+	if content == nil {
+		return ""
+	}
+	for _, source := range []map[string]any{content, devAppErrorDetailMap(content)} {
+		if source == nil {
+			continue
+		}
+		if value := devAppFirstContentString(source, keys...); value != "" {
+			return value
+		}
+	}
+	if result, ok := content["result"].(map[string]any); ok {
+		if value := devAppFirstContentString(result, keys...); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func devAppFailureResult(content map[string]any) output.CommandResult {
-	status := strings.ToUpper(devAppFirstContentString(content, "status", "taskStatus", "versionStatus", "processStatus"))
+	status := strings.ToUpper(devAppCallStateString(content, "status", "taskStatus", "versionStatus", "processStatus"))
+	outcome := strings.ToLower(strings.TrimSpace(devAppCallStateString(content, "outcome")))
+	if outcome == "failure" {
+		return output.Failure(devAppErrorInfo(content, "dev operation failed"))
+	}
+	if outcome == "unknown" {
+		info := devAppErrorInfo(content, "dev operation outcome is unknown")
+		if info.Subtype == "" {
+			info.Subtype = "remote_outcome_unknown"
+		}
+		if info.ExecutionStarted == nil {
+			started := true
+			info.ExecutionStarted = &started
+		}
+		info.Retryable = false
+		if len(info.Actions) == 0 {
+			info.Actions = []string{"先查询当前操作状态，确认远端是否已生效；不要直接重试写操作"}
+		}
+		return output.Failure(info)
+	}
 	if rawSuccess, present := content["success"]; present {
 		success, isBool := rawSuccess.(bool)
 		if !isBool {
@@ -2184,25 +2421,267 @@ func devAppFailureResult(content map[string]any) output.CommandResult {
 }
 
 func devAppErrorInfo(content map[string]any, fallback string) *output.ErrorInfo {
-	message := devAppFirstContentString(content, "errorMsg", "errorMessage", "message")
+	diag := transport.ExtractServerDiagnosticsFromMap(content)
+	detail := devAppErrorDetailMap(content)
+
+	message := ""
+	if detail != nil {
+		message = devAppFirstContentString(detail, "message", "errorMsg", "errorMessage")
+	}
+	if message == "" {
+		message = devAppStringRecursive(content, 0, "errorMsg", "errorMessage", "message")
+	}
 	if message == "" {
 		message = fallback
 	}
-	info := &output.ErrorInfo{Type: "api", Message: message}
-	if code, ok := content["errorCode"]; ok {
+
+	category := diag.ErrorType
+	if detail != nil {
+		if detailType := devAppFirstContentString(detail, "errorType", "error_type", "type"); detailType != "" {
+			category = detailType
+		}
+	}
+	info := &output.ErrorInfo{
+		Type:      devAppWireErrorType(category),
+		Subtype:   diag.Reason,
+		Message:   message,
+		Hint:      diag.FriendlyHint,
+		Operation: diag.Operation,
+		Origin:    diag.Origin,
+		Stage:     diag.FailureStage,
+		TraceID:   diag.TraceID,
+	}
+	if info.Subtype == "" && detail != nil {
+		info.Subtype = devAppFirstContentString(detail, "subtype", "reason")
+	}
+	if transport.IsFrameworkReservedReason(info.Subtype) {
+		info.Subtype = ""
+	}
+
+	if code, ok := devAppUpstreamCode(content, detail, diag); ok {
 		info.UpstreamCode = code
-	} else if code, ok := content["code"]; ok {
-		info.UpstreamCode = code
+	}
+	if diag.ServerRetryable != nil {
+		info.Retryable = *diag.ServerRetryable
+	}
+	if diag.ExecutionStarted != nil {
+		info.ExecutionStarted = diag.ExecutionStarted
+	}
+	info.Actions = append([]string(nil), diag.Actions...)
+	nextCommand := diag.NextCommand
+	if nextCommand == "" {
+		nextCommand = devAppFirstNextCommand(content)
+	}
+	if nextCommand == "" {
+		nextCommand = devAppStringRecursive(content, 0, "nextCommand", "next_command", "nextStep")
+	}
+	if nextCommand == "" {
+		nextCommand = devAppRecoveryCommand(content)
+	}
+	if nextCommand != "" && !containsDevAppAction(info.Actions, nextCommand) {
+		info.Actions = append(info.Actions, nextCommand)
+	}
+
+	if details := devAppErrorDetails(content, detail, diag); len(details) > 0 {
+		info.Details = details
+	}
+	if raw, ok := devAppFirstContentValue(content, "rpc_data", "rpcData"); ok {
+		info.RPCData = raw
 	}
 	return info
 }
 
+func devAppErrorDetailMap(content map[string]any) map[string]any {
+	return devAppErrorDetailMapAtDepth(content, 0)
+}
+
+func devAppErrorDetailMapAtDepth(content map[string]any, depth int) map[string]any {
+	if content == nil || depth > 8 {
+		return nil
+	}
+	for _, key := range []string{"errorDetail", "error_detail"} {
+		if detail, ok := content[key].(map[string]any); ok {
+			return detail
+		}
+	}
+	for _, key := range []string{"content", "result", "data", "error", "details"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if detail := devAppErrorDetailMapAtDepth(child, depth+1); detail != nil {
+				return detail
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if detail := devAppErrorDetailMapAtDepth(childMap, depth+1); detail != nil {
+					return detail
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func devAppErrorDetails(content, detail map[string]any, diag apperrors.ServerDiagnostics) map[string]any {
+	var details map[string]any
+	if detail != nil {
+		if nested, ok := detail["details"].(map[string]any); ok {
+			details = cloneDevAppMap(nested)
+		}
+	}
+	if details == nil && diag.Details != nil {
+		details = cloneDevAppMap(diag.Details)
+	}
+	if details == nil && detail != nil {
+		details = cloneDevAppMap(detail)
+	}
+	if details == nil {
+		details = make(map[string]any)
+	}
+	if diag.ContractVersion != "" {
+		details["contractVersion"] = diag.ContractVersion
+	}
+	if diag.Outcome != "" {
+		details["outcome"] = diag.Outcome
+	}
+	if diag.Unknown != nil {
+		details["unknown"] = *diag.Unknown
+	}
+	nextCommand := diag.NextCommand
+	if nextCommand == "" {
+		nextCommand = devAppFirstNextCommand(content)
+	}
+	if nextCommand == "" {
+		nextCommand = devAppStringRecursive(content, 0, "nextCommand", "next_command", "nextStep")
+	}
+	if nextCommand == "" {
+		nextCommand = devAppRecoveryCommand(content)
+	}
+	if nextCommand != "" {
+		details["nextCommand"] = nextCommand
+	}
+	for _, key := range []string{"taskId", "unifiedAppId", "versionId", "requestId"} {
+		if raw, ok := devAppRecursiveValue(content, 0, key); ok {
+			details[key] = raw
+		}
+	}
+	if raw, ok := devAppRecursiveValue(content, 0, "checkpoint"); ok {
+		details["checkpoint"] = raw
+	}
+	if raw, ok := devAppRecursiveValue(content, 0, "knownSideEffects", "known_side_effects"); ok {
+		details["knownSideEffects"] = raw
+	}
+	if len(details) == 0 {
+		return nil
+	}
+	return details
+}
+
+func devAppFirstContentValue(content map[string]any, keys ...string) (any, bool) {
+	for _, key := range keys {
+		if value, ok := content[key]; ok && value != nil {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func devAppRecursiveValue(content map[string]any, depth int, keys ...string) (any, bool) {
+	if content == nil || depth > 8 {
+		return nil, false
+	}
+	if value, ok := devAppFirstContentValue(content, keys...); ok {
+		return value, true
+	}
+	for _, key := range []string{"errorDetail", "error_detail", "content", "result", "data", "error", "details"} {
+		switch child := content[key].(type) {
+		case map[string]any:
+			if value, ok := devAppRecursiveValue(child, depth+1, keys...); ok {
+				return value, true
+			}
+		case []any:
+			for _, item := range child {
+				childMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if value, ok := devAppRecursiveValue(childMap, depth+1, keys...); ok {
+					return value, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func devAppStringRecursive(content map[string]any, depth int, keys ...string) string {
+	value, ok := devAppRecursiveValue(content, depth, keys...)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func devAppUpstreamCode(content, detail map[string]any, diag apperrors.ServerDiagnostics) (any, bool) {
+	if detail != nil {
+		if code, ok := devAppFirstContentValue(detail, "errorCode", "code", "serverErrorCode", "server_error_code"); ok {
+			return code, true
+		}
+	}
+	if code, ok := devAppFirstContentValue(content, "errorCode", "code", "serverErrorCode", "server_error_code"); ok {
+		if diag.ServerErrorCode == "" || strings.EqualFold(fmt.Sprint(code), diag.ServerErrorCode) || !isDevAppWrapperCode(code) {
+			return code, true
+		}
+	}
+	if code, ok := devAppRecursiveValue(content, 0, "errorCode", "code", "serverErrorCode", "server_error_code"); ok {
+		if diag.ServerErrorCode == "" || strings.EqualFold(fmt.Sprint(code), diag.ServerErrorCode) || !isDevAppWrapperCode(code) {
+			return code, true
+		}
+	}
+	if diag.ServerErrorCode != "" {
+		return diag.ServerErrorCode, true
+	}
+	return nil, false
+}
+
+func isDevAppWrapperCode(value any) bool {
+	switch strings.ToUpper(strings.TrimSpace(fmt.Sprint(value))) {
+	case "ERROR", "BUSINESS_ERROR", "-1":
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneDevAppMap(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	copy := make(map[string]any, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
+}
+
+func containsDevAppAction(actions []string, want string) bool {
+	for _, action := range actions {
+		if action == want {
+			return true
+		}
+	}
+	return false
+}
+
 func devAppWireErrorType(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "api", "auth", "validation", "permission", "discovery", "internal":
+	case "api", "auth", "validation", "discovery", "internal":
 		return strings.ToLower(strings.TrimSpace(raw))
-	case "authorization", "forbidden":
-		return "permission"
+	case "permission", "authorization", "forbidden":
+		return "auth"
 	default:
 		// Upstream transport labels such as network/timeout are subtypes of an
 		// API operation failure, not new top-level Agent branch keys.
@@ -2213,9 +2692,10 @@ func devAppWireErrorType(raw string) string {
 func devAppPendingResult(content map[string]any) output.CommandResult {
 	state := strings.ToUpper(devAppFirstContentString(content,
 		"completionState", "status", "taskStatus", "versionStatus", "processStatus", "approvalStatus"))
+	outcome := strings.ToUpper(devAppFirstContentString(content, "outcome"))
 	nonTerminal := !devAppContentBool(content, "terminal") && (devAppContentBool(content, "mustContinue") || devAppContentBool(content, "mustAskUser"))
 	approvalPending := devAppContentBool(content, "approvalSubmitted") && !devAppContentBool(content, "published")
-	isPendingState := state == "WAITING" || state == "PENDING" || state == "PROCESSING" || state == "AUDIT" ||
+	isPendingState := outcome == "PENDING" || state == "WAITING" || state == "PENDING" || state == "PROCESSING" || state == "AUDIT" ||
 		state == "UNDER_REVIEW" || strings.HasPrefix(state, "WAITING_") || strings.HasPrefix(state, "BLOCKED_BY_")
 	if !isPendingState && !nonTerminal && !approvalPending {
 		return nil
@@ -2238,13 +2718,19 @@ func devAppPendingResult(content map[string]any) output.CommandResult {
 }
 
 func devAppRecoveryCommand(content map[string]any) string {
-	if taskID := devAppFirstContentString(content, "taskId"); taskID != "" {
-		return fmt.Sprintf("dws dev app robot result --task-id %s --format json", taskID)
+	taskID := devAppStringRecursive(content, 0, "taskId")
+	if taskID != "" {
+		if quotedTaskID, ok := devAppQuoteScopeValue(taskID); ok {
+			return fmt.Sprintf("dws dev app robot result --task-id %s --format json", quotedTaskID)
+		}
+		return ""
 	}
-	appID := devAppFirstContentString(content, "unifiedAppId")
-	versionID := devAppFirstContentString(content, "versionId")
-	if appID != "" && versionID != "" {
-		return fmt.Sprintf("dws dev app version status --unified-app-id %s --version-id %s --format json", appID, versionID)
+	appID := devAppStringRecursive(content, 0, "unifiedAppId")
+	versionID := devAppStringRecursive(content, 0, "versionId")
+	quotedAppID, appOK := devAppQuoteScopeValue(appID)
+	quotedVersionID, versionOK := devAppQuoteScopeValue(versionID)
+	if appID != "" && versionID != "" && appOK && versionOK {
+		return fmt.Sprintf("dws dev app version status --unified-app-id %s --version-id %s --format json", quotedAppID, quotedVersionID)
 	}
 	return ""
 }
@@ -2355,11 +2841,13 @@ func normalizeDevAppVersionApproval(content map[string]any) {
 		return
 	}
 
-	unifiedAppID := devAppContentString(content, "unifiedAppId")
+	rawAppID := devAppContentString(content, "unifiedAppId")
+	rawVersionID := devAppContentString(content, "versionId")
+	unifiedAppID := rawAppID
 	if unifiedAppID == "" {
 		unifiedAppID = "<unifiedAppId>"
 	}
-	versionID := devAppContentString(content, "versionId")
+	versionID := rawVersionID
 	if versionID == "" {
 		versionID = "<versionId>"
 	}
@@ -2384,6 +2872,34 @@ func normalizeDevAppVersionApproval(content map[string]any) {
 	content["terminal"] = false
 	content["approvalPromptText"] = promptText
 	content["message"] = "版本发布需要选择审批人；请原样展示 approvalPromptText 的完整内容，等待用户选择，不要只显示 userId、不要自行截取、不能默认取第一个"
+	appIDProvided := strings.TrimSpace(rawAppID) != ""
+	versionIDProvided := strings.TrimSpace(rawVersionID) != ""
+	quotedAppID, appOK := "<unifiedAppId>", !appIDProvided
+	quotedVersionID, versionOK := "<versionId>", !versionIDProvided
+	if appIDProvided {
+		quotedAppID, appOK = devAppQuoteScopeValue(unifiedAppID)
+	}
+	if versionIDProvided {
+		quotedVersionID, versionOK = devAppQuoteScopeValue(versionID)
+	}
+	publishStep := devAppNextStep(devAppStep{
+		ID:       "publish_version",
+		DoneWhen: "approvalSubmitted=true、versionStatus=AUDIT 或 processStatus=UNDER_REVIEW 表示已提交审批；published=true 表示已发布",
+		Blocking: true,
+	})
+	missingParams := []string{"approver-user-id", "confirmed-sensitive"}
+	if appOK && versionOK {
+		publishStep["command"] = fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id %s --approver-user-id <selectedUserId> --confirmed-sensitive=false --format json", quotedAppID, quotedVersionID)
+		publishStep["dryRunCommand"] = fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id %s --approver-user-id <selectedUserId> --confirmed-sensitive=false --dry-run --format json", quotedAppID, quotedVersionID)
+	} else {
+		if !appOK {
+			missingParams = append(missingParams, "unifiedAppId")
+		}
+		if !versionOK {
+			missingParams = append(missingParams, "versionId")
+		}
+	}
+	publishStep["missingParams"] = missingParams
 	content["nextSteps"] = []map[string]any{
 		{
 			"id":                "select_approver",
@@ -2391,13 +2907,7 @@ func normalizeDevAppVersionApproval(content map[string]any) {
 			"requiresUserInput": true,
 			"doneWhen":          "用户从 approvalOptions 中选择一位审批人，得到对应 userId",
 		},
-		devAppNextStep(devAppStep{
-			ID:            "publish_version",
-			Command:       fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id %s --approver-user-id <selectedUserId> --format json", unifiedAppID, versionID),
-			DryRunCommand: fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id %s --approver-user-id <selectedUserId> --dry-run --format json", unifiedAppID, versionID),
-			DoneWhen:      "approvalSubmitted=true、versionStatus=AUDIT 或 processStatus=UNDER_REVIEW 表示已提交审批；published=true 表示已发布",
-			Blocking:      true,
-		}),
+		publishStep,
 	}
 }
 
@@ -2528,8 +3038,8 @@ func devAppRobotPublishSteps(appID string) []map[string]any {
 		}),
 		devAppNextStep(devAppStep{
 			ID:                "publish_version",
-			Command:           fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id <versionId> --format json", appID),
-			DryRunCommand:     fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id <versionId> --dry-run --format json", appID),
+			Command:           fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id <versionId> --confirmed-sensitive=false --format json", appID),
+			DryRunCommand:     fmt.Sprintf("dws dev app version publish --unified-app-id %s --version-id <versionId> --confirmed-sensitive=false --dry-run --format json", appID),
 			DoneWhen:          "published=true 表示已发布；approvalSubmitted=true、versionStatus=AUDIT 或 processStatus=UNDER_REVIEW 表示已提交审批；SELECT_APPROVER 时必须先让用户从 approvalCandidates 选择审批人后追加 --approver-user-id",
 			RequiresUserInput: true,
 			Blocking:          true,
@@ -2643,6 +3153,12 @@ func devAppNextStep(step devAppStep) map[string]any {
 	return out
 }
 
+func devAppMissingParamsStep(id, doneWhen string, missing ...string) map[string]any {
+	step := devAppNextStep(devAppStep{ID: id, DoneWhen: doneWhen, RequiresUserInput: true})
+	step["missingParams"] = missing
+	return step
+}
+
 func devAppFirstContentString(content map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if value := devAppContentString(content, key); value != "" {
@@ -2730,6 +3246,33 @@ func splitDevAppList(raw string) []string {
 // key from toolArgs. Required flags that collapse to empty are rejected by
 // corecmd.BuildArgs after transform.
 func transformDevAppListParam(raw string) (any, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "[") {
+		var items []json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &items); err != nil {
+			return nil, fmt.Errorf("list must be CSV or a JSON array: %w", err)
+		}
+		values := make([]string, 0, len(items))
+		for _, item := range items {
+			var text string
+			if err := json.Unmarshal(item, &text); err == nil {
+				if text = strings.TrimSpace(text); text != "" {
+					values = append(values, text)
+				}
+				continue
+			}
+			var number json.Number
+			if err := json.Unmarshal(item, &number); err == nil && strings.TrimSpace(number.String()) != "" {
+				values = append(values, number.String())
+				continue
+			}
+			return nil, fmt.Errorf("JSON array values must be strings or numbers")
+		}
+		if len(values) == 0 {
+			return nil, nil
+		}
+		return values, nil
+	}
 	values := splitDevAppList(raw)
 	if len(values) == 0 {
 		return nil, nil

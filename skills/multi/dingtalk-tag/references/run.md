@@ -16,7 +16,7 @@ Example:
   dws dingtalk-tag run run-status --agent-uuid <id> --source-id <openMessageId> --source-type im_message --format json
 ```
 
-- `run-status` 返回 `result`（1 成功 / -1 失败 / 0 运行中 / 2 中止）、`execStatus`、`runId`、`messageId`
+- `run-status` 返回 `result`（人类可读的状态说明，字符串，例如“成功”，不是数字状态码）、`execStatus`、`runId`、`messageId`。程序判断执行状态应使用 `execStatus`，如 `RUNNING` / `SUCCESS`；不要把 `result` 按 1/-1/0/2 解析，也不要将未知或空状态视为成功。
 - `trace` 返回 Langfuse 原始 trace JSON，**含完整对话与模型输入输出**；服务端先做管理者 / 触发人两级授权，无权返回 `NO_PERMISSION`
 - `trace` 输出为 `null`（无 data）**不是报错**，而是该来源暂无可用 trace：可能 trace 尚未就绪（异步写入有延迟）、来源 ID/类型不匹配，或该来源无对应执行；可稍后重试，或先用 `run-status` 确认执行是否存在
 

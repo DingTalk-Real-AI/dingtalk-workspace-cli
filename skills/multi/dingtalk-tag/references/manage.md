@@ -6,7 +6,7 @@
 
 ```
 Usage:
-  dws dingtalk-tag manage create --name <名称> --description <职责描述> --type <open_code|local_agent> [flags]
+  dws dingtalk-tag manage create --name <名称> --description <职责描述> --type <qwenwork|local_agent> [flags]
 Flags:
   --name             必填，同组织内唯一（≤30 Unicode 码点）
   --description      必填，职责描述（≤300 码点）
@@ -14,30 +14,30 @@ Flags:
   --dept-id          归属部门 ID；可选，省略时服务端补操作人主任职部门
   --avatar-url       公网 HTTP(S) 头像地址，或本地图片路径（≤10 MiB）
   --supervisor-user-id 直属上级 userId
-  --type             必填：open_code | local_agent；必须显式填写且不能为空
+  --type             必填：qwenwork | local_agent；必须显式填写且不能为空
   --response-mode    mention_only | targeted_proactive | mention_only,targeted_proactive；未提供或空值时默认 mention_only
 Example:
-  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --type open_code --prompt "你是周报助手，负责汇总团队进展。" --avatar-url ./avatar.png --dry-run --format json
+  dws dingtalk-tag manage create --name "周报助手" --description "汇总并推送团队周报" --type qwenwork --prompt "你是周报助手，负责汇总团队进展。" --avatar-url ./avatar.png --dry-run --format json
 ```
 
-只建草稿，不会上线。`--prompt` 对所有当前支持的类型均可选；显式空字符串或纯空白会被拒绝。`local_agent` 省略时自动保存默认人设；其他类型（当前为 `open_code`）省略时仅提醒发布前补齐，不阻断创建，也不套用本地 Agent 的默认人设。DWS 在同一次命令中先创建草稿，再保存人设及本地头像；后续保存失败时保留 `agentUuid`，使用 detail / save-draft 恢复，禁止重复创建。`--dry-run` 会展示待保存的人设且不调用远端。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
+只建草稿，不会上线。`--prompt` 对所有当前支持的类型均可选；显式空字符串或纯空白会被拒绝。`local_agent` 省略时自动保存默认人设；其他类型（当前为 `qwenwork`）省略时仅提醒发布前补齐，不阻断创建，也不套用本地 Agent 的默认人设。DWS 在同一次命令中先创建草稿，再保存人设及本地头像；后续保存失败时保留 `agentUuid`，使用 detail / save-draft 恢复，禁止重复创建。`--dry-run` 会展示待保存的人设且不调用远端。不传 `--dept-id` 时，OpenAPI 查询操作人主任职部门并补齐；CLI 不接收部门名称。`--avatar-url` 传 HTTP(S) 时直接使用，传本地 jpg/jpeg/png/gif/webp 时复用 Skill 本地文件上传封装，组合执行“先创建草稿 → 上传头像 → 回写草稿”；后两步失败时保留已创建的 `agentUuid`，禁止重复 create。用户只感知 `avatarUrl`，不需要手动调用上传接口。
 
 `create` 当前为 `confirmation=not_required`：先用 `--dry-run` 核对，确认参数无误后移除 `--dry-run` 执行即可，不要额外猜测或重复创建。
 
-`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持；CLI 对应参数为 `--type`。创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。注意：`create` / `list` / `save-draft` 的 `--type` 表示主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，分属不同子命令，不要混淆。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
+`create` / `save-draft` 的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，仅支持 `qwenwork`、`local_agent`，`a2a` 暂不支持；CLI 对应参数为 `--type`。创建时必须显式传 `--type qwenwork|local_agent`，缺失或空值由 DWS 本地拦截，不自动选择类型；未提供 `--response-mode` 或值为空时，CLI 默认发送 `mention_only`（包括 `local_agent`）。更新时未传主程序类型或响应模式则不更新对应字段。注意：`create` / `list` / `save-draft` 的 `--type` 表示主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，分属不同子命令，不要混淆。主管参数和返回都使用字段名 `supervisorUserId`，字段值为当前组织内的 `userId`，不对用户暴露 uid/robotUid 概念。工号由平台管理，本命令不提供 `employee-no`。
 
 ## detail / list — 查询
 
 ```
 Usage:
   dws dingtalk-tag manage detail --agent-uuid <agentUuid> [--snapshot draft|published]
-  dws dingtalk-tag manage list [--keyword <关键词>] [--type open_code|local_agent] [--page 1] [--page-size 20]
+  dws dingtalk-tag manage list [--keyword <关键词>] [--type qwenwork|local_agent] [--page 1] [--page-size 20]
 Example:
   dws dingtalk-tag manage detail --agent-uuid <agentUuid> --format json
   dws dingtalk-tag manage list --keyword "周报" --type local_agent --format json
 ```
 
-`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--type` 会映射到 MCP 的 `type`，仅支持 `open_code`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
+`--keyword` 按名称或职责等可见基础信息模糊匹配，不对外提供工号搜索语义。`--type` 会映射到 MCP 的 `type`，仅支持 `qwenwork`、`local_agent`，不传表示不过滤。`--page` / `--page-size` 均不得小于 1。
 
 `detail` 的 `--snapshot` 默认为 `draft`；需要核对已发布配置时显式传 `--snapshot published`。该参数映射到 MCP 的 `snapshot` 字段。响应中的 `snapshot` 明确本次配置来源（draft/published），与生命周期 `status` 独立；未成功发布的员工查询 published 返回 `NOT_FOUND`，不回退到 dev 对象。曾发布后下架的员工仍可读取保留的 published 配置，`status=offline` 不代表本地 Agent 正在运行。Skill/MCP 资源也使用 snapshot。人员标识统一为 `userId`，直属上级的输入与输出字段统一为 `supervisorUserId`，数字员工 ID 统一为 `agentUuid`。
 
@@ -90,7 +90,8 @@ dws dingtalk-tag manage set-visibility --agent-uuid <agentUuid> --visibility PAR
 ```
 
 - `--agent-uuid`、`--visibility` 必填；`ALL` 表示本企业全员，`PARTIAL` 表示指定成员或部门。
-- `PARTIAL` 的 `--user-ids`、`--dept-ids` 至少一项非空；两项均支持英文逗号分隔或重复传入。
+- `PARTIAL` 的 `--user-ids`、`--dept-ids` 至少一项包含非空 ID；空白不算有效 ID。两项均支持英文逗号分隔或重复传入。
+- `--visibility` 只接受 `ALL` / `PARTIAL`；`ALL` 不接受非空成员或部门列表，避免误把限定范围设置成全员可见。上述约束在 dry-run 和真实执行时都会先由 CLI 本地校验，无效请求不调用 MCP。
 - 这是**全量替换草稿可见范围**，不会自动发布。未传某一维度会清空该维度，不能把本次输入当作增量追加；`ALL` 无需成员/部门列表。
 - `--user-ids` 接收当前组织内的 userId，MCP 请求字段仍是 `staffIds`。
 - 先预览并让用户确认替换范围，再执行带 `--yes` 的命令。其他草稿字段保持不变。

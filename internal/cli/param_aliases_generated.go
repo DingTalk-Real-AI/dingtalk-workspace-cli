@@ -924,6 +924,13 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
+		CLIPath: "aitable +role-copy",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
 		CLIPath: "aitable +role-create",
 		Aliases: map[string]string{
 			"base":       "base-id",
@@ -946,6 +953,27 @@ var generatedParamAliases = []ParamAliasEntry{
 	},
 	{
 		CLIPath: "aitable +role-list",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-members-add",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-members-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-query-user",
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
@@ -1253,6 +1281,12 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
+		CLIPath: "aitable advperm role-copy",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
 		CLIPath: "aitable advperm role-create",
 		Aliases: map[string]string{
 			"base-token": "base-id",
@@ -1272,6 +1306,24 @@ var generatedParamAliases = []ParamAliasEntry{
 	},
 	{
 		CLIPath: "aitable advperm role-list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-members-add",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-members-update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-query-user",
 		Aliases: map[string]string{
 			"base-token": "base-id",
 		},

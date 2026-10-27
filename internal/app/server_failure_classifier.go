@@ -25,6 +25,7 @@ import (
 var dingRobotRejectionPattern = regexp.MustCompile(`(?i)\b(?:robotcode(?:\s*:\s*|\s+(?:is\s+(?:in\s+)?)?)(?:invalid|not\s+valid|not\s+in\s+(?:the\s+)?org(?:anization)?)|invalid\s+robotcode)\b`)
 
 type serverFailureClass struct {
+	category         apperrors.Category
 	message          string
 	reason           string
 	origin           string
@@ -42,6 +43,23 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 	text := strings.ToLower(strings.TrimSpace(message))
 	combined := text + " " + detail
 
+	// Prefer the explicit server code over incidental dependency or parameter
+	// wording. The classifier only improves recovery guidance; it does not
+	// invent retryability, a retry delay, or an execution state.
+	if code == "RATE_LIMIT_ERROR" {
+		return serverFailureClass{
+			category: apperrors.CategoryAPI,
+			message:  "由于当前请求频率过高，本次请求被限流，请等待 10 秒后重试。",
+			reason:   "rate_limited",
+			hint:     "请降低请求频率，并等待 10 秒后重试。",
+			actions: []string{
+				"降低请求频率，避免短时间内发起大量请求",
+				"等待 10 秒后使用相同参数重试",
+				"持续失败时保留 Trace ID 和 Server Code 联系服务端排查",
+			},
+		}, true
+	}
+
 	if strings.EqualFold(strings.TrimSpace(serverKey), "ding") &&
 		(strings.EqualFold(strings.TrimSpace(tool), "send_ding_message") ||
 			strings.EqualFold(strings.TrimSpace(tool), "recall_ding_message")) &&
@@ -49,6 +67,7 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 		retryable := false
 		executionStarted := false
 		return serverFailureClass{
+			category:         apperrors.CategoryAuth,
 			message:          "企业机器人不在当前组织或未处于可用状态",
 			reason:           "robot_not_in_org",
 			origin:           "dingtalk_api",
@@ -66,11 +85,12 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 	if code == "999" &&
 		(strings.Contains(combined, "nullpointerexception") || strings.Contains(combined, "system error")) {
 		classified := serverFailureClass{
-			message: message,
-			reason:  "upstream_internal_error",
-			origin:  "dingtalk_api",
-			stage:   "upstream_execution",
-			hint:    "上游服务发生内部异常；请保留 Trace ID 和 Server Code，确认操作结果后再决定是否重试。",
+			category: apperrors.CategoryInternal,
+			message:  message,
+			reason:   "upstream_internal_error",
+			origin:   "dingtalk_api",
+			stage:    "upstream_execution",
+			hint:     "上游服务发生内部异常；请保留 Trace ID 和 Server Code，确认操作结果后再决定是否重试。",
 			actions: []string{
 				"检查目标资源的当前状态，确认本次操作是否已经生效",
 				"状态未确认前不要直接重试写操作",
@@ -96,11 +116,12 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 		strings.Contains(detail, "statuscode.unavailable") ||
 		strings.Contains(detail, "connection refused") {
 		classified := serverFailureClass{
-			message: "MCP 后端依赖暂时不可用",
-			reason:  "backend_dependency_unavailable",
-			origin:  "mcp_gateway",
-			stage:   "backend_dependency",
-			hint:    "请求参数无需修改；请使用相同参数稍后重试。持续失败时请提供 Trace ID 排查 MCP 服务。",
+			category: apperrors.CategoryAPI,
+			message:  "MCP 后端依赖暂时不可用",
+			reason:   "backend_dependency_unavailable",
+			origin:   "mcp_gateway",
+			stage:    "backend_dependency",
+			hint:     "请求参数无需修改；请使用相同参数稍后重试。持续失败时请提供 Trace ID 排查 MCP 服务。",
 			actions: []string{
 				"使用相同参数重试一次",
 				"持续失败时保留 Trace ID 并排查 MCP 后端依赖",
@@ -117,11 +138,12 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 		strings.Contains(text, "opencid or cid is required") ||
 		strings.Contains(text, "openconversationid") && strings.Contains(text, "required") {
 		return serverFailureClass{
-			message: message,
-			reason:  "invalid_request",
-			origin:  "dingtalk_api",
-			stage:   "tool_validation",
-			hint:    "请求未通过后端参数校验；请核对当前 leaf Help/Schema 和稳定 ID 类型后重试。",
+			category: apperrors.CategoryAPI,
+			message:  message,
+			reason:   "invalid_request",
+			origin:   "dingtalk_api",
+			stage:    "tool_validation",
+			hint:     "请求未通过后端参数校验；请核对当前 leaf Help/Schema 和稳定 ID 类型后重试。",
 		}, true
 	}
 
@@ -136,26 +158,86 @@ func newServerFailureAPIError(
 	tool string,
 	diag apperrors.ServerDiagnostics,
 ) error {
+	operation := "tools/call"
+	reason := fallbackReason
+	origin := ""
+	stage := ""
+	hint := fallbackHint
+	actions := []string{"持续失败时保留 Trace ID 和 Server Code 联系服务端排查"}
+	classifiedRetryable := false
+	classifiedExecutionStarted := false
+	classifiedReason := false
+	classifiedOperation := false
+	classifiedOrigin := false
+	classifiedStage := false
+	classifiedHint := false
+	classifiedActions := false
+	classified, classifiedOK := classifyServerFailure(message, serverKey, tool, diag)
+	if classifiedOK {
+		message = classified.message
+		if classified.reason != "" {
+			reason = classified.reason
+			classifiedReason = true
+		}
+		if classified.operation != "" {
+			operation = classified.operation
+			classifiedOperation = true
+		}
+		if classified.origin != "" {
+			origin = classified.origin
+			classifiedOrigin = true
+		}
+		if classified.stage != "" {
+			stage = classified.stage
+			classifiedStage = true
+		}
+		if classified.hint != "" {
+			hint = classified.hint
+			classifiedHint = true
+		}
+		if len(classified.actions) > 0 {
+			actions = append([]string(nil), classified.actions...)
+			classifiedActions = true
+		}
+		if classified.retryable != nil {
+			classifiedRetryable = true
+		}
+		if classified.executionStarted != nil {
+			classifiedExecutionStarted = true
+		}
+	}
+	if diag.Reason != "" && !classifiedReason {
+		reason = diag.Reason
+	}
+	if diag.Operation != "" && !classifiedOperation {
+		operation = diag.Operation
+	}
+	if diag.Origin != "" && !classifiedOrigin {
+		origin = diag.Origin
+	}
+	if diag.FailureStage != "" && !classifiedStage {
+		stage = diag.FailureStage
+	}
+	if diag.FriendlyHint != "" && !classifiedHint {
+		hint = diag.FriendlyHint
+	}
+	if !classifiedActions {
+		actions = appendUniqueServerFailureActions(actions, diag.Actions...)
+		if diag.NextCommand != "" {
+			actions = appendUniqueServerFailureActions(actions, diag.NextCommand)
+		}
+	}
 	opts := []apperrors.Option{
-		apperrors.WithOperation("tools/call"),
-		apperrors.WithReason(fallbackReason),
+		apperrors.WithOperation(operation),
+		apperrors.WithReason(reason),
 		apperrors.WithServerKey(serverKey),
-		apperrors.WithHint(fallbackHint),
-		apperrors.WithActions("持续失败时保留 Trace ID 和 Server Code 联系服务端排查"),
+		apperrors.WithOrigin(origin),
+		apperrors.WithFailureStage(stage),
+		apperrors.WithHint(hint),
+		apperrors.WithActions(actions...),
 		apperrors.WithServerDiag(diag),
 	}
-	if classified, ok := classifyServerFailure(message, serverKey, tool, diag); ok {
-		message = classified.message
-		opts = append(opts,
-			apperrors.WithReason(classified.reason),
-			apperrors.WithOrigin(classified.origin),
-			apperrors.WithFailureStage(classified.stage),
-			apperrors.WithHint(classified.hint),
-			apperrors.WithActions(classified.actions...),
-		)
-		if classified.operation != "" {
-			opts = append(opts, apperrors.WithOperation(classified.operation))
-		}
+	if classifiedOK {
 		if classified.retryable != nil {
 			opts = append(opts, apperrors.WithRetryable(*classified.retryable))
 		}
@@ -163,7 +245,77 @@ func newServerFailureAPIError(
 			opts = append(opts, apperrors.WithExecutionStarted(*classified.executionStarted))
 		}
 	}
-	return apperrors.NewAPI(message, opts...)
+	if diag.ServerRetryable != nil && !classifiedRetryable {
+		opts = append(opts, apperrors.WithRetryable(*diag.ServerRetryable))
+	}
+	if diag.ExecutionStarted != nil && !classifiedExecutionStarted {
+		opts = append(opts, apperrors.WithExecutionStarted(*diag.ExecutionStarted))
+	}
+	if diag.NextCommand != "" || diag.Outcome != "" || diag.ContractVersion != "" || diag.Unknown != nil || len(diag.Details) > 0 {
+		details := map[string]any{}
+		for key, value := range diag.Details {
+			details[key] = value
+		}
+		if diag.NextCommand != "" {
+			details["nextCommand"] = diag.NextCommand
+		}
+		if diag.Outcome != "" {
+			details["outcome"] = diag.Outcome
+		}
+		if diag.ContractVersion != "" {
+			details["contractVersion"] = diag.ContractVersion
+		}
+		if diag.Unknown != nil {
+			details["unknown"] = *diag.Unknown
+		}
+		opts = append(opts, apperrors.WithDetails(details))
+	}
+	category := apperrors.CategoryAPI
+	if classifiedOK && classified.category != "" {
+		category = classified.category
+	} else {
+		switch strings.ToLower(strings.TrimSpace(diag.ErrorType)) {
+		case "auth", "authorization", "permission", "forbidden":
+			category = apperrors.CategoryAuth
+		case "validation":
+			category = apperrors.CategoryValidation
+		case "discovery":
+			category = apperrors.CategoryDiscovery
+		case "internal":
+			category = apperrors.CategoryInternal
+		}
+	}
+	newError := apperrors.NewAPI
+	switch category {
+	case apperrors.CategoryAuth:
+		newError = apperrors.NewAuth
+	case apperrors.CategoryValidation:
+		newError = apperrors.NewValidation
+	case apperrors.CategoryDiscovery:
+		newError = apperrors.NewDiscovery
+	case apperrors.CategoryInternal:
+		newError = apperrors.NewInternal
+	}
+	return newError(message, opts...)
+}
+
+func appendUniqueServerFailureActions(actions []string, additions ...string) []string {
+	for _, action := range additions {
+		if action == "" || containsServerFailureAction(actions, action) {
+			continue
+		}
+		actions = append(actions, action)
+	}
+	return actions
+}
+
+func containsServerFailureAction(actions []string, want string) bool {
+	for _, action := range actions {
+		if action == want {
+			return true
+		}
+	}
+	return false
 }
 
 func serverFailureReason(err error, fallback string) string {

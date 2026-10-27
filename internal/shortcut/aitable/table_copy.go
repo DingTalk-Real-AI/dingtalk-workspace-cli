@@ -113,6 +113,9 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 	if rt.Bool("strict-fields") && len(warnings) > 0 {
 		return apperrors.NewValidation("源表含无法安全重建的字段；strict-fields 模式未创建目标表", apperrors.WithReason("table_copy_unsupported_fields"), apperrors.WithDetails(map[string]any{"warnings": warnings}))
 	}
+	if err := validateCreateTableCapabilities(createFields, "source fields"); err != nil {
+		return apperrors.NewValidation(err.Error(), apperrors.WithReason("table_copy_unsupported_fields"))
+	}
 
 	var sourceRecords []map[string]any
 	if rt.Bool("include-records") {

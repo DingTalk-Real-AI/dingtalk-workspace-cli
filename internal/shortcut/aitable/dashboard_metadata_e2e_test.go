@@ -55,8 +55,8 @@ func TestCrossPlatformCoverageChartUpdateShortcutEnforcesDashboardGrid(t *testin
 	if len(caller.calls) != 2 || caller.calls[0].tool != "get_dashboard" || caller.calls[1].tool != "update_chart" {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
-	if _, exists := caller.calls[1].args["isAppMode"]; exists {
-		t.Fatalf("read-only application context leaked into update_chart: %#v", caller.calls[1].args)
+	if caller.calls[1].args["isAppMode"] != false {
+		t.Fatalf("ordinary grid context was not forwarded: %#v", caller.calls[1].args)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestCrossPlatformCoverageChartUpdateShortcutUsesReadOnlyAppMode(t *testing.
 	if len(caller.calls) != 2 || caller.calls[1].tool != "update_chart" {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
-	if _, exists := caller.calls[1].args["isAppMode"]; exists {
-		t.Fatalf("isAppMode leaked into update_chart: %#v", caller.calls[1].args)
+	if caller.calls[1].args["isAppMode"] != true {
+		t.Fatalf("read-only grid context was not forwarded: %#v", caller.calls[1].args)
 	}
 }

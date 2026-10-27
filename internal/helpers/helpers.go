@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
@@ -215,6 +216,22 @@ type compatibleToolRouteResolver interface {
 	ResolveToolProduct(context.Context, []string, string) (string, error)
 }
 
+// MCPToolAvailable checks an exact capability before any mutation. A caller
+// without discovery support retains the legacy path; discovery errors do not
+// authorize fallback. No tools/call is used to probe write availability.
+func MCPToolAvailable(ctx context.Context, product, tool string) (bool, error) {
+	if deps == nil || deps.Caller == nil {
+		return false, nil
+	}
+	resolver, ok := deps.Caller.(interface {
+		SupportsMCPTool(context.Context, string, string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return resolver.SupportsMCPTool(ctx, product, tool)
+}
+
 // resolveCompatibleToolServer preserves the historical aitable-helper route
 // for callers and deployments that do not expose capability discovery. The
 // production caller discovers the tool on the split and unified services
@@ -338,6 +355,15 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 				}
 				if patErr := classifyPATError(errBody); patErr != nil {
 					return "", patErr
+				}
+				if readErr := aitableprotocol.FieldCapabilityReadError(serverID, toolName, errBody); readErr != nil {
+					return "", readErr
+				}
+				if projected := aitableprotocol.FieldGroupMutationError(serverID, toolName, errBody); projected != nil {
+					return "", projected
+				}
+				if projected := classifyAitableMutationError(errBody); projected != nil {
+					return "", projected
 				}
 				if isBusinessError(errBody) {
 					return "", &CLIError{
@@ -576,6 +602,12 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 					return patErr
 				}
 				// 业务逻辑错误
+				if projected := aitableprotocol.FieldGroupMutationError(serverID, toolName, errBody); projected != nil {
+					return projected
+				}
+				if projected := classifyAitableMutationError(errBody); projected != nil {
+					return projected
+				}
 				if isBusinessError(errBody) {
 					message := businessErrorDisplayMessage(errBody, c.Text)
 					if hasOAApprovalListEnvelope(serverID, toolName) {

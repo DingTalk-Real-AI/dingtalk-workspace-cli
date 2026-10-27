@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
@@ -31,7 +32,7 @@ func TestCrossPlatformCoverageShareFormShortcutTerminalEnvelope(t *testing.T) {
 				root.SetOut(stdout)
 				root.SetErr(stderr)
 				root.SetArgs([]string{"aitable", "+form-share-update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true", "--yes", "--format=json"})
-				cmd, err := root.ExecuteC()
+				cmd, err := corecmd.ExecuteCForTest(root)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -72,7 +73,7 @@ func TestCrossPlatformCoverageShareFormShortcutRequestTarget(t *testing.T) {
 			root.SetOut(stdout)
 			root.SetErr(stderr)
 			root.SetArgs([]string{"aitable", "+form-share-update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true", "--yes", "--format=json"})
-			cmd, err := root.ExecuteC()
+			cmd, err := corecmd.ExecuteCForTest(root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,7 +143,7 @@ func TestCrossPlatformCoverageShareFormShortcutRequestedValue(t *testing.T) {
 			root.SetOut(stdout)
 			root.SetErr(stderr)
 			root.SetArgs([]string{"aitable", "+form-share-update", "--base-id=b", "--table-id=t", "--view-id=v", tc.flag, "--yes", "--format=json"})
-			cmd, err := root.ExecuteC()
+			cmd, err := corecmd.ExecuteCForTest(root)
 			if err != nil {
 				t.Fatal(err)
 			}

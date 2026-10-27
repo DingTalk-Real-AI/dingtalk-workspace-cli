@@ -11,7 +11,7 @@
       },
       "before": {"enum": ["local_agent", "open_code"]},
       "after": {"enum": ["local_agent", "qwenwork"]},
-      "state": "pending",
+      "state": "consumed",
       "reason": "Rename the cloud employee type from open_code to qwenwork; local_agent is unchanged. Existing CLI scripts and return-value consumers must migrate to qwenwork. Verify public service support and older-client compatibility before distributing the business change. Approval covers only this tool's exact type enum replacement."
     },
     {
@@ -24,7 +24,7 @@
       },
       "before": {"enum": ["local_agent", "open_code"]},
       "after": {"enum": ["local_agent", "qwenwork"]},
-      "state": "pending",
+      "state": "consumed",
       "reason": "Use qwenwork/local_agent for the employee list type filter; omitting type still means no filter. Existing open_code filters and return-value consumers must migrate to qwenwork. Public service compatibility must be verified before distribution. Approval covers only this tool's exact type enum replacement."
     },
     {
@@ -37,7 +37,7 @@
       },
       "before": {"enum": ["local_agent", "open_code"]},
       "after": {"enum": ["local_agent", "qwenwork"]},
-      "state": "pending",
+      "state": "consumed",
       "reason": "Use qwenwork/local_agent for an explicit draft type; omission still preserves the existing type and does not authorize switching an employee's type after creation. Existing scripts must replace open_code with qwenwork. Verify public service compatibility before distribution. Approval covers only this tool's exact type enum replacement."
     },
     {
@@ -50,7 +50,7 @@
       },
       "before": {"enum": []},
       "after": {"enum": ["ALL", "PARTIAL"]},
-      "state": "pending",
+      "state": "consumed",
       "reason": "Constrain visibility to ALL/PARTIAL. Execution and dry-run reject invalid values, empty PARTIAL targets and ALL with targets before calling MCP, with validation exit code 3. Invalid requests fail earlier than before. Approval covers only this tool's exact visibility enum change, without exempting other fields or constraints."
     }
   ]

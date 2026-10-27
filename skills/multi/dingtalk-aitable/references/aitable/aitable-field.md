@@ -74,6 +74,14 @@ dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ### AI 字段创建示例
 
+内置 AI 插件先用 `field ai-plugins --base-id <BASE_ID> --table-id <TABLE_ID>` 只读查询真实 `pluginId`、`fieldTypes`、`configSchema` 与 `configurationMode/reason`，不猜插件 ID。工作流凭据需要现有 UI 绑定时，按返回限制处理，不把凭据传入 CLI。
+
+配置复用 `field create --ai-config`、`field update --ai-config` 与 `+field-update --ai-config`。配置使用 `{"type":"builtin","pluginId":"<已确认插件ID>","formData":{},"referFieldIds":["<FIELD_ID>"],"autoRecompute":true}`，无需通用 AI 的 `prompt` / `outputType`。由 MCP 校验与转换，CLI 不自行构造 `decoratorConfigs`。回执 `verificationStatus=pending` 时继续 `field get` 只读核对，不能视为已生效或再次写入。
+
+快递/OCR 等已支持的内置模板可能要求基础字段类型 `object`，按 `ai-plugins` 返回的 `fieldTypes` 选择；这不表示可以创建任意普通 object 字段。
+
+下例是通用 AI 配置：
+
 ```bash
 dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
   --name "AI摘要" --type text \
@@ -94,6 +102,22 @@ dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
 - `prompt` 里通过 `fieldRef` 引用已有字段
 - `autoRecompute=true` 表示引用字段变化后自动重算
 - **AI 字段的 prompt 必须至少包含一个 `fieldRef` 引用**，纯文本 prompt 会被后端拒绝
+
+### 字段编组
+
+字段编组作用于列，不是按记录值分组。入口须已在目标 MCP 部署：
+
+| 入口 | 参数与行为 |
+|---|---|
+| `field-group list` | `--base-id`、`--table-id`；查询组名、说明和组内字段 ID |
+| `field-group create` | 加 `--name`、`--field-ids F1,F2`（1～100 项），可选 `--description`；清空旧组时须 `--confirm-empty-group=true` |
+| `field-group update` | 加 `--group-id` 和 `--name` / `--description` 至少一项；显式空说明清除，未传配置保留 |
+| `field-group ungroup` | 加 `--group-id`；取消编组，保留字段与数据 |
+| `field-group move-fields` | 加 `--field-ids`；传 `--target-group-id` 移入目标组，省略则移出成为普通列 |
+
+移空源组时必须显式 `--confirm-empty-group=true`，沿用页面自动取消空组的处理；`--yes` 只确认写操作，不替代这个业务确认。取消或移出后的普通列继续遵循当前视图列顺序与隐藏规则，不额外创建“未分组”组。变更 `verificationStatus=pending` 时保留回执，按 `meta.operation.next_command` 只读核对，不能重放写入。
+
+`field-group list` 与 `field ai-plugins` 的读取失败在 `error.upstream_code` 保留 MCP 错误码：`InvalidArgument`、`InvalidRequest.ResourceNotFound`、`InvalidRequest.Forbidden` 须先修正请求、资源标识或访问条件；`InvalidRequest.DataNotReady`、`500` 在 `error.retryable=true` 时可等待后重新读取。重试标记仅为 true 时出现在 CLI 回执中，不能从错误文案推断。CLI 不自动重试这两个入口，也不将读取重试提示用于重放写操作。
 
 ### 关联字段与跨表引用字段
 

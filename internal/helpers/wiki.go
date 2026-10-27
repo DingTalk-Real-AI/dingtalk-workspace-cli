@@ -211,6 +211,7 @@ func newWikiCommand() *cobra.Command {
 			},
 			AvoidWhen: []string{
 				"需要编辑在线文档正文时使用 doc；只管理钉盘普通文件时使用 drive",
+				"需要携带 OpenNodes 初始内容创建脑图时使用 mind create；wiki node create --type amind 只创建空白脑图文件",
 			},
 		},
 	})
@@ -1240,10 +1241,12 @@ ORG 类型授权不会出现在查询结果中。`,
   able      多维表
   appt      在线演示
   adraw     白板/画板
-  amind     脑图
+  amind     空白脑图文件（不带初始化内容）
   folder    文件夹
 
-通过 --folder 指定父节点，不传则创建在知识库根目录。`,
+通过 --folder 指定父节点，不传则创建在知识库根目录。
+--type amind 仅创建空白脑图文件，不接受 OpenNodes 初始化内容。
+需要携带页面和主题内容创建脑图时，使用 mind create --source ... --workspace ...。`,
 		Example: `  dws wiki node create --workspace <workspaceId> --name "新文档"
   dws wiki node create --workspace <workspaceId> --name "方案目录" --type folder
   dws wiki node create --workspace <workspaceId> --name "数据表" --type axls --folder <parentNodeId>`,
@@ -1284,16 +1287,17 @@ ORG 类型授权不会出现在查询结果中。`,
 				CLIPath:        "wiki node create",
 				PrimaryCLIPath: "wiki node create",
 			},
-			Description: "在指定知识库中创建文档、文件夹或其他类型的节点",
+			Description: "在指定知识库中创建文档、文件夹或其他类型的空节点；amind 仅创建空白脑图文件，不带初始化内容",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "create_file"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "在指定知识库中创建文档、文件夹或其他类型的节点",
+				AgentSummary: "在指定知识库中创建文档、文件夹或其他类型的空节点；--type amind 仅创建空白脑图文件，不带初始化内容",
 				UseWhen:      []string{"在知识库内创建空节点：adoc/axls/appt/adraw/amind/able/folder（必须 --workspace）时"},
 				AvoidWhen: []string{
+					"需要携带 OpenNodes 初始内容创建脑图时使用 mind create --source ... --workspace ...，不能使用 wiki node create --type amind 代替",
 					"要带初始 Markdown 的文字文档可用 doc create",
 					"钉盘普通文件夹用 drive mkdir（无需 workspace）",
 					"type 不要用 asheet，在线表格用 axls",

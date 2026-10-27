@@ -48,7 +48,7 @@ func devAppRegressionLeafPaths(t *testing.T) []string {
 	return leaves
 }
 
-// devAppEnvelopeRegressionChecklist 是 dev app 树 32 叶子的信封核销清单
+// devAppEnvelopeRegressionChecklist 是 dev app 树全部叶子的信封核销清单
 // （队列 B138，AC-28/M1.8）：每条给出可执行 argv。读叶子走成功路径
 // （outcome=success），写叶子带 --dry-run 走预览路径（outcome=success +
 // dry_run=true）。argv 与轮 11-B0 族验证测试同源（各叶子 flag 已逐一核对）。
@@ -70,6 +70,8 @@ func devAppEnvelopeRegressionChecklist() []struct {
 		{"disable", []string{"dev", "app", "disable", "--unified-app-id", "u-1", "--dry-run"}, true},
 		{"enable", []string{"dev", "app", "enable", "--unified-app-id", "u-1", "--dry-run"}, true},
 		{"credentials get", []string{"dev", "app", "credentials", "get", "--unified-app-id", "u-1"}, false},
+		{"scope get", []string{"dev", "app", "scope", "get", "--unified-app-id", "u-1"}, false},
+		{"scope set", []string{"dev", "app", "scope", "set", "--unified-app-id", "u-1", "--user-visible-scopes", "100", "--precheck-only", "--dry-run"}, true},
 		{"webapp get", []string{"dev", "app", "webapp", "get", "--unified-app-id", "u-1"}, false},
 		{"webapp config", []string{"dev", "app", "webapp", "config", "--unified-app-id", "u-1", "--homepage-url", "https://example.com", "--dry-run"}, true},
 		{"permission list", []string{"dev", "app", "permission", "list", "--unified-app-id", "u-1"}, false},
@@ -130,20 +132,21 @@ type regressionEnvelope struct {
 	Data    map[string]any `json:"data"`
 }
 
-// TestDevAppEnvelopeRegressionUnifiedExit 逐一执行 32 叶子并断言 stdout 恰为
+// TestDevAppEnvelopeRegressionUnifiedExit 逐一执行全部叶子并断言 stdout 恰为
 // 一个统一信封（走 writeDevAppEnvelope 唯一出口）：ok 为 JSON 布尔 true、
 // outcome 与读/写形态一致、data 非空。任何绕过信封直写 stdout 的叶子
 // （legacy 裸 JSON/人读文案）都会因缺 ok 键或 JSON 解析失败而暴露。
 func TestDevAppEnvelopeRegressionUnifiedExit(t *testing.T) {
 	for _, entry := range devAppEnvelopeRegressionChecklist() {
 		t.Run(entry.path, func(t *testing.T) {
+			args := append([]string(nil), entry.args...)
 			out, errBuf, err := runDevAppFamily(t,
 				devAppFamilyContentRunner(map[string]any{
 					"unifiedAppId": "u-1",
 					"name":         "DemoApp",
 					"appStatus":    "ENABLED",
 				}),
-				entry.args...)
+				args...)
 			if err != nil {
 				t.Fatalf("Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, out.String(), errBuf.String())
 			}

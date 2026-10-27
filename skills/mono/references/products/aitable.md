@@ -202,10 +202,15 @@
 | `advperm role-create` | 创建自定义角色 | `--base-id` `--name` | 可选 `--sub-roles` 同时指定子角色权限规则 |
 | `advperm role-update` | 增量更新自定义角色（PATCH） | `--base-id` `--role-id` | 未传字段不变；`--sub-roles` 按 (targetId,targetType) 合并 |
 | `advperm role-delete` | 删除自定义角色 | `--base-id` `--role-id` `--yes` | 不可逆；系统角色禁删；**调用者必须是该 AI 表格的管理员/Owner**，非管理员会得到 401 AUTH_ERROR |
+| `+role-members-add` | 向自定义角色追加成员 | `--base-id` `--role-id` `--members` `--yes` | members 为最多 200 项的 JSON array，id/memberType 均为 String；用户填 uid（不是 userId）和 `"2"`；返回写后成员列表 |
+| `+role-members-update` | 完整替换或清空成员 | `--base-id` `--role-id` `--members` `--default-role-mode` `--yes` | DWS 强制完整 members 与 mode=0/1/2；1 还需 `--default-role-id`；`[]` 清空，不接受 null，默认角色按回读值传入 |
+| `+role-copy` | 复制角色配置（不复制成员） | `--base-id` `--source-role-id` `--yes` | 系统角色不可复制；沿用 roleType/flowType/subRoles，name 省略或空字符串使用「源角色名 副本」 |
+| `+role-query-user` | 查询当前或指定用户命中的角色 | `--base-id` | targetUid 可选，默认自己，不替换调用身份；返回 enabled 和 roles 配置（不含成员），高级权限关闭时 roles 通常为空 |
 
-> **角色 CRUD 已全支持**：create/get/list/update/delete 都可走 CLI。
-> 所有写命令（enable/disable/role-create/role-update/role-delete）需要 Base 管理员权限；非管理员只能调 `role-list` / `role-get`（只读）。
-> "角色 ↔ 成员"绑定当前 CLI 不支持，仍需在 AI 表格 Web 端 → Base 设置 → 高级权限面板手动完成。
+> 成员完整字符串编码和类型表见高级权限 reference；不能用 user/conv 或数字 2，可选 memberIdBelongOrgId 为 number（Java Long 整数），同文档组织省略由服务端回填 docOrgId，跨组织填成员所属组织 ID。roleId/sourceRoleId/defaultRoleId/targetUid 均为 long 形态 String。
+> **角色 CRUD 与成员操作均已支持**：create/get/list/update/delete、成员追加/完整替换、角色复制和用户角色查询都可走 CLI。
+> 所有写命令需要 Base 管理员权限；非管理员只能调只读命令。
+> `--base-id` 是公开参数；不要在 Agent 命令中使用隐藏兼容别名 `--base`。
 
 ### section (文件夹与节点管理)
 

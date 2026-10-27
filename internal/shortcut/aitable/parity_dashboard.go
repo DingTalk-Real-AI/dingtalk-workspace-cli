@@ -73,6 +73,7 @@ func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 			return e
 		}
 		args["layout"] = layout
+		args["isAppMode"] = rt.Bool("is-app-mode")
 	} else {
 		cfg["name"] = rt.Str("name")
 		if rt.Str("name") == "" {
@@ -131,13 +132,7 @@ func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 		if body["dashboardId"] != args["dashboardId"] {
 			return compositeError(result, fmt.Errorf("chart parent mismatch"), false)
 		}
-		widget, _ := body["widget"].(map[string]any)
-		actual, _ := widget["config"].(map[string]any)
-		if actual == nil {
-			actual, _ = body["config"].(map[string]any)
-		}
-		layout, _ := body["layout"].(map[string]any)
-		if !mapContains(actual, cfg) || !mapContains(layout, args["layout"].(map[string]any)) {
+		if !verifyChartConfiguration(body, cfg, args["layout"].(map[string]any)) {
 			return compositeError(result, fmt.Errorf("chart configuration/layout readback mismatch"), false)
 		}
 	} else {

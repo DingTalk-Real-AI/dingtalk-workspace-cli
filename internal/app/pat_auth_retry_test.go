@@ -188,6 +188,32 @@ func TestIsPatScopeError_GenericForbidden(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePatScopeDetectionSeparatesBusinessHints(t *testing.T) {
+	t.Parallel()
+	// A server-supplied business hint must not reroute a business authorization
+	// denial into the PAT re-auth path: only the error's own message/reason may
+	// carry the looser "scope ... required" PAT shape.
+	business := apperrors.NewAuth("business denied",
+		apperrors.WithHint("application scope approval required"))
+	if isPatScopeError(business) {
+		t.Fatal("business authorization hint must not be detected as PAT scope error")
+	}
+	businessProse := apperrors.NewAuth("application scope approval required")
+	if isPatScopeError(businessProse) {
+		t.Fatal("business prose in the message without a scope value must not be detected as PAT scope error")
+	}
+	pat := apperrors.NewAuth("missing required scope(s): mail:read",
+		apperrors.WithHint("application scope approval required"))
+	if !isPatScopeError(pat) {
+		t.Fatal("PAT message evidence must still be detected despite business hint")
+	}
+	explicitInHint := apperrors.NewAPI("business denied",
+		apperrors.WithHint("insufficient_scope for this resource"))
+	if !isPatScopeError(explicitInHint) {
+		t.Fatal("explicit insufficient_scope marker in hint must be detected")
+	}
+}
+
 func TestExtractPatScopeError_ComplexScope(t *testing.T) {
 	t.Parallel()
 	err := apperrors.NewAuth("missing required scope(s): mail:user_mailbox.message:send")

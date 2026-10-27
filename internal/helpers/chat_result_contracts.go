@@ -9,6 +9,40 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
+func chatListAllConversationsResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePartialFailure,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(`{
+			"type":"object",
+			"description":"当前用户的会话列表；--page-all 时附带分页完整性账本",
+			"properties":{
+				"result":{"type":"object","description":"标准化会话分页结果","properties":{
+					"conversationList":{"type":"array","description":"按 openConversationId 去重后的会话","items":{"type":"object","description":"会话记录","properties":{"openConversationId":{"type":"string","description":"稳定会话 ID"}},"required":["openConversationId"],"additionalProperties":true}},
+					"hasMore":{"type":"boolean","description":"服务端是否仍有后续页"},
+					"nextCursor":{"description":"hasMore=true 时用于续页的游标"}
+				},"required":["conversationList","hasMore"],"additionalProperties":true},
+				"paging":{"type":"object","description":"--page-all 的完整性账本","properties":{
+					"truncated":{"type":"boolean","description":"是否因本地页数或条数边界截断"},
+					"hasMore":{"type":"boolean","description":"停止时服务端是否仍有后续页"},
+					"sourceExhausted":{"type":"boolean","description":"是否已确认读到服务端末页"},
+					"requestSatisfied":{"type":"boolean","description":"请求是否在无部分失败的情况下满足"},
+					"lastCursor":{"description":"最后成功页返回的续页游标"},
+					"pages":{"type":"integer","minimum":0,"description":"成功读取页数"},
+					"total":{"type":"integer","minimum":0,"description":"去重后保留的会话数"},
+					"partial":{"type":"boolean","description":"是否在取得部分数据后失败"},
+					"error":{"type":"string","description":"分页失败信息"}
+				},"additionalProperties":true}
+			},
+			"required":["result"],
+			"additionalProperties":true
+		}`),
+	}
+}
+
 // chatMessageRangeAllResult documents the stable projected fields returned by
 // chat message list-all. The command intentionally reuses the existing
 // search_messages_by_time_range runtime; this declaration makes that one-call

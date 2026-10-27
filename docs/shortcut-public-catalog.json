@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-09T10:34:13.296839",
-  "count": 484,
+  "generated_at": "2026-10-27T12:30:03.549383",
+  "count": 497,
   "results": [
     {
       "suite": "semantic",
@@ -315,6 +315,26 @@
     {
       "suite": "semantic",
       "service": "aitable",
+      "command": "+build-plan",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在固定 Base 按声明依赖串行执行结构、记录、显式图表和固定记录 AI 步骤；真实回执绑定 ID，私有检查点绑定计划摘要、账号组织及目标，恢复先核验，不重放未知写入。AI 等待持久保留逐行证据，结果未核实可读时阻断后续步骤并保持 pending，不默认重排布局。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+build-plan-verify",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按原计划、账号组织及 Base 只读续验检查点中的真实对象并重新匹配完整数据断言；不创建尚未执行步骤，不用摘要或数量差额补写，缺少可靠回执或 ID 时停止，保留逐步状态和原任务关联。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
       "command": "+chart-create",
       "risk": "write",
       "status": "reviewed_available",
@@ -365,6 +385,16 @@
     {
       "suite": "semantic",
       "service": "aitable",
+      "command": "+chart-templates",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "正确解析 JSONC 并按大写 chartType 投影结构化模板；默认客户端筛选不减少远端响应体，仅确认新模板入口部署后显式 server-filter，模板示例 ID 仍须绑定真实资源。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
       "command": "+chart-update",
       "risk": "write",
       "status": "reviewed_available",
@@ -380,6 +410,16 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "返回所有图表类型的 widget config 示例，供构造合法图表配置。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+charts-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "同一仪表盘编排 1～20 项完整 config/layout，默认串行提交并按真实 chartId 独立回读；只在确认 create_charts 部署后显式 server-batch，保留逐项受理、ID 和核验进度，不承诺整批原子性或自动重放未知写入，不默认追加 arrange。",
       "availability": "available"
     },
     {
@@ -425,6 +465,16 @@
     {
       "suite": "semantic",
       "service": "aitable",
+      "command": "+dashboard-diagnose",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取完整根布局并诊断越界、重叠和已声明 minW/minH；可按完整 expected-layout 比较设计差异、按 regions 核验所选卡片并集覆盖。几何、设计、区域覆盖分别报告，不证明组件尺寸规则、子容器布局或页面可读，pageReadableVerified 始终 false。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
       "command": "+dashboard-get",
       "risk": "read",
       "status": "reviewed_available",
@@ -440,6 +490,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "发现完整目录或创建后独立核对对象 ID、名称/配置；布局使用真实 Dashboard 协议。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-preview",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "preview_dashboard_layout 确认部署后，只读获取真实源布局、同源按行重排结果和逐卡前后差异；参数回显不是预览，布局摘要不提供原子 CAS，也不证明页面可读。",
       "availability": "available"
     },
     {
@@ -615,6 +675,16 @@
     {
       "suite": "semantic",
       "service": "aitable",
+      "command": "+field-wait-ai",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按固定 taskId/fieldId/recordIds 分片只读等待；共享请求与退避总时限，保留部分证据。可用私有检查点绑定身份和全部原目标跨进程续查，不重触发 AI；成功历史缺失仍 unknown，写回版本不证明结果可读，终态仍可能 pending。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
       "command": "+find-record",
       "risk": "read",
       "status": "reviewed_available",
@@ -780,6 +850,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "把 Base 目录稳定投影为 tableId/tableName 列表，隐藏非表节点。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+read-batch",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "同一 Base 集中执行 1～20 项无依赖只读请求并按输入顺序保留完整结果，默认串行，可显式启用最多 4 路并发；不减少请求总数，不接收条件写、写操作或依赖前项 ID 的未绑定请求，不替代复杂服务端分析。",
       "availability": "available"
     },
     {
@@ -975,6 +1055,16 @@
     {
       "suite": "semantic",
       "service": "aitable",
+      "command": "+role-copy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "复制自定义角色配置但不复制成员，系统角色不可作为源。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
       "command": "+role-create",
       "risk": "write",
       "status": "reviewed_available",
@@ -1010,6 +1100,36 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "列出 Base 全部自定义角色的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-members-add",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "向指定自定义角色增量追加稳定 ID 成员，写后必须独立回读。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-members-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以完整成员列表替换角色成员，并强制显式保留已回读的默认角色。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-query-user",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "查询目标用户实际命中的高级权限角色，不覆盖调用人身份。",
       "availability": "available"
     },
     {
@@ -1140,6 +1260,16 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "统一表名、备注和行命名规则的 PATCH 风格更新。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+task-report",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "离线读取搭建或 AI 等待检查点，汇总已记录的 CLI 请求、退避、响应编码字节量和显式客户端模型指标；只有同输入、身份、模型、环境且双方结果核验通过才比较。缺失指标保持未知，不查询 MCP、不重触发任务、不宣称端到端提速。",
       "availability": "available"
     },
     {

@@ -22,19 +22,36 @@ import (
 // MCP response bodies or HTTP response headers. Fields are populated
 // on a best-effort basis during error construction.
 type ServerDiagnostics struct {
-	TraceID         string `json:"trace_id,omitempty"`
-	ServerErrorCode string `json:"server_error_code,omitempty"`
-	TechnicalDetail string `json:"technical_detail,omitempty"`
-	FriendlyHint    string `json:"friendly_hint,omitempty"`
-	ActionURL       string `json:"action_url,omitempty"`
-	ServerRetryable *bool  `json:"server_retryable,omitempty"`
+	TraceID          string         `json:"trace_id,omitempty"`
+	ErrorStage       string         `json:"error_stage,omitempty"`
+	ErrorCategory    string         `json:"error_category,omitempty"`
+	ServerErrorCode  string         `json:"server_error_code,omitempty"`
+	TechnicalDetail  string         `json:"technical_detail,omitempty"`
+	ErrorType        string         `json:"error_type,omitempty"`
+	FriendlyHint     string         `json:"friendly_hint,omitempty"`
+	ActionURL        string         `json:"action_url,omitempty"`
+	ServerRetryable  *bool          `json:"server_retryable,omitempty"`
+	Reason           string         `json:"reason,omitempty"`
+	Operation        string         `json:"operation,omitempty"`
+	Origin           string         `json:"origin,omitempty"`
+	FailureStage     string         `json:"failure_stage,omitempty"`
+	NextCommand      string         `json:"next_command,omitempty"`
+	Outcome          string         `json:"outcome,omitempty"`
+	ContractVersion  string         `json:"contract_version,omitempty"`
+	Unknown          *bool          `json:"unknown,omitempty"`
+	ExecutionStarted *bool          `json:"execution_started,omitempty"`
+	Actions          []string       `json:"actions,omitempty"`
+	Details          map[string]any `json:"details,omitempty"`
 }
 
 // IsEmpty returns true when no diagnostic field has been populated.
 func (d ServerDiagnostics) IsEmpty() bool {
-	return d.TraceID == "" && d.ServerErrorCode == "" &&
-		d.TechnicalDetail == "" && d.FriendlyHint == "" &&
-		d.ActionURL == "" && d.ServerRetryable == nil
+	return d.TraceID == "" && d.ServerErrorCode == "" && d.ErrorStage == "" && d.ErrorCategory == "" &&
+		d.TechnicalDetail == "" && d.ErrorType == "" && d.FriendlyHint == "" &&
+		d.ActionURL == "" && d.ServerRetryable == nil && d.Reason == "" &&
+		d.Operation == "" && d.Origin == "" && d.FailureStage == "" &&
+		d.NextCommand == "" && d.Outcome == "" && d.ContractVersion == "" &&
+		d.Unknown == nil && d.ExecutionStarted == nil && len(d.Actions) == 0 && len(d.Details) == 0
 }
 
 // WithServerDiag attaches server diagnostics to the error.
@@ -44,6 +61,17 @@ func WithServerDiag(diag ServerDiagnostics) Option {
 	}
 	return func(e *Error) {
 		e.ServerDiag = diag
+		if e.FailureStage == "" {
+			e.FailureStage = diag.ErrorStage
+		}
+		if diag.ErrorCategory != "" {
+			details := make(map[string]any, len(e.Details)+1)
+			for k, v := range e.Details {
+				details[k] = v
+			}
+			details["error_category"] = diag.ErrorCategory
+			e.Details = details
+		}
 		// Override retryable if server explicitly specified.
 		if diag.ServerRetryable != nil {
 			e.Retryable = *diag.ServerRetryable

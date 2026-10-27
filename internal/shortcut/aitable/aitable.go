@@ -67,6 +67,19 @@ func parseJSONObject(flag, s string) (map[string]any, error) {
 	return m, nil
 }
 
+// parseJSONArray parses a JSON string into an array and rejects other JSON values.
+func parseJSONArray(flag, s string) ([]any, error) {
+	v, err := parseJSONAny(flag, s)
+	if err != nil {
+		return nil, err
+	}
+	items, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("--%s 必须是 JSON 数组，got %T", flag, v)
+	}
+	return items, nil
+}
+
 // trimNonEmpty returns a copy of ss with each element trimmed of surrounding
 // whitespace and all empty entries dropped. Used to sanitize string-slice
 // flags (e.g. --field-ids) before they reach the downstream MCP tool.
@@ -619,7 +632,7 @@ var FieldUpdate = shortcut.Shortcut{
 		{Name: "name", Type: shortcut.FlagString, Desc: "新字段名（可选）"},
 		{Name: "description", Type: shortcut.FlagString, Desc: "字段说明；显式空字符串清除说明，省略保留"},
 		{Name: "config", Type: shortcut.FlagString, Desc: "字段配置 JSON（可选）"},
-		{Name: "ai-config", Type: shortcut.FlagString, Desc: "AI 配置 JSON（可选）"},
+		{Name: "ai-config", Type: shortcut.FlagString, Desc: "AI 配置 JSON；内置插件传 type=builtin/pluginId/formData/referFieldIds，可选 autoRecompute，不要求 prompt/outputType；由 MCP 校验和转换"},
 	},
 	Tips: []string{`dws aitable +field-update --base-id B --table-id T --field-id F --name "新名"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -2012,7 +2025,7 @@ var FormShareUpdate = shortcut.Shortcut{
 	Command:       "+form-share-update",
 	Product:       serverHelper,
 	Description:   "部分更新分享表单配置，并返回经服务端回读和 CP 投影校验的真实终态",
-	Intent:        "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；仅当存在占位符时第二行才说明需要替换的占位符，已知短 ID 也不能要求替换。最终只输出两行纯文本，无标题或代码围栏；第一行必须保留 --format json；所有 ID 已知时第二行原样为：未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。仅询问写法时唯一允许的查询是 dws schema --cli-path \"aitable +form-share-update\" --compact --format json，成功后不再查询 help/schema。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。成功后检查 shareFormUuid、status、formCover、cpSynced，只有 cpSynced=true 才表示闭环完成；cpSynced=false/缺失/类型错误或其他必需字段无效时返回 partial_failure 和退出码7；原始回执在 data.succeeded[0].response，失败信息在 data.failed[0].error，含 execution_started=true，不自动重放写入；部分失败不得当作成功；DWS 不自行调用第二个 View 更新命令补偿 CP。get 不返回 cpSynced，不能用 get 回读该字段或确认 CP 已恢复；只能诊断分享配置，CP 未确认时需服务端诊断。即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。",
+	Intent:        "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；仅当存在占位符时第二行才说明需要替换的占位符，已知短 ID 也不能要求替换。最终只输出两行纯文本，无标题或代码围栏；第一行必须保留 --format json；所有 ID 已知时第二行原样为：未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。仅询问写法时唯一允许的查询是 dws schema --cli-path \"aitable +form-share-update\" --compact --format json，成功后不再查询 help/schema。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。成功后检查 shareFormUuid、status、formCover、cpSynced、verified 和 unverified；权限、匿名、查看范围、通知、时间及封面等已回读配置按语义比对，缺少回读或资源对应证明时保留 unverified。成员不可用提示保留在 data.warnings，null 不代表成员清空；只有 cpSynced=true 才表示闭环完成；cpSynced=false/缺失/类型错误、enabled/status 相互矛盾或其他必需字段无效时返回 partial_failure 和退出码7；原始回执在 data.succeeded[0].response，失败信息在 data.failed[0].error，含 execution_started=true，不自动重放写入；部分失败不得当作成功；DWS 不自行调用第二个 View 更新命令补偿 CP。get 不返回 cpSynced，不能用 get 回读该字段或确认 CP 已恢复；只能诊断分享配置，CP 未确认时需服务端诊断。即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。",
 	Risk:          shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -2046,18 +2059,24 @@ var FormShareUpdate = shortcut.Shortcut{
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "View ID", Required: true},
 		// 布尔更新项保留字符串 flag，以兼容已有的 "--enabled false" 空格写法；调用 MCP 前再转为 JSON boolean。
 		{Name: "enabled", Type: shortcut.FlagString, Desc: "分享开关", Enum: []string{"true", "false"}},
-		{Name: "auth-type-code", Type: shortcut.FlagInt, Desc: "授权类型 code：0 企业内成员，1 钉钉用户，2 指定成员，3/4/5 为教育业务"},
-		{Name: "auth-data", Type: shortcut.FlagString, Desc: "授权内容；auth-type-code=2 时为逗号分隔的成员 ID"},
+		{Name: "auth-type-code", Type: shortcut.FlagInt, Desc: "授权类型 code：0 企业内成员，1 钉钉用户，2 指定成员，6 免登录，3/4/5 为教育业务"},
+		{Name: "auth-data", Type: shortcut.FlagString, Desc: "指定成员：当前组织 userId，逗号分隔，1-100 人；不接受内部 uid；非指定成员模式可显式传空字符串清除残留授权，未传保持原值"},
 		{Name: "submit-times-limit", Type: shortcut.FlagInt, Desc: "所有人合计提交次数上限"},
 		{Name: "submit-times-user-limit", Type: shortcut.FlagInt, Desc: "单用户提交限制 code：0 不限制，1 仅一次，2 每天一次，3 每周期一次"},
 		{Name: "form-start-time", Type: shortcut.FlagInt, Desc: "表单生效时间，毫秒时间戳"},
 		{Name: "form-end-time", Type: shortcut.FlagInt, Desc: "表单失效时间，毫秒时间戳"},
+		{Name: "form-start-at", Type: shortcut.FlagString, Desc: "表单生效时间，带时区的 RFC3339"},
+		{Name: "form-end-at", Type: shortcut.FlagString, Desc: "表单失效时间，带时区的 RFC3339"},
 		{Name: "form-name", Type: shortcut.FlagString, Desc: "分享表单名称；新建表单首次开启分享时传入已知标题"},
 		{Name: "form-desc", Type: shortcut.FlagString, Desc: "分享表单描述"},
-		{Name: "anonymous-submit", Type: shortcut.FlagString, Desc: "是否允许匿名提交", Enum: []string{"true", "false"}},
-		{Name: "load-last-submit", Type: shortcut.FlagString, Desc: "重新打开时是否加载上次提交", Enum: []string{"true", "false"}},
+		{Name: "anonymous-submit", Type: shortcut.FlagString, Desc: "是否匿名提交（不同于免登录）；免登录时必须为 true", Enum: []string{"true", "false"}},
+		{Name: "load-last-submit", Type: shortcut.FlagString, Desc: "是否允许提交后查看/修改；免登录时必须为 false", Enum: []string{"true", "false"}},
+		{Name: "submit-record-view-mode", Type: shortcut.FlagInt, Desc: "提交后查看范围：0 最近一次，1 全部历史", Enum: []string{"0", "1"}},
 		{Name: "reply-notice", Type: shortcut.FlagString, Desc: "有人填写后是否通知分享人", Enum: []string{"true", "false"}},
-		{Name: "share-uid-list", Type: shortcut.FlagString, Desc: "接收回复通知的钉钉 uid，逗号分隔"},
+		{Name: "share-uid-list", Type: shortcut.FlagString, Desc: "回复通知接收人的 userId，逗号分隔，最多 100 人；空字符串清除"},
+		{Name: "form-cover", Type: shortcut.FlagString, Desc: helpers.FormCoverURLDescription},
+		{Name: "form-cover-file", Type: shortcut.FlagString, Desc: "本地 PNG/JPEG/GIF 图片，最大 10 MiB；上传后同步页面与分享卡片"},
+		{Name: "form-cover-resource-id", Type: shortcut.FlagString, Desc: helpers.FormCoverResourceDescription},
 	},
 	Constraints: []shortcut.Constraint{{
 		Kind:         shortcut.ConstraintAtLeastOne,
@@ -2066,9 +2085,12 @@ var FormShareUpdate = shortcut.Shortcut{
 		Flags: []string{
 			"enabled", "auth-type-code", "auth-data", "submit-times-limit", "submit-times-user-limit",
 			"form-start-time", "form-end-time", "form-name", "form-desc", "anonymous-submit",
-			"load-last-submit", "reply-notice", "share-uid-list",
+			"form-start-at", "form-end-at", "load-last-submit", "reply-notice", "share-uid-list",
+			"submit-record-view-mode", "form-cover", "form-cover-file", "form-cover-resource-id",
 		},
-	}},
+	}, {Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"form-cover", "form-cover-file", "form-cover-resource-id"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"form-start-time", "form-start-at"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"form-end-time", "form-end-at"}}},
 	Tips: []string{
 		`dws aitable +form-share-update --base-id B --table-id T --view-id V --enabled true --form-name "活动报名" --format json`,
 		`dws aitable +form-share-update --base-id B --table-id T --view-id V --form-name "活动报名" --anonymous-submit true --format json`,
@@ -2087,6 +2109,15 @@ var FormShareUpdate = shortcut.Shortcut{
 				params[property] = strings.EqualFold(rt.Str(name), "true")
 			}
 		}
+		for name, property := range map[string]string{"form-start-at": "formStartTime", "form-end-at": "formEndTime"} {
+			if rt.Changed(name) {
+				value, err := helpers.ParseFormShareTime(rt.Str(name), name)
+				if err != nil {
+					return err
+				}
+				params[property] = value
+			}
+		}
 		for name, property := range map[string]string{
 			"auth-type-code": "authTypeCode", "submit-times-limit": "submitTimesLimit",
 			"submit-times-user-limit": "submitTimesUserLimit", "form-start-time": "formStartTime",
@@ -2098,13 +2129,24 @@ var FormShareUpdate = shortcut.Shortcut{
 		}
 		for name, property := range map[string]string{
 			"auth-data": "authData", "form-name": "formName", "form-desc": "formDesc",
-			"share-uid-list": "shareUidList",
+			"share-uid-list": "shareUidList", "form-cover": "formCover", "form-cover-resource-id": "formCoverResourceId",
 		} {
 			if rt.Changed(name) {
-				params[property] = rt.Str(name)
+				value := rt.Str(name)
+				if name == "form-cover" || name == "form-cover-resource-id" {
+					// Str trims whitespace; cover validation must inspect the original input and reject padding.
+					value, _ = rt.Command().Flags().GetString(name)
+				}
+				params[property] = value
 			}
 		}
-		return executeFormShareMCP(rt, "update_share_form", params, true)
+		if rt.Changed("submit-record-view-mode") {
+			// Runtime validates the declared Enum before Execute; keep a single validation boundary.
+			params["submitRecordViewMode"] = rt.Int("submit-record-view-mode")
+		}
+		return helpers.RunAitableFormShareUpdate(rt.Command(), params, func(args map[string]any) error {
+			return executeFormShareMCP(rt, "update_share_form", args, true)
+		})
 	},
 }
 
@@ -2130,13 +2172,13 @@ func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[st
 		return err
 	}
 	if write {
-		return output.StoreResult(rt.Command().Context(), helpers.AitableFormShareUpdateResult(envelope["data"], params))
+		return output.StoreResult(rt.Command().Context(), helpers.AitableFormShareUpdateResult(envelope, params))
 	}
-	data, ok := envelope["data"].(map[string]any)
-	if !ok || data == nil {
-		return apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值缺少 JSON 对象 data", serverHelper, tool))
+	result, err := helpers.AitableFormShareGetResult(envelope)
+	if err != nil {
+		return err
 	}
-	return rt.Output(data)
+	return output.StoreResult(rt.Command().Context(), result)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2436,14 +2478,43 @@ var DashboardDelete = shortcut.Shortcut{
 	},
 }
 
-// DashboardArrange 自动重排仪表盘图表布局（align_dashboard，server: aitable）。
+// DashboardArrange 用户明确要求时统一按行重排图表布局（align_dashboard，server: aitable）。
 var DashboardArrange = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+dashboard-arrange",
 	Product:     serverHelper,
-	Description: "对指定仪表盘做服务端智能布局重排",
-	Intent:      "当仪表盘里的图表排布凌乱、你想让系统自动重新排版对齐时使用；会实际调整该仪表盘的图表布局。",
+	Description: "统一按行重排仪表盘图表位置和尺寸",
+	Intent:      "仅在用户明确要求统一按行重排时使用；会改变图表位置、宽度、高度及叠放关系。大小卡混排、已有设计布局、纵向叠放或明确指定坐标时保留声明布局，创建图表后不默认追加 arrange。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_dashboard_arrange",
+			CanonicalPath:  "aitable.shortcut_dashboard_arrange",
+			CLIPath:        "aitable +dashboard-arrange",
+			PrimaryCLIPath: "aitable +dashboard-arrange",
+		},
+		Title:       "统一按行重排仪表盘图表位置和尺寸",
+		Description: "用户明确要求时统一按行重排仪表盘，改变图表位置、宽高及叠放关系。",
+		Interface: &contract.InterfaceSpec{
+			Mode:         contract.InterfaceModeComposite,
+			Availability: contract.InterfaceAvailable,
+			Reason:       reviewedAITableShortcutInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "统一按行重排仪表盘，改变图表位置、宽高及叠放关系；仅用户明确要求这种排版时执行。",
+			UseWhen:      []string{"用户明确要求自动将指定仪表盘按行铺满网格，并接受图表位置、宽高和叠放关系改变时"},
+			AvoidWhen: []string{
+				"大小卡混排、已有设计布局、纵向叠放或明确指定坐标需要保留时，不使用 arrange，也不作为创建图表的默认收尾",
+				"仅查看布局或核验设计时使用 +dashboard-get 与 +chart-get；修改仪表盘名称或元数据用 +dashboard-update",
+			},
+			Examples: []string{"dws aitable +dashboard-arrange --base-id B --dashboard-id D"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "dashboard-id", Type: shortcut.FlagString, Desc: "Dashboard ID", Required: true},
@@ -2616,7 +2687,7 @@ var ChartUpdate = shortcut.Shortcut{
 		{Name: "chart-id", Type: shortcut.FlagString, Desc: "Chart ID", Required: true},
 		{Name: "config", Type: shortcut.FlagString, Desc: "图表配置 JSON（至少含 chartName）", Required: true},
 		{Name: "layout", Type: shortcut.FlagString, Desc: "布局 JSON（可选）"},
-		{Name: "is-app-mode", Type: shortcut.FlagBool, Desc: "只读应用模式上下文；仅已确认应用模式且更新 layout 时传 true，不写入 MCP payload"},
+		{Name: "is-app-mode", Type: shortcut.FlagBool, Desc: "只读应用模式上下文；仅已确认应用模式且更新 layout 时传 true，不写入图表配置"},
 	},
 	Tips: []string{`dws aitable +chart-update --base-id B --dashboard-id D --chart-id C --config '{"chartName":"柱图"}'`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -2674,6 +2745,7 @@ var ChartUpdate = shortcut.Shortcut{
 				)
 			}
 			params["layout"] = layout
+			params["isAppMode"] = rt.Bool("is-app-mode")
 		}
 		return rt.CallMCP("update_chart", params)
 	},
@@ -3099,6 +3171,238 @@ var RoleDelete = shortcut.Shortcut{
 	},
 }
 
+func advancedPermissionResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{"type":"object","description":"高级权限 MCP 操作的服务端业务结果","additionalProperties":true}`),
+	}
+}
+
+func executeAdvancedPermissionMCP(rt *shortcut.RuntimeContext, tool string, params map[string]any, write bool) error {
+	if rt.DryRun() {
+		return rt.CallMCP(tool, params)
+	}
+	var (
+		envelope map[string]any
+		err      error
+	)
+	if write {
+		envelope, err = rt.CallMCPWriteDataStrict(serverMain, tool, params)
+	} else {
+		envelope, err = rt.CallMCPData(serverMain, tool, params)
+	}
+	if err != nil {
+		return err
+	}
+	data, ok := envelope["data"]
+	if !ok || data == nil {
+		return apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值缺少非空 data", serverMain, tool))
+	}
+	return rt.Output(data)
+}
+
+func validateAdvancedPermissionMembers(rt *shortcut.RuntimeContext) error {
+	_, err := parseRoleMembers(rt.Str("members"))
+	return err
+}
+
+func validateAdvancedPermissionMemberUpdate(rt *shortcut.RuntimeContext) error {
+	if err := validateAdvancedPermissionMembers(rt); err != nil {
+		return err
+	}
+	mode := rt.Int("default-role-mode")
+	if mode < 0 || mode > 2 {
+		return apperrors.NewValidation("--default-role-mode 仅支持 0、1 或 2")
+	}
+	if mode == 1 && (!rt.Changed("default-role-id") || strings.TrimSpace(rt.Str("default-role-id")) == "") {
+		return apperrors.NewValidation("--default-role-mode=1 时必须传 --default-role-id")
+	}
+	return nil
+}
+
+// Role-member prose describes the wire contract without adding parser enums.
+const (
+	roleMembersDescription  = `members 为 JSON array，最多 200 项；每项 id 和 memberType 必须是非空 String。id 按类型填写：用户填 uid（不是 userId）、群填群 id、部门填部门 id、组织填 orgid，其他组填对应稳定 ID。memberType 是字符串编码："1"=群 / "2"=用户 / "3"=组织 / "4"=部门 / "5"=虚拟组 / "6"=角色组 / "8"=动态组；不能用 user/conv 或数字 2。memberIdBelongOrgId 可选，类型为 JSON number（Java Long 整数，不加引号）；同文档组织可省略，由服务端回填 docOrgId；跨组织须填成员所属组织 ID。`
+	roleMembersAddIntent    = "当你已取得按类型匹配的稳定成员 ID（用户为 uid 而非 userId），且只需向自定义角色追加成员时使用；需 Base 管理员，不移除现有成员，返回写后最新成员列表 {roleId, members}，写后须回读核验。"
+	roleMembersUpdateIntent = "当你已读取当前角色成员和 defaultRole，且要完整替换自定义角色成员时使用；需 Base 管理员，返回写后最新成员列表 {roleId, members}，写后须回读核验。DWS 强制 members（非空全替换，包含所有需保留成员，[] 清空，不接受 null）和 default-role-mode（0/1/2）；mode=1 还需 default-role-id，按回读值显式保留默认角色。"
+	roleCopyIntent          = "当你要基于明确的自定义角色创建配置副本时使用；需 Base 管理员，沿用 roleType、flowType、subRoles，不复制成员，系统角色不可复制。name 省略或空字符串使用「源角色名 副本」；返回新角色完整配置。"
+	roleQueryUserIntent     = "当你要确认某用户在指定 Base 中实际命中的高级权限角色时使用；targetUid 可选，省略或空字符串查询当前调用人，不替换调用身份。返回 enabled 和 roles 角色配置，不含成员；高级权限关闭时 roles 通常为空。"
+)
+
+// RoleMembersAdd 向自定义角色增量追加成员（add_role_members）。
+var RoleMembersAdd = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+role-members-add",
+	Product:       serverMain,
+	Description:   "向自定义角色增量追加成员",
+	Intent:        roleMembersAddIntent,
+	Risk:          shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent",
+	},
+	Contract: advancedPermissionShortcutContract("role_members_add", "向自定义角色增量追加成员", roleMembersAddIntent, "目标是系统角色、非 Base 管理员或未取得按类型匹配的稳定成员 ID 时不得使用；完整替换成员用 +role-members-update", `dws aitable +role-members-add --base-id <BASE_ID> --role-id <ROLE_ID> --members '[{"id":"<UID>","memberType":"2"}]'`),
+	Flags: []shortcut.Flag{
+		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID（String）", Required: true},
+		{Name: "role-id", Type: shortcut.FlagString, Desc: "目标自定义角色 ID（long 形态 String）", Required: true},
+		{Name: "members", Type: shortcut.FlagString, Desc: "增量追加，不移除现有成员；" + roleMembersDescription, Required: true},
+	},
+	Tips:        []string{`dws aitable +role-members-add --base-id <BASE_ID> --role-id <ROLE_ID> --members '[{"id":"<UID>","memberType":"2"}]'`, roleMembersDescription},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"members"}, Description: roleMembersDescription}},
+	Validate:    validateAdvancedPermissionMembers,
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		members, err := parseRoleMembers(rt.Str("members"))
+		if err != nil {
+			return err
+		}
+		return executeAdvancedPermissionMCP(rt, "add_role_members", map[string]any{
+			"baseId": rt.Str("base-id"), "roleId": rt.Str("role-id"), "members": members,
+		}, true)
+	},
+}
+
+// RoleMembersUpdate 以完整成员列表替换自定义角色成员（update_role_members）。
+var RoleMembersUpdate = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+role-members-update",
+	Product:       serverMain,
+	Description:   "完整替换自定义角色成员并显式保留默认角色",
+	Intent:        roleMembersUpdateIntent,
+	Risk:          shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent",
+	},
+	Contract: advancedPermissionShortcutContract("role_members_update", "完整替换自定义角色成员并显式保留默认角色", roleMembersUpdateIntent, "目标是系统角色、非 Base 管理员、未回读 defaultRole 或目标成员 ID 类型不明时不得使用；仅追加成员用 +role-members-add", `dws aitable +role-members-update --base-id <BASE_ID> --role-id <ROLE_ID> --members '[{"id":"<UID>","memberType":"2","memberIdBelongOrgId":123456}]' --default-role-mode 0`),
+	Flags: []shortcut.Flag{
+		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID（String）", Required: true},
+		{Name: "role-id", Type: shortcut.FlagString, Desc: "目标自定义角色 ID（long 形态 String）", Required: true},
+		{Name: "members", Type: shortcut.FlagString, Desc: "DWS 必填，非空全替换，[] 清空，不接受 null；" + roleMembersDescription, Required: true},
+		{Name: "default-role-mode", Type: shortcut.FlagInt, Desc: "DWS 必填，仅支持 0/1/2，须按 role-list 回读值保留默认角色：0=无兜底、1=指定自定义角色、2=继承文档权限", Required: true},
+		{Name: "default-role-id", Type: shortcut.FlagString, Desc: "仅 default-role-mode=1 时必填且非空，使用当前默认自定义角色 ID（long 形态 String）", RequiredWhen: "default-role-mode=1"},
+	},
+	Tips: []string{`dws aitable +role-members-update --base-id <BASE_ID> --role-id <ROLE_ID> --members '[]' --default-role-mode 0`, roleMembersDescription},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"members"}, Description: "DWS 必填，非空全替换，[] 清空，不接受 null；" + roleMembersDescription},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"default-role-mode"}, Description: "DWS 必填，仅支持 0/1/2，须按 role-list 回读值保留默认角色"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"default-role-id"}, Description: "仅 default-role-mode=1 时必填且非空，使用当前默认自定义角色 ID（long 形态 String）"},
+	},
+	Validate: validateAdvancedPermissionMemberUpdate,
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		members, err := parseRoleMembers(rt.Str("members"))
+		if err != nil {
+			return err
+		}
+		mode := rt.Int("default-role-mode")
+		if mode < 0 || mode > 2 {
+			return apperrors.NewValidation("--default-role-mode 仅支持 0、1 或 2")
+		}
+		params := map[string]any{
+			"baseId": rt.Str("base-id"), "roleId": rt.Str("role-id"), "members": members, "defaultRoleMode": mode,
+		}
+		if mode == 1 {
+			defaultRoleID := strings.TrimSpace(rt.Str("default-role-id"))
+			if !rt.Changed("default-role-id") || defaultRoleID == "" {
+				return apperrors.NewValidation("--default-role-mode=1 时必须传 --default-role-id")
+			}
+			params["defaultRoleId"] = defaultRoleID
+		}
+		return executeAdvancedPermissionMCP(rt, "update_role_members", params, true)
+	},
+}
+
+// RoleCopy 复制自定义角色配置，不复制成员（copy_role）。
+var RoleCopy = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+role-copy",
+	Product:       serverMain,
+	Description:   "复制自定义角色配置（不复制成员）",
+	Intent:        roleCopyIntent,
+	Risk:          shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent",
+	},
+	Contract: advancedPermissionShortcutContract("role_copy", "复制自定义角色配置（不复制成员）", roleCopyIntent, "系统角色或非 Base 管理员不可复制；需要复制成员时须另用成员命令", "dws aitable +role-copy --base-id <BASE_ID> --source-role-id <ROLE_ID> --name 新角色"),
+	Flags: []shortcut.Flag{
+		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID（String）", Required: true},
+		{Name: "source-role-id", Type: shortcut.FlagString, Desc: "源自定义角色 ID（long 形态 String）；系统角色不可复制", Required: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "新角色名称（String）；省略或空字符串使用「源角色名 副本」"},
+	},
+	Tips: []string{`dws aitable +role-copy --base-id <BASE_ID> --source-role-id <ROLE_ID> --name "市场可读副本"`, roleCopyIntent},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		params := map[string]any{"baseId": rt.Str("base-id"), "sourceRoleId": rt.Str("source-role-id")}
+		if rt.Changed("name") {
+			params["name"] = rt.Str("name")
+		}
+		return executeAdvancedPermissionMCP(rt, "copy_role", params, true)
+	},
+}
+
+// RoleQueryUser 查询用户实际命中的高级权限角色（query_user_roles）。
+var RoleQueryUser = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+role-query-user",
+	Product:       serverMain,
+	Description:   "查询用户实际命中的高级权限角色",
+	Intent:        roleQueryUserIntent,
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: advancedPermissionShortcutContract("role_query_user", "查询用户实际命中的高级权限角色", roleQueryUserIntent, "targetUid 仅指定查询对象，不能替代调用人身份；获取角色成员用 +role-list，修改角色或成员用对应写命令", "dws aitable +role-query-user --base-id <BASE_ID> --target-uid <TARGET_UID>"),
+	Flags: []shortcut.Flag{
+		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID（String）", Required: true},
+		{Name: "target-uid", Type: shortcut.FlagString, Desc: "目标用户 uid（long 形态 String，不是 userId）；可选，省略或空字符串查询当前调用人，不替换调用身份"},
+	},
+	Tips: []string{`dws aitable +role-query-user --base-id <BASE_ID> --target-uid <TARGET_UID>`, roleQueryUserIntent},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		params := map[string]any{"baseId": rt.Str("base-id")}
+		if rt.Changed("target-uid") {
+			params["targetUid"] = rt.Str("target-uid")
+		}
+		return executeAdvancedPermissionMCP(rt, "query_user_roles", params, false)
+	},
+}
+
+func parseRoleMembers(raw string) ([]any, error) {
+	members, err := parseJSONArray("members", raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(members) > 200 {
+		return nil, apperrors.NewValidation("--members 最多 200 项")
+	}
+	for index, rawMember := range members {
+		member, ok := rawMember.(map[string]any)
+		id, idOK := member["id"].(string)
+		memberType, memberTypeOK := member["memberType"].(string)
+		id = strings.TrimSpace(id)
+		memberType = strings.TrimSpace(memberType)
+		if !ok || !idOK || !memberTypeOK || id == "" || memberType == "" {
+			return nil, apperrors.NewValidation(fmt.Sprintf("--members[%d] 必须包含非空 id 和 memberType", index))
+		}
+		member["id"] = id
+		member["memberType"] = memberType
+	}
+	return members, nil
+}
+
+func advancedPermissionShortcutContract(name, title, useWhen, avoidWhen, example string) corecmd.ContractDecl {
+	return corecmd.ContractDecl{
+		Title: title, Description: useWhen,
+		Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: reviewedAITableShortcutInterfaceReason},
+		Selection: contract.SelectionSpec{
+			AgentSummary: title, UseWhen: []string{useWhen},
+			AvoidWhen: []string{avoidWhen},
+			Examples:  []string{example},
+		},
+		Result:   advancedPermissionResultSpec(),
+		Identity: contract.ToolIdentitySpec{ProductID: "aitable", Name: "shortcut_" + name, CanonicalPath: "aitable.shortcut_" + name, CLIPath: "aitable +" + strings.ReplaceAll(name, "_", "-"), PrimaryCLIPath: "aitable +" + strings.ReplaceAll(name, "_", "-")},
+	}
+}
+
 // ─────────────────────────────────────────────────────────────
 // section: 文件夹与节点管理（server: aitable）
 // ─────────────────────────────────────────────────────────────
@@ -3400,6 +3704,10 @@ func init() {
 		RoleCreate,
 		RoleUpdate,
 		RoleDelete,
+		RoleMembersAdd,
+		RoleMembersUpdate,
+		RoleCopy,
+		RoleQueryUser,
 		SectionCreate,
 		SectionRename,
 		SectionDelete,

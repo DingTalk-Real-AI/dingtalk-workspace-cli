@@ -39,6 +39,8 @@ func TestMaterializeEmbeddedSkillSourceMono(t *testing.T) {
 		"SKILL.md",
 		filepath.Join("references", "global-reference.md"),
 		filepath.Join("references", "products", "contract.md"),
+		filepath.Join("references", "products", "mind.md"),
+		filepath.Join("references", "products", "mind", "open-nodes-v1.md"),
 		filepath.Join("references", "best_practices", "_common"),
 	} {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
@@ -82,6 +84,8 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		filepath.Join("dingtalk-misc", "SKILL.md"),
 		filepath.Join("dingtalk-misc", "references", "pat.md"),
 		filepath.Join("dingtalk-misc", "references", "contract.md"),
+		filepath.Join("dingtalk-misc", "references", "mind.md"),
+		filepath.Join("dingtalk-misc", "references", "mind", "open-nodes-v1.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
 			t.Errorf("expected embedded multi skill to contain %s: %v", rel, err)

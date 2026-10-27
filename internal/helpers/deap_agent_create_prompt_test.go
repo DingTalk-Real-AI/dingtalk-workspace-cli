@@ -15,7 +15,7 @@ import (
 )
 
 func TestCrossPlatformCoverageDeapAgentCreatePrompt(t *testing.T) {
-	for _, agentType := range []string{"open_code", "local_agent"} {
+	for _, agentType := range []string{"qwenwork", "local_agent"} {
 		for _, supplied := range []bool{false, true} {
 			for _, avatar := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/supplied=%t/avatar=%t", agentType, supplied, avatar), func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCrossPlatformCoverageDeapAgentCreatePrompt(t *testing.T) {
 							t.Fatal("missing prompt")
 						}
 						if !wantPrompt && prompt != "" {
-							t.Fatal("must not default open_code prompt")
+							t.Fatal("must not default qwenwork prompt")
 						}
 						if avatar && patch.args["avatarUrl"] != "https://oss.example/avatar.png" {
 							t.Fatal("avatar lost")
@@ -118,7 +118,7 @@ func TestCrossPlatformCoverageDeapAgentCreatePromptValidation(t *testing.T) {
 	for _, value := range []string{"", " \t ", strings.Repeat("中", 5001)} {
 		caller, _ := newDeapAgentTestTree(t, false)
 		root := deapHandler{}.Command(&captureRunner{})
-		root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "open_code", "--prompt", value})
+		root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "qwenwork", "--prompt", value})
 		err := corecmd.ExecuteForTest(root)
 		if err == nil || !strings.Contains(err.Error(), "--prompt") || strings.Contains(err.Error(), "unknown flag") {
 			t.Fatalf("expected prompt validation: %v", err)
@@ -136,7 +136,7 @@ func TestCrossPlatformCoverageDeapAgentCreatePromptPartialFailure(t *testing.T) 
 	}}
 	InitDepsForTest(t, caller)
 	root := deapHandler{}.Command(&captureRunner{})
-	root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "open_code", "--prompt", "Custom persona"})
+	root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "qwenwork", "--prompt", "Custom persona"})
 	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "created-1") || !strings.Contains(err.Error(), "save-draft") {
 		t.Fatalf("must preserve recoverable draft identity: %v", err)
@@ -151,7 +151,7 @@ func TestCrossPlatformCoverageDeapAgentCreatePromptUnicodeLimit(t *testing.T) {
 	caller.resultText = `{"success":true,"data":{"agentUuid":"created-1"}}`
 	root := deapHandler{}.Command(&captureRunner{})
 	prompt := strings.Repeat("中", 5000)
-	root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "open_code", "--prompt", prompt})
+	root.SetArgs([]string{"manage", "create", "--name", "helper", "--description", "assist", "--type", "qwenwork", "--prompt", prompt})
 	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}

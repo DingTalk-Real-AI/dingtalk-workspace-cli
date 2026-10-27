@@ -13,6 +13,7 @@ dws dev app get --unified-app-id <id> --format json
 dws dev app get --app-key <appKey> --format json
 
 # 写操作：同一条命令先预检，再正式执行
+# create 的 --desc 服务端必填（缺省返回 67010 DESC_INVALID），名称仅限中英文/数字/指定标点
 dws dev app create --name <名称> --desc <描述> --dry-run --format json
 dws dev app update --unified-app-id <id> --desc <描述> --dry-run --format json
 dws dev app disable --unified-app-id <id> --dry-run --format json

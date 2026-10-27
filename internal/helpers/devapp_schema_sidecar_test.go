@@ -114,22 +114,26 @@ func TestDevSchemaAllDumpToolsParseable(t *testing.T) {
 	}
 
 	// dev 域核心能力必须出现在装配 dump（可解析旁路的目标集合）。
-	for _, want := range []string{"dev.get_dev_app", "dev.list_dev_app", "dev.list_dev_app_versions", "dev.list_dev_app_events", "dev.list_dev_app_permissions", "dev.list_dev_app_members"} {
+	for _, want := range []string{"dev.get_dev_app", "dev.list_dev_app", "dev.list_dev_app_versions", "dev.list_dev_app_events", "dev.list_dev_app_permissions", "dev.list_dev_app_members", "dev.get_dev_app_scope", "dev.set_dev_app_visible_scope"} {
 		if !canonicals[want] {
 			t.Errorf("dev schema --all dump missing canonical tool %q", want)
 		}
 	}
+	if canonicals["dev.reset_dev_app_credentials"] {
+		t.Error("dev schema --all dump includes credential reset, which is excluded from the public migration")
+	}
 }
 
 // TestDevSchemaAllDumpCountStable 是队列 B192 的补充观察断言：dev 子树装配 dump
-// 的 tool 数量稳定（当前 67；包含 29 条静态 dev mcp 开发命令和显式 hybrid dev connect），作为回归
+// 的 tool 数量稳定（当前 69；包含 29 条静态 dev mcp 开发命令、显式 hybrid dev connect
+// 和两条应用可见范围命令，不包含凭证重置），作为回归
 // 基线快照。数量变化提示 dev 命令表面变更，需复核装配。
 func TestDevSchemaAllDumpCountStable(t *testing.T) {
 	dump := assembleDevSchemaAllDump(t)
 	for _, p := range dump.Products {
 		if p.ID == "dev" {
-			if len(p.Tools) != 67 {
-				t.Fatalf("dev schema --all tool count = %d, want 67 (hybrid connect included)", len(p.Tools))
+			if len(p.Tools) != 69 {
+				t.Fatalf("dev schema --all tool count = %d, want 69 (scope get/set included; credential reset excluded)", len(p.Tools))
 			}
 			return
 		}

@@ -8,6 +8,7 @@
 | AppKey、AppSecret、clientId、agentId | `dws dev app credentials get` | [`credentials.md`](./credentials.md) |
 | 开放平台应用的管理成员、成员角色与角色汇总 | `dws dev app member ...` | [`member.md`](./member.md) |
 | 应用权限 | `dws dev app permission ...` | [`permission.md`](./permission.md) |
+| 开发者后台应用的可见人员范围（部门/角色/人员，查询或全量设置） | `dws dev app scope get` / `dws dev app scope set` | [`scope.md`](./scope.md) |
 | IP 白名单、回调或 SSO 地址 | `dws dev app security config` | [`security.md`](./security.md) |
 | H5、PC 主页与 OMP 地址 | `dws dev app webapp ...` | [`webapp.md`](./webapp.md) |
 | 机器人配置、启停、提交审核 | `dws dev app robot ...` | [`robot.md`](./robot.md) |

@@ -137,7 +137,9 @@ type FlagSpec struct {
 	// toolArgs still needs a fallback. For KindString it is used when the
 	// effective value is empty. For KindInt it is also the floor: when the
 	// resolved integer is < 1, ArgDefault is emitted instead (cursor page-size
-	// semantics).
+	// semantics). For KindBool it is emitted only when no declared flag name
+	// was provided; explicit true/false still wins, and presence constraints
+	// continue to count only Changed rather than this payload default.
 	ArgDefault string
 	// Bind is the toolArgs key; empty uses Name.
 	Bind string
@@ -1451,8 +1453,9 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 			continue
 		}
 		if flag.Kind == KindBool {
-			// Enter on Changed only (main OR alias): explicit false is still
-			// sent (matching the handwritten "transmit on Changed" semantics).
+			// Existing booleans remain Changed-only. A declared ArgDefault opts
+			// this parameter into a required wire value without opting the user
+			// into a different boolean choice or altering flag presence.
 			if flagNameProvided(cmd, flag) {
 				v, _ := cmd.Flags().GetBool(flag.Name)
 				if !cmd.Flags().Changed(flag.Name) {
@@ -1462,6 +1465,12 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 							break
 						}
 					}
+				}
+				toolArgs[bind] = v
+			} else if flag.ArgDefault != "" {
+				v, err := strconv.ParseBool(flag.ArgDefault)
+				if err != nil {
+					return nil, fmt.Errorf("flag --%s: invalid boolean ArgDefault %q", flag.Name, flag.ArgDefault)
 				}
 				toolArgs[bind] = v
 			}

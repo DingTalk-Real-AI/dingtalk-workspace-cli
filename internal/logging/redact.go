@@ -64,6 +64,10 @@ var sensitiveKeys = map[string]bool{
 	"uploadurl":                   true,
 	"upload_url":                  true,
 	"upload-url":                  true,
+	// 群邀请链接携带入群凭证，不得写入诊断日志。
+	"inviteurl":  true,
+	"invite_url": true,
+	"invite-url": true,
 	// 消息正文可能来自 stdin 机器协议；传输日志不得记录正文或审批内容。
 	"content": true,
 	"text":    true,

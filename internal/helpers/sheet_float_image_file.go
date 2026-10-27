@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -110,27 +111,35 @@ func runFloatImageFileMode(cmd *cobra.Command, toolName, filePath string, toolAr
 }
 
 func openFloatImageLocalFile(path string) (*floatImageLocalFile, error) {
-	return openFloatImageLocalFileWith(path, os.Stat, os.Open)
+	return openFloatImageLocalFileNamed(path, "--file")
 }
 
 func openFloatImageLocalFileWith(path string, stat func(string) (os.FileInfo, error), open func(string) (*os.File, error)) (*floatImageLocalFile, error) {
+	return openFloatImageLocalFileWithFlag(path, "--file", stat, open)
+}
+
+func openFloatImageLocalFileNamed(path, flagName string) (*floatImageLocalFile, error) {
+	return openFloatImageLocalFileWithFlag(path, flagName, os.Stat, os.Open)
+}
+
+func openFloatImageLocalFileWithFlag(path, flagName string, stat func(string) (os.FileInfo, error), open func(string) (*os.File, error)) (*floatImageLocalFile, error) {
 	info, err := stat(path)
 	if err != nil {
-		return nil, fmt.Errorf("无法读取 --file %q: %w", path, err)
+		return nil, fmt.Errorf("无法读取 %s %q: %w", flagName, path, err)
 	}
-	if err := validateFloatImageFileInfo(info); err != nil {
+	if err := validateFloatImageFileInfoNamed(info, flagName); err != nil {
 		return nil, err
 	}
 	file, err := open(path)
 	if err != nil {
-		return nil, fmt.Errorf("无法打开 --file %q: %w", path, err)
+		return nil, fmt.Errorf("无法打开 %s %q: %w", flagName, path, err)
 	}
 	openedInfo, err := file.Stat()
 	if err != nil {
 		_ = file.Close()
-		return nil, fmt.Errorf("无法读取已打开的 --file %q: %w", path, err)
+		return nil, fmt.Errorf("无法读取已打开的 %s %q: %w", flagName, path, err)
 	}
-	if err := validateFloatImageFileInfo(openedInfo); err != nil {
+	if err := validateFloatImageFileInfoNamed(openedInfo, flagName); err != nil {
 		_ = file.Close()
 		return nil, err
 	}
@@ -143,12 +152,14 @@ func openFloatImageLocalFileWith(path string, stat func(string) (os.FileInfo, er
 	}, nil
 }
 
-func validateFloatImageFileInfo(info os.FileInfo) error {
+// Invalid file kinds and empty files are input errors for both cover and floating images.
+// Classify only these checks; stat/open/read failures keep their underlying I/O identity.
+func validateFloatImageFileInfoNamed(info os.FileInfo, flagName string) error {
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("--file 必须是普通文件")
+		return apperrors.NewValidation(fmt.Sprintf("%s 必须是普通文件", flagName))
 	}
 	if info.Size() <= 0 {
-		return fmt.Errorf("--file 不能为空文件")
+		return apperrors.NewValidation(fmt.Sprintf("%s 不能为空文件", flagName))
 	}
 	return nil
 }

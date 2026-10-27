@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
 const (
@@ -116,14 +118,24 @@ func TestCrossPlatformCoverageAITableShareFormResultContracts(t *testing.T) {
 					t.Fatalf("required=%#v", dataSchema["required"])
 				}
 				properties := aitableShareSchemaObject(t, dataSchema["properties"], "result.data_schema.properties")
-				for _, field := range tc.fields {
+				fields := append(append([]string{}, tc.fields...), "shareFormUrl", "authTypeCode", "authData", "submitTimesLimit", "submitTimesUserLimit", "formStartTime", "formEndTime", "anonymousSubmit", "loadLastSubmit", "submitRecordViewMode", "replyNotice", "shareUidList", "warnings")
+				for _, field := range fields {
 					property := aitableShareSchemaObject(t, properties[field], "result field "+field)
 					if schemaContractString(property["description"]) == "" {
 						t.Errorf("missing described result field %s", field)
 					}
 				}
-				if _, exists := schemaContractMap(full["parameters"])["form-cover"]; exists {
-					t.Fatal("form-cover must not become a required DWS input")
+				cover, exists := schemaContractMap(full["parameters"])["form-cover"]
+				if strings.Contains(path, "update") {
+					if !exists {
+						t.Fatal("update must expose the optional form-cover input")
+					}
+					param := aitableShareSchemaObject(t, cover, "form-cover")
+					if param["required"] == true || param["cli_required"] == true {
+						t.Fatal("form-cover must not become a required DWS input")
+					}
+				} else if exists {
+					t.Fatal("get must not expose a form-cover input")
 				}
 			})
 		}
@@ -134,8 +146,10 @@ func TestCrossPlatformCoverageAITableShareFormUpdateConstraints(t *testing.T) {
 	want := map[string][][]string{"require_one_of": {{
 		"enabled", "auth-type-code", "auth-data", "submit-times-limit", "submit-times-user-limit",
 		"form-start-time", "form-end-time", "form-name", "form-desc", "anonymous-submit",
-		"load-last-submit", "reply-notice", "share-uid-list",
-	}}}
+		"form-start-at", "form-end-at", "load-last-submit", "reply-notice", "share-uid-list",
+		"submit-record-view-mode", "form-cover", "form-cover-file", "form-cover-resource-id",
+	}}, "mutually_exclusive": {{"form-cover", "form-cover-file", "form-cover-resource-id"},
+		{"form-start-time", "form-start-at"}, {"form-end-time", "form-end-at"}}}
 	for _, path := range []string{"aitable form share update", "aitable +form-share-update"} {
 		for _, compact := range []bool{false, true} {
 			args := []string{"--cli-path", path}
@@ -143,6 +157,27 @@ func TestCrossPlatformCoverageAITableShareFormUpdateConstraints(t *testing.T) {
 				args = append(args, "--compact")
 			}
 			tool := executeShortcutSchemaQuery(t, args...)
+			{
+				file := tool["parameters"].(map[string]any)["form-cover-file"].(map[string]any)
+				if _, present := file["property"]; present {
+					t.Fatalf("local cover file must not publish a direct RPC property: %#v", file)
+				}
+				if !compact {
+					provenance := file["field_provenance"].(map[string]any)["property"].(map[string]any)
+					if provenance["source"] != "reviewed_mapping_exclusion" {
+						t.Fatalf("local cover file mapping exclusion was not delivered: %#v", provenance)
+					}
+				}
+			}
+			for name, description := range map[string]string{
+				"form-cover":             helpers.FormCoverURLDescription,
+				"form-cover-resource-id": helpers.FormCoverResourceDescription,
+			} {
+				param := tool["parameters"].(map[string]any)[name].(map[string]any)
+				if param["description"] != description {
+					t.Fatalf("%s compact=%v %s description=%#v", path, compact, name, param["description"])
+				}
+			}
 			if !schemaContractJSONEqual(tool["constraints"], want) {
 				t.Fatalf("%s compact=%v constraints=%#v", path, compact, tool["constraints"])
 			}
@@ -152,6 +187,27 @@ func TestCrossPlatformCoverageAITableShareFormUpdateConstraints(t *testing.T) {
 			}
 			if _, published := enabled["interface_type"]; published {
 				t.Fatalf("%s compact=%v must preserve the historical omitted enabled interface_type", path, compact)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAITableShareFormNotifyIdentity(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		args := []string{"--cli-path", "aitable form share notify"}
+		if compact {
+			args = append(args, "--compact")
+		}
+		tool := executeShortcutSchemaQuery(t, args...)
+		parameter := aitableShareSchemaObject(t, tool["parameters"], "parameters")["recipients"].(map[string]any)
+		for label, description := range map[string]string{"command": tool["description"].(string), "recipients": parameter["description"].(string)} {
+			if !strings.Contains(description, "当前组织") || !strings.Contains(description, "userId") || !strings.Contains(description, "1-100") {
+				t.Fatalf("compact=%t %s obscures recipient identity: %s", compact, label, description)
+			}
+		}
+		for _, example := range tool["examples"].([]any) {
+			if !strings.Contains(example.(string), "USER_ID") || strings.Contains(example.(string), "INTERNAL_UID") {
+				t.Fatalf("notify example uses the wrong identity: %s", example)
 			}
 		}
 	}
@@ -304,6 +360,47 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				t.Fatalf("%s still forces an executable command when required IDs are absent", path)
 			}
 		})
+	}
+}
+
+// Query the shipped projections, not only ContractFinal: legacy-only leaves
+// may declare Result internally while intentionally omitting it from Schema.
+func TestCrossPlatformCoverageAITableShareFormURLResultSchema(t *testing.T) {
+	full := executeShortcutSchemaQuery(t, "--cli-path", "aitable form share url")
+	compact := executeShortcutSchemaQuery(t, "--cli-path", "aitable form share url", "--compact")
+	result, ok := full["result"].(map[string]any)
+	if !ok {
+		t.Fatal("form share url must publish result in final full Schema")
+	}
+	if !schemaContractJSONEqual(result, compact["result"]) {
+		t.Fatalf("compact result differs from full result: full=%#v compact=%#v", result, compact["result"])
+	}
+	if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) {
+		t.Fatalf("unexpected outcomes: %#v", result["outcomes"])
+	}
+	schema := result["data_schema"].(map[string]any)
+	branches := schema["oneOf"].([]any)
+	if len(branches) != 2 {
+		t.Fatalf("expected business and dry-run branches: %#v", branches)
+	}
+	business := branches[0].(map[string]any)
+	properties := business["properties"].(map[string]any)
+	for _, name := range []string{"shareFormUuid", "shareUrl", "copyableUrl", "qrFile"} {
+		property, ok := properties[name].(map[string]any)
+		if !ok || property["type"] != "string" || property["description"] == "" || property["description"] == nil {
+			t.Fatalf("missing or invalid published property %s: %#v", name, properties[name])
+		}
+	}
+	if !schemaContractJSONEqual(business["required"], []string{"shareFormUuid", "shareUrl", "copyableUrl"}) {
+		t.Fatalf("qrFile must remain optional: %#v", business["required"])
+	}
+	preview := branches[1].(map[string]any)
+	if !schemaContractJSONEqual(preview["required"], []string{"tool", "arguments", "executed"}) {
+		t.Fatalf("unexpected dry-run required fields: %#v", preview)
+	}
+	executed := preview["properties"].(map[string]any)["executed"].(map[string]any)
+	if executed["const"] != false {
+		t.Fatalf("dry-run must declare executed=false: %#v", executed)
 	}
 }
 

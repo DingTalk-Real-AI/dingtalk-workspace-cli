@@ -29,6 +29,12 @@ func TestCrossPlatformCoverageChatNarrowSchemaReplacesRoutineHelp(t *testing.T) 
 			pagination:       true,
 		},
 		{
+			path:             "chat list-all-conversations",
+			parameters:       []string{"limit", "cursor", "exclude-muted", "page-all", "page-limit", "max-items", "page-delay"},
+			resultProperties: []string{"result", "result.conversationList", "paging"},
+			pagination:       true,
+		},
+		{
 			path:             "chat +chat-messages",
 			parameters:       []string{"group", "user", "time", "page-all"},
 			resultProperties: []string{"messages", "messages[].messageId", "messages[].conversationId", "messages[].sender", "messages[].text", "messages[].createTime", "complete", "nextActions"},

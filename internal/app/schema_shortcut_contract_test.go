@@ -19,12 +19,14 @@ import (
 )
 
 const (
-	publicShortcutCount = 483
+	// CLI acceleration adds nine public shortcuts beyond main's role/member
+	// commands; the deferred layout write is not part of the delivered surface.
+	publicShortcutCount = 496
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 540
+	schemaPublishedShortcutCount = 553
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 483
+	publiclyDeliveredShortcutCount = 496
 )
 
 func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
@@ -61,6 +63,130 @@ func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
 	}
 	if full["effect"] != "read" || full["confirmation"] != "not_required" || full["dry_run"].(map[string]any)["preview_kind"] != "request" {
 		t.Fatalf("unsafe contract: %#v", full)
+	}
+}
+
+func TestCrossPlatformCoverageAITableAdvancedPermissionResultReachesBothSchemaProjections(t *testing.T) {
+	for _, path := range []string{
+		"aitable advperm role-members-add",
+		"aitable advperm role-members-update",
+		"aitable advperm role-copy",
+		"aitable advperm role-query-user",
+		"aitable +role-members-add",
+		"aitable +role-members-update",
+		"aitable +role-copy",
+		"aitable +role-query-user",
+	} {
+		t.Run(path, func(t *testing.T) {
+			full := executeShortcutSchemaQuery(t, "--cli-path", path)
+			compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+			result, ok := full["result"].(map[string]any)
+			if !ok || !schemaContractJSONEqual(result, compact["result"]) {
+				t.Fatalf("Result must reach both projections: full=%#v compact=%#v", full, compact)
+			}
+			if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) || result["data_schema"] == nil {
+				t.Fatalf("incomplete unified Result: %#v", result)
+			}
+			if strings.Contains(path, " advperm ") {
+				wantRPC := map[string]string{
+					"role-members-add": "add_role_members", "role-members-update": "update_role_members",
+					"role-copy": "copy_role", "role-query-user": "query_user_roles",
+				}[strings.TrimPrefix(path, "aitable advperm ")]
+				ref := schemaInterfaceObject(full["interface_ref"])
+				if full["interface_mode"] != "mcp" || ref["product_id"] != "aitable" || ref["rpc_name"] != wantRPC {
+					t.Fatalf("atomic interface route = %v/%v, want aitable/%s", full["interface_mode"], ref, wantRPC)
+				}
+			} else if full["interface_mode"] != "composite" || full["interface_ref"] != nil {
+				t.Fatalf("shortcut composite interface changed: %#v", full["interface_ref"])
+			}
+			root := NewRootCommand()
+			cmd, _, err := root.Find(strings.Fields(path))
+			if err != nil || !output.UsesUnifiedResult(cmd) {
+				t.Fatalf("Result published without unified runtime: %v", err)
+			}
+			for projection, leaf := range map[string]map[string]any{"full": full, "compact": compact} {
+				t.Run(projection, func(t *testing.T) {
+					assertContains := func(text string, phrases ...string) {
+						t.Helper()
+						for _, phrase := range phrases {
+							if !strings.Contains(text, phrase) {
+								t.Errorf("missing %q in %s", phrase, text)
+							}
+						}
+					}
+					params := schemaContractMap(leaf["parameters"])
+					for _, name := range []string{"base-id", "role-id", "source-role-id", "default-role-id", "target-uid"} {
+						if param := params[name]; param != nil {
+							desc := schemaContractString(param["description"])
+							assertContains(desc, "String")
+							assertContains(cmd.Flags().Lookup(name).Usage, "String")
+							if name != "base-id" {
+								assertContains(desc, "long")
+							}
+							// The wire omits interface_type when it equals the CLI type.
+							if param["type"] != "string" || (param["interface_type"] != nil && param["interface_type"] != "string") {
+								t.Errorf("%s must remain a String parameter: %#v", name, param)
+							}
+						}
+					}
+					description := schemaContractString(leaf["description"])
+					switch {
+					case strings.Contains(path, "role-members-"):
+						assertContains(description, "管理员", "写后最新成员列表")
+						for _, text := range []string{schemaContractString(params["members"]["description"]), cmd.Flags().Lookup("members").Usage} {
+							assertContains(text, "JSON array", "200", "id 和 memberType 必须是非空 String", "uid（不是 userId）", "群填群 id", "部门填部门 id", "组织填 orgid", `"1"=群`, `"2"=用户`, `"3"=组织`, `"4"=部门`, `"5"=虚拟组`, `"6"=角色组`, `"8"=动态组`, "不能用 user/conv 或数字 2", "memberIdBelongOrgId", "JSON number", "Java Long 整数", "不加引号", "同文档组织可省略", "docOrgId", "跨组织")
+						}
+						if params["members"]["required"] != true {
+							t.Fatal("DWS members must remain required")
+						}
+						if projection == "full" && strings.Contains(path, "advperm") && params["members"]["interface_type"] != "array" {
+							t.Fatal("atomic members must declare the array interface type")
+						}
+						if strings.HasSuffix(path, "update") {
+							assertContains(schemaContractString(params["members"]["description"]), "非空全替换", "[]", "不接受 null")
+							if params["default-role-mode"]["required"] != true || params["default-role-id"]["required_when"] != "default-role-mode=1" {
+								t.Fatal("DWS default-role requirements were relaxed")
+							}
+						}
+						populated := false
+						for _, example := range schemaContractStringSlice(leaf["examples"]) {
+							argv, err := cli.ParseAgentExampleArgv(example)
+							if err != nil {
+								t.Fatal(err)
+							}
+							var members []map[string]any
+							if err := json.Unmarshal([]byte(schemaExampleFlagValue(argv, "members")), &members); err != nil {
+								t.Fatal(err)
+							}
+							for _, member := range members {
+								populated = true
+								if member["memberType"] != "2" || member["id"] != "<UID>" {
+									t.Errorf("example must use uid and String code: %#v", member)
+								}
+								if org, exists := member["memberIdBelongOrgId"]; exists && org != float64(123456) {
+									t.Errorf("example org must be a JSON number: %#v", org)
+								}
+							}
+						}
+						if !populated {
+							t.Fatal("member example must demonstrate the String code")
+						}
+					case strings.HasSuffix(path, "role-copy"):
+						assertContains(description, "roleType", "flowType", "subRoles", "不复制成员", "系统角色不可复制", "新角色完整配置")
+						assertContains(schemaContractString(params["name"]["description"]), "省略或空字符串", "源角色名 副本")
+						if strings.Contains(strings.Join(schemaContractStringSlice(leaf["avoid_when"]), " "), "成员 ID") {
+							t.Fatal("copy must not require member IDs")
+						}
+					case strings.HasSuffix(path, "role-query-user"):
+						assertContains(description, "enabled", "roles", "不含成员", "高级权限关闭时 roles 通常为空", "不替换调用身份")
+						assertContains(schemaContractString(params["target-uid"]["description"]), "可选", "省略或空字符串查询当前调用人", "不是 userId")
+						if params["target-uid"]["required"] == true {
+							t.Fatal("target uid must remain optional")
+						}
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -217,7 +343,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 240; got != want {
+	if got, want := int(product["count"].(float64)), 243; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])

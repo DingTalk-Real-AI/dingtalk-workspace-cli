@@ -27,10 +27,11 @@ type upsertByKeyStep struct {
 }
 
 type upsertByKeyCaller struct {
-	steps  []upsertByKeyStep
-	calls  []aitableURLCall
-	dryRun bool
-	callFn func(index int, product, tool string, args map[string]any) (string, error)
+	steps        []upsertByKeyStep
+	calls        []aitableURLCall
+	dryRun       bool
+	callFn       func(index int, product, tool string, args map[string]any) (string, error)
+	capabilityFn func(context.Context, string, string) (bool, error)
 }
 
 func (c *upsertByKeyCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {

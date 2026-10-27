@@ -91,7 +91,7 @@ const (
 	// LeafInt 整型 flag；仅在值 != 0 时进入 toolArgs（putInt 语义）。
 	LeafInt = corecmd.KindInt
 	// LeafBool 布尔 flag；仅在用户显式提供（Changed）时进入 toolArgs，显式
-	// false 也下发；不参与别名/env 回退链。
+	// false 也下发；显式声明 ArgDefault 时才在未提供 flag 时发送布尔默认载荷。
 	LeafBool = corecmd.KindBool
 	// LeafStringSlice 字符串列表 flag；仅在存在非空元素时进入 toolArgs，元素
 	// 恒 TrimSpace 后过滤空串。

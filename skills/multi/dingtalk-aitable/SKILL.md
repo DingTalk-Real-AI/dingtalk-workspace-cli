@@ -114,7 +114,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 127 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知 leaf 直接执行。参数只查 `dws schema --cli-path "aitable <leaf>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 outcomes/pagination，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；低频 reference 不默认 Help；同一任务只读一个 Reference。
+`aitable` 当前有 140 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知 leaf 直接执行。参数只查 `dws schema --cli-path "aitable <leaf>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 outcomes/pagination，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；低频 reference 不默认 Help；同一任务只读一个 Reference。
 
 仅当根路由、精确 task reference 和 `references/aitable.md` 的低频原子索引都无法定位能力时，才执行 `dws shortcut list --service aitable --format json` 做最终回退；不要为已知意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -178,6 +178,8 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 - 已有 ID 直接使用；URL 只解析一次；“唯一定位并操作”用 `+resolve-base` / `+resolve-table`，“搜索候选/存在性检查”直接用 `+base-search`。人员、部门或群组只有显示名称时用 `entity search` 取得稳定身份；这些路径不要串行探测。filters/sort 缺 fieldId 时才读取字段目录。
 - Golden Route 已给出准确命令和参数时直接执行；不预读或默认读取通用 `references/aitable.md`。只有操作参数、JSON 结构或恢复语义确实缺失时，才读取下方一个精确操作 Reference。
 - Shortcut 已含分片或验证时不重复拆步；已有 Base 新建完整表结构直接用 `+table-bootstrap`。
+- 明确仪表盘设计、大小混排或纵向叠放时保留显式 layout，创建后不默认 arrange。多图集中编排用 `+charts-create`；需要多步依赖和中断接续时读 dashboard-chart 专项，使用 `+build-plan` / `+build-plan-verify`。
+- AI submitted 只表示有真实 taskId 的受理；新状态入口已部署且有固定目标记录时才使用 `+field-wait-ai`。本轮终态与结果写回可读分别判断，缺少版本证据时保持 pending。
 - 单产品线性任务直接执行，不创建 TodoWrite；只有跨产品或多个独立分支的长任务才建计划，并且只在阶段切换时更新，不在每条 CLI 后刷新状态。
 - 用户要求资源名带当前时间戳时只取一次并在 Base、Table、Dashboard 等名称中复用同一值；不要为每个资源分别取时间。
 - JSON 已返回所需字段时立即复用；不得为寻找同一字段改用 `--verbose`、`raw`、`pretty` 重复请求。

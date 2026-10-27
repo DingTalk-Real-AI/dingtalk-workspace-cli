@@ -1,6 +1,6 @@
 ---
 name: dingtalk-minutes
-description: 钉钉 AI 听记。Use when 查询或修改听记摘要、完整逐字稿、关键词、标签、行动项、录音、上传、思维导图、发言人洞察、ASR 热词/识别词配置或分享权限。写文档走 dingtalk-doc；建待办走 dingtalk-todo；日程走 dingtalk-calendar。命令前缀：dws minutes。
+description: 钉钉 AI 听记。Use when 查询或修改听记摘要、完整逐字稿、关键词、标签、行动项、录音、上传、听记内置思维导图、发言人洞察、ASR 热词/识别词配置或分享权限。独立 .amind 脑图文件的创建和主题读写走 dingtalk-misc 的 mind reference；写文档走 dingtalk-doc；建待办走 dingtalk-todo；日程走 dingtalk-calendar。命令前缀：dws minutes。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -52,7 +52,7 @@ metadata:
 | 上传音视频生成听记 | `dws minutes +upload --file <相对路径>` | 真实执行会上传文件并创建远端听记，必须按 Runtime confirmation；用户明确要闪记卡片时改用 `+upload-and-notify`，需要上传后等待分析产物时用 `+upload-and-analyze` |
 | 真实开始、暂停、继续或停止录音 | `+record-start` / `+record-pause` / `+record-resume` / `+record-stop` | 这组入口会真实执行。start 返回 `accepted=true, bound=false` 或 `controlReady=false` 时，报告“已受理但未绑定”并停止：不得重试 start，也不得用 `+latest`、列表第一条或时间最近项猜 ID。结束并等待产物用 `+record-wrap-up` |
 | 只预览录音请求，不实际执行 | `dws minutes record start --dry-run --format json` | 使用对应的原子 `minutes record start|pause|resume|stop` leaf；start 的 `--session-id` 可选，pause/resume/stop 必须传真实 `--id`。不要把被拒绝的 Shortcut dry-run 描述成预览成功 |
-| 生成或继续思维导图 | `dws minutes +mindmap --id <taskUuid>` | 创建后有界轮询；超时或未知状态保留恢复信息，用 `--resume` 继续，不重复创建 |
+| 生成或继续查询听记内置思维导图 | `dws minutes +mindmap --id <taskUuid>` | 创建后有界轮询；超时或未知状态保留恢复信息，用 `--resume` 继续，不重复创建 |
 | 生成或继续发言人洞察 | `dws minutes +speaker-insights --id <taskUuid>` | 只有 `state=ready/complete=true` 才完成；pending 保留 `taskId` 并同账号 `--resume [--task-id <ID>]`，不重复创建；用户给定等待时长传 `--timeout` |
 | 当前用户申请查看/下载/编辑权限 | `dws minutes +apply-permission --id <taskUuid> --permission view|download|edit` | 这是“我申请访问”，不是所有者给别人授权；按 Runtime confirmation 执行 |
 | 所有者给成员授权或撤权 | `dws minutes +share ...` / `dws minutes +unshare ...` | 先用通讯录把姓名解析为同组织稳定 UID；撤权是破坏性操作。批量结果必须保留逐成员 ledger 和失败项 |
@@ -94,6 +94,10 @@ dws minutes +list-all --page-all --format json
 - `--dry-run` 必须返回明确的 dry-run/request 证据且不调用远端；录音预览按上方原子入口执行。任何入口若拒绝 dry-run，必须报告“不支持预览”，不得把拦截或普通执行称为预演成功。
 - 用户明确要求“仅预览/不实际写入”时，任务在真实现状读取、dry-run 计划和差异交付后结束；不得继续请求写入确认，也不得为了验证预览而执行真实写入后再还原。
 - 分享/撤权使用稳定成员 UID，不能把姓名、手机号或跨组织 ID 直接当 UID；同一目标解析、读取、写入和验证必须使用同一 profile。
+
+## 脑图目标边界
+
+`minutes +mindmap` 的目标是听记内置思维导图，结果展示在听记详情中，不创建可独立编辑的 .amind 文件。用户明确要求独立脑图或编辑已有脑图主题时，转 [独立脑图](../dingtalk-misc/references/mind.md)。已有听记 URL 不覆盖明确的独立文件意图；只有目标未明时才消歧。若用户明确另存独立脑图，可先读取获授权的听记内容，再按 mind reference 构造 OpenNodes；不套用内置生成的“禁止先读取内容”规则。
 
 ## 按需加载
 

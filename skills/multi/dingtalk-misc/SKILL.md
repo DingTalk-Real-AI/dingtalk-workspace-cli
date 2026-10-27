@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 钉钉独立白板（白板文件）的创建、绘图、保存和修改；文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写（dws whiteboard）。两类目标相互独立，不互相推断或切换；文档内白板卡片容器不属于本 skill。长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/独立白板带内容创建/独立白板节点读写/已有 nodeId 和 partId 的文档内嵌白板图形内容读写/单元格读写/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 钉钉独立白板（白板文件）的创建、绘图、保存和修改；文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写（dws whiteboard）。两类目标相互独立，不互相推断或切换；文档内白板卡片容器不属于本 skill。长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/独立白板带内容创建/独立白板节点读写/已有 nodeId 和 partId 的文档内嵌白板图形内容读写/单元格读写/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/搜索MCP市场/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
 metadata:
   cli_version: ">=1.0.61"
   category: product
@@ -13,11 +13,13 @@ metadata:
 
 ## 执行前路由
 
-本文件只负责产品路由。先由下表确定唯一产品：单一、清晰的 Whiteboard、Attendance、Report、Sheet 或 Dev 任务直接读取对应 reference（内含该任务所需的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
+本文件只负责产品路由。先由下表确定唯一产品：单一、清晰的 Mind、Whiteboard、Attendance、Report、Sheet 或 Dev 任务直接读取对应 reference（内含该任务所需的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
 
 同一请求同时出现日报、周报或简报名称与审批人、抄送人、审批路径、审批单等审批意图时，审批意图优先，统一路由 OA 并读取 `oa.md`；本次任务不得执行 `dws report`。OA 中没有同名模板也不能降级提交 Report，只能交付 OA 搜索结果或请求消歧。只有用户明确要求提交钉钉日志，且没有审批流语义时，才路由 Report。
 
 Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`，不要重复预读 `dingtalk-shared`。只有出现跨产品编排、profile/认证问题、未知全局错误或 Reference 明确指向 shared 时，才按需读取 shared 对应内容。
+
+用户要求独立脑图文件的带内容创建、主题查询或增删改时，直接读取 [mind.md](references/mind.md)。只创建空白脑图文件走 `wiki node create --type amind`；听记内置思维导图走 `dingtalk-minutes`。仅提到“脑图/思维导图”且目标不明时先消歧；明确独立文件需求不得路由听记。OpenNodes 不是白板专属触发词，应按目标产品和 catalogVersion 区分，不把 mind-v1 传给白板。
 
 用户明确要求创建或操作白板文件、独立白板时，直接读取 [whiteboard.md](references/whiteboard.md)，无需先读 Doc 或 shared 路由。课表、日历、流程图等是内容形态，不能据此把文档内嵌目标改成独立白板。文档内嵌白板的卡片容器操作走 `dingtalk-doc`；只有已有承载文档 `nodeId` 和 `partId` 的图形内容操作才读取 whiteboard reference。缺少任一身份时停止并补齐，禁止转成独立白板。
 
@@ -30,14 +32,15 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 考勤 / 打卡 / 班次 / 考勤组 / 排班 / 考勤报表 / 假期余额 | 考勤记录、规则与配置、排班、报表、假期 | `dws attendance` | 日常查询/规则/设置：[attendance.md](references/attendance.md)；排班导入或排班表导出：[attendance-schedule.md](references/attendance-schedule.md)；考勤 Excel/报表导出：[attendance-report.md](references/attendance-report.md)；假期/余额：[attendance-vacation.md](references/attendance-vacation.md) |
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
 | DING / 紧急通知 / 电话DING / 短信DING / 必达消息 | DING 紧急消息（应用内/短信/电话），个人DING | `dws ding` | [ding.md](references/ding.md) |
-| 开放平台应用 / 企业内部应用 / 应用状态或删除条件 / 应用管理成员 / 应用权限 / 应用版本或版本历史 / agentId / clientId / 应用机器人配置 / 机器人消息模式或在线状态 / 本机机器人连接器 / Stream连接 / 版本发布 / connect / MCP 服务开发 / MCP 工具发布 / MCP 凭证 / OpenAPI或Swagger或Postman或curl转MCP / 接口给Agent用 / 已发布MCP调用 | 开放平台企业内部应用，以及 MCP 服务、工具、鉴权、凭证、协作者和发布后动态调用 | `dws dev` / `dws dev mcp` / `dws mcp published` | 按下方「Dev 直达规则」读取一个 `references/dev/*.md`；意图不明时才读 [dev-index.md](references/dev/dev-index.md) |
+| 开放平台应用 / 企业内部应用 / 应用状态或删除条件 / 应用管理成员 / 应用权限 / 应用版本或版本历史 / agentId / clientId / 应用机器人配置 / 机器人消息模式或在线状态 / 本机机器人连接器 / Stream连接 / 版本发布 / connect / MCP 服务开发 / MCP 工具发布 / MCP 凭证 / OpenAPI或Swagger或Postman或curl转MCP / 接口给Agent用 / 已发布MCP调用 / MCP市场搜索 | 开放平台企业内部应用，以及 MCP 服务、工具、鉴权、凭证、协作者、发布后动态调用和市场搜索 | `dws dev` / `dws dev mcp` / `dws mcp published` / `dws mcp market search` | 按下方「Dev 直达规则」读取一个 `references/dev/*.md`；意图不明时才读 [dev-index.md](references/dev/dev-index.md) |
 | DEAP 数字员工 / 数字员工 / 人设 / 群感知 / DSH 接入 | 兼容路由；完整自然语言编排只由独立 `dingtalk-tag` skill 维护 | `dws dingtalk-tag` | 切换 [`dingtalk-tag`](../dingtalk-tag/SKILL.md) |
 | 目标管理 / 战略解码 / 经营合约字段 / 计分卡 / OKR / 目标规则周期 / 个人目标 / 目标模板 / 周月报规则统计 / 按时迟交未提交 / 跟催 | Agoal 目标管理与经营目标跟进 | `dws agoal` | [agoal.md](references/agoal.md) |
 | 日报 / 周报 / 月报 / 写日志 / 收件箱日志 / 发件箱日志 | 日志（日报/周报/月报）查询与按模版提交 | `dws report`（别名 `dws log`） | [report.md](references/report.md) |
 | 电子表格 / 工作表 / 单元格读写 / 公式 / 超链接 / 浮动图片 | 电子表格创建/读写/公式/超链接/浮动图片/导出 | `dws sheet` | [sheet.md](references/sheet.md) |
 | 开放平台文档 / API文档 / 接口文档 / 接口报错 | 开放平台开发文档搜索 | `dws devdoc` | [devdoc.md](references/devdoc.md) |
 | 未封装 OpenAPI / llms.txt / dws api / Raw API / API 逃生舱 | 官方 llms.txt 分层发现，仅对企业内部应用 App Token 服务端 API 生成并确认 Raw 调用 | `dws api` | [openapi-explorer.md](references/openapi-explorer.md) |
-| 白板文件 / 独立白板 / 保存到白板 / 画布 / OpenNodes / 白板节点 / SVG 预渲染 | 独立白板的带内容创建、本地 SVG 预渲染、读取、写前 diff 预览和更新 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
+| 独立脑图 / 带内容创建脑图 / 脑图主题查询和增删改 | 独立 .amind 文件的主题树；不包含听记内置思维导图生成或空白文件创建 | `dws mind` | [mind.md](references/mind.md) |
+| 白板文件 / 独立白板 / 保存到白板 / 画布 / 白板 OpenNodes / 白板节点 / SVG 预渲染 | 独立白板的带内容创建、本地 SVG 预渲染、读取、写前 diff 预览和更新 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
 | 已有承载文档 nodeId 和 partId 的文档内嵌白板图形内容 | 只读写该 part 内的图形内容；卡片容器插入、定位、删除走 `dingtalk-doc`；身份缺失时停止，禁止改成独立白板 | `dws whiteboard --node ... --part-id ...` | [whiteboard.md](references/whiteboard.md) |
 | 搜索技能 / 找技能 / 安装技能 / 技能市场 / 安装 DWS mono 或 multi skill | DWS 技能市场搜索、下载、安装与内置技能部署 | `dws skill` | [skill.md](references/skill.md) |
 | 人才池 / 储备干部池 / 员工档案 / 职业历程 / 绩效记录 / 员工标签 / 组织大脑 / 人才搜索 | 组织大脑：人才池、员工档案专项模块与结构化人才搜索 | `dws hrbrain` | [hrbrain.md](references/hrbrain.md) |

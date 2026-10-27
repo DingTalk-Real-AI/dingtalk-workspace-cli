@@ -916,7 +916,7 @@ Flags:
 
 触发创建听记思维导图任务。触发成功后，可通过 `mind-graph status` 轮询任务状态。状态：0=进行中，1=成功，2=失败。
 
-**重要：当用户要求"生成思维导图/创建脑图"时，必须调用此命令（`mind-graph create`），严禁自行生成 HTML 或其他格式的思维导图。** 思维导图由服务端专业引擎生成，AI 不应尝试自己构造思维导图内容。
+**重要：当用户要求在听记详情中生成内置思维导图时，使用此命令（`mind-graph create`），严禁自行生成 HTML 或其他格式的思维导图。** 思维导图由服务端专业引擎生成，AI 不应尝试自己构造思维导图内容。
 
 ### 查询思维导图状态
 ```
@@ -1540,29 +1540,29 @@ tagId 可通过 `dws minutes tag list` 获取。
 - "把这个纪要内容变得更精简一点"
 
 ### 生成思维导图
-用户说"生成思维导图/创建脑图/帮我添加思维导图/基于这个听记做思维导图/把会议内容做成脑图" → `mind-graph create`
+用户明确要求在听记详情中生成内置思维导图 → 优先 `dws minutes +mindmap --id <taskUuid>`。原子命令 `mind-graph create/status` 仅在需要底层控制时使用。独立 .amind 文件创建或主题读写使用 [mind.md](./mind.md)；仅提到脑图、思维导图或提供听记 URL 不足以覆盖明确的独立文件意图，目标未明先消歧。
 
-**关键约束（必须严格遵守，违反视为严重错误）：**
-1. **思维导图必须且只能通过 `dws minutes mind-graph create` 命令生成**，由服务端写回到听记本身。这是"听记内置的思维导图能力"，生成结果会直接挂在听记详情页上，用户在听记里就能看到。
+**以下约束只适用于听记内置生成，不适用于获授权读取听记后另存独立脑图：**
+1. **听记内置思维导图由服务端生成并写回听记本身**；优先使用 `dws minutes +mindmap` 完成创建及有界轮询，只有需要底层控制时使用 `mind-graph create/status`。这是"听记内置的思维导图能力"，生成结果会直接挂在听记详情页上，用户在听记里就能看到。
 2. **严禁以下任何"自行构造"的替代方案**（这些都是错误做法）：
    - [禁止] 先 `get summary` / `get transcription` 拿到内容，再用 AI 自己整理出思维导图结构（Markdown / OPML / JSON 等）展示给用户
    - [禁止] 调用 app-development-skill / ai-app / 任何前端构建能力，用 `@antv/g6`、`markmap`、`jsmind`、`mermaid`、ECharts 等库生成 HTML/网页版思维导图
    - [禁止] 调用 `generate_image` 或任何绘图工具生成思维导图图片
    - [禁止] 路由到其他 Agent（如 ai-app）来"创建一个思维导图应用"
    - [禁止] 任何形式的"我帮你画一个/生成一个网页/部署一个在线预览链接"
-3. **唯一正确做法**：从用户输入中拿到 taskUuid（URL 场景见下方"URL 直达"），直接调用 `mind-graph create`，然后用 `mind-graph status` 轮询直到状态为 1（成功），最后告知用户"思维导图已生成，可在听记详情页查看"即可。**不需要**先调 `get summary` 等任何读取命令——服务端会基于听记自身内容生成。
+3. **执行方式**：从用户输入中取得 taskUuid（URL 场景见下方"URL 直达"），优先调用 `minutes +mindmap`；根据返回区分完成、待恢复或失败，pending 使用同一目标的 `--resume`，不重复创建。只有确需原子控制时才调用 `mind-graph create/status`；成功后告知用户可在听记详情查看。**不需要**先调 `get summary` 等任何读取命令——服务端会基于听记自身内容生成。
 
 **URL 直达场景：**
-当用户输入形如 `https://shanji.dingtalk.com/app/transcribes/{taskUuid}` 的链接 + "创建思维导图/生成脑图"等诉求时：
+当用户输入形如 `https://shanji.dingtalk.com/app/transcribes/{taskUuid}` 的链接，且目标明确为该听记内置思维导图时：
 1. 直接从 URL 路径末段提取 taskUuid
-2. **直接** `dws minutes mind-graph create --id <taskUuid> --format json`
-3. 用 `mind-graph status` 轮询
+2. 优先 `dws minutes +mindmap --id <taskUuid> --format json`
+3. 按 Shortcut 返回区分成功或同目标 `--resume`；不自动切换为独立文件
 4. 严禁中间插入 `get summary` / `get transcription` 等任何"先读取内容"的步骤，更严禁基于读到的内容自行构造思维导图
 
-**自然语言示例：**
-- "帮我添加思维导图"
-- "生成思维导图"
-- "帮我创建一个脑图"
+**以下示例须在已明确听记内置目标的上下文中使用；不得据此吞掉独立脑图请求：**
+- "帮我给这个听记添加思维导图"
+- "在这个听记中生成思维导图"
+- "给听记生成内置脑图"
 - "把这个听记做成思维导图"
 - "生成这个会议的思维导图"
 - "基于这个听记创建思维导图"
