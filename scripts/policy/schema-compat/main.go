@@ -267,6 +267,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
 	var approvedFlagMigrationsPath, candidateFlagMigrationsPath string
 	var approvedCommandMigrationsPath, candidateCommandMigrationsPath string
+	var approvedParameterMigrationsPath, candidateParameterMigrationsPath string
+	var parameterBaseSchemaPath, parameterStableSchemaPath string
 	var migrationBaseSchemaPath string
 	var migrationCurrentSnapshotPath, migrationBaseSnapshotPath, migrationStableSnapshotPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
@@ -279,6 +281,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&candidateFlagMigrationsPath, "candidate-flag-migrations", "", "detached candidate flag migration manifest")
 	flags.StringVar(&approvedCommandMigrationsPath, "approved-command-migrations", "", "base-owned approved command migration manifest")
 	flags.StringVar(&candidateCommandMigrationsPath, "candidate-command-migrations", "", "detached candidate command migration manifest")
+	flags.StringVar(&approvedParameterMigrationsPath, "approved-schema-parameter-migrations", "", "base-owned approved Schema parameter manifest")
+	flags.StringVar(&candidateParameterMigrationsPath, "candidate-schema-parameter-migrations", "", "detached candidate Schema parameter manifest")
+	flags.StringVar(&parameterBaseSchemaPath, "parameter-migration-base-schema", "", "original normalized merge-base contract for enum lifecycle")
+	flags.StringVar(&parameterStableSchemaPath, "parameter-migration-stable-schema", "", "original normalized stable contract for enum lifecycle")
 	flags.StringVar(&migrationBaseSchemaPath, "migration-base-schema", "", "normalized merge-base Schema contract used to verify cross-migration lineage")
 	flags.StringVar(&migrationCurrentSnapshotPath, "migration-current-snapshot", "", "current interface snapshot used for migration authorization")
 	flags.StringVar(&migrationBaseSnapshotPath, "migration-base-snapshot", "", "merge-base interface snapshot used for migration authorization")
@@ -299,6 +305,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	flagMigrationPair := approvedFlagMigrationsPath != "" || candidateFlagMigrationsPath != ""
 	commandMigrationPair := approvedCommandMigrationsPath != "" || candidateCommandMigrationsPath != ""
+	parameterMigrationPair := approvedParameterMigrationsPath != "" || candidateParameterMigrationsPath != "" ||
+		parameterBaseSchemaPath != "" || parameterStableSchemaPath != ""
+	if parameterMigrationPair && (approvedParameterMigrationsPath == "" || candidateParameterMigrationsPath == "" ||
+		parameterBaseSchemaPath == "" || parameterStableSchemaPath == "" || checkPath == "") {
+		fmt.Fprintln(stderr, "Schema parameter migrations require --check, both manifests and both base/stable Schema contracts")
+		return 2
+	}
 	if flagMigrationPair && (approvedFlagMigrationsPath == "" || candidateFlagMigrationsPath == "") {
 		fmt.Fprintln(stderr, "Schema flag migration authorization requires both flag manifests")
 		return 2
@@ -364,6 +377,33 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
 			return 2
+		}
+		if parameterMigrationPair {
+			approved, readErr := readSchemaParameterMigrations(approvedParameterMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read approved Schema parameter migrations: %v\n", readErr)
+				return 2
+			}
+			candidate, readErr := readSchemaParameterMigrations(candidateParameterMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read candidate Schema parameter migrations: %v\n", readErr)
+				return 2
+			}
+			base, readErr := readContract(parameterBaseSchemaPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read parameter migration base: %v\n", readErr)
+				return 2
+			}
+			stable, readErr := readContract(parameterStableSchemaPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read parameter migration stable: %v\n", readErr)
+				return 2
+			}
+			baseline, err = normalizeSchemaParameterMigrations(baseline, base, stable, current, approved, candidate)
+			if err != nil {
+				fmt.Fprintf(stderr, "authorize Schema parameter migrations: %v\n", err)
+				return 2
+			}
 		}
 		var flagMigrations []interfacesnapshot.FlagMigration
 		if flagMigrationPair {

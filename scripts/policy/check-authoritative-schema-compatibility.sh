@@ -14,6 +14,9 @@ CANDIDATE_REF="HEAD"
 SCHEMA_CHECKER_REL="scripts/policy/schema-compat/main.go"
 MIGRATION_MANIFEST_REL="scripts/policy/interface-migrations/approved-flag-migrations-v1.json"
 COMMAND_MIGRATION_MANIFEST_REL="scripts/policy/interface-migrations/approved-command-migrations-v1.json"
+PARAMETER_MIGRATION_MANIFEST_REL="scripts/policy/interface-migrations/approved-schema-parameter-migrations-v1.json"
+PARAMETER_MIGRATIONS_REL="internal/interfacesnapshot/schema_parameter_migrations.go"
+PARAMETER_ADAPTER_REL="scripts/policy/schema-compat/parameter_migrations.go"
 MIGRATIONS_REL="internal/interfacesnapshot/migrations.go"
 COMMAND_MIGRATIONS_REL="internal/interfacesnapshot/command_migrations.go"
 CORECMD_BRIDGE_REL="internal/corecmd/corecmd.go"
@@ -408,9 +411,60 @@ CANDIDATE_RAW="$TMP_ROOT/candidate-schema.json"
 	go build -o "$CANDIDATE_BIN" ./cmd
 )
 
+# Read help completely before matching. grep -q on a live producer can cause
+# SIGPIPE under pipefail; substring matching can also mistake the new
+# parameter-migration-base-schema for the older migration-base-schema flag.
+CHECKER_HELP="$TMP_ROOT/checker-help.txt"
+if "$CHECKER" --help >"$CHECKER_HELP" 2>&1; then
+	:
+else
+	checker_help_status="$?"
+	[ "$checker_help_status" -eq 2 ] || {
+		printf 'error: base-owned Schema checker help failed (%s)\n' "$checker_help_status" >&2
+		exit 2
+	}
+fi
 CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=false
-if "$CHECKER" --help 2>&1 | grep -Fq -- 'migration-base-schema'; then
+if grep -Eq '^[[:space:]]*-migration-base-schema([[:space:]]|$)' "$CHECKER_HELP"; then
 	CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=true
+fi
+
+# This separate ledger grants no bootstrap authorization. The old base checker
+# still decides compatibility without this ledger; a supplemental candidate
+# check may only validate pending declarations against unchanged contracts.
+USE_PARAMETER_MIGRATION_GOVERNANCE=false
+CHECK_PARAMETER_DECLARATIONS=false
+PARAMETER_DECLARATION_CHECKER="$TMP_ROOT/parameter-declarations"
+if grep -Eq '^[[:space:]]*-approved-schema-parameter-migrations([[:space:]]|$)' "$CHECKER_HELP"; then
+	for policy_path in "$PARAMETER_MIGRATION_MANIFEST_REL" "$PARAMETER_MIGRATIONS_REL" "$PARAMETER_ADAPTER_REL"; do
+		if ! commit_path_is_regular_file "$BASE_COMMIT" "$policy_path" ||
+			! commit_path_is_regular_file "$CANDIDATE_COMMIT" "$policy_path"; then
+			printf 'error: preserve complete base/candidate Schema parameter migration governance: %s\n' "$policy_path" >&2
+			exit 2
+		fi
+	done
+	USE_PARAMETER_MIGRATION_GOVERNANCE=true
+elif commit_path_exists "$BASE_COMMIT" "$PARAMETER_MIGRATION_MANIFEST_REL" ||
+	commit_path_exists "$BASE_COMMIT" "$PARAMETER_MIGRATIONS_REL" ||
+	commit_path_exists "$BASE_COMMIT" "$PARAMETER_ADAPTER_REL"; then
+	printf 'error: incomplete base-owned Schema parameter migration governance\n' >&2
+	exit 2
+elif commit_path_exists "$CANDIDATE_COMMIT" "$PARAMETER_MIGRATION_MANIFEST_REL" ||
+	commit_path_exists "$CANDIDATE_COMMIT" "$PARAMETER_MIGRATIONS_REL" ||
+	commit_path_exists "$CANDIDATE_COMMIT" "$PARAMETER_ADAPTER_REL"; then
+	for policy_path in "$PARAMETER_MIGRATION_MANIFEST_REL" "$PARAMETER_MIGRATIONS_REL" "$PARAMETER_ADAPTER_REL"; do
+		if ! commit_path_is_regular_file "$CANDIDATE_COMMIT" "$policy_path"; then
+			printf 'error: incomplete candidate Schema parameter migration bootstrap: %s\n' "$policy_path" >&2
+			exit 2
+		fi
+	done
+	if ! cmp -s "$CANDIDATE_WORKTREE/$PARAMETER_MIGRATION_MANIFEST_REL" "$EMPTY_MANIFEST"; then
+		CHECK_PARAMETER_DECLARATIONS=true
+		(
+			cd "$CANDIDATE_WORKTREE"
+			go build -o "$PARAMETER_DECLARATION_CHECKER" ./scripts/policy/schema-compat
+		)
+	fi
 fi
 
 mkdir -p "$TMP_ROOT/base-home" "$TMP_ROOT/stable-home" "$TMP_ROOT/candidate-home"
@@ -424,11 +478,32 @@ HOME="$TMP_ROOT/candidate-home" DWS_LANG=zh \
 "$CHECKER" --normalize "$BASE_RAW" >"$BASELINE"
 "$CHECKER" --normalize "$STABLE_RAW" >"$STABLE_BASELINE"
 
+check_parameter_declarations() {
+	[ "$CHECK_PARAMETER_DECLARATIONS" = true ] || return 0
+	# Called only AFTER both base-owned comparisons succeed. Empty approval data
+	# means the new checker cannot consume or project any proposed migration.
+	# This validates the new policy/plan for human review, never replaces the old
+	# checker, and must be built before installing the base-owned snapshot helper.
+	printf '%s\n' 'validating pending Schema parameter declarations (no bootstrap authorization)'
+	"$PARAMETER_DECLARATION_CHECKER" --check "$BASELINE" --current "$CANDIDATE_RAW" \
+		--approved-schema-parameter-migrations "$EMPTY_MANIFEST" \
+		--candidate-schema-parameter-migrations "$CANDIDATE_WORKTREE/$PARAMETER_MIGRATION_MANIFEST_REL" \
+		--parameter-migration-base-schema "$BASELINE" \
+		--parameter-migration-stable-schema "$STABLE_BASELINE"
+}
+
 check_schema_contract() {
 	historical_kind="$1"
 	historical_ref="$2"
 	historical_baseline="$3"
 	shift 3
+	if [ "$USE_PARAMETER_MIGRATION_GOVERNANCE" = true ]; then
+		set -- "$@" \
+			--approved-schema-parameter-migrations "$BASE_WORKTREE/$PARAMETER_MIGRATION_MANIFEST_REL" \
+			--candidate-schema-parameter-migrations "$CANDIDATE_WORKTREE/$PARAMETER_MIGRATION_MANIFEST_REL" \
+			--parameter-migration-base-schema "$BASELINE" \
+			--parameter-migration-stable-schema "$STABLE_BASELINE"
+	fi
 	printf 'checking complete Schema contract against %s %s\n' \
 		"$historical_kind" "$historical_ref"
 	"$CHECKER" --check "$historical_baseline" --current "$CANDIDATE_RAW" "$@"
@@ -437,6 +512,7 @@ check_schema_contract() {
 if [ "$USE_MIGRATION_GOVERNANCE" = false ]; then
 	check_schema_contract "PR merge-base" "$BASE_REF" "$BASELINE"
 	check_schema_contract "stable" "$STABLE_REF" "$STABLE_BASELINE"
+	check_parameter_declarations
 	exit 0
 fi
 
@@ -498,3 +574,4 @@ check_with_migrations() {
 
 check_with_migrations "PR merge-base" "$BASE_REF" "$BASELINE"
 check_with_migrations "stable" "$STABLE_REF" "$STABLE_BASELINE"
+check_parameter_declarations
