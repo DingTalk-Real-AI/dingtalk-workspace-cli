@@ -108,6 +108,66 @@ func TestDevAppCredentialsGetMissingRequired(t *testing.T) {
 	}
 }
 
+func TestDevAppScopeSetDispatchesRemoteToolName(t *testing.T) {
+	r := &fakeDevAppRunner{}
+	cmd := prepareDevAppLeafTestCommand(newDevAppScopeSetCommand(r))
+	for name, value := range map[string]string{
+		"unified-app-id":      "app-1",
+		"user-visible-scopes": "1001,1002",
+		"precheck-only":       "true",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cmd.Flags().Lookup("yes") == nil {
+		cmd.Flags().Bool("yes", false, "yes")
+	}
+	if err := cmd.Flags().Set("yes", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r.got.Tool != devAppScopeSetRemoteTool {
+		t.Fatalf("remote tool = %q, want %q", r.got.Tool, devAppScopeSetRemoteTool)
+	}
+}
+
+func TestDevAppScopeGetDispatchesRemoteToolName(t *testing.T) {
+	r := &fakeDevAppRunner{}
+	cmd := prepareDevAppLeafTestCommand(newDevAppScopeGetCommand(r))
+	if err := cmd.Flags().Set("unified-app-id", "app-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r.got.Tool != devAppScopeGetRemoteTool {
+		t.Fatalf("remote tool = %q, want %q", r.got.Tool, devAppScopeGetRemoteTool)
+	}
+}
+
+func TestDevAppScopePrecheckRequiresConfirmation(t *testing.T) {
+	r := &fakeDevAppRunner{}
+	cmd := prepareDevAppLeafTestCommand(newDevAppScopeSetCommand(r))
+	if err := cmd.Flags().Set("unified-app-id", "app-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("user-visible-scopes", "1001,1002"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("precheck-only", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.RunE(cmd, nil); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		t.Fatalf("precheck without confirmation error = %v", err)
+	}
+	if r.got.Tool != "" {
+		t.Fatalf("backend called before confirmation: %#v", r.got)
+	}
+}
+
 // TestDevAppVersionLeafs 验证 version get/status/check-approval 的 toolArgs
 // 装配：双必填 trim + check-approval 经 Call 注入 precheckOnly=true 常量。
 func TestDevAppVersionLeafs(t *testing.T) {

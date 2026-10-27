@@ -26,8 +26,8 @@ func TestCrossPlatformCoverageDeapAgentLegacyNamesKeepRequestMeaning(t *testing.
 		{"list", []string{"list", "--main-program-type", "local_agent"}, "type", "local_agent", false},
 		{"save", []string{"save-draft", "--agent-uuid", "agent-1", "--main-program-type", "local_agent", "--yes"}, "type", "local_agent", true},
 		{"visibility", []string{"set-visibility", "--agent-uuid", "agent-1", "--visibility", "PARTIAL", "--staff-ids", "u1,u2", "--yes"}, "staffIds", []string{"u1", "u2"}, false},
-		{"new_type_wins", []string{"list", "--type", "local_agent", "--main-program-type", "open_code"}, "type", "local_agent", false},
-		{"new_type_wins_reverse_order", []string{"list", "--main-program-type", "open_code", "--type", "local_agent"}, "type", "local_agent", false},
+		{"new_type_wins", []string{"list", "--type", "local_agent", "--main-program-type", "qwenwork"}, "type", "local_agent", false},
+		{"new_type_wins_reverse_order", []string{"list", "--main-program-type", "qwenwork", "--type", "local_agent"}, "type", "local_agent", false},
 		{"new_users_win", []string{"set-visibility", "--agent-uuid", "agent-1", "--visibility", "PARTIAL", "--user-ids", "u3", "--staff-ids", "u1,u2", "--yes"}, "staffIds", []string{"u3"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestCrossPlatformCoverageDeapAgentObsoletePublishFlagIsIgnored(t *testing.T
 		for _, dry := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/dry=%t", value, dry), func(t *testing.T) {
 				caller, out := newDeapAgentTestTree(t, dry)
-				caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1","type":"open_code"}}`
+				caller.resultText = `{"success":true,"data":{"agentUuid":"agent-1","type":"qwenwork"}}`
 				root := deapHandler{}.Command(&captureRunner{})
 				root.PersistentFlags().Bool("yes", false, "confirmation")
 				root.PersistentFlags().Bool("dry-run", false, "preview")

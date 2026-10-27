@@ -190,3 +190,19 @@ func TestCrossPlatformCoverageOpenSupplementServersExcludesRetiredEduEndpoints(t
 		}
 	}
 }
+
+func TestCrossPlatformCoverageMindSupplementEndpointUsesApprovedGateway(t *testing.T) {
+	count := 0
+	for _, server := range Get().SupplementServers() {
+		if server.ID != "mind" {
+			continue
+		}
+		count++
+		if server.Endpoint != "https://mcp-gw.dingtalk.com/server/mind" || len(server.Prefixes) != 0 {
+			t.Fatalf("unexpected mind registration: %#v", server)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("mind registered %d times, want 1", count)
+	}
+}

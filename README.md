@@ -96,6 +96,23 @@ How to pick:
 npm install -g dingtalk-workspace-cli
 ```
 
+Install only the CLI binary and skip all bundled Skill validation, extraction,
+Agent-directory updates, state writes, and user-cache refreshes:
+
+```bash
+DWS_NO_SKILLS=1 npm install -g dingtalk-workspace-cli
+```
+
+```powershell
+$env:DWS_NO_SKILLS = "1"
+npm install -g dingtalk-workspace-cli
+```
+
+Without `DWS_NO_SKILLS=1`, npm keeps installing Skills as before. A failure
+while refreshing the optional `~/.dws/skills` cache is reported as a warning
+after the CLI and Agent Skills are installed; run `dws skill setup` to refresh
+Skills later.
+
 Install the latest beta:
 
 ```bash
@@ -245,7 +262,7 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 1. **准备** — 官方开源版下载同版本的当前平台归档和技能包，强制验证大小、SHA256 及新二进制版本。自定义 Registry 保留完整 npm 包及完整性校验。验证失败时不替换现有安装。
 2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into the canonical `~/.agents/skills` root. Agents classified by the pinned compatibility registry as supporting the universal root read it directly; other detected Agents receive links to the canonical copy, with a direct-copy fallback when links are unavailable. Older DWS-managed agent-specific copies are backed up and retired so the same Skill is not discovered twice.
 
-独立二进制升级保留自动备份和 `dws upgrade --rollback`。包管理器安装的回退由对应管理器处理；npm/pnpm 安装不支持 `--skip-skills`，因为发布包的安装脚本会更新技能。Homebrew 捆绑技能，使用 `dws skill setup` 安装到 Agent 目录。
+独立二进制升级保留自动备份和 `dws upgrade --rollback`。包管理器安装的回退由对应管理器处理；npm/pnpm 没有 `--skip-skills` 参数，但可设置 `DWS_NO_SKILLS=1` 仅安装 CLI 二进制。Homebrew 捆绑技能，使用 `dws skill setup` 安装到 Agent 目录。
 
 | Flag | Description |
 |------|-------------|
@@ -519,7 +536,7 @@ DWS_SKILL_SOURCE=/absolute/path/to/extracted-dws-skills dws skill setup --mode m
 
 After a multi setup or upgrade, DWS stores the official bundle snapshot and centralized ownership metadata in `~/.dws/skills-state.json` (or `$DWS_CONFIG_DIR/skills-state.json`). Every upgrade installs and overwrites the complete bundled Skill set from that release. Deleting or excluding a bundled Skill is not sticky: the next upgrade restores it. `dws upgrade --force` additionally allows reinstalling the current CLI version when no newer version is available.
 
-Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.ps1`), `DWS_SKILL_SOURCE=<path>`.
+Env vars: `DWS_NO_SKILLS=1` (npm, `install.sh`, and `install.ps1`; skips the complete Skill path), `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.ps1`), `DWS_SKILL_SOURCE=<path>`.
 
 **What's included (mono layout):**
 

@@ -15,6 +15,7 @@ package logging
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -200,6 +201,43 @@ func TestCrossPlatformCoverageRedactEndpoint(t *testing.T) {
 			t.Parallel()
 			if got := redactEndpoint(tt.input); got != tt.want {
 				t.Errorf("redactEndpoint(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TC-001: 两个邀请链接 RPC 的调试日志必须隐藏凭证，同时保持实际请求不变。
+func TestCrossPlatformCoverageLogRequestBodyRedactsInviteURL(t *testing.T) {
+	t.Parallel()
+	const inviteURL = "https://qr.dingtalk.com/action/joingroup?code=INVITE_SECRET_FOR_TEST&origin=11"
+	for _, tool := range []string{"get_group_info_by_invite_url", "join_group_by_invite_url"} {
+		t.Run(tool, func(t *testing.T) {
+			for _, key := range []string{"inviteUrl", "invite_url", "invite-url", "INVITEURL"} {
+				t.Run(key, func(t *testing.T) {
+					var buf bytes.Buffer
+					logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+					args := map[string]any{key: inviteURL, "groupId": int64(123456)}
+					LogRequestBody(logger, "tools/call", "exec-invite", tool, args)
+					var entry struct {
+						Summary string `json:"arguments_summary"`
+					}
+					if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+						t.Fatal(err)
+					}
+					var summary map[string]any
+					if err := json.Unmarshal([]byte(entry.Summary), &summary); err != nil {
+						t.Fatal(err)
+					}
+					if summary[key] != "***" || strings.Contains(buf.String(), "INVITE_SECRET_FOR_TEST") {
+						t.Fatalf("invitation credential was not redacted: %s", buf.String())
+					}
+					if summary["groupId"] != float64(123456) {
+						t.Fatalf("safe argument changed: %#v", summary)
+					}
+					if args[key] != inviteURL {
+						t.Fatal("logging mutated the actual invite URL")
+					}
+				})
 			}
 		})
 	}

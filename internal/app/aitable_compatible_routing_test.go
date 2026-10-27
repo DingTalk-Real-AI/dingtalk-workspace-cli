@@ -323,3 +323,41 @@ func TestCrossPlatformCoverageAitableToolCallerRouteDecorators(t *testing.T) {
 		t.Fatalf("recording delegated route = (%q, %v)", got, err)
 	}
 }
+
+func TestCrossPlatformCoverageChartCapabilityDistinguishesMissingAndFailedDiscovery(t *testing.T) {
+	for _, mode := range []string{"present", "missing", "failure"} {
+		t.Run(mode, func(t *testing.T) {
+			calls := 0
+			testseam.Swap(t, &runnerListProductTools, func(_ *runtimeRunner, _ context.Context, product, tool, _ string) ([]transport.ToolDescriptor, error) {
+				calls++
+				if product != "aitable" || tool != "create_charts" {
+					t.Fatalf("wrong capability target %s/%s", product, tool)
+				}
+				if mode == "failure" {
+					return nil, errors.New("tools/list unavailable")
+				}
+				if mode == "present" {
+					return []transport.ToolDescriptor{{Name: "create_charts"}}, nil
+				}
+				return nil, nil
+			})
+			runner := &runtimeRunner{}
+			caller := recordingToolCaller{inner: &toolCallerAdapter{runner: runner}}
+			supported, err := caller.SupportsMCPTool(t.Context(), "aitable", "create_charts")
+			if supported != (mode == "present") || (err != nil) != (mode == "failure") || calls != 1 {
+				t.Fatalf("supported=%v err=%v calls=%d", supported, err, calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChartCapabilityWithoutReaderKeepsLegacyRoute(t *testing.T) {
+	adapter := &toolCallerAdapter{runner: runtimeProfileCaptureRunner{}}
+	if supported, err := adapter.SupportsMCPTool(t.Context(), "aitable", "create_charts"); supported || err != nil {
+		t.Fatalf("unsupported runner inferred a capability: %v %v", supported, err)
+	}
+	caller := recordingToolCaller{inner: nonReadToolCaller{}}
+	if supported, err := caller.SupportsMCPTool(t.Context(), "aitable", "create_charts"); supported || err != nil {
+		t.Fatalf("unsupported caller inferred a capability: %v %v", supported, err)
+	}
+}

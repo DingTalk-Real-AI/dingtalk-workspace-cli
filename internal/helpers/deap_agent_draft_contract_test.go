@@ -204,7 +204,7 @@ func TestCrossPlatformCoverageDeapAgentPublishStopsWhenDraftReadFails(t *testing
 }
 
 func TestCrossPlatformCoverageDeapAgentPublishPreservesFailureWithoutDefaulting(t *testing.T) {
-	for _, agentType := range []string{"local_agent", "open_code"} {
+	for _, agentType := range []string{"local_agent", "qwenwork"} {
 		t.Run(agentType, func(t *testing.T) {
 			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 				"deap-dev/get_digital_employee_detail": {fmt.Sprintf(`{"success":true,"data":{"agentUuid":"agent-1","type":%q,"prompt":"existing persona"}}`, agentType)},

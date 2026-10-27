@@ -178,3 +178,39 @@ func TestCrossPlatformCoverageAitableCompatibleRouteBoundaries(t *testing.T) {
 		t.Fatalf("uninitialized caller route = (%q, %v)", got, err)
 	}
 }
+
+type chartCapabilityCaller struct {
+	aitableLegacyRouteCaller
+	available bool
+	failure   error
+}
+
+func (c *chartCapabilityCaller) SupportsMCPTool(_ context.Context, product, tool string) (bool, error) {
+	if product != "aitable" || tool != "create_charts" {
+		return false, errors.New("wrong capability target")
+	}
+	return c.available, c.failure
+}
+
+func TestCrossPlatformCoverageMCPToolAvailabilityBoundaries(t *testing.T) {
+	testseam.Swap(t, &deps, nil)
+	if available, err := MCPToolAvailable(t.Context(), "aitable", "create_charts"); available || err != nil {
+		t.Fatalf("uninitialized capability: %v %v", available, err)
+	}
+	InitDepsForTest(t, &aitableLegacyRouteCaller{})
+	if available, err := MCPToolAvailable(t.Context(), "aitable", "create_charts"); available || err != nil {
+		t.Fatalf("legacy capability: %v %v", available, err)
+	}
+	for _, available := range []bool{false, true} {
+		caller := &chartCapabilityCaller{available: available}
+		InitDepsForTest(t, caller)
+		got, err := MCPToolAvailable(t.Context(), "aitable", "create_charts")
+		if got != available || err != nil {
+			t.Fatalf("capability changed: %v %v", got, err)
+		}
+		caller.failure = context.DeadlineExceeded
+		if _, err := MCPToolAvailable(t.Context(), "aitable", "create_charts"); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("lost dependency error: %v", err)
+		}
+	}
+}

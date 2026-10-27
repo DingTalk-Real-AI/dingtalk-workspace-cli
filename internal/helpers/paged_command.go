@@ -47,7 +47,10 @@ type PagedMCPCommandConfig struct {
 	AggregationMode  PagedAggregationMode
 	BuildArgs        func(*cobra.Command) (map[string]any, error)
 	Fallback         func(map[string]any) error
-	ProjectResult    func(map[string]any) map[string]any
+	// ParsePage lets a command normalize documented response variants into its
+	// canonical ItemPath/CursorPath/HasMorePath before aggregation.
+	ParsePage     func(string) (map[string]any, []any, any, bool, error)
+	ProjectResult func(map[string]any) map[string]any
 	// ResultProjection enriches the framework-only Result after the established
 	// legacy projection. dual_validate shadows it without changing public bytes.
 	ResultProjection func(map[string]any) map[string]any
@@ -184,7 +187,15 @@ func runPagedMCPCommand(cmd *cobra.Command, cfg PagedMCPCommandConfig, opts page
 		if err != nil {
 			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, true, true)
 		}
-		parsed, pageItems, nextCursor, more, err := parsePagedCommandPage(text, cfg)
+		var parsed map[string]any
+		var pageItems []any
+		var nextCursor any
+		var more bool
+		if cfg.ParsePage != nil {
+			parsed, pageItems, nextCursor, more, err = cfg.ParsePage(text)
+		} else {
+			parsed, pageItems, nextCursor, more, err = parsePagedCommandPage(text, cfg)
+		}
 		if err != nil {
 			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, false, false)
 		}

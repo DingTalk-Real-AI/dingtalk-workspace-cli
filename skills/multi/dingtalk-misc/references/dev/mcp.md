@@ -3,7 +3,7 @@
 命令分为两层：
 
 - `dws dev mcp ...`：开发端，管理服务、工具、鉴权、凭证、协作者和 HSF 方法。
-- `dws mcp published ...`：消费端，按 `mcpId` 查看或调用已发布工具。
+- `dws mcp market search` / `dws mcp published ...`：消费端。只知道名称时先按关键词搜索 MCP 市场拿到 `mcpId`，再按 `mcpId` 查看或调用已发布工具。
 
 远端 `serverName` 和工具名不会注册成新的顶层命令，也不写入跨身份缓存。消费端每次按当前登录 profile、用户和组织身份解析服务地址；输出只展示脱敏地址。
 
@@ -26,7 +26,7 @@
 1. 下列已知 leaf 直接执行，不先读分组 help。只有创建/更新等复杂字段或确认语义确有不确定性时，读取一次 `dws schema --cli-path "dev mcp <leaf>" --compact --format json`；Schema 与 Cobra 不一致时才读取同一 leaf 的一次 help。
 2. 开发写操作的最初请求只允许 `--dry-run --format json`。展示 invocation 中的准确对象、动作、业务参数和影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；目标或业务参数变化就重新预检并确认，确认前不得真实写入。
 3. 发布前执行 `tool get` 和 `tool debug`，核对输入、输出与映射。
-4. 调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`；真实 invoke 还会在本次调用中重新发现工具并按实时 Schema 校验。
+4. 想获取新的 MCP，或想知道市场里有哪些 MCP 但不知道 mcpId 时，先执行 `dws mcp market search --keyword <关键词>` 从 MCP 市场取 `mcpId`，不要猜测或编造。该命令只覆盖已上架市场（MARKET）的 MCP；企业内发布、未上架市场（PUBLISHED）的 MCP 不在结果里，有开发权限的可用 `dws dev mcp service list` 查。调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`；真实 invoke 还会在本次调用中重新发现工具并按实时 Schema 校验。
 5. `mcp published invoke` 无法静态判断远端工具副作用，真实调用一律需要 `--yes`；未明确影响时只做 dry-run。
 6. MCP URL、凭证内容、token 和密钥不得写入回答、日志、文档或代码仓库。
 7. 若真实命令返回 `endpoint_not_resolved`，表示当前 CLI 的 `mcpdev` 运行端点不可用，不是 flag 错误；立即报告并停止，不用 help、改参数、Raw API 或 dry-run 冒充业务完成。
@@ -121,6 +121,14 @@ dws mcp published invoke --help
 ```
 
 确认帮助中包含 `inputSchemaDigest (fresh_core_subset_snapshot)`。若没有，先运行 `dws upgrade` 升级到最新**稳定版**并重新检测。不要安装/建议 beta；能力仍缺失时停止真实调用，只可展示本地 dry-run。
+
+只知道名称时先搜市场（只读，无需确认）：
+
+```bash
+dws mcp market search --keyword <关键词> --format json
+```
+
+`mcpId` 在 `data.mcps[].mcpId`。搜索是模糊匹配，带 `mcp` 这类通用词会命中大量结果，要按 `name`、`corpName`、`official` 甄别后再用。续页把 `meta.pagination.next_token` 原样传给 `--cursor`。
 
 ```bash
 dws mcp published tools <mcpId> --format json

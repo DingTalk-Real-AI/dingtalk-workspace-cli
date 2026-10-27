@@ -1189,6 +1189,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
 	mcpCmd.AddCommand(
+		newMCPMarketGroup(patCaller),
 		newMCPURLGroup(patCaller),
 		newMCPPublishedGroup(patCaller, newAuthenticatedMCPPublishedTransportFactory(runner, flags)),
 	)

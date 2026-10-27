@@ -123,6 +123,9 @@ func TestLeafHelpRendersSelectionSafetyAndReferences(t *testing.T) {
 		wantSkill    string
 		wantDocument string
 	}{
+		{path: "mind create", wantEffect: "write", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/mind.md"},
+		{path: "mind node list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/mind.md"},
+		{path: "mind node delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/mind.md"},
 		{path: "dev app list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
 		{path: "chat message send", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-chat", wantDocument: "references/chat.md"},
 		{path: "dev app delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},

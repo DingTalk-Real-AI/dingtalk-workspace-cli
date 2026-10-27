@@ -28,6 +28,8 @@
 
 摘要脚本的 `--dry-run` 只打印计划且不得调用 DWS；DWS 失败、非法 JSON 与合法空结果必须分开。摘要脚本没有覆盖完整分页、目标消歧与跨 scope 聚合，因此不能用它的输出声称“全部听记”。时间转换脚本始终纯本地，不提供或需要 `--dry-run`。行动项读取由 `+action-items`（单条）或 `+detail --ids ... --artifacts todos`（多条）承接，不再发布重复脚本。
 
+本页的思维导图命令仅生成听记内置产物；独立 .amind 文件创建和主题编辑走 dingtalk-misc 的 mind reference，不因提供听记 URL 而改变明确的独立文件目标。
+
 命令前缀统一为 `dws minutes`。结构化读取加 `--format json`；参数不确定时查询精确 leaf：
 
 ```text

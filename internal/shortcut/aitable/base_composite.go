@@ -114,6 +114,9 @@ func parseBootstrapTables(raw string) ([]bootstrapTable, error) {
 			}
 			fieldNames[fieldName] = true
 		}
+		if err := validateCreateTableCapabilities(fields, fmt.Sprintf("--tables[%d].fields", index)); err != nil {
+			return nil, baseBootstrapValidation(err.Error())
+		}
 		out = append(out, bootstrapTable{Name: name, Fields: fields})
 	}
 	return out, nil

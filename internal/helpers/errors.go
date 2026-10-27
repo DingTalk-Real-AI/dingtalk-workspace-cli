@@ -609,6 +609,10 @@ func ClassifyMCPResponseText(text string) error {
 		}
 	}
 
+	if projected := classifyAitableMutationError(body); projected != nil {
+		return projected
+	}
+
 	if isNoPermissionError(body) {
 		return &CLIError{
 			Code:       CodeAuthPermission,

@@ -76,6 +76,53 @@ func TestSkillDocsDoNotRecommendRetiredCommands(t *testing.T) {
 	}
 }
 
+func TestDevScopeSkillDocumentsExposeScopeCommands(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	scopeDoc := filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "scope.md")
+	content, err := os.ReadFile(scopeDoc)
+	if err != nil {
+		t.Fatalf("read %s: %v", scopeDoc, err)
+	}
+	text := string(content)
+	for _, required := range []string{
+		"dev app scope get",
+		"dev app scope set",
+		"全量替换",
+		"--precheck-only --yes",
+		"--precheck-only=false --yes",
+		"本地调用预览",
+		"服务端预检",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("scope skill doc missing contract %q", required)
+		}
+	}
+	// --dry-run is a local invocation preview (RemoteReads=false); the doc
+	// must not sell it as the server-side precheck of the full-replace write.
+	dryRunIndex := strings.Index(text, "--dry-run")
+	if dryRunIndex >= 0 && dryRunIndex < strings.Index(text, "服务端预检") &&
+		!strings.Contains(text[max(0, dryRunIndex-120):dryRunIndex], "本地") {
+		t.Errorf("scope skill doc must label --dry-run as local preview, not server precheck")
+	}
+	for _, path := range []string{
+		filepath.Join(root, "skills", "mono", "references", "products", "dev.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "dev-index.md"),
+	} {
+		navContent, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		navText := string(navContent)
+		if !strings.Contains(navText, "dev app scope get") || !strings.Contains(navText, "dev app scope set") {
+			t.Errorf("%s missing scope get/set route", path)
+		}
+	}
+}
+
 func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {

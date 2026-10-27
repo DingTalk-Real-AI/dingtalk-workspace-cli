@@ -26,6 +26,13 @@ var bootstrapReadbackWait = func(ctx context.Context, delay time.Duration) error
 // for an already-created ID. Errors, malformed results and wrong IDs stop;
 // creation is never repeated and the caller retains its recovery checkpoint.
 func verifyCreatedTableEventually(rt *shortcut.RuntimeContext, baseID, tableID string) error {
+	// Requests and backoff share one readback deadline. Do not multiply the
+	// transport's full timeout by every eventual-consistency probe.
+	original := rt.Command().Context()
+	ctx, cancel := context.WithTimeout(original, 5*time.Second)
+	defer cancel()
+	rt.Command().SetContext(ctx)
+	defer rt.Command().SetContext(original)
 	delays := [...]time.Duration{250 * time.Millisecond, time.Second, 2 * time.Second}
 	for attempt := 0; ; attempt++ {
 		if err := rt.Command().Context().Err(); err != nil {

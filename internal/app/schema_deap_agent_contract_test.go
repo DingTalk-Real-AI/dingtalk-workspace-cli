@@ -13,6 +13,28 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
+func TestCrossPlatformCoverageDigitalEmployeeQwenworkTypeSchema(t *testing.T) {
+	root := NewRootCommand()
+	names := []string{"dingtalk-tag.create_digital_employee", "dingtalk-tag.list_digital_employees", "dingtalk-tag.update_digital_employee_draft"}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, names...)
+	for _, name := range names {
+		params := schemaContractMap(payload.Tools[name]["parameters"])
+		got := params["type"]["enum"]
+		if !reflect.DeepEqual(got, []string{"qwenwork", "local_agent"}) {
+			t.Errorf("%s type enum = %#v", name, got)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDigitalEmployeeVisibilityEnumSchema(t *testing.T) {
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.set_visibility")
+	params := schemaContractMap(payload.Tools["dingtalk-tag.set_visibility"]["parameters"])
+	if got := params["visibility"]["enum"]; !reflect.DeepEqual(got, []string{"ALL", "PARTIAL"}) {
+		t.Fatalf("visibility enum = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}

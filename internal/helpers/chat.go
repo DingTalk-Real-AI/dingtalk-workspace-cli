@@ -1976,6 +1976,118 @@ func pagedMCPParamDecls() []contract.ParamDecl {
 	}
 }
 
+func chatListAllConversationsArgs(cmd *cobra.Command) (map[string]any, error) {
+	args := map[string]any{}
+	if value, err := cmd.Flags().GetInt("limit"); err == nil && value > 0 {
+		if value > 100 {
+			return nil, fmt.Errorf("--limit 最大 100（服务端上限），got %d；如需取全部会话请配合 --cursor 翻页", value)
+		}
+		args["limit"] = value
+	}
+	if value, _ := cmd.Flags().GetInt64("cursor"); value > 0 {
+		args["cursor"] = value
+	}
+	if value, _ := cmd.Flags().GetBool("exclude-muted"); value {
+		args["excludeMuted"] = true
+	}
+	return args, nil
+}
+
+func parseChatListAllConversationsPage(text string) (map[string]any, []any, any, bool, error) {
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(text), &envelope); err != nil {
+		return nil, nil, nil, false, fmt.Errorf("parse paged response JSON: %w", err)
+	}
+	rawResult, ok := envelope["result"]
+	if !ok {
+		return nil, nil, nil, false, fmt.Errorf("paged response missing result")
+	}
+
+	var items []any
+	var nextCursor any
+	var hasMore bool
+	result := map[string]any{}
+	switch typed := rawResult.(type) {
+	case map[string]any:
+		for key, value := range typed {
+			result[key] = value
+		}
+		for _, key := range []string{"conversationList", "conversations", "list"} {
+			rawItems, exists := typed[key]
+			if !exists {
+				continue
+			}
+			var valid bool
+			items, valid = rawItems.([]any)
+			if !valid {
+				return nil, nil, nil, false, fmt.Errorf("paged response result.%s must be array", key)
+			}
+			break
+		}
+		if items == nil {
+			return nil, nil, nil, false, fmt.Errorf("paged response missing result.conversationList")
+		}
+		delete(result, "conversations")
+		delete(result, "list")
+		rawHasMore, exists := typed["hasMore"]
+		if !exists {
+			return nil, nil, nil, false, fmt.Errorf("paged response missing result.hasMore")
+		}
+		var valid bool
+		hasMore, valid = rawHasMore.(bool)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result.hasMore must be boolean")
+		}
+		nextCursor, ok = typed["nextCursor"]
+	case []any:
+		if len(typed) < 3 {
+			return nil, nil, nil, false, fmt.Errorf("paged response result tuple must contain items, nextCursor and hasMore")
+		}
+		var valid bool
+		items, valid = typed[0].([]any)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result[0] must be array")
+		}
+		nextCursor = typed[1]
+		hasMore, valid = typed[2].(bool)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result[2] must be boolean")
+		}
+		ok = true
+	default:
+		return nil, nil, nil, false, fmt.Errorf("paged response result must be object or gateway tuple")
+	}
+	if hasMore && !ok {
+		return nil, nil, nil, false, fmt.Errorf("paged response missing result.nextCursor")
+	}
+	result["conversationList"] = items
+	result["hasMore"] = hasMore
+	if ok {
+		result["nextCursor"] = nextCursor
+	}
+	envelope["result"] = result
+	return envelope, items, nextCursor, hasMore, nil
+}
+
+func chatListAllConversationsPagedConfig() PagedMCPCommandConfig {
+	return PagedMCPCommandConfig{
+		ServerID:         "im",
+		ToolName:         "list_all_conversations",
+		ItemPath:         "result.conversationList",
+		ItemIdentityPath: "openConversationId",
+		CursorPath:       "result.nextCursor",
+		HasMorePath:      "result.hasMore",
+		CursorArg:        "cursor",
+		PageSizeArg:      "limit",
+		CursorKind:       PagedCursorInt64,
+		BuildArgs:        chatListAllConversationsArgs,
+		ParsePage:        parseChatListAllConversationsPage,
+		Fallback: func(args map[string]any) error {
+			return callMCPToolOnServer("im", "list_all_conversations", args)
+		},
+	}
+}
+
 func runChatGroupSearch(cmd *cobra.Command, args []string) error {
 	keyword := flagOrFallback(cmd, "query", "keyword", "name", "group")
 	if len(args) == 1 {
@@ -3792,8 +3904,8 @@ func newChatCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(chatGroupMemberRemoveCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -10247,6 +10359,261 @@ status 可选值:
 		},
 	})
 
+	// callChatGroupJoinTool invokes one IM group-join tool. Under the unified
+	// rollout it stores a CommandResult so the declared Result contract reaches
+	// the Schema delivery path; the legacy rollout keeps the print path.
+	callChatGroupJoinTool := func(cmd *cobra.Command, tool string, args map[string]any) error {
+		if !output.UsesUnifiedResult(cmd) {
+			return callMCPToolOnServer("im", tool, args)
+		}
+		if deps.Caller.DryRun() {
+			return storeChatThreadDryRun(cmd, "im", tool, args)
+		}
+		data, err := CallMCPToolDataOnServer(cmd.Context(), "im", tool, args)
+		result, err := chatGroupJoinCommandResult(tool, args, data, err)
+		if err != nil {
+			return err
+		}
+		return output.StoreResult(cmd.Context(), result)
+	}
+
+	// ── group join-by-group-id: 群号申请入群 ─────────────────────────
+
+	chatGroupJoinByGroupIdCmd := &cobra.Command{
+		Use:   "join-by-group-id",
+		Short: "通过群号申请加入群聊",
+		Long: `通过群号（groupId）申请加入群聊。已在群内时服务端直接返回 ALREADY_MEMBER，不产生重复写入。
+
+免审批并确认入群时返回 JOINED；需要审批时不等于已入群。当前服务端可能返回 400001「成员邀请已发送」：申请/邀请已提交，请等待群主或管理员处理，按专用提示先只读回查，不要重复提交。此时仍返回原错误码和非零退出码，不能据此认定申请没有提交。
+
+服务端明确返回 APPLIED 且提供 openConversationId 时，CLI 返回 pending 和只读回查命令；缺少回查标识时仅提示等待审批。写入后结果暂未确认（RESULT_UNKNOWN）时也必须先查群状态，不要重试写入。仅收到 JOINED 或 ALREADY_MEMBER 并回查确认成员状态后，才能认定已入群。
+
+如何获取 groupId（如果上层已有则直接使用，不必再查）：
+  - 群号搜索：dws chat search --query "群名"`,
+		Example: `  dws chat group join-by-group-id --group-id 123456`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group-id"); err != nil {
+				return err
+			}
+			groupID, err := strconv.ParseInt(mustGetFlag(cmd, "group-id"), 10, 64)
+			if err != nil || groupID <= 0 {
+				return apperrors.NewValidation(fmt.Sprintf("--group-id must be a positive integer (numeric groupId), got %q", mustGetFlag(cmd, "group-id")))
+			}
+			return callChatGroupJoinTool(cmd, "join_group_by_group_id", map[string]any{
+				"groupId": groupID,
+			})
+		},
+	}
+	chatGroupJoinByGroupIdCmd.Flags().String("group-id", "", "目标群 numeric groupId (必填)")
+	_ = chatGroupJoinByGroupIdCmd.MarkFlagRequired("group-id")
+	DeclareLeafMetadata(chatGroupJoinByGroupIdCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "join_group_by_group_id",
+				CanonicalPath:  "chat.join_group_by_group_id",
+				CLIPath:        "chat group join-by-group-id",
+				PrimaryCLIPath: "chat group join-by-group-id",
+			},
+			Description: "通过群号（groupId）申请加入群聊",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "join_group_by_group_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群号（groupId）申请加入群聊",
+				UseWhen:      []string{"已知目标群的 numeric groupId，需要当前用户加入该群时"},
+				AvoidWhen:    []string{"只有群邀请链接时使用 chat group join-by-invite-url；仅查询群信息时使用 chat group get-by-group-id"},
+				Examples:     []string{"dws chat group join-by-group-id --group-id 123456"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "group-id", Property: "groupId", Required: boolPtr(true), InterfaceType: "integer"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomePending,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 入群响应；入群状态与成员事实位于 result，缺失字段不推断为 false",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的入群结果","properties":{
+							"openConversationId":{"type":"string","description":"目标群会话 ID，仅保留服务端实际返回值"},
+							"status":{"type":"string","description":"服务端入群状态：JOINED（已加入）/ALREADY_MEMBER（已是成员）/APPLIED（已提交审批，完成状态需只读回查）"},
+							"isMember":{"type":["boolean","null"],"description":"观察时点本人是否在群；缺失或 null 时未知，不默认 false"},
+							"alreadyMember":{"type":"boolean","description":"调用前是否已是成员；仅在服务端返回该兼容字段时提供"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
+	// ── group get-info-by-invite-url: 邀请链接查群 ─────────────────────────
+
+	chatGroupGetInfoByInviteUrlCmd := &cobra.Command{
+		Use:   "get-info-by-invite-url",
+		Short: "通过群邀请链接查询群信息",
+		Long: `通过群邀请链接查询目标群的预览信息（群名称、成员数、本人是否在群）。只读接口，不产生任何写入；isMember 未知时为 null，不默认 false。
+
+如何获取群邀请链接（如果上层已有则直接使用，不必再查）：
+  - 生成邀请链接：dws chat group invite-url --conversation-id <openConversationId>`,
+		Example: `  dws chat group get-info-by-invite-url --invite-url "https://qr.dingtalk.com/action/joingroup?code=xxx"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "invite-url"); err != nil {
+				return err
+			}
+			return callChatGroupJoinTool(cmd, "get_group_info_by_invite_url", map[string]any{
+				"inviteUrl": mustGetFlag(cmd, "invite-url"),
+			})
+		},
+	}
+	chatGroupGetInfoByInviteUrlCmd.Flags().String("invite-url", "", "群邀请链接 (必填，原样透传服务端)")
+	_ = chatGroupGetInfoByInviteUrlCmd.MarkFlagRequired("invite-url")
+	DeclareLeafMetadata(chatGroupGetInfoByInviteUrlCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "get_group_info_by_invite_url",
+				CanonicalPath:  "chat.get_group_info_by_invite_url",
+				CLIPath:        "chat group get-info-by-invite-url",
+				PrimaryCLIPath: "chat group get-info-by-invite-url",
+			},
+			Description: "通过群邀请链接查询群预览信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "get_group_info_by_invite_url"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群邀请链接查询群预览信息（群名称、成员数、本人是否在群）",
+				UseWhen:      []string{"持有群邀请链接，需要在加入前确认群名称、规模或本人是否已在群时"},
+				AvoidWhen:    []string{"已知 openConversationId 查询群详情使用 chat conversation-info --conversation-id；确认后直接入群使用 chat group join-by-invite-url"},
+				Examples:     []string{"dws chat group get-info-by-invite-url --invite-url \"https://qr.dingtalk.com/action/joingroup?code=xxx\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "invite-url", Property: "inviteUrl", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 邀请链接预览响应；群预览白名单和成员事实位于 result",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的群预览结果","properties":{
+							"groupInfo":{"type":"object","description":"群预览白名单，不含群主或邀请人身份","properties":{"openConversationId":{"type":"string","description":"群会话 ID（授权后返回）"},"title":{"type":"string","description":"群名称"},"memberCount":{"type":"integer","description":"群成员数"}}},
+							"isMember":{"type":["boolean","null"],"description":"本人当前是否在群；缺失或 null 时未知，不默认 false"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
+	// ── group join-by-invite-url: 邀请链接入群 ─────────────────────────
+
+	chatGroupJoinByInviteUrlCmd := &cobra.Command{
+		Use:   "join-by-invite-url",
+		Short: "通过群邀请链接申请加入群聊",
+		Long: `通过群邀请链接申请加入群聊。已在群内时服务端直接返回 ALREADY_MEMBER，不产生重复写入。
+
+免审批并确认入群时返回 JOINED；需要审批时不等于已入群。当前服务端可能返回 400001「成员邀请已发送」：申请/邀请已提交，请等待群主或管理员处理，按专用提示先只读回查，不要重复提交。此时仍返回原错误码和非零退出码，不能据此认定申请没有提交。
+
+服务端明确返回 APPLIED 且提供 openConversationId 时，CLI 返回 pending 和只读回查命令；缺少回查标识时仅提示等待审批。写入后结果暂未确认（RESULT_UNKNOWN）时也请先用 chat group get-info-by-invite-url 查询群状态，不要重试写入。仅收到 JOINED 或 ALREADY_MEMBER 并回查确认成员状态后，才能认定已入群。`,
+		Example: `  dws chat group join-by-invite-url --invite-url "https://qr.dingtalk.com/action/joingroup?code=xxx"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "invite-url"); err != nil {
+				return err
+			}
+			return callChatGroupJoinTool(cmd, "join_group_by_invite_url", map[string]any{
+				"inviteUrl": mustGetFlag(cmd, "invite-url"),
+			})
+		},
+	}
+	chatGroupJoinByInviteUrlCmd.Flags().String("invite-url", "", "群邀请链接 (必填，原样透传服务端)")
+	_ = chatGroupJoinByInviteUrlCmd.MarkFlagRequired("invite-url")
+	DeclareLeafMetadata(chatGroupJoinByInviteUrlCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "join_group_by_invite_url",
+				CanonicalPath:  "chat.join_group_by_invite_url",
+				CLIPath:        "chat group join-by-invite-url",
+				PrimaryCLIPath: "chat group join-by-invite-url",
+			},
+			Description: "通过群邀请链接申请加入群聊",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "join_group_by_invite_url"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群邀请链接申请加入群聊",
+				UseWhen:      []string{"持有群邀请链接，需要当前用户加入该群时"},
+				AvoidWhen:    []string{"只有 numeric groupId 时使用 chat group join-by-group-id；加入前需确认群信息时先用 chat group get-info-by-invite-url"},
+				Examples:     []string{"dws chat group join-by-invite-url --invite-url \"https://qr.dingtalk.com/action/joingroup?code=xxx\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "invite-url", Property: "inviteUrl", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomePending,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 入群响应；入群状态与成员事实位于 result，缺失字段不推断为 false",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的入群结果","properties":{
+							"openConversationId":{"type":"string","description":"目标群会话 ID，仅保留服务端实际返回值"},
+							"status":{"type":"string","description":"服务端入群状态：JOINED（已加入）/ALREADY_MEMBER（已是成员）/APPLIED（已提交审批，完成状态需只读回查）"},
+							"isMember":{"type":["boolean","null"],"description":"观察时点本人是否在群；缺失或 null 时未知，不默认 false"},
+							"alreadyMember":{"type":"boolean","description":"调用前是否已是成员；仅在服务端返回该兼容字段时提供"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
 	// ── mark-unread: 标记会话为未读 ───────────────────────────
 
 	chatMarkUnreadCmd := &cobra.Command{
@@ -10412,33 +10779,22 @@ status 可选值:
 		Use:   "list-all-conversations",
 		Short: "分页获取当前用户的全部会话列表",
 		Long: `分页获取当前用户的全部会话列表（包含单聊和群聊）。--limit 指定每页数量（1-100，默认 100），--cursor 传分页游标（首次不传或传 0）。
-返回 hasMore=true 时用 nextCursor 作为下次 --cursor 继续翻页。`,
+默认保持单页调用；显式传 --page-all 时，CLI 按 nextCursor 自动翻页，并按 openConversationId 去重聚合 result.conversationList。--page-limit 控制最多请求页数，--max-items 控制最多返回条数，--page-delay 控制页间等待毫秒数。`,
 		Example: `  dws chat list-all-conversations
   dws chat list-all-conversations --limit 50
   dws chat list-all-conversations --limit 100 --cursor <nextCursor>
-  dws chat list-all-conversations --exclude-muted`,
+  dws chat list-all-conversations --exclude-muted
+  dws chat list-all-conversations --page-all --page-limit 20 --max-items 500 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{}
-			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
-				// 服务端每页上限 100，超过会被静默截断，这里显式拒绝以免误以为取全。
-				if v > 100 {
-					return fmt.Errorf("--limit 最大 100（服务端上限），got %d；如需取全部会话请配合 --cursor 翻页", v)
-				}
-				toolArgs["limit"] = v
-			}
-			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
-				toolArgs["cursor"] = v
-			}
-			if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
-				toolArgs["excludeMuted"] = true
-			}
-			return callMCPToolOnServer("im", "list_all_conversations", toolArgs)
+			return RunPagedMCPCommand(cmd, chatListAllConversationsPagedConfig())
 		},
 	}
 	chatListAllConversationsCmd.Flags().Int("limit", 100, "每页数量（1-100，默认 100）")
 	chatListAllConversationsCmd.Flags().Int64("cursor", 0, "分页游标（首次不传或传 0，翻页传 nextCursor）")
 	chatListAllConversationsCmd.Flags().Bool("exclude-muted", false, "是否排除已免打扰会话（默认 false）")
+	AddPagedMCPFlags(chatListAllConversationsCmd)
 	DeclareLeafMetadata(chatListAllConversationsCmd, LeafSpec{
+		OutputRollout: output.RolloutDualValidate,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -10463,10 +10819,18 @@ status 可选值:
 				AvoidWhen:    []string{"常规枚举全部会话使用 chat +conversation-list；只搜索群聊使用 chat +chat-search"},
 				Examples:     []string{"dws chat list-all-conversations --limit 100"},
 			},
-			Parameters: []contract.ParamDecl{
+			Parameters: append([]contract.ParamDecl{
 				{Name: "cursor", Property: "cursor", Required: boolPtr(false), InterfaceType: "integer"},
 				{Name: "exclude-muted", Property: "excludeMuted", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "limit", Property: "limit", Required: boolPtr(false), InterfaceType: "integer"},
+			}, pagedMCPParamDecls()...),
+			Result: chatListAllConversationsResult(),
+			Pagination: &contract.PaginationSpec{
+				Kind:                  contract.PaginationKindCursor,
+				CursorParameter:       "cursor",
+				MetaPath:              contract.PaginationMetaPath,
+				EndpointExhaustedPath: contract.PaginationExhaustedPath,
+				NextTokenPath:         contract.PaginationNextTokenPath,
 			},
 		},
 	})
@@ -11685,7 +12049,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	})
 	chatTextCmd.AddCommand(chatTextTranslateCmd)
 
-	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
+	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupJoinByGroupIdCmd, chatGroupGetInfoByInviteUrlCmd, chatGroupJoinByInviteUrlCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
 
 	// ── chat group user-settings ──
 	chatGroupUserSettingsCmd := newGroupCommand(&cobra.Command{

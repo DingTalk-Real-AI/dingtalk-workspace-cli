@@ -36,9 +36,10 @@ func TestCrossPlatformCoverageAITableSemanticCatalogExactlyCoversRegisteredSurfa
 		}
 		registered[item.Command] = item
 	}
-	// +record-write-result adds one reviewed read-only leaf to the 126-command surface.
-	if len(registered) != 127 || len(source.Shortcuts) != 127 {
-		t.Fatalf("registered/catalog = %d/%d, want 127/127", len(registered), len(source.Shortcuts))
+	// Nine reviewed optimization shortcuts extend main's 131-command surface,
+	// including its four advanced-permission role/member commands.
+	if len(registered) != 140 || len(source.Shortcuts) != 140 {
+		t.Fatalf("registered/catalog = %d/%d, want 140/140", len(registered), len(source.Shortcuts))
 	}
 
 	var missing, stale []string

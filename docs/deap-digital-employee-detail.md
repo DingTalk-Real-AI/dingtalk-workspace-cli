@@ -10,7 +10,7 @@ dws dingtalk-tag manage detail --agent-uuid <agentUuid> --snapshot published
 `--snapshot` 只接受 `draft` 或 `published`，默认 `draft`。CLI 映射到
 `get_digital_employee_detail` 的 `snapshot` 字段。登录和连接内部的详情查询使用相同字段。
 
-详情响应中的 `type` 表示主程序类型（`open_code` / `local_agent`）。
+详情响应中的 `type` 表示主程序类型（`qwenwork` / `local_agent`）。
 响应的 `snapshot` 表示本次读取的配置来源（`draft` / `published`）。
 `status` 表示生命周期：`online` 为已发布，`dev` 为开发中，`offline` 为下架；
 它不能单独证明本次读取的是 published 快照，也不代表本地 Agent 正在运行。

@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -315,6 +317,33 @@ type deapAgentSkillStageError struct {
 	Err       error
 }
 
+const deapAgentPermissionManagementURL = "https://workforce.dingtalk.com/#/dai/role-manage"
+
+// Only this public, credential-free management URL may survive upload-error redaction.
+var deapAgentSkillErrorURLs = regexp.MustCompile(`(?i)https?://[^\s"'<>()[\]{}，。；！？、（）]+`)
+
+// An absent server message cannot tell us which permission layer rejected the request.
+// Keep this guidance conditional rather than asking an existing co-admin to acquire a broader role.
+func deapAgentWithPermissionGuidance(err error) error {
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed == nil || typed.ServerDiag.ServerErrorCode != "NO_PERMISSION" ||
+		(typed.ServerKey != "" && typed.ServerKey != deapAgentServerID) {
+		return err
+	}
+	switch strings.TrimSpace(typed.Message) {
+	case "", "NO_PERMISSION", "business error: code NO_PERMISSION", "business error: success=false":
+		copy := *typed
+		copy.Message = "本次数字员工操作被拒绝（NO_PERMISSION），服务端未返回具体原因。" +
+			"若尚未获得管理权限，请联系企业主管理员，登录管理后台权限管理页（" +
+			deapAgentPermissionManagementURL + "），为你的账号添加对应权限后重试；" +
+			"若已是该数字员工的共同管理员、部门管理员或企业主管理员，请保留本次错误联系平台核查权限，无需重复申请。"
+		copy.Cause = err
+		return &copy
+	default:
+		return err
+	}
+}
+
 func (e *deapAgentSkillStageError) Error() string {
 	if e == nil {
 		return "skill create 阶段失败"
@@ -325,9 +354,16 @@ func (e *deapAgentSkillStageError) Error() string {
 	}
 	detail := ""
 	if e.Err != nil {
-		detail = e.Err.Error()
+		detail = deapAgentWithPermissionGuidance(e.Err).Error()
 	}
-	lower := strings.ToLower(detail)
+	// Do not strip normal permission guidance merely because it links to the public
+	// management page. All other URLs (including modified/signed variants) stay redacted.
+	for _, rawURL := range deapAgentSkillErrorURLs.FindAllString(detail, -1) {
+		if rawURL != deapAgentPermissionManagementURL {
+			return fmt.Sprintf("skill %s %s 阶段失败: 下游错误详情已脱敏", operation, e.Stage)
+		}
+	}
+	lower := strings.ToLower(strings.ReplaceAll(detail, deapAgentPermissionManagementURL, ""))
 	for _, marker := range []string{"http://", "https://", "token", "secret", "credential", "password", "fileurl", "uploadurl"} {
 		if strings.Contains(lower, marker) {
 			detail = "下游错误详情已脱敏"
@@ -623,7 +659,7 @@ func deapAgentCallSkillUpdate(cmd *cobra.Command, tool string, args map[string]a
 	rawPath, _ := args["file"].(string)
 	delete(args, "file")
 	if strings.TrimSpace(rawPath) == "" {
-		return callMCPToolOnServer(deapAgentServerID, tool, args)
+		return deapAgentWithPermissionGuidance(callMCPToolOnServer(deapAgentServerID, tool, args))
 	}
 	pkg, err := deapAgentOpenSkillPackage(rawPath)
 	if err != nil {
@@ -644,7 +680,7 @@ func deapAgentCallSkillUpdate(cmd *cobra.Command, tool string, args map[string]a
 		return &deapAgentSkillStageError{Operation: "update", Stage: "upload", Err: err}
 	}
 	args["fileUrl"] = fileURL
-	return callMCPToolOnServer(deapAgentServerID, tool, args)
+	return deapAgentWithPermissionGuidance(callMCPToolOnServer(deapAgentServerID, tool, args))
 }
 
 func newDeapAgentSkillDeleteCommand() *cobra.Command {

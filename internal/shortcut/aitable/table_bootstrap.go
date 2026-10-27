@@ -94,33 +94,37 @@ func validateBootstrapField(raw any, path string) (string, error) {
 	if raw, exists := field["aiConfig"]; exists {
 		cfg, ok := raw.(map[string]any)
 		if !ok {
-			return "", fmt.Errorf("%s.aiConfig 需要非空 prompt 与 outputType", path)
+			return "", fmt.Errorf("%s.aiConfig 必须是 JSON 对象", path)
 		}
-		prompt, ok := cfg["prompt"].([]any)
-		if !ok || len(prompt) == 0 {
-			return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
-		}
-		for _, raw := range prompt {
-			part, ok := raw.(map[string]any)
-			if !ok {
-				return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
+		// Shared with create_fields, which supports builtin configurations.
+		// create_table capability checks run separately before any writes.
+		if cfg["type"] != "builtin" {
+			prompt, ok := cfg["prompt"].([]any)
+			if !ok || len(prompt) == 0 {
+				return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
 			}
-			switch part["type"] {
-			case "text":
-				if stringValue(part, "value") == "" {
-					return "", fmt.Errorf("prompt text 片段需要 value")
+			for _, raw := range prompt {
+				part, ok := raw.(map[string]any)
+				if !ok {
+					return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
 				}
-			case "fieldRef":
-				if stringValue(part, "fieldId") == "" {
-					return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+				switch part["type"] {
+				case "text":
+					if stringValue(part, "value") == "" {
+						return "", fmt.Errorf("prompt text 片段需要 value")
+					}
+				case "fieldRef":
+					if stringValue(part, "fieldId") == "" {
+						return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+					}
+				default:
+					return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
 				}
-			default:
-				return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
 			}
-		}
-		expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
-		if expected == "" || expected != fieldType {
-			return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
+			expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
+			if expected == "" || expected != fieldType {
+				return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
+			}
 		}
 	}
 	if description, exists := field["description"]; exists {
@@ -129,6 +133,21 @@ func validateBootstrapField(raw any, path string) (string, error) {
 		}
 	}
 	return name, nil
+}
+
+// create_table does not accept builtin aiConfig or object output. Keep that
+// capability on create_fields/update_field, including the legacy config shape.
+func validateCreateTableCapabilities(fields []any, path string) error {
+	for index, raw := range fields {
+		field, _ := raw.(map[string]any)
+		aiConfig, _ := field["aiConfig"].(map[string]any)
+		config, _ := field["config"].(map[string]any)
+		decorator, _ := config["decoratorConfigs"].(map[string]any)
+		if field["type"] == "object" || aiConfig["type"] == "builtin" || decorator["type"] == "builtin" {
+			return fmt.Errorf("%s[%d] 的 builtin 配置或 object 字段不支持组合建表；请先创建普通表，再用 field create 或 field update 配置内置 AI 字段", path, index)
+		}
+	}
+	return nil
 }
 
 func parseBootstrapFields(raw string) ([]any, error) {
@@ -169,6 +188,9 @@ func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	fields, err := parseBootstrapFields(rt.Str("fields"))
 	if err != nil {
 		return err
+	}
+	if err := validateCreateTableCapabilities(fields, "--fields"); err != nil {
+		return tableBootstrapValidation(err.Error())
 	}
 	baseID, tableName := rt.Str("base-id"), rt.Str("name")
 	result := newCompositeResult("table_bootstrap")

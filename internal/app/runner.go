@@ -263,6 +263,20 @@ func (r *runtimeRunner) ResolveToolProduct(ctx context.Context, productIDs []str
 	)
 }
 
+// SupportsMCPTool distinguishes a confirmed missing tool from failed discovery.
+// It reuses authenticated, paginated tools/list routing and never submits a write.
+func (r *runtimeRunner) SupportsMCPTool(ctx context.Context, product, tool string) (bool, error) {
+	_, err := r.ResolveToolProduct(ctx, []string{product}, tool)
+	if err == nil {
+		return true, nil
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) && typed.Reason == "mcp_tool_not_found" {
+		return false, nil
+	}
+	return false, err
+}
+
 func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
 	if r == nil || r.transport == nil {
 		return nil, fmt.Errorf("runtime transport is not configured")
@@ -655,15 +669,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	invokeStart := time.Now()
 	execID := generateExecutionID()
-	r.transport.ExecutionId = execID
+	// Each invocation owns tracing/logging state. Independent reads may share
+	// the HTTP connection pool, but must never race on the runner's base client.
+	invocationTransport := r.transport.WithExecutionId(execID)
 
 	// Lazy bind FileLogger: it may be nil at construction time because
 	// configureLogLevel runs later in PersistentPreRunE.
-	if r.transport.FileLogger == nil {
-		r.transport.FileLogger = FileLoggerInstance()
+	if invocationTransport.FileLogger == nil {
+		invocationTransport.FileLogger = FileLoggerInstance()
 	}
 
-	fl := r.transport.FileLogger
+	fl := invocationTransport.FileLogger
 
 	defer func() {
 		var errCat, errReason string
@@ -775,16 +791,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// Plugin ownership is authoritative even when the plugin is anonymous.
 		// Copy and sanitize manifest headers so plugins cannot opt themselves into
 		// DWS-owned Agent metadata by declaring the reserved names directly.
-		tc = r.transport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
+		tc = invocationTransport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
 		// Default path: use DingTalk OAuth token with identity headers. Agent
 		// metadata is resolved exactly once per invocation and is excluded from
 		// helper-only service-discovery requests.
 		if r.agentMetadata != nil {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
 		} else {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
 		}
 	}
 
@@ -900,6 +916,26 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 	}
 
+	// Keep the two field-capability read contracts before generic isError handling
+	// discards nested error.code/retryable. Gateway and PAT classifiers stay first.
+	if readErr := aitableprotocol.FieldCapabilityReadError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); readErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(readErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(readErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, readErr, readErr)
+		if isPatScopeError(readErr) && !hasRequestToken {
+			return runnerRetryWithPatAuthRetry(ctx, r, invocation, extractPatScopeError(readErr), defaultConfigDir(), os.Stderr)
+		}
+		return executor.Result{}, readErr
+	}
+	if mutationErr := aitableprotocol.FieldGroupMutationError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); mutationErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(mutationErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(mutationErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, mutationErr, mutationErr)
+		return executor.Result{}, mutationErr
+	}
+
 	if callResult.IsError {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
 
@@ -926,7 +962,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.Tool,
 			diag,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
 		// PAT scope error in business response: offer human-readable output and retry
 		if isPatScopeError(mcpErr) {
 			if hasRequestToken {
@@ -955,7 +991,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.Tool,
 			diag,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
 		return executor.Result{}, classifiedErr
 	}
 

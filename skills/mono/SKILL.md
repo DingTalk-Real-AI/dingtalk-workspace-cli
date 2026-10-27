@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
+description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
 metadata:
   internal: true
@@ -48,7 +48,7 @@ metadata:
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 127 | `dingtalk-aitable` |
+| `aitable` | 140 | `dingtalk-aitable` |
 | `attendance` | 11 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 102 | `dingtalk-chat` |
@@ -97,7 +97,8 @@ metadata:
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
 | `html`            | 原生 HTML 文件：读取/创建/全量覆盖/局部替换（.html/.htm，钉盘或文档空间）     | [html.md](./references/products/html.md)                     |
 | `markdown`        | 原生 Markdown 文件：读取/创建/对比/全量覆盖/局部替换/评论列表           | [markdown.md](./references/products/markdown.md)               |
-| `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
+| `mind`            | 独立脑图：携带 OpenNodes 初始内容创建 .amind 文件，查询和增删改主题；空白文件创建走 wiki，听记内置思维导图生成走 minutes | [mind.md](./references/products/mind.md) |
+| `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/听记内置思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
@@ -128,7 +129,7 @@ metadata:
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
 用户提到"原生 HTML 文件/.html 文件/新建 HTML 页面/创建 HTML 文件/读取 HTML 原文/覆盖 HTML/局部替换 HTML" → `html`
 用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown/Markdown 评论" → `markdown`
-用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
+用户提到"听记/AI听记/会议纪要/转写/摘要/听记内置思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
 用户提到"PAT 授权/行为权限/scope 授权/批量授权/一次性授权/会话授权/永久授权/授权浏览器策略" → `pat`
@@ -136,7 +137,8 @@ metadata:
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"白板文件/独立白板/保存到白板/画布/OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`。用户要在文档中插入、定位或删除白板卡片 → `doc whiteboard`；只有已有承载文档 `nodeId` 和 `partId` 的内嵌白板图形内容读写才走 `whiteboard`。内嵌目标身份缺失时停止并补齐，禁止转成独立白板
+用户要求独立脑图文件的带内容创建、主题查询或增删改 → `mind`，读取 [mind.md](./references/products/mind.md)。仅创建空白脑图文件 → `wiki node create --type amind`。听记内置思维导图 → `minutes +mindmap`；明确要求把听记内容另存独立脑图时走 `mind`。目标不明确时先消歧，不能仅凭 OpenNodes 就路由白板，不能把 mind-v1 传给白板。
+用户提到"白板文件/独立白板/保存到白板/画布/白板OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`。用户要在文档中插入、定位或删除白板卡片 → `doc whiteboard`；只有已有承载文档 `nodeId` 和 `partId` 的内嵌白板图形内容读写才走 `whiteboard`。内嵌目标身份缺失时停止并补齐，禁止转成独立白板
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/监听并自动回复消息/驱动 Agent 处理消息" → `event +listen-im`；群成员加入/退出、群改名/解散或明确原始 EventKey/Filter DSL → `event consume`
 用户提到"监听待我审批的任务/监听审批任务创建、完成或转交/监听审批单发起或终止/监听我发起的审批完成/监听审批实例完成/订阅 OA 事件/event consume user_oa_approval_*" → `event consume`
 用户提到"收到语音通话邀请时通知我/监听 VoIP 来电/订阅 user_voip_call_receive_invite" → `event consume`
@@ -170,7 +172,7 @@ metadata:
 | `aitable` | `record delete` | 删除记录（支持批量） |
 | `aitable` | `chart delete` / `dashboard delete` | 删除图表/仪表盘 |
 | `calendar` | `event delete` | 删除日程，所有参与者同步取消 |
-| `calendar` | `participant delete` | 移除日程参与者 |
+| `calendar` | `attendee delete` | 移除日程参与者 |
 | `calendar` | `room delete` | 取消会议室预定 |
 | `chat` | `group members remove` | 移除群成员 |
 | `chat` | `message recall-by-bot` | 撤回机器人已发消息 |

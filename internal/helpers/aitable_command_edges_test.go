@@ -173,6 +173,7 @@ func TestCrossPlatformCoverageAitableDryRunEmitterDataMatchesFinalResultSchema(t
 		args []string
 	}{
 		{name: "record ids", path: "aitable record ids", args: []string{"record", "ids", "--base-id=b", "--table-id=t"}},
+		{name: "form share url", path: "aitable form share url", args: []string{"form", "share", "url", "--base-id=b", "--table-id=t", "--view-id=v", "--qr-file=preview.png"}},
 		{name: "comment list", path: "aitable comment list", args: []string{"comment", "list", "--base-id=b", "--table-id=t", "--record-id=r"}},
 		{name: "comment create", path: "aitable comment create", args: []string{"comment", "create", "--base-id=b", "--table-id=t", "--record-id=r", "--content=preview"}},
 		{name: "comment reply", path: "aitable comment reply", args: []string{"comment", "reply", "--base-id=b", "--table-id=t", "--record-id=r", "--topic-id=topic", "--comment-key=comment", "--content=preview"}},
@@ -727,8 +728,8 @@ func TestCrossPlatformCoverageAitableChartLayoutPreflight(t *testing.T) {
 		if len(caller.calls) != 2 || caller.calls[1].tool != "create_chart" {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		if _, exists := caller.calls[1].args["isAppMode"]; exists {
-			t.Fatalf("read-only context leaked into create_chart: %#v", caller.calls[1].args)
+		if caller.calls[1].args["isAppMode"] != true {
+			t.Fatalf("read-only grid context was not forwarded: %#v", caller.calls[1].args)
 		}
 	})
 

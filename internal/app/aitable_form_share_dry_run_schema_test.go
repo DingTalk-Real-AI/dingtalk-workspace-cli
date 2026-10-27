@@ -14,10 +14,60 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+// Both delivered schemas must describe the recovery ID without weakening partial_failure.
+func TestCrossPlatformCoverageAITableShareFormRecoveryResultSchema(t *testing.T) {
+	result := helpers.AitableFormShareUpdateResult(nil, map[string]any{"formCoverResourceId": "rid-cover"})
+	env, err := output.EnvelopeFromResult(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"aitable form share update", "aitable +form-share-update"} {
+		for _, compact := range []bool{false, true} {
+			query := []string{"--cli-path", path}
+			if compact {
+				query = append(query, "--compact")
+			}
+			leaf := executeShortcutSchemaQuery(t, query...)
+			decl := aitableShareSchemaObject(t, leaf["result"], "published result")
+			schemaJSON, _ := json.Marshal(decl["data_schema"])
+			if !strings.Contains(string(schemaJSON), `"formCoverResourceId"`) {
+				t.Fatalf("%s compact=%v omits recovery ID declaration", path, compact)
+			}
+			compiler := jsonschema.NewCompiler()
+			const resource = "https://dws.test/form-cover-recovery.json"
+			if err := compiler.AddResource(resource, decl["data_schema"]); err != nil {
+				t.Fatal(err)
+			}
+			schema, err := compiler.Compile(resource)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := schema.Validate(data); err != nil {
+				t.Fatalf("actual recovery result violates %s schema: %v", path, err)
+			}
+			details := data["failed"].([]any)[0].(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
+			details["formCoverResourceId"] = 123
+			if err := schema.Validate(data); err == nil {
+				t.Fatalf("%s schema accepts a non-string recovery ID", path)
+			}
+			details["formCoverResourceId"] = "rid-cover"
+		}
+	}
+}
 
 // Execute the final assembled leaves, not a hand-built preview or a mapper.
 // The injected runner rejects any attempt to cross the remote-call boundary.

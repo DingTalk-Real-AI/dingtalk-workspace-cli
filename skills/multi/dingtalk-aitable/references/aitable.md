@@ -153,7 +153,7 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 |------|------|
 | `dashboard get/create/update/delete` | 仪表盘管理 |
 | `dashboard config-example` | 查看仪表盘配置模板 |
-| `dashboard arrange` | 自动重排仪表盘图表布局（智能填满网格，避免空缺） |
+| `dashboard arrange` | 明确接受统一按行重排时使用；改变位置、宽高和叠放关系 |
 | `chart get/create/update/delete` | 图表管理 |
 | `chart widgets-example` | 查看图表 widgets 配置模板 |
 
@@ -189,9 +189,10 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 | `advperm role-update` | 增量更新自定义角色（PATCH） | `--base-id` `--role-id` | 未传字段不变；`--sub-roles` 按 (targetId,targetType) 合并 |
 | `advperm role-delete` | 删除自定义角色 | `--base-id` `--role-id` `--yes` | 不可逆；系统角色禁删；**调用者必须是该 AI 表格的管理员/Owner**，非管理员会得到 401 AUTH_ERROR |
 
-> **角色 CRUD 已全支持**：create/get/list/update/delete 都可走 CLI。
-> 所有写命令（enable/disable/role-create/role-update/role-delete）需要 Base 管理员权限；非管理员只能调 `role-list` / `role-get`（只读）。
-> "角色 ↔ 成员"绑定当前 CLI 不支持，仍需在 AI 表格 Web 端 → Base 设置 → 高级权限面板手动完成。
+> **高级权限角色与成员已支持**：角色 create/get/list/update/delete、成员追加/完整替换、角色复制和按用户查角色均可走 CLI。
+> 所有写命令（enable/disable/role-create/role-update/role-delete/role-members-add/role-members-update/role-copy）需要 Base 管理员权限；非管理员只读使用 `role-list`、`role-get`、`role-query-user`。
+> 成员全量替换前必须回读 `defaultRole`，DWS 强制完整 `--members`（`[]` 清空，不接受 null）及 `--default-role-mode`（0/1/2，1 还需 `--default-role-id`）。成员最多 200 项，id/memberType 均为 String，用户填 uid（不是 userId）及 `"2"`，不能用 user/conv 或数字 2；完整编码和可选 number `memberIdBelongOrgId` 见高级权限 reference 类型表。
+> 复制沿用 roleType/flowType/subRoles，不复制成员，name 省略或空字符串使用「源角色名 副本」；查询返回 enabled 和 roles 配置（不含成员），高级权限关闭时 roles 通常为空，targetUid 不替换调用身份。
 
 ### section (文件夹与节点管理)
 
@@ -410,7 +411,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
-用户说"仪表盘排版乱了/图表对不齐/重新排布/自动布局/美化仪表盘" → `dashboard arrange`（读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)）
+用户明确接受改变位置和尺寸、统一按行重排 → `dashboard arrange`；已有设计、大小混排或纵向叠放保留显式布局（读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)）
 
 用户说"附件/上传文件" → 读 [aitable-attachment.md](./aitable/aitable-attachment.md)
 
@@ -424,7 +425,10 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 建角色（可同时指定子角色权限） → `advperm role-create --name ... --sub-roles '[...]'`
 - 改角色名 / 改子角色权限（PATCH 语义，未传字段不变） → `advperm role-update --role-id ... [--name ...] [--sub-roles '[...]']`
 - 删角色 → `advperm role-delete --yes`
-- **角色 ↔ 成员绑定**：当前 CLI 不支持，仍需在 AI 表格 Web 端面板手动完成
+- 向角色追加成员 → `+role-members-add --role-id ... --members '[...]' --yes`
+- 完整替换或清空成员 → `+role-members-update --role-id ... --members '[...]' --default-role-mode 0 --yes`；mode=1 时必须同时传 `--default-role-id`
+- 复制角色配置（不复制成员）→ `+role-copy --source-role-id ... --yes`
+- 查询当前或指定用户命中的角色 → `+role-query-user [--target-uid ...]`
 
 命令报错/操作失败 → 读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)
 
