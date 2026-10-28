@@ -201,7 +201,7 @@ dws dev app scope set --unified-app-id <unifiedAppId> \
 dws dev connect \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
-# 明确指定渠道（opencode/claudecode/qoder/qoderwork/workbuddy/codex/gemini/hermes/openclaw/custom）
+# 明确指定渠道（opencode/claudecode/qoder/qoderwork/workbuddy/codex/gemini/pi/hermes/openclaw/custom）
 dws dev connect --channel opencode \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
@@ -233,6 +233,8 @@ dws dev connect stop
 | `--owner-user-id` | 数字分身：执行类请求先发给主人审批 |
 
 **预检 cli.installed**：`--dry-run` 出参的 `cli` 字段含 `installed/autoInstall/installHint`。`installed:false, autoInstall:false`（桌面 App 渠道）时先引导用户安装对应 App，不要直接起连接。
+
+Pi 使用 `--channel pi`，复用 Pi 自身的登录和模型配置；`--agent-model` 可指定 `provider/model`。按会话隔离记忆，`/new`、`/clear` 重置会话映射；需要禁用工具时显式使用 `--agent-permission-mode ask`，或在未配置权限模式及其环境变量时使用 `--agent-approval-mode ask`。不存在 `--ask` 参数，`--yolo=false` 也不会关闭默认高权限模式。原生 Pi 通道不要同时设置 `--agent-cmd`，也不要用 `DWS_AGENT_CMD` 覆盖命令。
 
 `dev connect` 是本地调试步骤。dry-run JSON 的 `invocation` 会包含 `scope=local_debug_only`、`doesNotPublish=true`、`completionState=LOCAL_DEBUG_ONLY`、`terminal=false`；真实前台/daemon 启动也会提示“本地调试，不代表线上发布完成”。这些信号不能抵消版本发布/审批闭环。
 

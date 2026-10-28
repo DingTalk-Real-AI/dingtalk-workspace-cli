@@ -30,7 +30,9 @@ dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
 
 连接使用数字员工 Profile 启动 Event Consumer，调用与 dev connect 共用的 Agent 协议，以员工身份按回复模式更新 A2UI 卡片，或引用回复最终文本。后台结果只有在 ready 后才返回运行成功；不支持的 Agent 或缺失的依赖必须明确报错。
 
-支持 `qoder/qoderwork/workbuddy/claudecode/codebuddy/codex/gemini/opencode/custom`；custom 使用 `--agent-cmd`，问题作为最后一个参数、stdout 作为答案。模型、工作目录、会话和权限参数沿用 dev connect，模型推理是否远端执行由 Agent 自身决定。
+支持 `qoder/qoderwork/workbuddy/claudecode/codebuddy/codex/gemini/opencode/pi/custom`；custom 使用 `--agent-cmd`，问题作为最后一个参数、stdout 作为答案。模型、工作目录、会话和权限参数沿用 dev connect，模型推理是否远端执行由 Agent 自身决定。
+
+Pi 使用 `--channel pi`，按员工与会话隔离记忆；需要禁用工具时显式使用 `--agent-permission-mode ask`，或在未配置权限模式及其环境变量时使用 `--agent-approval-mode ask`。不存在 `--ask` 参数，`--yolo=false` 也不会关闭默认高权限模式。Pi 尚未适配公开进度接口，数字员工按既有回退路径发送最终文本；不提供 A2UI 工具进度。Pi 直接音频、视频输入会被明确拒绝。
 
 默认仅主管可用；`--allowed-users` 接收精确 userId 并在员工上下文解析，`--allowed-groups` 接收该上下文的群会话 ID，群消息仍需满足用户白名单。不要向用户索要其它内部人员标识。
 
