@@ -335,6 +335,15 @@ Credentials are securely persisted after first login (Keychain). Subsequent runs
 
 `dws` can stay logged in to several DingTalk accounts at once, including multiple accounts in the same organization. A profile is uniquely identified by `corpId:userId`; the current profile decides which identity a command runs as.
 
+根级临时凭证可通过 `dws --token "$TOKEN" auth status --format json` 检查。
+命令使用注入的 token 查询当前用户，只有身份查询成功才返回 `authenticated=true`。
+返回包含 `token_source=explicit` 和 `verification=valid|invalid|unknown|not_checked`：
+明确的 HTTP/RPC 401 表示 `invalid`，权限不足、超时、网络失败或无法解析身份表示 `unknown`；
+`--readonly` 或 `--dry-run` 不发起身份查询，返回 `not_checked`。
+消费者必须结合 `verification` 判断，不能把 `unknown` 或 `not_checked` 下的
+`authenticated=false` 当作 token 已失效。临时凭证不保存、不刷新，也不回退到本地登录态。
+未传 `--token` 时，继续检查所选 profile 的本地 OAuth 状态。
+
 Business commands automatically check and refresh local OAuth credentials as needed;
 there is no need to run `auth status` before each request. `auth status` retains
 refresh, migration and repair behavior and may wait for the authentication lock.
