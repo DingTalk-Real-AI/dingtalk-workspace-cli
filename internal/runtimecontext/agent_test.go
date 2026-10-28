@@ -37,7 +37,13 @@ func TestCrossPlatformCoverageAgentSnapshotOutcomes(t *testing.T) {
 		{"json oversized", bytes.Repeat([]byte("x"), MaxAgentJSONBytes+1), 0, nil, AgentOversized, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			snapshot := parseAgentResult(tc.raw, tc.code, tc.err)
+			var snapshot AgentSnapshot
+			if tc.err != nil {
+				snapshot = parseAgentResult(tc.raw, tc.code, tc.err)
+			} else {
+				// 同包验证公开测试入口，避免依赖跨包插桩才计入覆盖率。
+				snapshot = AgentSnapshotForTest(tc.raw, tc.code)
+			}
 			if snapshot.State != tc.state || snapshot.AgentID != tc.id || snapshot.ErrorCode != tc.code || (len(snapshot.JSON()) > 0) != tc.retained {
 				t.Fatalf("snapshot metadata = %s id=%d", snapshot, snapshot.AgentID)
 			}
