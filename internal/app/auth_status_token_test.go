@@ -111,6 +111,33 @@ func TestCrossPlatformCoverageAuthStatusTokenIdentity(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAuthStatusTokenTextOutput(t *testing.T) {
+	t.Setenv("DWS_NO_UPDATE_CHECK", "1")
+	for _, failOutput := range []bool{false, true} {
+		root := &cobra.Command{Use: "dws"}
+		root.PersistentFlags().String("token", "", "")
+		root.PersistentFlags().String("format", "table", "")
+		root.AddCommand(newAuthStatusCommand())
+		root.SetArgs([]string{"--token", "status-token-canary", "status", "--readonly"})
+		var out bytes.Buffer
+		root.SetOut(&out)
+		writeErr := errors.New("status output failed")
+		if failOutput {
+			root.SetOut(appFailWriter{err: writeErr})
+		}
+		err := corecmd.ExecuteForTest(root)
+		if failOutput {
+			if !errors.Is(err, writeErr) {
+				t.Fatalf("output error not preserved: %v", err)
+			}
+			continue
+		}
+		if err != nil || !strings.Contains(out.String(), "验证: not_checked") || strings.Contains(out.String(), "status-token-canary") {
+			t.Fatalf("unexpected text status: %q, err=%v", out.String(), err)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageAuthStatusExplicitTokenRealRoot(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
