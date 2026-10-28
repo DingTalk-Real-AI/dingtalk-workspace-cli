@@ -76,7 +76,7 @@ func setNativeAgentConfig(path string) (func(), error) {
 	}{
 		{"getenv", &getenv}, {"setenv", &setenv}, {"unsetenv", &unsetenv},
 	} {
-		symbol, err := purego.Dlsym(purego.RTLD_DEFAULT, binding.name)
+		symbol, err := lookupNativeSymbol(purego.RTLD_DEFAULT, binding.name)
 		if err != nil {
 			return nil, errNativeSymbol
 		}

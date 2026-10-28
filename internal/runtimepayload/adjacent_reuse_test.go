@@ -50,9 +50,10 @@ func TestCrossPlatformCoverageAdjacentEmbeddedWarmReuse(t *testing.T) {
 		t.Fatalf("hashed %d resources, want the library and configuration", len(hashed))
 	}
 	for path, count := range hashed {
-		if count != 1 || filepath.Dir(path) != root {
+		if count != 1 {
 			t.Fatalf("resource %q hashed %d times", path, count)
 		}
+		assertAdjacentDirectory(t, path, root)
 	}
 }
 

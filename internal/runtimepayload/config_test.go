@@ -135,3 +135,53 @@ func TestCrossPlatformCoverageFormatTwoUpgradeDoesNotOwnNewConfig(t *testing.T) 
 		}
 	}
 }
+
+func TestCrossPlatformCoverageConfigOwnershipFailureBoundaries(t *testing.T) {
+	container, err := BuildContainer(writePayloadFixture(t, "linux", "amd64"), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if _, err := MaterializeAdjacent(container, root, "linux", "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	original, _, err := readOwnership(root, "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*manifest)
+	}{
+		{"legacy version", func(m *manifest) {
+			m.FormatVersion = 2
+			m.PayloadVersion = "20261028"
+			m.Config = ""
+			m.ConfigSHA256 = ""
+		}},
+		{"legacy config", func(m *manifest) { m.FormatVersion = 2; m.PayloadVersion = "20260909" }},
+		{"current config", func(m *manifest) { m.Config = "other.bin" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := original
+			tc.mutate(&candidate.Manifest)
+			raw, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, ownershipName), raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, owned, err := readOwnership(dir, "linux", "amd64"); err == nil || owned {
+				t.Fatal("invalid ownership accepted")
+			}
+		})
+	}
+	if err := os.Remove(filepath.Join(root, "skt.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRootManifest(root, original.Manifest, "linux", "amd64"); err == nil {
+		t.Fatal("missing configuration accepted")
+	}
+}

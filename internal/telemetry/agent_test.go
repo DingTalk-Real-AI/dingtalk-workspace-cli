@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,4 +113,48 @@ func TestCrossPlatformCoverageAgentHTMLCharactersDoNotInflateIPCLimit(t *testing
 		}
 		return nil
 	})
+}
+
+func TestCrossPlatformCoverageAgentTransportFailureBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		err  error
+	}{
+		{"encoding failure", nil, errors.New("encoding failed")},
+		{"IPC limit", make([]byte, maxIPCBytes+1), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testseam.Swap(t, &encodeHandoff, func(any) ([]byte, error) { return tc.raw, tc.err })
+			submit(sampleEvent(), time.Second, func(context.Context, []byte) error { t.Error("failed payload launched a worker"); return nil })
+		})
+	}
+	if _, err := encodeTelemetryJSON(make(chan int)); err == nil {
+		t.Fatal("unencodable value accepted")
+	}
+	for _, info := range []*AgentInfo{
+		{State: runtimecontext.StateReady, ErrorCategory: strings.Repeat("x", 129)},
+		{State: runtimecontext.StateReady, Result: make([]byte, runtimecontext.MaxAgentJSONBytes+1)},
+		{State: "unrecognized"},
+	} {
+		event := sampleEvent()
+		event.AgentInfo = info
+		if validEvent(event) {
+			t.Fatal("invalid runtime metadata accepted by worker")
+		}
+	}
+	t.Setenv("DO_NOT_TRACK", "")
+	var attempts atomic.Int32
+	testseam.Swap(t, &findExecutable, func() (string, error) { attempts.Add(1); return "", errors.New("no executable") })
+	event := sampleEvent()
+	event.AgentInfo = AgentInfoFromSnapshot(runtimecontext.AgentSnapshotForTest([]byte(`{"agent":7,"match_tier":"high","extra":"`+strings.Repeat("x", maxEventBytes)+`"}`), 0))
+	Submit(event)
+	if attempts.Load() != 1 {
+		t.Fatal("large valid snapshot did not reach bounded handoff")
+	}
+	t.Setenv("DO_NOT_TRACK", "1")
+	Submit(event)
+	if attempts.Load() != 1 {
+		t.Fatal("opt out launched a worker")
+	}
 }

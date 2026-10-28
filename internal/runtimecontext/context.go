@@ -85,21 +85,19 @@ func (r Result) HeaderValue() (string, bool) {
 	if r.State == StateReady {
 		payload.UMID = r.token
 	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return "", false
-	}
+	// 固定结构只含字符串和整数，JSON 编码不会失败。
+	raw, _ := json.Marshal(payload)
 	if len(raw) > maxHeaderBytes {
 		// Preserve the existing UMID when the combined extension reaches its limit.
 		payload.OS, payload.ExecutionMode = "", ""
-		raw, err = json.Marshal(payload)
-		if err == nil && len(raw) > maxHeaderBytes && payload.UMID != "" {
-			raw, err = json.Marshal(struct {
+		raw, _ = json.Marshal(payload)
+		if len(raw) > maxHeaderBytes && payload.UMID != "" {
+			raw, _ = json.Marshal(struct {
 				UMID string `json:"umid"`
 			}{payload.UMID})
 		}
 	}
-	if err != nil || len(raw) > maxHeaderBytes {
+	if len(raw) > maxHeaderBytes {
 		return "", false
 	}
 	return string(raw), true

@@ -40,6 +40,7 @@ const (
 )
 
 var (
+	encodeHandoff  = encodeTelemetryJSON
 	findExecutable = os.Executable
 	openPipe       = os.Pipe
 	startCommand   = (*exec.Cmd).Start
@@ -118,7 +119,7 @@ func submit(event Event, budget time.Duration, launch func(context.Context, []by
 	if !validEvent(event) {
 		return
 	}
-	payload, err := encodeTelemetryJSON(event)
+	payload, err := encodeHandoff(event)
 	if err != nil || len(payload) > maxIPCBytes {
 		return
 	}

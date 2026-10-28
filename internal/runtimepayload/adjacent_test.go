@@ -31,9 +31,7 @@ func TestCrossPlatformCoverageAdjacentReuseRepairAndUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Dir(path) != root {
-		t.Fatal("not adjacent")
-	}
+	assertAdjacentDirectory(t, path, root)
 	before, _ := os.Stat(path)
 	if _, err = MaterializeAdjacent(container, root, "linux", "amd64"); err != nil {
 		t.Fatal(err)
@@ -182,8 +180,8 @@ func TestCrossPlatformCoverageAdjacentConcurrentAndBusy(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			path, err := MaterializeAdjacent(container, root, "linux", "amd64")
-			if err == nil && filepath.Dir(path) != root {
-				t.Error("wrong directory")
+			if err == nil {
+				assertAdjacentDirectory(t, path, root)
 			}
 		}()
 	}
@@ -392,5 +390,21 @@ func TestCrossPlatformCoverageAdjacentProcessLock(t *testing.T) {
 	}
 	if _, err := MaterializeAdjacent(container, root, "linux", "amd64"); err != nil {
 		t.Fatal("released process lock remained busy")
+	}
+}
+
+// Windows 的临时目录可以包含混合分隔符；核对目录身份而非原始路径文本。
+func assertAdjacentDirectory(t *testing.T, path, root string) {
+	t.Helper()
+	actual, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := os.Stat(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(actual, expected) {
+		t.Fatalf("resource %q is outside directory %q", path, root)
 	}
 }
