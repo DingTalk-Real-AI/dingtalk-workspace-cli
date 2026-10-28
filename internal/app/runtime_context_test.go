@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
@@ -21,7 +22,7 @@ func TestCrossPlatformCoverageRuntimeContextRequestScoping(t *testing.T) {
 	t.Setenv(envDWSAgentVersion, "1.0.0")
 	t.Setenv(envDWSAgentExt, `{"source":"agent"}`)
 	ready := runtimecontext.ReadyResultForTest("runtime-value")
-	if headers := applyRuntimeContextHeader(nil, ready); headers[runtimecontext.HeaderName] != `{"umid":"runtime-value"}` {
+	if headers := applyRuntimeContextHeader(nil, ready); headers[runtimecontext.HeaderName] != `{"umid":"runtime-value","agent_id":0}` {
 		t.Fatalf("nil runtime headers = %#v", headers)
 	}
 	resolveCalls := 0
@@ -36,7 +37,7 @@ func TestCrossPlatformCoverageRuntimeContextRequestScoping(t *testing.T) {
 	}
 
 	headers := resolveMCPRequestHeadersForInvocation(executor.Invocation{CanonicalProduct: "doc", Tool: "read"})
-	if headers[runtimecontext.HeaderName] != `{"umid":"runtime-value"}` {
+	if headers[runtimecontext.HeaderName] != `{"umid":"runtime-value","agent_id":0}` {
 		t.Fatalf("runtime header = %#v", headers)
 	}
 	if headers[transport.HeaderAgentExt] != `{"source":"agent"}` {
@@ -63,7 +64,7 @@ func TestCrossPlatformCoverageRawAPIAttachesRuntimeContext(t *testing.T) {
 	testseam.Swap(t, &newRawAPIClient, func(token, baseURL string) *apiclient.APIClient {
 		client := apiclient.NewClient(token, baseURL)
 		client.HTTPClient.Transport = apiRoundTripper(func(req *http.Request) (*http.Response, error) {
-			if got := req.Header.Get(runtimecontext.HeaderName); got != `{"umid":"raw-value"}` {
+			if got := req.Header.Get(runtimecontext.HeaderName); got != `{"umid":"raw-value","agent_id":0}` {
 				t.Fatalf("runtime header = %q", got)
 			}
 			return &http.Response{
@@ -136,5 +137,20 @@ func TestCrossPlatformCoverageDoctorRuntimeContextIsRedacted(t *testing.T) {
 				t.Fatalf("doctor warning = %#v", warning)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageSDKAgentIDDoesNotChangeAgentCode(t *testing.T) {
+	t.Setenv(auth.AgentCodeEnv, "explicit-agent-code")
+	original, originalSignal := auth.DetectAgentCode()
+	ready := runtimecontext.ResultWithAgentForTest("runtime-value", []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local"}`), 0)
+	headers := applyRuntimeContextHeader(map[string]string{"x-dingtalk-dws-agent-code": original}, ready)
+	current, signal := auth.DetectAgentCode()
+	if headers["x-dingtalk-dws-agent-code"] != original || original != "explicit-agent-code" || current != original || signal != originalSignal || !auth.HostOwnsPATFlow() {
+		t.Fatal("SDK number changed existing Agent code")
+	}
+	var ext map[string]json.RawMessage
+	if json.Unmarshal([]byte(headers[runtimecontext.HeaderName]), &ext) != nil || string(ext["agent_id"]) != "7" {
+		t.Fatal("SDK Agent ID is not an integer")
 	}
 }

@@ -132,7 +132,7 @@ func TestCrossPlatformCoverageAdjacentInterruptedPublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for failAt := 1; failAt <= 4; failAt++ {
+	for failAt := 1; failAt <= 6; failAt++ {
 		t.Run(string(rune('0'+failAt)), func(t *testing.T) {
 			root := t.TempDir()
 			library, err := MaterializeAdjacent(container, root, "linux", "amd64")

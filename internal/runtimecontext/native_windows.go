@@ -4,6 +4,7 @@ package runtimecontext
 
 import (
 	"fmt"
+	"os"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -17,8 +18,10 @@ type nativeCallbackFunc func(unsafe.Pointer, int32) uintptr
 
 var (
 	openNativeLibrary = func(path string) (uintptr, error) {
-		handle, err := windows.LoadLibrary(path)
-		return uintptr(handle), err
+		return sharedNativeLibrary(path, func(path string) (uintptr, error) {
+			handle, err := windows.LoadLibrary(path)
+			return uintptr(handle), err
+		})
 	}
 	lookupNativeSymbol = func(handle uintptr, name string) (uintptr, error) {
 		return windows.GetProcAddress(windows.Handle(handle), name)
@@ -55,4 +58,29 @@ func startNative(path string, callback func([]byte, int32, error)) (session nati
 	initialize := bindNativeInitialize(symbol)
 	accepted = initialize(initializationEnvironment, callbackPointer)
 	return session, accepted, nil
+}
+
+func bindNativeAgent(getSymbol, freeSymbol uintptr) (func(int32, *int32) unsafe.Pointer, func(unsafe.Pointer)) {
+	var get func(int32, *int32) unsafe.Pointer
+	var free func(unsafe.Pointer)
+	purego.RegisterFunc(&get, getSymbol)
+	purego.RegisterFunc(&free, freeSymbol)
+	return get, free
+}
+
+// On Windows os.Setenv uses the native SetEnvironmentVariableW API.
+// Set it before LoadLibrary so the SDK private CRT sees it at initialization.
+func setNativeAgentConfig(path string) (func(), error) {
+	const key = "SKILLTRACE_CONFIG"
+	previous, exists := os.LookupEnv(key)
+	if err := os.Setenv(key, path); err != nil {
+		return nil, err
+	}
+	return func() {
+		if exists {
+			_ = os.Setenv(key, previous)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	}, nil
 }

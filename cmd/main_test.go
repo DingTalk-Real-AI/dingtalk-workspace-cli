@@ -23,11 +23,15 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageMainPreservesExecution(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		return runtimecontext.AgentSnapshot{State: runtimecontext.StateUnavailable}
+	})
 	for _, code := range []int{0, 1, 3, 5} {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
 			t.Setenv("DO_NOT_TRACK", "")
@@ -63,6 +67,9 @@ func TestCrossPlatformCoverageMainPreservesExecution(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageMainOptOutSkipsAllTelemetry(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		return runtimecontext.AgentSnapshot{State: runtimecontext.StateUnavailable}
+	})
 	for _, value := range []string{"1", "0", " true "} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("DO_NOT_TRACK", value)
@@ -80,6 +87,9 @@ func TestCrossPlatformCoverageMainOptOutSkipsAllTelemetry(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageMainDoesNotWaitForIdentity(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		return runtimecontext.AgentSnapshot{State: runtimecontext.StateUnavailable}
+	})
 	t.Setenv("DO_NOT_TRACK", "")
 	testseam.Swap(t, &os.Args, []string{"dws", "version"})
 	started, release, returned := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -143,6 +153,10 @@ func TestCrossPlatformCoverageIdentitySnapshotOwnsArgumentsAndRecovers(t *testin
 }
 
 func TestCrossPlatformCoveragePrivateSchemaBuilderBypassesApp(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		t.Fatal("private worker collected agent info")
+		return runtimecontext.AgentSnapshot{}
+	})
 	testseam.Swap(t, &os.Args, []string{"dws", "--_dws-schema-builder=1"})
 	testseam.Swap(t, &runSchemaCacheBuilder, func([]string, io.Writer) (bool, int) { return true, 7 })
 	testseam.Swap(t, &appExecute, func() (int, string, string) { t.Fatal("builder entered app"); return 0, "", "" })
@@ -152,6 +166,10 @@ func TestCrossPlatformCoveragePrivateSchemaBuilderBypassesApp(t *testing.T) {
 }
 
 func TestCrossPlatformCoveragePrivateWorkerBypassesApp(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		t.Fatal("private worker collected agent info")
+		return runtimecontext.AgentSnapshot{}
+	})
 	t.Setenv("DO_NOT_TRACK", "1")
 	testseam.Swap(t, &os.Args, []string{"dws", "--_dws-telemetry-worker=1"})
 	testseam.Swap(t, &appExecute, func() (int, string, string) { t.Fatal("worker entered app"); return 0, "", "" })
@@ -161,6 +179,9 @@ func TestCrossPlatformCoveragePrivateWorkerBypassesApp(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageReadyIdentityAndProcessExit(t *testing.T) {
+	testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+		return runtimecontext.AgentSnapshot{State: runtimecontext.StateUnavailable}
+	})
 	t.Setenv("DO_NOT_TRACK", "")
 	testseam.Swap(t, &os.Args, []string{"dws", "version"})
 	testseam.Swap(t, &snapshotTelemetryIdentity, func([]string) <-chan app.TelemetryIdentity {
@@ -179,5 +200,35 @@ func TestCrossPlatformCoverageReadyIdentityAndProcessExit(t *testing.T) {
 	main()
 	if exit != 3 {
 		t.Fatalf("process exit=%d", exit)
+	}
+}
+
+func TestCrossPlatformCoverageMainCollectsAgentBeforeHelpAndVersion(t *testing.T) {
+	for _, path := range []string{"help", "version"} {
+		t.Run(path, func(t *testing.T) {
+			t.Setenv("DO_NOT_TRACK", "")
+			testseam.Swap(t, &os.Args, []string{"dws", path})
+			collected := false
+			raw := []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local","process":{"pid":42},"future":{"v":1}}`)
+			testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+				collected = true
+				return runtimecontext.AgentSnapshotForTest(raw, 0)
+			})
+			testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { return app.TelemetryIdentity{} })
+			testseam.Swap(t, &appExecute, func() (int, string, string) {
+				if !collected {
+					t.Fatal("public execution preceded Agent snapshot")
+				}
+				return 0, path, ""
+			})
+			testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
+				if event.AgentInfo == nil || string(event.AgentInfo.Result) != string(raw) {
+					t.Fatal("original process SDK object lost")
+				}
+			})
+			if run() != 0 {
+				t.Fatal("public execution failed")
+			}
+		})
 	}
 }
