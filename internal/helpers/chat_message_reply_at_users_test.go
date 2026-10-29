@@ -146,3 +146,32 @@ func TestChatMessageReplyAtUsersResolutionFailureIsReported(t *testing.T) {
 		}
 	}
 }
+
+func TestChatMessageReplyAtUsersMergesWithAtOpenDingTalkIDs(t *testing.T) {
+	// An id passed through both flags is sent once, and ids given only via
+	// --at-open-dingtalk-ids stay ahead of the ones --at-users adds.
+	caller := &wukongWeeklySyncCaller{}
+	_, _, err := executeWukongWeeklySyncCommand(
+		t,
+		"chat",
+		caller,
+		newChatCommand,
+		"message", "reply",
+		"--conversation-id", "cid",
+		"--ref-msg-id", "mid",
+		"--ref-sender", "DAAAAAAAAAAAiE",
+		"--text", "@DBAAAAAAAAAAiE @DCAAAAAAAAAAiE 收到",
+		"--at-open-dingtalk-ids", "DBAAAAAAAAAAiE",
+		"--at-users", "DBAAAAAAAAAAiE,DCAAAAAAAAAAiE",
+	)
+	if err != nil {
+		t.Fatalf("reply returned error: %v", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want one send call", caller.calls)
+	}
+	want := []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"}
+	if got := caller.calls[0].args["atOpenDingTalkIds"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("atOpenDingTalkIds = %#v, want %#v", got, want)
+	}
+}
