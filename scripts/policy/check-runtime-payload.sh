@@ -104,9 +104,9 @@ check_hash linux/arm64/libx7k2m9p4q1w8.so c160e5a5205ddc0f8320b616c0d5404899601c
 check_hash windows/amd64/x7k2m9p4q1w864.dll 2c9a0eff98bc7c387e21224037f51da011797416e17504387c8f6311d773bd84
 check_hash windows/arm64/x7k2m9p4q1w864.dll b12ed8d654628f789b6c1aff795b6208da228306a80a2486178bf2b36b52917b
 
-check_hash linux/skt.bin f7aa6d4fb8140f0e393efbdce55ad833df64aa5984698ca6ebc9e19bb35bd79e
-check_hash windows/skt.bin fcec7d34327bc53cc2aa0dcc5aca3c4a76d7e2f5783350595eb25f1909345dae
-check_hash darwin/skt.bin 32e91c83c3d327e8192035f03c01bce663e3792c7082b7b45cc8b551ac75c61b
+check_hash linux/skt.bin 0e0a7bfee3c34aab752db7d98e8dddefd7b55577791cdd95a8bd42be09e71b78
+check_hash windows/skt.bin f7559094191a5f0530b732e72fca378ad36d33499fb5cca3f0ab85dff6158834
+check_hash darwin/skt.bin 2d1f6aab6ce561400035e7d898500d006896568e8932671a27c7349ea4760925
 
 checksum_count="$(wc -l < "$PAYLOAD/SHA256SUMS" | tr -d ' ')"
 [ "$checksum_count" = 8 ] || fail "expected 8 SHA-256 entries, found $checksum_count"

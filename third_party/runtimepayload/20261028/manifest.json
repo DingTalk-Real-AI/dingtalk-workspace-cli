@@ -9,8 +9,8 @@
     "darwin/universal/x7k2m9p4q1w8.dylib": "8e4460791f12381863f5844ded6423b2a9b75d6f394e9bd146410e7f160b0c5c"
   },
   "configs": {
-    "linux/skt.bin": "f7aa6d4fb8140f0e393efbdce55ad833df64aa5984698ca6ebc9e19bb35bd79e",
-    "windows/skt.bin": "fcec7d34327bc53cc2aa0dcc5aca3c4a76d7e2f5783350595eb25f1909345dae",
-    "darwin/skt.bin": "32e91c83c3d327e8192035f03c01bce663e3792c7082b7b45cc8b551ac75c61b"
+    "linux/skt.bin": "0e0a7bfee3c34aab752db7d98e8dddefd7b55577791cdd95a8bd42be09e71b78",
+    "windows/skt.bin": "f7559094191a5f0530b732e72fca378ad36d33499fb5cca3f0ab85dff6158834",
+    "darwin/skt.bin": "2d1f6aab6ce561400035e7d898500d006896568e8932671a27c7349ea4760925"
   }
 }
