@@ -32,6 +32,7 @@ func TestCrossPlatformCoverageProviderReadyAndHeader(t *testing.T) {
 	}, time.Second)
 
 	testseam.Swap(t, &defaultProvider, provider)
+	testseam.Swap(t, &defaultAgentProvider, &agentProvider{collect: func(string, string) ([]byte, int32, error) { return nil, 0, nil }, locate: successfulLocator, timeout: time.Second})
 	result := Resolve()
 	if result.State != StateReady || result.token != "device-value" {
 		t.Fatalf("result = %#v", result)
@@ -39,11 +40,11 @@ func TestCrossPlatformCoverageProviderReadyAndHeader(t *testing.T) {
 	if provider.session.handle != 7 || provider.session.callback != 9 {
 		t.Fatalf("native session was not retained: %#v", provider.session)
 	}
-	if value, ok := result.HeaderValue(); !ok || value != `{"umid":"device-value"}` {
+	if value, ok := result.HeaderValue(); !ok || value != `{"umid":"device-value","agent_id":0}` {
 		t.Fatalf("header = %q, %v", value, ok)
 	}
 	fixture := ReadyResultForTest("fixture-value")
-	if value, ok := fixture.HeaderValue(); !ok || value != `{"umid":"fixture-value"}` {
+	if value, ok := fixture.HeaderValue(); !ok || value != `{"umid":"fixture-value","agent_id":0}` {
 		t.Fatalf("test fixture header = %q, %v", value, ok)
 	}
 	detail := result.DiagnosticDetail()
@@ -152,7 +153,7 @@ func TestCrossPlatformCoverageProviderFailureOutcomes(t *testing.T) {
 			if detail := result.DiagnosticDetail(); detail["error_category"] != test.wantError {
 				t.Fatalf("diagnostic detail = %#v", detail)
 			}
-			if value, ok := result.HeaderValue(); ok || value != "" {
+			if value, ok := result.HeaderValue(); !ok || value != `{"agent_id":0}` {
 				t.Fatalf("unexpected header = %q, %v", value, ok)
 			}
 		})
@@ -177,7 +178,7 @@ func TestCrossPlatformCoverageValidateTokenAndHeaderBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := Result{State: StateReady, token: value}
-	if header, ok := result.HeaderValue(); !ok || header != `{"umid":"quoted\"value"}` {
+	if header, ok := result.HeaderValue(); !ok || header != `{"umid":"quoted\"value","agent_id":0}` {
 		t.Fatalf("header = %q, %v", header, ok)
 	}
 	code := int32(71)

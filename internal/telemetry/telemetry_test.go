@@ -21,6 +21,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
 )
@@ -130,9 +131,9 @@ func (f closeFunc) Close() error { return f() }
 func TestCrossPlatformCoverageWorkerValidatesBeforeSending(t *testing.T) {
 	payload, _ := json.Marshal(sampleEvent())
 	for name, input := range map[string][]byte{
-		"truncated": payload[:len(payload)-1], "oversized": bytes.Repeat([]byte("x"), maxEventBytes+1),
-		"unknown field": []byte(strings.Replace(string(payload), `"protocol":1`, `"protocol":1,"p2":"Codex"`, 1)),
-		"wrong version": []byte(strings.Replace(string(payload), `"protocol":1`, `"protocol":2`, 1)),
+		"truncated": payload[:len(payload)-1], "oversized": bytes.Repeat([]byte("x"), maxIPCBytes+1),
+		"unknown field": []byte(strings.Replace(string(payload), `"protocol":2`, `"protocol":2,"p2":"Codex"`, 1)),
+		"wrong version": []byte(strings.Replace(string(payload), `"protocol":2`, `"protocol":1`, 1)),
 		"extra object":  append(slices.Clone(payload), []byte(" {}")...), "empty": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -356,7 +357,10 @@ func TestCrossPlatformCoverageLaunchDetachedDirectly(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("DWS_TELEMETRY_TEST_ENDPOINT", server.URL)
-	payload, _ := json.Marshal(sampleEvent())
+	event := sampleEvent()
+	raw := json.RawMessage(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local","process":{"cmd":"` + strings.Repeat("private-process", 1000) + `"},"future":{"v":1}}`)
+	event.AgentInfo = AgentInfoFromSnapshot(runtimecontext.AgentSnapshotForTest(raw, 0))
+	payload, _ := json.Marshal(event)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	if err := launchDetached(ctx, payload); err != nil {
 		cancel()
@@ -364,7 +368,14 @@ func TestCrossPlatformCoverageLaunchDetachedDirectly(t *testing.T) {
 	}
 	cancel() // Completion must detach the worker from the handoff cancellation.
 	select {
-	case <-request:
+	case body := <-request:
+		_, fields := decodeEvent(t, body)
+		var ext struct {
+			AgentInfo json.RawMessage `json:"agentinfo"`
+		}
+		if json.Unmarshal([]byte(fields.Get("ext")), &ext) != nil || !bytes.Equal(ext.AgentInfo, raw) {
+			t.Fatal("detached worker lost original complete Agent object")
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("completed handoff was cancelled")
 	}

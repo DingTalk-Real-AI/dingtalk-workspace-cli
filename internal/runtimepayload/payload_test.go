@@ -452,7 +452,7 @@ func TestCrossPlatformCoverageExtractionFailureSeams(t *testing.T) {
 		})
 	}
 
-	tooMany := []string{"manifest.json", "libx7k2m9p4q1w8.so", "x7k2m9p4q1w8.dylib"}
+	tooMany := []string{"manifest.json", "libx7k2m9p4q1w8.so", "x7k2m9p4q1w8.dylib", "skt.bin"}
 	if err := extractArchive(bytes.NewReader(maliciousArchive(t, tooMany...)), t.TempDir()); err == nil || !strings.Contains(err.Error(), "too many") {
 		t.Fatalf("entry limit error = %v", err)
 	}
@@ -684,10 +684,16 @@ func writePayloadFixture(t *testing.T, goos, goarch string) string {
 	if err := os.WriteFile(filepath.Join(root, library), libraryContent, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	configContent := []byte("config-" + goos)
+	if err := os.WriteFile(filepath.Join(root, "skt.bin"), configContent, 0600); err != nil {
+		t.Fatal(err)
+	}
+	configDigest := sha256.Sum256(configContent)
 	libraryDigest := sha256.Sum256(libraryContent)
 	metadata := manifest{
 		FormatVersion: manifestVersion, PayloadVersion: PayloadVersion, Target: goos + "/" + goarch,
 		Library: library, LibrarySHA256: hex.EncodeToString(libraryDigest[:]),
+		Config: "skt.bin", ConfigSHA256: hex.EncodeToString(configDigest[:]),
 	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {

@@ -19,7 +19,7 @@ import (
 
 const ownershipName = ".dws-runtime-manifest.json"
 
-// A pending record reserves only the fixed library name. It is written
+// A pending record reserves the fixed library and configuration names. It is written
 // before the first rename, so another process can recover after interruption.
 // A ready record is committed last, after validation of the published files.
 type ownership struct {
@@ -71,14 +71,14 @@ func MaterializeAdjacent(container []byte, root, targetOS, targetArch string) (s
 		return fail()
 	}
 	// The retired ps directory is no longer owned or traversed by this version.
-	// Never follow a link in place of the library, even with an ownership record.
-	for _, entry := range []string{name} {
+	// Never follow a link in place of either resource, even with an ownership record.
+	for _, entry := range []string{name, "skt.bin"} {
 		path := filepath.Join(root, entry)
 		info, err := lstatAdjacent(path)
 		if os.IsNotExist(err) {
 			continue
 		}
-		if err != nil || !owned {
+		if err != nil || !owned || (entry == "skt.bin" && current.Manifest.Config != "skt.bin") {
 			return fail()
 		}
 		if !info.Mode().IsRegular() {
@@ -117,7 +117,7 @@ func MaterializeAdjacent(container []byte, root, targetOS, targetArch string) (s
 	if err := writeOwnership(root, stage, next); err != nil {
 		return fail()
 	}
-	for _, entry := range []string{name} {
+	for _, entry := range []string{name, "skt.bin"} {
 		target := filepath.Join(root, entry)
 		if _, err := lstatAdjacent(target); err == nil {
 			// Move owned old data out of the way. A failed rename (e.g. a loaded DLL)
@@ -209,11 +209,19 @@ func readOwnership(root, targetOS, targetArch string) (ownership, bool, error) {
 	case 1:
 		// Recognize old ownership only to replace its library. Old data files
 		// and caches are left untouched, and old payloads are never loaded.
-		if (m.PayloadVersion != "20260825" && m.PayloadVersion != "20260908") || m.PSFileCount != 123 {
+		if (m.PayloadVersion != "20260825" && m.PayloadVersion != "20260908") || m.PSFileCount != 123 || m.Config != "" || m.ConfigSHA256 != "" {
 			return ownership{}, false, invalid
 		}
 		digests = append(digests, m.PSManifestSHA256)
+	case 2:
+		if m.PayloadVersion != "20260909" || m.Config != "" || m.ConfigSHA256 != "" || m.PSFileCount != 0 || m.PSManifestSHA256 != "" {
+			return ownership{}, false, invalid
+		}
 	case manifestVersion:
+		if m.Config != "skt.bin" {
+			return ownership{}, false, invalid
+		}
+		digests = append(digests, m.ConfigSHA256)
 		if m.PSFileCount != 0 || m.PSManifestSHA256 != "" {
 			return ownership{}, false, invalid
 		}

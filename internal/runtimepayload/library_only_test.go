@@ -34,7 +34,7 @@ func TestCrossPlatformCoverageLibraryOnlyAssets(t *testing.T) {
 			}
 			root := filepath.Dir(library)
 			entries, err := os.ReadDir(root)
-			if err != nil || len(entries) != 2 {
+			if err != nil || len(entries) != 3 {
 				t.Fatalf("library-only root = %v, %v", entries, err)
 			}
 			if _, err := os.Lstat(filepath.Join(root, "ps")); !os.IsNotExist(err) {
@@ -50,9 +50,9 @@ func TestCrossPlatformCoverageLibraryOnlyAssets(t *testing.T) {
 			}
 			defer gz.Close()
 			archive := tar.NewReader(gz)
-			for range 2 {
+			for range 3 {
 				header, err := archive.Next()
-				if err != nil || (header.Name != "manifest.json" && header.Name != filepath.Base(library)) {
+				if err != nil || (header.Name != "manifest.json" && header.Name != "skt.bin" && header.Name != filepath.Base(library)) {
 					t.Fatalf("unexpected archive entry: %v, %v", header, err)
 				}
 			}
@@ -82,6 +82,10 @@ func TestCrossPlatformCoverageLibraryOnlyLegacyUpgrade(t *testing.T) {
 				}
 				previous.State = state
 				previous.Manifest.FormatVersion = 1
+				previous.Manifest.Config, previous.Manifest.ConfigSHA256 = "", ""
+				if err := os.Remove(filepath.Join(root, "skt.bin")); err != nil {
+					t.Fatal(err)
+				}
 				previous.Manifest.PayloadVersion = version
 				previous.Manifest.PSFileCount = 123
 				previous.Manifest.PSManifestSHA256 = strings.Repeat("a", 64)
@@ -278,6 +282,7 @@ func TestCrossPlatformCoverageLibraryOnlyRejectsInvalidOwnership(t *testing.T) {
 			}
 			if strings.HasPrefix(scenario, "legacy") {
 				value.Manifest.FormatVersion = 1
+				value.Manifest.Config, value.Manifest.ConfigSHA256 = "", ""
 				value.Manifest.PayloadVersion = "20260908"
 				value.Manifest.PSFileCount = 123
 				value.Manifest.PSManifestSHA256 = strings.Repeat("a", 64)
@@ -290,7 +295,7 @@ func TestCrossPlatformCoverageLibraryOnlyRejectsInvalidOwnership(t *testing.T) {
 			case "legacy digest", "new digest":
 				value.Manifest.PSManifestSHA256 = "invalid"
 			case "unknown format":
-				value.Manifest.FormatVersion = 3
+				value.Manifest.FormatVersion = 99
 			}
 			data, _ := json.Marshal(value)
 			if err := os.WriteFile(filepath.Join(root, ownershipName), data, 0600); err != nil {

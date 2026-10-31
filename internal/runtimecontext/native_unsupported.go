@@ -7,3 +7,7 @@ import "errors"
 func startNative(string, func([]byte, int32, error)) (nativeSession, int32, error) {
 	return nativeSession{}, 0, errors.New("unsupported runtime platform")
 }
+
+func collectNativeAgent(string, string) ([]byte, int32, error) {
+	return nil, 0, errors.New("unsupported runtime platform")
+}

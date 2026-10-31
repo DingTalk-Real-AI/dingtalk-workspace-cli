@@ -1716,17 +1716,21 @@ function Install-BinaryFromSource {
         if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
 
         $targetArch = Get-Arch
-        $payloadSource = Join-Path $Root "third_party\runtimepayload\20260909\windows\$targetArch\x7k2m9p4q1w864.dll"
-        $preparedPayload = Join-Path $tmpPayloadRoot "20260909"
+        $payloadSource = Join-Path $Root "third_party\runtimepayload\20261028\windows\$targetArch\x7k2m9p4q1w864.dll"
+        $preparedPayload = Join-Path $tmpPayloadRoot "20261028"
         New-Item -ItemType Directory -Path $preparedPayload -Force | Out-Null
         $preparedLibrary = Join-Path $preparedPayload "x7k2m9p4q1w864.dll"
         Copy-Item -LiteralPath $payloadSource -Destination $preparedLibrary -Force
+        $preparedConfig = Join-Path $preparedPayload "skt.bin"
+        Copy-Item -LiteralPath (Join-Path $Root "third_party\runtimepayload\20261028\windows\skt.bin") -Destination $preparedConfig -Force
         $manifest = [ordered]@{
-            format_version = 2
-            payload_version = "20260909"
+            format_version = 3
+            payload_version = "20261028"
             target = "windows/$targetArch"
             library = "x7k2m9p4q1w864.dll"
             library_sha256 = (Get-FileHash -LiteralPath $preparedLibrary -Algorithm SHA256).Hash.ToLowerInvariant()
+            config = "skt.bin"
+            config_sha256 = (Get-FileHash -LiteralPath $preparedConfig -Algorithm SHA256).Hash.ToLowerInvariant()
         }
         $manifestJson = $manifest | ConvertTo-Json
         [System.IO.File]::WriteAllText(

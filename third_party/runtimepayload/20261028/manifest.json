@@ -1,0 +1,16 @@
+{
+  "format_version": 3,
+  "payload_version": "20261028",
+  "libraries": {
+    "linux/amd64/libx7k2m9p4q1w8.so": "d4e849134c311e9af71ef8bd018e5b4b94617edd79a30cc13a998caaf6ed10e0",
+    "linux/arm64/libx7k2m9p4q1w8.so": "c160e5a5205ddc0f8320b616c0d5404899601cd6683b4e2ce351c87f2a146c36",
+    "windows/amd64/x7k2m9p4q1w864.dll": "2c9a0eff98bc7c387e21224037f51da011797416e17504387c8f6311d773bd84",
+    "windows/arm64/x7k2m9p4q1w864.dll": "b12ed8d654628f789b6c1aff795b6208da228306a80a2486178bf2b36b52917b",
+    "darwin/universal/x7k2m9p4q1w8.dylib": "8e4460791f12381863f5844ded6423b2a9b75d6f394e9bd146410e7f160b0c5c"
+  },
+  "configs": {
+    "linux/skt.bin": "0e0a7bfee3c34aab752db7d98e8dddefd7b55577791cdd95a8bd42be09e71b78",
+    "windows/skt.bin": "f7559094191a5f0530b732e72fca378ad36d33499fb5cca3f0ab85dff6158834",
+    "darwin/skt.bin": "2d1f6aab6ce561400035e7d898500d006896568e8932671a27c7349ea4760925"
+  }
+}

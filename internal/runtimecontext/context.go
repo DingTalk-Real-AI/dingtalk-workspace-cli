@@ -61,6 +61,7 @@ type Result struct {
 	Environment     string        `json:"environment"`
 	Elapsed         time.Duration `json:"-"`
 	ErrorCategory   string        `json:"error_category,omitempty"`
+	agent           AgentSnapshot
 	token           string
 	callbackCode    int32
 	hasCallbackCode bool
@@ -72,19 +73,34 @@ func (r Result) String() string {
 
 func (r Result) GoString() string { return r.String() }
 
-// HeaderValue returns the compact request header payload when initialization
-// completed successfully.
+// HeaderValue composes independent UMID and Agent results into a bounded header.
+// Missing or failed Agent collection is represented by the integer agent_id=0.
 func (r Result) HeaderValue() (string, bool) {
-	if r.State != StateReady || r.token == "" {
+	payload := struct {
+		UMID          string `json:"umid,omitempty"`
+		AgentID       int64  `json:"agent_id"`
+		OS            string `json:"os,omitempty"`
+		ExecutionMode string `json:"execution_mode,omitempty"`
+	}{AgentID: r.agent.AgentID, OS: r.agent.OS, ExecutionMode: r.agent.ExecutionMode}
+	if r.State == StateReady {
+		payload.UMID = r.token
+	}
+	// 固定结构只含字符串和整数，JSON 编码不会失败。
+	raw, _ := json.Marshal(payload)
+	if len(raw) > maxHeaderBytes {
+		// Preserve the existing UMID when the combined extension reaches its limit.
+		payload.OS, payload.ExecutionMode = "", ""
+		raw, _ = json.Marshal(payload)
+		if len(raw) > maxHeaderBytes && payload.UMID != "" {
+			raw, _ = json.Marshal(struct {
+				UMID string `json:"umid"`
+			}{payload.UMID})
+		}
+	}
+	if len(raw) > maxHeaderBytes {
 		return "", false
 	}
-	payload, err := json.Marshal(struct {
-		UMID string `json:"umid"`
-	}{UMID: r.token})
-	if err != nil || len(payload) > maxHeaderBytes {
-		return "", false
-	}
-	return string(payload), true
+	return string(raw), true
 }
 
 // AttachToURL attaches the private runtime value to a login authorization URL.
@@ -172,7 +188,10 @@ var defaultProvider = newProvider(startNative, resolveLibraryPath, defaultTimeou
 // Resolve initializes and returns the process-scoped context. It never
 // retries: every caller observes the same immutable outcome.
 func Resolve() Result {
-	return defaultProvider.resolve()
+	agent := ResolveAgent()
+	result := defaultProvider.resolve()
+	result.agent = agent
+	return result
 }
 
 func (p *provider) resolve() Result {
