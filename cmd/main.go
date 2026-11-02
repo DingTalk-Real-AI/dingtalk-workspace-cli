@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry"
 )
 
 var (
+	resolveAgentInfo          = runtimecontext.ResolveAgent
 	appExecute                = app.ExecuteWithTelemetry
 	runSchemaCacheBuilder     = app.RunSchemaCacheBuilder
 	resolveTelemetryIdentity  = app.ResolveTelemetryIdentity
@@ -45,6 +47,8 @@ func run() int {
 	if telemetry.RunWorker(os.Args[1:], os.Stdin) {
 		return 0
 	}
+	// Only public CLI invocations collect ancestry; private workers return above.
+	agentInfo := resolveAgentInfo()
 	optedOut := telemetry.OptedOut()
 	var identity <-chan app.TelemetryIdentity
 	if !optedOut {
@@ -59,6 +63,7 @@ func run() int {
 			Version: app.RawVersion(), Command: command, Path: path, ExitCode: code,
 			DurationMillis: finished.Sub(start).Milliseconds(), CompletedAtMillis: finished.UnixMilli(),
 			ErrorSummary: message,
+			AgentInfo:    telemetry.AgentInfoFromSnapshot(agentInfo),
 		}
 		select {
 		case value := <-identity:

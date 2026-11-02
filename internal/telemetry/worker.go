@@ -65,11 +65,11 @@ func RunWorker(args []string, input *os.File) bool {
 }
 
 func runWorker(input io.Reader, acquire func() (io.Closer, error), send func(Event) error) error {
-	payload, err := io.ReadAll(io.LimitReader(input, maxEventBytes+1))
+	payload, err := io.ReadAll(io.LimitReader(input, maxIPCBytes+1))
 	if err != nil {
 		return err
 	}
-	if len(payload) > maxEventBytes {
+	if len(payload) > maxIPCBytes {
 		return errors.New("oversized telemetry event")
 	}
 	var event Event
@@ -123,7 +123,17 @@ func sdkConfig(event Event) clitrack.Config {
 		NoCommandLine: true, NoCwd: true, NoAutomaticDimensions: true,
 		NoAttribution: true,
 		ExtraFields: func() map[string]string {
-			return map[string]string{"c9": event.Path, "c10": event.Identity.CorpID}
+			fields := map[string]string{"c9": event.Path, "c10": event.Identity.CorpID}
+			if event.AgentInfo != nil {
+				ext, _ := encodeTelemetryJSON(struct {
+					AgentInfo     json.RawMessage `json:"agentinfo,omitempty"`
+					State         string          `json:"agentinfo_state"`
+					ErrorCode     int32           `json:"agentinfo_error_code"`
+					ErrorCategory string          `json:"agentinfo_error_category,omitempty"`
+				}{event.AgentInfo.Result, string(event.AgentInfo.State), event.AgentInfo.ErrorCode, event.AgentInfo.ErrorCategory})
+				fields["ext"] = string(ext)
+			}
+			return fields
 		},
 	}
 }

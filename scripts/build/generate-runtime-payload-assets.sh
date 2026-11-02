@@ -20,14 +20,14 @@ for target in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64 wi
   target_os="${target%-*}"
   target_arch="${target##*-}"
   case "$target" in
-    # Library-only bundles retain headroom for the final platform signature.
-    darwin-*|linux-*) capacity=1048576 ;;
-    windows-*) capacity=4194304 ;;
+    # Library and configuration bundles retain headroom for the final platform signature.
+    darwin-*|linux-*) capacity=2097152 ;;
+    windows-*) capacity=8388608 ;;
   esac
   target_root="$work/$target"
   "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$target_root" >/dev/null
   (cd "$ROOT" && go run ./scripts/build/runtime-payload generate \
-    "$generated/$target.payload" "$target_root/.dws-runtime/20260909" "$capacity")
+    "$generated/$target.payload" "$target_root/.dws-runtime/20261028" "$capacity")
 done
 
 if [ "$CHECK" -eq 1 ]; then

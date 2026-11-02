@@ -12,28 +12,35 @@
 // limitations under the License.
 
 // Package telemetry hands completed CLI events to a short-lived sender process.
-// The command process never initializes the SDK or waits for a network request.
+// The command process never initializes the AEM SDK or waits for a network request.
 package telemetry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 )
 
 const (
-	workerArgument  = "--_dws-telemetry-worker=1"
-	protocolVersion = 1
-	maxEventBytes   = 4096
-	handoffTimeout  = 10 * time.Millisecond
-	workerLifetime  = 6 * time.Second
-	maxSenders      = 8
+	workerArgument      = "--_dws-telemetry-worker=1"
+	protocolVersion     = 2
+	maxEventBytes       = 4096
+	maxIPCBytes         = 2 * 1024 * 1024
+	largeHandoffTimeout = 250 * time.Millisecond
+	handoffTimeout      = 10 * time.Millisecond
+	workerLifetime      = 6 * time.Second
+	maxSenders          = 8
 )
 
 var (
+	encodeHandoff  = encodeTelemetryJSON
 	findExecutable = os.Executable
 	openPipe       = os.Pipe
 	startCommand   = (*exec.Cmd).Start
@@ -46,19 +53,47 @@ type Identity struct {
 	CorpID   string `json:"corpId,omitempty"`
 }
 
-// Event is a completed command, not the sender's own execution. No arguments,
-// stdout, working directory, attribution, credentials, or arbitrary fields cross
-// the process boundary.
+// Event 描述原始 CLI 命令，不是发送进程自身的执行。基础事件不收集 argv、
+// stdout 或工作目录；AgentInfo 单独保留 SDK 返回的进程和环境元数据，
+// 由原始 CLI 采集，发送进程不重新识别。
 type Event struct {
-	Protocol          int      `json:"protocol"`
-	Version           string   `json:"version"`
-	Command           string   `json:"command"`
-	Path              string   `json:"path"`
-	ExitCode          int      `json:"exitCode"`
-	DurationMillis    int64    `json:"durationMillis"`
-	CompletedAtMillis int64    `json:"completedAtMillis"`
-	ErrorSummary      string   `json:"errorSummary,omitempty"`
-	Identity          Identity `json:"identity"`
+	Protocol          int        `json:"protocol"`
+	Version           string     `json:"version"`
+	Command           string     `json:"command"`
+	Path              string     `json:"path"`
+	ExitCode          int        `json:"exitCode"`
+	DurationMillis    int64      `json:"durationMillis"`
+	CompletedAtMillis int64      `json:"completedAtMillis"`
+	ErrorSummary      string     `json:"errorSummary,omitempty"`
+	Identity          Identity   `json:"identity"`
+	AgentInfo         *AgentInfo `json:"agentInfo,omitempty"`
+}
+
+// AgentInfo preserves unknown SDK fields in a complete JSON object.
+type AgentInfo struct {
+	State         runtimecontext.State `json:"state"`
+	ErrorCode     int32                `json:"errorCode"`
+	ErrorCategory string               `json:"errorCategory,omitempty"`
+	Result        json.RawMessage      `json:"result,omitempty"`
+}
+
+func AgentInfoFromSnapshot(snapshot runtimecontext.AgentSnapshot) *AgentInfo {
+	return &AgentInfo{State: snapshot.State, ErrorCode: snapshot.ErrorCode,
+		ErrorCategory: snapshot.ErrorCategory, Result: snapshot.JSON()}
+}
+
+func normalizeAgentInfo(info *AgentInfo) *AgentInfo {
+	if info == nil {
+		return nil
+	}
+	copy := *info
+	if len(copy.Result) > runtimecontext.MaxAgentJSONBytes {
+		copy.Result, copy.State, copy.ErrorCategory = nil, runtimecontext.AgentOversized, "json_too_large"
+	} else if len(copy.Result) > 0 && (!utf8.Valid(copy.Result) || !json.Valid(copy.Result) || bytes.TrimSpace(copy.Result)[0] != '{') {
+		copy.Result, copy.State, copy.ErrorCategory = nil, runtimecontext.AgentInvalid, "invalid_json"
+	}
+	copy.Result = append(json.RawMessage(nil), copy.Result...)
+	return &copy
 }
 
 // OptedOut preserves the existing DO_NOT_TRACK semantics, including "0".
@@ -70,17 +105,22 @@ func Submit(event Event) {
 	if OptedOut() {
 		return
 	}
-	submit(event, handoffTimeout, launchDetached)
+	budget := handoffTimeout
+	if event.AgentInfo != nil && len(event.AgentInfo.Result) > maxEventBytes {
+		budget = largeHandoffTimeout
+	}
+	submit(event, budget, launchDetached)
 }
 
 func submit(event Event, budget time.Duration, launch func(context.Context, []byte) error) {
 	defer func() { _ = recover() }()
 	event.Protocol = protocolVersion
+	event.AgentInfo = normalizeAgentInfo(event.AgentInfo)
 	if !validEvent(event) {
 		return
 	}
-	payload, err := json.Marshal(event)
-	if err != nil || len(payload) > maxEventBytes {
+	payload, err := encodeHandoff(event)
+	if err != nil || len(payload) > maxIPCBytes {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
@@ -96,15 +136,52 @@ func submit(event Event, budget time.Duration, launch func(context.Context, []by
 	}
 }
 
+// Keep the bounded SDK object's representation from expanding during IPC
+// (notably '<', '>' and '&' in process command lines). RawMessage still carries
+// every unknown field and no partial JSON is emitted.
+func encodeTelemetryJSON(value any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
+}
+
 func validEvent(e Event) bool {
 	// Reject oversized profile metadata before JSON encoding on the exit path.
 	// The reporting protocol accepts the CLI's portable 0..255 exit codes;
 	// larger native Windows exit codes are intentionally discarded.
-	return e.Protocol == protocolVersion && e.Command != "" && e.Path != "" &&
+	baseValid := e.Protocol == protocolVersion && e.Command != "" && e.Path != "" &&
 		e.DurationMillis >= 0 && e.DurationMillis <= int64((1<<63-1)/time.Millisecond) &&
 		e.CompletedAtMillis > 0 && e.ExitCode >= 0 && e.ExitCode <= 255 &&
 		len(e.Version)+len(e.Command)+len(e.Path)+len(e.ErrorSummary)+
 			len(e.Identity.UserID)+len(e.Identity.UserName)+len(e.Identity.CorpID) <= maxEventBytes
+	if !baseValid {
+		return false
+	}
+	base := e
+	base.AgentInfo = nil
+	raw, err := encodeTelemetryJSON(base)
+	if err != nil || len(raw) > maxEventBytes {
+		return false
+	}
+	if e.AgentInfo == nil {
+		return true
+	}
+	info := e.AgentInfo
+	if len(info.ErrorCategory) > 128 || len(info.Result) > runtimecontext.MaxAgentJSONBytes {
+		return false
+	}
+	switch info.State {
+	case runtimecontext.StateReady, runtimecontext.AgentUnknown, runtimecontext.AgentDegraded,
+		runtimecontext.AgentInvalid, runtimecontext.AgentOversized, runtimecontext.StateError,
+		runtimecontext.StateTimeout, runtimecontext.StateUnavailable:
+	default:
+		return false
+	}
+	return len(info.Result) == 0 || (utf8.Valid(info.Result) && json.Valid(info.Result) && bytes.TrimSpace(info.Result)[0] == '{')
 }
 
 // launchDetached uses actual file handles rather than os/exec's stream-copy

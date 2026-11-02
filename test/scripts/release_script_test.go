@@ -93,7 +93,7 @@ func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 		binary = "dws.exe"
 	}
 	writeReleaseRuntimeFixture(t, stage, asset)
-	container, err := runtimepayload.BuildContainer(filepath.Join(stage, ".dws-runtime", "20260909"), 12<<20)
+	container, err := runtimepayload.BuildContainer(filepath.Join(stage, ".dws-runtime", runtimepayload.PayloadVersion), 12<<20)
 	if err != nil {
 		t.Fatalf("BuildContainer(%s): %v", asset, err)
 	}
@@ -125,18 +125,21 @@ func writeReleaseRuntimeFixture(t *testing.T, stage, asset string) {
 	default:
 		t.Fatalf("unsupported release fixture asset %q", asset)
 	}
-	writeRuntimePayloadFixture(t, filepath.Join(stage, ".dws-runtime", "20260909"), target, library)
+	writeRuntimePayloadFixture(t, filepath.Join(stage, ".dws-runtime", runtimepayload.PayloadVersion), target, library)
 }
 
 func writeRuntimePayloadFixture(t *testing.T, root, target, library string) {
 	t.Helper()
 	libraryData := []byte("fake runtime library for " + target + "\n")
 	librarySum := sha256.Sum256(libraryData)
+	configData := []byte("fake config for " + target + "\n")
+	configSum := sha256.Sum256(configData)
+	mustWriteFile(t, filepath.Join(root, "skt.bin"), configData, 0o600)
 	mustWriteFile(t, filepath.Join(root, library), libraryData, 0o755)
 
 	manifest := fmt.Sprintf(
-		"{\n  \"format_version\": 2,\n  \"payload_version\": \"20260909\",\n  \"target\": %q,\n  \"library\": %q,\n  \"library_sha256\": \"%x\"\n}\n",
-		target, library, librarySum,
+		"{\n  \"format_version\": 3,\n  \"payload_version\": %q,\n  \"target\": %q,\n  \"library\": %q,\n  \"library_sha256\": \"%x\",\n  \"config\": \"skt.bin\",\n  \"config_sha256\": \"%x\"\n}\n",
+		runtimepayload.PayloadVersion, target, library, librarySum, configSum,
 	)
 	mustWriteFile(t, filepath.Join(root, "manifest.json"), []byte(manifest), 0o644)
 }

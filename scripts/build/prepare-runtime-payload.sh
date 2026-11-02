@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 GOOS="${1:-}"
 GOARCH="${2:-}"
 DEST_ROOT="${3:-}"
-VERSION=20260909
+VERSION=20261028
 SOURCE="$ROOT/third_party/runtimepayload/$VERSION"
 
 [ -n "$GOOS" ] && [ -n "$GOARCH" ] && [ -n "$DEST_ROOT" ] || {
@@ -54,14 +54,19 @@ rm -rf "$TARGET"
 mkdir -p "$TARGET"
 cp "$SOURCE/$RELATIVE_LIBRARY" "$TARGET/$LIBRARY_NAME"
 
+cp "$SOURCE/$GOOS/skt.bin" "$TARGET/skt.bin"
+CONFIG_SHA="$(hash_file "$TARGET/skt.bin")"
+
 LIBRARY_SHA="$(hash_file "$TARGET/$LIBRARY_NAME")"
 cat > "$TARGET/manifest.json" <<EOF
 {
-  "format_version": 2,
+  "format_version": 3,
   "payload_version": "$VERSION",
   "target": "$GOOS/$GOARCH",
   "library": "$LIBRARY_NAME",
-  "library_sha256": "$LIBRARY_SHA"
+  "library_sha256": "$LIBRARY_SHA",
+  "config": "skt.bin",
+  "config_sha256": "$CONFIG_SHA"
 }
 EOF
 

@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-PAYLOAD="$ROOT/third_party/runtimepayload/20260909"
+PAYLOAD="$ROOT/third_party/runtimepayload/20261028"
 ALLOW_UNSUPPORTED_TOOLS=0
 
 if [ "${1:-}" = "--allow-unsupported-tools" ]; then
@@ -98,14 +98,18 @@ check_pe_arch() {
   printf 'Skipping %s library architecture inspection: compatible tooling is unavailable.\n' "$pe_label"
 }
 
-check_hash darwin/universal/x7k2m9p4q1w8.dylib bc9c5b94b710f043a448e1e89f12de7723a7d2468450f127c1de2efdc6b90742
-check_hash linux/amd64/libx7k2m9p4q1w8.so 174b59ba2e46195e81dbcbe3aac83dedbf5baaceec41d02a684e623ddaace481
-check_hash linux/arm64/libx7k2m9p4q1w8.so aa81cd1c19493ead17e54a61b1845acd0e2f28fb61a3a7914e5e6a669bcaa83d
-check_hash windows/amd64/x7k2m9p4q1w864.dll 7b8b06f1776eb02f7101c0999e53eec04984cc51334ca2795b3bfdb44a4f449b
-check_hash windows/arm64/x7k2m9p4q1w864.dll 057854bb037509659b1daab239de16e28a88e327cf302cd3312c8c72c5d05dfb
+check_hash darwin/universal/x7k2m9p4q1w8.dylib 8e4460791f12381863f5844ded6423b2a9b75d6f394e9bd146410e7f160b0c5c
+check_hash linux/amd64/libx7k2m9p4q1w8.so d4e849134c311e9af71ef8bd018e5b4b94617edd79a30cc13a998caaf6ed10e0
+check_hash linux/arm64/libx7k2m9p4q1w8.so c160e5a5205ddc0f8320b616c0d5404899601cd6683b4e2ce351c87f2a146c36
+check_hash windows/amd64/x7k2m9p4q1w864.dll 2c9a0eff98bc7c387e21224037f51da011797416e17504387c8f6311d773bd84
+check_hash windows/arm64/x7k2m9p4q1w864.dll b12ed8d654628f789b6c1aff795b6208da228306a80a2486178bf2b36b52917b
+
+check_hash linux/skt.bin 0e0a7bfee3c34aab752db7d98e8dddefd7b55577791cdd95a8bd42be09e71b78
+check_hash windows/skt.bin f7559094191a5f0530b732e72fca378ad36d33499fb5cca3f0ab85dff6158834
+check_hash darwin/skt.bin 2d1f6aab6ce561400035e7d898500d006896568e8932671a27c7349ea4760925
 
 checksum_count="$(wc -l < "$PAYLOAD/SHA256SUMS" | tr -d ' ')"
-[ "$checksum_count" = 5 ] || fail "expected 5 SHA-256 entries, found $checksum_count"
+[ "$checksum_count" = 8 ] || fail "expected 8 SHA-256 entries, found $checksum_count"
 while read -r expected relative; do
   [ -n "$expected" ] || continue
   check_hash "$relative" "$expected"
@@ -160,7 +164,7 @@ if [ -z "$windows_arm64_exports" ]; then
   printf 'Skipping Windows arm64 library export inspection: compatible tooling is unavailable.\n'
 fi
 
-for symbol in k9Xm2pQv d4Rw7Lnz h6Yb3Jtq m8Vc5Kxf p2Zn9Gsa t5Qe1Hud b7Uj4Myr f3Wi8Olc; do
+for symbol in k9Xm2pQv d4Rw7Lnz h6Yb3Jtq m8Vc5Kxf p2Zn9Gsa t5Qe1Hud b7Uj4Myr f3Wi8Olc r7Qk3Wzp m2Xt9Bvn; do
   [ "$check_darwin" -eq 0 ] || printf '%s\n' "$darwin_exports" | grep -Eq "[[:space:]]_?${symbol}$" || fail "missing macOS export $symbol"
   [ "$check_linux_amd64" -eq 0 ] || printf '%s\n' "$linux_amd64_exports" | grep -Eq "[[:space:]]${symbol}$" || fail "missing Linux amd64 export $symbol"
   [ "$check_linux_arm64" -eq 0 ] || printf '%s\n' "$linux_arm64_exports" | grep -Eq "[[:space:]]${symbol}$" || fail "missing Linux arm64 export $symbol"
@@ -176,7 +180,7 @@ check_pe_arch windows/amd64/x7k2m9p4q1w864.dll 'x86[_-]64' 'PE32\+.*x86-64' 'Win
 # file(1) names COFF machine 0xaa64 "Aarch64" in older magic and "ARM64" in newer magic.
 check_pe_arch windows/arm64/x7k2m9p4q1w864.dll 'aarch64|arm64' 'PE32\+.*(Aarch64|ARM64)' 'Windows arm64' 43620
 
-printf 'Runtime payload verified: 5 libraries, 6 targets, no auxiliary data files.\n'
+printf 'Runtime payload verified: 5 libraries, 3 configurations, 6 targets, no ps files.\n'
 if [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 0 ]; then
   "$ROOT/scripts/build/generate-runtime-payload-assets.sh" --check
 fi

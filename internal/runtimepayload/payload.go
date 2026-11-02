@@ -24,14 +24,14 @@ import (
 )
 
 const (
-	PayloadVersion    = "20260909"
-	manifestVersion   = 2
+	PayloadVersion    = "20261028"
+	manifestVersion   = 3
 	containerHeader   = 64
 	formatVersion     = uint32(1)
 	maxContainerBytes = 32 << 20
 	maxBundleBytes    = int64(24 << 20)
 	maxFileBytes      = int64(16 << 20)
-	maxFiles          = 2 // One target library and its manifest; no auxiliary files.
+	maxFiles          = 3 // One target library, its configuration, and manifest.
 )
 
 var (
@@ -83,6 +83,8 @@ type manifest struct {
 	Target         string `json:"target"`
 	Library        string `json:"library"`
 	LibrarySHA256  string `json:"library_sha256"`
+	Config         string `json:"config,omitempty"`
+	ConfigSHA256   string `json:"config_sha256,omitempty"`
 	// Only decoded to recognize ownership records from the retired format 1.
 	PSFileCount      int    `json:"ps_file_count,omitempty"`
 	PSManifestSHA256 string `json:"ps_manifest_sha256,omitempty"`
@@ -297,7 +299,7 @@ func writeArchive(output io.Writer, root string) error {
 	gzipWriter.Header.ModTime = time.Unix(0, 0).UTC()
 	gzipWriter.Header.OS = 255
 	tarWriter := tar.NewWriter(gzipWriter)
-	paths := []string{"manifest.json", metadata.Library}
+	paths := []string{"manifest.json", metadata.Library, metadata.Config}
 	sort.Strings(paths)
 	for _, relative := range paths {
 		path := filepath.Join(root, filepath.FromSlash(relative))
@@ -390,7 +392,7 @@ func extractArchive(input io.Reader, root string) error {
 }
 
 func validArchivePath(name string) bool {
-	return name == "manifest.json" || name == "x7k2m9p4q1w8.dylib" || name == "libx7k2m9p4q1w8.so" || name == "x7k2m9p4q1w864.dll"
+	return name == "skt.bin" || name == "manifest.json" || name == "x7k2m9p4q1w8.dylib" || name == "libx7k2m9p4q1w8.so" || name == "x7k2m9p4q1w864.dll"
 }
 
 func validateRoot(root, targetOS, targetArch string) error {
@@ -399,13 +401,13 @@ func validateRoot(root, targetOS, targetArch string) error {
 		return err
 	}
 	// Build sources and private caches are dedicated bundle roots. Adjacent
-	// publication validates only its owned library, leaving unrelated files alone.
+	// publication validates its owned library and config, leaving unrelated files alone.
 	entries, err := readPayloadDirectory(root)
 	if err != nil || len(entries) != maxFiles {
-		return errors.New("runtime payload must contain only its library and manifest")
+		return errors.New("runtime payload must contain only its library, configuration and manifest")
 	}
 	for _, entry := range entries {
-		if entry.Name() != metadata.Library && entry.Name() != "manifest.json" {
+		if entry.Name() != metadata.Library && entry.Name() != metadata.Config && entry.Name() != "manifest.json" {
 			return errors.New("runtime payload contains an unexpected file")
 		}
 	}
@@ -417,7 +419,7 @@ func validateRootManifest(root string, metadata manifest, targetOS, targetArch s
 	if err != nil {
 		return err
 	}
-	if metadata.FormatVersion != manifestVersion || metadata.PayloadVersion != PayloadVersion || metadata.Target != targetOS+"/"+targetArch || metadata.Library != name {
+	if metadata.FormatVersion != manifestVersion || metadata.PayloadVersion != PayloadVersion || metadata.Target != targetOS+"/"+targetArch || metadata.Library != name || metadata.Config != "skt.bin" {
 		return errors.New("runtime payload manifest does not match target")
 	}
 	if metadata.PSFileCount != 0 || metadata.PSManifestSHA256 != "" {
@@ -430,6 +432,14 @@ func validateRootManifest(root string, metadata manifest, targetOS, targetArch s
 	libraryDigest, err := hashFile(libraryPath)
 	if err != nil || hex.EncodeToString(libraryDigest[:]) != metadata.LibrarySHA256 {
 		return errors.New("runtime payload library checksum mismatch")
+	}
+	configPath := filepath.Join(root, metadata.Config)
+	if !regularPayloadFile(configPath) {
+		return errors.New("runtime payload configuration is unavailable")
+	}
+	configDigest, err := hashFile(configPath)
+	if err != nil || hex.EncodeToString(configDigest[:]) != metadata.ConfigSHA256 {
+		return errors.New("runtime payload configuration checksum mismatch")
 	}
 	return nil
 }
