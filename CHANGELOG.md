@@ -6,6 +6,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.67-beta.1] - 2026-11-02
+
+### Changed
+
+- **Runtime payload** — 升级至 20261028，纳入最新平台配置，同步六平台资源、完整性校验、运行时集成及安装打包兼容性。
+
 ## [1.0.66] - 2026-10-28
 
 本版本将已交付的 `v1.0.66-beta.2` 晋级正式版，汇总两个 beta 的改进，并纳入下方列出的 beta 后变更。
