@@ -39,8 +39,8 @@ func TestGiteeCodeMirrorWorkflowBoundsCheckoutAndPush(t *testing.T) {
 	if got := workflowTimeoutMinutesAfter(t, content, "name: Checkout main history"); got != 5 {
 		t.Fatalf("checkout timeout = %d minutes, want 5", got)
 	}
-	if got := workflowTimeoutMinutesAfter(t, content, "name: Push localized main to Gitee"); got != 15 {
-		t.Fatalf("push timeout = %d minutes, want 15", got)
+	if got := workflowTimeoutMinutesAfter(t, content, "name: Push localized main to Gitee"); got != 60 {
+		t.Fatalf("push timeout = %d minutes, want 60", got)
 	}
 	if strings.Contains(content, "fetch-depth: 0") || !strings.Contains(content, "fetch-depth: 1") {
 		t.Fatal("checkout must not fetch all GitHub branches and tags")
