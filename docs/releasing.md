@@ -173,6 +173,10 @@ stable baseline，后两者仍要求整条 Release 成功或受保护 recovery �
 attempt 的单个 failed job，以免在 attempts 之间拼接交付证据。独立 Gitee release
 workflow 和本地直发脚本已停用，避免绕开 publication queue 或用重新构建的不同字节覆盖镜像。
 
+渠道修复的资产格式校验使用目标封存 commit 的 `verify-release-artifacts.sh` 及其运行时工具，
+避免当前 main 的新载荷格式拒绝历史不可变制品。tag、immutable Release、交付来源与资产集合的
+准入校验，以及镜像上传工具，仍由当前受保护 main 提供；不会重新构建或改写旧制品。
+
 ## 既有 tag 的紧急恢复
 
 云端封板或本地 tag push 已成功、但 Release workflow 失败且 GitHub Release 尚未公开时，不要新建临时 workflow、移动 tag 或跳过门禁。在最新且干净的 `main` worktree 运行：
