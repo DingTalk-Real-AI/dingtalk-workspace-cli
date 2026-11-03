@@ -2841,8 +2841,10 @@ jobs:
             --pattern 'dws-*' \
             --pattern 'checksums.txt' \
             --clobber
+          # Runtime payload formats evolve; validate immutable artifacts with
+          # the verifier from their already-authorized sealed source commit.
           DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
+            "$GITHUB_WORKSPACE/release-source/scripts/release/verify-release-artifacts.sh" "$VERSION"
 
       - name: Mirror release to Gitee (China)
         if: ${{ needs.dispatch-contract.outputs.mode == 'repair_gitee' }}
