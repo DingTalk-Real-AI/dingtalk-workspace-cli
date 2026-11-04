@@ -147,6 +147,7 @@ func newDeapConnectCommand() *cobra.Command {
 				{Name: "daemon", Property: "daemon"},
 				{Name: "alwayson", Property: "alwayson"},
 				{Name: "reply-mode", Property: "replyMode"},
+				{Name: "reply-card-forward", Property: "replyCardForward"},
 			},
 		},
 	})
@@ -263,6 +264,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	cfg := digitalEmployeeAdapterConfig{Binding: binding, Name: findJSONScalar(draft, "name"), AlwaysOn: commandBoolFlag(cmd, "alwayson")}
 	cfg.ReplyMode = devAppStringFlag(cmd, "reply-mode")
+	cfg.ReplyCardForward = commandBoolFlag(cmd, "reply-card-forward")
 	// 入站发送者 ID 随员工 Token 上下文变化，不能复用主管查询的发布详情 ID。
 	cfg.SelfOpenDingTalkID, err = resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, token.UserID)
 	if err != nil || !validEmployeeSelfIdentity(cfg.SelfOpenDingTalkID) {

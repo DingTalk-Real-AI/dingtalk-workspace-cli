@@ -72,9 +72,9 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 |------|------|----------------|----------|
 | `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId 与类型；完整结果必须用 `--all --page-limit 0` 自动翻页；filters 中的实体展示名须先解析为稳定 ID/结构化值 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
-| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
+| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；单次最多 100 条 |
 | `record update` | 更新记录（每条独立 cells） | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
-| `record batch-update` | 批量更新（同一 cells 应用到多条 recordId） | [aitable-record-update.md](./aitable/aitable-record-update.md)、[aitable-cell-value.md](./aitable/aitable-cell-value.md) | 适合"统一标记完成/统一改负责人"等共享 patch 场景；`--cells` 是 JSON object（key=fieldId，value 按字段类型见 cell-value.md），与 record update 的单条 cells 结构完全一致；必填 `--record-ids` `--cells`；单次最多 100 条 |
+| `record batch-update` | 批量更新（同一 cells 应用到多条 recordId） | [aitable-record-update.md](./aitable/aitable-record-update.md)、[aitable-cell-value.md](./aitable/aitable-cell-value.md) | 适合"统一标记完成/统一改负责人"等共享 patch 场景；`--cells` 是 JSON object（key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；value 按字段类型见 cell-value.md），与 record update 的单条 cells 结构完全一致；必填 `--record-ids` `--cells`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
 | `record history-list` | 查询单条记录的变更历史 | [aitable-record-history.md](./aitable/aitable-record-history.md) | 必填 `--record-id`；分页 `--offset --limit`，limit 范围 [1,50] 默认 20 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 一页扫描 `--limit` [1,100] 默认 100；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完） |
@@ -479,9 +479,9 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- 对象寻址使用真实 ID（baseId/tableId/fieldId/recordId）；记录写入的 cells key 也支持当前表内唯一字段名；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
 - `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
-- records 的 cells key 是 fieldId，不是字段名称
+- records 的 cells key 支持 fieldId 或当前表内唯一字段名；推荐 fieldId，字段名须精确匹配
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)
 

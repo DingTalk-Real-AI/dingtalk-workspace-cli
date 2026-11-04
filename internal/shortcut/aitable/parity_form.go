@@ -5,6 +5,7 @@ package aitable
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -14,7 +15,7 @@ func parityFormShortcuts() []shortcut.Shortcut {
 	var out []shortcut.Shortcut
 	for _, op := range []string{"create", "get", "submit", "questions-remove"} {
 		command := "+form-" + op
-		desc := map[string]string{"create": "创建表单并按新 viewId 核对名称", "get": "按准确 viewId 获取表单及可见题目", "submit": "提交已分享表单并按返回 rowId 核对写入值", "questions-remove": "只隐藏表单题目并核对表字段仍存在，不删除整列"}[op]
+		desc := map[string]string{"create": "创建表单并按新 viewId 核对名称；result.url/links 是管理访问链接，定位由 Web 处理", "get": "按准确 viewId 获取表单及可见题目", "submit": "提交已分享表单并按返回 rowId 核对写入值", "questions-remove": "只隐藏表单题目并核对表字段仍存在，不删除整列"}[op]
 		flags := []shortcut.Flag{{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true}, {Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true}}
 		ex := "dws aitable " + command + " --base-id B --table-id T"
 		if op == "create" {
@@ -126,12 +127,14 @@ func executeParityForm(rt *shortcut.RuntimeContext, op string) error {
 			return err
 		}
 	}
+	var mutationNavigation map[string]any
 	if op != "get" {
 		server := serverMain
 		if op == "questions-remove" {
 			server = serverHelper
 		}
 		raw, err := rt.CallMCPWriteDataStrict(server, tool, args)
+		mutationNavigation = parityResponseObject(raw)
 		newID := findStringByKeys(raw, "viewId")
 		if op == "submit" {
 			newID = findStringByKeys(raw, "rowId")
@@ -204,6 +207,7 @@ func executeParityForm(rt *shortcut.RuntimeContext, op string) error {
 		}
 	}
 	result.Result = map[string]any{"form": form, "visibleFields": fields}
+	aitablenavigation.Preserve(result.Result, mutationNavigation)
 	result.Verification = map[string]any{"status": "verified"}
 	result.CompletedCount = 1
 	return rt.Output(result)

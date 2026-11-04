@@ -26,6 +26,8 @@ func dashboardGetResultSpec() *contract.ResultSpec {
       "type":"object",
       "description":"Dashboard 详情",
       "properties":{
+        "url":{"type":["string","null"],"description":"MCP 返回的仪表盘访问链接，携带 applicationId；显式 null 保留，不代表写后核验完成"},
+        "links":{"type":["array","null"],"description":"仪表盘目标和父级 Base 的访问上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}},
         "meta":{
           "description":"决定根布局协议的只读 Dashboard 元信息",
           "oneOf":[

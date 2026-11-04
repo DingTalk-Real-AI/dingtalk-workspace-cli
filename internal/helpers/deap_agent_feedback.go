@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,10 +39,11 @@ type employeeFeedbackRecord struct {
 	MessageID      string `json:"messageId"`
 	Desired        string `json:"desired"`
 	// Owned 同时包含接口结果未知的表情；恢复时仅清理本员工实际尝试添加的 ID。
-	Owned     []employeeEmotion `json:"owned,omitempty"`
-	Applied   string            `json:"applied,omitempty"`
-	Status    string            `json:"status"`
-	UpdatedAt time.Time         `json:"updatedAt"`
+	Owned     []employeeEmotion       `json:"owned,omitempty"`
+	Applied   string                  `json:"applied,omitempty"`
+	Status    string                  `json:"status"`
+	UpdatedAt time.Time               `json:"updatedAt"`
+	LastError *employeeCardDiagnostic `json:"lastError,omitempty"`
 }
 
 type employeeFeedbackItem struct {
@@ -145,8 +147,9 @@ func (f *employeeFeedback) run(item *employeeFeedbackItem) {
 		err := f.apply(ctx, item.e, &record, label)
 		cancel()
 		if err != nil {
-			// 只记录稳定分类，不输出上游错误、正文或凭据。
-			fmt.Fprintln(os.Stderr, "[employee] message_feedback_failed")
+			// 仅输出结构化白名单诊断；原始 stderr、业务正文及凭据不进入日志。
+			data, _ := json.Marshal(map[string]any{"code": "message_feedback_failed", "diagnostic": record.LastError, "task": filepath.Base(f.path(item.e))})
+			fmt.Fprintln(os.Stderr, string(data))
 		}
 		if terminal || stopping {
 			return
@@ -166,8 +169,14 @@ func (f *employeeFeedback) apply(ctx context.Context, e employeeEvent, record *e
 	}
 	operationErr := f.replace(ctx, e, record, label)
 	record.Status = "applied"
+	record.LastError = nil
 	if operationErr != nil {
 		record.Status = "failed"
+		record.LastError = &employeeCardDiagnostic{Code: "feedback_update_failed"}
+		var classified *employeeRunError
+		if errors.As(operationErr, &classified) && classified.CardDiagnostic != nil {
+			record.LastError = classified.CardDiagnostic
+		}
 	}
 	if err := f.save(e, record); err != nil {
 		return err
@@ -263,10 +272,24 @@ func runEmployeeFeedbackCall(ctx context.Context, profile, operation string, e e
 	}
 	var stdout, stderr employeeBoundedBuffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil || stdout.overflow {
-		return nil, fmt.Errorf("feedback_command_failed")
+	if err := cmd.Run(); err != nil || stdout.overflow || stderr.overflow {
+		if !stdout.overflow && !stderr.overflow {
+			return nil, employeeFeedbackResponseError(stdout.Bytes(), stderr.Bytes())
+		}
+		return nil, employeeTerminal("feedback_output_overflow")
 	}
-	return decodeEmployeeFeedbackResult(stdout.Bytes())
+	result, err := decodeEmployeeFeedbackResult(stdout.Bytes())
+	if err != nil {
+		return nil, employeeFeedbackResponseError(stdout.Bytes(), stderr.Bytes())
+	}
+	return result, nil
+}
+
+func employeeFeedbackResponseError(stdout, stderr []byte) error {
+	classified := employeeCardResponseError(stdout, stderr)
+	classified.Code = "feedback_command_failed"
+	classified.CardDiagnostic.Code = classified.Code
+	return classified
 }
 
 func decodeEmployeeFeedbackResult(raw []byte) (map[string]any, error) {
@@ -297,7 +320,16 @@ func decodeEmployeeFeedbackResult(raw []byte) (map[string]any, error) {
 
 func employeeTaskLabel(record employeeTaskRecord) string {
 	switch record.Status {
-	case "delivered", "card_finished":
+	case "card_finished":
+		return "已完成"
+	case "card_rejected", "card_delivery_failed":
+		return "回复发送失败"
+	case "card_incomplete":
+		if record.Execution == "unknown" {
+			return "结果待确认"
+		}
+		return "执行失败"
+	case "delivered":
 		return "已完成"
 	case "completed_without_reply":
 		if record.Execution == "success" && record.Delivery == "not_required" {
@@ -309,6 +341,12 @@ func employeeTaskLabel(record employeeTaskRecord) string {
 	case "cancelled":
 		return "已取消"
 	case "needs_review":
+		if record.Execution == "unknown" && record.ExecutionErrorCode == "codex_desktop_result_unknown" {
+			return "结果待确认"
+		}
+		if record.CardError != "" {
+			return "送达待确认"
+		}
 		if record.Delivery == "unknown" || record.Delivery == "pending" {
 			return "发送待确认"
 		}

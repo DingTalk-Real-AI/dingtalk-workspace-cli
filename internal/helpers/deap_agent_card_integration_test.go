@@ -90,8 +90,8 @@ func TestCrossPlatformCoverageEmployeeCardPreservesPublicCodexContext(t *testing
 func TestCrossPlatformCoverageEmployeeCardFeedbackStates(t *testing.T) {
 	for _, test := range []struct{ status, delivery, label string }{
 		{"card_finished", "accepted", "已完成"},
-		{"card_incomplete", "accepted", "处理失败"},
-		{"card_rejected", "rejected", "处理失败"},
+		{"card_incomplete", "accepted", "执行失败"},
+		{"card_rejected", "rejected", "回复发送失败"},
 		{"needs_review", "unknown", "发送待确认"},
 	} {
 		if got := employeeTaskLabel(employeeTaskRecord{Status: test.status, Delivery: test.delivery}); got != test.label {

@@ -64,7 +64,7 @@ func TestCrossPlatformCoverageRecordVerificationTreatsEmptyMultiSelectAsOmitted(
 	); err == nil {
 		t.Fatal("missing non-multi-select field must still fail")
 	}
-	if !recordCellsMayNeedFieldTypes(
+	if !recordCellsMayNeedFields(
 		map[string]any{"recordId": "r1", "cells": map[string]any{}},
 		expected,
 	) {

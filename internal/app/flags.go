@@ -57,7 +57,7 @@ func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
 	cmd.PersistentFlags().StringVarP(&flags.Output, "output", "o", "", "Write command output to a file")
 	_ = cmd.PersistentFlags().MarkHidden("output")
 	cmd.PersistentFlags().StringVar(&flags.Profile, "profile", "", "一次性指定组织或账号；支持 corpId/corpName 与 userId/userName 组合，推荐使用 profile list 返回的 corpId:userId；多个按 CSV 逗号分隔")
-	cmd.PersistentFlags().IntVar(&flags.Timeout, "timeout", 30, "HTTP 请求超时时间 (秒)")
+	cmd.PersistentFlags().IntVar(&flags.Timeout, "timeout", 30, "HTTP 请求与文件直传超时时间 (秒)；文件直传最低保留 5 分钟")
 	cmd.PersistentFlags().StringVar(&flags.Token, "token", "", "Override the configured API token")
 	_ = cmd.PersistentFlags().MarkHidden("token")
 	cmd.PersistentFlags().BoolVarP(&flags.Verbose, "verbose", "v", false, "显示详细日志")

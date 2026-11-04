@@ -87,9 +87,12 @@ Agent 产品标识 DWS_AGENT_PRODUCT：
   服务自行定义。同时该值作为启用 --ai-tag 时 IM 消息小尾巴的 clawType
   参数。未设置或为空时请求头省略，小尾巴回退发行版默认值。
 
-DINGTALK_AGENT（可选，仅供 x-dingtalk-agent 使用）：
+DINGTALK_AGENT（可选，业务 Agent 名称）：
   如设置，将原样注入 HTTP 请求头 x-dingtalk-agent，
   便于上游按业务 Agent 名称区分流量。
+  四个文档编辑工具 update_document、update_document_block、
+  delete_document_block、insert_document_block 另在实际参数中传递
+  extraInfo.agentName：去除首尾空白，未设置或为空白时使用 unknown。
   它不参与 claw-type 派生，也不参与 host-owned PAT 判定。
 
 DWS_CHANNEL 只用于上游 channelCode。`,

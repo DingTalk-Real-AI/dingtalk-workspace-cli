@@ -46,33 +46,40 @@ type digitalEmployeeRunState struct {
 }
 
 type employeeEvent struct {
-	Type           string                        `json:"type"`
-	EventID        string                        `json:"event_id"`
-	MessageID      string                        `json:"message_id"`
-	ConversationID string                        `json:"conversation_id"`
-	SenderName     string                        `json:"sender"`
-	SenderID       string                        `json:"sender_open_dingtalk_id"`
-	Content        string                        `json:"content"`
-	QuotedMessage  *personal.MessageEventContext `json:"quoted_message,omitempty"`
+	Type            string                         `json:"type"`
+	EventID         string                         `json:"event_id"`
+	MessageID       string                         `json:"message_id"`
+	ConversationID  string                         `json:"conversation_id"`
+	SenderName      string                         `json:"sender"`
+	SenderID        string                         `json:"sender_open_dingtalk_id"`
+	Content         string                         `json:"content"`
+	QuotedMessage   *personal.MessageEventContext  `json:"quoted_message,omitempty"`
+	ForwardMessages []personal.MessageEventContext `json:"forward_messages,omitempty"`
 }
 
 type employeeTaskRecord struct {
-	EventID        string    `json:"eventId"`
-	MessageID      string    `json:"messageId"`
-	ConversationID string    `json:"conversationId"`
-	Status         string    `json:"status"`
-	IdempotencyKey string    `json:"idempotencyKey"`
-	ReplyID        string    `json:"replyId,omitempty"`
-	BizID          string    `json:"bizId,omitempty"`
-	SurfaceID      string    `json:"surfaceId,omitempty"`
-	FlowStatus     string    `json:"flowStatus,omitempty"`
-	CardUpdates    int       `json:"cardUpdates,omitempty"`
-	CardCreatedAt  string    `json:"cardCreatedAt,omitempty"`
-	CardError      string    `json:"cardError,omitempty"`
-	CardErrorCode  string    `json:"cardErrorCode,omitempty"`
-	Execution      string    `json:"execution,omitempty"`
-	Delivery       string    `json:"delivery,omitempty"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	EventID              string                  `json:"eventId"`
+	MessageID            string                  `json:"messageId"`
+	ConversationID       string                  `json:"conversationId"`
+	Status               string                  `json:"status"`
+	IdempotencyKey       string                  `json:"idempotencyKey"`
+	ReplyID              string                  `json:"replyId,omitempty"`
+	BizID                string                  `json:"bizId,omitempty"`
+	SurfaceID            string                  `json:"surfaceId,omitempty"`
+	FlowStatus           string                  `json:"flowStatus,omitempty"`
+	CardUpdates          int                     `json:"cardUpdates,omitempty"`
+	CardCreatedAt        string                  `json:"cardCreatedAt,omitempty"`
+	CardError            string                  `json:"cardError,omitempty"`
+	CardErrorCode        string                  `json:"cardErrorCode,omitempty"`
+	LastCardError        *employeeCardDiagnostic `json:"lastCardError,omitempty"`
+	CardRecoveryAttempts int                     `json:"cardRecoveryAttempts,omitempty"`
+	CardResultFile       string                  `json:"cardResultFile,omitempty"`
+	CardNoticeDelivery   string                  `json:"cardNoticeDelivery,omitempty"`
+	CardNoticeReplyID    string                  `json:"cardNoticeReplyId,omitempty"`
+	Execution            string                  `json:"execution,omitempty"`
+	ExecutionErrorCode   string                  `json:"executionErrorCode,omitempty"`
+	Delivery             string                  `json:"delivery,omitempty"`
+	UpdatedAt            time.Time               `json:"updatedAt"`
 }
 
 type employeeRetryState struct {
@@ -82,11 +89,12 @@ type employeeRetryState struct {
 	NextAttempt     time.Time `json:"nextAttempt"`
 }
 
-// 所有错误只携带稳定分类，禁止把 MCP/Agent 的原始输出写到日志。
+// Error() 只返回稳定分类；卡片诊断仅允许携带经过白名单筛选和脱敏的传输信息。
 type employeeRunError struct {
-	Code       string
-	Retryable  *bool
-	RetryAfter time.Duration
+	Code           string
+	Retryable      *bool
+	RetryAfter     time.Duration
+	CardDiagnostic *employeeCardDiagnostic
 }
 
 func (e *employeeRunError) Error() string { return e.Code }
@@ -132,6 +140,11 @@ func employeeCommand(ctx context.Context, profile string, args ...string) (*exec
 type employeeBoundedBuffer struct {
 	bytes.Buffer
 	overflow bool
+}
+
+// os/exec 使用 io.Copy 收集输出；隐藏 bytes.Buffer 的 ReaderFrom，防止绕过限长 Write。
+func (b *employeeBoundedBuffer) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(struct{ io.Writer }{b}, r)
 }
 
 func (b *employeeBoundedBuffer) Write(p []byte) (int, error) {
@@ -196,6 +209,7 @@ type employeeRuntime struct {
 	ctx          context.Context
 	feedback     *employeeFeedback
 	cardFailures map[string]int
+	approvals    map[string]*employeeApproval
 }
 
 func (r *employeeRuntime) audit(record employeeTaskRecord) error {
@@ -360,10 +374,11 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
 	defer cleanup()
 	_, control := parseConnectControlCommand(e.Content)
-	if fwd, ok := r.fwd.(progressForwarder); err == nil && ok && !control && r.cfg.ReplyMode == "a2ui" {
-		if err := r.processCard(e, &record, fwd, attachments...); err != nil {
+	if err == nil && !control && r.cfg.ReplyMode == "a2ui" {
+		if err := r.processCard(e, &record, r.fwd, attachments...); err != nil {
 			return err
 		}
+		r.notifyCardFailure(e, &record)
 		if err := r.finishRecord(e, record); err != nil {
 			return err
 		}
@@ -372,7 +387,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	}
 	var answer string
 	if err == nil {
-		answer, err = forwardEmployeeTurn(r.ctx, r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
+		answer, err = forwardEmployeeTurn(r.turnContext(e), r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
 	}
 	record.Execution = "success"
 	if err != nil {
@@ -385,7 +400,14 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 		if errors.Is(err, errCodexEmployeeResumeFailed) {
 			answer = "原会话暂时无法恢复，请稍后重试；如需新会话，请发送 /new。"
 		}
-		if errors.Is(err, context.Canceled) || r.ctx.Err() != nil {
+		if failure := employeeSharedTurnFailure(err); failure != nil {
+			record.Execution, record.ExecutionErrorCode = failure.Execution, failure.Code
+			answer = failure.Reply
+			if record.Execution == "unknown" {
+				record.Status = "needs_review"
+			}
+		}
+		if record.Execution != "unknown" && (errors.Is(err, context.Canceled) || r.ctx.Err() != nil) {
 			record.Status, record.Execution = "cancelled", "cancelled"
 			answer = ""
 		}
@@ -418,7 +440,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 				record.Delivery = "accepted"
 			}
 		}
-		if record.Execution == "failure" {
+		if record.Execution != "success" {
 			record.Status = outcome
 		}
 	}
@@ -536,6 +558,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		args = append(args, "user_im_message_receive_at")
 	} else if len(cfg.Options.AllowedGroups) > 0 {
 		args = append(args, "user_im_message_receive_group_all")
+	}
+	if employeeApprovalsEnabled(cfg) {
+		args = append(args, "user_card_action_triggered")
 	}
 	args = append(args, "--flatten", "--format", "ndjson")
 	proc, err := employeeCommand(ctx, cfg.Binding.DWSProfile, args...)
@@ -687,6 +712,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 				defer failureMu.Unlock()
 				return employeeConsumerExit(ctx, failure)
 			}
+			if r.handleApprovalEvent(line) {
+				continue
+			}
 			var e employeeEvent
 			if json.Unmarshal(line, &e) != nil {
 				return employeeTerminal("invalid_event")
@@ -821,7 +849,8 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 			}
 			if record.Status == "sending" || cardInterrupted {
 				record.Delivery = "unknown"
-			} else {
+			}
+			if record.Execution == "" || record.Execution == "running" {
 				record.Execution = "unknown"
 			}
 			record.Status = "needs_review"

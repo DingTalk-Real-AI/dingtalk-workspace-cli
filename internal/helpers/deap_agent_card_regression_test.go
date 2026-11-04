@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageEmployeeLegacyReplyMode(t *testing.T) {
 			}
 			want := mode
 			if want == "" {
-				want = "text"
+				want = "a2ui"
 			}
 			if loaded.ReplyMode != want {
 				t.Fatalf("mode=%q", loaded.ReplyMode)
@@ -86,7 +86,7 @@ func TestCrossPlatformCoverageEmployeeLegacyReplyMode(t *testing.T) {
 			if err := r.process(e); err != nil {
 				t.Fatal(err)
 			}
-			if (cardCalls > 0) != (mode == "a2ui") {
+			if (cardCalls > 0) != (mode != "text") {
 				t.Fatalf("old configuration switched mode: %d", cardCalls)
 			}
 		})

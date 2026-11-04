@@ -13,6 +13,8 @@ Use for parameters, settings, ratings, and comments. For display-only informatio
 
 `ChoicePicker.variant` sets single or multiple selection. `displayStyle` sets presentation: `chips` for inline tags, `checkbox` for inline vertical choices, and `dropdown` (the default) for a compact entry opening the native picker. `chips` and `checkbox` write local state through `value` binding without firing an action; the submit Button collects their values in `context`. A configured `dropdown` action fires after confirming a selection.
 
+When a separate Button submits edited values, verify that bindings carry the current values into its event context in the target renderer. A changed control display or a picker callback containing the new value does not prove that the independent submit action reads it.
+
 Bind collected values with suitable initial values. Even single-select `ChoicePicker.value` uses an array of strings. Omitting `TextField.value` does not create a writeback path. Put submit validation on standalone `Button.checks`, not on TextField or a ButtonGroup item.
 
 Make each field recognizable before and after input. Component labels have different roles:

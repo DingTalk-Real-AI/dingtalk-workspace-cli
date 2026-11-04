@@ -1493,6 +1493,14 @@ func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testin
 				if side.ref != "" {
 					t.Errorf("%s: %s composite interface unexpectedly has ref %s", toolPath, side.name, side.ref)
 				}
+			case "local":
+				// 只允许 local 作为单向迁移的旧侧且必须迁往 composite：
+				// 纯本地实现（内置目录/本地文件）接入远端读取即不再是 local，
+				// 反向把远端编排降级回纯本地则没有已评审场景。
+				if side.name == "old" && side.ref == "" && transition.NewMode == "composite" {
+					continue
+				}
+				t.Errorf("%s: %s local mode is only reviewed as a one-way old side to composite", toolPath, side.name)
 			default:
 				t.Errorf("%s: %s mode %q is not a reviewed mcp/composite transition", toolPath, side.name, side.mode)
 			}
@@ -3141,5 +3149,50 @@ func TestCrossPlatformCoverageDingTalkTagSkillConstraintTransitionIsReviewed(t *
 	wrongTarget := fixture(`{"mutually_exclusive":[["enabled","file"]]}`)
 	if failures := checkToolCompatibility(toolPath, baseline, wrongTarget); len(failures) == 0 {
 		t.Fatal("a wrong target constraint inherited the approval")
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatEventLocalToCompositeTransition(t *testing.T) {
+	for _, toolPath := range []string{"event/event.list", "event/event.schema"} {
+		transition, ok := reviewedInterfaceTransitions[toolPath]
+		if !ok {
+			t.Fatalf("%s: missing reviewed interface transition", toolPath)
+		}
+		if transition.OldMode != "local" || transition.NewMode != "composite" {
+			t.Fatalf("%s: transition is not local -> composite: %+v", toolPath, transition)
+		}
+		oldTool := toolSchema{InterfaceMode: "local", Availability: "available"}
+		newTool := toolSchema{InterfaceMode: "composite", Availability: "available"}
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("%s: reviewed local->composite transition should pass: %v", toolPath, failures)
+		}
+		// 未登记工具使用同一 tuple 仍必须被拦：local 离场只能走评审迁移。
+		if failures := checkToolCompatibility("event/event.unlisted", oldTool, newTool); len(failures) == 0 {
+			t.Fatalf("unlisted tool should not borrow the local->composite transition")
+		}
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatLocalTransitionRejectsRefAndWrongTarget(t *testing.T) {
+	transition, ok := reviewedInterfaceTransitions["event/event.list"]
+	if !ok {
+		t.Fatal("missing reviewed interface transition for event/event.list")
+	}
+	// local 旧侧带 ref 时与登记 tuple（OldRef 为空）不匹配：注册表按完整
+	// mode+ref 元组精确放行，携带 ref 的 local 契约不得借道本条目。
+	if compat := compatibleReviewedInterfaceTransition("event/event.list",
+		toolSchema{InterfaceMode: "local", InterfaceRef: `{"product_id":"event","rpc_name":"list"}`},
+		toolSchema{InterfaceMode: transition.NewMode}, nil); compat {
+		t.Fatal("local interface carrying a ref must not match the reviewed transition")
+	}
+	// local -> mcp 与当前登记 tuple（NewMode=composite）不匹配：运行时按完整
+	// mode+ref 元组精确比对，未登记的目标形态一律不放行。若登记表本身被误填
+	// 为 local->mcp，拦住它的是 canonical 规范测试
+	// （TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical），
+	// 而非此处的元组比对。
+	if compat := compatibleReviewedInterfaceTransition("event/event.list",
+		toolSchema{InterfaceMode: "local"},
+		toolSchema{InterfaceMode: interfaceModeMCP, InterfaceRef: `{"product_id":"event","rpc_name":"list"}`}, nil); compat {
+		t.Fatal("local -> mcp must not be released by the local-side exception")
 	}
 }

@@ -400,13 +400,14 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 19 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
+	if len(parameters) != 20 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 20", len(parameters))
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "client-id": "clientId",
 		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
-		"reply-mode": "replyMode",
+		"reply-mode":         "replyMode",
+		"reply-card-forward": "replyCardForward",
 	} {
 		parameter := parameters[name]
 		if parameter == nil {
@@ -420,6 +421,14 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 	channel := parameters["channel"]
 	if got := schemaContractString(parameters["reply-mode"]["default"]); got != "a2ui" {
 		t.Errorf("reply-mode default = %q, want a2ui", got)
+	}
+	// The existing wire projection omits zero defaults. Runtime's false default
+	// is checked on the owning flag; reject any contradictory published value.
+	if got, present := parameters["reply-card-forward"]["default"]; present && got != false {
+		t.Errorf("reply-card-forward published default = %#v, want false or omitted", got)
+	}
+	if got := schemaContractString(parameters["reply-card-forward"]["type"]); got != "boolean" {
+		t.Errorf("reply-card-forward type = %q, want boolean", got)
 	}
 	if got := schemaContractString(channel["required_when"]); got != "" {
 		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)

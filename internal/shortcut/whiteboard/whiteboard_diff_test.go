@@ -29,10 +29,10 @@ func decodeWhiteboardBusinessData(t *testing.T, raw []byte) map[string]any {
 
 func TestCrossPlatformCoverageWhiteboardDiffStandaloneExecutionLogicalMediaAndRisk(t *testing.T) {
 	current := `[
-		{"id":"real-title","type":"text","source":"page","x":10,"y":20,"text":"old"},
+		{"id":"real-title","type":"text","source":"page","x":10,"y":20,"text":{"blocks":[{"type":"paragraph","runs":[{"text":"old"}]}]}},
 		{"id":"real-image","type":"image","source":"page","writeSupport":"readOnly","resource":{"resourceId":"asset-1"}}
 	]`
-	source := `{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"title","type":"text","x":11,"y":20,"text":"new"}]}}`
+	source := `{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"title","type":"text","x":11,"y":20,"text":{"blocks":[{"type":"paragraph","runs":[{"text":"new"}]}]}}]}}`
 	identity := `{"version":1,"target":{"nodeId":"wb","pageId":"page-1","revision":11},"nodes":{"title":"real-title"}}`
 	caller := &whiteboardCoverageCaller{responses: map[string][]string{
 		toolQueryStandalone: {validStandaloneWhiteboardQueryResponse("wb", "page", 12, current)},
@@ -197,12 +197,12 @@ func TestCrossPlatformCoverageWhiteboardDiffComparisonAndPayloadBudget(t *testin
 			"pages": []any{map[string]any{
 				"id": "page-1",
 				"nodes": []any{map[string]any{
-					"id": "real", "type": "text", "source": "page", "text": largeBefore,
+					"id": "real", "type": "text", "source": "page", "text": map[string]any{"blocks": []any{map[string]any{"type": "paragraph", "runs": []any{map[string]any{"text": largeBefore}}}}},
 				}},
 			}},
 		},
 	}
-	proposed, err := parseWhiteboardSource(`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"node","type":"text","text":"` + largeAfter + `"}]}}`)
+	proposed, err := parseWhiteboardSource(`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"node","type":"text","text":{"blocks":[{"type":"paragraph","runs":[{"text":"` + largeAfter + `"}]}]}}]}}`)
 	if err != nil {
 		t.Fatal(err)
 	}

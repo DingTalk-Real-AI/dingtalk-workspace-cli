@@ -2677,7 +2677,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 		Short: "创建 AI 表格",
 		Long: `创建一个新的 AI 表格 Base。当前仅要求 baseName，服务端按默认模板创建并返回 baseId/baseName。
 如果需要创建在特定的文件夹路径下，则需要传递 folderId，这个是知识库节点的 ID，调用文档的相关服务可以获取。
-MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解析出实际生效的节点 ID。`,
+MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解析出实际生效的节点 ID。` + "\n" + AitableNavigationGuidance,
 		Example: `  dws aitable base create --name "项目跟踪"
   dws aitable base create --name "项目跟踪" --folder-id FOLDER_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -2696,11 +2696,12 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("template-id"); v != "" {
 				toolArgs["templateId"] = v
 			}
-			return callMCPToolContext(cmd.Context(), "create_base", toolArgs)
+			return ExecuteAitableNavigationResult(cmd, "create_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseCreateCmd, LeafSpec{
-		Safety: aitableSafetyCreate(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -2709,10 +2710,11 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 				CLIPath:        "aitable base create",
 				PrimaryCLIPath: "aitable base create",
 			},
-			Description: "创建 AI 表格 Base。",
+			Description: "创建 AI 表格 Base。" + AitableNavigationGuidance,
+			Result:      AitableNavigationBusinessResultSpec(),
 			Interface:   aitableMCPInterface("create_base"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建 AI 表格 Base。",
+				AgentSummary: "创建 AI 表格 Base。" + AitableNavigationGuidance,
 				UseWhen:      []string{"需要新建一份 AI 多维表（able）时"},
 				AvoidWhen:    []string{"创建在线电子表格用 sheet create；复制已有 Base 用 base copy"},
 				Examples:     []string{"dws aitable base create --name \"项目跟踪\""},
@@ -2725,10 +2727,11 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 	})
 
 	baseUpdateCmd := &cobra.Command{
-		Use:     "update",
-		Short:   "更新 AI 表格",
-		Long:    `更新 Base 名称（可选备注）。当前不支持修改主题、封面等扩展属性`,
-		Example: `  dws aitable base update --base-id BASE_ID --name "新名称"  # 查询 baseId: dws aitable base list`,
+		Use:   "update",
+		Short: "更新 AI 表格",
+		Long:  `更新 Base 名称（可选备注）。当前不支持修改主题、封面等扩展属性。` + AitableNavigationGuidance,
+		Example: `  dws aitable base update --base-id BASE_ID --name "新名称"
+  # 查询 baseId: dws aitable base list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "name"); err != nil {
 				return err
@@ -2744,11 +2747,12 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("desc"); v != "" {
 				toolArgs["description"] = v
 			}
-			return callAitableToolContext(cmd.Context(), "update_base", toolArgs)
+			return ExecuteAitableNavigationResult(cmd, "update_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseUpdateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyWrite(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -2757,10 +2761,11 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 				CLIPath:        "aitable base update",
 				PrimaryCLIPath: "aitable base update",
 			},
-			Description: "更新 Base 名称。",
+			Description: "更新 Base 名称。" + AitableNavigationGuidance,
+			Result:      AitableNavigationBusinessResultSpec(),
 			Interface:   aitableMCPInterface("update_base"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "更新 Base 名称。",
+				AgentSummary: "更新 Base 名称。" + AitableNavigationGuidance,
 				UseWhen:      []string{"需要重命名 AI 表格 Base 时"},
 				AvoidWhen:    []string{"改数据表名用 table update；删 Base 用 base delete"},
 				Examples:     []string{"dws aitable base update --base-id <BASE_ID> --name \"新名称\""},
@@ -2821,7 +2826,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 如果选择仅复制结构（--only-struct），则不会复制实际的记录数据。
 
 权限要求：需要对源 Base 有"阅读"权限；指定目标文件夹时，还需对该文件夹有"编辑"权限。
---base-id 支持 Base ID 或标准 Base 节点 URL。--target-folder-id 支持 dentryUuid、标准节点 URL 或 Drive 文件夹 URL；不传时复制到源 Base 所在工作区根目录。`,
+--base-id 支持 Base ID 或标准 Base 节点 URL。--target-folder-id 支持 dentryUuid、标准节点 URL 或 Drive 文件夹 URL；不传时复制到源 Base 所在工作区根目录。` + "\n" + AitableNavigationGuidance,
 		Example: `  dws aitable base copy --base-id BASE_ID
 	  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID
 	  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID --only-struct
@@ -2839,11 +2844,12 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if targetFolderID, _ := cmd.Flags().GetString("target-folder-id"); strings.TrimSpace(targetFolderID) != "" {
 				toolArgs["targetFolderId"] = strings.TrimSpace(targetFolderID)
 			}
-			return callAitableToolContext(cmd.Context(), "copy_base", toolArgs)
+			return ExecuteAitableNavigationResult(cmd, "copy_base", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(baseCopyCmd, LeafSpec{
-		Safety: aitableSafetyCreate(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -2852,10 +2858,11 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 				CLIPath:        "aitable base copy",
 				PrimaryCLIPath: "aitable base copy",
 			},
-			Description: "复制整个 Base，可选目标文件夹或仅复制结构。",
+			Description: "复制整个 Base，可选目标文件夹或仅复制结构。" + AitableNavigationGuidance,
+			Result:      AitableNavigationBusinessResultSpec(),
 			Interface:   aitableMCPInterface("copy_base"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "复制整个 Base；未指定目标时复制到源 Base 工作区根目录。",
+				AgentSummary: "复制整个 Base；未指定目标时复制到源 Base 工作区根目录。" + AitableNavigationGuidance,
 				UseWhen:      []string{"需要复制 AI 表格，可选指定目标文件夹或 --only-struct 时"},
 				AvoidWhen:    []string{"新建空白 Base 用 base create"},
 				Examples:     []string{"dws aitable base copy --base-id <BASE_ID>", "dws aitable base copy --base-id <BASE_URL> --target-folder-id <FOLDER_URL>"},
@@ -2907,6 +2914,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 				PrimaryCLIPath: "aitable table get",
 			},
 			Description: "获取数据表结构（字段+视图目录）。",
+			Result:      AitableTablesNavigationResultSpec(),
 			Interface:   aitableMCPInterface("get_tables"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取数据表结构（字段+视图目录）。",
@@ -3014,6 +3022,7 @@ config 结构参考：
 				PrimaryCLIPath: "aitable table create",
 			},
 			Description: "在 Base 下创建数据表（可带 fields，空数组会补标题列）。",
+			Result:      AitableObjectNavigationResultSpec(),
 			Interface:   aitableMCPInterface("create_table"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在 Base 下创建数据表（可带 fields，空数组会补标题列）。",
@@ -3315,6 +3324,7 @@ config 结构参考：
 		},
 	}
 	fieldCreateCmd.Long += "\n\n" + aitableCreateWaitHelp + "\n未使用 --wait 时，success 表示创建回执，不代表字段已可读；verificationStatus=pending/unknown 需只读核对。"
+	fieldCreateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(fieldCreateCmd, LeafSpec{
 		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
@@ -3325,7 +3335,8 @@ config 结构参考：
 				CLIPath:        "aitable field create",
 				PrimaryCLIPath: "aitable field create",
 			},
-			Description: "创建字段（单字段或批量，单次最多 15 个）。",
+			Description: "创建字段（单字段或批量，单次最多 15 个）。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(true),
 			Interface:   aitableMCPInterface("create_fields"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建字段（单字段或批量，单次最多 15 个）。",
@@ -3406,6 +3417,7 @@ verificationStatus=pending 仅表示待核实，继续只读 field get 核对，
 			return callAitableToolContext(cmd.Context(), "update_field", toolArgs)
 		},
 	}
+	fieldUpdateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(fieldUpdateCmd, LeafSpec{
 		Safety: aitableSafetyWrite(),
 		Contract: LeafContract{
@@ -3416,7 +3428,8 @@ verificationStatus=pending 仅表示待核实，继续只读 field get 核对，
 				CLIPath:        "aitable field update",
 				PrimaryCLIPath: "aitable field update",
 			},
-			Description: "更新字段名或配置（不可变更字段类型）。",
+			Description: "更新字段名或配置（不可变更字段类型）。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_field"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新字段名或配置（不可变更字段类型）。",
@@ -4023,7 +4036,7 @@ MEDIAN、DISTINCT、DISTINCT_RATIO 等服务端统计动作。
 		Long: `在指定表格中批量新增记录。
 
 records 为待创建的记录列表 JSON 数组，单次最多 100 条。
-每条记录包含 cells 字段，key 为 fieldId（通过 table get 获取），value 为写入值。
+每条记录包含 cells 字段，key 支持 fieldId 或当前表内唯一字段名；推荐通过 table get 获取真实 fieldId，字段名须精确匹配。value 为写入值。
 
 可选 --client-token 必须是 UUID v4。调用前持久化 token；网络超时或回执丢失后禁止自动重放创建，使用原 baseId/tableId/token 调用 +record-write-result 只读对账；
 收到重复 token 错误时停止重试并查询实际写入结果，不要换新 token 盲目重放。
@@ -4122,10 +4135,10 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 				CLIPath:        "aitable record create",
 				PrimaryCLIPath: "aitable record create",
 			},
-			Description: "新增记录（cells 的 key 必须是 fieldId）。",
+			Description: "新增记录（cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId）。",
 			Interface:   aitableMCPInterface("create_records"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "新增记录（cells 的 key 必须是 fieldId）。",
+				AgentSummary: "新增记录（cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId）。",
 				UseWhen:      []string{"需要插入新行数据时"},
 				AvoidWhen:    []string{"更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"},
 				Examples:     []string{"dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"},
@@ -4610,7 +4623,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 
 records JSON 结构与 record update 完全一致：[{"recordId": "<可选>", "cells": {...}}, ...]
 单次最多 100 条（创建 + 更新合计）。
-cells 写入格式见 record create --help（key 是 fieldId，value 按字段类型）。
+cells 写入格式见 record create --help（key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；value 按字段类型）。
 
 可选 --client-token 必须是 UUID v4，仅作用于创建分组，建议发送前生成并持久化。
 超时、回执丢失或收到重复 token 错误时，禁止重放整个 upsert（即使使用同一 token）。
@@ -5398,6 +5411,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			return callMCPToolContext(cmd.Context(), "create_view", toolArgs)
 		},
 	}
+	viewCreateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(viewCreateCmd, LeafSpec{
 		Safety: aitableSafetyCreate(),
 		Contract: LeafContract{
@@ -5408,7 +5422,8 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 				CLIPath:        "aitable view create",
 				PrimaryCLIPath: "aitable view create",
 			},
-			Description: "创建视图（Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner）。",
+			Description: "创建视图（Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner）。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("create_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建视图（Grid/Kanban/Gantt/Calendar/Gallery/FormDesigner）。",
@@ -5525,7 +5540,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 				CLIPath:        "aitable view update card",
 				PrimaryCLIPath: "aitable view update card",
 			},
-			Description: "更新卡片视图配置",
+			Description: "更新卡片视图配置 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新卡片视图配置",
@@ -5586,7 +5602,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				CLIPath:        "aitable view update timebar",
 				PrimaryCLIPath: "aitable view update timebar",
 			},
-			Description: "更新时间条配置",
+			Description: "更新时间条配置 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新时间条配置",
@@ -5654,7 +5671,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				CLIPath:        "aitable view update aggregate",
 				PrimaryCLIPath: "aitable view update aggregate",
 			},
-			Description: "更新视图聚合配置",
+			Description: "更新视图聚合配置 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新视图聚合配置",
@@ -5706,7 +5724,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				CLIPath:        "aitable view update field-widths",
 				PrimaryCLIPath: "aitable view update field-widths",
 			},
-			Description: "更新 Grid 列宽",
+			Description: "更新 Grid 列宽 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI performs an aitable/get_views preflight, locally transforms the requested configuration, and then calls aitable/update_view; the two-call workflow has no single direct MCP interface."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新 Grid 列宽",
@@ -5771,7 +5790,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				CLIPath:        "aitable view update visible-fields",
 				PrimaryCLIPath: "aitable view update visible-fields",
 			},
-			Description: "更新可见字段列表与顺序",
+			Description: "更新可见字段列表与顺序 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新可见字段列表与顺序",
@@ -5835,7 +5855,8 @@ from_now.offset 必须是 JSON string。写入后命令会独立读取并按原�
 				CLIPath:        "aitable view update filter",
 				PrimaryCLIPath: "aitable view update filter",
 			},
-			Description: "更新视图筛选",
+			Description: "更新视图筛选 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新视图筛选",
@@ -5870,7 +5891,8 @@ from_now.offset 必须是 JSON string。写入后命令会独立读取并按原�
 				CLIPath:        "aitable view update sort",
 				PrimaryCLIPath: "aitable view update sort",
 			},
-			Description: "更新视图排序",
+			Description: "更新视图排序 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新视图排序",
@@ -5905,7 +5927,8 @@ from_now.offset 必须是 JSON string。写入后命令会独立读取并按原�
 				CLIPath:        "aitable view update group",
 				PrimaryCLIPath: "aitable view update group",
 			},
-			Description: "更新视图分组",
+			Description: "更新视图分组 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新视图分组",
@@ -5947,7 +5970,8 @@ from_now.offset 必须是 JSON string。写入后命令会独立读取并按原�
 				CLIPath:        "aitable view update name",
 				PrimaryCLIPath: "aitable view update name",
 			},
-			Description: "重命名视图",
+			Description: "重命名视图 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableMCPInterface("update_view"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "重命名视图",
@@ -6570,6 +6594,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			return callAitableToolContext(cmd.Context(), "create_form_view", toolArgs)
 		},
 	}
+	formCreateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(formCreateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -6745,6 +6770,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			return callAitableHelperToolContext(cmd.Context(), "update_form_info", toolArgs)
 		},
 	}
+	formUpdateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(formUpdateCmd, LeafSpec{
 		Safety: aitableSafetyWrite(),
 		Contract: LeafContract{
@@ -6755,7 +6781,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				CLIPath:        "aitable form update",
 				PrimaryCLIPath: "aitable form update",
 			},
-			Description: "更新表单 title/name/description。",
+			Description: "更新表单 title/name/description。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新表单 title/name/description。",
@@ -7363,6 +7390,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			return executeAitableWorkflowPublish(cmd.Context(), "create_workflow", toolArgs)
 		},
 	}
+	workflowCreateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(workflowCreateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -7376,7 +7404,8 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				CLIPath:        "aitable workflow create",
 				PrimaryCLIPath: "aitable workflow create",
 			},
-			Description: "创建并发布 AI 表格自动化工作流。",
+			Description: "创建并发布 AI 表格自动化工作流。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI calls pinned aitable/create_workflow without automatic retry, then verifies the published result through pinned workflow read interfaces."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并发布 AI 表格自动化工作流。",
@@ -7458,6 +7487,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			return executeAitableWorkflowPublish(cmd.Context(), "update_workflow", toolArgs)
 		},
 	}
+	workflowUpdateCmd.Long += "\n返回携带 Web 对象定位参数的 url/links；实际定位由 Web 页面处理，链接不代表写后核验完成。"
 	DeclareLeafMetadata(workflowUpdateCmd, LeafSpec{
 		Safety: aitableSafetyWrite(),
 		Contract: LeafContract{
@@ -7468,7 +7498,8 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				CLIPath:        "aitable workflow update",
 				PrimaryCLIPath: "aitable workflow update",
 			},
-			Description: "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
+			Description: "用完整 DSL 更新并发布已有 AI 表格自动化工作流。 返回携带目标标识的对象访问链接；实际定位由 Web 页面处理。",
+			Result:      aitableNavigationResultSpec(false),
 			Interface:   aitableCompositeInterface("The CLI calls pinned aitable/update_workflow without automatic retry, then verifies the published result through pinned workflow read interfaces."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "用完整 DSL 更新并发布已有 AI 表格自动化工作流。",
@@ -7909,6 +7940,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				PrimaryCLIPath: "aitable dashboard create",
 			},
 			Description: "创建仪表盘。",
+			Result:      AitableObjectNavigationResultSpec(),
 			Interface:   aitableMCPInterface("create_dashboard"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建仪表盘。",
@@ -9130,7 +9162,8 @@ role-get 自行 merge）。
 追加导入时的注意事项：
   - 系统按列名自动匹配字段，源文件列名须与目标表字段名一致
   - 若需自定义映射关系，使用 --field-mapping 指定（key=目标表字段名，value=源文件列名）
-  - 多 Sheet 文件默认使用第一个 Sheet，可通过 --src-sheet-name 指定`,
+  - 多 Sheet 文件默认使用第一个 Sheet，可通过 --src-sheet-name 指定
+` + AitableNavigationGuidance,
 		Example: `  # 新建表导入
   dws aitable import data --import-id IMPORT_ID
   # 追加到已有表
@@ -9163,11 +9196,12 @@ role-get 自行 merge）。
 				}
 				toolArgs["fieldMapping"] = mapping
 			}
-			return callAitableToolContext(cmd.Context(), "import_data", toolArgs)
+			return executeAitableImportResult(cmd, toolArgs)
 		},
 	}
 	DeclareLeafMetadata(importDataCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyWrite(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -9176,10 +9210,11 @@ role-get 自行 merge）。
 				CLIPath:        "aitable import data",
 				PrimaryCLIPath: "aitable import data",
 			},
-			Description: "触发数据导入。",
+			Description: "触发数据导入，保留同一 importId 的等待状态。" + AitableNavigationGuidance,
+			Result:      aitableImportDataResultSpec(),
 			Interface:   aitableMCPInterface("import_data"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "触发数据导入。",
+				AgentSummary: "触发数据导入；pending 时使用同一 importId 继续等待。" + AitableNavigationGuidance,
 				UseWhen:      []string{"上传凭证就绪后触发导入任务时"},
 				AvoidWhen:    []string{"导出用 export data"},
 				Examples:     []string{"dws aitable import data --import-id IMPORT_ID"},
@@ -10831,13 +10866,14 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		Use:   "create",
 		Short: "创建 AI 表格（dws aitable base create 的别名）",
 		Long: `创建一个新的 AI 表格 Base。
-这是 dws aitable base create 的便捷别名,两个命令完全等价。`,
+这是 dws aitable base create 的便捷别名,两个命令完全等价。` + "\n" + AitableNavigationGuidance,
 		Example: `  dws aitable create --name "项目跟踪"
   dws aitable create --name "项目跟踪" --folder-id FOLDER_ID`,
 		RunE: baseCreateCmd.RunE, // 复用 baseCreateCmd 的执行逻辑
 	}
 	DeclareLeafMetadata(createAliasCmd, LeafSpec{
-		Safety: aitableSafetyCreate(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyCreate(),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -10846,10 +10882,11 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				CLIPath:        "aitable create",
 				PrimaryCLIPath: "aitable create",
 			},
-			Description: "创建 AI 表格 Base（create 别名入口）。",
+			Description: "创建 AI 表格 Base（create 别名入口）。" + AitableNavigationGuidance,
+			Result:      AitableNavigationBusinessResultSpec(),
 			Interface:   aitableMCPInterface("create_base"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建 AI 表格 Base（create 别名入口）。",
+				AgentSummary: "创建 AI 表格 Base（create 别名入口）。" + AitableNavigationGuidance,
 				UseWhen:      []string{"走 aitable create 别名新建 Base 时"},
 				AvoidWhen:    []string{"推荐主路径 aitable base create；电子表格用 sheet create"},
 				Examples:     []string{"dws aitable create --name \"项目跟踪\""},

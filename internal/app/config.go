@@ -33,11 +33,13 @@ func init() {
 
 // Build-time variables injected via ldflags when available.
 var (
-	buildTime       = "unknown"
-	gitCommit       = "unknown"
-	userHomeDir     = os.UserHomeDir
-	executablePath  = os.Executable
-	evaluateSymlink = filepath.EvalSymlinks
+	buildTime = "unknown"
+	gitCommit = "unknown"
+	// Optional doc-only default injected with -X; explicit product env wins.
+	buildDocMCPEndpoint = ""
+	userHomeDir         = os.UserHomeDir
+	executablePath      = os.Executable
+	evaluateSymlink     = filepath.EvalSymlinks
 )
 
 func defaultConfigDir() string {

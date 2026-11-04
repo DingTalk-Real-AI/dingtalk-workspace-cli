@@ -30,13 +30,35 @@ type codexPublicProgress struct {
 }
 
 type codexPublicItem struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Phase   string `json:"phase"`
-	Text    string `json:"text"`
-	buffer  strings.Builder
-	lastEnd int
-	capped  bool
+	ID     string `json:"id"`
+	Type   string `json:"type"`
+	Phase  string `json:"phase"`
+	Text   string `json:"text"`
+	Status string `json:"status"`
+	buffer strings.Builder
+	capped bool
+}
+
+func codexPublicMessageKind(phase string) string {
+	switch phase {
+	case "final_answer", "partial_answer":
+		return "answer"
+	case "commentary":
+		return "progress"
+	default:
+		return ""
+	}
+}
+
+func (p *codexPublicProgress) emitText(i *codexPublicItem, done bool) {
+	text := i.buffer.String()
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if i.capped {
+		text += "\n\n（当前仅展示部分正文。）"
+	}
+	p.emit(agentProgress{ID: i.ID, Kind: codexPublicMessageKind(i.Phase), Text: text, Done: done})
 }
 
 func (p *codexPublicProgress) handle(method string, raw json.RawMessage, thread string) {
@@ -57,27 +79,18 @@ func (p *codexPublicProgress) handle(method string, raw json.RawMessage, thread 
 	}
 	if method == "item/agentMessage/delta" {
 		i := p.items[n.ItemID]
-		if i == nil || i.Type != "agentMessage" || (i.Phase != "final_answer" && i.Phase != "partial_answer") {
+		if i == nil || i.Type != "agentMessage" || codexPublicMessageKind(i.Phase) == "" {
 			return
 		}
 		if i.capped {
 			return
 		}
-		previous := i.buffer.Len()
-		remaining := agentProgressPreviewBytes - previous
+		remaining := agentProgressPreviewBytes - i.buffer.Len()
 		delta := boundedPublicText(n.Delta, remaining, "")
 		i.buffer.WriteString(delta)
 		i.capped = len(delta) < len(n.Delta)
-		text := i.buffer.String()
-		// Search only newly received bytes plus the possible split delimiter.
-		from := max(0, previous-1)
-		if end := strings.LastIndex(text[from:], "\n\n"); end >= 0 {
-			end += from
-			if end > i.lastEnd {
-				i.lastEnd = end
-				p.emit(agentProgress{ID: i.ID, Kind: "answer", Text: text[:end]})
-			}
-		}
+		// 卡片消费者统一节流；单段、无换行的回复也立即提供累计正文。
+		p.emitText(i, false)
 		return
 	}
 	if method != "item/started" && method != "item/completed" || n.Item.ID == "" {
@@ -93,34 +106,53 @@ func (p *codexPublicProgress) handle(method string, raw json.RawMessage, thread 
 				break
 			}
 		}
-	} else if i.Type == "agentMessage" && (i.Phase == "final_answer" || i.Phase == "partial_answer") {
-		if _, exists := p.items[i.ID]; exists {
-			return
+	} else if i.Type == "agentMessage" && codexPublicMessageKind(i.Phase) != "" {
+		text := boundedPublicText(i.Text, agentProgressPreviewBytes, "")
+		if previous, exists := p.items[i.ID]; exists {
+			// 桌面共享提供累计快照，允许正文增长或更正；重复快照不重复刷新。
+			if i.Text == "" || previous.buffer.String() == text && previous.Phase == i.Phase && previous.capped == (len(i.Text) > agentProgressPreviewBytes) {
+				return
+			}
+		} else {
+			if len(p.order) == 64 {
+				delete(p.items, p.order[0])
+				p.order = p.order[1:]
+			}
+			p.order = append(p.order, i.ID)
 		}
-		if len(p.order) == 64 {
-			delete(p.items, p.order[0])
-			p.order = p.order[1:]
-		}
-		p.order = append(p.order, i.ID)
-		i.buffer.WriteString(boundedPublicText(i.Text, agentProgressPreviewBytes, ""))
+		i.buffer.WriteString(text)
 		i.capped = len(i.Text) > agentProgressPreviewBytes
 		i.Text = "" // Do not retain the unbounded source alongside the preview buffer.
 		p.items[i.ID] = &i
+		p.emitText(&i, false)
+		return
 	}
 	switch i.Type {
 	case "agentMessage":
 		if !done || strings.TrimSpace(i.Text) == "" {
 			return
 		}
-		kind := "progress"
-		if i.Phase == "final_answer" || i.Phase == "partial_answer" {
-			kind = "answer"
-		} else if i.Phase != "commentary" {
+		kind := codexPublicMessageKind(i.Phase)
+		if kind == "" {
 			// Unknown phase is not proof of publicly displayable progress.
 			return
 		}
 		p.emit(agentProgress{ID: i.ID, Kind: kind, Text: publicProgressPreview(i.Text), Done: true})
 	case "commandExecution", "mcpToolCall", "dynamicToolCall", "webSearch", "collabAgentToolCall":
-		p.emit(agentProgress{ID: i.ID, Kind: "tool", Done: done})
+		// 仅由已知类型生成公开名称，不投影命令、参数、工具结果或任意工具名。
+		label := map[string]string{"commandExecution": "命令执行", "mcpToolCall": "MCP 工具调用", "dynamicToolCall": "扩展工具调用", "webSearch": "网页搜索", "collabAgentToolCall": "协作 Agent"}[i.Type]
+		status := "running"
+		if done {
+			status = "ended"
+		}
+		switch i.Status {
+		case "failed":
+			status = "failed"
+		case "cancelled", "interrupted":
+			status = "cancelled"
+		case "completed":
+			status = "completed"
+		}
+		p.emit(agentProgress{ID: i.ID, Kind: "tool", Text: label, Status: status, Done: done})
 	}
 }

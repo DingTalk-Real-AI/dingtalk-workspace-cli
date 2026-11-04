@@ -97,7 +97,7 @@ func TestCrossPlatformCoverageEmployeeFeedbackFailureRecoveryAndIsolation(t *tes
 			var removed []string
 			fail := true
 			testseam.Swap(t, &employeeFeedbackCall, func(_ context.Context, profile, operation string, got employeeEvent, emotion employeeEmotion) (map[string]any, error) {
-				if got != e || profile != "corp:employee" {
+				if !reflect.DeepEqual(got, e) || profile != "corp:employee" {
 					return nil, errors.New("wrong target")
 				}
 				if operation == "remove-text-emotion" {

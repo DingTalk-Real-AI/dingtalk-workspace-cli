@@ -708,7 +708,7 @@ func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
 		if !ok || !reflect.DeepEqual(messages, []string{"message1", "message2"}) {
 			t.Fatalf("a2uiMessages = %#v", caller.args["a2uiMessages"])
 		}
-		if caller.args["summary"] != "message1\nmessage2" || caller.args["protocolVersion"] != "1.0" || caller.args["flowStatus"] != "PROCESSING" {
+		if caller.args["summary"] != "互动卡片" || caller.args["protocolVersion"] != "1.0" || caller.args["flowStatus"] != "PROCESSING" {
 			t.Fatalf("args = %#v", caller.args)
 		}
 		if caller.args["requestId"] == "" || caller.args["bizCardId"] == "" {
@@ -794,17 +794,145 @@ func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
 		}
 	})
 
-	t.Run("a2ui rejects mention flags", func(t *testing.T) {
+	t.Run("a2ui mention flags pass through atOpenDingTalkIds and atAll for group", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"{\\\"version\\\":\\\"v1.0\\\",\\\"updateComponents\\\":{\\\"surfaceId\\\":\\\"s\\\",\\\"components\\\":[{\\\"id\\\":\\\"m\\\",\\\"component\\\":\\\"Markdown\\\",\\\"content\\\":\\\"hi <a atId=\\\\\\\"DAAAAAAAAAAAiE\\\\\\\">nick</a> and <a atId=\\\\\\\"all\\\\\\\">everyone</a>\\\"}]}}\"]",
+			"--at-open-dingtalk-ids=DAAAAAAAAAAAiE",
+			"--at-all",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.tool != "create_and_send_a2ui_card" {
+			t.Fatalf("call = count:%d tool:%q", caller.calls, caller.tool)
+		}
+		atList, ok := caller.args["atOpenDingTalkIds"].([]string)
+		if !ok || !reflect.DeepEqual(atList, []string{"DAAAAAAAAAAAiE"}) {
+			t.Fatalf("atOpenDingTalkIds = %#v", caller.args["atOpenDingTalkIds"])
+		}
+		if caller.args["atAll"] != true {
+			t.Fatalf("atAll = %#v", caller.args["atAll"])
+		}
+		if _, ok := caller.args["atIdList"]; ok {
+			t.Fatalf("legacy atIdList must not be sent: %#v", caller.args)
+		}
+		messages, ok := caller.args["a2uiMessages"].([]string)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("a2uiMessages = %#v", caller.args["a2uiMessages"])
+		}
+		if !strings.Contains(messages[0], `<a atId=\"10\">everyone</a>`) || strings.Contains(messages[0], `<a atId=\"all\">`) {
+			t.Fatalf("at-all tag not rewritten to wire alias: %s", messages[0])
+		}
+	})
+
+	t.Run("a2ui mention declarations over the raw limit are rejected", func(t *testing.T) {
+		ids := make([]string, 0, 101)
+		for i := 0; i < 101; i++ {
+			ids = append(ids, "DAAAAAAAAAAAiE")
+		}
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message\"]",
+			"--at-open-dingtalk-ids="+strings.Join(ids, ","),
+		)
+		if err == nil || !strings.Contains(err.Error(), "不能超过 100") {
+			t.Fatalf("err = %v, want raw declaration limit rejection", err)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("over-limit declarations made %d calls", caller.calls)
+		}
+	})
+
+	t.Run("a2ui malformed mention messages are rejected before send", func(t *testing.T) {
+		for _, flag := range []string{"--at-open-dingtalk-ids=DAAAAAAAAAAAiE", "--at-all"} {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card", "--conversation-id=cid",
+				"--content=[\"not-json\"]", flag,
+			)
+			if err == nil || !strings.Contains(err.Error(), "消息[0] JSON 无效") {
+				t.Fatalf("error = %v, want malformed message diagnostic", err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("malformed messages made %d calls", caller.calls)
+			}
+		}
+	})
+
+	t.Run("a2ui mention flags reject inconsistent body", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			args []string
+			want string
+		}{
+			{"declared but unused", []string{"--at-open-dingtalk-ids=DAAAAAAAAAAAiE"}, "未使用: DAAAAAAAAAAAiE"},
+			{"at-all without all tag", []string{"--at-all"}, "<a atId=\"all\">"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				caller := &scriptedToolCaller{}
+				args := append([]string{
+					"message", "send-a2ui-card",
+					"--conversation-id=cid",
+					"--content=[\"{}\"]",
+				}, tc.args...)
+				err := runChatCoverageCommand(t, caller, args...)
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("err = %v, want mention consistency rejection containing %q", err, tc.want)
+				}
+				if caller.calls != 0 {
+					t.Fatalf("inconsistent mentions made %d calls", caller.calls)
+				}
+			})
+		}
+	})
+
+	t.Run("a2ui legacy body without mention flags is preserved", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"{\\\"version\\\":\\\"v1.0\\\",\\\"updateComponents\\\":{\\\"surfaceId\\\":\\\"s\\\",\\\"components\\\":[{\\\"id\\\":\\\"m\\\",\\\"component\\\":\\\"Markdown\\\",\\\"content\\\":\\\"hi <a atId=\\\\\\\"DAAAAAAAAAAAiE\\\\\\\">nick</a>\\\"}]}}\"]",
+		)
+		if err != nil {
+			t.Fatalf("err = %v, want legacy send success", err)
+		}
+		if caller.calls != 1 {
+			t.Fatalf("undeclared atId made %d calls", caller.calls)
+		}
+	})
+
+	t.Run("a2ui invalid at id is rejected", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message\"]",
+			"--at-open-dingtalk-ids=not-a-d-form-id",
+		)
+		if err == nil || !strings.Contains(err.Error(), "不符合当前 D 版本 openDingTalkId 格式") {
+			t.Fatalf("err = %v, want invalid at id rejection", err)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("invalid at id made %d calls", caller.calls)
+		}
+	})
+
+	t.Run("a2ui mention flags rejected for direct message", func(t *testing.T) {
 		for _, tc := range []string{"--at-open-dingtalk-ids=DAAAAAAAAAAAiE", "--at-all"} {
 			caller := &scriptedToolCaller{}
 			err := runChatCoverageCommand(t, caller,
 				"message", "send-a2ui-card",
-				"--conversation-id=cid",
+				"--open-dingtalk-id=DAAAAAAAAAAAiE",
 				"--content=[\"message\"]",
 				tc,
 			)
-			if err == nil || !strings.Contains(err.Error(), "unknown flag") {
-				t.Fatalf("flag %s: err = %v, want a2ui mention rejection", tc, err)
+			if err == nil || !strings.Contains(err.Error(), "单聊不接受 @ 参数") {
+				t.Fatalf("flag %s: err = %v, want direct-message mention rejection", tc, err)
 			}
 			if caller.calls != 0 {
 				t.Fatalf("flag %s made %d calls", tc, caller.calls)
@@ -1019,4 +1147,43 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	}
 	httpGetFile = func(context.Context, string, map[string]string, string) error { return nil }
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"resourceUrl":"https://example.test/file.txt"}`}}}, append(base, "--output="+filepath.Join(blocker, "child"))...)
+}
+
+func TestCrossPlatformCoverageA2UILegacyMentionsAndSummary(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+	message := `{"version":"v1.0","updateComponents":{"surfaceId":"s","components":[{"id":"m","component":"Markdown","content":"<a atId=\"all\">everyone</a>"}]}}`
+	for _, target := range []string{"--conversation-id=cid", "--open-dingtalk-id=DAAAAAAAAAAAiE"} {
+		t.Run(target, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			if err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", target, "--content="+fmt.Sprintf("[%q]", message)); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(caller.args["a2uiMessages"], []string{message}) || caller.args["summary"] != "互动卡片" || caller.args["supportForward"] != false || caller.args["atAll"] != nil {
+				t.Fatalf("legacy body changed: %#v", caller.args)
+			}
+		})
+	}
+	caller := &scriptedToolCaller{}
+	if err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", "--conversation-id=cid", "--at-all", "--content="+fmt.Sprintf("[%q]", message)); err != nil {
+		t.Fatal(err)
+	}
+	if caller.args["summary"] != "互动卡片" || caller.args["atAll"] != true {
+		t.Fatalf("summary changed with wire normalization: %#v", caller.args)
+	}
+}
+
+func TestCrossPlatformCoverageA2UIUpdatePreservesMarkupWithoutNotifying(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+	message := `{"updateComponents":{"surfaceId":"s","components":[{"id":"m","component":"Markdown","content":"<a atId=\"all\">everyone</a>"}]}}`
+	caller := &scriptedToolCaller{}
+	if err := runChatCoverageCommand(t, caller, "message", "update-a2ui-card", "--biz-id=existing", "--flow-status=FINISH", "--content="+fmt.Sprintf("[%q]", message)); err != nil {
+		t.Fatal(err)
+	}
+	if caller.args["a2uiMessages"].([]string)[0] != message || caller.args["atAll"] != nil || caller.args["atOpenDingTalkIds"] != nil {
+		t.Fatalf("update payload %#v", caller.args)
+	}
 }

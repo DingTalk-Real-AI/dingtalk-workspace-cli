@@ -157,6 +157,7 @@ func newServerFailureAPIError(
 	serverKey string,
 	tool string,
 	diag apperrors.ServerDiagnostics,
+	content ...map[string]any,
 ) error {
 	operation := "tools/call"
 	reason := fallbackReason
@@ -251,8 +252,8 @@ func newServerFailureAPIError(
 	if diag.ExecutionStarted != nil && !classifiedExecutionStarted {
 		opts = append(opts, apperrors.WithExecutionStarted(*diag.ExecutionStarted))
 	}
+	details := map[string]any{}
 	if diag.NextCommand != "" || diag.Outcome != "" || diag.ContractVersion != "" || diag.Unknown != nil || len(diag.Details) > 0 {
-		details := map[string]any{}
 		for key, value := range diag.Details {
 			details[key] = value
 		}
@@ -268,6 +269,16 @@ func newServerFailureAPIError(
 		if diag.Unknown != nil {
 			details["unknown"] = *diag.Unknown
 		}
+	}
+	if len(content) > 0 {
+		for key, value := range docDeletePartialFailureDetails(serverKey, tool, content[0]) {
+			details[key] = value
+		}
+	}
+	if diag.ErrorCategory != "" {
+		details["error_category"] = diag.ErrorCategory
+	}
+	if len(details) > 0 {
 		opts = append(opts, apperrors.WithDetails(details))
 	}
 	category := apperrors.CategoryAPI
@@ -324,4 +335,41 @@ func serverFailureReason(err error, fallback string) string {
 		return typed.Reason
 	}
 	return fallback
+}
+
+// A failed batch can still have successful deletes. Preserve only this tool's
+// server-provided partial outcome; keep the original failure and retry contract.
+func docDeletePartialFailureDetails(serverKey, tool string, content map[string]any) map[string]any {
+	if serverKey != "doc" || tool != "delete_document_block" {
+		return nil
+	}
+	details := make(map[string]any)
+	for _, key := range []string{"deletedBlockIds", "notFoundBlockIds"} {
+		values, ok := content[key].([]any)
+		if !ok {
+			continue
+		}
+		ids := make([]string, len(values))
+		valid := true
+		for i, value := range values {
+			id, ok := value.(string)
+			if !ok {
+				valid = false
+				break
+			}
+			ids[i] = id
+		}
+		if valid {
+			details[key] = ids
+		}
+	}
+	if len(details) == 0 {
+		return nil
+	}
+	for _, key := range []string{"blockId", "logId"} {
+		if value, ok := content[key].(string); ok {
+			details[key] = value
+		}
+	}
+	return details
 }

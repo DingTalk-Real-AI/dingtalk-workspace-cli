@@ -35,6 +35,8 @@ dws aitable record create --base-id <B> --table-id <T> \
 
 ## 更新、同步与批量修改
 
+记录复合写入沿用服务端的 fieldId/唯一字段名寻址，CLI 不在写前读取字段目录或改写 cells。回读先直接比较；仅缺少对应字段键或需要类型投影时，才读取 `get_fields`，将校验期望中的字段名精确映射为 fieldId，同一轮校验复用目录。字段目录读取失败、不完整或映射存在歧义时，保留写入回执和已知 recordId，返回非零退出码、unknown 与 verification.status=pending，不代表写入失败，也不自动重发写入；`+record-upsert`、`+record-batch-create` 与按键创建复用有界只读回读重试（500ms、1500ms）；预算耗尽仍报告未确认，不重发写入。目录是写后观测，不能证明与写入时的 schema 原子一致。`+record-upsert-by-key` 的 `--key-field-id` 仍只接受字段 ID，原有唯一键预检不变。dry-run 不新增字段请求；`+record-bulk-patch` 仍查询匹配记录，按键 upsert 仍查询唯一键以生成计划。
+
 已知 recordId：
 
 ```bash

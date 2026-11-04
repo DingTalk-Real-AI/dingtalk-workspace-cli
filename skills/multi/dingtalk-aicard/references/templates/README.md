@@ -1,0 +1,32 @@
+# A2UI templates
+
+Localized scene labels and summaries are intentional discovery copy. These complete local public examples use fictional data, without Alibaba business content or source business identities. Preserve supplied real-task facts when deriving a card. Each scene has one complete JSON for mobile and desktop; read only the selected file.
+
+## Reuse workflow
+
+Choose by information structure, data types, collection behavior, and required interactions, not scene name alone. For changes confined to bound data, locate `"updateDataModel"` and read its data first. Copy the complete JSON to a working file, edit intended values with a JSON parser, keep message Surface IDs consistent, and validate the complete result. A data excerpt alone is not a new card. Inspect components when changing literal text, layout, resources, or actions.
+
+For an existing instance, keep its IDs and state and send only authorized deltas; do not replay initialization or overwrite user input. Consult the selected pattern only for the behavior being changed.
+
+Preserve the selected template's frame and insets as written. Some templates set root `padding` to `0` and inset an inner content container; others omit root `padding` and rely on host insets. Do not add, remove, or zero root `padding` when reusing a template. The ordinary new-card defaults in design guidance do not replace an existing template's intentional styling.
+
+## Reuse boundaries
+
+`Fixed` records the highest referenced array index plus one: these are indexed component slots, and extra values do not add items. `Repeated` identifies collections used by component children templates, including Column and Row; it does not describe Table or Chart datasets. Inspect components when collection shape changes.
+
+`Events` are application wiring points that require real business handlers. Client-side function calls, such as host actions like `copyText` or `showModal`, are not listed; inspect a control's action before reusing it for a business operation. `Input events` lists button events whose context includes bound input paths, including skip actions that retain input. It does not prove edited values reach that event on a client or that a business operation succeeds.
+
+Data-only changes affect existing bindings. A new status field does not automatically disable buttons, change visibility, or add a completed state: inspect the component definitions for those bindings. These public examples do not supply a complete business state machine; production bindings and authorized data paths belong to the business runtime.
+
+| Scene | Description | Related patterns | Reuse boundary | A2UI | Notes |
+|---|---|---|---|---|---|
+| 企业信息 | 展示企业概况、风险与交易信息，支持预览下载报告附件 | [detail](../patterns/detail.md), [content](../patterns/content.md) | Fixed: none; Repeated: `/report/background`, `/report/findings`; Events: `company_investigation_download_attachment`, `company_investigation_preview_attachment`; Input events: none | [company-investigation](company-investigation/a2ui.json) | — |
+| 混合审批汇报 | 同时包含待审批和已处理，两个 Tabs 分别展示 | [report](../patterns/report.md), [detail](../patterns/detail.md) | Fixed: none; Repeated: `/approvals/handled`, `/approvals/pending`; Events: none; Input events: none | [expense-approval](expense-approval/a2ui.json) | — |
+| 单类审批列表 | 仅一类审批，无 Tabs；items 支持单条或多条 | [report](../patterns/report.md), [detail](../patterns/detail.md) | Fixed: none; Repeated: `/approvals/items`; Events: none; Input events: none | [expense-approval-list](expense-approval-list/a2ui.json) | — |
+| 会议邀约 | 选择主题、参会人及线上线下方式，编辑地点和议程，校验后提交会议创建请求 | [form](../patterns/form.md) | Fixed: `/meeting/topics`=2; Repeated: none; Events: `meeting_invitation_submit`; Input events: `meeting_invitation_submit` | [meeting-invitation](meeting-invitation/a2ui.json) | Submits current form data after validation; a service callback must create the meeting and confirm success. Verify conditional visibility and picker rendering on target clients. |
+| 会后总结 | 整理会议结论、待办与相关事项，支持创建任务设置提醒 | [detail](../patterns/detail.md) | Fixed: `/summary/conclusions`=3, `/summary/conclusions/2/details`=3, `/summary/todos`=3; Repeated: none; Events: `post_meeting_create_todo`, `post_meeting_ignore`, `post_meeting_set_reminder`; Input events: none | [post-meeting-summary](post-meeting-summary/a2ui.json) | — |
+| 晨间日报·日程 | 汇总今日日程、冲突与重点关注，支持响应邀请处理事务 | [detail](../patterns/detail.md) | Fixed: `/agenda`=4, `/approvals`=2, `/attention`=2, `/timeline/segments`=12, `/todos`=3; Repeated: none; Events: `daily_briefing_accept_event`, `daily_briefing_approve_approval`, `daily_briefing_reject_approval`, `daily_briefing_reject_event`, `daily_briefing_select_section`, `daily_briefing_skip`, `daily_briefing_start_processing`; Input events: none | [daily-agenda-briefing](daily-agenda-briefing/a2ui.json) | — |
+| 今日待办事项 | 集中展示今日审批、待办与会前准备，支持审批及查看相关资料 | [detail](../patterns/detail.md) | Fixed: `/approvals`=2, `/attention`=3, `/preparations`=2, `/preparations/0/notes`=2, `/preparations/1/notes`=1, `/todos`=3; Repeated: none; Events: `daily_briefing_approve_approval`, `daily_briefing_download_document`, `daily_briefing_preview_document`, `daily_briefing_reject_approval`, `daily_briefing_select_section`, `daily_briefing_skip`, `daily_briefing_start_processing`; Input events: none | [daily-approval-briefing](daily-approval-briefing/a2ui.json) | — |
+| 任务处理 | 勾选会议协调、沟通与准备事项，交由助手继续推进处理 | [form](../patterns/form.md) | Fixed: none; Repeated: `/ui/taskRow`; Events: `task_delegation_select`, `task_delegation_skip`, `task_delegation_submit`; Input events: `task_delegation_skip`, `task_delegation_submit` | [task-delegation](task-delegation/a2ui.json) | Checkbox rows store index arrays internally; selection and submission events expose boolean values. |
+| 工作周报 | 整理本周完成、下周计划与风险事项，生成结构化工作周报 | [report](../patterns/report.md) | Fixed: `/report/completed`=3, `/report/completed/2/details`=3, `/report/planned`=3, `/report/planned/2/details`=3, `/report/risks`=2; Repeated: none; Events: none; Input events: none | [weekly-work-report](weekly-work-report/a2ui.json) | — |
+| 面试反馈 | 确认面试优点、不足与待改进及结论，服务确认后新增职级与评论消息并锁定已提交表单 | [form](../patterns/form.md) | Fixed: none; Repeated: none; Events: `interview_feedback_submit`, `interview_review_confirm`; Input events: `interview_feedback_submit`, `interview_review_confirm` | [interview-feedback](interview-feedback/a2ui.json) | The two-message flow requires service callbacks to save results, lock submitted forms, and send the next message. |

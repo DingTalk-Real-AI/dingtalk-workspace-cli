@@ -42,7 +42,7 @@ func newAitableAppCommand() *cobra.Command {
 		Short: "获取应用信息",
 		Long: `获取指定 Base 唯一面向用户的应用模式 App 及页面摘要。
 如果底层尚无 App，本次调用会幂等创建默认 App，并在结果中返回 created=true；因此该命令不是纯读操作。
-返回的 app.appId 是构造应用模式在线访问 URL 的编码标识，不是内部数字主键。`,
+返回的 app.appId 是编码标识；app.url 携带 appId，实际定位由 Web 页面处理。`,
 		Example:       "  dws aitable app get --base-id BASE_ID",
 		Tool:          "get_app",
 		OutputRollout: output.RolloutUnifiedActive,
@@ -90,7 +90,7 @@ func newAitableAppCommand() *cobra.Command {
 		}},
 		Contract: aitableAppContract(
 			"app_update", "aitable app update", "update_app",
-			"更新 Base 唯一应用模式 App 的外观配置；不存在时幂等创建默认 App。",
+			"更新 Base 唯一应用模式 App 的外观配置；不存在时幂等创建默认 App。返回编码 appId 和 url/links，实际定位由 Web 页面处理。",
 			"更新应用模式 App 的名称、图标、外观、导航或主题。",
 			[]string{"需要修改应用模式 App 外观配置时；无 App 时允许服务端自动初始化"},
 			[]string{"页面元数据用 app page update；Widget 配置用 app widget update"},
@@ -113,7 +113,8 @@ func newAitableAppCommand() *cobra.Command {
 		Short: "创建应用页面",
 		Long: `在指定 Base 的应用模式 App 中创建一个仪表盘页面，并同时创建同 ID 的 Dashboard。
 如果底层尚无 App，服务端会先幂等创建默认 App。一个 App 最多包含 100 个 Page。
---before-page-id 指定时插入到该页面之前，省略时追加到末尾；--icon 和 --background 是 JSON 对象。`,
+--before-page-id 指定时插入到该页面之前，省略时追加到末尾；--icon 和 --background 是 JSON 对象。
+返回编码 appId、url/links；链接携带 appId/pageId，实际定位由 Web 页面处理。`,
 		Example:       "  dws aitable app page create --base-id BASE_ID --name \"经营总览\"",
 		Tool:          "create_app_page",
 		OutputRollout: output.RolloutUnifiedActive,
@@ -296,11 +297,11 @@ func newAitableAppCommand() *cobra.Command {
 		Short: "创建应用页面 Widget",
 		Long: `在应用模式仪表盘页面中创建 Widget，并同时写入页面 Dashboard 布局。
 --config 是完整 Widget 配置对象且 chartType 必填；--layout 的 x/y/w/h 必填。
-根布局按 48 列坐标系处理；非根 parentId 使用其容器自己的坐标系。创建非幂等，CLI 不自动重试。`,
+根布局按 48 列坐标系处理；非根 parentId 使用其容器自己的坐标系。创建非幂等，CLI 不自动重试。` + "\n" + AitableNavigationGuidance,
 		Example:       `  dws aitable app widget create --base-id BASE_ID --page-id PAGE_ID --config '{"chartType":"AI_ANALYZE"}' --layout '{"x":0,"y":0,"w":48,"h":8}'`,
 		Tool:          "create_app_widget",
 		OutputRollout: output.RolloutUnifiedActive,
-		ResultCall:    callAitableAppResult,
+		ResultCall:    callAitableAppWidgetMutationResult,
 		Safety:        aitableAppCreateSafety(),
 		Flags: []LeafFlag{
 			aitableAppBaseIDFlag(),
@@ -311,8 +312,8 @@ func newAitableAppCommand() *cobra.Command {
 		},
 		Contract: aitableAppContract(
 			"app_widget_create", "aitable app widget create", "create_app_widget",
-			"在应用页面创建 Widget 并写入 Dashboard 布局。",
-			"使用完整 config 和 layout 在应用页面创建 Widget。",
+			"在应用页面创建 Widget 并写入 Dashboard 布局。"+AitableNavigationGuidance,
+			"使用完整 config 和 layout 在应用页面创建 Widget。"+AitableNavigationGuidance,
 			[]string{"需要在已知应用页面新增 Widget，且已有合法 chartType 配置和 48 列布局时"},
 			[]string{"普通 Dashboard 图表用 chart create；不知道 config 时先用 chart widgets-example"},
 			[]string{`dws aitable app widget create --base-id <BASE_ID> --page-id <PAGE_ID> --config '{"chartType":"AI_ANALYZE"}' --layout '{"x":0,"y":0,"w":48,"h":8}'`},
@@ -323,7 +324,7 @@ func newAitableAppCommand() *cobra.Command {
 				aitableAppParam("config", "config", "object", true),
 				aitableAppParam("layout", "layout", "object", true),
 			},
-			aitableAppWidgetResultSpec(),
+			aitableAppWidgetMutationResultSpec(),
 		),
 	})
 
@@ -384,11 +385,11 @@ func newAitableAppCommand() *cobra.Command {
 		Short: "更新应用页面 Widget",
 		Long: `更新应用模式页面 Widget 的名称、完整配置或布局，至少提供一项。
 --config 一旦提供会整体替换原配置且 chartType 必填；应先用 app widget get 读取当前配置。
---layout 一旦提供必须包含 x/y/w/h，只更新当前 Widget 的布局。`,
+--layout 一旦提供必须包含 x/y/w/h，只更新当前 Widget 的布局。` + "\n" + AitableNavigationGuidance,
 		Example:       "  dws aitable app widget update --base-id BASE_ID --page-id PAGE_ID --widget-id WIDGET_ID --name \"销售趋势\"",
 		Tool:          "update_app_widget",
 		OutputRollout: output.RolloutUnifiedActive,
-		ResultCall:    callAitableAppResult,
+		ResultCall:    callAitableAppWidgetMutationResult,
 		Safety:        aitableAppIdempotentWriteSafety(),
 		Flags: []LeafFlag{
 			aitableAppBaseIDFlag(),
@@ -405,8 +406,8 @@ func newAitableAppCommand() *cobra.Command {
 		}},
 		Contract: aitableAppContract(
 			"app_widget_update", "aitable app widget update", "update_app_widget",
-			"更新应用页面 Widget 的名称、完整配置或布局。",
-			"更新 Widget；config 是全量替换，修改前应先读取当前配置。",
+			"更新应用页面 Widget 的名称、完整配置或布局。"+AitableNavigationGuidance,
+			"更新 Widget；config 是全量替换，修改前应先读取当前配置。"+AitableNavigationGuidance,
 			[]string{"需要修改已知 Widget 的名称、完整 config 或布局时"},
 			[]string{"只查询用 app widget get；普通 Dashboard Chart 用 chart update"},
 			[]string{"dws aitable app widget update --base-id <BASE_ID> --page-id <PAGE_ID> --widget-id <WIDGET_ID> --name \"销售趋势\""},
@@ -418,7 +419,7 @@ func newAitableAppCommand() *cobra.Command {
 				aitableAppParam("config", "config", "object", false),
 				aitableAppParam("layout", "layout", "object", false),
 			},
-			aitableAppWidgetResultSpec(),
+			aitableAppWidgetMutationResultSpec(),
 		),
 	})
 
@@ -452,6 +453,14 @@ func newAitableAppCommand() *cobra.Command {
 	widgetCmd.AddCommand(widgetCreateCmd, widgetGetCmd, widgetListCmd, widgetUpdateCmd, widgetDeleteCmd)
 	appCmd.AddCommand(appGetCmd, appUpdateCmd, pageCmd, widgetCmd)
 	return appCmd
+}
+
+// callAitableAppWidgetMutationResult keeps a local preview out of the MCP response decoder.
+func callAitableAppWidgetMutationResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	if preview, ok := aitableNavigationDryRunResult(cmd, tool, args); ok {
+		return preview, nil
+	}
+	return callAitableAppResult(cmd, tool, args)
 }
 
 func callAitableAppResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
@@ -624,6 +633,8 @@ func aitableAppGetResultSpec() *contract.ResultSpec {
       "description":"Base 唯一面向用户的应用模式 App",
       "properties":{
         "appId":{"type":"string","description":"用于应用模式在线访问 URL 的编码标识"},
+        "url":{"type":"string","description":"携带 appId 的应用访问链接；实际定位由 Web 页面处理"},
+        "links":{"type":"array","description":"对象与父级上下文","items":{"type":"object","additionalProperties":true}},
         "name":{"type":"string","description":"App 显示名称"},
         "appearance":{"type":"string","description":"App 外观模式"},
         "themeType":{"type":"string","description":"App 主题类型"},
@@ -652,6 +663,9 @@ func aitableAppStateResultSpec() *contract.ResultSpec {
   "type":"object",
   "description":"更新或移动页面后的应用模式 App 状态",
   "properties":{
+    "appId":{"type":"string","description":"Notable 返回的编码 App 标识"},
+    "url":{"type":"string","description":"携带完整 appId/可选 pageId 的访问链接；实际定位由 Web 页面处理"},
+    "links":{"type":"array","description":"对象与父级上下文","items":{"type":"object","additionalProperties":true}},
     "appearance":{"type":"string","description":"App 外观模式"},
     "name":{"type":"string","description":"App 显示名称"},
     "navThemeType":{"type":"string","description":"App 导航主题类型"},
@@ -669,6 +683,9 @@ func aitableAppPageResultSpec() *contract.ResultSpec {
   "type":"object",
   "description":"应用模式仪表盘页面详情",
   "properties":{
+    "appId":{"type":"string","description":"Notable 返回的编码 App 标识"},
+    "url":{"type":"string","description":"携带完整 appId/可选 pageId 的访问链接；实际定位由 Web 页面处理"},
+    "links":{"type":"array","description":"对象与父级上下文","items":{"type":"object","additionalProperties":true}},
     "background":{"type":"object","description":"页面背景配置","properties":{"image":{"type":"string","description":"背景图片 URL"},"type":{"type":"string","description":"背景类型"},"value":{"type":"string","description":"背景颜色或资源值"}},"additionalProperties":true},
     "hiddenMenu":{"type":"boolean","description":"页面是否在导航菜单中隐藏"},
     "icon":{"type":"object","description":"页面图标配置","properties":{"id":{"type":"string","description":"图标资源 ID"},"type":{"type":"string","description":"图标类型"},"url":{"type":"string","description":"图标资源 URL"}},"additionalProperties":true},
@@ -709,11 +726,21 @@ func aitableAppPageDeleteResultSpec() *contract.ResultSpec {
 }`)
 }
 
+// aitableAppWidgetMutationResultSpec publishes the no-write preview separately from Widget facts.
+func aitableAppWidgetMutationResultSpec() *contract.ResultSpec {
+	spec := aitableAppWidgetResultSpec()
+	spec.DataSchema = aitableResultSchemaWithDryRun("Widget 变更结果或未执行的请求预览", spec.DataSchema)
+	return spec
+}
+
 func aitableAppWidgetResultSpec() *contract.ResultSpec {
 	return aitableAppResultSpec(`{
   "type":"object",
   "description":"应用页面 Widget 详情",
   "properties":{
+	"appId":{"type":"string","description":"服务端返回的应用编码标识；已知时提供"},
+	"url":{"type":["string","null"],"description":"所属 App 页面或 Base 入口，不承诺 Widget 自身定位；完整保留 URL 及参数"},
+	"links":{"type":["array","null"],"description":"页面或 Base 的访问链接，目标由 objectType/objectId 指明","items":{"type":"object","additionalProperties":true,"properties":{"objectType":{"type":"string","description":"对象类型"},"objectId":{"type":"string","description":"对象真实 ID"},"name":{"type":"string","description":"已知实体名称"},"relation":{"type":"string","description":"target 或 parent"},"url":{"type":"string","description":"对象访问链接"}}}},
     "config":{"type":"object","description":"Widget 完整配置","additionalProperties":true},
     "layout":{"type":"object","description":"Widget 布局","properties":{"h":{"type":"number","description":"布局高度"},"i":{"type":"string","description":"布局项 ID，通常等于 widgetId"},"parentId":{"type":"string","description":"可选父容器 ID"},"w":{"type":"number","description":"布局宽度"},"x":{"type":"number","description":"布局横坐标"},"y":{"type":"number","description":"布局纵坐标"}},"required":["x","y","w","h"],"additionalProperties":true},
     "pageId":{"type":"string","description":"所属应用页面 ID"},

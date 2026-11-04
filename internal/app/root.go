@@ -54,6 +54,12 @@ import (
 
 type outputFileContextKey struct{}
 
+// maxFilePutTimeoutSeconds caps the --timeout seconds handed to the direct
+// file-storage PUT budget: 24 hours is far beyond any transfer window a
+// presigned credential can serve, and the cap keeps the nanosecond
+// conversion free of int64 overflow for extreme flag values.
+const maxFilePutTimeoutSeconds = 24 * 60 * 60
+
 var (
 	rootNormalizeProcessProfileArgs = normalizeProcessProfileArgs
 	rootExecuteCommand              = (*cobra.Command).ExecuteC
@@ -1111,6 +1117,17 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
+
+			// Direct file-storage PUT transfers bypass the MCP RPC runner, so the
+			// parsed --timeout must be handed to the helpers upload budget here.
+			// The setter floors at the 5-minute default; short values cannot
+			// shrink the transfer window. The seconds cap also keeps the
+			// nanosecond conversion below the int64 overflow point.
+			putTimeoutSeconds := flags.Timeout
+			if putTimeoutSeconds > maxFilePutTimeoutSeconds {
+				putTimeoutSeconds = maxFilePutTimeoutSeconds
+			}
+			helpers.SetFilePutClientTimeout(time.Duration(putTimeoutSeconds) * time.Second)
 
 			installOutputSinkRunBoundary(cmd)
 			// 输出初始化在业务 RunE 外层，也可能失败；清理必须包住整个执行入口。

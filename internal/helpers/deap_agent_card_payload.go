@@ -95,9 +95,10 @@ func (v *employeeCardView) batches(surface, title string, running bool) ([][]map
 	panelView.answer = ""
 	panel := panelView.messages(surface, title, running)[1]
 	components := panel["updateComponents"].(map[string]any)["components"].([]map[string]any)
-	components[len(components)-1]["children"] = []string{"execution", "answer"}
+	components[len(components)-1]["children"] = []string{employeeCardPanelID(running), "result"}
 	panel["updateComponents"].(map[string]any)["components"] = append(components,
-		map[string]any{"id": "answer", "component": "Column", "children": children})
+		map[string]any{"id": "answer", "component": "Column", "children": children},
+		map[string]any{"id": "result", "component": "Column", "children": []string{"answer"}, "gap": 6})
 	batches = append(batches, []map[string]any{panel})
 	for _, batch := range batches {
 		if _, err := encodeEmployeeCardMessages(batch); err != nil {

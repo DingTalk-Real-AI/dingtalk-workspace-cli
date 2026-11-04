@@ -62,7 +62,7 @@ func TestCrossPlatformCoverageOpenNodesSVGGoldenAndDeterminism(t *testing.T) {
 
 func TestCrossPlatformCoverageOpenNodesSVGEscapesInjectionAndUsesPlaceholders(t *testing.T) {
 	source := parseSource(t, `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[
-		{"id":"text","type":"text","x":0,"y":0,"width":200,"height":60,"text":"</text><script>alert(1)</script>&"},
+		{"id":"text","type":"text","x":0,"y":0,"width":200,"height":60,"text":{"blocks":[{"type":"paragraph","runs":[{"text":"</text><script>alert(1)</script>&"}]}]}},
 		{"id":"path","type":"path","x":0,"y":100,"width":100,"height":40,"path":{"data":"M0 0\" onload=\"alert(1)","intrinsicWidth":100,"intrinsicHeight":40}},
 		{"id":"future","type":"future-widget","x":140,"y":100,"width":100,"height":40}
 	]}`)
@@ -96,10 +96,12 @@ func TestCrossPlatformCoverageOpenNodesSVGEscapesInjectionAndUsesPlaceholders(t 
 }
 
 func TestCrossPlatformCoverageOpenNodesSVGParentCycleAndLimits(t *testing.T) {
-	cycle := parseSource(t, `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[
-		{"id":"a","type":"group","parentId":"b","x":1,"y":2,"width":20,"height":20},
-		{"id":"b","type":"group","parentId":"a","x":3,"y":4,"width":20,"height":20}
-	]}`)
+	// Direct callers still receive a defensive warning even though Parse now
+	// rejects cyclic request graphs before preview or submission.
+	cycle := &opennodes.Source{Nodes: []map[string]any{
+		{"id": "a", "type": "group", "parentId": "b", "x": 1, "y": 2, "width": 20, "height": 20},
+		{"id": "b", "type": "group", "parentId": "a", "x": 3, "y": 4, "width": 20, "height": 20},
+	}}
 	result, err := SVG(cycle)
 	if err != nil {
 		t.Fatal(err)
