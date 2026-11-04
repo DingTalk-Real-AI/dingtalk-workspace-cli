@@ -29,16 +29,10 @@ const (
 	// AccountToken is the account key for storing auth token data.
 	AccountToken = "auth-token"
 
-	// StorageDirEnv overrides the on-disk keychain storage root on
-	// platforms that use file-backed storage (macOS, Linux, OpenHarmony). It is
-	// intended for tests that need to isolate keychain state from the
-	// real user environment and from sibling test packages running in
-	// parallel. When empty, the platform default applies.
+	// StorageDirEnv selects the credential root (file directory or Windows registry namespace); empty preserves the default.
 	StorageDirEnv = "DWS_KEYCHAIN_DIR"
 
-	// TestNamespaceEnv isolates the Windows HKCU registry backend for tests.
-	// Production code must not set it. Other platforms already isolate secure
-	// storage through StorageDirEnv and ignore this value.
+	// TestNamespaceEnv adds Windows registry isolation for tests only; production must not set it.
 	TestNamespaceEnv = "DWS_KEYCHAIN_TEST_NAMESPACE"
 
 	// DisableKeychainEnv opts the macOS implementation out of system
