@@ -374,7 +374,9 @@ func devAppParamBool(params map[string]any, key string) bool {
 }
 
 func appendDevAppSuccessNextSteps(content map[string]any, additions ...map[string]any) {
-	if len(additions) == 0 {
+	// content 可能是 JSON null 反序列化出的 typed-nil map（如服务端返回空回执），
+	// 往 nil map 写入会 panic；没有可承载的 content 时不挂 nextSteps。
+	if content == nil || len(additions) == 0 {
 		return
 	}
 	steps := normalizeDevAppNextSteps(content["nextSteps"])

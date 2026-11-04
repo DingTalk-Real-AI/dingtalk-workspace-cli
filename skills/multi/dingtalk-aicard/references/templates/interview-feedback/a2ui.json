@@ -1,0 +1,508 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-interview-feedback",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "review-intro",
+          "component": "Markdown",
+          "content": {
+            "path": "/interview/reviewMarkdown"
+          }
+        },
+        {
+          "id": "strengths-label",
+          "component": "Text",
+          "text": "优点",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "bold": true
+        },
+        {
+          "id": "strengths",
+          "component": "TextField",
+          "label": "",
+          "value": {
+            "path": "/form/strengths"
+          },
+          "variant": "longText",
+          "disabled": false
+        },
+        {
+          "id": "strengths-group",
+          "component": "Column",
+          "children": [
+            "strengths-label",
+            "strengths"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "pending-label",
+          "component": "Text",
+          "text": "不足与待改进",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "bold": true
+        },
+        {
+          "id": "pending",
+          "component": "TextField",
+          "label": "",
+          "value": {
+            "path": "/form/pending"
+          },
+          "variant": "longText",
+          "disabled": false
+        },
+        {
+          "id": "pending-group",
+          "component": "Column",
+          "children": [
+            "pending-label",
+            "pending"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "conclusion-label",
+          "component": "Text",
+          "text": "候选人的面试结果",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "bold": true
+        },
+        {
+          "id": "conclusion",
+          "component": "ChoicePicker",
+          "variant": "mutuallyExclusive",
+          "displayStyle": "checkbox",
+          "value": {
+            "path": "/form/conclusion"
+          },
+          "options": [
+            {
+              "label": "通过",
+              "value": "pass"
+            },
+            {
+              "label": "不通过",
+              "value": "reject"
+            }
+          ],
+          "disabled": false
+        },
+        {
+          "id": "conclusion-group",
+          "component": "Column",
+          "children": [
+            "conclusion-label",
+            "conclusion"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "review-confirm-label",
+          "component": "Text",
+          "text": "确认并填入至系统",
+          "maxLine": 30,
+          "colorToken": "common_link_color",
+          "bold": true
+        },
+        {
+          "id": "review-confirm",
+          "component": "Button",
+          "child": "review-confirm-label",
+          "variant": "primary",
+          "disabled": false,
+          "action": {
+            "event": {
+              "name": "interview_review_confirm",
+              "context": {
+                "identity": {
+                  "path": "/identity"
+                },
+                "form": {
+                  "path": "/form"
+                },
+                "step": {
+                  "path": "/view/step"
+                }
+              }
+            }
+          },
+          "checks": [
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/strengths"
+                  }
+                }
+              },
+              "message": "请补充候选人优点"
+            },
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/pending"
+                  }
+                }
+              },
+              "message": "请补充待验证项"
+            },
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/conclusion"
+                  }
+                }
+              },
+              "message": "请选择面试结论"
+            }
+          ],
+          "weight": 1
+        },
+        {
+          "id": "review-hint",
+          "component": "Text",
+          "text": "确认后将自动回填至面试系统",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "review-footer",
+          "component": "Column",
+          "children": [
+            "review-footer-inset",
+            "review-confirm-row",
+            "review-hint"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "review",
+          "component": "Column",
+          "children": [
+            "review-intro",
+            "review-fields",
+            "review-footer"
+          ],
+          "gap": 16,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/step"
+              },
+              "b": 1
+            }
+          }
+        },
+        {
+          "id": "recommendation-intro",
+          "component": "Markdown",
+          "content": {
+            "path": "/interview/recommendationMarkdown"
+          }
+        },
+        {
+          "id": "level-label",
+          "component": "Text",
+          "text": "职级（可更正）",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "bold": true
+        },
+        {
+          "id": "level",
+          "component": "TextField",
+          "label": "",
+          "value": {
+            "path": "/form/level"
+          },
+          "variant": "shortText",
+          "placeholder": "请输入职级",
+          "disabled": false
+        },
+        {
+          "id": "level-group",
+          "component": "Column",
+          "children": [
+            "level-label",
+            "level"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "comment-label",
+          "component": "Text",
+          "text": "评论（选填）",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "bold": true
+        },
+        {
+          "id": "comment",
+          "component": "TextField",
+          "label": "",
+          "value": {
+            "path": "/form/comment"
+          },
+          "variant": "shortText",
+          "placeholder": "补充评论",
+          "disabled": false
+        },
+        {
+          "id": "comment-group",
+          "component": "Column",
+          "children": [
+            "comment-label",
+            "comment"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "submit-label",
+          "component": "Text",
+          "text": "确认并提交至系统",
+          "maxLine": 30,
+          "colorToken": "common_link_color",
+          "bold": true
+        },
+        {
+          "id": "submit",
+          "component": "Button",
+          "child": "submit-label",
+          "variant": "primary",
+          "disabled": false,
+          "action": {
+            "event": {
+              "name": "interview_feedback_submit",
+              "context": {
+                "identity": {
+                  "path": "/identity"
+                },
+                "form": {
+                  "path": "/form"
+                },
+                "step": {
+                  "path": "/view/step"
+                }
+              }
+            }
+          },
+          "checks": [
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/level"
+                  }
+                }
+              },
+              "message": "请输入职级"
+            }
+          ],
+          "weight": 1
+        },
+        {
+          "id": "submit-hint",
+          "component": "Text",
+          "text": "提交后将自动回填至面试系统",
+          "maxLine": 30,
+          "variant": "caption",
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "submit-footer",
+          "component": "Column",
+          "children": [
+            "submit-footer-inset",
+            "submit-row",
+            "submit-hint"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "recommendation",
+          "component": "Column",
+          "children": [
+            "recommendation-intro",
+            "level-group",
+            "comment-group",
+            "submit-footer"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/step"
+              },
+              "b": 2
+            }
+          }
+        },
+        {
+          "id": "review-confirm-row",
+          "component": "Row",
+          "children": [
+            "review-confirm"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "submit-row",
+          "component": "Row",
+          "children": [
+            "submit"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "review",
+            "recommendation",
+            "invalid-step"
+          ],
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "review-fields",
+          "component": "Column",
+          "children": [
+            "strengths-group",
+            "pending-group",
+            "conclusion-group"
+          ],
+          "gap": 20,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "review-footer-inset",
+          "component": "Column",
+          "children": [],
+          "padding": 0,
+          "gap": 0
+        },
+        {
+          "id": "submit-footer-inset",
+          "component": "Column",
+          "children": [],
+          "padding": 0,
+          "gap": 0
+        },
+        {
+          "id": "invalid-step",
+          "component": "Text",
+          "text": "表单状态异常，请重新打开或联系发起人。",
+          "maxLine": 30,
+          "colorToken": "common_level2_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "call": "or",
+                "args": {
+                  "values": [
+                    {
+                      "call": "eq",
+                      "args": {
+                        "a": {
+                          "path": "/view/step"
+                        },
+                        "b": 1
+                      }
+                    },
+                    {
+                      "call": "eq",
+                      "args": {
+                        "a": {
+                          "path": "/view/step"
+                        },
+                        "b": 2
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-interview-feedback",
+      "path": "/",
+      "value": {
+        "identity": {
+          "interviewId": "demo-interview-001",
+          "requestId": "demo-interview-feedback"
+        },
+        "interview": {
+          "candidateName": "张三",
+          "recommendedLevel": "P7+",
+          "reviewMarkdown": "刚才这场跟 **张三** 的面试，听记我已读完：",
+          "recommendationMarkdown": "好，建议他的评级为 **P7+**，职级可更正，也可以补充评论："
+        },
+        "view": {
+          "step": 1
+        },
+        "form": {
+          "strengths": "复杂业务经验扎实：熟悉制造、零售等行业排班场景，具备企业工作流程理解与产品落地能力。\n\n具备双平台视角：有两类协同办公产品工作背景，能具体分析 IM、文档协作与 AI 整合的体验差异。\n\n具备 AI 应用认知：有 Agent 辅助配置、Skill 简化排班等案例，实践深度待验证。",
+          "pending": "IM 经验待验证：经历集中于假勤、人事领域，大规模 IM 产品迭代与基础能力经验尚需验证。\n\n岗位预期需对齐：期望承担“业务＋产品”角色，需确认对 IM 基础能力与 AI 落地职责的认可及长期投入意愿。",
+          "conclusion": [
+            "pass"
+          ],
+          "level": "P7+",
+          "comment": ""
+        }
+      }
+    }
+  }
+]

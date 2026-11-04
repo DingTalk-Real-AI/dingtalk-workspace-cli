@@ -80,6 +80,8 @@ func (f *docCoverageCaller) JQ() string     { return "" }
 
 func docCoveragePayload(tool string) map[string]any {
 	switch tool {
+	case "update_document":
+		return map[string]any{"success": true}
 	case "create_document":
 		return map[string]any{"data": map[string]any{"nodeId": "node-1"}}
 	case "get_document_content":
@@ -1374,12 +1376,14 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 			case "update append":
 				caller.responses["get_document_content"] = []map[string]any{{"markdown": "existing\nx"}}
 			case "update insert text":
+				caller.responses["insert_document_block"] = []map[string]any{{"newBlockIds": []any{"id-1"}}}
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "x"}}}}
 			case "update insert heading before":
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "id-1", "blockType": "heading", "heading": map[string]any{"text": "x", "level": 1}}, map[string]any{"id": "b", "text": "reference"}}}}
 			case "update insert jsonml":
 				caller.responses["list_document_blocks"] = []map[string]any{{"jsonml": `["root",{},["p",{"uuid":"b"},"reference"],["p",{"uuid":"id-1"},"x"]]`}}
 			case "update replace text":
+				caller.responses["update_document_block"] = []map[string]any{{"newBlockIds": []any{"actual-new"}}}
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "x"}}}}
 			case "update replace jsonml":
 				caller.responses["list_document_blocks"] = []map[string]any{{"jsonml": `["root",{},["p",{"uuid":"b"},"x"]]`}}

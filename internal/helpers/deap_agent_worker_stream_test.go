@@ -52,6 +52,9 @@ func TestEmployeeStreamBoundaryFixture(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	switch mode {
+	case "approval":
+		fmt.Println(`{"type":"user_card_action_triggered","payload":{}}`)
+		fmt.Println(`!`)
 	case "stderr-oversized":
 		fmt.Fprint(os.Stderr, strings.Repeat("x", digitalEmployeeStdinLimit+1))
 	case "stdout-oversized":
@@ -80,9 +83,15 @@ func TestEmployeeStreamBoundaryFixture(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
-	for _, scenario := range []string{"group-subscription", "prepare", "executor-state", "audit", "ledger", "command", "transport-state", "running-state", "exit-before-ready", "stderr-oversized", "stdout-oversized", "exit-after-ready", "unobserved", "transport-write", "enqueue", "fatal", "cancel-start", "cancel-running", "hang-exit", "flood-stdout", "flood-stderr"} {
+	for _, scenario := range []string{"approval", "group-subscription", "prepare", "executor-state", "audit", "ledger", "command", "transport-state", "running-state", "exit-before-ready", "stderr-oversized", "stdout-oversized", "exit-after-ready", "unobserved", "transport-write", "enqueue", "fatal", "cancel-start", "cancel-running", "hang-exit", "flood-stdout", "flood-stderr"} {
 		t.Run(scenario, func(t *testing.T) {
 			cfg := employeeBoundaryConfig(t)
+			if scenario == "approval" {
+				cfg.Binding.Channel = "codex"
+				if err := writeEmployeeJSON(digitalEmployeeBindingPath(deapConnectConfigDir(), cfg.Binding.DWSProfile), cfg.Binding); err != nil {
+					t.Fatal(err)
+				}
+			}
 			cfg.Options.AllowedUsers = []string{"owner"}
 			cfg.Options.AllowedGroups = []string{"group"}
 			if scenario == "group-subscription" {
@@ -103,6 +112,9 @@ func TestCrossPlatformCoverageEmployeeWorkerStreamFailures(t *testing.T) {
 			t.Setenv("DWS_STREAM_BOUNDARY", scenario)
 			t.Setenv("DWS_STREAM_BOUNDARY_DIR", dir)
 			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+				if scenario == "approval" && !strings.Contains(strings.Join(args, " "), "user_card_action_triggered") {
+					t.Error("missing approval callback subscription")
+				}
 				if scenario == "group-subscription" && (!strings.Contains(strings.Join(args, " "), "user_im_message_receive_at") || strings.Contains(strings.Join(args, " "), "user_im_message_receive_group_all")) {
 					t.Error("managed employee must subscribe only to group mentions")
 				}

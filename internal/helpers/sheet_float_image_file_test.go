@@ -404,7 +404,7 @@ func TestCrossPlatformCoverageFloatImageHTTPPut(t *testing.T) {
 		}))
 		defer source.Close()
 		client := newFloatImageUploadClient()
-		if client.Timeout != floatImageUploadTimeout {
+		if client.Timeout != filePutClientTimeout {
 			t.Fatalf("timeout = %v", client.Timeout)
 		}
 		err := putFloatImageFileWithClient(context.Background(), client, source.URL, local)

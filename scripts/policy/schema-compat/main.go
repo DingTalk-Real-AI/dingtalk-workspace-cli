@@ -1056,7 +1056,9 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 // interfaceTransition identifies one reviewed interface tuple change and pins
 // both sides of the migration. A composite leaf has an empty ref. An available
 // MCP leaf carries the canonicalized ref emitted by parseTool; an unavailable
-// MCP leaf deliberately clears it.
+// MCP leaf deliberately clears it. A local leaf (pure built-in implementation)
+// is reviewed only as the one-way old side of a migration to composite and
+// always carries an empty ref.
 type interfaceTransition struct {
 	OldMode string
 	OldRef  string
@@ -1067,7 +1069,10 @@ type interfaceTransition struct {
 // reviewedInterfaceTransitions enumerates exact changes between a single-RPC
 // leaf and an orchestrated/composite leaf. Schema shape cannot prove that the declared kind
 // matches runtime execution, so every tool and both complete interface tuples
-// must be reviewed before the product change lands.
+// must be reviewed before the product change lands. A local mode may appear
+// only as the old side with an empty ref, migrating one-way to composite;
+// TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical rejects
+// any other local shape at the registry level.
 //
 // The table does not approve any CLI, parameter, availability, or safety drift.
 // compatibleReviewedInterfaceTransition requires every other compatibility
@@ -1161,6 +1166,17 @@ var reviewedInterfaceTransitions = map[string]interfaceTransition{
 		OldMode: "composite",
 		NewMode: "mcp",
 		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_info"}`,
+	},
+	// DWSH-189: event list/schema 主路径切换远端 DWS 个人事件目录
+	// （官方 + 应用事件，/event/catalog 与 /event/schema），内置目录降级为
+	// 离线回退。完整命令不再是纯内置读取，无单一可 pin 的 interface_ref。
+	"event/event.list": {
+		OldMode: "local",
+		NewMode: "composite",
+	},
+	"event/event.schema": {
+		OldMode: "local",
+		NewMode: "composite",
 	},
 }
 

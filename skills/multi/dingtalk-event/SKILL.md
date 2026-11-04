@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、互动卡片与好友事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、好友申请/好友添加成功，或互动卡片回调。命令前缀：dws event。
+description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 监听消息/@我/已读/撤回/reaction/群成员加入/群成员退出，审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/添加、听记创建/纪要生成或互动卡片回调。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,11 +9,11 @@ metadata:
       - dws
 ---
 
-# 钉钉个人 IM、OA 审批、VoIP、待办、互动卡片与好友事件
+# 钉钉个人事件
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
-本 Skill 只负责实时个人事件；发送/历史消息、审批处理、待办操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`。
+实时个人事件以外，消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用 `event consume`。
@@ -32,15 +32,14 @@ metadata:
 | 同一人/群的消息、表情、已读或撤回 | `dws event +listen-im --kind <sender|group> --events message,reaction,read,recall ...` |
 | 监听全部单聊或全部群消息 | `dws event +listen-im --kind <all-direct|all-group>`（`user_im_message_receive_o2o_all`/`user_im_message_receive_group_all`）；只有用户明确要求“全部”时使用 |
 | 群改名、成员进退、群解散 | EventKey 为 `user_im_group_updated`、`user_im_group_member_added`、`user_im_group_member_exited`、`user_im_group_disbanded`，读取 [EventKey 索引](references/event-im-keys.md) |
-| OA 审批任务或实例事件 | 读取 [OA 事件参考](references/event-oa.md)，使用精确 `event consume` EventKey |
-| 查看 OA 事件目录 | `dws event list --category oa` |
-| VoIP 通话邀请 | 读取 [VoIP 事件参考](references/event-voip.md)，使用精确 `event consume` EventKey |
-| 待办创建、更新或删除事件 | 读取 [Todo 事件参考](references/event-todo.md)，使用精确 `event consume` EventKey 与 `--role-types` |
-| 查看 Todo 事件目录 | `dws event list --category todo` |
-| 好友申请/好友添加成功事件 | 读取 [好友事件参考](references/event-contact.md)，使用精确 `event consume` EventKey |
-| 查看好友事件目录 | `dws event list --category contact` |
-| 互动卡片回调 | 读取 [互动卡片事件参考](references/event-card.md)；命令与字段见下方卡片契约 |
-| 查看互动卡片事件目录 | `dws event list --category card` |
+| OA 审批任务或实例事件 | [OA 参考](references/event-oa.md)：`event consume` |
+| VoIP 通话邀请 | [VoIP 参考](references/event-voip.md)：`event consume` |
+| 待办创建/更新/删除 | [Todo 参考](references/event-todo.md)：`event consume` 与 `--role-types` |
+| 日程创建/新增参与/修改/取消 | [日历参考](references/event-calendar.md)：`event consume user_calendar_event_changed` |
+| 好友申请/添加成功 | [好友参考](references/event-contact.md)：`event consume` |
+| 互动卡片回调 | [卡片参考](references/event-card.md) |
+| 听记创建/纪要生成 | <!-- dws-intent: event.listen.minutes -->`dws event consume`，见 [听记参考](references/event-minutes.md) |
+| 查看事件目录 | `dws event list --category <分类>` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
 | 查看状态 / 停止 | `dws event status` / `dws event stop <subscribe_id> --dry-run`，确认后再 `--yes` |
 
@@ -51,11 +50,13 @@ metadata:
 - `group` 必须且只能传 `--chat-id` 或 `--chat-query` 之一。
 - `--query` 只用于纯 `message` 监听；混入 reaction/read/recall 时不得使用。
 
-OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友两个 EventKey 约束同 OA。每项独立订阅并共享 bus。
+OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友、听记各两个 EventKey 约束同 OA。每项独立订阅并共享 bus。
 
-<!-- dws-intent: event.listen.card -->互动卡片使用 `dws event consume user_card_action_triggered --flatten -f ndjson`、`ruleType=all`、`filterRule={}`；不接受目标、角色或消息过滤。结构化上下文在 `payload.body.actionData.context`：`questions[].id` 关联 `answers[question_id]` 读 `selected`，未知字段保留。
+<!-- dws-intent: event.listen.card -->互动卡片使用 `dws event consume user_card_action_triggered --flatten -f ndjson`、`ruleType=all`、`filterRule={}`；不接受目标、角色或消息过滤。结构化上下文在 `payload.body.actionData.context`：`questions[].id` 关联 `answers[question_id]` 读取 `selected`，详见 [卡片参考](references/event-card.md)。
 
 <!-- dws-intent: event.listen.contact -->好友申请/好友添加成功事件使用 `dws event consume`；查询或操作好友关系走 `dws contact`，不要轮询模拟事件。
+
+<!-- dws-intent: event.listen.calendar -->主日历创建/新增参与/修改/取消使用 `dws event consume user_calendar_event_changed --flatten -f ndjson`；过滤与去重见 [日历参考](references/event-calendar.md)。
 
 姓名/群名必须唯一解析，零命中或多候选在创建订阅前停止。解析、监听、状态、停止使用同一 `--profile`，不得跨组织搬运 ID。
 
@@ -81,13 +82,15 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 - `event stop` 取消订阅并影响本地 consumer：先 `--dry-run`，确认后 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
-- 全部 30 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片 + 2 好友）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`；`retryable=true`→`max_additional_attempts=2`；`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，也不持久化或计算跨调用的 Agent/host 尝试次数。
+- 全部 33 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片 + 2 好友 + 2 听记 + 1 日历）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`；`retryable=true`→`max_additional_attempts=2`；`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，也不持久化或计算跨调用的 Agent/host 尝试次数。
 - 遵守 `retry_after_seconds`/`next_retry_at`；`in_flight`、`cooldown`、`terminal_hold` 时不并发或换 `subscribe_id`/`trace_id` 绕过。
 - 认证、profile、订阅保护状态和 bus 排障按失败类型读取 [订阅运维](references/event-im-operations.md)。
 
 ### 本地订阅保护
 
-状态在 `~/.dws/events/open/personal_stream/<identity_hash>/personal_subscription_attempts.json`（`DWS_CONFIG_DIR` 改根）；目录 `0700`，`personal_subscription_attempts.json` 与 `personal_subscription_attempts.lock` 为 `0600`。连续 `24h` 无失败后重置，`terminal_hold` 为 `1h`。紧急恢复只删除 `personal_subscription_attempts.json`，不要删除 lock 文件；这会清空该 identity 的全部保护记录。
+默认记录为 `~/.dws/events/open/personal_stream/<identity_hash>/personal_subscription_attempts.json`，`DWS_CONFIG_DIR` 改变根目录。identity 目录权限 `0700`，JSON 与 `personal_subscription_attempts.lock` 为 `0600`；连续 24h 无失败后重置，`terminal_hold` 为 1h。
+
+紧急恢复前确认没有创建进程，只删除 `personal_subscription_attempts.json`，不要删除 lock 文件；这会清空该 identity 的全部保护记录，随后仅尝试一次原始操作。详见 [订阅运维](references/event-im-operations.md)。
 
 ## 何时查询 Schema
 
@@ -98,15 +101,16 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 ## Reference
 
-| Topic | Reference | 何时读取 |
-|---|---|---|
-| 任务索引 | [event-im.md](references/event-im.md) | 不确定加载哪个 reference |
-| EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) | 群生命周期、显式 EventKey 或多事件组合 |
-| ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) | 启动/托管/关闭 consumer |
-| 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) | 解析事件或自动回复 |
-| Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) | 订阅控制或失败恢复 |
-| OA 审批事件 | [event-oa.md](references/event-oa.md) | 七个 OA EventKey 与审批字段解析 |
-| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) | VoIP EventKey 与邀请字段、敏感输出边界 |
-| Todo 待办事件 | [event-todo.md](references/event-todo.md) | Todo EventKey、角色范围与待办字段 |
-| 好友事件 | [event-contact.md](references/event-contact.md) | 好友 EventKey、申请与添加字段解析 |
-| 互动卡片回调事件 | [event-card.md](references/event-card.md) | 回调订阅与 payload 解析 |
+| 何时读取 | Reference |
+|---|---|
+| 任务索引 | [event-im.md](references/event-im.md) |
+| EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) |
+| ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) |
+| 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) |
+| Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) |
+| OA 审批事件 | [event-oa.md](references/event-oa.md) |
+| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) |
+| Todo 待办事件 | [event-todo.md](references/event-todo.md) |
+| 好友事件 | [event-contact.md](references/event-contact.md) |
+| 互动卡片回调事件 | [event-card.md](references/event-card.md) |
+| 日历创建/修改/取消、过滤与去重 | [event-calendar.md](references/event-calendar.md) |

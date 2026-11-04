@@ -927,7 +927,7 @@ var paramAliasRepresentativePayloadCases = map[string]bool{
 	paramAliasPayloadCaseKey("doc +doc-append", "text"):                              true, // shortcut content rename keeps append payload
 	paramAliasPayloadCaseKey("doc block insert", "text"):                             true, // block write content compatibility alias
 	paramAliasPayloadCaseKey("doc block update", "text"):                             true, // update uses the same typed compatibility path
-	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // scoped block-role alias
+	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // unsupported parent role retains the same pre-write validation
 	paramAliasPayloadCaseKey("doc comment delete", "comment-id"):                     true, // destructive comment-key alias
 	paramAliasPayloadCaseKey("doc comment reply", "mentioned-open-conversation-ids"): true, // list-valued group mention role
 	paramAliasPayloadCaseKey("drive info", "workspace"):                              true, // published numeric storage-space compatibility remains payload-equivalent
@@ -1096,6 +1096,26 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 		}
 		executedRepresentatives[caseKey] = true
 		t.Run(fixture.Command+"/"+fixture.Emitted, func(t *testing.T) {
+			if fixture.Command == "doc block insert" && fixture.Expect == "parent-block" {
+				var canonicalMessage string
+				for _, args := range [][]string{canonicalArgs, aliasArgs} {
+					caller := &paramAliasCaptureCaller{}
+					ctx, err := executeParamAliasPayloadE2E(t, caller, args...)
+					var classified *apperrors.Error
+					if ctx == nil || !errors.As(err, &classified) || classified.Category != apperrors.CategoryValidation || apperrors.ExitCode(err) != 3 {
+						t.Fatalf("unsupported parent role must reach pre-write validation: args=%v err=%v", args, err)
+					}
+					if len(caller.calls) != 0 {
+						t.Fatalf("unsupported parent role crossed transport boundary: args=%v calls=%#v", args, caller.calls)
+					}
+					if canonicalMessage == "" {
+						canonicalMessage = err.Error()
+					} else if err.Error() != canonicalMessage {
+						t.Fatalf("canonical and alias validation differ: canonical=%q alias=%q", canonicalMessage, err.Error())
+					}
+				}
+				return
+			}
 			assertParamAliasFinalPayloadEquivalent(t, fixture.Command, canonicalArgs, aliasArgs)
 		})
 	}

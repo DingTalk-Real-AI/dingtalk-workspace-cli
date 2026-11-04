@@ -549,7 +549,7 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, filePutFlowTimeout())
 	defer cancel()
 
 	if !jsonMode {

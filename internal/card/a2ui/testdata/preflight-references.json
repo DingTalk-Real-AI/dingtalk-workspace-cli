@@ -415,7 +415,7 @@
     ]
   },
   {
-    "name": "Shared child is not a cycle",
+    "name": "Shared static child has multiple parents but no cycle",
     "messages": [
       {
         "version": "v1.0",
@@ -469,8 +469,14 @@
       }
     ],
     "mode": "new-card",
-    "valid": true,
-    "diagnostics": []
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/0",
+        "severity": "error"
+      }
+    ]
   },
   {
     "name": "Unreachable component is a warning",
@@ -660,7 +666,7 @@
     ]
   },
   {
-    "name": "Dynamic template recursion is not a static cycle",
+    "name": "Root reused as template source is rejected without claiming a static cycle",
     "messages": [
       {
         "version": "v1.0",
@@ -695,8 +701,14 @@
       }
     ],
     "mode": "new-card",
-    "valid": true,
-    "diagnostics": []
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.template_source_referenced",
+        "pointer": "/2/updateComponents/components/0/id",
+        "severity": "error"
+      }
+    ]
   },
   {
     "name": "Regular container supports templates",
@@ -1196,6 +1208,2430 @@
         "code": "reference.dangling_child",
         "pointer": "/2/updateComponents/components/0/children/0",
         "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Repeated child under one parent is an error",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label",
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.duplicate_child",
+        "pointer": "/2/updateComponents/components/0/children/1",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Repeated child across Stack slots is an error",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "child": "label",
+              "overlays": [
+                {
+                  "child": "label",
+                  "position": "center"
+                }
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.duplicate_child",
+        "pointer": "/2/updateComponents/components/0/overlays/0/child",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Nested Tabs slot and static container share a child",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Tabs",
+              "tabs": [
+                {
+                  "title": "Tab",
+                  "child": "label"
+                }
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Three parents report every additional owner",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "c",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/0",
+        "severity": "error"
+      },
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/3/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Unreachable former parent does not claim ownership",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "old",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": [
+      {
+        "code": "reference.unreachable_component",
+        "pointer": "/2/updateComponents/components/2/id",
+        "severity": "warning"
+      }
+    ]
+  },
+  {
+    "name": "Later update repairs a temporary ownership conflict",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "b",
+              "component": "Column",
+              "children": []
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Later update introduces an ownership conflict",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": []
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/3/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Template subtree has static multiple parents",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/3/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Shared template definition has multiple source owners",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": []
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/componentId",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Different template roots cannot share source descendants",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": []
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": {
+                "componentId": "row_a",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": {
+                "componentId": "row_b",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row_a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "row_b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/4/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Static content cannot reuse a template source descendant",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": []
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label",
+                "loop"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "loop",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/3/children/0",
+        "severity": "error"
+      },
+      {
+        "code": "reference.template_source_referenced",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Static template source reuse reports both ownership and deletion hazards",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "loop"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "b",
+                "c"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "c",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "loop",
+              "component": "Column",
+              "children": {
+                "componentId": "a",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/3/children/0",
+        "severity": "error"
+      },
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/5/children/componentId",
+        "severity": "error"
+      },
+      {
+        "code": "reference.template_source_referenced",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Template edges do not hide static cycles",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": {
+                "componentId": "a",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "b"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "a"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/0",
+        "severity": "error"
+      },
+      {
+        "code": "reference.cycle",
+        "pointer": "/2/updateComponents/components/2/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Identical component IDs in different Surfaces have independent owners",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "other",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "other",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "other",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "b"
+              ]
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Reported selection card attaches submit_text to root and Button",
+    "messages": [
+      {
+        "createSurface": {
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "_multicaReply": {
+              "finished": false
+            },
+            "audience": "",
+            "presentation_format": "",
+            "topic_direction": ""
+          },
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      },
+      {
+        "updateComponents": {
+          "components": [
+            {
+              "children": [
+                "title",
+                "hint",
+                "aud_label",
+                "aud_picker",
+                "topic_label",
+                "topic_picker",
+                "fmt_label",
+                "fmt_picker",
+                "submit_btn",
+                "submit_text"
+              ],
+              "component": "Column",
+              "gap": 8,
+              "id": "root"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "title",
+              "text": "30 分钟内部技术分享 · 选三项"
+            },
+            {
+              "component": "Text",
+              "id": "hint",
+              "text": "每行点一下即选中，不用再打开面板；选完点「提交」，我会在这张卡上给出大纲。"
+            },
+            {
+              "component": "Text",
+              "id": "aud_label",
+              "text": "受众"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "aud_picker",
+              "options": [
+                {
+                  "label": "研发工程师",
+                  "value": "研发工程师"
+                },
+                {
+                  "label": "产品经理",
+                  "value": "产品经理"
+                }
+              ],
+              "value": [
+                "${/audience}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "topic_label",
+              "text": "主题方向"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "topic_picker",
+              "options": [
+                {
+                  "label": "Agent 工程实践",
+                  "value": "Agent 工程实践"
+                },
+                {
+                  "label": "模型评测",
+                  "value": "模型评测"
+                }
+              ],
+              "value": [
+                "${/topic_direction}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "fmt_label",
+              "text": "呈现形式"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "fmt_picker",
+              "options": [
+                {
+                  "label": "讲解加 Demo",
+                  "value": "讲解加 Demo"
+                },
+                {
+                  "label": "案例复盘",
+                  "value": "案例复盘"
+                }
+              ],
+              "value": [
+                "${/presentation_format}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "action": {
+                "event": {
+                  "context": {
+                    "_multicaAction": "submit_brief",
+                    "_multicaCard": "regression-business-card",
+                    "_multicaRevision": 1,
+                    "audience": "${/audience}",
+                    "presentation_format": "${/presentation_format}",
+                    "topic_direction": "${/topic_direction}"
+                  },
+                  "name": "multica.card.action"
+                }
+              },
+              "child": "submit_text",
+              "component": "Button",
+              "id": "submit_btn",
+              "variant": "primary"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "submit_text",
+              "text": "提交"
+            }
+          ],
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/1/updateComponents/components/0/children/9",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Reported selection card with only extra root reference removed",
+    "messages": [
+      {
+        "createSurface": {
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "_multicaReply": {
+              "finished": false
+            },
+            "audience": "",
+            "presentation_format": "",
+            "topic_direction": ""
+          },
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      },
+      {
+        "updateComponents": {
+          "components": [
+            {
+              "children": [
+                "title",
+                "hint",
+                "aud_label",
+                "aud_picker",
+                "topic_label",
+                "topic_picker",
+                "fmt_label",
+                "fmt_picker",
+                "submit_btn"
+              ],
+              "component": "Column",
+              "gap": 8,
+              "id": "root"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "title",
+              "text": "30 分钟内部技术分享 · 选三项"
+            },
+            {
+              "component": "Text",
+              "id": "hint",
+              "text": "每行点一下即选中，不用再打开面板；选完点「提交」，我会在这张卡上给出大纲。"
+            },
+            {
+              "component": "Text",
+              "id": "aud_label",
+              "text": "受众"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "aud_picker",
+              "options": [
+                {
+                  "label": "研发工程师",
+                  "value": "研发工程师"
+                },
+                {
+                  "label": "产品经理",
+                  "value": "产品经理"
+                }
+              ],
+              "value": [
+                "${/audience}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "topic_label",
+              "text": "主题方向"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "topic_picker",
+              "options": [
+                {
+                  "label": "Agent 工程实践",
+                  "value": "Agent 工程实践"
+                },
+                {
+                  "label": "模型评测",
+                  "value": "模型评测"
+                }
+              ],
+              "value": [
+                "${/topic_direction}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "fmt_label",
+              "text": "呈现形式"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "fmt_picker",
+              "options": [
+                {
+                  "label": "讲解加 Demo",
+                  "value": "讲解加 Demo"
+                },
+                {
+                  "label": "案例复盘",
+                  "value": "案例复盘"
+                }
+              ],
+              "value": [
+                "${/presentation_format}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "action": {
+                "event": {
+                  "context": {
+                    "_multicaAction": "submit_brief",
+                    "_multicaCard": "regression-business-card",
+                    "_multicaRevision": 1,
+                    "audience": "${/audience}",
+                    "presentation_format": "${/presentation_format}",
+                    "topic_direction": "${/topic_direction}"
+                  },
+                  "name": "multica.card.action"
+                }
+              },
+              "child": "submit_text",
+              "component": "Button",
+              "id": "submit_btn",
+              "variant": "primary"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "submit_text",
+              "text": "提交"
+            }
+          ],
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Resource-only preflight leaves ownership unverified",
+    "messages": [
+      {
+        "createSurface": {
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "_multicaReply": {
+              "finished": false
+            },
+            "audience": "",
+            "presentation_format": "",
+            "topic_direction": ""
+          },
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      },
+      {
+        "updateComponents": {
+          "components": [
+            {
+              "children": [
+                "title",
+                "hint",
+                "aud_label",
+                "aud_picker",
+                "topic_label",
+                "topic_picker",
+                "fmt_label",
+                "fmt_picker",
+                "submit_btn",
+                "submit_text"
+              ],
+              "component": "Column",
+              "gap": 8,
+              "id": "root"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "title",
+              "text": "30 分钟内部技术分享 · 选三项"
+            },
+            {
+              "component": "Text",
+              "id": "hint",
+              "text": "每行点一下即选中，不用再打开面板；选完点「提交」，我会在这张卡上给出大纲。"
+            },
+            {
+              "component": "Text",
+              "id": "aud_label",
+              "text": "受众"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "aud_picker",
+              "options": [
+                {
+                  "label": "研发工程师",
+                  "value": "研发工程师"
+                },
+                {
+                  "label": "产品经理",
+                  "value": "产品经理"
+                }
+              ],
+              "value": [
+                "${/audience}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "topic_label",
+              "text": "主题方向"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "topic_picker",
+              "options": [
+                {
+                  "label": "Agent 工程实践",
+                  "value": "Agent 工程实践"
+                },
+                {
+                  "label": "模型评测",
+                  "value": "模型评测"
+                }
+              ],
+              "value": [
+                "${/topic_direction}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "fmt_label",
+              "text": "呈现形式"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "fmt_picker",
+              "options": [
+                {
+                  "label": "讲解加 Demo",
+                  "value": "讲解加 Demo"
+                },
+                {
+                  "label": "案例复盘",
+                  "value": "案例复盘"
+                }
+              ],
+              "value": [
+                "${/presentation_format}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "action": {
+                "event": {
+                  "context": {
+                    "_multicaAction": "submit_brief",
+                    "_multicaCard": "regression-business-card",
+                    "_multicaRevision": 1,
+                    "audience": "${/audience}",
+                    "presentation_format": "${/presentation_format}",
+                    "topic_direction": "${/topic_direction}"
+                  },
+                  "name": "multica.card.action"
+                }
+              },
+              "child": "submit_text",
+              "component": "Button",
+              "id": "submit_btn",
+              "variant": "primary"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "submit_text",
+              "text": "提交"
+            }
+          ],
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      }
+    ],
+    "mode": "resources",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Reported selection card keeps DFS pointer when Button ID is renamed",
+    "messages": [
+      {
+        "createSurface": {
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "_multicaReply": {
+              "finished": false
+            },
+            "audience": "",
+            "presentation_format": "",
+            "topic_direction": ""
+          },
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      },
+      {
+        "updateComponents": {
+          "components": [
+            {
+              "children": [
+                "title",
+                "hint",
+                "aud_label",
+                "aud_picker",
+                "topic_label",
+                "topic_picker",
+                "fmt_label",
+                "fmt_picker",
+                "a_submit_btn",
+                "submit_text"
+              ],
+              "component": "Column",
+              "gap": 8,
+              "id": "root"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "title",
+              "text": "30 分钟内部技术分享 · 选三项"
+            },
+            {
+              "component": "Text",
+              "id": "hint",
+              "text": "每行点一下即选中，不用再打开面板；选完点「提交」，我会在这张卡上给出大纲。"
+            },
+            {
+              "component": "Text",
+              "id": "aud_label",
+              "text": "受众"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "aud_picker",
+              "options": [
+                {
+                  "label": "研发工程师",
+                  "value": "研发工程师"
+                },
+                {
+                  "label": "产品经理",
+                  "value": "产品经理"
+                }
+              ],
+              "value": [
+                "${/audience}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "topic_label",
+              "text": "主题方向"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "topic_picker",
+              "options": [
+                {
+                  "label": "Agent 工程实践",
+                  "value": "Agent 工程实践"
+                },
+                {
+                  "label": "模型评测",
+                  "value": "模型评测"
+                }
+              ],
+              "value": [
+                "${/topic_direction}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "component": "Text",
+              "id": "fmt_label",
+              "text": "呈现形式"
+            },
+            {
+              "component": "ChoicePicker",
+              "displayStyle": "chips",
+              "id": "fmt_picker",
+              "options": [
+                {
+                  "label": "讲解加 Demo",
+                  "value": "讲解加 Demo"
+                },
+                {
+                  "label": "案例复盘",
+                  "value": "案例复盘"
+                }
+              ],
+              "value": [
+                "${/presentation_format}"
+              ],
+              "variant": "mutuallyExclusive"
+            },
+            {
+              "action": {
+                "event": {
+                  "context": {
+                    "_multicaAction": "submit_brief",
+                    "_multicaCard": "regression-business-card",
+                    "_multicaRevision": 1,
+                    "audience": "${/audience}",
+                    "presentation_format": "${/presentation_format}",
+                    "topic_direction": "${/topic_direction}"
+                  },
+                  "name": "multica.card.action"
+                }
+              },
+              "child": "submit_text",
+              "component": "Button",
+              "id": "a_submit_btn",
+              "variant": "primary"
+            },
+            {
+              "bold": true,
+              "component": "Text",
+              "id": "submit_text",
+              "text": "提交"
+            }
+          ],
+          "surfaceId": "selection-card-regression"
+        },
+        "version": "v1.0"
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/1/updateComponents/components/0/children/9",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Independent templates with distinct source descendants pass",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {},
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": {
+                "componentId": "row_a",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": {
+                "componentId": "row_b",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row_a",
+              "component": "Column",
+              "children": [
+                "label_a"
+              ]
+            },
+            {
+              "id": "row_b",
+              "component": "Column",
+              "children": [
+                "label_b"
+              ]
+            },
+            {
+              "id": "label_a",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "label_b",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": []
+  },
+  {
+    "name": "Shared template definition has multiple source owners with nonempty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {},
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/componentId",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Different template roots cannot share source descendants with nonempty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {},
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "a",
+                "b"
+              ]
+            },
+            {
+              "id": "a",
+              "component": "Column",
+              "children": {
+                "componentId": "row_a",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "b",
+              "component": "Column",
+              "children": {
+                "componentId": "row_b",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row_a",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "row_b",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/4/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Static content cannot reuse a template source descendant with nonempty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {},
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label",
+                "loop"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "loop",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/3/children/0",
+        "severity": "error"
+      },
+      {
+        "code": "reference.template_source_referenced",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Repeated child inside a template source is an error",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label",
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.duplicate_child",
+        "pointer": "/2/updateComponents/components/1/children/1",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Static content cannot reuse a template target directly",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {}
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "row",
+                "loop"
+              ]
+            },
+            {
+              "id": "row",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "loop",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.multiple_parents",
+        "pointer": "/2/updateComponents/components/2/children/componentId",
+        "severity": "error"
+      },
+      {
+        "code": "reference.template_source_referenced",
+        "pointer": "/2/updateComponents/components/0/children/0",
+        "severity": "error"
+      }
+    ]
+  },
+  {
+    "name": "Live static source shared with unreachable template target is rejected with empty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": []
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "orphan",
+              "component": "Column",
+              "children": {
+                "componentId": "label",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.template_source_referenced",
+        "severity": "error",
+        "pointer": "/2/updateComponents/components/0/children/0"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/2/id"
+      }
+    ]
+  },
+  {
+    "name": "Live static source shared with unreachable template target is rejected with nonempty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "orphan",
+              "component": "Column",
+              "children": {
+                "componentId": "label",
+                "path": "/rows"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.template_source_referenced",
+        "severity": "error",
+        "pointer": "/2/updateComponents/components/0/children/0"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/2/id"
+      }
+    ]
+  },
+  {
+    "name": "Live static source shared with unreachable template descendant is rejected with empty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": []
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "orphan",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.template_source_referenced",
+        "severity": "error",
+        "pointer": "/2/updateComponents/components/0/children/0"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/2/id"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/3/id"
+      }
+    ]
+  },
+  {
+    "name": "Live static source shared with unreachable template descendant is rejected with nonempty data",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            },
+            {
+              "id": "label",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "orphan",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Column",
+              "children": [
+                "label"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "diagnostics": [
+      {
+        "code": "reference.template_source_referenced",
+        "severity": "error",
+        "pointer": "/2/updateComponents/components/0/children/0"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/2/id"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/3/id"
+      }
+    ]
+  },
+  {
+    "name": "Unreachable template with independent source remains warnings",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "s",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "s",
+          "path": "/",
+          "value": {
+            "rows": [
+              {}
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "s",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Content"
+            },
+            {
+              "id": "orphan",
+              "component": "Column",
+              "children": {
+                "componentId": "row",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "row",
+              "component": "Text",
+              "text": "Content"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "diagnostics": [
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/1/id"
+      },
+      {
+        "code": "reference.unreachable_component",
+        "severity": "warning",
+        "pointer": "/2/updateComponents/components/2/id"
       }
     ]
   }

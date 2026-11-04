@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -48,9 +49,10 @@ var TableBootstrap = shortcut.Shortcut{
 }
 
 type createdTableStructure struct {
-	TableID  string
-	Fields   []map[string]any
-	Warnings []string
+	TableID    string
+	Fields     []map[string]any
+	Warnings   []string
+	Navigation map[string]any
 }
 
 var bootstrapFieldAllowedKeys = map[string]bool{
@@ -184,6 +186,8 @@ func tableBootstrapValidation(message string) error {
 	)
 }
 
+// executeTableBootstrap publishes navigation only after the new table and its
+// declared fields pass independent readback; failures retain the recovery ID.
 func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	fields, err := parseBootstrapFields(rt.Str("fields"))
 	if err != nil {
@@ -225,10 +229,14 @@ func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	result.CompletedSteps = []compositeStep{{Index: 1, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(fields), Result: map[string]any{"tableId": created.TableID, "fieldCount": len(created.Fields)}}}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableId": created.TableID, "fieldCount": len(created.Fields)}
 	result.Result = map[string]any{"baseId": baseID, "tableId": created.TableID, "tableName": tableName, "fields": created.Fields}
+	aitablenavigation.Preserve(result.Result, created.Navigation)
 	result.NextCommand = ""
 	return rt.Output(result)
 }
 
+// createAndVerifyTableStructure creates once, reads back the returned ID and
+// fields, and retains server navigation without another request. Navigation
+// never substitutes for table identity or field-structure verification.
 func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableName string, fields []any) (createdTableStructure, error) {
 	created := createdTableStructure{}
 	initialEnd := minInt(15, len(fields))
@@ -250,9 +258,16 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 			created.Warnings = append(created.Warnings, fmt.Sprintf("create_fields offset %d returned an error; final read-back decides success: %v", offset, fieldErr))
 		}
 	}
-	if err := verifyCreatedTableEventually(rt, baseID, created.TableID); err != nil {
+	table, err := verifyCreatedTableEventually(rt, baseID, created.TableID)
+	if err != nil {
 		return created, err
 	}
+	// Readback navigation wins per key. Older readers can omit it, in which
+	// case only server-provided creation navigation fills the missing keys.
+	// Explicit null/empty readback values are preserved rather than replaced.
+	created.Navigation = map[string]any{}
+	aitablenavigation.Preserve(created.Navigation, table)
+	aitablenavigation.Preserve(created.Navigation, parityResponseObject(createData))
 	fieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": created.TableID})
 	created.Fields, _ = findNamedObjectList(fieldsData, "fields", "fieldList")
 	if err == nil && created.Fields == nil {

@@ -1,11 +1,20 @@
 package helpers
 
 import (
+	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf16"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +34,7 @@ func newMinutesCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "查询和维护钉钉听记的转写、摘要、待办、权限、录音、标签、说话人总结、语音备忘及文件上传会话。",
+			AgentSummary: "查询和维护钉钉听记的转写、摘要、待办、纪要模板、权限、录音、标签、说话人总结、语音备忘及文件上传会话。",
 			UseWhen: []string{
 				"用户要查找、读取、编辑或管理钉钉听记及其录音、转写、摘要和衍生内容。",
 			},
@@ -1949,7 +1958,7 @@ func newMinutesCommand() *cobra.Command {
 	// ── tag 子组 ────────────────────────────────────────────────
 	// 听记标签/分组管理：查询用户标签列表、按标签查询听记。
 	// 对应 MCP 工具 query_user_tag_list / query_minutes_by_tag_id。
-	// 标签/分组由用户在听记页面手动创建，此处仅提供查询能力。
+	// 自定义标签可在听记页面或通过tag create创建。
 	tagCmd := newGroupCommand(&cobra.Command{Use: "tag", Short: "听记标签/分组管理", RunE: groupRunE})
 
 	// tag list — 对应 MCP 工具 query_user_tag_list
@@ -1959,7 +1968,7 @@ func newMinutesCommand() *cobra.Command {
 		Use:   "list",
 		Short: "查询我的听记标签/分组列表",
 		Long: `查询当前用户的听记标签或分组列表。
-标签/分组在听记页面手动创建，此命令用于查看已有标签。
+标签/分组可在听记页面或通过tag create创建，此命令用于查看已有标签。
 无需传入额外参数，系统自动识别当前用户身份。
 返回所有标签/分组的列表，每条记录包含 tagId 和标签名称。
 获取到 tagId 后，可使用 dws minutes tag query --tag-id <tagId> 查询该标签下的听记列表。`,
@@ -2005,7 +2014,7 @@ func newMinutesCommand() *cobra.Command {
 		Use:   "query",
 		Short: "根据标签ID查询听记列表",
 		Long: `根据用户的标签或分组 ID 查询该标签下的听记列表。
-标签/分组在听记页面手动创建，tagId 可通过 dws minutes tag list 获取。
+标签/分组可在听记页面或通过tag create创建，tagId 可通过 dws minutes tag list 获取。
 支持分页查询，使用 --limit 控制每页数量，--cursor 传入分页 token。`,
 		Example: `  dws minutes tag query --tag-id <tagId>
   dws minutes tag query --tag-id <tagId> --limit 20
@@ -2068,6 +2077,7 @@ func newMinutesCommand() *cobra.Command {
 	_ = tagQueryCmd.Flags().MarkHidden("next-token")
 
 	tagCmd.AddCommand(tagListCmd, tagQueryCmd)
+	addMinutesTagWriteCommands(tagCmd)
 
 	// ── audio-memo 子组 ────────────────────────────
 	// 语音备忘查询：对应 MCP 工具 list_audio_memos。
@@ -2181,10 +2191,11 @@ func newMinutesCommand() *cobra.Command {
 	minutesCmd := newGroupCommand(&cobra.Command{
 		Use:   "minutes",
 		Short: "AI 听记 / 会议纪要",
-		Long:  `管理钉钉AI听记：查询列表、获取详情、摘要、转写、待办、关键字、音频地址、思维导图、发言人管理、文件上传、成员权限管理、语音备忘查询，以及修改标题和纪要内容。`,
+		Long:  `管理钉钉AI听记：查询列表、获取详情、摘要、转写、待办、关键字、音频地址、思维导图、发言人管理、文件上传、成员权限、纪要模板、标签、语音备忘，以及修改标题和纪要内容。`,
 		RunE:  groupRunE,
 	})
 	minutesCmd.AddCommand(minutesListCmd, minutesGetCmd, minutesUpdateCmd, minutesRecordCmd, mindGraphCmd, speakerCmd, hotWordCmd, replaceTextCmd, audioMemoCmd, uploadCmd, permissionCmd, tagCmd)
+	minutesCmd.AddCommand(newMinutesTemplateCommand())
 	return minutesCmd
 }
 
@@ -2309,4 +2320,630 @@ func callListByKeywordRange(cmd *cobra.Command, filterType string) error {
 		toolArgs["nextToken"] = v
 	}
 	return callMCPToolOnServer("minutes", "list_by_keyword_and_time_range", toolArgs)
+}
+
+func newMinutesTemplateCommand() *cobra.Command {
+	templates := newGroupCommand(&cobra.Command{Use: "template", Short: "纪要模板管理", RunE: groupRunE})
+	listSystem := NewLeafCommand(LeafSpec{
+		Use: "list-system", Short: "分页查询系统纪要模板",
+		Long:    "分页查询系统纪要模板目录，返回 templateId、title、brief。默认20条，最多50条；locale默认zh_CN。空页仍按 meta.pagination 判断续页，续页原样传入 cursor 并保持相同 locale。",
+		Example: "  dws minutes template list-system --limit 20 --locale zh_CN --format json",
+		Server:  "minutes", Tool: "list_system_templates", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPReadSafety(),
+		Flags: []LeafFlag{
+			{Name: "limit", Kind: LeafInt, Default: "20", Bind: "maxResults", Usage: "每页数量，整数1-50，默认20"},
+			{Name: "cursor", Bind: "nextToken", OmitEmpty: true, Usage: "上一页 meta.pagination.next_token，原样传入；首页省略"},
+			{Name: "locale", Bind: "locale", Default: "zh_CN", Usage: "语言区域，默认zh_CN；续页保持一致"},
+		},
+		Constraints: []LeafConstraint{{Kind: "custom", Flags: []string{"limit", "cursor"}, Description: "limit必须在1-50；显式cursor不能空白"}},
+		Validate:    validateMinutesSystemTemplateList,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "list_system_templates", CanonicalPath: "minutes.list_system_templates", CLIPath: "minutes template list-system", PrimaryCLIPath: "minutes template list-system"},
+			Description: "分页查询系统纪要模板目录，按配置顺序返回模板标识、标题和简介。",
+			Interface:   minutesMCPInterface("list_system_templates"), DryRun: minutesMCPDryRun(),
+			Result: minutesMCPResultSpec(minutesSystemTemplatePageSchema), Pagination: minutesMCPagination(),
+			Selection:  contract.SelectionSpec{AgentSummary: "浏览可选的系统纪要模板目录。", UseWhen: []string{"用户要查询或选择官方系统纪要模板时"}, AvoidWhen: []string{"个人模板用 template list-custom；系统模板目录不返回提示词"}, Examples: []string{"dws minutes template list-system --format json"}},
+			Parameters: []contract.ParamDecl{{Name: "limit", Property: "maxResults", InterfaceType: "number"}, {Name: "cursor", Property: "nextToken", InterfaceType: "string"}, {Name: "locale", Property: "locale", InterfaceType: "string"}},
+		},
+	})
+	listCustom := NewLeafCommand(LeafSpec{
+		Use: "list-custom", Short: "分页查询个人纪要模板",
+		Long:    "分页查询当前用户的个人纪要模板，返回 templateKey、title、完整 prompt 和 version，版本0有效。默认5条，最多10条。items为空也须按 meta.pagination 续页，cursor必须原样回传。",
+		Example: "  dws minutes template list-custom --limit 5 --format json",
+		Server:  "minutes", Tool: "list_custom_templates", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPReadSafety(),
+		Flags: []LeafFlag{
+			{Name: "limit", Kind: LeafInt, Default: "5", Bind: "maxResults", Usage: "每页数量，整数1-10，默认5"},
+			{Name: "cursor", Bind: "nextToken", OmitEmpty: true, Usage: "上一页meta.pagination.next_token；首页省略，不能空白"},
+		},
+		Constraints: []LeafConstraint{{Kind: "custom", Flags: []string{"limit", "cursor"}, Description: "limit必须在1-10；显式cursor不能空白"}},
+		Validate:    validateMinutesCustomTemplateList,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "list_custom_templates", CanonicalPath: "minutes.list_custom_templates", CLIPath: "minutes template list-custom", PrimaryCLIPath: "minutes template list-custom"},
+			Description: "分页查询当前用户的个人纪要模板及完整提示词，保留版本0和空页续页。",
+			Interface:   minutesMCPInterface("list_custom_templates"), DryRun: minutesMCPDryRun(),
+			Result: minutesMCPResultSpec(minutesCustomTemplatePageSchema), Pagination: minutesMCPagination(),
+			Selection:  contract.SelectionSpec{AgentSummary: "浏览当前用户的个人纪要模板和提示词。", UseWhen: []string{"用户要查询个人纪要模板、templateKey或其完整提示词时"}, AvoidWhen: []string{"系统模板用 template list-system；空页且仍有游标时不要声称列表已结束"}, Examples: []string{"dws minutes template list-custom --format json"}},
+			Parameters: []contract.ParamDecl{{Name: "limit", Property: "maxResults", InterfaceType: "number"}, {Name: "cursor", Property: "nextToken", InterfaceType: "string"}},
+		},
+	})
+	create := NewLeafCommand(LeafSpec{
+		Use: "create", Short: "创建个人纪要模板",
+		Long:    "创建当前用户的个人纪要模板。先确认标题和完整提示词；title非空白且最多150个UTF-16单元，prompt非空白且原样保留空格换行，支持@文件或-读取stdin；最大提示词长度由服务端校验。简介省略或空串由服务异步生成。不会修改已有听记；结果不确定时先查询，不自动重复创建。",
+		Example: "  dws minutes template create --title \"周会\" --prompt \"归纳结论和行动项\"",
+		Server:  "minutes", Tool: "create_custom_template", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPCreateSafety(),
+		Flags: []LeafFlag{
+			{Name: "title", Bind: "title", Required: true, Usage: "非空白标题，最多150个UTF-16单元"},
+			{Name: "prompt", Bind: "prompt", Required: true, Input: []string{corecmd.InputFile, corecmd.InputStdin}, Usage: "完整提示词，保留格式；支持@文件或-"},
+			{Name: "brief-intro", Bind: "briefIntro", OmitEmpty: true, Usage: "模板简介；省略或空串由服务异步生成"},
+		},
+		Validate: validateMinutesTemplateCreate,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "create_custom_template", CanonicalPath: "minutes.create_custom_template", CLIPath: "minutes template create", PrimaryCLIPath: "minutes template create"},
+			Description: "创建个人纪要模板，保留完整提示词格式；结果不确定时先查询确认，不自动重试。",
+			Interface:   minutesMCPInterface("create_custom_template"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTemplateWriteSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "按已确认标题和提示词创建个人纪要模板。", UseWhen: []string{"用户明确要新建个人纪要模板且已提供标题和完整提示词时"}, AvoidWhen: []string{"修改已有模板用 template update；设置后续默认用 template set-default"}, Examples: []string{"dws minutes template create --title \"周会\" --prompt \"归纳结论和行动项\""}},
+			Parameters: []contract.ParamDecl{{Name: "title", Property: "title", InterfaceType: "string"}, {Name: "prompt", Property: "prompt", InterfaceType: "string"}, {Name: "brief-intro", Property: "briefIntro", InterfaceType: "string"}},
+		},
+	})
+	update := NewLeafCommand(LeafSpec{
+		Use: "update", Short: "修改个人纪要模板",
+		Long:    "按真实templateKey修改个人纪要模板。title、prompt、brief-intro至少显式提供一项；省略保留旧值，显式空简介也保留旧简介。title非空白且最多150个UTF-16单元；prompt非空白、原样保留格式，支持@文件或-。不重新生成已有听记。",
+		Example: "  dws minutes template update --template-key <templateKey> --title \"周会纪要\"",
+		Server:  "minutes", Tool: "update_custom_template", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPWriteSafety(),
+		Flags: []LeafFlag{
+			{Name: "template-key", Bind: "templateKey", Required: true, Trim: true, Usage: "本人个人模板templateKey，不是系统templateId"},
+			{Name: "title", Bind: "title", OmitEmpty: true, Usage: "新标题，非空白，最多150个UTF-16单元"},
+			{Name: "prompt", Bind: "prompt", OmitEmpty: true, Input: []string{corecmd.InputFile, corecmd.InputStdin}, Usage: "新提示词，原样保留格式；支持@文件或-"},
+			{Name: "brief-intro", Bind: "briefIntro", Usage: "新简介；显式空串保留旧值"},
+		},
+		Constraints: []LeafConstraint{{Kind: corecmd.AtLeastOne, Flags: []string{"title", "prompt", "brief-intro"}, PresenceOnly: true, Description: "title、prompt、brief-intro至少显式提供一项，空简介也算显式提供"}},
+		Validate:    validateMinutesTemplateUpdate,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "update_custom_template", CanonicalPath: "minutes.update_custom_template", CLIPath: "minutes template update", PrimaryCLIPath: "minutes template update"},
+			Description: "修改指定个人模板，未提供字段与空简介保持旧值，不改已有听记。",
+			Interface:   minutesMCPInterface("update_custom_template"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTemplateWriteSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "修改已知个人模板的标题、提示词或简介。", UseWhen: []string{"用户要更新已知templateKey的个人纪要模板时"}, AvoidWhen: []string{"新建模板用 template create；未选定真实templateKey时先查询个人模板"}, Examples: []string{"dws minutes template update --template-key <templateKey> --title \"周会纪要\""}},
+			Parameters: []contract.ParamDecl{{Name: "template-key", Property: "templateKey", InterfaceType: "string"}, {Name: "title", Property: "title", InterfaceType: "string"}, {Name: "prompt", Property: "prompt", InterfaceType: "string"}, {Name: "brief-intro", Property: "briefIntro", InterfaceType: "string"}},
+		},
+	})
+	deleteTemplate := NewLeafCommand(LeafSpec{
+		Use: "delete", Short: "删除个人纪要模板",
+		Long:    "删除当前用户指定templateKey的个人纪要模板，执行前确认目标；不存在或已删除也按幂等完成。不会删除已有听记或清除默认模板设置。wasDefault=null表示原默认状态未知，不能当作false。",
+		Example: "  dws minutes template delete --template-key <templateKey>",
+		Server:  "minutes", Tool: "delete_custom_template", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPDeleteSafety(),
+		Flags: []LeafFlag{{Name: "template-key", Bind: "templateKey", Required: true, Trim: true, Usage: "待删除的本人个人模板templateKey"}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "delete_custom_template", CanonicalPath: "minutes.delete_custom_template", CLIPath: "minutes template delete", PrimaryCLIPath: "minutes template delete"},
+			Description: "幂等删除个人模板；保留已有听记和默认设置，保留wasDefault未知状态。",
+			Interface:   minutesMCPInterface("delete_custom_template"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTemplateDeleteSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "删除已确认的个人纪要模板。", UseWhen: []string{"用户明确要删除本人某个个人纪要模板且目标已确认时"}, AvoidWhen: []string{"只改变默认选择用 template set-default；不能删除系统模板"}, Examples: []string{"dws minutes template delete --template-key <templateKey>"}},
+			Parameters: []contract.ParamDecl{{Name: "template-key", Property: "templateKey", InterfaceType: "string"}},
+		},
+	})
+	setDefault := NewLeafCommand(LeafSpec{
+		Use: "set-default", Short: "设置默认纪要模板",
+		Long:    "设置当前用户后续听记的默认模板。系统template-id与个人template-key必须二选一，未选字段省略，显式空串非法；template-id不能填diy。个人模板回执templateId=diy；官方模板templateKey=null。保留现有主题，不修改或重新生成已有听记。",
+		Example: "  dws minutes template set-default --template-key <templateKey>",
+		Server:  "minutes", Tool: "set_default_template", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPWriteSafety(),
+		Flags: []LeafFlag{
+			{Name: "template-id", Bind: "templateId", OmitEmpty: true, Trim: true, Usage: "官方templateId，与template-key二选一，不能填diy或空串"},
+			{Name: "template-key", Bind: "templateKey", OmitEmpty: true, Trim: true, Usage: "本人个人模板templateKey，与template-id二选一"},
+			{Name: "locale", Bind: "locale", OmitEmpty: true, Usage: "可选，校验系统模板目录时使用"},
+		},
+		Constraints: []LeafConstraint{{Kind: LeafExactlyOne, Flags: []string{"template-id", "template-key"}, PresenceOnly: true}},
+		Validate:    validateMinutesDefaultTemplate,
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "set_default_template", CanonicalPath: "minutes.set_default_template", CLIPath: "minutes template set-default", PrimaryCLIPath: "minutes template set-default"},
+			Description: "设置后续听记默认模板，系统与个人模板标识二选一，不修改已有听记。",
+			Interface:   minutesMCPInterface("set_default_template"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTemplateDefaultSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "选择后续听记默认使用的系统或个人纪要模板。", UseWhen: []string{"用户明确要设置之后创建的听记默认纪要模板时"}, AvoidWhen: []string{"更新个人模板内容用 template update；本命令不会重新生成已有听记"}, Examples: []string{"dws minutes template set-default --template-key <templateKey>"}},
+			Parameters: []contract.ParamDecl{{Name: "template-id", Property: "templateId", InterfaceType: "string"}, {Name: "template-key", Property: "templateKey", InterfaceType: "string"}, {Name: "locale", Property: "locale", InterfaceType: "string"}},
+		},
+	})
+	templates.AddCommand(listSystem, listCustom, create, update, deleteTemplate, setDefault)
+	return templates
+}
+
+func validateMinutesSystemTemplateList(cmd *cobra.Command, _ []string) error {
+	return validateMinutesTemplateList(cmd, 50)
+}
+
+func validateMinutesCustomTemplateList(cmd *cobra.Command, _ []string) error {
+	return validateMinutesTemplateList(cmd, 10)
+}
+
+func validateMinutesTemplateList(cmd *cobra.Command, maximum int) error {
+	limit, _ := cmd.Flags().GetInt("limit")
+	if limit < 1 || limit > maximum {
+		return apperrors.NewValidation("--limit超出允许范围")
+	}
+	if cursor, _ := cmd.Flags().GetString("cursor"); cmd.Flags().Changed("cursor") && strings.TrimSpace(cursor) == "" {
+		return apperrors.NewValidation("--cursor不能是空白；首页请省略")
+	}
+	return nil
+}
+
+func validateMinutesTemplateCreate(cmd *cobra.Command, _ []string) error {
+	return validateMinutesTemplateContent(cmd, true)
+}
+
+func validateMinutesTemplateUpdate(cmd *cobra.Command, _ []string) error {
+	return validateMinutesTemplateContent(cmd, false)
+}
+
+func validateMinutesTemplateContent(cmd *cobra.Command, create bool) error {
+	if title, _ := cmd.Flags().GetString("title"); create || cmd.Flags().Changed("title") {
+		if strings.TrimSpace(title) == "" || len(utf16.Encode([]rune(title))) > 150 {
+			return apperrors.NewValidation("--title必须非空白且不超过150个UTF-16单元")
+		}
+	}
+	if prompt, _ := cmd.Flags().GetString("prompt"); (create || cmd.Flags().Changed("prompt")) && strings.TrimSpace(prompt) == "" {
+		return apperrors.NewValidation("--prompt必须非空白；内容不能截断")
+	}
+	return nil
+}
+
+func validateMinutesDefaultTemplate(cmd *cobra.Command, _ []string) error {
+	for _, name := range []string{"template-id", "template-key"} {
+		value, _ := cmd.Flags().GetString(name)
+		if cmd.Flags().Changed(name) && strings.TrimSpace(value) == "" {
+			return apperrors.NewValidation("--" + name + "不能是空白；未选字段请省略")
+		}
+	}
+	if value, _ := cmd.Flags().GetString("template-id"); strings.TrimSpace(value) == "diy" {
+		return apperrors.NewValidation("个人模板请使用--template-key，--template-id不能填diy")
+	}
+	return nil
+}
+
+func addMinutesTagWriteCommands(tags *cobra.Command) {
+	create := NewLeafCommand(LeafSpec{
+		Use: "create", Short: "创建听记自定义标签",
+		Long:    "为当前用户创建自定义标签，返回实际保存的tagId和displayName，不自动关联听记。名称非空白且最多50个UTF-16单元。系统或自定义标签不能同名；同名推荐标签会先删除，创建失败不恢复。执行前确认名称，结果不确定时先查询核对。",
+		Example: "  dws minutes tag create --display-name \"周会\"",
+		Server:  "minutes", Tool: "create_minutes_tag", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPCreateSafety(),
+		Flags: []LeafFlag{{Name: "display-name", Bind: "displayName", Required: true, Usage: "标签名称，非空白且最多50个UTF-16单元", Transform: minutesTagName}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "create_minutes_tag", CanonicalPath: "minutes.create_minutes_tag", CLIPath: "minutes tag create", PrimaryCLIPath: "minutes tag create"},
+			Description: "创建个人自定义标签；同名推荐标签可能先删除，失败不承诺回滚。",
+			Interface:   minutesMCPInterface("create_minutes_tag"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTagCreateSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "按已确认名称创建听记自定义标签。", UseWhen: []string{"用户明确要创建一个本人听记自定义标签时"}, AvoidWhen: []string{"给一条听记添加已有标签用 tag add；只查看标签用 tag list"}, Examples: []string{"dws minutes tag create --display-name \"周会\""}},
+			Parameters: []contract.ParamDecl{{Name: "display-name", Property: "displayName", InterfaceType: "string"}},
+		},
+	})
+	deleteTag := NewLeafCommand(LeafSpec{
+		Use: "delete", Short: "删除听记自定义标签定义",
+		Long:    "删除当前用户的自定义标签定义，随后异步清理所有听记关联。不存在或已删除按幂等完成；系统和推荐标签不能删除。执行前确认真实ID和名称，无恢复工具。成功回执不证明异步清理完成，听记正文和已同步的知识库文件不撤回。",
+		Example: "  dws minutes tag delete --tag-id <tagId>",
+		Server:  "minutes", Tool: "delete_minutes_tag", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPDeleteSafety(),
+		Flags: []LeafFlag{{Name: "tag-id", Bind: "tagId", Required: true, Trim: true, Usage: "已确认的本人自定义标签ID"}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "delete_minutes_tag", CanonicalPath: "minutes.delete_minutes_tag", CLIPath: "minutes tag delete", PrimaryCLIPath: "minutes tag delete"},
+			Description: "幂等删除自定义标签定义并异步清理关联，不撤回已同步知识库文件。",
+			Interface:   minutesMCPInterface("delete_minutes_tag"), DryRun: minutesMCPDryRun(), Result: minutesMCPResultSpec(minutesTagDeleteSchema),
+			Selection:  contract.SelectionSpec{AgentSummary: "删除已确认的听记自定义标签定义及其关联。", UseWhen: []string{"用户明确要删除本人自定义标签本身且已确认目标ID和名称时"}, AvoidWhen: []string{"只从一条听记移除关联用 tag remove；系统或推荐标签不可删除"}, Examples: []string{"dws minutes tag delete --tag-id <tagId>"}},
+			Parameters: []contract.ParamDecl{{Name: "tag-id", Property: "tagId", InterfaceType: "string"}},
+		},
+	})
+	add := NewLeafCommand(LeafSpec{
+		Use: "add", Short: "为一条听记添加标签",
+		Long:    "为有查看权限的一条听记增量添加本人自定义标签，保留已有标签。原始输入1-20项，去首尾ASCII空白后按首次顺序去重；关联并集最多20项。可能触发已配置知识库同步，回执不证明同步完成。首个失败停止且不回滚；FAILED为写入结果未知，NOT_PROCESSED为未执行，须检查逐项结果。",
+		Example: "  dws minutes tag add --id <taskUuid> --tag-ids <tagId1,tagId2>",
+		Server:  "minutes", Tool: "add_tags_to_minutes", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPWriteSafety(),
+		Flags: []LeafFlag{
+			{Name: "id", Bind: "taskUuid", Required: true, Trim: true, Usage: "真实听记taskUuid，不能使用taskId或分享链接"},
+			{Name: "tag-ids", Bind: "tagIds", Required: true, Transform: minutesTagIDs, Usage: "逗号分隔本人自定义标签ID，原始1-20项，允许重复"},
+			{Name: "locale", Bind: "locale", OmitEmpty: true, Usage: "可选，知识库同步语言；缺省或空白由服务使用zh"},
+		},
+		Constraints: []LeafConstraint{{Kind: "custom", Flags: []string{"tag-ids"}, Description: "原始标签ID列表须有1-20项且无空白项，按首次出现顺序去重"}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "add_tags_to_minutes", CanonicalPath: "minutes.add_tags_to_minutes", CLIPath: "minutes tag add", PrimaryCLIPath: "minutes tag add"},
+			Description: "为一条听记增量关联自定义标签，逐项串行执行，保留已成功、未知及未执行的结果。",
+			Interface:   minutesMCPInterface("add_tags_to_minutes"), DryRun: minutesMCPDryRun(), Result: minutesMCPRelationResultSpec(),
+			Selection:  contract.SelectionSpec{AgentSummary: "为已知听记添加已有的本人自定义标签。", UseWhen: []string{"用户明确要把已有自定义标签添加到一条有查看权限的听记时"}, AvoidWhen: []string{"创建标签用 tag create；移除一条听记关联用 tag remove；不代表知识库已同步完成"}, Examples: []string{"dws minutes tag add --id <taskUuid> --tag-ids <tagId1,tagId2>"}},
+			Parameters: []contract.ParamDecl{{Name: "id", Property: "taskUuid", InterfaceType: "string"}, {Name: "tag-ids", Property: "tagIds", InterfaceType: "array"}, {Name: "locale", Property: "locale", InterfaceType: "string"}},
+		},
+	})
+	remove := NewLeafCommand(LeafSpec{
+		Use: "remove", Short: "从一条听记移除标签关联",
+		Long:    "从有查看权限的一条听记移除本人自定义标签关联，不删除标签定义、听记正文或已同步的知识库文件。原始输入1-20项，去首尾ASCII空白后按首次顺序去重。无关联返回UNCHANGED。首个失败停止且不回滚；FAILED为写入结果未知，NOT_PROCESSED为未执行，须检查逐项结果。",
+		Example: "  dws minutes tag remove --id <taskUuid> --tag-ids <tagId1,tagId2>",
+		Server:  "minutes", Tool: "remove_tags_from_minutes", OutputRollout: output.RolloutUnifiedActive,
+		PostMount:  minutesMCPNoArgs,
+		ResultCall: callMinutesMCPResult, Safety: minutesMCPWriteSafety(),
+		Flags: []LeafFlag{
+			{Name: "id", Bind: "taskUuid", Required: true, Trim: true, Usage: "真实听记taskUuid，不能使用taskId或分享链接"},
+			{Name: "tag-ids", Bind: "tagIds", Required: true, Transform: minutesTagIDs, Usage: "逗号分隔本人自定义标签ID，原始1-20项，允许重复"},
+		},
+		Constraints: []LeafConstraint{{Kind: "custom", Flags: []string{"tag-ids"}, Description: "原始标签ID列表须有1-20项且无空白项，按首次出现顺序去重"}},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "minutes", Name: "remove_tags_from_minutes", CanonicalPath: "minutes.remove_tags_from_minutes", CLIPath: "minutes tag remove", PrimaryCLIPath: "minutes tag remove"},
+			Description: "从一条听记移除自定义标签关联，保留标签定义及逐项执行状态。",
+			Interface:   minutesMCPInterface("remove_tags_from_minutes"), DryRun: minutesMCPDryRun(), Result: minutesMCPRelationResultSpec(),
+			Selection:  contract.SelectionSpec{AgentSummary: "只移除一条听记的自定义标签关联。", UseWhen: []string{"用户明确要从指定听记移除本人自定义标签关联时"}, AvoidWhen: []string{"删除标签定义用 tag delete；添加关联用 tag add；不能撤回已同步知识库文件"}, Examples: []string{"dws minutes tag remove --id <taskUuid> --tag-ids <tagId1,tagId2>"}},
+			Parameters: []contract.ParamDecl{{Name: "id", Property: "taskUuid", InterfaceType: "string"}, {Name: "tag-ids", Property: "tagIds", InterfaceType: "array"}},
+		},
+	})
+	tags.AddCommand(create, deleteTag, add, remove)
+}
+
+func minutesTagName(raw string) (any, error) {
+	if strings.TrimSpace(raw) == "" || len(utf16.Encode([]rune(raw))) > 50 {
+		return nil, apperrors.NewValidation("--display-name必须非空白且不超过50个UTF-16单元")
+	}
+	return raw, nil
+}
+
+// Use a declared string Transform rather than KindStringSlice: the framework's
+// slice normalization drops blank entries and trims Unicode whitespace before
+// a domain transform can enforce the backend's raw-count/Java-trim contract.
+func minutesTagIDs(raw string) (any, error) {
+	reader := csv.NewReader(strings.NewReader(raw))
+	values, err := reader.Read()
+	if err != nil {
+		return nil, apperrors.NewValidation("--tag-ids须是有效的逗号分隔ID列表")
+	}
+	if _, err := reader.Read(); err != io.EOF {
+		return nil, apperrors.NewValidation("--tag-ids只接受一行逗号分隔ID列表")
+	}
+	if len(values) < 1 || len(values) > 20 {
+		return nil, apperrors.NewValidation("--tag-ids原始数量必须在1-20项之间")
+	}
+	seen := map[string]bool{}
+	unique := make([]string, 0, len(values))
+	for index, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return nil, apperrors.NewValidation("--tag-ids包含空白项")
+		}
+		value = strings.TrimFunc(value, func(r rune) bool { return r <= 0x20 })
+		if value == "" {
+			return nil, apperrors.NewValidation(fmt.Sprintf("--tag-ids第%d项为空白", index+1))
+		}
+		if !seen[value] {
+			seen[value] = true
+			unique = append(unique, value)
+		}
+	}
+	return unique, nil
+}
+
+const minutesMCPWriteRecovery = "写入结果可能已经生效；先查询原模板、标签或听记关联核对，不自动重试整个写请求。"
+
+const minutesSystemTemplatePageSchema = `{"type":"object","properties":{"items":{"type":"array","description":"当前页系统模板，按服务配置排序","items":{"type":"object","properties":{"templateId":{"type":"string","description":"系统模板ID"},"title":{"type":"string","description":"本地化标题"},"brief":{"type":"string","description":"本地化简介，允许空串"}},"required":["templateId","title","brief"],"additionalProperties":true}}},"required":["items"],"additionalProperties":false}`
+const minutesCustomTemplatePageSchema = `{"type":"object","properties":{"items":{"type":"array","description":"当前页个人模板；空数组也可能有续页","items":{"type":"object","properties":{"templateKey":{"type":"string","description":"个人模板key"},"title":{"type":"string","description":"模板标题"},"prompt":{"type":"string","description":"完整提示词，原样保留格式"},"version":{"type":"integer","minimum":0,"description":"版本号，0有效"}},"required":["templateKey","title","prompt","version"],"additionalProperties":true}}},"required":["items"],"additionalProperties":false}`
+const minutesTemplateWriteSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"模板已保存"},"templateKey":{"type":"string","description":"保存后的个人模板key"},"title":{"type":"string","description":"实际保存标题"},"version":{"type":"integer","minimum":0,"description":"保存版本号，0有效"}},"required":["success","templateKey","title","version"],"additionalProperties":true}`
+const minutesTemplateDeleteSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"删除已完成或目标原本不存在"},"templateKey":{"type":"string","description":"请求删除的个人模板key"},"wasDefault":{"type":["boolean","null"],"description":"原默认状态，null为未知；默认设置不清除"}},"required":["success","templateKey","wasDefault"],"additionalProperties":true}`
+const minutesTemplateDefaultSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"默认模板设置完成"},"templateId":{"type":"string","description":"系统templateId，个人模板为diy"},"templateKey":{"type":["string","null"],"description":"个人模板key；系统模板为null"}},"required":["success","templateId","templateKey"],"additionalProperties":true}`
+const minutesTagCreateSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"标签已创建"},"tagId":{"type":"string","description":"新标签ID"},"displayName":{"type":"string","description":"实际保存名称"}},"required":["success","tagId","displayName"],"additionalProperties":true}`
+const minutesTagDeleteSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"主删除完成或标签原本不存在，不证明异步关联清理完成"},"tagId":{"type":"string","description":"请求删除的标签ID"}},"required":["success","tagId"],"additionalProperties":true}`
+const minutesTagRelationSchema = `{"type":"object","properties":{"success":{"type":"boolean","const":true,"description":"所有关联项均确认完成"},"taskUuid":{"type":"string","description":"本次听记taskUuid"},"results":{"type":"array","description":"与去重请求同序的逐项成功回执","items":{"type":"object","properties":{"tagId":{"type":"string","description":"标签ID"},"status":{"type":"string","enum":["APPLIED","UNCHANGED"],"description":"实际变更或原本即目标状态"}},"required":["tagId","status"],"additionalProperties":true}}},"required":["success","taskUuid","results"],"additionalProperties":true}`
+const minutesTagPartialSchema = `{"type":"object","properties":{"total":{"type":"integer","description":"去重后的请求标签总数"},"succeeded":{"type":"array","minItems":1,"description":"原APPLIED或UNCHANGED条目，加上id与taskUuid","items":{"type":"object","properties":{"id":{"type":"string","description":"标签ID"},"taskUuid":{"type":"string","description":"听记taskUuid"},"tagId":{"type":"string","description":"标签ID"},"status":{"type":"string","enum":["APPLIED","UNCHANGED"],"description":"已确认完成状态"}},"required":["id","taskUuid","tagId","status"],"additionalProperties":true}},"failed":{"type":"array","description":"前序失败而未执行的NOT_PROCESSED项","items":{"type":"object","properties":{"id":{"type":"string","description":"未执行的标签ID"},"error":{"type":"object","description":"subtype=not_processed，rpc_data保留原始条目","additionalProperties":true}},"required":["id","error"]}},"unknown":{"type":"array","description":"FAILED项的写入终态未知，可能已落库","items":{"type":"object","properties":{"id":{"type":"string","description":"终态未知的标签ID"},"reason":{"type":"string","description":"服务端失败诊断；先核对再决定后续操作"}},"required":["id","reason"]}}},"required":["total","succeeded","failed","unknown"],"additionalProperties":false}`
+const minutesMCPDryRunSchema = `{"type":"object","properties":{"tool":{"type":"string","description":"预览的MCP工具名"},"arguments":{"type":"object","description":"已验证且将要发送的业务参数","additionalProperties":true},"executed":{"type":"boolean","const":false,"description":"本次未执行远端请求"}},"required":["tool","arguments","executed"],"additionalProperties":false}`
+
+func minutesMCPReadSafety() contract.SafetySpec {
+	return contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}
+}
+
+func minutesMCPWriteSafety() contract.SafetySpec {
+	return contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"}
+}
+
+func minutesMCPCreateSafety() contract.SafetySpec {
+	return contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"}
+}
+
+func minutesMCPDeleteSafety() contract.SafetySpec {
+	return contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"}
+}
+
+func minutesMCPInterface(tool string) *contract.InterfaceSpec {
+	return &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "minutes", RPCName: tool}}
+}
+
+func minutesMCPDryRun() *contract.DryRunSpec {
+	return &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false}
+}
+
+func minutesMCPagination() *contract.PaginationSpec {
+	return &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"}
+}
+
+func minutesMCPResultSpec(schema string) *contract.ResultSpec {
+	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","oneOf":[` + schema + `,` + minutesMCPDryRunSchema + `]}`)}
+}
+
+func minutesMCPRelationResultSpec() *contract.ResultSpec {
+	result := minutesMCPResultSpec(minutesTagRelationSchema)
+	result.Outcomes = append(result.Outcomes, contract.ResultOutcomePartialFailure)
+	result.DataSchema = json.RawMessage(`{"type":"object","oneOf":[` + minutesTagRelationSchema + `,` + minutesTagPartialSchema + `,` + minutesMCPDryRunSchema + `]}`)
+	return result
+}
+
+func callMinutesMCPResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	// Omitted and explicitly empty briefIntro have different request presence
+	// semantics. FlagSpec has no changed-only string mode; keep its declared
+	// binding/value intact, omitting only the absent optional update field here.
+	if tool == "update_custom_template" && !cmd.Flags().Changed("brief-intro") {
+		delete(args, "briefIntro")
+	}
+	if corecmd.BoolFlag(cmd, "dry-run") || (deps != nil && deps.Caller != nil && deps.Caller.DryRun()) {
+		return output.Success(map[string]any{"tool": tool, "arguments": args, "executed": false}, output.WithDryRun()), nil
+	}
+	text, err := CallMCPToolTextOnServerContext(cmd.Context(), "minutes", tool, args)
+	if err != nil {
+		// The shared text parser retains an outer ServiceResult error as raw
+		// JSON in the legacy error. Reuse the established classifier to keep
+		// permission/auth categories and upstream codes; never branch on prose.
+		var legacy *CLIError
+		if errors.As(err, &legacy) && legacy.Code == CodeMCPToolError {
+			if classified := ClassifyMCPResponseText(legacy.Message); classified != nil {
+				var projected *CLIError
+				if errors.As(classified, &projected) {
+					copy := *projected
+					copy.Operation = "minutes/" + tool
+					copy.Cause = err
+					var body map[string]any
+					if json.Unmarshal([]byte(legacy.Message), &body) == nil {
+						copy.ServerCode = businessErrorCode(body)
+						copy.Details = businessErrorDetails(body)
+					}
+					classified = &copy
+				}
+				err = classified
+			}
+		}
+		if !strings.HasPrefix(tool, "list_") {
+			err = minutesMCPNonRetryableError(err)
+		}
+		return nil, err
+	}
+	var envelope map[string]any
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	if err := decoder.Decode(&envelope); err != nil {
+		return minutesMCPInvalidResult(tool, "响应不是JSON对象", nil), nil
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return minutesMCPInvalidResult(tool, "响应包含多个JSON值", nil), nil
+	}
+	if ok, valid := envelope["success"].(bool); !valid || !ok {
+		return minutesMCPInvalidResult(tool, "响应缺少成功的ServiceResult", envelope), nil
+	}
+	data, ok := envelope["result"].(map[string]any)
+	if !ok || data == nil {
+		return minutesMCPInvalidResult(tool, "ServiceResult缺少result对象", envelope), nil
+	}
+	if tool == "list_system_templates" || tool == "list_custom_templates" {
+		return minutesMCPTemplatePage(tool, data, args)
+	}
+	if tool == "add_tags_to_minutes" || tool == "remove_tags_from_minutes" {
+		return minutesMCPTagRelation(tool, data, args)
+	}
+	if err := validateMinutesMCPWrite(tool, data, args); err != nil {
+		return minutesMCPInvalidResult(tool, err.Error(), data), nil
+	}
+	// These DTO members are nullable. Some ServiceResult serializers omit
+	// nulls; normalize only the two declared nullable fields, preserving their
+	// unknown/no-personal-key meaning rather than inventing false or "".
+	if tool == "delete_custom_template" {
+		if _, exists := data["wasDefault"]; !exists {
+			data["wasDefault"] = nil
+		}
+	}
+	if tool == "set_default_template" {
+		if _, exists := data["templateKey"]; !exists {
+			data["templateKey"] = nil
+		}
+	}
+	return output.Success(data), nil
+}
+
+func minutesMCPNonRetryableError(err error) error {
+	var typed *apperrors.Error
+	if errors.As(err, &typed) {
+		copy := *typed
+		copy.Retryable, copy.RetryableSet = false, true
+		copy.RetryAfterSeconds, copy.NextRetryAt, copy.Actions = nil, nil, nil
+		copy.Hint = minutesMCPWriteRecovery
+		return &copy
+	}
+	var legacy *CLIError
+	if errors.As(err, &legacy) {
+		copy := *legacy
+		copy.Suggestion = minutesMCPWriteRecovery
+		return &copy
+	}
+	return err
+}
+
+func minutesMCPInvalidResult(tool, message string, receipt map[string]any) output.CommandResult {
+	subtype := "malformed_tool_response"
+	hint := "响应不符合听记工具契约，请保留诊断信息排查。"
+	if !strings.HasPrefix(tool, "list_") {
+		subtype, hint = "write_outcome_unknown", minutesMCPWriteRecovery
+	}
+	return output.Failure(&output.ErrorInfo{Type: "api", Subtype: subtype, Message: message, Operation: "minutes/" + tool, Origin: "mcp", Stage: "response_validation", Hint: hint, Details: map[string]any{"receipt": receipt}})
+}
+
+func minutesMCPTemplatePage(tool string, data, args map[string]any) (output.CommandResult, error) {
+	items, ok := data["items"].([]any)
+	if !ok {
+		return minutesMCPInvalidResult(tool, "items必须为数组", data), nil
+	}
+	hasMore, ok := data["hasMore"].(bool)
+	if !ok {
+		return minutesMCPInvalidResult(tool, "hasMore必须为布尔值", data), nil
+	}
+	next := ""
+	if raw := data["nextToken"]; raw != nil {
+		var valid bool
+		next, valid = raw.(string)
+		if !valid {
+			return minutesMCPInvalidResult(tool, "nextToken必须为字符串或null", data), nil
+		}
+	}
+	if (hasMore && next == args["nextToken"]) || (!hasMore && next != "") {
+		return minutesMCPInvalidResult(tool, "分页游标缺失、未前进或与hasMore矛盾", data), nil
+	}
+	for _, value := range items {
+		item, ok := value.(map[string]any)
+		if !ok || !minutesMCPString(item, "title") {
+			return minutesMCPInvalidResult(tool, "模板条目或标题无效", data), nil
+		}
+		if tool == "list_system_templates" {
+			_, briefOK := item["brief"].(string)
+			if !minutesMCPString(item, "templateId") || !briefOK {
+				return minutesMCPInvalidResult(tool, "系统模板标识或简介无效", data), nil
+			}
+		} else if !minutesMCPString(item, "templateKey") || !minutesMCPString(item, "prompt") || !minutesMCPVersion(item["version"]) {
+			return minutesMCPInvalidResult(tool, "个人模板标识、提示词或版本无效", data), nil
+		}
+	}
+	pagination, err := output.NewPagination(!hasMore, next)
+	if err != nil {
+		return minutesMCPInvalidResult(tool, err.Error(), data), nil
+	}
+	// NewPagination trims a generic token. Minutes continuation tokens are
+	// opaque: retain the exact bytes after the nonblank/consistency checks.
+	// Pagination.Validate checks usability without rewriting NextToken.
+	pagination.NextToken = next
+	pagination.Pages, pagination.Items = 1, len(items)
+	return output.Success(map[string]any{"items": items}, output.WithMeta(&output.Meta{Count: output.NewCount(len(items)), Pagination: pagination})), nil
+}
+
+func minutesMCPString(data map[string]any, key string) bool {
+	value, ok := data[key].(string)
+	return ok && strings.TrimSpace(value) != ""
+}
+
+func minutesMCPVersion(raw any) bool {
+	number, ok := raw.(json.Number)
+	if !ok {
+		return false
+	}
+	value, err := strconv.ParseInt(string(number), 10, 64)
+	return err == nil && value >= 0
+}
+
+func validateMinutesMCPWrite(tool string, data, args map[string]any) error {
+	if success, ok := data["success"].(bool); !ok || !success {
+		return fmt.Errorf("业务回执未确认success=true")
+	}
+	switch tool {
+	case "create_custom_template", "update_custom_template":
+		if !minutesMCPString(data, "templateKey") || !minutesMCPString(data, "title") || !minutesMCPVersion(data["version"]) {
+			return fmt.Errorf("模板标识、标题或版本无效")
+		}
+		if tool == "update_custom_template" && data["templateKey"] != args["templateKey"] {
+			return fmt.Errorf("返回模板与请求不一致")
+		}
+	case "delete_custom_template":
+		if !minutesMCPString(data, "templateKey") || data["templateKey"] != args["templateKey"] {
+			return fmt.Errorf("返回模板与请求不一致")
+		}
+		if raw := data["wasDefault"]; raw != nil {
+			if _, ok := raw.(bool); !ok {
+				return fmt.Errorf("wasDefault必须为布尔值或null")
+			}
+		}
+	case "set_default_template":
+		if key, personal := args["templateKey"]; personal {
+			if data["templateId"] != "diy" || data["templateKey"] != key {
+				return fmt.Errorf("个人默认模板与请求不一致")
+			}
+		} else if data["templateKey"] != nil || data["templateId"] != args["templateId"] {
+			return fmt.Errorf("系统默认模板回执无效，templateKey必须为null")
+		}
+	case "create_minutes_tag":
+		if !minutesMCPString(data, "tagId") || !minutesMCPString(data, "displayName") {
+			return fmt.Errorf("创建标签回执缺少tagId或实际displayName")
+		}
+	case "delete_minutes_tag":
+		if !minutesMCPString(data, "tagId") || data["tagId"] != args["tagId"] {
+			return fmt.Errorf("返回标签与请求不一致")
+		}
+	default:
+		return fmt.Errorf("未声明的听记写工具")
+	}
+	return nil
+}
+
+func minutesMCPTagRelation(tool string, data, args map[string]any) (output.CommandResult, error) {
+	items, ok := data["results"].([]any)
+	ids, idsOK := args["tagIds"].([]string)
+	success, successOK := data["success"].(bool)
+	if !ok || !idsOK || !successOK || data["taskUuid"] != args["taskUuid"] || len(items) != len(ids) {
+		return minutesMCPInvalidResult(tool, "标签回执缺少逐项结果或目标不一致", data), nil
+	}
+	succeeded := []any{}
+	failed := []output.PartialFailedEntry{}
+	unknown := []output.PartialUnknownEntry{}
+	seenFailure := false
+	for index, value := range items {
+		item, ok := value.(map[string]any)
+		if !ok || item["tagId"] != ids[index] {
+			return minutesMCPInvalidResult(tool, "标签结果必须与去重请求同序且不重不漏", data), nil
+		}
+		switch item["status"] {
+		case "APPLIED", "UNCHANGED":
+			if seenFailure {
+				return minutesMCPInvalidResult(tool, "标签结果在首个失败之后仍声称执行成功", data), nil
+			}
+			entry := make(map[string]any, len(item)+2)
+			for key, value := range item {
+				entry[key] = value
+			}
+			entry["id"], entry["taskUuid"] = ids[index], data["taskUuid"]
+			succeeded = append(succeeded, entry)
+		case "FAILED":
+			if seenFailure || !minutesMCPString(item, "errorCode") || !minutesMCPString(item, "errorMessage") {
+				return minutesMCPInvalidResult(tool, "FAILED条目重复或缺少诊断字段", data), nil
+			}
+			seenFailure = true
+			unknown = append(unknown, output.PartialUnknownEntry{ID: ids[index], Reason: fmt.Sprintf("FAILED (%s): %s；写入结果未知，请先核对。", item["errorCode"], item["errorMessage"])})
+		case "NOT_PROCESSED":
+			if !seenFailure {
+				return minutesMCPInvalidResult(tool, "NOT_PROCESSED之前缺少FAILED项", data), nil
+			}
+			started := false
+			failed = append(failed, output.PartialFailedEntry{ID: ids[index], Error: &output.ErrorInfo{Type: "api", Subtype: "not_processed", Message: "前序项失败，本项未执行", Operation: "minutes/" + tool, ExecutionStarted: &started, RPCData: item, Hint: minutesMCPWriteRecovery}})
+		default:
+			return minutesMCPInvalidResult(tool, "未知标签结果状态", data), nil
+		}
+	}
+	if success == seenFailure {
+		return minutesMCPInvalidResult(tool, "业务success与逐项状态矛盾", data), nil
+	}
+	if success {
+		return output.Success(data), nil
+	}
+	if len(succeeded) == 0 {
+		return minutesMCPInvalidResult(tool, "没有标签项得到完成确认；FAILED可能已落库，后续项未执行", data), nil
+	}
+	partial, err := output.NewPartialData(len(ids), succeeded, failed, unknown)
+	if err != nil {
+		return minutesMCPInvalidResult(tool, err.Error(), data), nil
+	}
+	return output.Partial(partial), nil
+}
+
+func minutesMCPNoArgs(cmd *cobra.Command) {
+	cmd.Args = cobra.NoArgs
 }

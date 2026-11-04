@@ -30,13 +30,13 @@ func TestCrossPlatformCoverageCodexPublicProgressIsolation(t *testing.T) {
 	send("item/agentMessage/delta", `{"threadId":"thread","itemId":"a","delta":"完整段落\n\n半"}`)
 	send("item/agentMessage/delta", `{"threadId":"thread","itemId":"a","delta":"句话"}`)
 	send("item/completed", `{"threadId":"thread","item":{"id":"a","type":"agentMessage","phase":"final_answer","text":"完整段落\n\n完整答案"}}`)
-	if len(got) != 5 || got[0].Kind != "progress" || got[1].Kind != "tool" || !got[2].Done || got[3].Text != "完整段落" || got[4].Text != "完整段落\n\n完整答案" {
+	if len(got) != 6 || got[0].Kind != "progress" || got[1].Kind != "tool" || !got[2].Done || got[3].Text != "完整段落\n\n半" || got[4].Text != "完整段落\n\n半句话" || got[5].Text != "完整段落\n\n完整答案" {
 		t.Fatalf("unexpected public events: %+v", got)
 	}
 	raw, _ := json.Marshal(got)
-	for _, forbidden := range []string{"secret", "private", "半句话", "wrong thread"} {
+	for _, forbidden := range []string{"secret", "private", "wrong thread"} {
 		if strings.Contains(string(raw), forbidden) {
-			t.Fatal("private/incomplete content leaked")
+			t.Fatal("private content leaked")
 		}
 	}
 }
@@ -164,8 +164,8 @@ func TestCrossPlatformCoverageCodexProgressBoundedBuffers(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"threadId": "thread", "itemId": "a64", "delta": delta})
 		p.handle("item/agentMessage/delta", raw, "thread")
 	}
-	if len(got) != 2 || got[0].Text != "first" || got[1].Text != "first\n\nsecond" {
-		t.Fatalf("split paragraph delimiter lost: %+v", got)
+	if len(got) != 3 || got[0].Text != "first\n" || got[1].Text != "first\n\nsecond" || got[2].Text != "first\n\nsecond\n\n" {
+		t.Fatalf("incremental text lost: %+v", got)
 	}
 	raw, _ := json.Marshal(map[string]any{"threadId": "thread", "itemId": "a64", "delta": strings.Repeat("字", 50000)})
 	p.handle("item/agentMessage/delta", raw, "thread")

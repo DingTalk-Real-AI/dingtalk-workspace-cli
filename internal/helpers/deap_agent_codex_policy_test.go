@@ -36,6 +36,12 @@ func TestCrossPlatformCoverageEmployeeCodexToolPolicy(t *testing.T) {
 		cf := fwd.(*codexAppServerForwarder)
 		for _, thread := range []string{"", "existing-thread"} {
 			params := cf.threadParams(thread)
+			if thread != "" {
+				if params["threadId"] != thread || len(params) != 1 {
+					t.Fatal("恢复旧会话不得覆盖权限、目录或指令")
+				}
+				continue
+			}
 			instructions := params["developerInstructions"].(string)
 			if strings.Contains(instructions, "不得访问其它文件") || strings.Contains(instructions, "仅当用户消息明确附带了本地附件路径时") {
 				t.Error("数字员工继承了机器人仅分析附件的限制，用户明确请求也无法调用本地技能")
@@ -43,22 +49,29 @@ func TestCrossPlatformCoverageEmployeeCodexToolPolicy(t *testing.T) {
 			if !strings.Contains(instructions, "技能") || !strings.Contains(instructions, "用户明确") {
 				t.Error("缺少数字员工按用户授权使用本地技能的指令")
 			}
-			wantSandbox := "read-only"
-			if yolo {
-				wantSandbox = "workspace-write"
+			wantSandbox, wantReviewer := "workspace-write", "auto_review"
+			if !yolo {
+				wantSandbox, wantReviewer = "read-only", "user"
 			}
-			if params["sandbox"] != wantSandbox || params["approvalPolicy"] != "never" || params["cwd"] != cfg.Options.WorkDir || cf.sessions == nil {
-				t.Fatal("工具策略改变了沙箱、工作目录或会话复用配置")
+			if params["sandbox"] != wantSandbox || params["approvalPolicy"] != "on-request" || params["approvalsReviewer"] != wantReviewer || params["cwd"] != cfg.Options.WorkDir || cf.sessions == nil {
+				t.Fatal("新会话缺少自动审核、工作目录或会话复用配置")
 			}
 		}
 		// 每轮新建 app-server 进程并不等于新建会话；重建 forwarder 后也要恢复同一 thread。
 		var captures []*bufferWriteCloser
+		settings := codexPermissionFixture(t)
+		read := codexPermissionReadFixture(t, "employee-thread", settings)
 		testseam.Swap(t, &codexNewAppServerClient, func(context.Context, string, []string, string) (*codexAppServerClient, error) {
 			buf := &bufferWriteCloser{}
 			captures = append(captures, buf)
+			result := json.RawMessage(`{"thread":{"id":"employee-thread"}}`)
+			if len(captures) == 2 {
+				result = read
+			}
 			return unitCodexClient(buf,
 				codexRPCMessage{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)},
-				codexRPCMessage{ID: codexIntPtr(2), Result: json.RawMessage(`{"thread":{"id":"employee-thread"}}`)},
+				codexRPCMessage{ID: codexIntPtr(2), Result: result},
+				codexRPCMessage{ID: codexIntPtr(3), Result: codexPermissionResumeFixture(t, "employee-thread", settings)},
 				codexRPCMessage{Method: "turn/completed", Params: json.RawMessage(`{"threadId":"employee-thread","turn":{"status":"completed","items":[{"type":"agentMessage","text":"done"}]}}`)},
 			), nil
 		})
@@ -83,7 +96,7 @@ func TestCrossPlatformCoverageEmployeeCodexToolPolicy(t *testing.T) {
 				if err := json.Unmarshal([]byte(line), &request); err != nil {
 					t.Fatal(err)
 				}
-				if strings.HasPrefix(request.Method, "thread/") {
+				if request.Method == "thread/start" || request.Method == "thread/resume" {
 					want := "thread/start"
 					if i == 1 {
 						want = "thread/resume"
@@ -136,6 +149,11 @@ func TestCrossPlatformCoverageEmployeeCodexResumePreservesContext(t *testing.T) 
 	f := newCodexAppServerForwarder("fixture", nil, 0, connectAgentOptions{Memory: true}, "employee").(*codexAppServerForwarder)
 	f.developerInstructions = codexEmployeeDeveloperInstructions
 	f.sessions.setThreadID("conversation", "locked-thread")
+	sharedAttempt := false
+	testseam.Swap(t, &codexForwardDesktopTurn, func(_ context.Context, thread, _ string, _ []connectMediaAttachment, _ func(string), _ string) (string, error) {
+		sharedAttempt = thread == "locked-thread"
+		return "", &codexDesktopTurnError{Code: "codex_desktop_unavailable"}
+	})
 	testseam.Swap(t, &codexNewAppServerClient, func(context.Context, string, []string, string) (*codexAppServerClient, error) {
 		return unitCodexClient(&bufferWriteCloser{},
 			codexRPCMessage{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)},
@@ -149,6 +167,9 @@ func TestCrossPlatformCoverageEmployeeCodexResumePreservesContext(t *testing.T) 
 	}
 	if f.sessions.threadID("conversation") != "locked-thread" {
 		t.Fatal("会话恢复失败清除了已有 thread 映射")
+	}
+	if !sharedAttempt {
+		t.Fatal("已占用的原会话应尝试通过持有者接续")
 	}
 	// 只有用户明确发起新会话才清除映射。
 	f.resetSession("conversation")

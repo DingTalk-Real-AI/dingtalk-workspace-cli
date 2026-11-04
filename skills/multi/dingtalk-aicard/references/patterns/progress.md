@@ -6,12 +6,16 @@ For one status, a short Text or Markdown block, optionally in one panel, is enou
 
 ## State and presentation
 
+For a standalone Markdown running indicator, prefix `content` with `[AIGenerating]` and remove it on completion, failure, or cancellation. Panel-based execution uses the conventions below.
+
 For an Agent reasoning or tool-execution flow, use this recommended pattern. Ordinary upload or task progress does not require reasoning styling or generation effects:
 
 - The outer `CollapsiblePanel(variant=reasoning)` shows the current operation in its title, with the host's `[AIGenerating]` convention and `textEffect: shimmer` while running. On completion, show completion text and omit both the generating marker and `textEffect`.
+- When a public planning step belongs in the requested flow, a thinking placeholder such as `[AIGenerating]Thinking...` can precede the first tool group. Use only a concise public plan or operation summary as its timeline item; never expose private reasoning or invent an unobserved step. A placeholder is presentation, not evidence that reasoning occurred. When present, keep this item first; it is not a tool group and has no loading or completion icon. Reuse a host-owned placeholder rather than creating another card.
 - Group related tools in nested `indented` panels when useful. While running, set `icon` to the light loading GIF URL and `darkIcon` to the dark loading GIF URL. For the requested DingTalk named-icon completion style, replace `icon` with `"Check_L_outlined"` when the tool group succeeds and omit the loading `darkIcon`. Do not show a success check for failed or cancelled groups.
 - Panel icons accept image URLs or registered icon names. Tool-row named icons use `Icon.name`.
 - Tool rows use `Icon.name`, chosen from [IconName](../protocol/common-types-visual.json#/$defs/IconName) for the tool type, not image URLs. `SpinLoading_L_outlined` alone does not enable rotation. Keep tool icons separate from panel status images; the outer panel uses the generation marker rather than a loading icon.
+- When authorized diagnostics need input or output details, show selected, sanitized excerpts rather than raw tool dumps; exclude credentials, private reasoning, and unrelated inputs. Make the call its own nested `indented` panel: the title names the call, `icon` carries the tool-type icon name, and a Markdown child shows the excerpt as a fenced code block. Set `maxHeight` so long code scrolls inside the panel, and replace only that Markdown definition when the result arrives. Code-block text color, syntax colors, and background are renderer-owned; Markdown has no color field, and `<font color>` inside a fence is shown as literal text. Use `Text.colorToken` outside the block when a value must be highlighted.
 - For the compact example style, use `common_level2_base_color` on panel titles and tool rows, and `common_action_text_style__font_size` on tool-row Text. These are styling defaults, not protocol requirements; preserve requested styling. Panel-title size is renderer-owned; do not invent a size field.
 - Children may contain any contract-supported composition, including Markdown, File, charts, or forms. Content placement and reveal timing are task choices, not restrictions imposed by the execution state.
 
@@ -36,10 +40,10 @@ Initialize new bound fields with correctly typed values before using them. A tex
 
 The message positions below are one-based. Read one matching JSON, not both by default.
 
-| Example | Batch 1 | Batch 2 | Batch 3 |
-|---|---|---|---|
-| [agent-run-progress.json](../protocol/examples/agent-run-progress.json) | Messages 1–3: initialize reading | Message 4: finish reading, start analysis | None; intentionally stays running |
-| [agent-run.json](../protocol/examples/agent-run.json) | Messages 1–3: initialize reading | Message 4: finish reading, start analysis | Message 5: complete and reveal results |
+| Example | Batch 1 | Batch 2 | Batch 3 | Batch 4 |
+|---|---|---|---|---|
+| [agent-run-progress.json](../protocol/examples/agent-run-progress.json) | Messages 1–3: initialize thinking | Message 4: start reading | Message 5: finish reading, start analysis | None; intentionally stays running |
+| [agent-run.json](../protocol/examples/agent-run.json) | Messages 1–3: initialize thinking | Message 4: start reading | Message 5: finish reading, start analysis | Message 6: complete and reveal results |
 
 The batches describe successive A2UI states on the same Surface; applying the entire array at once may hide intermediate states. Timing belongs to the consuming application, not the JSON. Keep the running-only example unfinished when demonstrating that state. For a requested complete lifecycle, include the actual completed, failed, or cancelled content state; do not infer success from the end of a message array.
 

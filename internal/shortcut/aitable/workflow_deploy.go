@@ -5,6 +5,7 @@ package aitable
 
 import (
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -16,18 +17,19 @@ var WorkflowDeploy = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+workflow-deploy",
 	Product:     serverMain,
-	Description: "创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING",
+	Description: "创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING；result.url/links 保留目标标识，定位由 Web 处理",
 	Intent:      "当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建并安全交付 STOP，提供则更新但不改变已有状态，--enable 会检查最终 RUNNING。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Contract: aitableCompositeContract(
+	Contract: aitableCompositeContractWithResult(
 		"+workflow-deploy",
-		"创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING",
+		"创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING；result.url/links 保留目标标识，定位由 Web 处理",
 		"当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建并安全交付 STOP，提供则更新但不改变已有状态，--enable 会检查最终 RUNNING。",
 		"只查看定义用 workflow get；只启停已有流程用 enable/disable；创建回包不确定时不要盲目重试",
 		`dws aitable +workflow-deploy --base-id B --dsl '{"version":"workflow-dsl/v1","name":"提醒","nodes":[]}' --enable`,
+		parityCompositeResultSpec(),
 	),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -177,6 +179,7 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 	result.CompletedCount = len(result.CompletedSteps)
 	result.Verification = verification
 	result.Result = map[string]any{"action": action, "workflowId": workflowID, "valid": true, "enableRequested": enableRequested}
+	aitablenavigation.Preserve(result.Result, parityResponseObject(writeData))
 	if running, exists := result.Verification["running"]; exists {
 		result.Result["running"] = running
 	}

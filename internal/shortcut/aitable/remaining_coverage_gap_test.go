@@ -114,7 +114,7 @@ func TestCrossPlatformCoverageURLResolveAllVerificationKindsE2E(t *testing.T) {
 		{name: "record", url: "https://alidocs.dingtalk.com/i/nodes/base?iframeQuery=sheetId%3Dtable%26recordId%3Drecord", tool: "query_records", text: `{"records":[{"record_id":"record"}]}`},
 		{name: "view", url: "https://alidocs.dingtalk.com/i/nodes/base?iframeQuery=sheetId%3Dtable%26viewId%3Dview", tool: "get_views", text: `{"views":[{"view_id":"view"}]}`},
 		{name: "base by id", url: "https://alidocs.dingtalk.com/i/nodes/base", tool: "get_base", text: `{"base_id":"base"}`},
-		{name: "base structural fallback", url: "https://alidocs.dingtalk.com/i/nodes/base", tool: "get_base", text: `{"data":{"tables":[]}}`},
+		{name: "base nested identity", url: "https://alidocs.dingtalk.com/i/nodes/base", tool: "get_base", text: `{"data":{"baseId":"base","tables":[]}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,19 +141,6 @@ func TestCrossPlatformCoverageURLResolveAllVerificationKindsE2E(t *testing.T) {
 			t.Fatalf("unknown base = output:%q err:%v", out, err)
 		}
 	})
-}
-
-func TestCrossPlatformCoverageURLResolveRecursiveShapeHelpers(t *testing.T) {
-	value := map[string]any{"data": []any{map[string]any{"id": "wanted"}}}
-	if !responseContainsID(value, "wanted", "id") || responseContainsID(value, "other", "id") {
-		t.Fatal("responseContainsID recursion mismatch")
-	}
-	if !responseHasAnyKey(map[string]any{"data": []any{map[string]any{"tables": []any{}}}}, "tables") {
-		t.Fatal("responseHasAnyKey recursion mismatch")
-	}
-	if responseHasAnyKey([]any{"value"}, "tables") {
-		t.Fatal("unrelated key must not match")
-	}
 }
 
 func TestCrossPlatformCoverageViewPresetValidationAndDryRunE2E(t *testing.T) {

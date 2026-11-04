@@ -15,6 +15,19 @@ metadata:
 
 默认目标是完成用户明确提出的 AI 表格业务操作，包括查询、创建、更新、同步和其他已授权写入。契约评审是辅助场景，仅在用户明确要求核对合成 JSON、dry-run、参数合法性、Help/Schema 或恢复方案时启用；这类请求默认只读，不把评审要求扩展成线上业务操作。用户同时提出业务操作和契约核对时，先按真实业务目标执行必要的契约校验，再继续执行已明确授权的业务操作。
 
+## 过程展示建议
+
+创建与修改采用相同的展示建议：结合核验结果按需展示阶段进展，可使用 Markdown 标题与链接（如 `[项目台账](完整URL)`）、卡片或当前宿主支持的其他格式；在满足宿主明确交付要求的前提下，遵循用户指定的展示方式。最终汇总保留当前有效的具名链接及名称转义，不拆成名称与裸 URL；用户或宿主指定格式除外。
+
+- 展示链接时，名称与对象对应，复用当前有效回执中对象自身的完整 `url` 或身份匹配的 `relation=target` 链接，保留原编码；不得截断、缩写或用 `...` / `…` 替代 URL 任一部分。不用父级链接冒充目标对象，不拼接地址或为补链接重放写入。独立读回优先，显式 null/空值不由旧回执覆盖。
+- 如实描述结果，保留 pending/unknown/partial/STOP；链接本身不证明成功、核验完成或流程启用。缺链接时可简短说明。
+- 字段 target 须满足 `objectType=field` 且 `objectId=当前 fieldId`；不额外展示错配链接。字段自身无可用链接时直说缺失，核验状态仍按有效回执保留。
+- **回执转述边界：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
+
+业务核验与宿主交付分别判断。对当前宿主明确要求交付或登记的最终产物，按其适用范围和规则执行，普通链接不替代规定的登记。展示或登记失败、工具不可用或状态未确认时，应简短分别说明当前已知的业务核验、登记与展示状态，不因此重放业务写入；无需重复对象或链接清单；用户明确要求字段完整汇总时除外，应按宿主及用户指定格式保留各项已有完整链接与原核验状态。展示请求已提交不等于登记或渲染成功。
+
+收尾时检查所有用户最终目标，某个目标进入恢复流程，不遗漏其他满足交付条件的目标；不额外登记未被用户指定为最终交付对象的内部 Table、字段或中间产物。已确认完成的登记不重复提交；结果未知的登记请求不自动重发，保留未确认状态并说明限制，仅在宿主提供明确查询或安全恢复契约时按其处理。用户要求预发交付时，指定预发前缀不证明环境映射成立；缺少可信完整预发 URL 时，保留业务结果并说明预发交付未完成，不自行拼接、换域登记或擅自改交生产链接。
+
 ## 先区分操作、用法与契约评审
 
 用户只要求评审返回值或恢复方案时，不执行业务操作，也不按业务任务扩展到上游写入命令。发现目标以用户原始消息为准，Agent 自行摘要或传入 Skill 的参数不是新增请求，不能将“核对该对账命令”改写成“比较对账与原创建命令”。保留用户正在核对的完整原子路径或 `+` Shortcut 名，不做同义替换。背景里提到的原创建命令不是额外发现目标。
@@ -41,7 +54,7 @@ metadata:
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；本轮用户已明确要求执行、目标与影响无歧义的非破坏性写操作时，该明确指令就是本次确认，首次调用直接携带 Runtime 所需的 `--yes`，不先制造 `confirmation_required`。文件导入是非幂等操作，仍按 Golden Route 先触发 Runtime 确认门禁，确认后再追加 `--yes`。删除、停用自动化等破坏性或高风险动作仍须先说明对象、动作与影响并取得独立确认。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；本轮用户已明确要求执行、目标与影响无歧义的非破坏性写操作时，该明确指令就是本次确认，首次调用直接携带 Runtime 所需的 `--yes`，不先制造 `confirmation_required`。文件导入是非幂等操作，仍按 Golden Route 先触发 Runtime 确认门禁，确认后再追加 `--yes`。删除、停用自动化等破坏性或高风险动作仍须先说明对象、动作与影响并取得独立确认。仅补确认标记时，保持目标、名称、字段、类型及其他业务参数不变，不夹带修正，不使用占位类型或重复 JSON 键。
 - 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
 - Runtime Schema 是当前能力与安全语义的权威来源；同一 leaf 任务内只读一次并复用。只有 Schema 缺字段、含义不清或与真实执行冲突时才读 leaf Help；版本、profile 变化或出现契约错误时立即作废缓存。
 - mutation 返回、HTTP 200 和退出码 0 都只是调用回执，不是最终对象状态。写后必须清除受影响的读取缓存，用返回的真实 ID/唯一键发起独立读回，不复用写前结果。
@@ -127,10 +140,11 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 从已确认的 AITable URL 解析稳定 ID | `dws aitable +url-resolve --url <URL>` | 只解析 URL 中已有的 baseId/tableId/viewId/recordId，不远程解析 dlink；原始 `/i/nodes/` URL 必须先按上文规范化，dlink 目标 nodeId 直接作为 baseId |
+| 从已确认的 AITable URL 解析稳定 ID | `dws aitable +url-resolve --url <URL>` | 解析表、视图、记录、字段、表单、App/Page、Application 和流程 ID；保留完整 URL 的定位参数，不远程解析 dlink；原始节点先按上文确认类型，dlink 使用已确认目标 |
 | 按名称唯一定位并操作 Base/Table | `dws aitable +resolve-base --name <名称>` → `dws aitable +resolve-table --base <ID> --name <表名>` | 默认精确匹配；只有用户明确接受模糊匹配时才加 `--fuzzy` |
 | 搜索 Base 候选或检查是否存在 | `dws aitable +base-search --query <关键词>` | 用户说“搜索/找一下/候选/如果没有就创建”时直接走本入口，不先调用 `+resolve-base`；返回 `hasMore/nextCursor`，仅 `hasMore=true` 时续页；AITable Base 名称不得路由到 `dws aisearch person` |
 | 浏览 Base 下的数据表 | `dws aitable +list-tables --base <ID>` | 只返回 tableId/tableName，不加载字段 |
+| 新建独立空白 Base，未指定自定义表结构 | `dws aitable base create --name <名称>` | 保留平台默认结构，不额外创建默认同名表或写入业务记录；不以 `tables=[]` 表达空白 Base；未独立核验记录数时，不宣称已验证零记录 |
 | 新建 Base 与整套表字段 | `dws aitable +base-bootstrap --name <名称> --tables '[{"name":"<表名>","fields":[{"fieldName":"<字段名>","type":"text"}]}]'` | 表对象键必须是 `name`，不是 `tableName`；字段使用 `fieldName/type/config`，可选 `description`；参数已足够时直接执行 |
 | 复制 Base | `dws aitable +base-copy --base-id <B_OR_URL> [--target-folder-id <FOLDER_ID_OR_URL>] [--only-struct] [--new-name <名称>]` | `base-id` 可传 Base ID 或标准节点 URL；`target-folder-id` 可传 dentryUuid、标准节点 URL 或 Drive 文件夹 URL，省略时复制到源 Base 所在工作区根目录；参数解析与目标验证由 AITable MCP 负责 |
 | 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`，可选 `description`；自动按 15 个字段分片并读回验证 |
@@ -248,7 +262,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 ## 错误最短路径
 
 1. 零/多候选、字段歧义或分页不完整：停止并返回证据；仅有效分页会话可透传真实 `nextCursor`。失效游标先执行上方“记录稳定约束”，不能套用普通断点续传。
-2. 类型错误只复核目标字段，不删字段或丢输入；`partial_success` 从 checkpoint 续跑，未知写入先回读。
+2. 类型错误只复核目标字段，不删字段或丢输入；`partial_success` 或未知写入结果应先保留原 ID、已完成步骤及已知副作用，对受影响的原对象只读核实后，再按当前契约和授权补齐。只读核实仍无法确定写入结果或补齐范围时，停止后续写入并说明未确认项，不重放创建。checkpoint、失败计数或输入错误不构成重放许可；不得自行新建替代 Base，或通过改名、清理旧对象掩盖问题；确需替代或清理时，说明影响并按既有规则取得相应授权。原 partial 与恢复核验结果分别说明。
 3. 错误提供 `actions` / `available_flags` 时只按其中的 `next_command` 修正一次；`retryable=false` 或目标 ID 类型不符时停止。
 4. 数据源同步 `errorCode=4014` 表示同步运行中重复触发，可稍后重试；非数据源表触发同步前先用 `+base-get` 确认 `sync=true`。
 
@@ -257,3 +271,11 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 - Excel 式单元格、区域和公式操作 → `dingtalk-misc` 的 Sheet。
 - Base 作为整体在普通文件夹间移动或做外层存储重命名 → Drive；Base 结构复制/删除，以及 Base 内 Table、Dashboard、Section 的创建、复制、移动、重命名、删除 → AITable。
 - 记录主键文档正文 → 取得真实 nodeId 后切 `dingtalk-doc`。
+
+## 对象访问链接
+
+对象访问链接复用 Web 定位参数：数据表/视图/字段使用 `sheetId/viewId/fieldId`，应用模式使用编码 `appId/pageId`，普通仪表盘和说明文档使用 `applicationId`，自动化使用 `flowId/autoOpenAutomation=true`。字段复合创建及续跑结果逐项保留 `sheetId/fieldId` 链接；展示方式参考前文“过程展示建议”。表单管理入口 `entrance=form` 与公开填写链接不同，不能因此开启分享；自动打开流程编辑器不会启用流程。字段业务 type 不作为链接对象类型。
+
+`+url-resolve` 默认仅做本地解析，覆盖 Base、Table、View、Record、Field、Form、App/Page、Application 和 Workflow；参数冲突、缺父级或混用不同对象族时明确拒绝，不能把子对象降级为 Base 验证。`--verify` 只调用对应只读接口并核对所属关系；Application 经 `list_nsheet_nodes` 的 `nodeId/nodeType` 核对仪表盘/说明文档导航节点，不能用底层文档 UUID 或 Base 存在证明目标节点存在。自动化入口保留的后台表/视图/Application 参数不作为目标；无 flowId 时仅验证 Base，有 flowId 时验证流程。仅 App 链接暂无只读验证入口，必须明确拒绝验证，不能调用会隐式创建 App 的 `get_app/list_app_pages`；含 Page 的链接通过 `get_app_page` 同时核对 App/Page。公开表单分享 URL 不作为 Base 对象链接解析。
+
+`+url-resolve` 使用统一 `ok/outcome` 信封，成功的稳定 ID 位于 `data.target`；仅 `data.verified=true` 表示只读验证通过。失败保留错误分类和非零退出码，不能把本地解析成功当作远程存在证明。

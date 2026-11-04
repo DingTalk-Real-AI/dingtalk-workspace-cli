@@ -3,12 +3,17 @@
 package a2ui
 
 import (
-	"encoding/base64"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
+	"unicode"
 )
+
+// resourceLeadingSpace matches the characters the standalone Skill skips before
+// a resource URL scheme: C0 controls, space, and Unicode whitespace.
+func resourceLeadingSpace(r rune) bool {
+	return r <= ' ' || unicode.IsSpace(r)
+}
 
 // Preflight is an explicit offline delivery/resource check, separate from Schema validity.
 func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, error) {
@@ -103,17 +108,33 @@ func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, er
 			}
 		}
 	}
-	resourceKeys := map[string]bool{"url": true, "darkUrl": true, "imageUrl": true, "posterUrl": true, "coverUrl": true, "images": true}
+	resourceKeys := map[string]bool{"url": true, "darkUrl": true, "imageUrl": true, "posterUrl": true, "coverUrl": true, "images": true, "icon": true, "darkIcon": true}
 	var walk func(any, string, string)
 	walk = func(node any, ptr, field string) {
 		switch n := node.(type) {
 		case map[string]any:
+			markdownFields := []string{}
+			if n["component"] == "Markdown" {
+				markdownFields = append(markdownFields, "content")
+			}
+			if _, ok := n["component"].(string); ok {
+				markdownFields = append(markdownFields, "fallbackMarkdown")
+			}
+			for _, key := range markdownFields {
+				if content, ok := n[key].(string); ok && strings.Contains(strings.ToLower(content), "data:") {
+					diagnostics = append(diagnostics, Diagnostic{"resource.markdown_data_unverified", "warning", ptr + "/" + key, "Markdown contains data: text; review image destinations before delivery. This check does not parse Markdown or verify resource use", ""})
+				}
+			}
 			keys := []string{}
 			for k := range n {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
 			for _, k := range keys {
+				// Table rows and chart data/config are business values, not component definitions.
+				if k == "data" && (n["component"] == "Table" || n["component"] == "Chart") {
+					continue
+				}
 				if k == "metadata" || k == "action" || k == "checks" || strings.HasPrefix(k, "on") {
 					continue
 				}
@@ -124,25 +145,10 @@ func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, er
 				walk(v, fmt.Sprintf("%s/%d", ptr, i), field)
 			}
 		case string:
-			if !resourceKeys[field] || !strings.HasPrefix(strings.ToLower(n), "data:") {
+			if !resourceKeys[field] || !strings.HasPrefix(strings.ToLower(strings.TrimLeftFunc(n, resourceLeadingSpace)), "data:") {
 				return
 			}
-			header, content, ok := strings.Cut(n, ",")
-			if strings.HasPrefix(strings.ToLower(header), "data:image/") && strings.Contains(strings.ToLower(header), ";base64") {
-				diagnostics = append(diagnostics, Diagnostic{"resource.base64_image_unverified", "warning", ptr, "Base64 image compatibility and operation size are unverified; prefer a verified HTTPS image URL", ""})
-			}
-			decoded, err := url.PathUnescape(content)
-			if !ok || err != nil {
-				add("resource.invalid_data_uri", ptr, "The data URI lacks a separator or contains invalid escaping")
-				return
-			}
-			if strings.HasSuffix(strings.ToLower(header), ";base64") {
-				// DecodeString permits CR/LF; data URI output must not silently absorb log text.
-				bytes, e := base64.StdEncoding.DecodeString(decoded)
-				if e != nil || len(bytes) == 0 || strings.ContainsAny(decoded, "\r\n") {
-					add("resource.invalid_base64", ptr, "Resource Base64 is empty or damaged; re-encode the original file instead of copying tool logs")
-				}
-			}
+			add("resource.inline_data_unsupported", ptr, "Inline data URLs are disallowed by resource preflight; use a verified, host-accessible asset URL")
 		}
 	}
 	for i, m := range docs {

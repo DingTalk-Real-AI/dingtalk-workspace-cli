@@ -873,13 +873,13 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed VoIP or card data it returns a safe typed output
+// event output. On malformed VoIP, calendar or card data it returns a safe typed output
 // so sensitive transport fields cannot leak through the projection fallback;
 // legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
-		if isVoIPEvent(ev.EventType) {
+		if isVoIPEvent(ev.EventType) || ev.EventType == EventCalendarEventChanged {
 			return baseEventOutput{
 				Type:        ev.EventType,
 				EventID:     ev.EventID,
@@ -948,6 +948,10 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		SubscribeID: subscribeID,
 	}
 	switch {
+	case eventType == EventCalendarEventChanged:
+		return projectCalendarEvent(base, data.Payload)
+	case isMinutesEvent(eventType):
+		return projectMinutesEvent(ev, base, data.Payload)
 	case isReadEvent(eventType):
 		return projectReadEvent(ev, base, data.Payload)
 	case isRecallEvent(eventType):
@@ -1616,6 +1620,10 @@ func transportEnvelopeSchema(eventKey string) map[string]any {
 
 func outputTypeForEvent(eventKey string) reflect.Type {
 	switch {
+	case eventKey == EventCalendarEventChanged:
+		return reflect.TypeOf(CalendarEventOutput{})
+	case isMinutesEvent(eventKey):
+		return reflect.TypeOf(MinutesEventOutput{})
 	case isMessageReceiveEvent(eventKey):
 		return reflect.TypeOf(MessageEventOutput{})
 	case isReadEvent(eventKey):

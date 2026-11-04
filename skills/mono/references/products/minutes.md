@@ -315,9 +315,20 @@ dws minutes
 │   ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]
 │   ├── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
 │   └── apply --id <uuid> --policy <2-4>
-└── tag <subcommand>                 # 听记标签/分组管理（标签在听记页面手动创建）
+├── template <subcommand>            # 系统/个人纪要模板与后续听记默认模板
+│   ├── list-system [--locale] [--limit] [--cursor]
+│   ├── list-custom [--limit] [--cursor]
+│   ├── create --title "..." --prompt "..." [--brief-intro "..."]
+│   ├── update --template-key <key> [--title] [--prompt] [--brief-intro]
+│   ├── delete --template-key <key>
+│   └── set-default --template-id <id> | --template-key <key>
+└── tag <subcommand>                 # 听记标签/分组查询、自定义标签与单条听记关联
     ├── list                         # 查询我的听记标签/分组列表（返回 tagId 和标签名称）
-    └── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
+    ├── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
+    ├── create --display-name "..."
+    ├── delete --tag-id <tagId>
+    ├── add --id <taskUuid> --tag-ids <tagId1,tagId2> [--locale]
+    └── remove --id <taskUuid> --tag-ids <tagId1,tagId2>
 ```
 
 ## 命令总览
@@ -1255,11 +1266,11 @@ Usage:
   dws minutes tag list
 ```
 
-查询当前用户在听记页面手动创建的所有标签或分组列表。无需传入额外参数，系统自动识别当前用户身份。
+查询当前用户的标签或分组列表。无需传入额外参数，系统自动识别当前用户身份。
 返回所有标签/分组的列表，每条记录包含 tagId 和标签名称。获取到 tagId 后，可使用 `dws minutes tag query --tag-id <tagId>` 查询该标签下的听记列表。
 
 **注意事项：**
-- 标签/分组在听记页面手动创建，此命令仅提供查询能力
+- 自定义标签可在听记页面或使用 `tag create` 创建；此命令用于查询已有标签
 - 返回的 tagId 用于后续 `tag query` 命令的 `--tag-id` 参数
 
 ### 根据标签ID查询听记列表
@@ -1282,7 +1293,37 @@ tagId 可通过 `dws minutes tag list` 获取。
 **注意事项：**
 - `--tag-id` 必填，值来自 `dws minutes tag list` 返回的 tagId
 - 支持分页，使用 `--cursor` 传入上一次返回的 nextToken
-- 标签/分组在听记页面手动创建，不支持通过 CLI 创建标签
+- 自定义标签可使用 `tag create --display-name "<名称>"` 创建，返回的 tagId 可直接查询或关联听记
+
+### 创建、删除及关联听记标签
+
+```text
+dws minutes tag create --display-name "项目复盘" --format json
+dws minutes tag delete --tag-id <真实tagId> --format json
+dws minutes tag add --id <taskUuid> --tag-ids <真实tagId1,真实tagId2> --format json
+dws minutes tag remove --id <taskUuid> --tag-ids <真实tagId1,真实tagId2> --format json
+```
+
+- 创建本人自定义标签，名称非空白、最多50个UTF-16单元；返回真实 tagId 和保存名称，不自动关联听记。同名系统或自定义标签不能重复创建；同名推荐标签可能先被删除，创建失败不会恢复。
+- delete 删除本人自定义标签定义并异步清理所有听记关联；remove 只移除指定听记的关联，不删除定义。系统或推荐标签不能删除，已同步的知识库文件不会撤回。
+- add/remove 的 --id 是有效 taskUuid，不能传 taskId 或完整链接。每次原始输入1–20个本人有效自定义标签ID，去首尾空白后按首次顺序去重；添加后总关联最多20个。add 可传 --locale 用于已配置知识库同步，缺省为zh。
+- 批量首个失败后停止，已成功项不回滚。APPLIED/UNCHANGED是确认成功，FAILED是写结果未知，NOT_PROCESSED是未执行；统一输出按 succeeded/unknown/failed 表达。存在成功项及未知/失败项时为 partial_failure，无成功项为 failure，均不得当作全部完成或自动重放整批。
+- 写入按 leaf Schema 和 Runtime confirmation 执行，成功后按真实ID读取核对。
+
+### 纪要模板与默认模板
+
+| 命令 | 参数与作用 |
+|---|---|
+| `dws minutes template list-system [--locale zh_CN] [--limit 20] [--cursor <token>]` | 系统模板目录，每页1–50条，返回 templateId、title和brief |
+| `dws minutes template list-custom [--limit 5] [--cursor <token>]` | 当前用户个人模板，每页1–10条，返回 templateKey、完整prompt和version |
+| `dws minutes template create --title "<标题>" --prompt "<提示词>" [--brief-intro "<简介>"]` | 创建个人模板，不自动设置默认 |
+| `dws minutes template update --template-key <真实key> [--title "<标题>"] [--prompt "<提示词>"] [--brief-intro "<简介>"]` | 至少显式提供一个更新字段；省略保留旧值，空简介也保留旧简介 |
+| `dws minutes template delete --template-key <真实key>` | 幂等删除本人个人模板，不删除已有听记、不清除默认设置 |
+| `dws minutes template set-default --template-id <真实id>` 或 `--template-key <真实key>` | 系统与个人模板二选一，可选 --locale，只影响后续听记 |
+
+模板列表每次只读一页；依据 `meta.pagination.endpoint_exhausted` 判断续页，将 `meta.pagination.next_token` 原样传给 --cursor，系统模板保持相同locale。空items不等于遍历结束。系统templateId和个人templateKey不可混用，不能用空串占位，官方ID不能填diy。
+
+标题非空白且最多150个UTF-16单元；prompt非空白并原样保留空格和换行，最大长度由服务端配置校验，不截断。创建或修改前确认用户标题和提示词；写结果不确定时先list-custom对账，不自动重试。version=0有效，删除结果wasDefault=null表示原默认状态未知，官方默认的templateKey=null有效。模板变更不会重新生成已有听记。
 
 ## 意图判断
 
@@ -1689,6 +1730,14 @@ tagId 可通过 `dws minutes tag list` 获取。
 1. 用户说"帮我看看'周会'标签下的听记" → AI 先获取标签列表
 2. 调用 `dws minutes tag list --format json` → 从返回中按名称匹配找到 tagId
 3. 调用 `dws minutes tag query --tag-id <tagId> --format json`
+
+### 听记标签维护与纪要模板
+
+- “创建听记标签/新建分组” → `tag create --display-name "<名称>"`；“删除这个标签” → `tag delete --tag-id <真实tagId>`。
+- “给这条听记添加标签/移除标签” → `tag add/remove --id <taskUuid> --tag-ids <真实tagIds>`；不能把移除关联解释为删除标签定义。
+- “查询系统模板/可选纪要模板” → `template list-system`；“我的个人模板” → `template list-custom`，完整请求须依据meta.pagination续页。
+- “创建/修改/删除个人纪要模板” → `template create/update/delete`；“以后默认用这个模板” → `template set-default`，按真实templateId或templateKey二选一。
+- 维护模板不等于重写当前听记。用户要求修改已有纪要正文时仍用对应的summary内容命令；写前锁定唯一目标并按Runtime confirmation执行。
 
 ### 修改听记标题
 用户说"改听记标题/重命名听记/修改标题" → `update title`

@@ -97,7 +97,7 @@ Golden Route 已给出命令且参数足够时，禁止读取 reference；其余
 ## 错误最短路径
 
 1. 零命中、多候选、类型不明或分页不完整：停止写入，展示候选或 continuation；禁止默认第一项。
-2. `+fetch` 若确认目标是目录，浏览请求复用完整 URL 执行 `+list --folder`，不要改用 `drive +list`。Help 不参与选路；先读一次精确 leaf Schema。仅真实 `unknown flag`/契约漂移查一次 leaf Help；`unknown command` 只查一次 shortcut 清单，禁止试探后缀和 `dws doc --help | grep/head`。
+2. `+fetch` 若确认目标是目录，浏览请求复用完整 URL 执行 `+list --folder`，不要改用 `drive +list`。Help 不参与选路；先读一次精确 leaf Schema。仅真实 `unknown flag`/契约漂移查一次 leaf Help；`unknown command` 按统一恢复路径处理，禁止试探后缀和 `dws doc --help | grep/head`。
 3. `REVISION_CONFLICT`：重新读取当前 revision，展示差异；未经用户确认不得改成无 revision 覆盖。
 4. `doc_write_commit_unknown`：先回读；禁止自动重试创建或追加。
 5. 认证、权限或 profile 错误：只读 `dingtalk-shared` 对应 reference，禁底层命令绕过。

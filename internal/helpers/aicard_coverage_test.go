@@ -26,7 +26,7 @@ func TestCrossPlatformCoverageAicardCommandFailureBranches(t *testing.T) {
 		{"unknown batch name", []string{"explain", "Text", "unknown-name"}, "At least one name"},
 		{"unknown compact batch name", []string{"explain", "Text", "unknown-name", "--compact"}, "At least one name"},
 		{"missing preview file", []string{"preview", "--file", " "}, "--file is required"},
-		{"empty preview summary", []string{"preview", "--file", file, "--summary", " "}, "--summary must not be empty"},
+		{"empty preview summary", []string{"preview", "--file", file, "--summary", " "}, "--summary must not be blank"},
 		{"unreadable preview file", []string{"preview", "--file", file + ".missing"}, "card.json.missing"},
 		{"invalid preview structure", []string{"preview", "--file", aicardTestFile(t, `[{"version":"v1.0","createSurface":{"surfaceId":1}}]`)}, "structure is invalid"},
 		{"missing card data", []string{"preview", "--file", aicardTestFile(t, strings.Replace(aicardTestSnapshot, `,"dataModel":{}`, "", 1))}, "delivery.data_model_missing"},

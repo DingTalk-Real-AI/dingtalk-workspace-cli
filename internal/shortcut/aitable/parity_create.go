@@ -5,6 +5,7 @@ package aitable
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -12,10 +13,13 @@ import (
 	"time"
 )
 
+// parityCompositeResultSpec describes shared composite receipts without assuming
+// that all objects use the same navigation keys; Dashboard navigation uses applicationId.
+// Navigation permits explicit server nulls, preserving readback precedence.
 func parityCompositeResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{
 		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-		DataSchema: json.RawMessage(`{"type":"object","description":"执行进度、对象 ID、读回验证和失败恢复信息；失败结果位于 error.details.result","properties":{"contractVersion":{"type":"string","description":"业务回执版本"},"operation":{"type":"string","description":"本次操作名称"},"status":{"type":"string","description":"success/planned/partial_success/unknown/failed 等业务状态"},"executed":{"type":"boolean","description":"是否执行远端操作"},"retryable":{"type":"boolean","description":"是否可直接重试"},"requestedCount":{"type":"integer","description":"请求项目数"},"completedCount":{"type":"integer","description":"已完成并验证的项目数"},"failedCount":{"type":"integer","description":"未完成项目数"},"resolved":{"type":"object","description":"准确目标及新对象 ID"},"plan":{"type":"array","description":"有序执行步骤","items":{"type":"object"}},"completedSteps":{"type":"array","description":"已执行步骤与结果","items":{"type":"object"}},"verification":{"type":"object","description":"独立读回验证事实"},"checkpoint":{"type":"object","description":"中断后已知进度和安全恢复提示"},"nextCommand":{"type":"string","description":"下一步核实指令"},"knownSideEffects":{"type":"array","description":"已知远端副作用","items":{"type":"object"}},"warnings":{"type":"array","description":"明确能力边界","items":{"type":"string"}},"result":{"type":"object","description":"成功结果"}},"required":["operation","status","executed","retryable"]}`),
+		DataSchema: json.RawMessage(`{"type":"object","description":"执行进度、对象 ID、读回验证和失败恢复信息；失败结果位于 error.details.result","properties":{"contractVersion":{"type":"string","description":"业务回执版本"},"operation":{"type":"string","description":"本次操作名称"},"status":{"type":"string","description":"success/planned/partial_success/unknown/failed 等业务状态"},"executed":{"type":"boolean","description":"是否执行远端操作"},"retryable":{"type":"boolean","description":"是否可直接重试"},"requestedCount":{"type":"integer","description":"请求项目数"},"completedCount":{"type":"integer","description":"已完成并验证的项目数"},"failedCount":{"type":"integer","description":"未完成项目数"},"resolved":{"type":"object","description":"准确目标及新对象 ID"},"plan":{"type":"array","description":"有序执行步骤","items":{"type":"object"}},"completedSteps":{"type":"array","description":"已执行步骤与结果","items":{"type":"object"}},"verification":{"type":"object","description":"独立读回验证事实"},"checkpoint":{"type":"object","description":"中断后已知进度和安全恢复提示"},"nextCommand":{"type":"string","description":"下一步核实指令"},"knownSideEffects":{"type":"array","description":"已知远端副作用","items":{"type":"object"}},"warnings":{"type":"array","description":"明确能力边界","items":{"type":"string"}},"result":{"type":"object","description":"成功结果；访问链接不代表 UI 已定位或写后核验完成","properties":{"url":{"type":["string","null"],"description":"携带对象定位标识的访问链接（数据表 sheetId、仪表盘 applicationId 等）；定位由 Web 页面处理"},"links":{"type":["array","null"],"description":"对象和父级上下文","items":{"type":"object","additionalProperties":true}},"fields":{"type":"array","description":"已核实真实 ID 的字段及其 url/links","items":{"type":"object","additionalProperties":true}}},"additionalProperties":true}},"required":["operation","status","executed","retryable"]}`),
 	}
 }
 
@@ -43,7 +47,7 @@ var RecordBatchCreate = shortcut.Shortcut{
 
 var FieldCreate = shortcut.Shortcut{
 	Service: "aitable", Command: "+field-create", Product: serverMain,
-	Description: "批量新增字段，15 个分片并核对新字段 ID、类型与配置",
+	Description: "批量新增字段，15 个分片并核对新字段 ID、类型与配置；result.fields 返回逐字段 url，result.links 提供上下文，定位由 Web 处理",
 	Intent:      "已有数据表要新增明确结构的一批字段时使用；名称已存在或重复则停止。创建回执明确含 CREATE_FIELD_READBACK_PENDING 且保留 fieldId 时，表示写入已受理但读回尚未验证，不代表未创建；只对这些原 ID 有界读回并核对名称、类型与配置。读回预算耗尽仍保留已知 ID 和未验证状态，不重发创建。仅 fieldId 非空不足以证明任意失败回执已成功。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"},
@@ -94,6 +98,7 @@ func executeParityFieldCreate(rt *shortcut.RuntimeContext) error {
 		resumeIDs = verifiedFieldIDsInDeclarationOrder(actual, fields[:len(resumeIDs)])
 		result.Resolved["fieldIds"] = append([]string{}, resumeIDs...)
 		result.CompletedCount = len(resumeIDs)
+		result.Result = aitablenavigation.Fields(base, table, resumeIDs, fields)
 		if len(resumeIDs) == len(fields) {
 			result.Verification = map[string]any{"status": "verified", "createdThisRun": false}
 			return rt.Output(result)
@@ -185,10 +190,13 @@ func executeParityFieldCreate(rt *shortcut.RuntimeContext) error {
 		}
 		step := &result.CompletedSteps[len(result.CompletedSteps)-1]
 		step.Status = "verified"
-		step.Result = map[string]any{"fieldIds": ids}
+		// Preserve per-item URLs and pending facts from the original receipt.
+		step.Result = receipt
+		step.Result["fieldIds"] = ids
 		result.CompletedCount = end
 		allIDs = append(allIDs, ids...)
 		result.Resolved["fieldIds"] = append([]string{}, allIDs...)
+		result.Result = aitablenavigation.Fields(base, table, allIDs, fields)
 		for _, id := range ids {
 			oldIDs[id] = true
 		}

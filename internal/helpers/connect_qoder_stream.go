@@ -102,7 +102,12 @@ func (f *qoderStreamForwarder) forwardWithAttachments(ctx context.Context, convI
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	args := []string{"--print", "--output-format", "text", "--max-turns", "30"}
+	emit := agentProgressSink(ctx)
+	outputFormat := "text"
+	if emit != nil {
+		outputFormat = "stream-json"
+	}
+	args := []string{"--print", "--output-format", outputFormat, "--max-turns", "30"}
 	if f.sessions != nil {
 		args = append(args, f.sessions.args(convID)...)
 	}
@@ -118,6 +123,18 @@ func (f *qoderStreamForwarder) forwardWithAttachments(ctx context.Context, convI
 		if path := strings.TrimSpace(attachment.LocalPath); path != "" {
 			args = append(args, "--attachment", path)
 		}
+	}
+	if emit != nil {
+		// 原生 --attachment 保持不变，只在接管卡片回复时读取 JSONL 公开事件。
+		argv := append([]string{f.bin}, args...)
+		argv = append(argv, "-p")
+		streamArgv := append([]string{}, argv...)
+		stream := &execForwarder{name: f.name, argv: argv, streamArgv: streamArgv, parser: "qoder", env: f.env, workDir: f.cwd(), timeout: f.timeout}
+		answer, err := stream.forwardProgress(ctx, convID, text, emit)
+		if err != nil && f.sessions != nil {
+			f.sessions.reset(convID)
+		}
+		return answer, err
 	}
 	args = append(args, "-p", text)
 	cmd := exec.CommandContext(ctx, f.bin, args...)
@@ -140,12 +157,14 @@ func (f *qoderStreamForwarder) forwardWithAttachments(ctx context.Context, convI
 	return "（本地 agent 无文本输出）", nil
 }
 
-func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (string, error) {
+func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text string, onDelta func(string)) (answer string, turnErr error) {
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	tools := agentToolProgress{emit: agentProgressSink(ctx)}
+	defer func() { tools.finish(agentToolEndStatus(ctx, turnErr)) }()
 
 	if err := f.ensureLocked(ctx); err != nil {
 		return "", err
@@ -183,6 +202,7 @@ func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text s
 		if f.handleControlRequestLocked(line) {
 			continue
 		}
+		tools.handleJSON(line)
 		delta, final, done := parseQoderPersistentLine(line)
 		if delta != "" {
 			acc.WriteString(delta)
@@ -198,6 +218,7 @@ func (f *qoderStreamForwarder) forwardStream(ctx context.Context, convID, text s
 			final = strings.TrimSpace(acc.String())
 		}
 		if agentReplyIsError(final) {
+			tools.finish("failed")
 			if f.sessions != nil {
 				f.sessions.reset(convID)
 			}

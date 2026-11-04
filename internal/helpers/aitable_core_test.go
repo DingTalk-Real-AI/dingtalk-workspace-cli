@@ -36,6 +36,8 @@ func (c *aitableTestCaller) CallTool(_ context.Context, server, tool string, arg
 	}
 	response := `{"success":true}`
 	switch tool {
+	case "create_base", "update_base", "copy_base", "update_table":
+		response = `{"status":"success","data":{"baseId":"b","tableId":"t"}}`
 	case "list_comments":
 		response = `{"success":true,"data":{"comments":[],"hasMore":false,"nextToken":null}}`
 	case "create_comment", "reply_comment", "update_comment", "delete_comment":

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
@@ -68,8 +69,14 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 		result.Status = "unknown"
 		return compositeError(result, cause, false)
 	}
-	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "copy_base", "newBaseId": newBaseID})
-	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 1, Name: "copy base", Tool: "copy_base", Status: "completed", Result: map[string]any{"newBaseId": newBaseID}})
+	result.Result = map[string]any{"newBaseId": newBaseID}
+	aitablenavigation.Preserve(result.Result, baseNavigation(writeData, newBaseID))
+	copyEffect := map[string]any{"tool": "copy_base", "newBaseId": newBaseID}
+	aitablenavigation.Preserve(copyEffect, result.Result)
+	result.KnownEffects = append(result.KnownEffects, copyEffect)
+	copyReceipt := map[string]any{"newBaseId": newBaseID}
+	aitablenavigation.Preserve(copyReceipt, result.Result)
+	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 1, Name: "copy base", Tool: "copy_base", Status: "completed", Result: copyReceipt})
 
 	var renameErr error
 	if newName != "" {
@@ -85,11 +92,19 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 
 	readBack, verifyErr := rt.CallMCPData(serverMain, "get_base", map[string]any{"baseId": newBaseID})
 	if verifyErr == nil {
-		actualID := findStringByKeys(readBack, "baseId")
+		actualID := stringValue(parityResponseObject(readBack), "baseId")
 		if actualID == "" {
 			verifyErr = fmt.Errorf("get_base read-back is missing baseId")
 		} else if actualID != newBaseID {
 			verifyErr = fmt.Errorf("get_base read-back identity mismatch: got %q, want %q", actualID, newBaseID)
+		}
+		if verifyErr == nil {
+			navigation := map[string]any{}
+			aitablenavigation.Preserve(navigation, baseNavigation(readBack, newBaseID))
+			aitablenavigation.Preserve(navigation, result.Result)
+			for key, value := range navigation {
+				result.Result[key] = value
+			}
 		}
 		if verifyErr == nil && newName != "" {
 			actualName := findStringByKeys(readBack, "baseName", "name", "title")
@@ -119,8 +134,22 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 		result.Verification["baseName"] = newName
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "update_base", "newBaseId": newBaseID, "baseName": newName})
 	}
-	result.Result = map[string]any{"newBaseId": newBaseID, "base": readBack}
+	result.Result["base"] = readBack
 	return rt.Output(result)
+}
+
+// Navigation is accepted only from the response object identifying this Base.
+// A source Base or an unrelated nested entity must never supply a copy's link.
+func baseNavigation(value map[string]any, baseID string) map[string]any {
+	object := parityResponseObject(value)
+	id := stringValue(object, "baseId")
+	if id == "" {
+		id = stringValue(object, "newBaseId")
+	}
+	if id != baseID {
+		return nil
+	}
+	return object
 }
 
 func copiedBaseID(value map[string]any, sourceBaseID string) string {

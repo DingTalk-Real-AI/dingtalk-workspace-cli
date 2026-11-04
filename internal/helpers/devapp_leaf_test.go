@@ -148,6 +148,16 @@ func TestDevAppScopeGetDispatchesRemoteToolName(t *testing.T) {
 	}
 }
 
+// 服务端返回空回执（content 为 JSON null → typed-nil map）时，命令不得 panic。
+// 回归 appendDevAppSuccessNextSteps 往 nil content map 写 nextSteps 的 panic。
+func TestDevAppNextStepsNilContentDoesNotPanic(t *testing.T) {
+	var content map[string]any
+	appendDevAppSuccessNextSteps(content, map[string]any{"id": "inspect-result"})
+	if content != nil {
+		t.Fatal("nil content must not become a synthetic success receipt")
+	}
+}
+
 func TestDevAppScopePrecheckRequiresConfirmation(t *testing.T) {
 	r := &fakeDevAppRunner{}
 	cmd := prepareDevAppLeafTestCommand(newDevAppScopeSetCommand(r))
