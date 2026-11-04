@@ -105,6 +105,18 @@ func TestCrossPlatformCoverageEmployeeToolAttachments(t *testing.T) {
 			if err != nil || answer != "测试完成" || calls != 1 || len(tools) != 4 {
 				t.Fatalf("附件与工具状态未共存：%q %v calls=%d tools=%+v", answer, err, calls, tools)
 			}
+			// Integrations may invoke the progress interface directly instead of
+			// forwardEmployeeTurn's native attachment path. Preserve both the
+			// attachment permissions above and tool events on that entry point.
+			calls, tools = 0, nil
+			answer, err = f.(progressForwarder).forwardProgress(context.Background(), "conversation", "读取图片", func(p agentProgress) {
+				if p.Kind == "tool" {
+					tools = append(tools, p)
+				}
+			}, connectMediaAttachment{LocalPath: attachmentPath})
+			if err != nil || answer != "测试完成" || calls != 1 || len(tools) != 4 {
+				t.Fatalf("直接进度接口丢失附件或工具状态：%q %v calls=%d tools=%+v", answer, err, calls, tools)
+			}
 		})
 	}
 }
