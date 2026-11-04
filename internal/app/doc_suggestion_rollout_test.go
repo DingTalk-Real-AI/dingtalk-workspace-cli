@@ -44,6 +44,8 @@ func TestCrossPlatformCoverageDocSuggestionLegacyReceiptsAndAgentSource(t *testi
 				t.Cleanup(func() { _ = capture.Close() })
 				testseam.Swap(t, &os.Stdout, capture)
 				t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+				// Cleanup is LIFO: close the runtime log before removing its directory.
+				t.Cleanup(CloseFileLogger)
 				t.Setenv("DO_NOT_TRACK", "1")
 				t.Setenv("DINGTALK_AGENT", " Future-Agent ")
 				t.Setenv("DINGTALK_DOC_MCP_URL", "https://mcp-gw.dingtalk.com/server/doc-rollout-test")

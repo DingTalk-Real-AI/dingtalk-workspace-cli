@@ -54,6 +54,8 @@ func TestCrossPlatformCoverageDocUpdateDryRunNeverWrites(t *testing.T) {
 			t.Cleanup(func() { _ = capture.Close() })
 			testseam.Swap(t, &os.Stdout, capture)
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+			// Windows cannot remove the config directory while dws.log is open.
+			t.Cleanup(CloseFileLogger)
 			t.Setenv("DO_NOT_TRACK", "1")
 			t.Setenv("DINGTALK_DOC_MCP_URL", "https://mcp-gw.dingtalk.com/server/doc-dry-run")
 			testseam.Swap(t, &os.Args, append([]string{"dws"}, tc.args...))
