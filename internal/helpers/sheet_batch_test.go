@@ -305,6 +305,7 @@ func TestSheetBatchP0P1StrictValidation(t *testing.T) {
 		{"integer-limit", map[string]any{"toolName": "insert-dimension", "input": map[string]any{"sheet-id": "s", "dimension": "ROWS", "position": "1", "length": 5001}}, "1~5000"},
 		{"bool-string", map[string]any{"toolName": "update", "input": map[string]any{"sheet-id": "s", "hidden": "false"}}, "必须是布尔值"},
 		{"update-mixed", map[string]any{"toolName": "update", "input": map[string]any{"sheet-id": "s", "index": 0, "hidden": false}}, "index 只能单独更新"},
+		{"update-mixed-hint", map[string]any{"toolName": "update", "input": map[string]any{"sheet-id": "s", "index": 0, "frozen-row-count": 2}}, "请把 index 放进单独的 update 子操作"},
 		{"float-image-file", map[string]any{"toolName": "create-float-image", "input": map[string]any{"file": "x"}}, "media-upload"},
 		{"sort-empty", map[string]any{"toolName": "range sort", "input": map[string]any{"sheet-id": "s", "range": "A1:B2", "sort-keys": []any{}}}, "不能为空数组"},
 		{"filter-update-empty", map[string]any{"toolName": "filter update", "input": map[string]any{"sheet-id": "s", "criteria": []any{}}}, "不能为空数组"},
