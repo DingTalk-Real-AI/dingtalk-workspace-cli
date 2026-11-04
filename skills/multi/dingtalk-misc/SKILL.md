@@ -49,7 +49,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 原生 HTML / `.html` 文件 / 新建 HTML 页面 / 上传 HTML 文件 / 读取 HTML 原文 / 覆盖 HTML / 局部替换 HTML | 原生 `.html`/`.htm` 文件读取、创建、全量覆盖与局部替换（钉盘或文档空间） | `dws html` | [html.md](references/html.md) |
 | PAT 授权 / 行为权限 / scope 授权 / 一次性授权 / 会话授权 / 永久授权 / 授权浏览器策略 | PAT 行为授权与本地浏览器策略 | `dws pat` | [pat.md](references/pat.md) |
 | 切换组织 / 换组织 / 跨组织 / 多组织 / profile / 看登录了哪些组织 | 多组织 / profile 管理与跨组织取数 | `dws profile` / `dws auth` / `--profile` | [profile.md](references/profile.md) |
-| 宜搭 / AI应用脚本 / 财务辅助脚本（cashflow/expense-flow，未产品化） | **无**稳定命令面；仅仓库内辅助脚本（财务正式能力走上方 `dws finance` 行） | （非默认路由） | [unsupported-scripts.md](references/unsupported-scripts.md) |
+| 宜搭 / AI应用脚本 / 财务辅助脚本（未产品化） | **无**稳定命令面；仅仓库内辅助脚本 | （非默认路由） | [unsupported-scripts.md](references/unsupported-scripts.md) |
 
 ## 说明
 
