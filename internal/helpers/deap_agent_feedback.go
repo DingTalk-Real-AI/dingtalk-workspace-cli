@@ -336,7 +336,7 @@ func employeeTaskLabel(record employeeTaskRecord) string {
 			return "收到"
 		}
 		return "已中断，待核查"
-	case "agent_failed", "empty_reply", "card_incomplete", "card_rejected":
+	case "agent_failed", "empty_reply":
 		return "处理失败"
 	case "cancelled":
 		return "已取消"
