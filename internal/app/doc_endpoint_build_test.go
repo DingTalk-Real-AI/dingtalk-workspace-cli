@@ -19,17 +19,17 @@ import (
 )
 
 func TestCrossPlatformCoverageDocBuildEndpointPrecedence(t *testing.T) {
-	const prepub = "https://custom-doc.example.invalid/server/doc-build?key=test-only&route=a%2Fb&route=c&empty="
+	const compiledEndpoint = "https://mcp-gw.dingtalk.com/server/doc-build?key=test-only&route=a%2Fb&route=c&empty="
 	for _, tc := range []struct {
 		name, product, compiled, explicit, want string
 		wantOverride                            bool
 	}{
-		{"compiled beats discovery", "doc", prepub, "", prepub, true},
-		{"explicit env wins", "doc", prepub, "https://mcp-gw.dingtalk.com/server/explicit?route=env", "https://mcp-gw.dingtalk.com/server/explicit?route=env", true},
-		{"trimmed compiled default", " doc ", "  " + prepub + "\n", "", prepub, true},
+		{"compiled beats discovery", "doc", compiledEndpoint, "", compiledEndpoint, true},
+		{"explicit env wins", "doc", compiledEndpoint, "https://mcp-gw.dingtalk.com/server/explicit?route=env", "https://mcp-gw.dingtalk.com/server/explicit?route=env", true},
+		{"trimmed compiled default", " doc ", "  " + compiledEndpoint + "\n", "", compiledEndpoint, true},
 		{"empty default uses discovery", "doc", "", "", "https://mcp-gw.dingtalk.com/server/discovered-doc", false},
 		{"whitespace default uses discovery", "doc", " \n", "", "https://mcp-gw.dingtalk.com/server/discovered-doc", false},
-		{"other product keeps discovery", "drive", prepub, "", "https://mcp-gw.dingtalk.com/server/discovered-drive", false},
+		{"other product keeps discovery", "drive", compiledEndpoint, "", "https://mcp-gw.dingtalk.com/server/discovered-drive", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DINGTALK_DOC_MCP_URL", tc.explicit)
@@ -54,10 +54,10 @@ func TestCrossPlatformCoverageDocBuildEndpointPrecedence(t *testing.T) {
 // Exercise both gateway-rewrite consumers and the real transport. The fake
 // HTTP boundary avoids external I/O while preserving URL parsing and routing.
 func TestCrossPlatformCoverageDocBuildEndpointSurvivesAuthenticatedRouting(t *testing.T) {
-	const prepub = "https://custom-doc.example.invalid/server/doc-build?key=test-only&route=a%2Fb&route=c&empty=&space=a+b%20c"
+	const compiledEndpoint = "https://mcp-gw.dingtalk.com/server/doc-build?key=test-only&route=a%2Fb&route=c&empty=&space=a+b%20c"
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv("DINGTALK_DOC_MCP_URL", "")
-	testseam.Swap(t, &buildDocMCPEndpoint, prepub)
+	testseam.Swap(t, &buildDocMCPEndpoint, compiledEndpoint)
 	testseam.Swap(t, &dynamicEndpoints, map[string]string{"doc": "https://mcp-gw.dingtalk.com/server/discovered-doc"})
 	testseam.Swap(t, &dynamicAliases, map[string]string{})
 	testseam.Swap(t, &pluginAuthRegistry, map[string]*PluginAuth{})
@@ -74,8 +74,8 @@ func TestCrossPlatformCoverageDocBuildEndpointSurvivesAuthenticatedRouting(t *te
 	})
 	var methods []string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if got := req.URL.String(); got != prepub {
-			t.Errorf("wire URL = %q, want %q", got, prepub)
+		if got := req.URL.String(); got != compiledEndpoint {
+			t.Errorf("wire URL = %q, want %q", got, compiledEndpoint)
 		}
 		if req.Header.Get("Authorization") != "Bearer test-token" {
 			t.Error("request lost the selected OAuth identity")

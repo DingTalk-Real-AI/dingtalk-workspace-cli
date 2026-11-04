@@ -16,8 +16,10 @@ import (
 	"github.com/google/uuid"
 )
 
-func (f *opencodeForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress)) (string, error) {
-	return f.forwardWithAttachments(context.WithValue(ctx, agentProgressKey{}, emit), conversation, text, nil)
+var _ progressForwarder = (*opencodeForwarder)(nil)
+
+func (f *opencodeForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress), attachments ...connectMediaAttachment) (string, error) {
+	return f.forwardWithAttachments(context.WithValue(ctx, agentProgressKey{}, emit), conversation, text, attachments)
 }
 
 type opencodeProgressPart struct {

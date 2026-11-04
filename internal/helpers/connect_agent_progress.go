@@ -134,7 +134,16 @@ func (p *agentToolProgress) handleJSON(line string) {
 	}
 }
 
-func (f *execForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress)) (string, error) {
+var _ progressForwarder = (*execForwarder)(nil)
+var _ progressForwarder = (*qoderStreamForwarder)(nil)
+
+func (f *execForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress), attachments ...connectMediaAttachment) (string, error) {
+	if emit != nil {
+		ctx = context.WithValue(ctx, agentProgressKey{}, emit)
+	}
+	if len(attachments) != 0 {
+		return f.forwardWithAttachments(ctx, conversation, text, attachments)
+	}
 	if emit == nil {
 		return f.forward(ctx, conversation, text)
 	}
@@ -142,7 +151,13 @@ func (f *execForwarder) forwardProgress(ctx context.Context, conversation, text 
 	return f.forwardStream(ctx, conversation, text, func(text string) { emit(agentProgress{Kind: "answer", Text: text}) })
 }
 
-func (f *qoderStreamForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress)) (string, error) {
+func (f *qoderStreamForwarder) forwardProgress(ctx context.Context, conversation, text string, emit func(agentProgress), attachments ...connectMediaAttachment) (string, error) {
+	if emit != nil {
+		ctx = context.WithValue(ctx, agentProgressKey{}, emit)
+	}
+	if len(attachments) != 0 {
+		return f.forwardWithAttachments(ctx, conversation, text, attachments)
+	}
 	if emit == nil {
 		return f.forward(ctx, conversation, text)
 	}

@@ -47,6 +47,12 @@ func TestCrossPlatformCoverageDocUpdateDryRunNeverWrites(t *testing.T) {
 		{"jsonml append indexed writes", []string{"doc", "update", "--node", "node", "--mode", "append", "--content-format", "jsonml", "--content", `["root",{},["p",{},["span",{},"new"]]]`, "--revision", "0", "--index", "0", "--dry-run=false"}, 0, 1, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			capture, err := os.CreateTemp(t.TempDir(), "doc-dry-run-output-*.log")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = capture.Close() })
+			testseam.Swap(t, &os.Stdout, capture)
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			t.Setenv("DO_NOT_TRACK", "1")
 			t.Setenv("DINGTALK_DOC_MCP_URL", "https://mcp-gw.dingtalk.com/server/doc-dry-run")
@@ -133,7 +139,12 @@ func TestCrossPlatformCoverageDocUpdateDryRunNeverWrites(t *testing.T) {
 			if _, err := pipeline.RunPreParseArgs(root, newPipelineEngine(), tc.args); err != nil {
 				t.Fatal(err)
 			}
-			err := root.Execute()
+			err = root.Execute()
+			captured, readErr := os.ReadFile(capture.Name())
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			stdout.Write(captured)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("execution error = %v; output=%s stderr=%s", err, stdout.String(), stderr.String())
 			}

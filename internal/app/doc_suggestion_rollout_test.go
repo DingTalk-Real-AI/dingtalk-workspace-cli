@@ -37,6 +37,12 @@ func TestCrossPlatformCoverageDocSuggestionLegacyReceiptsAndAgentSource(t *testi
 	} {
 		for _, selector := range []string{"", "--suggestion", "--suggestion=true", "--suggestion=false"} {
 			t.Run(command.path+selector, func(t *testing.T) {
+				capture, err := os.CreateTemp(t.TempDir(), "doc-rollout-output-*.log")
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = capture.Close() })
+				testseam.Swap(t, &os.Stdout, capture)
 				t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 				t.Setenv("DO_NOT_TRACK", "1")
 				t.Setenv("DINGTALK_AGENT", " Future-Agent ")
@@ -123,6 +129,11 @@ func TestCrossPlatformCoverageDocSuggestionLegacyReceiptsAndAgentSource(t *testi
 				if err := root.Execute(); err != nil {
 					t.Fatalf("ordinary receipt rejected: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 				}
+				captured, err := os.ReadFile(capture.Name())
+				if err != nil {
+					t.Fatal(err)
+				}
+				stdout.Write(captured)
 				if calls != 1 || !strings.Contains(stdout.String(), "ordinary-reply") {
 					t.Fatalf("calls=%d stdout=%s stderr=%s; want one RPC and retained ordinary receipt", calls, stdout.String(), stderr.String())
 				}
