@@ -15,13 +15,14 @@ func callMCPToolSheetInfo(toolArgs map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if text == "" {
-		return nil
-	}
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		deps.Out.PrintRaw(text)
-		return nil
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil || parsed == nil {
+		return &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    "get_sheet returned an invalid response; expected a JSON object",
+			Suggestion: "请重试读取；若问题持续，请携带 operation/trace 信息排查服务端响应",
+			Operation:  "sheet/get_sheet",
+		}
 	}
 	normalizeSheetInfoCoordinatesForAgent(parsed)
 	return deps.Out.PrintJSON(parsed)
