@@ -45,6 +45,10 @@ func newKeyClient(cfg Config) *keyClient {
 	}
 
 	transport := &http.Transport{
+		// Honour HTTP_PROXY / HTTPS_PROXY / NO_PROXY like the rest of the CLI;
+		// a custom Transport without a Proxy func dials direct and fails
+		// behind proxy-only networks.
+		Proxy: http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: insecureSkipVerify,
 		},
