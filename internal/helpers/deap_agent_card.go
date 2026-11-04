@@ -442,9 +442,19 @@ func (r *employeeRuntime) processCard(e employeeEvent, record *employeeTaskRecor
 		default:
 		}
 	}
-	// Keep shared turn context and the attachments prepared once by process.
-	ctx := context.WithValue(r.turnContext(e), agentProgressKey{}, emit)
-	answer, agentErr := forwardEmployeeTurn(ctx, fwd, e.ConversationID, employeeTurnText(e), attachments...)
+	// Confirm the placeholder before downloading images. Explicit attachments
+	// supplied by an integration caller retain their original native transport.
+	var agentErr error
+	cleanup := func() {}
+	if attachments == nil {
+		attachments, cleanup, agentErr = prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
+	}
+	defer cleanup()
+	var answer string
+	if agentErr == nil {
+		ctx := context.WithValue(r.turnContext(e), agentProgressKey{}, emit)
+		answer, agentErr = forwardEmployeeTurn(ctx, fwd, e.ConversationID, employeeTurnText(e), attachments...)
+	}
 	if errors.Is(agentErr, context.Canceled) || errors.Is(agentErr, context.DeadlineExceeded) {
 		cancelWrites()
 	}

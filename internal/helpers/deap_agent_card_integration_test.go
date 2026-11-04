@@ -26,14 +26,23 @@ func TestCrossPlatformCoverageEmployeeCardPreservesPublicCodexContext(t *testing
 			}
 			w := &bufferWriteCloser{}
 			thread := codexRPCMessage{ID: codexIntPtr(2), Result: json.RawMessage(`{"thread":{"id":"thread"}}`)}
-			if scenario == "resume-failed" {
-				thread = codexRPCMessage{ID: codexIntPtr(2), Error: &codexRPCError{Code: -32600, Message: "thread busy"}}
+			messages := []codexRPCMessage{{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)}}
+			if scenario != "new" {
+				settings := codexPermissionFixture(t)
+				messages = append(messages, codexRPCMessage{ID: codexIntPtr(2), Result: codexPermissionReadFixture(t, "thread", settings)})
+				thread = codexRPCMessage{ID: codexIntPtr(3), Result: codexPermissionResumeFixture(t, "thread", settings)}
 			}
-			client := unitCodexClient(w,
-				codexRPCMessage{ID: codexIntPtr(1), Result: json.RawMessage(`{}`)}, thread,
+			if scenario == "resume-failed" {
+				thread.Error, thread.Result = &codexRPCError{Code: -32600, Message: "thread busy"}, nil
+			}
+			messages = append(messages, thread,
 				codexRPCMessage{Method: "turn/completed", Params: json.RawMessage(`{"threadId":"thread","turn":{"status":"completed","items":[{"type":"agentMessage","text":"answer"}]}}`)},
 			)
+			client := unitCodexClient(w, messages...)
 			testseam.Swap(t, &codexNewAppServerClient, func(context.Context, string, []string, string) (*codexAppServerClient, error) { return client, nil })
+			testseam.Swap(t, &codexForwardDesktopTurn, func(context.Context, string, string, []connectMediaAttachment, func(string), string) (string, error) {
+				return "", &codexDesktopTurnError{Code: "codex_desktop_unavailable"}
+			})
 			testseam.Swap(t, &employeeA2UICall, func(_ context.Context, _ digitalEmployeeBinding, _ []map[string]any, args ...string) (map[string]any, error) {
 				if args[0] == "send-a2ui-card" {
 					return map[string]any{"bizId": "server-biz"}, nil

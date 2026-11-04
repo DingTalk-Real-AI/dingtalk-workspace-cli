@@ -371,11 +371,9 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 	// 即使执行或账本失败，也要结束处理中反馈；成功分支在持久化后覆盖该值。
 	label := "已中断，待核查"
 	defer func() { r.feedback.set(e, label, true) }()
-	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
-	defer cleanup()
 	_, control := parseConnectControlCommand(e.Content)
-	if err == nil && !control && r.cfg.ReplyMode == "a2ui" {
-		if err := r.processCard(e, &record, r.fwd, attachments...); err != nil {
+	if !control && r.cfg.ReplyMode == "a2ui" {
+		if err := r.processCard(e, &record, r.fwd); err != nil {
 			return err
 		}
 		r.notifyCardFailure(e, &record)
@@ -385,6 +383,8 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 		label = employeeTaskLabel(record)
 		return nil
 	}
+	attachments, cleanup, err := prepareEmployeeImages(r.ctx, r.cfg.Binding.DWSProfile, r.dir, e)
+	defer cleanup()
 	var answer string
 	if err == nil {
 		answer, err = forwardEmployeeTurn(r.turnContext(e), r.fwd, e.ConversationID, employeeTurnText(e), attachments...)
@@ -844,7 +844,7 @@ func (r *employeeRuntime) recoverInterruptedTasks() error {
 		}
 		cardInterrupted := record.Status == "card_creating" || record.Status == "card_streaming" || record.Status == "card_updating"
 		if record.Status == "accepted" || record.Status == "running" || record.Status == "sending" || cardInterrupted {
-			if cardInterrupted {
+			if cardInterrupted && record.CardResultFile == "" {
 				record.Execution = "unknown"
 			}
 			if record.Status == "sending" || cardInterrupted {
