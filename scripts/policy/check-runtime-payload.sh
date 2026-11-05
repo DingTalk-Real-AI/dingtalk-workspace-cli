@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-PAYLOAD="$ROOT/third_party/runtimepayload/20261028"
+PAYLOAD="$ROOT/third_party/runtimepayload/20261104"
 ALLOW_UNSUPPORTED_TOOLS=0
 
 if [ "${1:-}" = "--allow-unsupported-tools" ]; then
@@ -99,14 +99,14 @@ check_pe_arch() {
 }
 
 check_hash darwin/universal/x7k2m9p4q1w8.dylib 8e4460791f12381863f5844ded6423b2a9b75d6f394e9bd146410e7f160b0c5c
-check_hash linux/amd64/libx7k2m9p4q1w8.so d4e849134c311e9af71ef8bd018e5b4b94617edd79a30cc13a998caaf6ed10e0
-check_hash linux/arm64/libx7k2m9p4q1w8.so c160e5a5205ddc0f8320b616c0d5404899601cd6683b4e2ce351c87f2a146c36
+check_hash linux/amd64/libx7k2m9p4q1w8.so a9d5f7ad4b0503af268f4b8480cb5917d683d08408c41012f4dcfa77d5967ba4
+check_hash linux/arm64/libx7k2m9p4q1w8.so a65565e7ed45c6917085d268c06ed54e3f6ee8e1fb61246e02d6428b90879194
 check_hash windows/amd64/x7k2m9p4q1w864.dll 2c9a0eff98bc7c387e21224037f51da011797416e17504387c8f6311d773bd84
 check_hash windows/arm64/x7k2m9p4q1w864.dll b12ed8d654628f789b6c1aff795b6208da228306a80a2486178bf2b36b52917b
 
-check_hash linux/skt.bin 0e0a7bfee3c34aab752db7d98e8dddefd7b55577791cdd95a8bd42be09e71b78
-check_hash windows/skt.bin f7559094191a5f0530b732e72fca378ad36d33499fb5cca3f0ab85dff6158834
-check_hash darwin/skt.bin 2d1f6aab6ce561400035e7d898500d006896568e8932671a27c7349ea4760925
+check_hash linux/skt.bin 172d5bf0049666ffac70d53ed2b62f8910ec7aace99cc485a200f475698dd189
+check_hash windows/skt.bin effa5b61862fb182b067db5b81127af291dc86a7e27aceac4a4ac156ea38e50b
+check_hash darwin/skt.bin ee8872b6c8915e44327ad5d891367bfe3f50fd0ea22f24df925437f52495cf50
 
 checksum_count="$(wc -l < "$PAYLOAD/SHA256SUMS" | tr -d ' ')"
 [ "$checksum_count" = 8 ] || fail "expected 8 SHA-256 entries, found $checksum_count"

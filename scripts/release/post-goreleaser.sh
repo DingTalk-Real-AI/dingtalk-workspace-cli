@@ -311,7 +311,7 @@ write_runtime_manifest() {
   cat > "$runtime_root/manifest.json" <<EOF
 {
   "format_version": 3,
-  "payload_version": "20261028",
+  "payload_version": "20261104",
   "target": "$target_os/$target_arch",
   "library": "$library_name",
   "library_sha256": "$library_sha",
@@ -354,7 +354,7 @@ prepare_runtime_archives() {
     [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     if [ "$target_os" != darwin ]; then
-      attach_runtime_payload "$binary" "$stage/.dws-runtime/20261028"
+      attach_runtime_payload "$binary" "$stage/.dws-runtime/20261104"
       rm -rf "$stage/.dws-runtime"
     fi
     repack_platform_archive "$stage" "$archive"
@@ -446,7 +446,7 @@ sign_darwin_archives() {
     if [ ! -f "$bin" ]; then
       err "dws binary not found inside $name after extraction"
     fi
-    runtime_root="$stage/.dws-runtime/20261028"
+    runtime_root="$stage/.dws-runtime/20261104"
     runtime_library="$runtime_root/x7k2m9p4q1w8.dylib"
     [ -f "$runtime_library" ] || err "runtime library not found inside $name after extraction"
     sign_one_darwin_binary "$runtime_library"
