@@ -312,9 +312,10 @@ func TestDevEventDebugPassedAppendsNextCommand(t *testing.T) {
 	}
 }
 
-// TestDevEventDebugNonObjectPayloadFailsClosed 验证真实 debug 响应不是对象时
-// fail-closed：数组等载荷没有阶段事实，不得落入通用 success 假报通过。
-func TestDevEventDebugNonObjectPayloadFailsClosed(t *testing.T) {
+// TestCrossPlatformCoverageDevEventDebugNonObjectPayloadFailsClosed 验证真实
+// debug 响应不是对象时 fail-closed：数组等载荷没有阶段事实，不得落入通用
+// success 假报通过。
+func TestCrossPlatformCoverageDevEventDebugNonObjectPayloadFailsClosed(t *testing.T) {
 	invocation := executor.NewHelperInvocation("dev event debug", devEventProduct, devEventDebugTool, nil)
 	invocation.Implemented = true
 	result := executor.Result{
