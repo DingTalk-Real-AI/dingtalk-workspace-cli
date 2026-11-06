@@ -15,13 +15,13 @@ metadata:
 
 本 Skill 负责个人事件与应用事件消费；应用事件的发现、事件 Schema、业务版本和安全边界见 [应用事件参考](references/event-app.md)。发送/历史消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
 
-<!-- dws-intent: event.listen.im -->IM 消息、reaction、已读和撤回优先用 `dws event +listen-im`；群生命周期、Filter DSL、原始 envelope 或底层控制才用 `event consume`。
-<!-- dws-intent: event.listen.oa -->OA 审批任务/实例变化用 `event consume`；已有审批查询/操作走 `dws oa`，不要轮询模拟事件。
-<!-- dws-intent: event.listen.todo -->待办创建、更新、删除用 `event consume`；已有待办走 `dws todo`。
-<!-- dws-intent: event.listen.minutes -->听记创建/纪要生成用 `event consume`，见 `event-minutes.md`。
-<!-- dws-intent: event.listen.card -->互动卡片回调用 `event consume user_card_action_triggered`，见 `event-card.md`。
-<!-- dws-intent: event.listen.contact -->好友申请/添加成功用 `event consume`，关系查询走 `dws contact`。
-<!-- dws-intent: event.listen.calendar -->日历主事件用 `event consume user_calendar_event_changed`，见 `event-calendar.md`。
+<!-- dws-intent: event.listen.im -->IM 消息、reaction、已读和撤回默认监听入口是 `dws event +listen-im`；只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用 `event consume`。
+<!-- dws-intent: event.listen.oa -->OA 审批任务/实例变化用 `dws event consume`；已有审批查询/操作走 `dws oa`，不要轮询模拟事件。
+<!-- dws-intent: event.listen.todo -->待办创建、更新、删除用 `dws event consume`；已有待办走 `dws todo`。
+<!-- dws-intent: event.listen.minutes -->听记创建/纪要生成用 `dws event consume`，见 `event-minutes.md`。
+<!-- dws-intent: event.listen.card -->互动卡片回调用 `dws event consume user_card_action_triggered`，见 `event-card.md`。
+<!-- dws-intent: event.listen.contact -->好友申请/添加成功用 `dws event consume`，关系查询走 `dws contact`。
+<!-- dws-intent: event.listen.calendar -->日历主事件用 `dws event consume user_calendar_event_changed`，见 `event-calendar.md`。
 
 ## Golden Route
 
