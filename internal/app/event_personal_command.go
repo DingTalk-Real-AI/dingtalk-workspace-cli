@@ -317,8 +317,9 @@ func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, war
 	}
 
 	// 只有查询可能覆盖应用事件时才访问远端：内置官方分类直接短路，离线可用。
-	// appEvent 是来源选择器而非业务分类；远端独有的分类仍可能命中应用事件。
-	if category != "" && !appEventSource && isPersonalOfficialCategory(category) {
+	// appEvent 是来源选择器而非业务分类；producer 只可能命中应用事件，不做短路。
+	// 远端独有的分类仍可能命中应用事件。
+	if category != "" && producer == "" && !appEventSource && isPersonalOfficialCategory(category) {
 		return official, nil
 	}
 

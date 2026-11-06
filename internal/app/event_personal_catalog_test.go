@@ -629,6 +629,47 @@ func TestCrossPlatformCoveragePersonalEventCatalogCategorySkipAndDescriptionFall
 	}
 }
 
+func TestCrossPlatformCoveragePersonalEventCatalogProducerOverridesOfficialCategoryShortCircuit(t *testing.T) {
+	configDir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("sourceType"); got != personal.CatalogSourceTypeAppEvent {
+			t.Fatalf("sourceType query = %q, want appEvent", got)
+		}
+		if got := r.URL.Query().Get("category"); got != "card" {
+			t.Fatalf("category query = %q, want card", got)
+		}
+		if got := r.URL.Query().Get("producerUnifiedAppId"); got != "producer-card" {
+			t.Fatalf("producer query = %q, want producer-card", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 1,
+				"categories": []map[string]any{{
+					"category": "card",
+					"events": []map[string]any{{
+						"eventKey": "app_user_card_created_event", "name": "Card app event",
+						"category": "card", "event_source": "appEvent", "producerUnifiedAppId": "producer-card",
+					}},
+				}},
+			},
+		})
+	}))
+	defer srv.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, configDir)
+
+	items, err := loadPersonalEventCatalog(context.Background(), personalListOptions{Category: "card", ProducerAppID: "producer-card"}, nil)
+	if err != nil {
+		t.Fatalf("producer official-category catalog error = %v", err)
+	}
+	if len(items) != 1 || items[0].EventKey != "app_user_card_created_event" {
+		t.Fatalf("items = %#v, want the remote card-category app event", items)
+	}
+}
+
 func TestCrossPlatformCoverageRemoteEventSchemaDefaultFormatAndErrorWrap(t *testing.T) {
 	configDir := t.TempDir()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
