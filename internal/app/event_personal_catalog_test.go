@@ -588,15 +588,6 @@ func TestCrossPlatformCoveragePersonalEventCatalogCategorySkipAndDescriptionFall
 			{"eventKey": "app_user_other_created_event", "name": "Other", "category": "other", "event_source": "appEvent"},
 			{"eventKey": "app_user_demo_created_event", "name": "Demo", "category": "appEvent", "event_source": "appEvent"},
 		}
-		if category := r.URL.Query().Get("category"); category != "" {
-			filtered := make([]map[string]any, 0, len(events))
-			for _, event := range events {
-				if event["category"] == category {
-					filtered = append(filtered, event)
-				}
-			}
-			events = filtered
-		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
 			"result":  map[string]any{"total": len(events), "items": events},
