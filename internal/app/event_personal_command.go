@@ -36,6 +36,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -211,7 +212,7 @@ DRAFT、超长或从未发布的版本由服务端返回错误且不回退最新
 					eventExplicitToken(globalFlags), eventExplicitClientID(globalFlags))
 			}
 			if strings.TrimSpace(payloadSchemaVersion) != "" {
-				return fmt.Errorf("--payload-schema-version only applies to app events")
+				return apperrors.NewValidation("--payload-schema-version only applies to app events")
 			}
 			if !def.Public {
 				return personal.PublicAvailabilityError(args[0])
@@ -303,15 +304,21 @@ func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, war
 
 	// 官方事件固定来自内置目录：producer 筛选只可能命中应用事件，
 	// keyword 在本地按与远端一致的 eventKey 全值等值（忽略大小写）过滤。
+	appEventSource := category == personal.CatalogSourceTypeAppEvent
+	remoteCategory := category
+	if appEventSource {
+		remoteCategory = ""
+	}
 	official := personal.Catalog(category, opts.EnabledOnly, opts.IncludePending)
-	if producer != "" {
+	if producer != "" || appEventSource {
 		official = nil
 	} else if keyword != "" {
 		official = filterPersonalCatalogByKeyword(official, keyword)
 	}
 
-	// 只有查询可能覆盖应用事件时才访问远端：官方分类直接短路，离线可用。
-	if category != "" && category != personal.CatalogSourceTypeAppEvent {
+	// 只有查询可能覆盖应用事件时才访问远端：内置官方分类直接短路，离线可用。
+	// appEvent 是来源选择器而非业务分类；远端独有的分类仍可能命中应用事件。
+	if category != "" && !appEventSource && isPersonalOfficialCategory(category) {
 		return official, nil
 	}
 
@@ -327,6 +334,7 @@ func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, war
 	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL("", configDir), identity, opts.ExplicitToken)
 	events, err := client.ListCatalog(ctx, personal.CatalogOptions{
 		SourceType:           personal.CatalogSourceTypeAppEvent,
+		Category:             remoteCategory,
 		Keyword:              keyword,
 		ProducerUnifiedAppID: producer,
 	})
@@ -347,7 +355,7 @@ func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, war
 		if _, known := personal.Lookup(event.EventKey); known {
 			continue
 		}
-		if category != "" && event.Category != category {
+		if remoteCategory != "" && event.Category != remoteCategory {
 			continue
 		}
 		description := event.Description
@@ -367,6 +375,18 @@ func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, war
 		})
 	}
 	return items, nil
+}
+
+// isPersonalOfficialCategory reports whether a category is owned by the CLI's
+// built-in official registry. Unknown categories may still be returned by the
+// app-event source and must not be short-circuited before the remote catalog.
+func isPersonalOfficialCategory(category string) bool {
+	for _, def := range personal.Catalog("", true, true) {
+		if def.Category == category {
+			return true
+		}
+	}
+	return false
 }
 
 // filterPersonalCatalogByKeyword mirrors the remote catalog keyword contract:

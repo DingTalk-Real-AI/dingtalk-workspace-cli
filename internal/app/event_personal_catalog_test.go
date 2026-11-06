@@ -27,10 +27,12 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
@@ -451,6 +453,27 @@ func TestCrossPlatformCoveragePersonalEventSchemaVersionErrorsAndOfficialReject(
 	if err == nil || !strings.Contains(err.Error(), "only applies to app events") {
 		t.Fatalf("official event version flag error = %v", err)
 	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.ExitCode() != 3 {
+		t.Fatalf("official event version flag error = %v (%T), want validation with exit code 3", err, err)
+	}
+}
+
+// TestCrossPlatformCoveragePersonalEventSchemaOfficialVersionFlagProcessExitCode
+// covers the full process exit path: a built-in official event carrying
+// --payload-schema-version must classify as validation and exit 3, not internal/5.
+func TestCrossPlatformCoveragePersonalEventSchemaOfficialVersionFlagProcessExitCode(t *testing.T) {
+	configDir := t.TempDir()
+	startPersonalCatalogSeams(t, configDir)
+	testseam.Protect(t, &os.Args)
+	os.Args = []string{"dws", "event", "schema", "user_im_message_receive_at", "--payload-schema-version", "1"}
+	testseam.Swap(t, &rootNormalizeProcessProfileArgs, func() func() { return func() {} })
+	testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return nil })
+	testseam.Swap(t, &rootStopAllStdioClients, func() {})
+
+	if code := Execute(); code != 3 {
+		t.Fatalf("Execute exit code = %d, want validation code 3", code)
+	}
 }
 
 func TestCrossPlatformCoveragePersonalEventSchemaRemoteUnknownAndLoggedOut(t *testing.T) {
@@ -555,16 +578,28 @@ func TestCrossPlatformCoveragePersonalEventListWarnNilAndRunErrorWrap(t *testing
 
 func TestCrossPlatformCoveragePersonalEventCatalogCategorySkipAndDescriptionFallback(t *testing.T) {
 	configDir := t.TempDir()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var categoryQueries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("sourceType"); got != personal.CatalogSourceTypeAppEvent {
+			t.Fatalf("sourceType query = %q, want appEvent", got)
+		}
+		categoryQueries = append(categoryQueries, r.URL.Query().Get("category"))
+		events := []map[string]any{
+			{"eventKey": "app_user_other_created_event", "name": "Other", "category": "other", "event_source": "appEvent"},
+			{"eventKey": "app_user_demo_created_event", "name": "Demo", "category": "appEvent", "event_source": "appEvent"},
+		}
+		if category := r.URL.Query().Get("category"); category != "" {
+			filtered := make([]map[string]any, 0, len(events))
+			for _, event := range events {
+				if event["category"] == category {
+					filtered = append(filtered, event)
+				}
+			}
+			events = filtered
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
-			"result": map[string]any{
-				"total": 2,
-				"items": []map[string]any{
-					{"eventKey": "app_user_other_created_event", "name": "Other", "category": "other", "event_source": "appEvent"},
-					{"eventKey": "app_user_demo_created_event", "name": "Demo", "category": "appEvent", "event_source": "appEvent"},
-				},
-			},
+			"result":  map[string]any{"total": len(events), "items": events},
 		})
 	}))
 	defer srv.Close()
@@ -573,18 +608,33 @@ func TestCrossPlatformCoveragePersonalEventCatalogCategorySkipAndDescriptionFall
 	}
 	startPersonalCatalogSeams(t, configDir)
 
+	// appEvent 是来源选择器，不是业务分类过滤：sourceType=appEvent 返回的
+	// other/appEvent 分类都必须保留。
 	items, err := loadPersonalEventCatalog(context.Background(), personalListOptions{Category: "appEvent"}, nil)
 	if err != nil {
 		t.Fatalf("catalog error = %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("items = %#v, want only the appEvent entry", items)
+	if len(items) != 2 {
+		t.Fatalf("items = %#v, want both app-event categories", items)
 	}
-	if items[0].EventKey != "app_user_demo_created_event" {
-		t.Fatalf("item = %#v", items[0])
+	demo, ok := findPersonalCatalogItem(items, "app_user_demo_created_event")
+	if !ok {
+		t.Fatalf("items = %#v, want the appEvent-category entry", items)
 	}
-	if items[0].Description != "Demo" {
-		t.Fatalf("empty description should fall back to name, got %q", items[0].Description)
+	if demo.Description != "Demo" {
+		t.Fatalf("empty description should fall back to name, got %q", demo.Description)
+	}
+
+	// 远端独有分类仍要访问应用事件目录，并按业务分类 other 过滤。
+	items, err = loadPersonalEventCatalog(context.Background(), personalListOptions{Category: "other"}, nil)
+	if err != nil {
+		t.Fatalf("other-category catalog error = %v", err)
+	}
+	if len(items) != 1 || items[0].EventKey != "app_user_other_created_event" {
+		t.Fatalf("other-category items = %#v, want only the other-category app event", items)
+	}
+	if len(categoryQueries) != 2 || categoryQueries[0] != "" || categoryQueries[1] != "other" {
+		t.Fatalf("category queries = %#v, want [\"\", other] (appEvent is a source selector)", categoryQueries)
 	}
 }
 

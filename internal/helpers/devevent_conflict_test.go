@@ -312,6 +312,24 @@ func TestDevEventDebugPassedAppendsNextCommand(t *testing.T) {
 	}
 }
 
+// TestDevEventDebugNonObjectPayloadFailsClosed 验证真实 debug 响应不是对象时
+// fail-closed：数组等载荷没有阶段事实，不得落入通用 success 假报通过。
+func TestDevEventDebugNonObjectPayloadFailsClosed(t *testing.T) {
+	invocation := executor.NewHelperInvocation("dev event debug", devEventProduct, devEventDebugTool, nil)
+	invocation.Implemented = true
+	result := executor.Result{
+		Invocation: invocation,
+		Response:   map[string]any{"content": []any{"unexpected"}},
+	}
+	env := devEventEnvelopeOf(t, devEventCommandResult(result))
+	if env.Outcome != output.OutcomeFailure {
+		t.Fatalf("outcome = %q, want failure for a non-object debug payload", env.Outcome)
+	}
+	if env.Error == nil || env.Error.Type != "api" || env.Error.Subtype != "debug_not_ready" {
+		t.Fatalf("error = %#v, want api/debug_not_ready", env.Error)
+	}
+}
+
 // TestDevEventDebugDryRunNeverReportsStageFacts 验证 dry-run 不做阶段判定：
 // 本地 invocation 预览没有阶段事实，既不得报 debug_not_ready，也不得出现
 // debugPassed:true 这类假通过。

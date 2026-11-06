@@ -864,6 +864,11 @@ func devEventCommandResult(result executor.Result) output.CommandResult {
 	dryRun := result.Invocation.DryRun
 	data := devAppEnvelopeData(result)
 	content, isObject := data.(map[string]any)
+	if tool == devEventDebugTool && !dryRun && !isObject {
+		return output.Failure(devEventDebugErrorInfo(nil, "debug_not_ready",
+			"event definition debug is not ready: upstream response is not an object",
+			"上游调试响应缺少可判定的对象载荷与阶段事实；不要把它当作调试通过，也不要据此 publish。先用 dws dev event validate 做静态校验。"))
+	}
 	if isObject {
 		if failure := devEventFailureResult(content); failure != nil {
 			return failure
