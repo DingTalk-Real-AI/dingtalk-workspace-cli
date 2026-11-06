@@ -63,6 +63,7 @@ dws sheet batch-update --node <NODE_ID> --operations '[
 - `set-dropdown` 的 Inline 模式使用 `options`；SourceRange 模式使用 `source-sheet-id` 与 `source-range`，两种模式必须且只能选一个。Inline 颜色写在 `options[].color`；顶层 `colors` / `source-colors` 和 SourceRange 颜色不支持。
 - `source-range` 按 `toolName` 解释：在 `set-dropdown` 中是候选项来源，在 `range fill` / `range copy-to` / `range move-to` 中是数据源区域。
 - `create-float-image` / `update-float-image` 在 batch 中只接受 `src` URL，不接受 `file`；本地文件必须先上传。
+- `update` 子操作的 `index`（调整工作表位置）必须单独成一个子操作，不能与 `name` / `title` / `hidden` / `frozen-row-count` / `frozen-column-count` / `tab-color` 放在同一个 `input` 中；这一点与独立的 `sheet update` 不同。需要同时改属性和位置时，拆成两个 `update` 子操作：先改属性，再改 `index`，例如 `[{"toolName":"update","input":{"sheet-id":"S","frozen-row-count":2}},{"toolName":"update","input":{"sheet-id":"S","index":0}}]`。
 - `group-dimension` 在 batch 中只适合默认展开分组；需要 `group-state=fold` 时调用独立命令。
 
 ## 返回值与批内依赖

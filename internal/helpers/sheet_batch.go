@@ -1049,7 +1049,7 @@ func buildUpdateSheetArgs(input map[string]any, rejectMixed bool) (map[string]an
 	hasProperty := nameSet || titleSet || hiddenSet || input["frozen-row-count"] != nil ||
 		input["frozen-column-count"] != nil || input["tab-color"] != nil
 	if rejectMixed && indexSet && hasProperty {
-		return nil, fmt.Errorf("index 只能单独更新，不能与 name/title/hidden/frozen counts/tab-color 混用")
+		return nil, fmt.Errorf("index 只能单独更新，不能与 name/title/hidden/frozen counts/tab-color 混用；请把 index 放进单独的 update 子操作（同一批次内先改属性，再改 index）")
 	}
 	if !indexSet && !hasProperty {
 		return nil, fmt.Errorf("name/title/index/hidden/frozen-row-count/frozen-column-count/tab-color 至少指定一个")
