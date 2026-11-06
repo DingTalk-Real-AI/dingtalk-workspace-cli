@@ -13,7 +13,7 @@ import (
 
 func validateDocBlockRange(rt *shortcut.RuntimeContext) error {
 	start, end := rt.Str("start-block-id"), rt.Str("end-block-id")
-	if start == "" && end == "" {
+	if start == "" && end == "" && !rt.Changed("start-block-id") && !rt.Changed("end-block-id") {
 		return nil
 	}
 	if rt.Str("command") != "block_delete" && rt.Str("command") != "block_replace" {
@@ -25,49 +25,32 @@ func validateDocBlockRange(rt *shortcut.RuntimeContext) error {
 	return nil
 }
 
-// Range replacement is deliberately sequential: replace the first root block,
-// verify it, then remove the remaining selected blocks. It never rewrites the
-// whole document or claims an atomic transaction.
-func executeDocRangeReplace(rt *shortcut.RuntimeContext, node, content string) error {
-	if rt.DryRun() {
-		return rt.Output(docEnvelope("doc.range_replace", map[string]any{"executed": false, "atomic": false, "startBlockId": rt.Str("start-block-id"), "endBlockId": rt.Str("end-block-id"), "steps": []string{"resolve_range", "replace_first", "verify_first", "delete_remaining", "verify_remaining"}}))
+// Range resolution and mutation are one server operation, including pending-owner ranges.
+func executeDocRangeReplace(rt *shortcut.RuntimeContext, node, content string, jsonmlSequence bool) error {
+	if rt.Str("doc-format") == "jsonml" && !jsonmlSequence {
+		content = "[" + content + "]"
 	}
-	data, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": node, "format": "jsonml"})
-	if err != nil {
-		return err
-	}
-	ids, err := docRangeIDs(data, rt.Str("start-block-id"), rt.Str("end-block-id"))
-	if err != nil {
-		return err
-	}
-	params := map[string]any{"nodeId": node, "blockId": ids[0]}
-	format := rt.Str("doc-format")
-	if format == "jsonml" {
+	params := map[string]any{"nodeId": node, "startBlockId": rt.Str("start-block-id"), "endBlockId": rt.Str("end-block-id")}
+	return executeDocBlockSequence(rt, "update_document_block", params, content)
+}
+
+func executeDocBlockSequence(rt *shortcut.RuntimeContext, tool string, params map[string]any, content string) error {
+	if rt.Str("doc-format") == "jsonml" {
 		params["format"], params["jsonml"] = "jsonml", content
 	} else {
-		params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
+		params["format"], params["markdown"] = "markdown", content
 	}
-	first, err := runVerifiedDocMutation(rt, "doc.range_replace", "update_document_block", params, node, "list_document_blocks", map[string]any{"nodeId": node, "format": blockVerificationFormat(format), "__allBlocks": true}, func(_, read map[string]any) bool { return blockContentEquals(read, ids[0], content, format) })
+	if rt.Bool("suggestion") {
+		params["suggestion"] = true
+	}
+	if rt.DryRun() {
+		return rt.Output(docEnvelope("doc.update", map[string]any{"executed": false, "tool": tool, "arguments": params, "atomic": true}))
+	}
+	result, err := rt.CallMCPWriteDataStrict(productDoc, tool, params)
 	if err != nil {
-		return err
+		return docUnknownWriteError("doc.update", tool, rt.Str("node"), err)
 	}
-	if len(ids) > 1 {
-		_, err = runVerifiedDocMutation(rt, "doc.range_replace", "delete_document_block", map[string]any{"nodeId": node, "blockId": strings.Join(ids[1:], ",")}, node, "list_document_blocks", map[string]any{"nodeId": node, "format": blockVerificationFormat(format), "__allBlocks": true}, func(_, read map[string]any) bool {
-			if !blockContentEquals(read, ids[0], content, format) {
-				return false
-			}
-			for _, id := range ids[1:] {
-				if findCanonicalBlock(read, id, format) != nil {
-					return false
-				}
-			}
-			return true
-		})
-		if err != nil {
-			return docPartialWriteError("doc.range_replace", "doc_range_replace_partial", "delete_remaining", "首块已替换；剩余块删除未确认，请按原ID读回，不要重试整次替换", err, map[string]any{"nodeId": node, "replacedBlockId": ids[0], "remainingBlockIds": ids[1:], "firstStep": first}, nil, map[string]any{"available": false, "reason": "inspect exact selected IDs before recovery"})
-		}
-	}
-	return rt.Output(docEnvelope("doc.range_replace", map[string]any{"nodeId": node, "atomic": false, "verified": true, "replacedBlockId": ids[0], "deletedBlockIds": ids[1:]}))
+	return rt.Output(docEnvelope("doc.update", result))
 }
 
 func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {

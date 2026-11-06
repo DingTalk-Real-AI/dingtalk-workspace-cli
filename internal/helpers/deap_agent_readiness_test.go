@@ -162,7 +162,8 @@ func TestCrossPlatformCoverageEmployeeIPCReadyIsNotTransportReady(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			dir := t.TempDir()
 			testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
-			testseam.Swap(t, &digitalEmployeeReadyTimeout, 100*time.Millisecond)
+			// race 子进程在负载下可能超过 100ms 才启动；此处验证信号语义，不验证启动延迟。
+			testseam.Swap(t, &digitalEmployeeReadyTimeout, time.Second)
 			t.Setenv("DWS_EMPLOYEE_EVENT_FIXTURE", mode)
 			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 				return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeSubprocessFixture$", "--", "employee-consume-fixture")

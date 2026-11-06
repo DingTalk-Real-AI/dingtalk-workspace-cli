@@ -244,6 +244,28 @@
         "skills/multi/dingtalk-event/SKILL.md",
         "skills/multi/dingtalk-event/references/event-contact.md"
       ]
+    },
+    {
+      "id": "event.listen.minutes",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-minutes.md"
+      ]
+    },
+    {
+      "id": "event.listen.calendar",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-calendar.md"
+      ]
     }
   ]
 }

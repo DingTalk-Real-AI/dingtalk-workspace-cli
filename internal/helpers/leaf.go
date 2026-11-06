@@ -121,6 +121,11 @@ const (
 // 同时投影到 Agent Runtime Schema 并渲染进 --help 的「参数约束」段。
 type LeafConstraint = corecmd.Constraint
 
+// LeafPositional 声明一个位置参数（corecmd.PositionalSpec 的别名）：框架负责
+// arity 校验（RangeArgs，尾部可选位置参数可省略）、值校验（KindInt 为正整数
+// 并绑定 int64）、toolArgs 绑定与 Runtime Schema 位置参数注解。
+type LeafPositional = corecmd.PositionalSpec
+
 // LeafContract 是叶子 Contract 声明（corecmd.ContractDecl 别名）。
 // 嵌套字段直接使用 contract.*（InterfaceSpec / ParamDecl / SelectionSpec 等），
 // 不再保留平行 Decl 类型。
@@ -145,6 +150,10 @@ type LeafSpec struct {
 	Server string
 	Tool   string
 	Flags  []LeafFlag
+	// Positionals 声明位置参数（如 update <appId>）。声明后框架接管
+	// arity（RangeArgs，尾部可选可省略）、值校验、toolArgs 绑定与
+	// Runtime Schema 注解。
+	Positionals []LeafPositional
 	// Constraints 是跨 flag 的关系约束（至少一个 / 恰好一个 / 互斥），由
 	// command 统一校验并投影到 Runtime Schema 与 --help。复杂的条件式校验
 	// 仍放 Validate 钩子（钩子本身不是约束声明）。
@@ -218,6 +227,9 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	name := cmd.Name()
 	if len(spec.Flags) > 0 {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Flags must be empty (metadata-only mode)", name))
+	}
+	if len(spec.Positionals) > 0 {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Positionals must be empty (metadata-only mode)", name))
 	}
 	if len(spec.Constraints) > 0 {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Constraints must be empty (metadata-only mode)", name))
@@ -404,6 +416,7 @@ func FromLeafSpec(spec LeafSpec) corecmd.Spec {
 		Example:       spec.Example,
 		OutputRollout: spec.OutputRollout,
 		Flags:         spec.Flags,
+		Positionals:   spec.Positionals,
 		Constraints:   spec.Constraints,
 		Safety:        spec.Safety,
 		ConfirmFirst:  spec.ConfirmFirst,

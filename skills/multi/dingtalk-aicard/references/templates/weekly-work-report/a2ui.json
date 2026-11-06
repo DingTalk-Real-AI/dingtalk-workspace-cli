@@ -1,0 +1,1116 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-weekly-work-report-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "title",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "# ${/report/title}"
+            }
+          }
+        },
+        {
+          "id": "period",
+          "component": "Text",
+          "text": {
+            "path": "/report/period"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_h2_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "summary",
+          "component": "Markdown",
+          "content": {
+            "path": "/report/summary"
+          }
+        },
+        {
+          "id": "completed-title",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "### ${/report/completedTitle}"
+            }
+          }
+        },
+        {
+          "id": "completed-marker__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-content__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-row__0",
+          "component": "Row",
+          "children": [
+            "completed-marker__0",
+            "completed-content__0"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-indent-space__0",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "completed-details__0",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "completed-indented-details__0",
+          "component": "Row",
+          "children": [
+            "completed-indent-space__0",
+            "completed-details__0"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/completed/0/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "completed-item__0",
+          "component": "Column",
+          "children": [
+            "completed-row__0",
+            "completed-indented-details__0"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "completed-marker__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-content__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-row__1",
+          "component": "Row",
+          "children": [
+            "completed-marker__1",
+            "completed-content__1"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-indent-space__1",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "completed-details__1",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "completed-indented-details__1",
+          "component": "Row",
+          "children": [
+            "completed-indent-space__1",
+            "completed-details__1"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/completed/1/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "completed-item__1",
+          "component": "Column",
+          "children": [
+            "completed-row__1",
+            "completed-indented-details__1"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "completed-marker__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-content__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-row__2",
+          "component": "Row",
+          "children": [
+            "completed-marker__2",
+            "completed-content__2"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-indent-space__2",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "completed-detail-marker__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-detail-content__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-detail-row__2__0",
+          "component": "Row",
+          "children": [
+            "completed-detail-marker__2__0",
+            "completed-detail-content__2__0"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-detail-marker__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-detail-content__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-detail-row__2__1",
+          "component": "Row",
+          "children": [
+            "completed-detail-marker__2__1",
+            "completed-detail-content__2__1"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-detail-marker__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "completed-detail-content__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/completed/2/details/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "completed-detail-row__2__2",
+          "component": "Row",
+          "children": [
+            "completed-detail-marker__2__2",
+            "completed-detail-content__2__2"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "completed-details__2",
+          "component": "Column",
+          "children": [
+            "completed-detail-row__2__0",
+            "completed-detail-row__2__1",
+            "completed-detail-row__2__2"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "completed-indented-details__2",
+          "component": "Row",
+          "children": [
+            "completed-indent-space__2",
+            "completed-details__2"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/completed/2/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "completed-item__2",
+          "component": "Column",
+          "children": [
+            "completed-row__2",
+            "completed-indented-details__2"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "completed-list",
+          "component": "Column",
+          "children": [
+            "completed-item__0",
+            "completed-item__1",
+            "completed-item__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "completed-section",
+          "component": "Column",
+          "children": [
+            "completed-title",
+            "completed-list"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "planned-title",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "### ${/report/plannedTitle}"
+            }
+          }
+        },
+        {
+          "id": "planned-marker__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-content__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-row__0",
+          "component": "Row",
+          "children": [
+            "planned-marker__0",
+            "planned-content__0"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-indent-space__0",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "planned-details__0",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "planned-indented-details__0",
+          "component": "Row",
+          "children": [
+            "planned-indent-space__0",
+            "planned-details__0"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/planned/0/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "planned-item__0",
+          "component": "Column",
+          "children": [
+            "planned-row__0",
+            "planned-indented-details__0"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "planned-marker__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-content__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-row__1",
+          "component": "Row",
+          "children": [
+            "planned-marker__1",
+            "planned-content__1"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-indent-space__1",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "planned-details__1",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "planned-indented-details__1",
+          "component": "Row",
+          "children": [
+            "planned-indent-space__1",
+            "planned-details__1"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/planned/1/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "planned-item__1",
+          "component": "Column",
+          "children": [
+            "planned-row__1",
+            "planned-indented-details__1"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "planned-marker__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-content__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-row__2",
+          "component": "Row",
+          "children": [
+            "planned-marker__2",
+            "planned-content__2"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-indent-space__2",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "planned-detail-marker__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-detail-content__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-detail-row__2__0",
+          "component": "Row",
+          "children": [
+            "planned-detail-marker__2__0",
+            "planned-detail-content__2__0"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-detail-marker__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-detail-content__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-detail-row__2__1",
+          "component": "Row",
+          "children": [
+            "planned-detail-marker__2__1",
+            "planned-detail-content__2__1"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-detail-marker__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "planned-detail-content__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/report/planned/2/details/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "planned-detail-row__2__2",
+          "component": "Row",
+          "children": [
+            "planned-detail-marker__2__2",
+            "planned-detail-content__2__2"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "planned-details__2",
+          "component": "Column",
+          "children": [
+            "planned-detail-row__2__0",
+            "planned-detail-row__2__1",
+            "planned-detail-row__2__2"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "planned-indented-details__2",
+          "component": "Row",
+          "children": [
+            "planned-indent-space__2",
+            "planned-details__2"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/planned/2/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "planned-item__2",
+          "component": "Column",
+          "children": [
+            "planned-row__2",
+            "planned-indented-details__2"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "planned-list",
+          "component": "Column",
+          "children": [
+            "planned-item__0",
+            "planned-item__1",
+            "planned-item__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "planned-section",
+          "component": "Column",
+          "children": [
+            "planned-title",
+            "planned-list"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "risks-title",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "### ${/report/risksTitle}"
+            }
+          }
+        },
+        {
+          "id": "risks-marker__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/risks/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "risks-content__0",
+          "component": "Text",
+          "text": {
+            "path": "/report/risks/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "risks-row__0",
+          "component": "Row",
+          "children": [
+            "risks-marker__0",
+            "risks-content__0"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "risks-indent-space__0",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "risks-details__0",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "risks-indented-details__0",
+          "component": "Row",
+          "children": [
+            "risks-indent-space__0",
+            "risks-details__0"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/risks/0/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "risks-item__0",
+          "component": "Column",
+          "children": [
+            "risks-row__0",
+            "risks-indented-details__0"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "risks-marker__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/risks/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "risks-content__1",
+          "component": "Text",
+          "text": {
+            "path": "/report/risks/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "risks-row__1",
+          "component": "Row",
+          "children": [
+            "risks-marker__1",
+            "risks-content__1"
+          ],
+          "gap": 12,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "risks-indent-space__1",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "risks-details__1",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "risks-indented-details__1",
+          "component": "Row",
+          "children": [
+            "risks-indent-space__1",
+            "risks-details__1"
+          ],
+          "gap": 0,
+          "align": "start",
+          "padding": 0,
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/report/risks/1/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "risks-item__1",
+          "component": "Column",
+          "children": [
+            "risks-row__1",
+            "risks-indented-details__1"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "risks-list",
+          "component": "Column",
+          "children": [
+            "risks-item__0",
+            "risks-item__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "risks-section",
+          "component": "Column",
+          "children": [
+            "risks-title",
+            "risks-list"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "title",
+            "period",
+            "summary",
+            "completed-section",
+            "planned-section",
+            "risks-section"
+          ],
+          "gap": 18,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-weekly-work-report-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "businessId": "demo-weekly-work-report-20261006"
+        },
+        "report": {
+          "reportId": "demo-report-20261006-20261010",
+          "title": "🗓️ 工作周报",
+          "period": "日期：10.06 – 10.10",
+          "summary": "本周重点推进了**搜索体验优化项目**和**商业化变现方案**的落地。搜索侧完成了 v2.3 版本的灰度发布，覆盖 15% 流量。",
+          "completedTitle": "本周完成",
+          "plannedTitle": "下周计划",
+          "risksTitle": "风险/需协调",
+          "completed": [
+            {
+              "marker": "1.",
+              "content": "「示例助手」v1.2 完成灰度全量。",
+              "details": []
+            },
+            {
+              "marker": "2.",
+              "content": "@示例助手 总结会议快捷指令上线。",
+              "details": []
+            },
+            {
+              "marker": "3.",
+              "content": "虚拟办公室工位面板交互 v2 通过技术评审：",
+              "details": [
+                {
+                  "marker": "a.",
+                  "content": "周三和设计师对齐设计细节"
+                },
+                {
+                  "marker": "b.",
+                  "content": "设计稿已交付前端"
+                },
+                {
+                  "marker": "c.",
+                  "content": "排期 9/22 进开发"
+                }
+              ]
+            }
+          ],
+          "planned": [
+            {
+              "marker": "1.",
+              "content": "推进示例助手 v1.2 全量上线评审,准备「灰度数据复盘 + 异常 case list」两份材料。",
+              "details": []
+            },
+            {
+              "marker": "2.",
+              "content": "启动虚拟办公室工位面板 v2 开发评审,跟前端敲定首版交互细节。",
+              "details": []
+            },
+            {
+              "marker": "3.",
+              "content": "虚拟办公室工位面板交互 v2 通过技术评审：",
+              "details": [
+                {
+                  "marker": "a.",
+                  "content": "周三和设计师对齐设计细节"
+                },
+                {
+                  "marker": "b.",
+                  "content": "设计稿已交付前端"
+                },
+                {
+                  "marker": "c.",
+                  "content": "排期 9/22 进开发"
+                }
+              ]
+            }
+          ],
+          "risks": [
+            {
+              "marker": "1.",
+              "content": "启动虚拟办公室工位面板 v2 开发评审,跟前端敲定首版交互细节。",
+              "details": []
+            },
+            {
+              "marker": "2.",
+              "content": "1014要封板的功能需完成验收。",
+              "details": []
+            }
+          ]
+        }
+      }
+    }
+  }
+]

@@ -20,6 +20,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -1936,8 +1937,12 @@ func annotateDevAppTool(cmd *cobra.Command, tool string) *cobra.Command {
 // devAppLeafMeta 是 devapp 叶子命令统一的 PostMount 收尾：设置 NoArgs /
 // DisableAutoGenTag，并调用 preferLegacyLeaf + annotateDevAppTool。供迁移到
 // LeafSpec 的命令在 LeafSpec.PostMount 里复用，保持与手写版逐字等价。
+// 声明了位置参数的叶子（如 dev liteapp update <appId>）由框架装配
+// RangeArgs arity，此处保留，不得覆写为 NoArgs。
 func devAppLeafMeta(cmd *cobra.Command, tool string) {
-	cmd.Args = cobra.NoArgs
+	if len(runtimeannotate.CommandPositionals(cmd)) == 0 {
+		cmd.Args = cobra.NoArgs
+	}
 	cmd.DisableAutoGenTag = true
 	preferLegacyLeaf(cmd)
 	annotateDevAppTool(cmd, tool)
@@ -2779,6 +2784,12 @@ func normalizeDevAppServiceResult(result executor.Result) executor.Result {
 // remove-permission's removedScopeValues to a string array, stamp explicit
 // lifecycle booleans, and enrich async robot creation results with next steps.
 func normalizeDevAppToolResult(tool string, result executor.Result) executor.Result {
+	if tool == liteappDeleteTool {
+		if timestamp, ok := liteappDeleteTimestamp(result.Response["content"]); ok {
+			result.Response["content"] = map[string]any{"timeToDel": timestamp}
+			return result
+		}
+	}
 	content, ok := result.Response["content"].(map[string]any)
 	if !ok {
 		return result
@@ -2800,6 +2811,15 @@ func normalizeDevAppToolResult(tool string, result executor.Result) executor.Res
 		normalizeDevAppRobotResult(content)
 	}
 	return result
+}
+
+func liteappDeleteTimestamp(value any) (any, bool) {
+	switch value.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
+		return value, true
+	default:
+		return nil, false
+	}
 }
 
 func normalizeDevAppVersionApproval(content map[string]any) {

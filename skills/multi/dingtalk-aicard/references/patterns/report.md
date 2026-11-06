@@ -9,8 +9,10 @@ Use for a data summary, analytical report, monitoring, or execution result. Sele
 | Metrics at wide and narrow widths | `ColumnLayout > metric groups` | Query and enable `responsive` when narrow layouts must become vertical; this is not an automatic wrapping grid |
 | Status or exception list | `Column/List > Row(Icon/Tag, Text)` | Status and separate explanation per item; choose a registered icon |
 | Static tabular records | `Markdown` with table syntax | Exact comparison by column; prefer this over a separate `Table` component |
-| Trend or distribution | `Chart` | Data suited to a graphic; add a table separately when useful |
+| Trend or distribution | `Chart` | Data suited to a graphic; query its contract, and add a table separately when useful |
 | Method and full report | `CollapsiblePanel`, `File`, or `Link` | Supplemental details, an attachment, or a real detail destination |
+
+See [information roles](../design.md#2-information-roles-and-blocks) for the underlying layout notation.
 
 For static tabular data, use table syntax in `Markdown.content` by default. Use a separate `Table` only when explicitly requested or when a required capability calls for it; query its contract first. `Table.data` is structured data and its pagination runs locally. `Chart.data` holds chart type and data, not component IDs. `ColumnLayout.columns` does not automatically wrap any number of items into groups; build actual columns according to its responsive contract.
 

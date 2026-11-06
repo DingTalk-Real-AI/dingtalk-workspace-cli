@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -1067,7 +1066,7 @@ reset-reminder 写入的提醒规则。提醒写命令的成功响应只能作�
 				deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", meta.FileSize))
 				return nil
 			}
-			ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+			ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 			defer cancel()
 			commitText, err := uploadTodoLocalFile(ctx, meta)
 			if err != nil {

@@ -9,8 +9,21 @@
 | Base 文档 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` |
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
-> **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
+> **操作后展示建议**：可从当前有效回执提取对象名称及 `url/links` 展示阶段结果；上表仅用于识别 URI，不作为缺链接时拼接地址的依据。
 > 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
+
+## 过程展示建议
+
+创建与修改采用相同的展示建议：结合核验结果按需展示阶段进展，可使用 Markdown 标题与链接（如 `[项目台账](完整URL)`）、卡片或当前宿主支持的其他格式；在满足宿主明确交付要求的前提下，遵循用户指定的展示方式。最终汇总保留当前有效的具名链接及名称转义，不拆成名称与裸 URL；用户或宿主指定格式除外。
+
+- 展示链接时，名称与对象对应，复用当前有效回执中对象自身的完整 `url` 或身份匹配的 `relation=target` 链接，保留原编码；不得截断、缩写或用 `...` / `…` 替代 URL 任一部分。不用父级链接冒充目标对象，不拼接地址或为补链接重放写入。独立读回优先，显式 null/空值不由旧回执覆盖。
+- 如实描述结果，保留 pending/unknown/partial/STOP；链接本身不证明成功、核验完成或流程启用。缺链接时可简短说明。
+- 字段 target 须满足 `objectType=field` 且 `objectId=当前 fieldId`；不额外展示错配链接。字段自身无可用链接时直说缺失，核验状态仍按有效回执保留。
+- **回执转述边界：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
+
+业务核验与宿主交付分别判断。对当前宿主明确要求交付或登记的最终产物，按其适用范围和规则执行，普通链接不替代规定的登记。展示或登记失败、工具不可用或状态未确认时，应简短分别说明当前已知的业务核验、登记与展示状态，不因此重放业务写入；无需重复对象或链接清单；用户明确要求字段完整汇总时除外，应按宿主及用户指定格式保留各项已有完整链接与原核验状态。展示请求已提交不等于登记或渲染成功。
+
+收尾时检查所有用户最终目标，某个目标进入恢复流程，不遗漏其他满足交付条件的目标；不额外登记未被用户指定为最终交付对象的内部 Table、字段或中间产物。已确认完成的登记不重复提交；结果未知的登记请求不自动重发，保留未确认状态并说明限制，仅在宿主提供明确查询或安全恢复契约时按其处理。用户要求预发交付时，指定预发前缀不证明环境映射成立；缺少可信完整预发 URL 时，保留业务结果并说明预发交付未完成，不自行拼接、换域登记或擅自改交生产链接。
 
 ## 命令索引表
 
@@ -91,7 +104,7 @@
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
 | `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；group/sort 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
-| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
+| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
@@ -374,7 +387,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 用户说"表格/多维表/AI表格":
 - 查看/查找/列表 → `base search`（优先）或 `base list`（仅浏览最近访问）
 - 详情 → `base get`
-- 创建 → `base create`
+- 创建 → `base create`；仅新建独立空白 Base、未指定自定义表结构时，使用 `dws aitable base create --name <名称>`，保留平台默认结构，不额外创建默认同名表或写入业务记录；不以 `tables=[]` 表达空白 Base；未独立核验记录数时，不宣称已验证零记录。
 - 修改 → `base update`
 - 删除 → `base delete`
 
@@ -419,7 +432,9 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"模板" → `template search`
 
-命令报错/操作失败 → 读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)
+仅补确认标记时，保持目标、名称、字段、类型及其他业务参数不变，不夹带修正，不使用占位类型或重复 JSON 键。
+
+命令报错/操作失败：`partial_success` 或未知写入结果应先保留原 ID、已完成步骤及已知副作用，对受影响的原对象只读核实后，再按当前契约和授权补齐。只读核实仍无法确定写入结果或补齐范围时，停止后续写入并说明未确认项，不重放创建。checkpoint、失败计数或输入错误不构成重放许可；不得自行新建替代 Base，或通过改名、清理旧对象掩盖问题；确需替代或清理时，说明影响并按既有规则取得相应授权。原 partial 与恢复核验结果分别说明。其他恢复细节按需读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)。
 
 **关键区分**: base=表格文件, table=数据表, field=列, record=行
 
@@ -447,8 +462,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `base list/search` | `baseId` | 所有后续命令的 --base-id，拼接文档 URI |
-| `base create` | `baseId` | 后续命令 + 文档 URI |
+| `base list/search` | `baseId` | 所有后续命令的 --base-id；访问链接使用返回的 url/links |
+| `base create` | `baseId` | 后续命令；访问链接使用返回的 url/links |
 | `base get` | `tables[].tableId` | --table-id |
 | `table get` | `fields[].fieldId` | record 操作的 cells key, field get/update/delete |
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
@@ -467,9 +482,9 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- 对象寻址使用真实 ID（baseId/tableId/fieldId/recordId）；记录写入的 cells key 也支持当前表内唯一字段名；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
 - `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
-- records 的 cells key 是 fieldId，不是字段名称
+- records 的 cells key 支持 fieldId 或当前表内唯一字段名；推荐 fieldId，字段名须精确匹配
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)
 
@@ -485,3 +500,11 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 ## 相关产品
 
 - [doc](./doc.md) — 富文本文档编辑，不是结构化数据表格
+
+## 对象访问链接
+
+对象访问链接复用 Web 定位参数：数据表/视图/字段使用 `sheetId/viewId/fieldId`，应用模式使用编码 `appId/pageId`，普通仪表盘和说明文档使用 `applicationId`，自动化使用 `flowId/autoOpenAutomation=true`。字段复合创建及续跑结果逐项保留 `sheetId/fieldId` 链接；展示方式参考前文“过程展示建议”。表单管理入口 `entrance=form` 与公开填写链接不同，不能因此开启分享；自动打开流程编辑器不会启用流程。字段业务 type 不作为链接对象类型。
+
+`+url-resolve` 默认仅做本地解析，覆盖 Base、Table、View、Record、Field、Form、App/Page、Application 和 Workflow；参数冲突、缺父级或混用不同对象族时明确拒绝，不能把子对象降级为 Base 验证。`--verify` 只调用对应只读接口并核对所属关系；Application 经 `list_nsheet_nodes` 的 `nodeId/nodeType` 核对仪表盘/说明文档导航节点，不能用底层文档 UUID 或 Base 存在证明目标节点存在。自动化入口保留的后台表/视图/Application 参数不作为目标；无 flowId 时仅验证 Base，有 flowId 时验证流程。仅 App 链接暂无只读验证入口，必须明确拒绝验证，不能调用会隐式创建 App 的 `get_app/list_app_pages`；含 Page 的链接通过 `get_app_page` 同时核对 App/Page。公开表单分享 URL 不作为 Base 对象链接解析。
+
+`+url-resolve` 使用统一 `ok/outcome` 信封，成功的稳定 ID 位于 `data.target`；仅 `data.verified=true` 表示只读验证通过。失败保留错误分类和非零退出码，不能把本地解析成功当作远程存在证明。

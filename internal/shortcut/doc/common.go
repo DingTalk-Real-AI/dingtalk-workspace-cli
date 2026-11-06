@@ -225,6 +225,14 @@ func classifyDocWriteFailure(cause error) docFailureTransition {
 	if !errors.As(cause, &typed) {
 		return transition
 	}
+	switch strings.ToUpper(strings.TrimSpace(typed.Reason)) {
+	case "DOC_BLOCK_SEQUENCE_RECEIPT_UNCONFIRMED":
+		return docFailureTransition{state: docFailureUnknown, reason: "doc_block_sequence_receipt_unconfirmed", retryable: false, executionStarted: true, message: typed.Message, actions: typed.Actions}
+	case "PENDING_SUGGESTIONS_EXIST":
+		return docFailureTransition{state: docFailureFailed, reason: "PENDING_SUGGESTIONS_EXIST", retryable: false, executionStarted: false, message: typed.Message, actions: []string{"先审阅本人待处理建议；明确同意后以 --force 重新发起覆盖，--yes 不代表 --force"}}
+	case "PENDING_SUGGESTIONS_UNAVAILABLE":
+		return docFailureTransition{state: docFailureFailed, reason: "PENDING_SUGGESTIONS_UNAVAILABLE", retryable: false, executionStarted: false, message: typed.Message, actions: []string{"摘要不可用，覆盖尚未开始；稍后检查服务端状态"}}
+	}
 	reason := strings.ToLower(strings.TrimSpace(typed.Reason))
 	message := strings.ToLower(typed.Message)
 	if typed.Category == apperrors.CategoryValidation {

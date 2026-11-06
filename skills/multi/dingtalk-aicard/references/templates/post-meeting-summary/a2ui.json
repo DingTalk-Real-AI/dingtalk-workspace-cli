@@ -1,0 +1,1222 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-post-meeting-summary-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/title"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_largetitle_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "meeting",
+          "component": "Text",
+          "text": {
+            "path": "/summary/meeting"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_h1_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "conclusions-title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusionsTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h1_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "conclusions-marker__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-content__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-row__0",
+          "component": "Row",
+          "children": [
+            "conclusions-marker__0",
+            "conclusions-content__0"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-indent__0",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-details__0",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-indented-details__0",
+          "component": "Row",
+          "children": [
+            "conclusions-indent__0",
+            "conclusions-details__0"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/conclusions/0/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "conclusions-item__0",
+          "component": "Column",
+          "children": [
+            "conclusions-row__0",
+            "conclusions-indented-details__0"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-marker__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-content__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-row__1",
+          "component": "Row",
+          "children": [
+            "conclusions-marker__1",
+            "conclusions-content__1"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-indent__1",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-details__1",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-indented-details__1",
+          "component": "Row",
+          "children": [
+            "conclusions-indent__1",
+            "conclusions-details__1"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/conclusions/1/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "conclusions-item__1",
+          "component": "Column",
+          "children": [
+            "conclusions-row__1",
+            "conclusions-indented-details__1"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-marker__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-content__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-row__2",
+          "component": "Row",
+          "children": [
+            "conclusions-marker__2",
+            "conclusions-content__2"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-indent__2",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-detail-marker__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-detail-content__2__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-detail-row__2__0",
+          "component": "Row",
+          "children": [
+            "conclusions-detail-marker__2__0",
+            "conclusions-detail-content__2__0"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-detail-marker__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-detail-content__2__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-detail-row__2__1",
+          "component": "Row",
+          "children": [
+            "conclusions-detail-marker__2__1",
+            "conclusions-detail-content__2__1"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-detail-marker__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "conclusions-detail-content__2__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/conclusions/2/details/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-detail-row__2__2",
+          "component": "Row",
+          "children": [
+            "conclusions-detail-marker__2__2",
+            "conclusions-detail-content__2__2"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "conclusions-details__2",
+          "component": "Column",
+          "children": [
+            "conclusions-detail-row__2__0",
+            "conclusions-detail-row__2__1",
+            "conclusions-detail-row__2__2"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "conclusions-indented-details__2",
+          "component": "Row",
+          "children": [
+            "conclusions-indent__2",
+            "conclusions-details__2"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/conclusions/2/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "conclusions-item__2",
+          "component": "Column",
+          "children": [
+            "conclusions-row__2",
+            "conclusions-indented-details__2"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-list",
+          "component": "Column",
+          "children": [
+            "conclusions-item__0",
+            "conclusions-item__1",
+            "conclusions-item__2"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "conclusions-section",
+          "component": "Column",
+          "children": [
+            "conclusions-title",
+            "conclusions-list"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todoTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h1_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todos-marker__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/0/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "todos-content__0",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/0/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "todos-row__0",
+          "component": "Row",
+          "children": [
+            "todos-marker__0",
+            "todos-content__0"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "todos-indent__0",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-details__0",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "todos-indented-details__0",
+          "component": "Row",
+          "children": [
+            "todos-indent__0",
+            "todos-details__0"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/todos/0/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "todos-item__0",
+          "component": "Column",
+          "children": [
+            "todos-row__0",
+            "todos-indented-details__0"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-marker__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/1/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "todos-content__1",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/1/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "todos-row__1",
+          "component": "Row",
+          "children": [
+            "todos-marker__1",
+            "todos-content__1"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "todos-indent__1",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-details__1",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "todos-indented-details__1",
+          "component": "Row",
+          "children": [
+            "todos-indent__1",
+            "todos-details__1"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/todos/1/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "todos-item__1",
+          "component": "Column",
+          "children": [
+            "todos-row__1",
+            "todos-indented-details__1"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-marker__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/2/marker"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "todos-content__2",
+          "component": "Text",
+          "text": {
+            "path": "/summary/todos/2/content"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "todos-row__2",
+          "component": "Row",
+          "children": [
+            "todos-marker__2",
+            "todos-content__2"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "start"
+        },
+        {
+          "id": "todos-indent__2",
+          "component": "Column",
+          "children": [],
+          "gap": 0,
+          "padding": 13,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-details__2",
+          "component": "Column",
+          "children": [],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "todos-indented-details__2",
+          "component": "Row",
+          "children": [
+            "todos-indent__2",
+            "todos-details__2"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "start",
+          "visible": {
+            "call": "required",
+            "args": {
+              "value": {
+                "path": "/summary/todos/2/details"
+              }
+            }
+          }
+        },
+        {
+          "id": "todos-item__2",
+          "component": "Column",
+          "children": [
+            "todos-row__2",
+            "todos-indented-details__2"
+          ],
+          "gap": 6,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-list",
+          "component": "Column",
+          "children": [
+            "todos-item__0",
+            "todos-item__1",
+            "todos-item__2"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todos-section",
+          "component": "Column",
+          "children": [
+            "todos-title",
+            "todos-list"
+          ],
+          "gap": 12,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "related-title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/relatedTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h1_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "review-title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/review/title"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "review-deadline",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/review/deadline"
+          },
+          "maxLine": 1,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "review-header",
+          "component": "Row",
+          "children": [
+            "review-title",
+            "review-deadline"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "center"
+        },
+        {
+          "id": "review-description",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/review/description"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "review-hint",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/review/hint"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level3_base_color",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/summary/related/review/hint"
+              },
+              "b": ""
+            }
+          }
+        },
+        {
+          "id": "review-ignore-label",
+          "component": "Text",
+          "text": "忽略",
+          "maxLine": 10,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "review-ignore",
+          "component": "Button",
+          "child": "review-ignore-label",
+          "variant": "default",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/reviewCanOperate"
+          },
+          "action": {
+            "event": {
+              "name": "post_meeting_ignore",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "meetingId": {
+                  "path": "/summary/meetingId"
+                },
+                "taskId": {
+                  "path": "/summary/related/review/taskId"
+                },
+                "task": {
+                  "path": "/summary/related/review"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "review-primary-label",
+          "component": "Text",
+          "text": "创建待办",
+          "maxLine": 10,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "review-primary",
+          "component": "Button",
+          "child": "review-primary-label",
+          "variant": "primary",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/reviewCanOperate"
+          },
+          "action": {
+            "event": {
+              "name": "post_meeting_create_todo",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "meetingId": {
+                  "path": "/summary/meetingId"
+                },
+                "taskId": {
+                  "path": "/summary/related/review/taskId"
+                },
+                "task": {
+                  "path": "/summary/related/review"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "review-actions",
+          "component": "Row",
+          "children": [
+            "review-ignore",
+            "review-primary"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "center",
+          "visible": {
+            "path": "/ui/reviewCanOperate"
+          }
+        },
+        {
+          "id": "review-message",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/review/message"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_caption_text_style__font_size",
+          "colorToken": "common_level2_base_color",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/summary/related/review/message"
+              },
+              "b": ""
+            }
+          }
+        },
+        {
+          "id": "review-task",
+          "component": "Column",
+          "children": [
+            "review-header",
+            "review-description",
+            "review-hint",
+            "review-actions",
+            "review-message"
+          ],
+          "gap": 10,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "related-divider",
+          "component": "Divider"
+        },
+        {
+          "id": "closure-title",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/closure/title"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "closure-deadline",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/closure/deadline"
+          },
+          "maxLine": 1,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "closure-header",
+          "component": "Row",
+          "children": [
+            "closure-title",
+            "closure-deadline"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "center"
+        },
+        {
+          "id": "closure-description",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/closure/description"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "closure-hint",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/closure/hint"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level3_base_color",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/summary/related/closure/hint"
+              },
+              "b": ""
+            }
+          }
+        },
+        {
+          "id": "closure-ignore-label",
+          "component": "Text",
+          "text": "忽略",
+          "maxLine": 10,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "closure-ignore",
+          "component": "Button",
+          "child": "closure-ignore-label",
+          "variant": "default",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/closureCanOperate"
+          },
+          "action": {
+            "event": {
+              "name": "post_meeting_ignore",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "meetingId": {
+                  "path": "/summary/meetingId"
+                },
+                "taskId": {
+                  "path": "/summary/related/closure/taskId"
+                },
+                "task": {
+                  "path": "/summary/related/closure"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "closure-primary-label",
+          "component": "Text",
+          "text": "设置提醒",
+          "maxLine": 10,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "closure-primary",
+          "component": "Button",
+          "child": "closure-primary-label",
+          "variant": "primary",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/closureCanOperate"
+          },
+          "action": {
+            "event": {
+              "name": "post_meeting_set_reminder",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "meetingId": {
+                  "path": "/summary/meetingId"
+                },
+                "taskId": {
+                  "path": "/summary/related/closure/taskId"
+                },
+                "task": {
+                  "path": "/summary/related/closure"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "closure-actions",
+          "component": "Row",
+          "children": [
+            "closure-ignore",
+            "closure-primary"
+          ],
+          "gap": 8,
+          "padding": 0,
+          "align": "center",
+          "visible": {
+            "path": "/ui/closureCanOperate"
+          }
+        },
+        {
+          "id": "closure-message",
+          "component": "Text",
+          "text": {
+            "path": "/summary/related/closure/message"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_caption_text_style__font_size",
+          "colorToken": "common_level2_base_color",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/summary/related/closure/message"
+              },
+              "b": ""
+            }
+          }
+        },
+        {
+          "id": "closure-task",
+          "component": "Column",
+          "children": [
+            "closure-header",
+            "closure-description",
+            "closure-hint",
+            "closure-actions",
+            "closure-message"
+          ],
+          "gap": 10,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "related-panel",
+          "component": "Column",
+          "children": [
+            "review-task",
+            "related-divider",
+            "closure-task"
+          ],
+          "gap": 16,
+          "padding": 12,
+          "align": "stretch",
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "related-section",
+          "component": "Column",
+          "children": [
+            "related-title",
+            "related-panel"
+          ],
+          "gap": 10,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "title",
+            "meeting",
+            "conclusions-section",
+            "todos-section",
+            "related-section"
+          ],
+          "gap": 18,
+          "padding": 12,
+          "align": "stretch"
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "stretch"
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-post-meeting-summary-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "businessId": "demo-book-exchange-20261105"
+        },
+        "summary": {
+          "meetingId": "demo-meeting-book-exchange",
+          "title": "📝 会后总结",
+          "meeting": "会议：社区旧书交换活动筹备会",
+          "conclusionsTitle": "关键议题与结论",
+          "todoTitle": "待办事项",
+          "relatedTitle": "与我相关",
+          "conclusions": [
+            {
+              "marker": "1.",
+              "content": "活动安排：计划于11月14日在社区活动室举行旧书交换，设置图书登记、分类陈列和自由交换三个区域。",
+              "details": []
+            },
+            {
+              "marker": "2.",
+              "content": "物资准备：使用可重复利用的桌牌与纸箱，活动前核对数量并检查场地通道。",
+              "details": []
+            },
+            {
+              "marker": "3.",
+              "content": "现场分工：由志愿者分组负责接待、图书整理与秩序维护，活动结束后共同清理场地。",
+              "details": [
+                {
+                  "marker": "a.",
+                  "content": "11月10日前完成志愿者分组。"
+                },
+                {
+                  "marker": "b.",
+                  "content": "11月12日前确认图书分类标识。"
+                },
+                {
+                  "marker": "c.",
+                  "content": "11月13日进行场地布置与流程演练。"
+                }
+              ]
+            }
+          ],
+          "todos": [
+            {
+              "marker": "1.",
+              "content": "整理旧书接收标准，制作活动说明与图书分类清单。（11月10日截止）",
+              "details": []
+            },
+            {
+              "marker": "2.",
+              "content": "核对桌椅、纸箱和指示牌数量，补齐缺少的物资。（11月11日截止）",
+              "details": []
+            },
+            {
+              "marker": "3.",
+              "content": "确认志愿者值班表，并发送集合时间与活动流程。（11月12日截止）",
+              "details": []
+            }
+          ],
+          "related": {
+            "review": {
+              "taskId": "demo-task-book-layout",
+              "title": "确认图书交换区域布局",
+              "deadline": "11月12日",
+              "description": "查看虚构活动的场地布局草图，确认登记区、交换区和休息区的位置。",
+              "hint": "提醒：建议提前预留30分钟核对桌椅摆放与通道宽度，并将需要调整的位置记录在清单中，方便布置当天逐项确认。",
+              "status": "pending",
+              "message": ""
+            },
+            "closure": {
+              "taskId": "demo-task-volunteer-roster",
+              "title": "完成志愿者值班安排",
+              "deadline": "11月12日前",
+              "description": "根据示例报名名单安排接待、整理和秩序维护岗位，确认每个时段都有志愿者负责。",
+              "hint": "",
+              "status": "pending",
+              "message": ""
+            }
+          },
+          "overview": ""
+        },
+        "ui": {
+          "reviewCanOperate": true,
+          "closureCanOperate": true
+        }
+      }
+    }
+  }
+]

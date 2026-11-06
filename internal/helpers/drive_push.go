@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/text/unicode/norm"
@@ -832,7 +831,7 @@ func defaultPushPutOpenedFile(ctx context.Context, url string, headers map[strin
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+	resp, err := (&http.Client{Timeout: filePutClientTimeout}).Do(req)
 	if err != nil {
 		return fmt.Errorf("file upload failed: %w", err)
 	}

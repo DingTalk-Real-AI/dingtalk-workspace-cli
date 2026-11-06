@@ -81,6 +81,8 @@ type personalConsumeOptions struct {
 	OpenDingTalkID   string
 	GroupID          string
 	RoleTypes        []string
+	CalendarIDs      []string
+	ChangeTypes      []string
 	ControlBaseURL   string
 	StreamTicketMode string
 	StreamTicketURL  string
@@ -230,7 +232,7 @@ payload.body，结构化业务上下文优先读取 payload.body.actionData.cont
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM、OA、VoIP、Todo 或互动卡片 event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				UseWhen:      []string{"已知任一公开个人 IM、OA、VoIP、Todo、日历、互动卡片或听记 event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
@@ -852,6 +854,8 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 			OpenDingTalkID: plan.OpenDingTalkID,
 			GroupID:        plan.GroupID,
 			RoleTypes:      plan.RoleTypes,
+			CalendarIDs:    plan.CalendarIDs,
+			ChangeTypes:    plan.ChangeTypes,
 		})
 		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
 		ruleJSON := ""
@@ -919,6 +923,8 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
 		RoleTypes:      opts.RoleTypes,
+		CalendarIDs:    opts.CalendarIDs,
+		ChangeTypes:    opts.ChangeTypes,
 	}); err != nil {
 		return err
 	}
@@ -927,6 +933,27 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 }
 
 func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
+	if strings.TrimSpace(opts.SubscribeID) != "" && (opts.CalendarIDs != nil || opts.ChangeTypes != nil) {
+		return fmt.Errorf("--calendar-ids/--change-types are not supported when reusing --subscribe-id")
+	}
+	if eventKey == personal.EventCalendarEventChanged {
+		if strings.TrimSpace(opts.QueryCSV) != "" || strings.TrimSpace(opts.FilterJSON) != "" {
+			return fmt.Errorf("--query/--filter-json are not supported for calendar events; use --calendar-ids/--change-types")
+		}
+		if _, _, err := personal.BuildRuleParam(eventKey, personal.RuleOptions{
+			RuleType:       opts.Rule,
+			UserID:         opts.UserID,
+			OpenDingTalkID: opts.OpenDingTalkID,
+			GroupID:        opts.GroupID,
+			RoleTypes:      opts.RoleTypes,
+			CalendarIDs:    opts.CalendarIDs,
+			ChangeTypes:    opts.ChangeTypes,
+		}); err != nil {
+			return err
+		}
+	} else if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+		return fmt.Errorf("--calendar-ids/--change-types are only supported for %s", personal.EventCalendarEventChanged)
+	}
 	if err := validatePersonalUnfilteredEventOptions(eventKey, opts); err != nil {
 		return err
 	}
@@ -943,9 +970,10 @@ func validatePersonalUnfilteredEventOptions(eventKey string, opts personalConsum
 		return nil
 	}
 	categoryName := map[string]string{
-		"oa":   "OA",
-		"voip": "VoIP",
-		"card": "card",
+		"minutes": "minutes",
+		"oa":      "OA",
+		"voip":    "VoIP",
+		"card":    "card",
 	}[def.Category]
 	if categoryName == "" {
 		return nil
@@ -1028,6 +1056,8 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
 		RoleTypes:      opts.RoleTypes,
+		CalendarIDs:    opts.CalendarIDs,
+		ChangeTypes:    opts.ChangeTypes,
 	})
 	if err != nil {
 		return personalPreparedSubscription{}, err
@@ -1065,6 +1095,9 @@ func createPreparedPersonalSubscription(ctx context.Context, client *personal.Cl
 
 func ensurePersonalSubscription(ctx context.Context, client *personal.Client, identity personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
 	if strings.TrimSpace(opts.SubscribeID) != "" {
+		if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+			return nil, "", "", fmt.Errorf("--calendar-ids/--change-types are not supported when reusing --subscribe-id")
+		}
 		sub, err := personalGetSubscription(client, ctx, opts.SubscribeID)
 		if err != nil {
 			return nil, "", "", err

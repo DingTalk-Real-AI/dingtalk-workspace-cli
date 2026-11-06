@@ -119,6 +119,13 @@ func TestCrossPlatformCoverageA2UIAnnotationsSchema(t *testing.T) {
 			payload := executeShortcutSchemaQuery(t, args...)
 			forward := schemaContractMap(payload["parameters"])["support-forward"]
 			if path == "chat message send-a2ui-card" {
+				extension := schemaContractMap(payload["parameters"])["extension"]
+				if extension == nil || extension["type"] != "string" || extension["required"] == true || !strings.Contains(schemaContractString(extension["description"]), "JSON 对象") {
+					t.Fatalf("extension compact=%v parameter=%#v", compact, extension)
+				}
+				if !compact && (extension["property"] != "extension" || extension["interface_type"] != "object") {
+					t.Fatalf("extension mapping=%#v", extension)
+				}
 				if forward == nil || forward["type"] != "boolean" || forward["required"] == true {
 					t.Fatalf("support-forward compact=%v parameter=%#v", compact, forward)
 				}
@@ -127,6 +134,9 @@ func TestCrossPlatformCoverageA2UIAnnotationsSchema(t *testing.T) {
 				}
 			} else if forward != nil {
 				t.Fatalf("update unexpectedly exposes support-forward: %#v", forward)
+			}
+			if path == "chat message update-a2ui-card" && schemaContractMap(payload["parameters"])["extension"] != nil {
+				t.Fatal("update must not expose creation-only extension")
 			}
 			param := schemaContractMap(payload["parameters"])["a2ui-annotations"]
 			if param == nil || param["required"] == true || param["type"] != "string" || !strings.Contains(schemaContractString(param["description"]), "JSON 对象数组") {

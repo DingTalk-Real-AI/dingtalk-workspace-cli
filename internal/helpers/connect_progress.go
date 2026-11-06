@@ -8,10 +8,11 @@ import (
 	"unicode/utf8"
 )
 
-// agentProgress contains only public assistant text or an opaque tool lifecycle.
+// agentProgress contains only public assistant text or a safe tool lifecycle.
 // Arguments, results and reasoning must never enter this interface.
 type agentProgress struct {
 	ID, Kind, Text string
+	Status         string
 	Done           bool
 }
 

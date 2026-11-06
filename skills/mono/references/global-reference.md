@@ -77,7 +77,7 @@ refresh_token 单设备独占，远程刷新后源设备凭证失效。
 | `--debug` | | 调试日志 | false |
 | `--yes` | `-y` | 跳过确认提示 | false |
 | `--dry-run` | | 预览操作不执行 | false |
-| `--timeout` | | HTTP 超时 (秒) | 30 |
+| `--timeout` | | HTTP 请求与文件直传超时 (秒)；文件直传最低保留 5 分钟 | 30 |
 | `--mock` | | Mock 数据 (开发用) | false |
 | `--client-id` | | 覆盖 OAuth Client ID | 无 |
 | `--client-secret` | | 覆盖 OAuth Client Secret | 无 |

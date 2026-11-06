@@ -4,7 +4,7 @@
 
 ## Global design guidance
 
-1. **Prefer a transparent root for ordinary new cards.** Let the host provide the outer background instead of approximating its color. Preserve explicit surface designs and unrelated existing styling; see [root surface](#root-surface).
+1. **Prefer a transparent root for ordinary new cards.** Let the host provide the outer background instead of approximating its color. Preserve explicit surface designs, a reused template's frame and insets, and unrelated existing styling; see [root surface](#root-surface) and [headers and insets](#headers-and-card-insets).
 2. **Show generation state when relevant.** For an Agent that is generating or executing, a `Markdown` component may prefix its `content` with `[AIGenerating]`. DingTalk supports this convention across its six platforms; remove it on completion, failure, or cancellation. For panel titles and execution updates, see the [progress pattern](patterns/progress.md).
 3. **Group execution details.** Use `CollapsiblePanel` with `variant: "reasoning"` for an Agent generation or execution process. Choose its expanded state and internal layout from the content.
 
@@ -12,7 +12,7 @@
 
 | Layer | Checks | Evidence |
 |---|---|---|
-| Tools | Lint checks protocol structure; new-card preflight also checks initialization, reachable references in the final snapshot, static cycles, and resource encoding | Run checks for the delivery scenario. Fix errors at their locations; decide whether an unreferenced-component warning matters for this card |
+| Tools | Lint checks protocol structure; new-card preflight also checks initialization, final-snapshot references and component ownership, static cycles, and the inline-resource policy. See the Skill's [validation scope](../SKILL.md#validation-scope) for exact coverage | Run checks for the delivery scenario. Fix errors at their locations; decide whether an unreferenced-component warning matters for this card |
 | Author review | Preserve user information, operations, and visual requirements; provide appropriate first-frame binding values; make priority, grouping, and density clear | Compare each request with its component or action and the host's existing state. Visual and content completeness are not lint diagnostics |
 | Runtime acceptance | Resource loading, function evaluation, delivery, actual layout, interactions, and state writeback | Verify in the target host. Report request acceptance, conversation readback, and client rendering separately |
 
@@ -29,15 +29,17 @@ Passing structural checks does not establish the other two layers. Explain unsup
 | Brand marks and specific document or product icons | Use a real asset or a crop of the reference. Do not impersonate them with emoji, ordinary characters, or vaguely similar icons. If the asset is unavailable, report the gap and, when appropriate, use an explicit text description |
 | Generic action or status icons | Prefer a registered `Icon` with matching meaning. Otherwise use a supplied asset or text; do not invent an Icon name |
 
-Crop media to the media region itself. Do not bake surrounding interface copy or interactive controls into the image; text and marks that belong to a poster may remain inside it. Do not substitute a screenshot of the entire interface for components, or destroy poster artwork just to make it structural. Images need a working URL or correctly encoded inline data, not a placeholder path.
+Crop media to the media region itself. Do not bake surrounding interface copy or interactive controls into the image; text and marks that belong to a poster may remain inside it. Do not substitute a screenshot of the entire interface for components, or destroy poster artwork just to make it structural. Use verified, host-accessible image URLs, preferably HTTPS. Avoid inline image bytes and placeholder paths; report a missing compatible asset. Resource fields are checked directly; Markdown resource text requires manual review as described under [media resources](#media-resources).
 
 **Implement only known interactions.** For appearance-only reproduction, use a valid static representation and state that behavior is not connected. A pictured button does not reveal its event or URL. Implement bindings and actions when the user explicitly requires a form, data update, or host action. Extra business data and behavior require user input or a verifiable source.
 
 **Compare before delivery.** Check key copy, numbers, dates, prices, region order, buttons, tags, and media against the source. Look for invented business facts or substituted brand assets. The component count need not equal the number of visual elements; preserve meaning and use. Report unreadable, unavailable, or unsupported content. Neither this comparison nor protocol preflight proves client visual fidelity.
 
+At the requested logical width, compare text size, wrapping, and any block alignment required by the reference design. Choose `Text.sizeToken` from measurements in the target renderer; Token names alone do not establish pixel sizes. Keep the reference and report remaining visual differences.
+
 ## 2. Information roles and blocks
 
-First rank the content: order the facts, group them by relationship, and assign visual weight before selecting components. A report may lead with the conclusion; an execution card may lead with progress. Short content needs no extra blocks. These combinations are optional layout notation, not a fixed order or required structure.
+First rank the content: order the facts, group them by relationship, and assign visual weight before selecting components. A report may lead with the conclusion; an execution card may lead with progress. Keep supporting metadata quieter than the focal content. Short content needs no extra blocks. Do not add titles, metrics, or actions merely to fill a template. These combinations are optional layout notation, not a fixed order or required structure.
 
 | Role | Purpose | Components | Layout notation |
 |---|---|---|---|
@@ -46,7 +48,7 @@ First rank the content: order the facts, group them by relationship, and assign 
 | `facts` | Label-value facts | Column + Row + Text | One-line rows use `align=center`; wrapping values use `align=start` and matching label/value typography so the label aligns with the value's first line; see [key-value rows](#key-value-rows) |
 | `summary` | Conclusion-first prose | Markdown | Literal or bound content, for example `/content/body` |
 | `metrics` | A few important measures | Row + Column + Text | `Row(gap=8) > Column(weight=1, padding=12) > Text(value, bold) + Text(label, caption)` |
-| `data` | Comparison, trend, or composition | Markdown / Chart | For static tabular data, prefer Markdown table syntax over a separate `Table` component. Use a suitable Chart for graphical data and query its contract. |
+| `data` | Comparison, trend, or composition | Markdown / Chart | For static tabular data, prefer Markdown table syntax over a separate `Table` component. Use a suitable Chart for graphical data and query its contract; see [report composition](patterns/report.md) for selection and data rules |
 | `list` | Repeated entries | Column + Card + Text | — |
 | `timeline` | Time- or stage-ordered progress | Column + Row + Text + Tag | — |
 | `attachments` | File results | Divider + Text + File | `File(fileName, url, description, onPreview)` |
@@ -64,23 +66,23 @@ States, icons, illustrated entries, and highlights may support a main block or s
 | Content section | Related content needing a bounded visual surface | `Card(padding=12, cornerRadius=8, borderWidth=0.5) > Column(gap=8) > content` |
 | Status | Current stage or risk | Tag + Text |
 | Icon | Action, source, or status | Icon or Text.icon; use a registered matching icon, or a supplied image or explanation if none exists. Do not invent a name or default to emoji for a specific icon |
-| Illustrated item | Compact image-and-text content | `Row(align=center, gap=12) > Column(weight=1) + Image(variant=smallFeature)` |
+| Illustrated item | Compact image-and-text content | `Row(align=center, gap=12) > Column(weight=1) + Image(variant=smallFeature)`; see [content composition](patterns/content.md) for other image variants |
 | Highlight | Key conclusion or local emphasis | See [local highlights](#local-highlights); this is a design technique, not a protocol field |
 
 Select a relevant pattern from the Skill's [composition-pattern table](../SKILL.md#composition-patterns). Approval, schedules, and tasks share the detail pattern; ongoing generation uses the [progress pattern](patterns/progress.md). For mixed content, select only needed blocks and avoid duplicating headers or actions. When concrete message shapes would help, read the pattern's linked JSON; use the [example index](protocol/examples/README.md) only if unsure which fits. Examples initialize new cards; adapt them for host-created Surfaces or updates as described in the [Skill entrypoint](../SKILL.md#construct-and-validate). The protocol and contract lookup govern fields.
 
 ## 3. Host behavior and layout
 
-The bundled protocol governs field capabilities. Visual numbers are starting points, not extra protocol limits.
+The bundled protocol governs field capabilities. Visual numbers are starting points, not extra protocol limits. One preview width is neither a minimum supported width nor an acceptance gate; check wrapping, overflow, and actions at the actual narrow and wide container widths supported by the target host.
 
-Reserve Markdown headings for actual document sections; a small field or status label does not need heading hierarchy. Keep independent facts, statuses, and controls in appropriate components rather than flattening the card into one Markdown block.
+Use Markdown for rich text and Text for short titles and labels. Reserve Markdown headings for actual document sections; a small field or status label does not need heading hierarchy. Keep independent facts, statuses, and controls in appropriate components rather than flattening the card into one Markdown block.
 
 1. `Row.align=stretch` can make containers in a row the same height. Container children and leaf components are handled differently; consult the Row contract for client behavior and integration boundaries.
 2. Check long titles, metrics, and multiple columns at the target conversation width. Wrap or reduce adjacent items when space is limited; do not assume identical client widths.
-3. `Image.variant=smallFeature` is a starting point for illustrated cards; adjust to the asset and protocol size guidance.
+3. `Image.variant=smallFeature` is a starting point for illustrated cards; adjust to the asset and protocol size guidance. Use [content composition](patterns/content.md) for other image variants and media behavior.
 4. Usually emphasize one primary action within a visible action area. Assess separate Tabs or states independently, not by counting every Button in the component list. Label actions by what they do, not by phrases such as “click the button below.”
 5. Remove empty rows and dividers without information value. Choose truncation, full display, or collapse for long content; do not hide necessary text with `maxLine`.
-6. Check media URLs under the host policy; lint does not fetch them. Prefer Markdown table syntax for static tabular data. Limit rows or link to details for long tables. If a separate `Table` is explicitly required, its pagination is local, so provide the data at once.
+6. Check media URLs under the host policy; lint does not fetch them. Prefer Markdown table syntax for static tabular data. Limit rows or link to details for long tables. If a separate `Table` is explicitly required, its pagination is local, so provide the data at once; see [report composition](patterns/report.md).
 7. Query a component for defaults and conditions under which a field takes effect. The host may apply defaults when fields such as `Image.variant` are omitted.
 
 Keep related content close and separate groups with appropriate space. Set `gap` and `padding` on the containers responsible for layout rather than stacking padding at several levels. Multiples of 2 are a reasonable spacing starting point, adjustable for host defaults, density, and user requirements; they are not validation rules.
@@ -107,7 +109,7 @@ These are authoring defaults, not Schema restrictions or cross-client rendering 
 
 Omit root `padding` for ordinary cards: omission allows default insets, while explicit `0` can leave mobile content flush against the edge. Do not add a second whole-body inset by default; local content panels may still need padding.
 
-`CardHeader` can trigger header-specific spacing that differs across hosts. When explicitly requested, preserve it and verify insets and any requested corner rounding on target clients; do not assume a full-bleed header or identical spacing. These are authoring defaults, not Schema restrictions: `CardHeader` and explicit zero padding remain valid.
+Use Text or a Row for ordinary titles rather than defaulting to CardHeader. `CardHeader` can trigger header-specific spacing that differs across hosts. When explicitly requested, preserve it and verify insets and any requested corner rounding on target clients; do not assume a full-bleed header or identical spacing. These are authoring defaults, not Schema restrictions: `CardHeader` and explicit zero padding remain valid.
 
 ### Key-value rows
 
@@ -148,18 +150,19 @@ Prefer registered Tokens or semantic component variants (`Tag.theme`, `CardHeade
 
 Use a Token or theme for one meaning within a card. Express important status in text, not color alone. The host resolves actual colors, so a local block needs sufficient contrast against its background. Prefer `Tag.theme` for capsule states and contract-supported Tokens for container colors. Component defaults are valid too; a card does not need a quota of explicit Tokens. See the full [Token index](index/tokens.md).
 
+Check text against its actual background in the target theme. Use WCAG 1.4.3's 4.5:1 threshold for normal text and 3:1 for large text, following its [size definitions and exceptions](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). Semantic Tokens and component defaults do not establish sufficient contrast.
+
 Keep ordinary key-value labels neutral; use semantic color for a value only when it conveys status or trend. Three or fewer non-gray semantic colors is a starting point for an ordinary information card, not a limit on charts, brands, or complex states.
 
 ## 5. Hierarchy and density
 
-Choose the main visual area from the content: an available relevant image for illustrated content, key metrics for a report, or the current goal for a task. Give it more emphasis than supporting details without inventing content for decoration. When useful, put secondary details in a collapsed section or a details Tab; keep essential risks and required inputs visible, and do not add Tabs to simple cards.
+Choose the main visual area from the content: an available relevant image for illustrated content, key metrics for a report, or the current goal for a task. Give it more emphasis than supporting details without inventing content for decoration. Remove copy that merely repeats an adjacent heading or action; consolidate only equivalent missing-information notices, preserving distinct business meanings. When useful, put secondary details in a collapsed section or a details Tab; keep essential risks and required inputs visible, and do not add Tabs to simple cards.
 
 - **Text hierarchy:** emphasize focal `Text` with `bold=true` when needed. Use `variant=body` for normal text or `variant=caption` for smaller supporting text. Optional `colorToken` values include `common_level1_base_color` for primary text and `common_level2_base_color` for secondary text; preserve requested typography.
 - **Top-level grouping:** two to five groups can guide a complex card. A short notice may have one, and complex content may need more.
 - **Group with containers:** put related fields in one `Column` or `Card`. Use `Divider` between semantic sections, such as content and actions, not between every row.
 - **Contain long content:** use `CollapsiblePanel(defaultExpanded=false)` for details. Offer a “View all” `Link` when a real full-content destination exists.
 - **Separate display fallback from business data:** missing information may display “—” or “None yet,” or omit an empty section. Never write display fallback into a form, number, or boolean value. Empty string, unchecked `false`, unselected `[]`, and numeric `0` retain their distinct meanings.
-
 ## 6. Revise feedback at the right field
 
 After a user reviews the card, locate the affected fields and check related effects:
@@ -178,10 +181,8 @@ Rerun lint and deliver the revised file and check results. Send a real card only
 
 ## Media resources
 
-Prefer verified HTTPS assets, including avatars, Markdown images and bound values. Preserve explicitly requested inline Base64 resources and disclose unverified client compatibility. Valid encoding does not establish image decoding, transport limits or client support. Resource preflight adds `resource.base64_image_unverified` warnings and rejects malformed encoding; it does not fetch URLs or resolve bindings and Markdown destinations.
+Prefer verified HTTPS assets. Retain another URL scheme or relative address only when allowed by the field contract and verified in the target host. This authoring policy avoids inline `data:` resources, including Base64; it does not change public Schema validity or establish client support. Explain the policy and obtain a compatible asset before delivery.
+
+Resource preflight rejects literal `data:` values in component resource fields with `resource.inline_data_unsupported`. Markdown content and `fallbackMarkdown` containing `data:` text receive a nonblocking `resource.markdown_data_unverified` warning for manual review, including when that text is only a code example or comment. This is a marker check, not a Markdown/HTML parser or a complete resource detector. Review image destinations before delivery; an absent warning proves neither absence of inline images nor loading support. For example, an Image URL bound to a `data:` value receives no diagnostic. Table rows and chart data/config remain business values. The check does not fetch URLs or evaluate bindings/functions; verify resolved resources and client loading separately.
 
 Use supplied or verified assets. If one is unavailable, disclose the gap or ask for an accessible URL; do not invent URLs, impersonate a real avatar with an unrelated image, or silently upload private screenshots. Any agreed placeholder must be identified as a substitution, not faithful reconstruction.
-
-## Content hierarchy
-
-Choose a focal conclusion, group related evidence, and keep supporting metadata quiet. Do not add titles, metrics, or actions merely to fill a template. See [information roles](#2-information-roles-and-blocks) and [hierarchy and density](#5-hierarchy-and-density) for layout choices.

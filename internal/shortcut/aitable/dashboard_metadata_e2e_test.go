@@ -4,9 +4,59 @@
 package aitable
 
 import (
+	"encoding/json"
+	"maps"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestCrossPlatformCoverageDashboardGetNullableNavigationRuntime(t *testing.T) {
+	var schema any
+	if err := json.Unmarshal(DashboardGet.Contract.Result.DataSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("https://dws.test/dashboard-get.json", schema); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compiler.Compile("https://dws.test/dashboard-get.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, navigation := range []string{"", `,"url":null,"links":null`, `,"url":"","links":[]`} {
+		response := `{"status":"success","data":{"dashboardId":"d","meta":null` + navigation + `}}`
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: response}}}
+		out, err := runAITableCompositeCLI(t, caller, "+dashboard-get", "--base-id", "b", "--dashboard-id", "d")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var actual, want map[string]any
+		if err := json.Unmarshal([]byte(out), &actual); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(response), &want); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(actual, want) || len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+			t.Fatalf("get navigation changed: %s calls=%#v", out, caller.calls)
+		}
+		if err := compiled.Validate(actual); err != nil {
+			t.Fatalf("runtime output violates Result: %v\n%s", err, out)
+		}
+		for key, value := range map[string]any{"url": true, "links": map[string]any{}} {
+			invalid := maps.Clone(actual)
+			data := maps.Clone(actual["data"].(map[string]any))
+			data[key] = value
+			invalid["data"] = data
+			if compiled.Validate(invalid) == nil {
+				t.Fatalf("invalid %s accepted", key)
+			}
+		}
+	}
+}
 
 func TestCrossPlatformCoverageDashboardGetPreservesSchemaVersionTypeEvidenceE2E(t *testing.T) {
 	tests := []struct {

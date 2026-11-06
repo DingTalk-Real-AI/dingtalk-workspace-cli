@@ -1,0 +1,1600 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-daily-approval-briefing-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "title-emoji",
+          "component": "Text",
+          "text": "📝",
+          "sizeToken": "common_largetitle_text_style__font_size",
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "text": {
+            "path": "/briefing/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_largetitle_text_style__font_size",
+          "bold": true,
+          "weight": 1
+        },
+        {
+          "id": "title-line",
+          "component": "Row",
+          "children": [
+            "title-emoji",
+            "title"
+          ],
+          "gap": 4,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "summary",
+          "component": "Text",
+          "text": {
+            "path": "/briefing/summary"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "intro",
+          "component": "Column",
+          "children": [
+            "title-line",
+            "summary"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "today-title",
+          "component": "Text",
+          "text": "今日事务",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h1_text_style__font_size"
+        },
+        {
+          "id": "today-heading",
+          "component": "Column",
+          "children": [
+            "today-title"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "approval-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "approval-notice-info__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/0/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "approval-notice-warning__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "colorToken": "common_orange1_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/0/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "approval-title-line__0",
+          "component": "Row",
+          "children": [
+            "approval-title__0",
+            "approval-notice-info__0",
+            "approval-notice-warning__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "approval-details__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/details"
+          },
+          "maxLine": 30,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "approval-reject-label__0",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-reject-content__0",
+          "component": "Column",
+          "children": [
+            "approval-reject-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-reject__0",
+          "component": "Row",
+          "children": [
+            "approval-reject-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/0/id"
+                },
+                "approvalStatus": {
+                  "path": "/approvals/0/status"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-approve-label__0",
+          "component": "Text",
+          "text": "批准",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-approve-content__0",
+          "component": "Column",
+          "children": [
+            "approval-approve-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-approve__0",
+          "component": "Row",
+          "children": [
+            "approval-approve-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_approve_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/0/id"
+                },
+                "approvalStatus": {
+                  "path": "/approvals/0/status"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-operations__0",
+          "component": "Row",
+          "children": [
+            "approval-reject__0",
+            "approval-approve__0"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/approvals/0/canOperate"
+          }
+        },
+        {
+          "id": "approval-panel__0",
+          "component": "Column",
+          "children": [
+            "approval-title-line__0",
+            "approval-details__0",
+            "approval-operations__0"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "approval-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "approval-notice-info__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/1/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "approval-notice-warning__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "colorToken": "common_orange1_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/1/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "approval-title-line__1",
+          "component": "Row",
+          "children": [
+            "approval-title__1",
+            "approval-notice-info__1",
+            "approval-notice-warning__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "approval-details__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/details"
+          },
+          "maxLine": 30,
+          "sizeToken": "common_description_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "approval-reject-label__1",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-reject-content__1",
+          "component": "Column",
+          "children": [
+            "approval-reject-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-reject__1",
+          "component": "Row",
+          "children": [
+            "approval-reject-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/1/id"
+                },
+                "approvalStatus": {
+                  "path": "/approvals/1/status"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-approve-label__1",
+          "component": "Text",
+          "text": "批准",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-approve-content__1",
+          "component": "Column",
+          "children": [
+            "approval-approve-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-approve__1",
+          "component": "Row",
+          "children": [
+            "approval-approve-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_approve_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/1/id"
+                },
+                "approvalStatus": {
+                  "path": "/approvals/1/status"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-operations__1",
+          "component": "Row",
+          "children": [
+            "approval-reject__1",
+            "approval-approve__1"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/approvals/1/canOperate"
+          }
+        },
+        {
+          "id": "approval-panel__1",
+          "component": "Column",
+          "children": [
+            "approval-title-line__1",
+            "approval-details__1",
+            "approval-operations__1"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "approval-section",
+          "component": "Column",
+          "children": [
+            "approval-panel__0",
+            "approval-panel__1"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "todo-section",
+          "component": "Column",
+          "children": [
+            "todo-panel__0",
+            "todo-panel__1",
+            "todo-panel__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-heading",
+          "component": "Text",
+          "text": "会前准备",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h1_text_style__font_size"
+        },
+        {
+          "id": "preparation-number__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "preparation-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "preparation-title-line__0",
+          "component": "Row",
+          "children": [
+            "preparation-number__0",
+            "preparation-title__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "document-icon__0",
+          "component": "Image",
+          "url": "https://g.alicdn.com/dingding/card_a2ui/0.2.1/img/ding-file-icons/dingdoc_light.gfqssAq.png",
+          "darkUrl": "https://g.alicdn.com/dingding/card_a2ui/0.2.1/img/ding-file-icons/dingdoc_dark.CCxlCQ_.png",
+          "variant": "avatar",
+          "fit": "contain",
+          "cornerRadius": 0,
+          "previewEnabled": false
+        },
+        {
+          "id": "document-name__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/document/title"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "document-type__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/document/type"
+          },
+          "variant": "caption",
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 3,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "document-details__0",
+          "component": "Column",
+          "children": [
+            "document-name__0",
+            "document-type__0"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "document-preview-icon__0",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "Visibility_L_outlined"
+          },
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_h5_text_style__font_size"
+        },
+        {
+          "id": "document-preview__0",
+          "component": "Row",
+          "children": [
+            "document-preview-icon__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "action": {
+            "event": {
+              "name": "daily_briefing_preview_document",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "preparationId": {
+                  "path": "/preparations/0/id"
+                },
+                "documentId": {
+                  "path": "/preparations/0/document/id"
+                },
+                "documentTitle": {
+                  "path": "/preparations/0/document/title"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "document-download-icon__0",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "DownloadAndSave_L_outlined"
+          },
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_h5_text_style__font_size"
+        },
+        {
+          "id": "document-download__0",
+          "component": "Row",
+          "children": [
+            "document-download-icon__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "action": {
+            "event": {
+              "name": "daily_briefing_download_document",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "preparationId": {
+                  "path": "/preparations/0/id"
+                },
+                "documentId": {
+                  "path": "/preparations/0/document/id"
+                },
+                "documentTitle": {
+                  "path": "/preparations/0/document/title"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "document-panel__0",
+          "component": "Row",
+          "children": [
+            "document-icon__0",
+            "document-details__0",
+            "document-preview__0",
+            "document-download__0"
+          ],
+          "gap": 6,
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "preparation-notes-marker__0__0",
+          "component": "Text",
+          "text": "•",
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "preparation-notes-text__0__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/notes/0/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "preparation-notes-item__0__0",
+          "component": "Row",
+          "children": [
+            "preparation-notes-marker__0__0",
+            "preparation-notes-text__0__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "preparation-notes-marker__0__1",
+          "component": "Text",
+          "text": "•",
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "preparation-notes-text__0__1",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/0/notes/1/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "preparation-notes-item__0__1",
+          "component": "Row",
+          "children": [
+            "preparation-notes-marker__0__1",
+            "preparation-notes-text__0__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "preparation-notes__0",
+          "component": "Column",
+          "children": [
+            "preparation-notes-item__0__0",
+            "preparation-notes-item__0__1"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-item__0",
+          "component": "Column",
+          "children": [
+            "preparation-title-line__0",
+            "document-panel__0",
+            "preparation-notes__0"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-number__1",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/1/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "preparation-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/1/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "preparation-title-line__1",
+          "component": "Row",
+          "children": [
+            "preparation-number__1",
+            "preparation-title__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "document-icon__1",
+          "component": "Image",
+          "url": "https://g.alicdn.com/dingding/card_a2ui/0.2.1/img/ding-file-icons/dingdoc_light.gfqssAq.png",
+          "darkUrl": "https://g.alicdn.com/dingding/card_a2ui/0.2.1/img/ding-file-icons/dingdoc_dark.CCxlCQ_.png",
+          "variant": "avatar",
+          "fit": "contain",
+          "cornerRadius": 0,
+          "previewEnabled": false
+        },
+        {
+          "id": "document-name__1",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/1/document/title"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "document-type__1",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/1/document/type"
+          },
+          "variant": "caption",
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 3,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "document-details__1",
+          "component": "Column",
+          "children": [
+            "document-name__1",
+            "document-type__1"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "document-preview-icon__1",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "Visibility_L_outlined"
+          },
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_h5_text_style__font_size"
+        },
+        {
+          "id": "document-preview__1",
+          "component": "Row",
+          "children": [
+            "document-preview-icon__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "action": {
+            "event": {
+              "name": "daily_briefing_preview_document",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "preparationId": {
+                  "path": "/preparations/1/id"
+                },
+                "documentId": {
+                  "path": "/preparations/1/document/id"
+                },
+                "documentTitle": {
+                  "path": "/preparations/1/document/title"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "document-download-icon__1",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "DownloadAndSave_L_outlined"
+          },
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_h5_text_style__font_size"
+        },
+        {
+          "id": "document-download__1",
+          "component": "Row",
+          "children": [
+            "document-download-icon__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "action": {
+            "event": {
+              "name": "daily_briefing_download_document",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "preparationId": {
+                  "path": "/preparations/1/id"
+                },
+                "documentId": {
+                  "path": "/preparations/1/document/id"
+                },
+                "documentTitle": {
+                  "path": "/preparations/1/document/title"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "document-panel__1",
+          "component": "Row",
+          "children": [
+            "document-icon__1",
+            "document-details__1",
+            "document-preview__1",
+            "document-download__1"
+          ],
+          "gap": 6,
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "preparation-notes-marker__1__0",
+          "component": "Text",
+          "text": "•",
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "preparation-notes-text__1__0",
+          "component": "Text",
+          "text": {
+            "path": "/preparations/1/notes/0/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "preparation-notes-item__1__0",
+          "component": "Row",
+          "children": [
+            "preparation-notes-marker__1__0",
+            "preparation-notes-text__1__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "preparation-notes__1",
+          "component": "Column",
+          "children": [
+            "preparation-notes-item__1__0"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-item__1",
+          "component": "Column",
+          "children": [
+            "preparation-title-line__1",
+            "document-panel__1",
+            "preparation-notes__1"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-list",
+          "component": "Column",
+          "children": [
+            "preparation-item__0",
+            "preparation-item__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-section",
+          "component": "Column",
+          "children": [
+            "preparation-heading",
+            "preparation-list"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "attention-heading",
+          "component": "Text",
+          "text": "需要关注",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h1_text_style__font_size"
+        },
+        {
+          "id": "attention-number__0",
+          "component": "Text",
+          "text": {
+            "path": "/attention/0/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "attention-text__0",
+          "component": "Text",
+          "text": {
+            "path": "/attention/0/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "attention-item__0",
+          "component": "Row",
+          "children": [
+            "attention-number__0",
+            "attention-text__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "attention-number__1",
+          "component": "Text",
+          "text": {
+            "path": "/attention/1/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "attention-text__1",
+          "component": "Text",
+          "text": {
+            "path": "/attention/1/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "attention-item__1",
+          "component": "Row",
+          "children": [
+            "attention-number__1",
+            "attention-text__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "attention-number__2",
+          "component": "Text",
+          "text": {
+            "path": "/attention/2/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "attention-text__2",
+          "component": "Text",
+          "text": {
+            "path": "/attention/2/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "attention-item__2",
+          "component": "Row",
+          "children": [
+            "attention-number__2",
+            "attention-text__2"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "attention-list",
+          "component": "Column",
+          "children": [
+            "attention-item__0",
+            "attention-item__1",
+            "attention-item__2"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "attention-section",
+          "component": "Column",
+          "children": [
+            "attention-heading",
+            "attention-list"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "跳过",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_subhead_text_style__font_size"
+        },
+        {
+          "id": "skip-content",
+          "component": "Column",
+          "children": [
+            "skip-label"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "skip",
+          "component": "Row",
+          "children": [
+            "skip-content"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_skip",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "start-processing-label",
+          "component": "Text",
+          "text": "开始处理",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_subhead_text_style__font_size"
+        },
+        {
+          "id": "start-processing-content",
+          "component": "Column",
+          "children": [
+            "start-processing-label"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "start-processing",
+          "component": "Row",
+          "children": [
+            "start-processing-content"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_start_processing",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "footer",
+          "component": "Row",
+          "children": [
+            "skip",
+            "start-processing"
+          ],
+          "gap": 10,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "intro",
+            "today-heading",
+            "section-tabs",
+            "preparation-section",
+            "attention-section",
+            "footer"
+          ],
+          "gap": 14,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "todo-panel__0",
+          "component": "Column",
+          "children": [
+            "todo-title__0",
+            "todo-details__0",
+            "todo-status__0"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/todos/0/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__0",
+          "component": "Text",
+          "text": {
+            "path": "/todos/0/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__0",
+          "component": "Tag",
+          "text": {
+            "path": "/todos/0/statusText"
+          },
+          "theme": "gray",
+          "variant": "filled"
+        },
+        {
+          "id": "todo-panel__1",
+          "component": "Column",
+          "children": [
+            "todo-title__1",
+            "todo-details__1",
+            "todo-status__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/todos/1/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__1",
+          "component": "Text",
+          "text": {
+            "path": "/todos/1/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__1",
+          "component": "Tag",
+          "text": {
+            "path": "/todos/1/statusText"
+          },
+          "theme": "blue",
+          "variant": "filled"
+        },
+        {
+          "id": "todo-panel__2",
+          "component": "Column",
+          "children": [
+            "todo-title__2",
+            "todo-details__2",
+            "todo-status__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__2",
+          "component": "Text",
+          "text": {
+            "path": "/todos/2/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__2",
+          "component": "Text",
+          "text": {
+            "path": "/todos/2/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__2",
+          "component": "Tag",
+          "text": {
+            "path": "/todos/2/statusText"
+          },
+          "theme": "gray",
+          "variant": "filled"
+        },
+        {
+          "id": "section-tabs",
+          "component": "Tabs",
+          "tabs": [
+            {
+              "title": {
+                "path": "/counts/approval"
+              },
+              "child": "approval-section",
+              "action": {
+                "event": {
+                  "name": "daily_briefing_select_section",
+                  "context": {
+                    "businessId": {
+                      "path": "/identity/businessId"
+                    },
+                    "briefingId": {
+                      "path": "/briefing/id"
+                    },
+                    "section": "approval"
+                  }
+                }
+              }
+            },
+            {
+              "title": {
+                "path": "/counts/todo"
+              },
+              "child": "todo-section",
+              "action": {
+                "event": {
+                  "name": "daily_briefing_select_section",
+                  "context": {
+                    "businessId": {
+                      "path": "/identity/businessId"
+                    },
+                    "briefingId": {
+                      "path": "/briefing/id"
+                    },
+                    "section": "todo"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-daily-approval-briefing-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "businessId": "demo-daily-approval-briefing"
+        },
+        "briefing": {
+          "id": "demo-briefing-20261010",
+          "title": "今天，专注完成交付",
+          "summary": "最重要的一件事：14:00 前完成 v1.2 发布验收。已准备好评审资料，请及时处理审批与待办事项。",
+          "sourceNote": "合成演示数据，不读取真实聊天、日历或审批。"
+        },
+        "counts": {
+          "approval": "审批 2",
+          "todo": "待办 3"
+        },
+        "view": {
+          "showFocus": false
+        },
+        "approvals": [
+          {
+            "id": "approval-travel",
+            "title": "用户甲：出差报销1000元",
+            "notice": "建议批准",
+            "tone": "info",
+            "details": "报销金额、出差行程和票据匹配，费用标准符合公司规定",
+            "canOperate": true,
+            "status": "pending"
+          },
+          {
+            "id": "approval-discount",
+            "title": "用户乙：申请客户折扣 7折",
+            "notice": "待确认",
+            "tone": "warning",
+            "details": "低于公司8折常规底线，超出自动处理范围",
+            "canOperate": true,
+            "status": "pending"
+          }
+        ],
+        "todos": [
+          {
+            "id": "demo-todo-review",
+            "title": "核对演示项目验收清单",
+            "details": "今天 11:30 前 · 示例项目",
+            "statusText": "待处理"
+          },
+          {
+            "id": "demo-todo-draft",
+            "title": "整理演示汇报材料",
+            "details": "今天 13:00 前 · 示例工作组",
+            "statusText": "进行中"
+          },
+          {
+            "id": "demo-todo-plan",
+            "title": "确认下周演示安排",
+            "details": "今天 17:00 前 · 示例工作组",
+            "statusText": "待处理"
+          }
+        ],
+        "focus": [
+          {
+            "id": "focus-okr",
+            "text": "OKR 重点：数字员工接入链路上线 & 评测体系搭建"
+          },
+          {
+            "id": "focus-agent",
+            "text": "负责 AI Agent 方向，本周里程碑：周三竞品分析评审、周五方案终审关注 协作产品等竞品动态。"
+          }
+        ],
+        "preparations": [
+          {
+            "id": "prep-report",
+            "number": "1.",
+            "title": "专项进度汇报",
+            "document": {
+              "id": "doc-report-draft",
+              "title": "专项汇报初稿",
+              "type": "文档",
+              "url": ""
+            },
+            "notes": [
+              {
+                "id": "report-risk",
+                "text": "风险：跨组织 示例接口 授权前提，与示例助手办公的单组织登录限制需要对齐"
+              },
+              {
+                "id": "report-advice",
+                "text": "建议：10:00 对焦会上先确认，再补入汇报。"
+              }
+            ]
+          },
+          {
+            "id": "prep-sf",
+            "number": "2.",
+            "title": "客户甲见面会",
+            "document": {
+              "id": "doc-sf-reference",
+              "title": "客户甲会谈参考",
+              "type": "文档",
+              "url": ""
+            },
+            "notes": [
+              {
+                "id": "sf-reminder",
+                "text": "提醒：示例会议室 A-01 · 用户丙组织 · 负责人 首次参会"
+              }
+            ]
+          }
+        ],
+        "attention": [
+          {
+            "id": "attention-agent",
+            "number": "1.",
+            "text": "方案改跑示例助手 —— 用户乙反馈风险偏高，接入边界还没核实"
+          },
+          {
+            "id": "attention-api",
+            "number": "2.",
+            "text": "领用、查询接口已上预发 —— 用户丙同步，验收结果仍待确认"
+          },
+          {
+            "id": "attention-report",
+            "number": "3.",
+            "text": "专项汇报要统一口径 —— 用户丁建议由你牵头，分工未定"
+          }
+        ],
+        "icons": {
+          "location": "Location_L_outlined"
+        }
+      }
+    }
+  }
+]

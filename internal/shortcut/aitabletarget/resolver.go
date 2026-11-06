@@ -33,6 +33,12 @@ type Target struct {
 	TableID       string `json:"tableId,omitempty"`
 	ViewID        string `json:"viewId,omitempty"`
 	RecordID      string `json:"recordId,omitempty"`
+	Entrance      string `json:"entrance,omitempty"`
+	FieldID       string `json:"fieldId,omitempty"`
+	AppID         string `json:"appId,omitempty"`
+	PageID        string `json:"pageId,omitempty"`
+	ApplicationID string `json:"applicationId,omitempty"`
+	FlowID        string `json:"flowId,omitempty"`
 }
 
 // Candidate is a stable ID/name pair returned by name resolution.
@@ -50,10 +56,9 @@ type Resolution struct {
 	Selected   Candidate `json:"selected"`
 }
 
-// ParseURL parses the documented DingTalk AI Table URL forms:
-//
-//	https://alidocs.dingtalk.com/i/nodes/{baseId}
-//	https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}
+// ParseURL resolves node and standalone-record navigation without calling MCP.
+// Inner/outer IDs must agree. No object is
+// downgraded to Base when its parent IDs or object family are inconsistent.
 func ParseURL(raw string) (Target, error) {
 	raw = strings.TrimSpace(raw)
 	parsed, err := url.ParseRequestURI(raw)
@@ -63,65 +68,30 @@ func ParseURL(raw string) (Target, error) {
 	if !strings.EqualFold(parsed.Scheme, "https") || (!strings.EqualFold(parsed.Hostname(), aliDocsHost) && !strings.EqualFold(parsed.Hostname(), "docs.dingtalk.com")) || parsed.User != nil {
 		return Target{}, invalidURL(raw, "仅接受 https://alidocs.dingtalk.com 或 https://docs.dingtalk.com 的无凭据 URL")
 	}
-
-	segments := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
-	if len(segments) != 3 || segments[0] != "i" || segments[1] != "nodes" {
-		return Target{}, invalidURL(raw, "路径必须是 /i/nodes/{baseId}")
+	values, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return Target{}, invalidURL(raw, "URL 查询串编码无效")
 	}
-	baseID, err := url.PathUnescape(segments[2])
-	if err != nil || !validID(baseID) {
-		return Target{}, invalidURL(raw, "URL 路径中的 baseId 无效")
+	if len(values["iframeQuery"]) > 1 {
+		return Target{}, invalidURL(raw, "iframeQuery 不可重复")
 	}
-
-	values := parsed.Query()
 	nested, err := parseIframeQuery(values.Get("iframeQuery"))
 	if err != nil {
 		return Target{}, invalidURL(raw, err.Error())
 	}
-	for key, nestedValues := range nested {
-		for _, value := range nestedValues {
+	if nested.Has("iframeQuery") {
+		return Target{}, invalidURL(raw, "iframeQuery 不可递归嵌套")
+	}
+	for key, entries := range nested {
+		for _, value := range entries {
 			values.Add(key, value)
 		}
 	}
-
-	tableID, err := uniqueQueryID(values, "sheetId", "tableId")
+	target, err := parseNavigationURL(parsed, values)
 	if err != nil {
 		return Target{}, invalidURL(raw, err.Error())
 	}
-	viewID, err := uniqueQueryID(values, "viewId")
-	if err != nil {
-		return Target{}, invalidURL(raw, err.Error())
-	}
-	recordID, err := uniqueQueryID(values, "recordId")
-	if err != nil {
-		return Target{}, invalidURL(raw, err.Error())
-	}
-	if viewID != "" && tableID == "" {
-		return Target{}, invalidURL(raw, "viewId 缺少所属 sheetId/tableId")
-	}
-	if recordID != "" && tableID == "" {
-		return Target{}, invalidURL(raw, "recordId 缺少所属 sheetId/tableId")
-	}
-
-	kind := "base"
-	if tableID != "" {
-		kind = "table"
-	}
-	if viewID != "" {
-		kind = "view"
-	}
-	if recordID != "" {
-		kind = "record"
-	}
-	return Target{
-		SchemaVersion: "aitable.target.v1",
-		Source:        "url",
-		Kind:          kind,
-		BaseID:        strings.TrimSpace(baseID),
-		TableID:       tableID,
-		ViewID:        viewID,
-		RecordID:      recordID,
-	}, nil
+	return target, nil
 }
 
 func parseIframeQuery(raw string) (url.Values, error) {
@@ -296,6 +266,12 @@ func selectCandidate(entityType, query string, candidates []Candidate, allowFuzz
 		Status: "resolved", EntityType: entityType, Query: query,
 		MatchType: matchType, Selected: selected[0],
 	}, nil
+}
+
+// FindObjectList applies the resolver's deterministic collection and envelope
+// precedence. It never searches arbitrary objects such as audit metadata.
+func FindObjectList(data map[string]any, keys ...string) ([]map[string]any, bool, error) {
+	return findObjectList(data, keys...)
 }
 
 func findObjectList(data map[string]any, keys ...string) ([]map[string]any, bool, error) {

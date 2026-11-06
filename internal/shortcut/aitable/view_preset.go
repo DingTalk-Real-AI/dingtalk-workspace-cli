@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -23,17 +24,18 @@ var ViewPresetApply = shortcut.Shortcut{
 	Command:     "+view-preset-apply",
 	Product:     serverMain,
 	Description: "按视图精确名称幂等创建或更新预设；Gantt 可用独立 timebar 完成专用两步写入",
-	Intent:      "当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。",
+	Intent:      "当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。result.url/links 复用真实视图访问链接，具体定位由 Web 页面处理。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent",
 	},
-	Contract: aitableCompositeContract(
+	Contract: aitableCompositeContractWithResult(
 		"+view-preset-apply",
 		"按视图精确名称幂等创建或更新预设；Gantt 可用独立 timebar 完成专用两步写入",
-		"当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。",
+		"当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。result.url/links 复用真实视图访问链接，具体定位由 Web 页面处理。",
 		"只做一次性新建可用 view create；同名视图不唯一或现有视图类型不同必须人工处理",
 		`dws aitable +view-preset-apply --base-id B --table-id T --name "待处理" --view-type Grid --config '{"visibleFieldIds":["fld1"]}'`,
+		parityCompositeResultSpec(),
 	),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -49,6 +51,8 @@ var ViewPresetApply = shortcut.Shortcut{
 	},
 }
 
+// executeViewPresetApply verifies each preset/timebar mutation before delivering
+// navigation. Final readback wins; write receipts only fill missing navigation keys.
 func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	config, err := parseJSONObject("config", rt.Str("config"))
 	if err != nil {
@@ -131,9 +135,9 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 		return rt.Output(result)
 	}
 	verifiedMatches := matches
+	var writeData, timebarWriteData map[string]any
 	var writeErr error
 	if needsPresetWrite {
-		var writeData map[string]any
 		writeData, writeErr = rt.CallMCPWriteDataStrict(serverMain, tool, params)
 		if action == "create" {
 			viewID = findStringByKeys(writeData, "viewId")
@@ -187,7 +191,8 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	if needsTimebarWrite {
 		// ganttTimebar is a separate live MCP mutation. Once it is called, an
 		// unresolved read-back must not make the whole preset blindly retryable.
-		_, timebarWriteErr := rt.CallMCPWriteDataStrict(serverMain, "update_view", map[string]any{
+		var timebarWriteErr error
+		timebarWriteData, timebarWriteErr = rt.CallMCPWriteDataStrict(serverMain, "update_view", map[string]any{
 			"baseId": baseID, "tableId": tableID, "viewId": viewID,
 			"config": map[string]any{"ganttTimebar": timebar},
 		})
@@ -224,6 +229,11 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	timebarVerified := timebar != nil && len(verifiedMatches) == 1 && viewTimebarMatches(verifiedMatches[0], timebar)
 	result.Verification = map[string]any{"status": "verified", "viewId": viewID, "viewType": viewType, "timebarVerified": timebarVerified}
 	result.Result = map[string]any{"action": action, "viewId": viewID, "view": verifiedMatches[0]}
+	aitablenavigation.Preserve(result.Result, verifiedMatches[0])
+	// Older readers may omit navigation. Prefer the latest write receipt as a
+	// fallback, without copying receipt status or weakening either readback gate.
+	aitablenavigation.Preserve(result.Result, parityResponseObject(timebarWriteData))
+	aitablenavigation.Preserve(result.Result, parityResponseObject(writeData))
 	if writeErr != nil {
 		result.Status = "recovered"
 		result.Warnings = append(result.Warnings, "write response was an error, but the exact view preset was proven by read-back")

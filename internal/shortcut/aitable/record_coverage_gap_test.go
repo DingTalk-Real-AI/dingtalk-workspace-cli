@@ -464,8 +464,8 @@ func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
 	if recordCellValueEqual([]any{"one"}, []any{"one", "two"}, "multipleSelect") {
 		t.Fatal("recordCellValueEqual matched selection lists with different lengths")
 	}
-	if recordCellsMayNeedFieldTypes(map[string]any{}, map[string]any{"f": "value"}) {
-		t.Fatal("recordCellsMayNeedFieldTypes accepted a record without cells")
+	if recordCellsMayNeedFields(map[string]any{}, map[string]any{"f": "value"}) {
+		t.Fatal("recordCellsMayNeedFields accepted a record without cells")
 	}
 	if !selectionProjectionShapes("value", map[string]any{"id": "option-id", "name": "value"}) {
 		t.Fatal("selectionProjectionShapes missed scalar read-back for an object write")

@@ -208,8 +208,13 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 		return "", err
 	}
 	serverID = resolvedServerID
+	args = withDocEditExtraInfo(serverID, toolName, args)
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
-	return parseMCPToolTextResult(serverID, toolName, result, err)
+	text, err := parseMCPToolTextResult(serverID, toolName, result, err)
+	if err == nil {
+		err = validateDocBlockSequenceReceipt(toolName, args, text)
+	}
+	return text, err
 }
 
 type compatibleToolRouteResolver interface {
@@ -365,6 +370,9 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 				if projected := classifyAitableMutationError(errBody); projected != nil {
 					return "", projected
 				}
+				if pending := classifyDocOverwriteError(errBody); pending != nil {
+					return "", pending
+				}
 				if isBusinessError(errBody) {
 					return "", &CLIError{
 						Code: CodeMCPToolError,
@@ -374,6 +382,7 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 						// 只用于 callMCPToolInternalOptsContext 的终端展示路径。
 						Message:    c.Text,
 						Suggestion: suggestForBusinessError(errBody),
+						ServerCode: businessErrorCode(errBody),
 					}
 				}
 			}
@@ -506,6 +515,11 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	serverID := explicitServerID
+	if serverID == "" {
+		serverID = resolveProductID()
+	}
+	args = withDocEditExtraInfo(serverID, toolName, args)
 
 	// DryRun 模式：仅预览工具名和参数，不实际调用 MCP Server
 	if deps.Caller.DryRun() {
@@ -514,11 +528,7 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 		// the package-internal dryRunValidator interface (i.e. the delegation
 		// auth decorator is installed); undecorated callers skip this entirely.
 		if v, ok := deps.Caller.(dryRunValidator); ok {
-			preCheckServerID := explicitServerID
-			if preCheckServerID == "" {
-				preCheckServerID = resolveProductID()
-			}
-			if err := v.ensureDelegationAuth(ctx, preCheckServerID, toolName, args); err != nil {
+			if err := v.ensureDelegationAuth(ctx, serverID, toolName, args); err != nil {
 				return err
 			}
 		}
@@ -541,16 +551,19 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 		return nil
 	}
 
-	// 确定目标 MCP Server：优先使用显式指定的 serverID，否则自动路由
-	serverID := explicitServerID
-	if serverID == "" {
-		serverID = resolveProductID()
-	}
 	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
 	if err != nil {
 		return err
 	}
 	serverID = resolvedServerID
+
+	if isDocBlockSequenceWrite(toolName, args) {
+		text, err := callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+		if err != nil {
+			return err
+		}
+		return renderLegacyMCPText(toolName, text, unescapeHTML)
+	}
 
 	// 调用 MCP Server
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
@@ -607,6 +620,9 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 				}
 				if projected := classifyAitableMutationError(errBody); projected != nil {
 					return projected
+				}
+				if pending := classifyDocOverwriteError(errBody); pending != nil {
+					return pending
 				}
 				if isBusinessError(errBody) {
 					message := businessErrorDisplayMessage(errBody, c.Text)

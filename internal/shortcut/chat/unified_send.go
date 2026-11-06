@@ -98,7 +98,8 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "media-id", Type: shortcut.FlagString, Desc: "已有图片 mediaId（仅 user 的 image）"},
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内安全相对文件路径（user 的 file/audio/video；bot 仅单目标 file）"},
 		{Name: "a2ui-messages", Type: shortcut.FlagString, Input: []string{"file", "stdin"}, Desc: "user 的 A2UI JSON 字符串数组；与正文/媒体互斥，不接受 Lark Card JSON"},
-		{Name: "card-summary", Type: shortcut.FlagString, Desc: "A2UI 降级摘要；省略使用 A2UI 消息文本"},
+		{Name: "card-summary", Type: shortcut.FlagString, Desc: "A2UI 卡片无法渲染时的降级文案；省略时为“互动卡片”，显式空白会被拒绝"},
+		{Name: "support-forward", Type: shortcut.FlagBool, Default: "false", Desc: "允许转发 A2UI 卡片，默认 false；仅用于 --a2ui-messages"},
 		{Name: "biz-card-id", Type: shortcut.FlagString, Desc: "A2UI 业务标识，省略生成；不承诺消息幂等"},
 		{Name: "request-id", Type: shortcut.FlagString, Desc: "A2UI 链路追踪标识，省略生成；不是幂等键"},
 		{Name: "image-url", Type: shortcut.FlagString, Desc: "Bot 图片的 HTTP(S) URL（不接受已有 mediaId）"},
@@ -108,10 +109,10 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "file-path", Type: shortcut.FlagString, Desc: "--file 的兼容别名"},
 		{Name: "uuid", Type: shortcut.FlagString, Desc: "幂等键（仅 user）；受发送身份能力矩阵约束"},
 		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "--uuid 的 lark-cli 对齐别名（仅 user）；受发送身份能力矩阵约束"},
-		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId（user/bot 群聊）"},
+		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId（user/bot 群聊；user 的 a2ui 卡片须与正文 <a atId> 一致）"},
 		{Name: "at-user-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId（bot/webhook）"},
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号（webhook）"},
-		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人"},
+		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人（user 的 a2ui 卡片须与正文 <a atId=\"all\"> 同时出现）"},
 		shortcut.AIMessageTagFlag(),
 	}, chatDeliveryFlags()...),
 	Constraints: []shortcut.Constraint{
@@ -206,7 +207,7 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if (userID != "" || userQuery != "" || openID != "") && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user 单聊不接受 @ 参数；@ 只适用于群聊")
 		}
-		if contentType != "text" && contentType != "markdown" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
+		if contentType != "text" && contentType != "markdown" && contentType != "a2ui" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user image/file/audio/video 当前不接受 @ 参数")
 		}
 		if (group != "" || chatQuery != "") && (contentType == "text" || contentType == "markdown") {

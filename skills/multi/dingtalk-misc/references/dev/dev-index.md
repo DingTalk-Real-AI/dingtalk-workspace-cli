@@ -1,6 +1,8 @@
 # Dev 能力索引（只在意图不明时读取）
 
-意图清楚时不要读本索引，直接从根 Skill 进入唯一专题 Reference。默认走 `dws dev` 原子命令，不先读 `devapp.md`，也不调用 help 发现 shortcut。
+意图清楚时不要读本索引，直接从根 Skill 进入唯一专题 Reference。默认走 `dws dev` 原子命令，
+不先读 `devapp.md`，也不调用 help 发现 shortcut；已知 leaf 直接执行，参数不确定时只查该
+leaf 的 compact Schema。
 
 | 用户意图 | 标准命令路径 | 只读此文件 |
 |---|---|---|
@@ -16,6 +18,7 @@
 | 应用事件订阅 | `dws dev app event ...` | [`event.md`](./event.md) |
 | 本机机器人连接器、Stream/长连接实例与健康状态 | `dws dev connect ...` | [`connect.md`](./connect.md) |
 | MCP 服务、工具、鉴权、凭证与协作者 | `dws dev mcp ...` | [`mcp.md`](./mcp.md) |
+| 轻应用创建即发布、更新、删除、列表、详情、appKey/secret 凭证、配额与软删（独立于普通统一应用） | `dws dev liteapp ...` | [`liteapp.md`](./liteapp.md) |
 | 同一任务明确跨两个以上 Dev 域 | 按依赖顺序组合原子命令；先不预读专题 | [`recipes.md`](./recipes.md) |
 
 ## 共同执行约束

@@ -2,7 +2,9 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -40,5 +42,42 @@ func TestEmployeeLiveAgentRoundTrip(t *testing.T) {
 				t.Fatalf("NOT VERIFIED: session continuation failed, errType=%T chars=%d", err, len(answer))
 			}
 		})
+	}
+}
+
+// 显式授权的真实 Codex 验收。保留线程 ID 供桌面权限同步的后续实测使用。
+func TestEmployeeLivePermissionRoundTrip(t *testing.T) {
+	report := os.Getenv("DWS_EMPLOYEE_PERMISSION_LIVE_REPORT")
+	if report == "" {
+		t.Skip("set DWS_EMPLOYEE_PERMISSION_LIVE_REPORT to opt in")
+	}
+	root := filepath.Dir(report)
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(root, "permission-live-store"))
+	work := filepath.Join(root, "permission-live-workdir")
+	if err := os.MkdirAll(work, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := digitalEmployeeAdapterConfig{Binding: digitalEmployeeBinding{Channel: "codex", DWSProfile: "live-test:permission-employee"}, Options: connectAgentOptions{WorkDir: work, Memory: true, Timeout: 90 * time.Second}}
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	fwd, err := digitalEmployeeNewForwarder(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const conversation = "permission-default-test"
+	prompts := []string{"这是权限同步验收，请不要调用任何工具或读写文件，记住数字 719351，只回复719351。", "不要调用工具。上轮要求记住的数字是什么？只回复数字。"}
+	if prompt := os.Getenv("DWS_EMPLOYEE_PERMISSION_LIVE_PROMPT"); prompt != "" {
+		prompts = []string{prompt}
+	}
+	for _, prompt := range prompts {
+		answer, err := fwd.forward(ctx, conversation, prompt)
+		if err != nil || !strings.Contains(answer, "719351") {
+			t.Fatalf("真实 Codex 会话验收失败: %T", err)
+		}
+	}
+	thread := fwd.(*codexAppServerForwarder).sessions.threadID(conversation)
+	data, _ := json.Marshal(map[string]any{"threadId": thread, "turns": len(prompts), "contextRetained": true})
+	if err := os.WriteFile(report, data, 0600); err != nil {
+		t.Fatal(err)
 	}
 }

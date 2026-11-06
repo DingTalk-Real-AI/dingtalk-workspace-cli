@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	PayloadVersion    = "20261028"
+	PayloadVersion    = "20261104"
 	manifestVersion   = 3
 	containerHeader   = 64
 	formatVersion     = uint32(1)

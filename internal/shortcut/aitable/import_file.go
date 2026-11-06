@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -62,19 +63,20 @@ func rejectImportUploadRedirect(*http.Request, []*http.Request) error {
 }
 
 var ImportFile = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+import-file",
-	Product:     serverMain,
-	Description: "申请上传、PUT 本地 CSV/XLS/XLSX，并用同一 importId 触发导入；也可只续等已有任务",
-	Intent:      "当你要从本地文件完成 AI 表格导入闭环时使用；DWS 不暴露签名 URL，超时保留同一 importId 供只续等。",
-	Risk:        shortcut.RiskWrite,
+	Service:       "aitable",
+	Command:       "+import-file",
+	Product:       serverMain,
+	Description:   "申请上传、PUT 本地 CSV/XLS/XLSX，并用同一 importId 触发导入；也可只续等已有任务。" + helpers.AitableNavigationGuidance,
+	Intent:        "当你要从本地文件完成 AI 表格导入闭环时使用；DWS 不暴露签名 URL，超时保留同一 importId 供只续等。" + helpers.AitableNavigationGuidance,
+	Risk:          shortcut.RiskWrite,
+	OutputRollout: output.RolloutUnifiedActive,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent",
 	},
 	Contract: aitableCompositeContractWithResult(
 		"+import-file",
-		"申请上传、PUT 本地 CSV/XLS/XLSX，并用同一 importId 触发导入；也可只续等已有任务",
-		"当你要从本地文件完成 AI 表格导入闭环时使用；DWS 不暴露签名 URL，超时保留同一 importId 供只续等。",
+		"申请上传、PUT 本地 CSV/XLS/XLSX，并用同一 importId 触发导入；也可只续等已有任务。"+helpers.AitableNavigationGuidance,
+		"当你要从本地文件完成 AI 表格导入闭环时使用；DWS 不暴露签名 URL，超时保留同一 importId 供只续等。"+helpers.AitableNavigationGuidance,
 		"JSON 记录写入用 record create/upsert；只申请上传地址用 +import-upload；续等时不能改变目标表或映射参数",
 		`dws aitable +import-file --base-id B --file ./data.xlsx --table-id T`,
 		aitableImportFileResultSpec(),
@@ -247,6 +249,14 @@ func resumeImportFile(rt *shortcut.RuntimeContext, importID string) error {
 
 func finishImportFile(rt *shortcut.RuntimeContext, result compositeResult, mode, importID string, data map[string]any, completed int) error {
 	result.Result = map[string]any{"mode": mode, "importId": importID, "response": sanitizeImportOutput(data, "")}
+	// Preserve only sanitized navigation, never the upload credential URL.
+	sanitized := sanitizeImportOutput(parityResponseObject(data), "").(map[string]any)
+	aitablenavigation.Preserve(result.Result, sanitized)
+	for _, key := range []string{"baseId", "tableId", "tableIds"} {
+		if value, exists := sanitized[key]; exists {
+			result.Result[key] = value
+		}
+	}
 	switch importFileOutcome(data) {
 	case "success":
 		result.CompletedCount = completed
@@ -309,12 +319,34 @@ func importFileOutcome(payload map[string]any) string {
 		unified = append(unified, outcome)
 	}
 	if len(unified) > 0 {
+		// A unified terminal claim must agree with any explicit task status.
+		// The MCP transport's success acknowledgement is not a task status.
+		for index, object := range objects {
+			status, present := object["status"]
+			if !present || (index == 0 && len(objects) > 1 && status == "success") {
+				continue
+			}
+			if importTaskStatusOutcome(status) != unified[0] {
+				return "invalid"
+			}
+		}
 		return unified[0]
 	}
+	// Unknown or malformed task states must not fall back to an outer success
+	// acknowledgement (or a legacy success boolean) and claim completion.
+	for index, object := range objects {
+		if status, present := object["status"]; present && !(index == 0 && len(objects) > 1 && status == "success") {
+			if importTaskStatusOutcome(status) == "unknown" {
+				return "unknown"
+			}
+		}
+	}
 	for _, wanted := range []string{"failure", "partial_failure", "pending", "success"} {
-		for _, object := range objects {
-			status, _ := object["status"].(string)
-			normalized := map[string]string{"error": "failure", "failed": "failure", "failure": "failure", "partial_failure": "partial_failure", "pending": "pending", "success": "success"}[status]
+		for index, object := range objects {
+			if index == 0 && len(objects) > 1 && object["status"] == "success" {
+				continue
+			}
+			normalized := importTaskStatusOutcome(object["status"])
 			if normalized == wanted {
 				return wanted
 			}
@@ -337,6 +369,17 @@ func importFileOutcome(payload map[string]any) string {
 		return "success"
 	}
 	return "unknown"
+}
+
+func importTaskStatusOutcome(value any) string {
+	switch value {
+	case "success", "pending", "partial_failure":
+		return value.(string)
+	case "error", "failed", "failure", "all_fail", "timeout":
+		return "failure"
+	default:
+		return "unknown"
+	}
 }
 
 func importResponseObjects(payload map[string]any) []map[string]any {
@@ -461,6 +504,29 @@ func isPublicImportUploadIP(ip net.IP) bool {
 	return ok && helpers.IsPublicTransferIP(address)
 }
 
+// isImportNavigationURL recognizes the public Base/table URL protocol only.
+// Signed upload URLs, user-info, fragments and unrelated query parameters remain redacted.
+func isImportNavigationURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || (parsed.Host != "alidocs.dingtalk.com" && parsed.Host != "docs.dingtalk.com") || parsed.User != nil || parsed.Fragment != "" {
+		return false
+	}
+	baseID, found := strings.CutPrefix(parsed.Path, "/i/nodes/")
+	if !found || !validCompositeOpaqueID(baseID) {
+		return false
+	}
+	if parsed.RawQuery == "" {
+		return true
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil || len(query) != 1 || len(query["iframeQuery"]) != 1 {
+		return false
+	}
+	inner, err := url.ParseQuery(query.Get("iframeQuery"))
+	return err == nil && len(inner) == 2 && len(inner["entrance"]) == 1 && inner.Get("entrance") == "data" &&
+		len(inner["sheetId"]) == 1 && validCompositeOpaqueID(inner.Get("sheetId"))
+}
+
 func sanitizeImportOutput(value any, key string) any {
 	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
 	if strings.Contains(normalized, "uploadurl") || strings.Contains(normalized, "authorization") ||
@@ -483,6 +549,9 @@ func sanitizeImportOutput(value any, key string) any {
 		}
 		return out
 	case string:
+		if key == "url" && isImportNavigationURL(typed) {
+			return typed
+		}
 		lower := strings.ToLower(typed)
 		if strings.Contains(lower, "http://") || strings.Contains(lower, "https://") ||
 			strings.Contains(lower, "authorization:") || strings.Contains(lower, "x-oss-signature") ||

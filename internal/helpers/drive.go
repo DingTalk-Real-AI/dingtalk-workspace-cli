@@ -166,7 +166,7 @@ func runDriveUpload(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), filePutFlowTimeout())
 	defer cancel()
 
 	mimeType, _ := cmd.Flags().GetString("mime-type")
@@ -229,7 +229,7 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), filePutFlowTimeout())
 	defer cancel()
 
 	convert, _ := cmd.Flags().GetBool("convert")

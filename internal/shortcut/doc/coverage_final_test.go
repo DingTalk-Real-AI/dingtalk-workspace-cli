@@ -219,19 +219,11 @@ func TestCrossPlatformCoverageDocFinalExecutionFailureBranches(t *testing.T) {
 	if err := runDocCoverage(t, Create, &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}, "--name", "n", "--content", longContent); err == nil {
 		t.Fatal("partial chunk create succeeded")
 	}
-	for _, failAt := range []int{1, 2} {
-		err := runDocCoverage(t, Update, &docCoverageCaller{failAt: failAt, responses: map[string][]map[string]any{}},
-			"--node", "n", "--command", "block_insert_after", "--after-block-id", "block-1", "--content", "x", "--yes")
-		if err == nil {
-			t.Fatalf("block mutation failAt=%d succeeded", failAt)
-		}
-	}
-	mismatch := &docCoverageCaller{responses: map[string][]map[string]any{
-		"insert_document_block": {{"blockId": "new"}},
-		"list_document_blocks":  {{"blocks": []any{map[string]any{"id": "new", "text": "wrong"}}}},
-	}}
-	if err := runDocCoverage(t, Update, mismatch, "--node", "n", "--command", "block_insert_after", "--after-block-id", "block-1", "--content", "x", "--yes"); err == nil {
-		t.Fatal("mismatched block verification succeeded")
+	// Markdown block edits are a single server request; a rejected write cannot
+	// trigger a second client mutation or a body-verification fallback.
+	caller := &docCoverageCaller{failAt: 1}
+	if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_insert_after", "--after-block-id", "block-1", "--content", "x", "--yes"); err == nil || caller.calls != 1 {
+		t.Fatalf("single block request failure: %v %#v", err, caller.history)
 	}
 
 	for _, tc := range []struct {

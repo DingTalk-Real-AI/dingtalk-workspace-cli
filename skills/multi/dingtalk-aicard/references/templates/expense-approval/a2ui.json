@@ -1,0 +1,572 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-expense-approval-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "intro",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "<a atId=\"${/recipient/id}\">${/recipient/name}</a> ${/summary}"
+            }
+          }
+        },
+        {
+          "id": "pending-title",
+          "component": "Text",
+          "text": {
+            "call": "formatString",
+            "args": {
+              "value": "${applicant/name} ${expense/type}报销${expense/amount}元"
+            }
+          },
+          "maxLine": 20,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "bold": true,
+          "weight": 1
+        },
+        {
+          "id": "pending-recommendation",
+          "component": "Text",
+          "text": {
+            "call": "cond",
+            "args": {
+              "if": {
+                "call": "eq",
+                "args": {
+                  "a": {
+                    "path": "ai/decision"
+                  },
+                  "b": "approve"
+                }
+              },
+              "then": "建议批准",
+              "else": {
+                "call": "cond",
+                "args": {
+                  "if": {
+                    "call": "eq",
+                    "args": {
+                      "a": {
+                        "path": "ai/decision"
+                      },
+                      "b": "reject"
+                    }
+                  },
+                  "then": "",
+                  "else": "待核实"
+                }
+              }
+            }
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "cond",
+            "args": {
+              "if": {
+                "call": "eq",
+                "args": {
+                  "a": {
+                    "path": "ai/decision"
+                  },
+                  "b": "reject"
+                }
+              },
+              "then": false,
+              "else": {
+                "path": "showRecommendation"
+              }
+            }
+          },
+          "maxLine": 1,
+          "bold": true
+        },
+        {
+          "id": "applicant-value",
+          "component": "Row",
+          "children": [
+            "pending-title",
+            "pending-recommendation"
+          ],
+          "gap": 8,
+          "align": "center"
+        },
+        {
+          "id": "pending-reason",
+          "component": "Text",
+          "text": {
+            "path": "ai/reason"
+          },
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level2_base_color",
+          "maxLine": 20
+        },
+        {
+          "id": "pending-divider",
+          "component": "Row",
+          "children": [
+            "pending-divider-line"
+          ],
+          "gap": 0,
+          "align": "center",
+          "visible": {
+            "path": "showDivider"
+          }
+        },
+        {
+          "id": "pending-reject-label",
+          "component": "Text",
+          "text": "拒绝",
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "pending-reject",
+          "component": "Row",
+          "weight": 1,
+          "children": [
+            "pending-reject-label"
+          ],
+          "justify": "center",
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 24,
+          "backgroundColorToken": "common_bg_color"
+        },
+        {
+          "id": "pending-approve-label",
+          "component": "Text",
+          "text": "批准",
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "pending-approve",
+          "component": "Row",
+          "weight": 1,
+          "children": [
+            "pending-approve-label"
+          ],
+          "justify": "center",
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 24,
+          "backgroundColorToken": "common_bg_color"
+        },
+        {
+          "id": "pending-actions",
+          "component": "Row",
+          "children": [
+            "pending-reject",
+            "pending-approve"
+          ],
+          "gap": 10,
+          "align": "center",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "status"
+              },
+              "b": "pending"
+            }
+          }
+        },
+        {
+          "id": "pending-item",
+          "component": "Column",
+          "children": [
+            "pending-divider",
+            "applicant-value",
+            "pending-reason",
+            "pending-actions",
+            "pending-result-row"
+          ],
+          "gap": 16,
+          "align": "stretch"
+        },
+        {
+          "id": "pending-list",
+          "component": "Column",
+          "children": {
+            "componentId": "pending-item",
+            "path": "/approvals/pending"
+          },
+          "gap": 16,
+          "align": "stretch"
+        },
+        {
+          "id": "pending-panel",
+          "component": "Column",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 0.5,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color",
+          "children": [
+            "pending-list"
+          ],
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "handled-title",
+          "component": "Text",
+          "text": {
+            "call": "formatString",
+            "args": {
+              "value": "${applicant/name} ${expense/type}报销${expense/amount}元"
+            }
+          },
+          "maxLine": 20,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "bold": true,
+          "weight": 1
+        },
+        {
+          "id": "handled-recommendation",
+          "component": "Text",
+          "text": {
+            "call": "cond",
+            "args": {
+              "if": {
+                "call": "eq",
+                "args": {
+                  "a": {
+                    "path": "ai/decision"
+                  },
+                  "b": "approve"
+                }
+              },
+              "then": "建议批准",
+              "else": {
+                "call": "cond",
+                "args": {
+                  "if": {
+                    "call": "eq",
+                    "args": {
+                      "a": {
+                        "path": "ai/decision"
+                      },
+                      "b": "reject"
+                    }
+                  },
+                  "then": "",
+                  "else": "待核实"
+                }
+              }
+            }
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "cond",
+            "args": {
+              "if": {
+                "call": "eq",
+                "args": {
+                  "a": {
+                    "path": "ai/decision"
+                  },
+                  "b": "reject"
+                }
+              },
+              "then": false,
+              "else": {
+                "path": "showRecommendation"
+              }
+            }
+          },
+          "maxLine": 1,
+          "bold": true
+        },
+        {
+          "id": "handled-header",
+          "component": "Row",
+          "children": [
+            "handled-title",
+            "handled-recommendation"
+          ],
+          "gap": 8,
+          "align": "center"
+        },
+        {
+          "id": "handled-reason",
+          "component": "Text",
+          "text": {
+            "path": "ai/reason"
+          },
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level2_base_color",
+          "maxLine": 20
+        },
+        {
+          "id": "handled-divider",
+          "component": "Row",
+          "children": [
+            "handled-divider-line"
+          ],
+          "gap": 0,
+          "align": "center",
+          "visible": {
+            "path": "showDivider"
+          }
+        },
+        {
+          "id": "handled-status",
+          "component": "Text",
+          "text": {
+            "path": "resultLabel"
+          },
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "handled-item",
+          "component": "Column",
+          "children": [
+            "handled-divider",
+            "handled-header",
+            "handled-reason",
+            "handled-result-row"
+          ],
+          "gap": 16,
+          "align": "stretch"
+        },
+        {
+          "id": "handled-list",
+          "component": "Column",
+          "children": {
+            "componentId": "handled-item",
+            "path": "/approvals/handled"
+          },
+          "gap": 16,
+          "align": "stretch"
+        },
+        {
+          "id": "handled-panel",
+          "component": "Column",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 0.5,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color",
+          "children": [
+            "handled-list"
+          ],
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "tabs",
+          "component": "Tabs",
+          "tabs": [
+            {
+              "title": {
+                "path": "/view/pendingLabel"
+              },
+              "child": "pending-panel"
+            },
+            {
+              "title": {
+                "path": "/view/handledLabel"
+              },
+              "child": "handled-panel"
+            }
+          ]
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "intro",
+            "tabs"
+          ],
+          "gap": 10,
+          "align": "stretch"
+        },
+        {
+          "id": "pending-status",
+          "component": "Text",
+          "text": {
+            "path": "resultLabel"
+          },
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_body_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "pending-result",
+          "component": "Row",
+          "weight": 1,
+          "children": [
+            "pending-status"
+          ],
+          "justify": "center",
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 24,
+          "backgroundColorToken": "common_bg_color"
+        },
+        {
+          "id": "pending-result-row",
+          "component": "Row",
+          "children": [
+            "pending-result"
+          ],
+          "gap": 0,
+          "align": "center",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "status"
+              },
+              "b": "pending"
+            }
+          }
+        },
+        {
+          "id": "handled-result",
+          "component": "Row",
+          "weight": 1,
+          "children": [
+            "handled-status"
+          ],
+          "justify": "center",
+          "align": "center",
+          "padding": 8,
+          "cornerRadius": 24,
+          "backgroundColorToken": "common_bg_color"
+        },
+        {
+          "id": "handled-result-row",
+          "component": "Row",
+          "children": [
+            "handled-result"
+          ],
+          "gap": 0,
+          "align": "center"
+        },
+        {
+          "id": "pending-divider-line",
+          "component": "Divider",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "axis": "horizontal",
+          "borderColor": "#1F111F2C",
+          "weight": 1
+        },
+        {
+          "id": "handled-divider-line",
+          "component": "Divider",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "axis": "horizontal",
+          "borderColor": "#1F111F2C",
+          "weight": 1
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-expense-approval-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "requestId": "demo-approval-briefing"
+        },
+        "recipient": {
+          "id": "demo-approval-recipient",
+          "name": "林小夏"
+        },
+        "summary": "今天有3条审批需要跟你汇报，其中1条已按你的授权自动处理。",
+        "view": {
+          "pendingLabel": "待处理·2",
+          "handledLabel": "已为您处理·1"
+        },
+        "approvals": {
+          "pending": [
+            {
+              "id": "demo-expense-001",
+              "revision": 1,
+              "showRecommendation": true,
+              "showDivider": false,
+              "status": "pending",
+              "resultLabel": "",
+              "applicant": {
+                "id": "demo-applicant-1",
+                "name": "顾宁"
+              },
+              "expense": {
+                "type": "出差",
+                "amount": 1000,
+                "currency": "CNY"
+              },
+              "ai": {
+                "decision": "approve",
+                "reason": "报销金额、出差行程和票据匹配，费用标准符合公司规定"
+              }
+            },
+            {
+              "id": "demo-expense-002",
+              "revision": 1,
+              "showRecommendation": true,
+              "showDivider": true,
+              "status": "pending",
+              "resultLabel": "",
+              "applicant": {
+                "id": "demo-applicant-2",
+                "name": "周言"
+              },
+              "expense": {
+                "type": "餐饮",
+                "amount": 2400,
+                "currency": "CNY"
+              },
+              "ai": {
+                "decision": "reject",
+                "reason": "餐饮费用超出公司标准，且部分支出缺少有效票据，建议退回补充说明"
+              }
+            }
+          ],
+          "handled": [
+            {
+              "id": "demo-expense-003",
+              "revision": 2,
+              "showRecommendation": false,
+              "showDivider": false,
+              "resultLabel": "已批准",
+              "status": "approved",
+              "applicant": {
+                "id": "demo-applicant-3",
+                "name": "陈安"
+              },
+              "expense": {
+                "type": "交通",
+                "amount": 120,
+                "currency": "CNY"
+              },
+              "ai": {
+                "decision": "approve",
+                "reason": "金额在授权范围内，票据及费用标准符合公司规定"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+]

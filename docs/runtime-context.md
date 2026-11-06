@@ -1,13 +1,13 @@
 # Runtime context
 
-DWS embeds runtime payload `20261028` in its single executable.
+DWS embeds runtime payload `20261104` in its single executable.
 Five libraries and three platform-specific `skt.bin` configurations cover macOS,
 Linux and Windows on amd64/arm64; macOS shares a universal library. Each target
 bundle contains its library, configuration and a format-3 manifest pinning both
 SHA-256 digests. Payload slots reserve 2 MiB on macOS/Linux and 8 MiB on Windows,
 including headroom for signed libraries. Neither `ps/` nor Win32 is distributed.
 Resource provenance and redistribution terms are recorded in the
-[payload notice](../third_party/runtimepayload/20261028/NOTICE.md).
+[payload notice](../third_party/runtimepayload/20261104/NOTICE.md).
 
 A payload digest change upgrades owned resources and selects a new cache root.
 Source generation, installation, release injection and macOS signing all carry
@@ -52,7 +52,7 @@ lock, or publication fails (including a loaded Windows DLL), DWS uses a verified
 content-addressed cache:
 
 ```text
-<user-cache>/dws/runtime-context/20261028/<payload-sha256>/
+<user-cache>/dws/runtime-context/20261104/<payload-sha256>/
 ```
 
 Both paths compare the manifest with the embedded bundle and verify both library and configuration
@@ -64,7 +64,7 @@ without blocking login or business requests.
 
 ```mermaid
 flowchart TD
-    A[20261028 library, skt.bin and format-3 manifest] --> B[Resolve executable symlinks]
+    A[20261104 library, skt.bin and format-3 manifest] --> B[Resolve executable symlinks]
     B --> C[Lock and verify existing adjacent resources]
     C --> L{Ready payload digest and resources match embedded bundle?}
     L -- Yes --> F[Load verified library]

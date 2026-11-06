@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	EventMinutesTaskCreated           = "user_minutes_task_created"
+	EventMinutesSummaryGenerated      = "user_minutes_summary_generated"
 	EventMention                      = "user_im_message_receive_at"
 	EventSingleChat                   = "user_im_message_receive_o2o"
 	EventInChat                       = "user_im_message_receive_group"
@@ -53,6 +55,7 @@ const (
 	EventCardAction                   = "user_card_action_triggered"
 	EventFriendRequestReceived        = "user_contact_friend_request_received"
 	EventFriendAdded                  = "user_contact_friend_added"
+	EventCalendarEventChanged         = "user_calendar_event_changed"
 )
 
 const (
@@ -96,6 +99,8 @@ type RuleOptions struct {
 	OpenDingTalkID string
 	GroupID        string
 	RoleTypes      []string
+	CalendarIDs    []string
+	ChangeTypes    []string
 }
 
 type SchemaPendingError struct {
@@ -442,6 +447,36 @@ var definitions = []Definition{
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
+	{
+		EventKey:    EventMinutesTaskCreated,
+		DisplayName: "创建听记",
+		Description: "听记对象、必要关联和默认权限初始化成功后通知符合订阅和读取权限条件的接收人；不含复用已有听记",
+		Category:    "minutes",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
+	{
+		EventKey:    EventMinutesSummaryGenerated,
+		DisplayName: "纪要生成",
+		Description: "默认纪要首次生成成功、保存完成且可读取后通知符合订阅和读取权限条件的接收人；失败后首次成功计入，成功后重新生成、切换模板和人工修改不通知",
+		Category:    "minutes",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
+	{
+		EventKey:    EventCalendarEventChanged,
+		DisplayName: "日程变化",
+		Description: "当前用户的主日历日程变化：创建及新增参与 eventCreated、修改 eventUpdated、取消 eventCancelled；需平台完成事件登记与日历路由配置，CLI 目录可见不代表当前环境已开通",
+		Category:    "calendar",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
 }
 
 func targetUIDConstraints() *ParameterConstraints {
@@ -568,6 +603,12 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	}
 	if def.Status == StatusPending {
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
+	}
+	if eventKey == EventCalendarEventChanged {
+		return buildCalendarRuleParam(opts)
+	}
+	if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+		return "", nil, fmt.Errorf("--calendar-ids/--change-types are only supported for %s", EventCalendarEventChanged)
 	}
 	userID := strings.TrimSpace(opts.UserID)
 	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)

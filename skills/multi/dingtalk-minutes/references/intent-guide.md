@@ -15,6 +15,11 @@
 | “把摘要、关键词、完整逐字稿、待办归档成一包” | `dws minutes +export-pack --id <taskUuid> --output <新目录>` | 逐字稿必须完整；所有必需产物验证后才原子发布目录；目标目录已存在时拒绝覆盖 |
 | “归档时也带媒体” | `dws minutes +export-pack --id <taskUuid> --output <新相对目录> --include-media --format json` | manifest 不保存签名 URL；媒体未就绪导致归档不完整时必须明确失败 |
 | “按标签找听记” | `dws minutes tag list --format json`，再用真实 `tagId` 执行 `dws minutes tag query --tag-id <tagId> --limit 10 --format json` | 不按标签名猜 ID；空标签直接结束，有 `nextToken` 时续拉或明确结果不完整 |
+| “新建或删除一个听记标签” | `dws minutes tag create --display-name "<名称>"` / `dws minutes tag delete --tag-id <真实tagId>` | 创建定义不自动关联听记；删除定义会异步清理所有听记关联，须锁定本人自定义标签 |
+| “给这条听记加标签或移除标签” | `dws minutes tag add --id <taskUuid> --tag-ids <真实tagIds>` / `dws minutes tag remove --id <taskUuid> --tag-ids <真实tagIds>` | 增量操作单条听记，原始输入1–20项；失败后保留已成功项并核对未知写结果 |
+| “看看可用纪要模板” | `dws minutes template list-system --format json` / `dws minutes template list-custom --format json` | 系统 templateId 与个人 templateKey 分开；空页仍按 meta.pagination 判断是否续页 |
+| “创建、修改或删除我的纪要模板” | `template create` / `template update` / `template delete`（前缀 `dws minutes`） | 用户确认标题和提示词后创建；update/delete使用真实 templateKey，不重新生成已有听记 |
+| “以后听记默认用这个模板” | `dws minutes template set-default --template-id <真实id>` 或 `--template-key <真实key>` | 必须二选一，不用空串占位；只影响后续听记 |
 | “查语音备忘” | `dws minutes audio-memo list --format json` | 属于独立原子查询；需要时间范围或分页参数时读取该 compact leaf Schema |
 
 需要根据逐字稿总结指定发言人的内容时读取 [发言人匹配流程](10-minutes-speaker-match.md)；用户已经确认“匿名发言人 → 姓名”的对应关系、准备执行标注替换时读取 [发言人纠正流程](11-minutes-speaker-correct.md)。两者都不能凭职位、语言风格或列表顺序自动认定身份。
@@ -41,6 +46,26 @@ dws minutes tag query --tag-id <tagId> --limit 10 --cursor <nextToken> --format 
 
 - 不按标签名称猜 `tagId`；`tag list` 明确返回空数组时直接交付“当前无标签”，不再查 Help 或拿其他分组补位。
 - `tag query` 是单页原子查询；返回真实 `nextToken` 时继续续拉，或明确说明当前结果不完整。
+
+## 标签维护与纪要模板
+
+```text
+dws minutes tag create --display-name "项目复盘" --format json
+dws minutes tag add --id <taskUuid> --tag-ids <真实tagId> --format json
+dws minutes tag remove --id <taskUuid> --tag-ids <真实tagId> --format json
+dws minutes template list-system --locale zh_CN --format json
+dws minutes template list-custom --format json
+dws minutes template create --title "项目复盘" --prompt "总结结论、风险和行动项" --format json
+dws minutes template update --template-key <真实key> --title "项目复盘纪要" --format json
+dws minutes template set-default --template-key <真实key> --format json
+```
+
+- 写前按最终 leaf Schema 和 Runtime gate 确认，不为了绕过确认改用其他入口。
+- 标签 create 返回的 tagId 可直接用于后续关联；名称最多50个UTF-16单元。delete 删除定义，remove 仅移除单条听记关联，两者不可互换；删除标签不撤回已同步知识库文件。
+- 关联批量返回首个失败后的未处理项。`FAILED` 是终态未知，先按 tag query 等读取入口核对；`NOT_PROCESSED` 明确未执行。统一输出 partial_failure 仍为非零，不把成功项遗漏或自动重放。
+- 模板列表每次一页，即使 items 为空仍按 meta.pagination 续页，游标原样透传；系统模板续页保持 locale 不变。个人模板版本0有效。
+- 创建需 title、prompt；更新需 template-key 且至少显式提供 title/prompt/brief-intro 中一项。prompt的空格和换行保持原样，空简介不清空原值。系统 templateId 不可当个人 templateKey 使用。
+- 默认模板二选一；删除个人模板不清除默认设置，`wasDefault=null` 是未知而非false。模板变更不重新生成已有听记；写结果不确定时先 list-custom 对账。
 
 ## 逐字稿与行动项落盘
 

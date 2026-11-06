@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"unicode"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -24,7 +23,6 @@ const (
 	floatImageUpdateInputError  = "--file 与 --src 不能同时提供"
 	floatImageUpdateFieldsError = "--file、--src、--range、--width、--height、--offset-x、--offset-y 至少必须提供一个"
 	floatImagePlannedResource   = "<resourceUrl-after-upload>"
-	floatImageUploadTimeout     = 5 * time.Minute
 )
 
 type floatImageLocalFile struct {
@@ -301,7 +299,7 @@ func invalidFloatImageUploadURLError() error {
 
 func newFloatImageUploadClient() *http.Client {
 	return &http.Client{
-		Timeout: floatImageUploadTimeout,
+		Timeout: filePutClientTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

@@ -56,12 +56,12 @@ func TestCrossPlatformCoverageAicardPreflightErrorAndResourceCases(t *testing.T)
 		code  string
 		valid bool
 	}{
-		{"missing separator", "data:image/png;base64", "resource.invalid_data_uri", false},
-		{"invalid escaping", "data:image/png;base64,%zz", "resource.invalid_data_uri", false},
-		{"empty base64", "data:image/png;base64,", "resource.invalid_base64", false},
-		{"valid image encoding warns", "data:image/png;base64,YQ==", "resource.base64_image_unverified", true},
-		{"valid non-image base64", "data:text/plain;base64,YQ==", "", true},
-		{"plain data", "data:text/plain,hello", "", true},
+		{"missing separator", "data:image/png;base64", "resource.inline_data_unsupported", false},
+		{"invalid escaping", "data:image/png;base64,%zz", "resource.inline_data_unsupported", false},
+		{"empty base64", "data:image/png;base64,", "resource.inline_data_unsupported", false},
+		{"valid image encoding is unsupported", "data:image/png;base64,YQ==", "resource.inline_data_unsupported", false},
+		{"non-image inline data", "data:text/plain;base64,YQ==", "resource.inline_data_unsupported", false},
+		{"plain inline data", "data:text/plain,hello", "resource.inline_data_unsupported", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			message, _ := json.Marshal(map[string]any{"updateComponents": map[string]any{"components": []any{map[string]any{"url": tc.url, "nested": []any{map[string]any{"darkUrl": tc.url}}, "metadata": map[string]any{"imageUrl": "data:image/png;base64,bad!"}}}}})
@@ -74,8 +74,8 @@ func TestCrossPlatformCoverageAicardPreflightErrorAndResourceCases(t *testing.T)
 				found = found || d.Code == tc.code
 			}
 			for _, diagnostic := range r["diagnostics"].([]Diagnostic) {
-				if diagnostic.Code == tc.code && tc.valid && diagnostic.Severity != "warning" {
-					t.Fatal("compatible resources must only warn:", diagnostic)
+				if diagnostic.Code == tc.code && diagnostic.Severity != "error" {
+					t.Fatal("unsupported resources must fail:", diagnostic)
 				}
 			}
 			if r["valid"] != tc.valid || (tc.code != "" && !found) {
@@ -160,7 +160,9 @@ func TestCrossPlatformCoverageAicardRepeatedReferenceUsesVisitedNode(t *testing.
 		map[string]any{"id": "root", "component": "Column", "children": []any{"child", "child"}},
 		map[string]any{"id": "child", "component": "Text", "text": "shared"},
 	}}, "/0/createSurface")
-	if ds := p.checkReferences(s, "s"); len(ds) != 0 {
+	if ds := p.checkReferences(s, "s"); len(ds) != 1 ||
+		ds[0].Code != "reference.duplicate_child" || ds[0].Severity != "error" ||
+		ds[0].Pointer != "/0/createSurface/components/0/children/1" {
 		t.Fatal(ds)
 	}
 }

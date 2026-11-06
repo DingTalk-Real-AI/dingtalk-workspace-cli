@@ -13,6 +13,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -63,11 +64,16 @@ func runURLResolveCLI(t *testing.T, caller *urlResolveE2ECaller, args ...string)
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	stdout := &bytes.Buffer{}
 	root.SetOut(stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(append([]string{"aitable", "+url-resolve"}, args...))
-	err := corecmd.ExecuteForTest(root)
+	cmd, err := corecmd.ExecuteCForTest(root)
+	if err == nil {
+		_, _, err = output.EmitStoredResult(cmd)
+	}
 	return stdout.String(), err
 }
 

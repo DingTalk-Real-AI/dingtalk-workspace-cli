@@ -433,17 +433,21 @@ func TestCrossPlatformCoverageUpgradeBinaryHelpersFailureCoverage(t *testing.T) 
 		t.Fatalf("codesign lookup error = %v", err)
 	}
 	upgradeLookPath = func(string) (string, error) { return "/codesign", nil }
+	repairPath := filepath.Join(t.TempDir(), "binary")
+	if err := os.WriteFile(repairPath, []byte("unsigned"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	upgradeCommandOutput = func(name string, _ ...string) ([]byte, error) {
 		if name == "codesign" {
 			return []byte("denied"), fail
 		}
 		return nil, nil
 	}
-	if err := repairDarwinBinary("binary"); err == nil || !strings.Contains(err.Error(), "denied") {
+	if err := repairDarwinBinary(repairPath); err == nil || !strings.Contains(err.Error(), "denied") {
 		t.Fatalf("codesign execution error = %v", err)
 	}
 	upgradeCommandOutput = func(string, ...string) ([]byte, error) { return nil, nil }
-	if err := repairDarwinBinary("binary"); err != nil {
+	if err := repairDarwinBinary(repairPath); err != nil {
 		t.Fatalf("codesign success = %v", err)
 	}
 	upgradeMkdirAll = func(string, os.FileMode) error { return nil }

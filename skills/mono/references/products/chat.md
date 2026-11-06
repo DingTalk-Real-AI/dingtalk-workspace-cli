@@ -2470,7 +2470,9 @@ dws chat message send --conversation-id <openConversationId> --msg-type image --
 
 **注意：send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
 
-`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON）。生成内容时可参考 [A2UI 展示卡片指南](chat/a2ui.md)，使用完整的 `createSurface`、组件定义和数据绑定创建卡片。CLI 会解析为 `a2uiMessages`，并用换行拼接为 `summary`，单聊传 userId 时自动解析为 openDingTalkId。创建时默认 `flowStatus=PROCESSING`。可选 `--a2ui-annotations` 接受 JSON 对象数组并透传为 `a2uiAnnotations`，支持 `[]`；省略时创建请求不携带该字段。
+`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON）。生成内容时可参考 [A2UI 展示卡片指南](chat/a2ui.md)，使用完整的 `createSurface`、组件定义和数据绑定创建卡片。CLI 会解析为 `a2uiMessages`，单聊传 userId 时自动解析为 openDingTalkId。`--summary` 写入顶层 `summary`，是卡片无法渲染时的降级文案，省略时为 `互动卡片`；`--support-forward` 写入顶层 `supportForward`，默认 `false`。创建时默认 `flowStatus=PROCESSING`。群聊支持 `--at-open-dingtalk-ids`（成员声明，含重复最多100）和 `--at-all`，透传 `atOpenDingTalkIds` / `atAll`；仅显式通知启用一致性校验。支持同批静态绑定，后续流式正文可延后；代码示例不算 @。不传通知参数时保留原正文，单聊拒绝通知参数。流式推荐固定 @ 组件、仅更新绑定正文；更新不新增通知，参见 A2UI 指南。`DWS_A2UI_MENTIONS_DISABLED=1` 可停止新通知和改写。可选 `--a2ui-annotations` 接受 JSON 对象数组并透传为 `a2uiAnnotations`，支持 `[]`；省略时创建请求不携带该字段。完结后的会话摘要由 `artifact` 注解生成，见指南的“组件注解”。创建时还可选 `--extension '{"scene":"example"}'`，接受 key 非空白、value 为字符串的 JSON 对象并透传为 `extension`；支持 `{}` 和空字符串值，省略时不携带该字段。业务 key 由服务端白名单控制，传入不代表已放行；系统字段保持服务端受控语义。`null`、非字符串值及空白 key 会在发送前拒绝。
+
+隐藏发送者头像：目标环境已将 `hide_avatar` 加入服务端白名单时，创建卡片可传 `--extension '{"hide_avatar":"true"}'`。值是字符串 `"true"`，不是布尔值；它是卡片消息扩展，不放入 A2UI `createSurface`、组件或 surface metadata。未放行时该业务 key 会被过滤，DWS 不会修改白名单；未知 key 的含义须先确认。此扩展不影响服务端生成的系统字段和权限元数据。
 ```
 Usage:
   dws chat message send-card [flags]
