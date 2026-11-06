@@ -1,0 +1,17 @@
+# 技能打包排除规则
+
+# 环境变量文件（旧版配置方式，已弃用）
+.env
+*.env
+.env.local
+.env.*.local
+
+# dingtalk-skill-creator 工具脚本（仅用于创建技能，不属于技能本身）
+scripts/init_skill.py
+scripts/package_skill.py
+scripts/quick_validate.py
+scripts/fetch_mcp_tools.py
+scripts/generate_catalog_md.py
+
+# 注意：mcp-config.json 需要打包分发，不在此排除
+# 该文件中的 url 字段为空，由链路上下文注入
