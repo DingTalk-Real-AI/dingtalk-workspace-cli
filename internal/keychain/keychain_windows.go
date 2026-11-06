@@ -46,12 +46,7 @@ var registryOpenReadKey = registry.OpenKey
 
 const regRootPath = `Software\DwsCli\keychain`
 
-// StorageDir returns the storage directory for a given service name on Windows.
-// The Windows keychain backend keeps secrets in DPAPI-protected HKCU registry
-// values rather than on disk, so this path is used only by the portable
-// auth-bundle export/import (internal/auth) to colocate config. When the
-// DWS_KEYCHAIN_DIR environment variable is set, the storage root is taken from
-// that env var; otherwise it defaults to %LocalAppData%\<service>.
+// StorageDir returns the bundle directory; Windows credentials remain in DPAPI-protected registry values.
 func StorageDir(service string) string {
 	if override := os.Getenv(StorageDirEnv); override != "" {
 		return filepath.Join(override, service)
@@ -69,21 +64,22 @@ func StorageDir(service string) string {
 
 func registryPathForService(service string) string {
 	path := regRootPath + `\` + safeRegistryComponent(service)
-	namespace := strings.TrimSpace(os.Getenv(TestNamespaceEnv))
-	if namespace == "" {
-		return path
+	if namespace := strings.TrimSpace(os.Getenv(TestNamespaceEnv)); namespace != "" {
+		path += `\test-` + registryNamespaceHash(namespace)
 	}
+	if directory := os.Getenv(StorageDirEnv); directory != "" {
+		path += `\dir-` + registryNamespaceHash(directory)
+	}
+	return path
+}
 
-	// Windows stores credentials in HKCU instead of DWS_KEYCHAIN_DIR. Tests set
-	// an explicit process namespace so concurrent package binaries cannot
-	// delete each other's credentials. Hash it to avoid leaking temp paths or
-	// introducing registry separators.
+func registryNamespaceHash(namespace string) string {
 	namespace = filepath.Clean(namespace)
 	if absolute, err := filepath.Abs(namespace); err == nil {
 		namespace = absolute
 	}
 	sum := sha256.Sum256([]byte(strings.ToLower(namespace)))
-	return fmt.Sprintf(`%s\test-%x`, path, sum[:16])
+	return fmt.Sprintf("%x", sum[:16])
 }
 
 var safeRegRe = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
