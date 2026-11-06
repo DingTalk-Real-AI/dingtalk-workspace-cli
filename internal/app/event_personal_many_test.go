@@ -96,11 +96,10 @@ func TestPreparePersonalMultiOptionsCombinationMatrix(t *testing.T) {
 			wantErr: "multiple event keys are required",
 		},
 		{
-			name: "unknown event",
+			name: "unknown event subscribes as application event",
 			opts: personalConsumeOptions{
 				EventKeys: []string{personal.EventMention, "user_im_unknown"},
 			},
-			wantErr: "unknown personal event key",
 		},
 		{
 			name:    "missing user target",

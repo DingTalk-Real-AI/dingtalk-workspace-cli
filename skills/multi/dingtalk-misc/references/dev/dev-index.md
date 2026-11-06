@@ -15,7 +15,8 @@ leaf 的 compact Schema。
 | H5、PC 主页与 OMP 地址 | `dws dev app webapp ...` | [`webapp.md`](./webapp.md) |
 | 机器人配置、启停、提交审核 | `dws dev app robot ...` | [`robot.md`](./robot.md) |
 | 版本历史、待发布版本、创建、审批、发布与状态 | `dws dev app version ...` | [`version.md`](./version.md) |
-| 应用事件订阅 | `dws dev app event ...` | [`event.md`](./event.md) |
+| 应用事件订阅（应用接收哪些钉钉回调事件） | `dws dev app event ...` | [`event.md`](./event.md) |
+| 应用事件定义配置（企业自建应用产生什么事件：草稿、校验、启用、下线） | `dws dev event ...` | [`event-definition.md`](./event-definition.md) |
 | 本机机器人连接器、Stream/长连接实例与健康状态 | `dws dev connect ...` | [`connect.md`](./connect.md) |
 | MCP 服务、工具、鉴权、凭证与协作者 | `dws dev mcp ...` | [`mcp.md`](./mcp.md) |
 | 轻应用创建即发布、更新、删除、列表、详情、appKey/secret 凭证、配额与软删（独立于普通统一应用） | `dws dev liteapp ...` | [`liteapp.md`](./liteapp.md) |

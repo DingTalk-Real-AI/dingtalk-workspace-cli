@@ -125,15 +125,15 @@ func TestDevSchemaAllDumpToolsParseable(t *testing.T) {
 }
 
 // TestDevSchemaAllDumpCountStable 是队列 B192 的补充观察断言：dev 子树装配 dump
-// 的 tool 数量稳定（当前 75；包含 29 条静态 dev mcp 开发命令、显式 hybrid dev connect、
-// 两条应用可见范围命令及六条轻应用命令，不包含凭证重置），作为回归
-// 基线快照。数量变化提示 dev 命令表面变更，需复核装配。
+// 的 tool 数量稳定（当前 84；包含最新 main 的 dev 工具、显式 hybrid
+// dev connect、应用可见范围、liteapp 和 9 条 dev event 应用事件定义配置命令，
+// 不包含凭证重置），作为回归基线快照。数量变化提示 dev 命令表面变更，需复核装配。
 func TestDevSchemaAllDumpCountStable(t *testing.T) {
 	dump := assembleDevSchemaAllDump(t)
 	for _, p := range dump.Products {
 		if p.ID == "dev" {
-			if len(p.Tools) != 75 {
-				t.Fatalf("dev schema --all tool count = %d, want 75 (scope get/set included; credential reset excluded)", len(p.Tools))
+			if len(p.Tools) != 84 {
+				t.Fatalf("dev schema --all tool count = %d, want 84 (scope, liteapp and event tools included; credential reset excluded)", len(p.Tools))
 			}
 			return
 		}

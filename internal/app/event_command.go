@@ -110,8 +110,8 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	cmd.AddCommand(
 		newEventListenIMCommand(globalFlags...),
 		newEventConsumeCommand(globalFlags...),
-		newEventListCommand(),
-		newEventSchemaCommand(),
+		newEventListCommand(globalFlags...),
+		newEventSchemaCommand(globalFlags...),
 		newEventStatusCommandWithFlags(globalFlags...),
 		newEventStopCommandWithFlags(globalFlags...),
 		newEventBusCommand(),
@@ -171,6 +171,10 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 全部 consumer 就绪后 stderr 输出 [event] ready event_count=<n> bus_pid=<pid>。
 --event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费
 通常不需要设置。
+
+内置目录外的 event_key 为应用事件，同样可订阅；不支持 --user/--group/--query
+等目标与过滤参数。--flatten 输出中业务字段位于 payload，业务结构先用
+event schema 查看。
 
 互动卡片操作使用 event_key user_card_action_triggered 和 --flatten。回答、问题、
 操作者、业务与会话上下文位于 payload.body；优先读取结构化的
@@ -808,7 +812,7 @@ type listEntry struct {
 	PerType map[string]transport.Counters `json:"per_event_type,omitempty"`
 }
 
-func newEventListCommand() *cobra.Command {
+func newEventListCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var (
 		all            bool
 		allEditions    bool
@@ -818,11 +822,13 @@ func newEventListCommand() *cobra.Command {
 		category       string
 		enabledOnly    bool
 		includePending bool
+		keyword        string
+		producerAppID  string
 	)
 	cmd := &cobra.Command{
 		Use:               "list",
 		Short:             "列出个人事件目录",
-		Long:              "列出当前支持的个人事件目录；使用 --category card 只查看互动卡片事件。",
+		Long:              "列出个人事件目录：官方事件来自 CLI 内置定义（离线可用），自建应用事件登录后从远端目录获取；--category card 只看互动卡片，--category appEvent 只看应用事件。",
 		Example:           "  dws event list --category card --format json",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -836,13 +842,17 @@ func newEventListCommand() *cobra.Command {
 					return fmt.Errorf("event list: %w", err)
 				}
 				return eventRunPersonalList(c, personalListOptions{
-					Category:       category,
-					EnabledOnly:    enabledOnly,
-					IncludePending: includePending,
-					Format:         formatRaw,
+					Category:         category,
+					EnabledOnly:      enabledOnly,
+					IncludePending:   includePending,
+					Format:           formatRaw,
+					Keyword:          keyword,
+					ProducerAppID:    producerAppID,
+					ExplicitToken:    eventExplicitToken(globalFlags),
+					ClientIDOverride: eventExplicitClientID(globalFlags),
 				})
 			}
-			if err := rejectChangedFlags(c, "user", "category", "enabled-only", "include-pending"); err != nil {
+			if err := rejectChangedFlags(c, "user", "category", "enabled-only", "include-pending", "keyword", "producer-app-id"); err != nil {
 				return fmt.Errorf("event list: %w", err)
 			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
@@ -861,7 +871,9 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
-	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card|contact|minutes|calendar")
+	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card|contact|minutes|calendar|appEvent；远端目录可能返回其他分类")
+	cmd.Flags().StringVar(&keyword, "keyword", "", "按 eventKey 精确匹配（忽略大小写，登录后由远端目录执行）")
+	cmd.Flags().StringVar(&producerAppID, "producer-app-id", "", "按事件生产者应用 ID 筛选应用事件")
 	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
 	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
 	hideEventInternalFlags(cmd, "as", "all", "all-editions", "client-id")
@@ -880,9 +892,9 @@ func newEventListCommand() *cobra.Command {
 			},
 			Description: "列出支持的个人事件目录与状态说明",
 			Interface: &contract.InterfaceSpec{
-				Mode:         "local",
+				Mode:         "composite",
 				Availability: "available",
-				Reason:       "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
+				Reason:       "Reviewed composite workflow: official events come from the CLI built-in registry and organization app events are fetched only through the remote catalog interface; no single pinned RPC represents the result.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出支持的个人事件目录与状态说明",
