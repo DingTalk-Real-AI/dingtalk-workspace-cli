@@ -66,6 +66,14 @@ Agent 必须结合投递路径判断 `EVENT_NOT_AVAILABLE` / `event.notAvailable
 
 **实现侧软开仍待办**：草稿业务版本按 experienceUids 匹配体验人并下推的路径需实现补齐或缺陷修复，随后验证体验人能收到、非体验人不能因此获得全量开放、全量仍按已发布版本生效。本次仅修 Skill/docs，不改 open-callback 或二方包，不宣称已跑通。
 
+## 安全边界
+
+- 应用事件只能使用登录后远端目录返回的真实 `eventKey`、`producer_unified_app_id` 和 `scope`；不把任意字符串当作可消费事件，也不把定义存在、目录命中或 `scope` 元数据当作消费授权。
+- 目录查询、Schema 查询与 consume 使用同一 `--profile` 和组织身份；零命中、候选不唯一、应用筛选请求失败或目录不完整时停止，不降级为“事件不存在”。
+- consume 只允许应用事件规定的 `ruleType=all` 与空 filterRule；不拼接用户、群组、角色或查询过滤条件。`ready` 只证明订阅建立，不证明收到业务事件。
+- DRAFT、ONLINE 草稿版本、publish、offline 和 debug 的状态必须按真实 `status`、`configRevision`、发布快照及阶段回执分别判断；Schema 可读不等于事件已上线或当前环境可投递。
+- 本参考只描述发现、Schema 和消费契约，不自动执行事件写入、调试、发布、下线或真实业务推送；需要写操作时转到应用事件定义流程，并按其确认和回读规则执行。
+
 ## 开放态与验收
 
 | 能力 | 当前分支契约与验收依据 |
