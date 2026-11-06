@@ -180,10 +180,9 @@ func newDevEventCommand(runner executor.Runner) *cobra.Command {
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
-		},
 	}
+	// GroupNavigationOnly 由 newGroupCommand 统一接管 RunE（裸调用展示帮助、
+	// 位置参数按策略拒绝），这里不再声明会被覆盖的 RunE 闭包。
 	newGroupCommand(root)
 	root.AddCommand(
 		newDevEventListCommand(runner),

@@ -642,3 +642,17 @@ func TestCrossPlatformCoverageEnsurePersonalSubscriptionAppEventRuleFallback(t *
 		t.Fatalf("ensure = (%#v, %q, %q)", sub, eventKey, ruleType)
 	}
 }
+
+func TestCrossPlatformCoverageRemoteEventSchemaWrapsNonCredentialIdentityError(t *testing.T) {
+	configDir := t.TempDir()
+	startPersonalCatalogSeams(t, configDir)
+	testseam.Swap(t, &personalResolveEventIdentity, func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return personal.Identity{}, errors.New("identity backend unavailable")
+	})
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runRemoteEventSchema(cmd, "app_user_demo_created_event", "json", false, "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "event schema: identity backend unavailable") {
+		t.Fatalf("identity error wrap = %v", err)
+	}
+}

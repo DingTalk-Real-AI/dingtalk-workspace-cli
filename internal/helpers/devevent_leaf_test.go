@@ -628,18 +628,6 @@ func TestCrossPlatformCoverageDevEventApplyDefinitionFileEventKeyMismatch(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageDevEventGroupRootRunERendersHelp(t *testing.T) {
-	cmd := newDevEventCommand(&captureRunner{})
-	if cmd.RunE == nil {
-		t.Fatal("dev event group root must declare RunE")
-	}
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatalf("root RunE help error = %v", err)
-	}
-}
-
 func TestCrossPlatformCoverageDevEventApplyDefinitionFileMarshalFailure(t *testing.T) {
 	path := writeDevEventFile(t, "marshal.json", `{"eventKey":"app_user_alpha_created_event","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":{}}`)
 	defer os.Remove(path)
