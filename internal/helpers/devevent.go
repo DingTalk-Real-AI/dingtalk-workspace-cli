@@ -85,6 +85,10 @@ const (
 	devEventDebugTimeoutMax = 5 * time.Minute
 )
 
+// devEventMarshalJSON 是 payloadSchema/samplePayload 序列化的测试缝：
+// JSON 解码产物永远可序列化，该错误分支只能通过注入确定性复现。
+var devEventMarshalJSON = json.Marshal
+
 // devEventReadFile 是文件读取的测试缝：Stat 成功之后再读取失败（权限被
 // 并发改动、文件被换掉）只能靠替换这个变量确定性复现。
 var devEventReadFile = func(path string) ([]byte, error) {
@@ -1095,7 +1099,7 @@ func devEventApplyDefinitionFile(params map[string]any, matchEventKey bool) erro
 	for _, field := range devEventDefinitionFields {
 		if value, ok := definition[field]; ok {
 			if field == "payloadSchema" || field == "samplePayload" {
-				encoded, err := json.Marshal(value)
+				encoded, err := devEventMarshalJSON(value)
 				if err != nil {
 					return apperrors.NewValidation(
 						fmt.Sprintf("%s 的 %s 无法序列化：%v", path, field, err),

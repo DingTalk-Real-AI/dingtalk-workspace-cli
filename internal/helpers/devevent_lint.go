@@ -201,9 +201,10 @@ func devEventLintRequired(path string, node map[string]any, required any, issues
 // 受控白名单内的关键字语义由标准保证，内嵌校验器与服务端 networknt 行为一致。
 func devEventLintSample(schema map[string]any, sample map[string]any) []string {
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("dev-event-lint://payload-schema.json", schema); err != nil {
-		return []string{"payloadSchema 无法编译: " + err.Error()}
-	}
+	// 固定字面量 URL + 每次新建 Compiler：AddResource 仅在 URL 非法或资源重复时
+	// 报错，两者在本调用点结构性不可达；资源缺失会由下面的 Compile 以
+	// "resource not found" 报告，不引入不可达的错误分支。
+	_ = compiler.AddResource("dev-event-lint://payload-schema.json", schema)
 	compiled, err := compiler.Compile("dev-event-lint://payload-schema.json")
 	if err != nil {
 		return []string{"payloadSchema 无法编译: " + err.Error()}

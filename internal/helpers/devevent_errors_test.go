@@ -15,10 +15,12 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -210,5 +212,72 @@ func TestCrossPlatformCoverageDevEventRunnerErrorCallError(t *testing.T) {
 	}
 	if requestTyped.FailureStage != "jsonrpc" {
 		t.Fatalf("stage = %q, want jsonrpc", requestTyped.FailureStage)
+	}
+}
+
+func TestCrossPlatformCoverageDevEventRunnerErrorPreservesFullRetryContract(t *testing.T) {
+	next := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	original := apperrors.NewAPI("business error: success=false",
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "E_FULL_CONTRACT", TechnicalDetail: "tech-detail"}),
+		apperrors.WithDetails(map[string]any{"origin": "test"}),
+		apperrors.WithRetryAfterSeconds(30),
+		apperrors.WithNextRetryAt(next),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRPCCode(42),
+		apperrors.WithAvailableFlags("event-key", "file"),
+		apperrors.WithSnapshot("/tmp/snap.json"),
+		apperrors.WithRPCData(json.RawMessage(`{"k":"v"}`)),
+	)
+	wrapped := devEventRunnerError(original)
+	var typed *apperrors.Error
+	if !stderrors.As(wrapped, &typed) || typed == nil {
+		t.Fatalf("wrapped error is not *apperrors.Error: %v", wrapped)
+	}
+	if got := typed.Snapshot; got != "/tmp/snap.json" {
+		t.Fatalf("Snapshot = %q", got)
+	}
+	if typed.RetryAfterSeconds == nil || *typed.RetryAfterSeconds != 30 {
+		t.Fatalf("RetryAfterSeconds = %v", typed.RetryAfterSeconds)
+	}
+	if typed.NextRetryAt == nil || !typed.NextRetryAt.Equal(next) {
+		t.Fatalf("NextRetryAt = %v", typed.NextRetryAt)
+	}
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("ExecutionStarted = %v", typed.ExecutionStarted)
+	}
+	if typed.RPCCode != 42 {
+		t.Fatalf("RPCCode = %d", typed.RPCCode)
+	}
+	if len(typed.AvailableFlags) != 2 {
+		t.Fatalf("AvailableFlags = %v", typed.AvailableFlags)
+	}
+	if len(typed.RPCData) == 0 {
+		t.Fatal("RPCData lost")
+	}
+	if got := typed.Details["origin"]; got != "test" {
+		t.Fatalf("Details[origin] = %v", got)
+	}
+	if got := typed.Details["errorCode"]; got != "E_FULL_CONTRACT" {
+		t.Fatalf("Details[errorCode] = %v", got)
+	}
+}
+
+func TestCrossPlatformCoverageDevEventCategoryErrorConstructors(t *testing.T) {
+	for _, tc := range []struct {
+		category apperrors.Category
+		check    func(*apperrors.Error) bool
+	}{
+		{apperrors.CategoryAuth, func(e *apperrors.Error) bool { return e.ExitCode() == 2 }},
+		{apperrors.CategoryDiscovery, func(e *apperrors.Error) bool { return e.ExitCode() == 6 }},
+		{apperrors.CategoryInternal, func(e *apperrors.Error) bool { return e.ExitCode() == 5 }},
+	} {
+		err := devEventCategoryError(tc.category, "boom", nil)
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) {
+			t.Fatalf("%s: not typed: %v", tc.category, err)
+		}
+		if !tc.check(typed) {
+			t.Fatalf("%s: exit code = %d", tc.category, typed.ExitCode())
+		}
 	}
 }

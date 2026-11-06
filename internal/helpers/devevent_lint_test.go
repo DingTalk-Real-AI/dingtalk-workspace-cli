@@ -248,3 +248,61 @@ func TestCrossPlatformCoverageDevEventLintDepthLimit(t *testing.T) {
 		t.Fatalf("depth => valid=%v issues=%s", valid, lintIssueText(issues))
 	}
 }
+
+func TestCrossPlatformCoverageDevEventLintMalformedStructures(t *testing.T) {
+	cases := []struct {
+		name    string
+		def     string
+		wantSub string
+	}{
+		{"root type", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"string"},"samplePayload":{}}`, "根类型必须是 object"},
+		{"properties not object", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object","properties":"x"},"samplePayload":{}}`, "properties: 必须是对象"},
+		{"property not object", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object","properties":{"a":"str"}},"samplePayload":{}}`, "字段定义必须是对象"},
+		{"items on non-array", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object","items":{"type":"string"}},"samplePayload":{}}`, "非 array 类型不允许声明"},
+		{"required not array", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object","required":"a"},"samplePayload":{}}`, "required: 必须是字符串数组"},
+		{"required non-string", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object","required":[1]},"samplePayload":{}}`, "required: 必须是字符串数组"},
+		{"schema compile fails", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":5},"samplePayload":{}}`, "无法编译"},
+		{"dangling ref fails compile", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"$ref":"dev-event-lint://missing.json#"},"samplePayload":{}}`, "无法编译"},
+		{"payloadSchema missing", `{"eventKey":"app_user_demo","name":"n","description":"d","samplePayload":{}}`, "缺少必填键 \"payloadSchema\""},
+		{"payloadSchema null", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":null,"samplePayload":{}}`, "payloadSchema 是 null"},
+		{"payloadSchema not object", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":"str","samplePayload":{}}`, "payloadSchema 必须是 JSON 对象"},
+		{"samplePayload null", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":null}`, "samplePayload 是 null"},
+		{"samplePayload not object", `{"eventKey":"app_user_demo","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":"str"}`, "samplePayload 必须是 JSON 对象"},
+		{"eventKey too long", `{"eventKey":"app_user_` + strings.Repeat("x", 130) + `","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":{}}`, "eventKey 超过"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			valid, issues := runDevEventLintOnContent(t, tc.def)
+			if valid {
+				t.Fatalf("expected invalid, issues = %v", issues)
+			}
+			if text := lintIssueText(issues); !strings.Contains(text, tc.wantSub) {
+				t.Fatalf("issues = %q, want containing %q", text, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDevEventLintRequiresFileFlag(t *testing.T) {
+	cmd := newDevEventLintCommand(nil)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--file 为必填") {
+		t.Fatalf("lint without --file error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageRunDevEventLintRequiresPathDirect(t *testing.T) {
+	cmd := newDevEventLintCommand(nil)
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	if err := runDevEventLint(cmd, map[string]any{}); err == nil || !strings.Contains(err.Error(), "--file 为必填") {
+		t.Fatalf("runDevEventLint without path error = %v", err)
+	}
+}

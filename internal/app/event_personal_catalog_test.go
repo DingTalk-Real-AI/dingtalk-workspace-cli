@@ -27,6 +27,8 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/spf13/cobra"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -514,4 +516,129 @@ func findPersonalCatalogItem(items []personal.Definition, eventKey string) (pers
 		}
 	}
 	return personal.Definition{}, false
+}
+
+func TestCrossPlatformCoveragePersonalEventListWarnNilAndRunErrorWrap(t *testing.T) {
+	healthyDir := t.TempDir()
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": map[string]any{"total": 0, "items": []map[string]any{}}})
+	}))
+	defer healthy.Close()
+	if err := os.WriteFile(filepath.Join(healthyDir, "mcp_url"), []byte(healthy.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, healthyDir)
+	// warn == nil falls back to io.Discard without panic on a healthy catalog.
+	if _, err := loadPersonalEventCatalog(context.Background(), personalListOptions{}, nil); err != nil {
+		t.Fatalf("nil-warn catalog error = %v", err)
+	}
+
+	configDir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, configDir)
+
+	// Filtered catalog failure propagates through runPersonalEventList with the
+	// "event list --as user" wrap.
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runPersonalEventList(cmd, personalListOptions{Keyword: "app_user_never_match"})
+	if err == nil || !strings.Contains(err.Error(), "event list --as user") {
+		t.Fatalf("runPersonalEventList error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoveragePersonalEventCatalogCategorySkipAndDescriptionFallback(t *testing.T) {
+	configDir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 2,
+				"items": []map[string]any{
+					{"eventKey": "app_user_other_created_event", "name": "Other", "category": "other", "event_source": "appEvent"},
+					{"eventKey": "app_user_demo_created_event", "name": "Demo", "category": "appEvent", "event_source": "appEvent"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, configDir)
+
+	items, err := loadPersonalEventCatalog(context.Background(), personalListOptions{Category: "appEvent"}, nil)
+	if err != nil {
+		t.Fatalf("catalog error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %#v, want only the appEvent entry", items)
+	}
+	if items[0].EventKey != "app_user_demo_created_event" {
+		t.Fatalf("item = %#v", items[0])
+	}
+	if items[0].Description != "Demo" {
+		t.Fatalf("empty description should fall back to name, got %q", items[0].Description)
+	}
+}
+
+func TestCrossPlatformCoverageRemoteEventSchemaDefaultFormatAndErrorWrap(t *testing.T) {
+	configDir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, configDir)
+
+	cmd := &cobra.Command{}
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetContext(context.Background())
+	// Empty format defaults to json; a generic transport failure is wrapped by
+	// runRemoteEventSchema instead of a specialized not-found mapping.
+	err := runRemoteEventSchema(cmd, "app_user_demo_created_event", "", false, "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "event schema") {
+		t.Fatalf("runRemoteEventSchema error = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("unexpected output on failure: %q", out.String())
+	}
+}
+
+func TestCrossPlatformCoverageEnsurePersonalSubscriptionAppEventRuleFallback(t *testing.T) {
+	configDir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"items": []map[string]any{{"subscribe_id": "sub-1", "source_id": "open"}},
+			},
+		})
+	}))
+	defer srv.Close()
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(srv.URL+"\n"), 0o600); err != nil {
+		t.Fatalf("write mcp_url: %v", err)
+	}
+	startPersonalCatalogSeams(t, configDir)
+
+	client := personal.NewClient(personalEventControlBaseURL("", configDir), personal.Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	sub, eventKey, ruleType, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{
+		SubscribeID: "sub-1",
+		EventKey:    "app_user_demo_created_event",
+	})
+	if err != nil {
+		t.Fatalf("ensurePersonalSubscription error = %v", err)
+	}
+	if sub.SubscribeID != "sub-1" || eventKey != "app_user_demo_created_event" || ruleType != "all" {
+		t.Fatalf("ensure = (%#v, %q, %q)", sub, eventKey, ruleType)
+	}
 }

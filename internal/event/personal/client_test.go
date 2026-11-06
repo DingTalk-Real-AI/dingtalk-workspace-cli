@@ -15,6 +15,7 @@ package personal
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1301,4 +1302,108 @@ func captureClientDebugLogs(t *testing.T) *bytes.Buffer {
 		slog.SetDefault(previous)
 	})
 	return &buf
+}
+
+func TestCrossPlatformCoverageClientDecodingAndCatalogEdges(t *testing.T) {
+	var ev Event
+	if err := ev.UnmarshalJSON([]byte("{bad json")); err == nil {
+		t.Fatal("Event.UnmarshalJSON bad object should fail")
+	}
+	var listResult dwsEventListResult
+	if err := listResult.UnmarshalJSON([]byte(`{"total":1,`)); err == nil {
+		t.Fatal("dwsEventListResult.UnmarshalJSON truncated object should fail")
+	}
+
+	ctx := context.Background()
+	identity := Identity{AccessToken: "token", ClientID: "client", SourceID: "open"}
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failing.Close()
+	failClient := NewClient(failing.URL, identity)
+	if _, err := failClient.ListEvents(ctx); err == nil {
+		t.Fatal("ListEvents server error should propagate")
+	}
+	if _, err := failClient.ListCatalog(ctx, CatalogOptions{}); err == nil {
+		t.Fatal("ListCatalog server error should propagate")
+	}
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 1,
+				"items": []map[string]any{{
+					"eventKey":     "app_user_demo_event",
+					"name":         "Demo",
+					"category":     "appEvent",
+					"event_source": "appEvent",
+				}},
+			},
+		})
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, identity)
+	events, err := c.ListCatalog(ctx, CatalogOptions{Category: "appEvent", SourceType: "appEvent"})
+	if err != nil {
+		t.Fatalf("ListCatalog() error = %v", err)
+	}
+	if len(events) != 1 || events[0].EventKey != "app_user_demo_event" {
+		t.Fatalf("ListCatalog() events = %#v", events)
+	}
+	if got := gotQuery.Get("category"); got != "appEvent" {
+		t.Fatalf("category query = %q", got)
+	}
+	if got := gotQuery.Get("sourceType"); got != "appEvent" {
+		t.Fatalf("sourceType query = %q", got)
+	}
+
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": map[string]any{"total": 0, "items": []map[string]any{}}})
+	}))
+	defer empty.Close()
+	if events, err := NewClient(empty.URL, identity).ListCatalog(ctx, CatalogOptions{}); err != nil || len(events) != 0 {
+		t.Fatalf("empty catalog = (%#v, %v)", events, err)
+	}
+
+	pages := 0
+	runaway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		pages++
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"total": 100000,
+				"items": []map[string]any{{"eventKey": fmt.Sprintf("app_user_runaway_%d", pages)}},
+			},
+		})
+	}))
+	defer runaway.Close()
+	if _, err := NewClient(runaway.URL, identity).ListCatalog(ctx, CatalogOptions{}); err == nil || !strings.Contains(err.Error(), "exceeded guard") {
+		t.Fatalf("runaway catalog error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageClientGetSchemaFallsBackToSnakePayloadSchema(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"eventKey":       "app_user_demo_event",
+				"displayName":    "Demo",
+				"payload_schema": map[string]any{"type": "object"},
+			},
+		})
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	result, err := c.GetSchema(context.Background(), "app_user_demo_event", "")
+	if err != nil {
+		t.Fatalf("GetSchema() error = %v", err)
+	}
+	if result.PayloadSchema == nil {
+		t.Fatal("GetSchema() should fall back to payload_schema when payloadSchema is absent")
+	}
 }

@@ -1202,3 +1202,18 @@ func TestIdempotencyKeySeparatesTargetUIDTypes(t *testing.T) {
 		t.Fatalf("idempotency key collapsed for different targetUidType: %s", staffIDKey)
 	}
 }
+
+func TestCrossPlatformCoverageBuildRuleParamRejectsBlankKeyAndAppEventTargets(t *testing.T) {
+	if _, _, err := BuildRuleParam("   ", RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
+		t.Fatalf("blank key error = %v", err)
+	}
+	for name, opts := range map[string]RuleOptions{
+		"--open-dingtalk-id": {OpenDingTalkID: "ou-1"},
+		"--group":            {GroupID: "cid-1"},
+		"--role-types":       {RoleTypes: []string{"creator"}},
+	} {
+		if _, _, err := BuildRuleParam("app_user_demo_event", opts); err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("%s rejection error = %v", name, err)
+		}
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -564,5 +566,88 @@ func TestDevEventEnvelopeExit(t *testing.T) {
 				t.Fatalf("dry_run = %#v (present=%v), want present=%v true", got, present, dryRun)
 			}
 		}
+	}
+}
+
+func TestCrossPlatformCoverageDevEventReadFileOpenError(t *testing.T) {
+	if _, err := devEventReadFile(filepath.Join(t.TempDir(), "definitely-missing.json")); err == nil {
+		t.Fatal("devEventReadFile on missing path should return the open error")
+	}
+}
+
+func TestCrossPlatformCoverageDevEventGroupBareRunShowsHelp(t *testing.T) {
+	cmd := newDevEventCommand(&captureRunner{})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("bare group Execute() error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDevEventErrorInfoUnknownOutcomeNormalization(t *testing.T) {
+	info := devEventErrorInfo(map[string]any{
+		"success":  false,
+		"errorMsg": "remote outcome unclear",
+		"outcome":  "UNKNOWN",
+	})
+	if info.Subtype != "remote_outcome_unknown" {
+		t.Fatalf("Subtype = %q", info.Subtype)
+	}
+	if info.ExecutionStarted == nil || !*info.ExecutionStarted {
+		t.Fatalf("ExecutionStarted = %v", info.ExecutionStarted)
+	}
+	if info.Retryable {
+		t.Fatal("unknown outcome must not be retryable")
+	}
+	if len(info.Actions) == 0 {
+		t.Fatal("unknown outcome must carry recovery actions")
+	}
+}
+
+func TestCrossPlatformCoverageDevEventAppendDebugNextCommandSkipsUnsafeTokens(t *testing.T) {
+	content := map[string]any{}
+	devEventAppendDebugNextCommand(content, map[string]any{
+		"unifiedAppId":           "app id with spaces",
+		"eventKey":               "app_user_demo",
+		"expectedConfigRevision": 2,
+	})
+	if _, exists := content["nextCommand"]; exists {
+		t.Fatalf("unsafe appID must not produce nextCommand, got %q", content["nextCommand"])
+	}
+}
+
+func TestCrossPlatformCoverageDevEventApplyDefinitionFileEventKeyMismatch(t *testing.T) {
+	path := writeDevEventFile(t, "mismatch.json", `{"eventKey":"app_user_alpha_created_event","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":{}}`)
+	defer os.Remove(path)
+	err := devEventApplyDefinitionFile(map[string]any{"eventKey": "app_user_beta_created_event", "file": path}, true)
+	if err == nil || !strings.Contains(err.Error(), "不一致") {
+		t.Fatalf("eventKey mismatch error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDevEventGroupRootRunERendersHelp(t *testing.T) {
+	cmd := newDevEventCommand(&captureRunner{})
+	if cmd.RunE == nil {
+		t.Fatal("dev event group root must declare RunE")
+	}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("root RunE help error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDevEventApplyDefinitionFileMarshalFailure(t *testing.T) {
+	path := writeDevEventFile(t, "marshal.json", `{"eventKey":"app_user_alpha_created_event","name":"n","description":"d","payloadSchema":{"type":"object"},"samplePayload":{}}`)
+	defer os.Remove(path)
+	testseam.Swap(t, &devEventMarshalJSON, func(any) ([]byte, error) {
+		return nil, errors.New("boom")
+	})
+	err := devEventApplyDefinitionFile(map[string]any{"file": path}, false)
+	if err == nil || !strings.Contains(err.Error(), "无法序列化") {
+		t.Fatalf("marshal failure error = %v", err)
 	}
 }
