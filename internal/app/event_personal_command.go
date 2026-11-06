@@ -291,7 +291,7 @@ func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) erro
 	return runPersonalEventConsumeMany(c, opts)
 }
 
-func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions) error {
+func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions) (resultErr error) {
 	ctx := c.Context()
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
@@ -440,6 +440,11 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		}
 	}
 
+	guard, err := personalAcquireSubscriptionGuard(ctx, workDir)
+	if err != nil {
+		return fmt.Errorf("personal subscription lifecycle: %w", err)
+	}
+	defer guard.Close()
 	var attempt *personalSubscriptionAttemptReservation
 	if strings.TrimSpace(opts.SubscribeID) == "" {
 		attempt, err = reservePersonalSubscriptionAttempts(
@@ -487,16 +492,38 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	}
 	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
 	ownsSubscription := selfCreated || opts.Ephemeral
+	share, err := personalRetainSubscription(workDir, sub.SubscribeID, ownsSubscription)
+	if err != nil {
+		classification := personalSubscriptionLocalFailure()
+		err = attempt.completeFailure(ctx, 0, 0, err, &classification)
+		return fmt.Errorf("retain personal subscription %s: %w", sub.SubscribeID, err)
+	}
+	if err := guard.Close(); err != nil {
+		_ = share.lease.Close()
+		classification := personalSubscriptionLocalFailure()
+		return attempt.completeFailure(ctx, 0, 0, err, &classification)
+	}
 	var cleanupOnce sync.Once
+	var cleanupErr error
 	cleanupOwnedSubscription := func(cleanupCtx context.Context) {
-		if !ownsSubscription {
-			return
-		}
 		cleanupOnce.Do(func() {
-			_ = personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID)
-			_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+			cleanupErr = share.release(cleanupCtx, func() error {
+				if err := personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID); err != nil {
+					return err
+				}
+				return personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+			})
 		})
 	}
+	defer func() {
+		cleanupOwnedSubscription(context.Background())
+		if cleanupErr != nil {
+			// The root signal handler can replace unrelated errors with SIGTERM.
+			// Preserve cleanup failure in stderr even when its exit code is 143.
+			fmt.Fprintf(c.ErrOrStderr(), "personal subscription cleanup %s failed: %v\n", sub.SubscribeID, cleanupErr)
+			resultErr = errors.Join(resultErr, fmt.Errorf("personal subscription cleanup %s: %w", sub.SubscribeID, cleanupErr))
+		}
+	}()
 	if err := personalUpsertRunState(workDir, personal.RunState{
 		SubscribeID:  sub.SubscribeID,
 		EventKey:     eventKey,
@@ -521,15 +548,8 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		cleanupOwnedSubscription(context.Background())
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	// Ownership-based cleanup: a subscription this run CREATED is
-	// unsubscribed on exit
-	// (any exit — SIGTERM / stdin-EOF / limit / timeout / error), so nothing
-	// leaks server-side. A subscription REUSED via --subscribe-id is left
-	// intact — the caller owns its lifecycle. --ephemeral forces cleanup
-	// either way.
-	if ownsSubscription {
-		defer cleanupOwnedSubscription(context.Background())
-	}
+	// Owned subscriptions are removed by the final participating consumer.
+	// Explicit borrowers also release their lease, but do not create ownership.
 
 	cfg.EventKey = eventKey
 	cfg.ReadySubscribeID = sub.SubscribeID

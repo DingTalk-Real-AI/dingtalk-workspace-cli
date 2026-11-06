@@ -26,7 +26,7 @@ import (
 // inaccessible" (FS error) by checking for this sentinel.
 var ErrBusy = errors.New("lock: file is held by another process")
 
-// File represents a held exclusive file lock. Close releases the lock and
+// File represents a held file lock. Close releases the lock and
 // closes the underlying file handle. A zero File is not usable.
 type File struct {
 	f *os.File
@@ -41,11 +41,21 @@ var acquireFileLock = lockFile
 // The directory containing path must already exist; callers should mkdir
 // with pkg/config.DirPerm beforehand.
 func TryAcquire(path string) (*File, error) {
+	return tryAcquire(path, acquireFileLock)
+}
+
+// TryAcquireShared holds a reader lease until Close. An exclusive lock on
+// the same path succeeds only after all reader leases have been released.
+func TryAcquireShared(path string) (*File, error) {
+	return tryAcquire(path, lockFileShared)
+}
+
+func tryAcquire(path string, acquire func(*os.File) error) (*File, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, config.FilePerm)
 	if err != nil {
 		return nil, fmt.Errorf("lock: open %s: %w", path, err)
 	}
-	if err := acquireFileLock(f); err != nil {
+	if err := acquire(f); err != nil {
 		_ = f.Close()
 		if isBusy(err) {
 			return nil, ErrBusy

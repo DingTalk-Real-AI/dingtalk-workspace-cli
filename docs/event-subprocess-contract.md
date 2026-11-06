@@ -72,13 +72,30 @@ or runtime failure (permissions, network, params) = non-zero, with no
 
 ### 4. Cleanup on exit (no `kill -9`)
 
-Ownership-based cleanup:
-- If this run **created** the subscription (no `--subscribe-id`), a clean
-  exit (SIGTERM / SIGINT / stdin-EOF / limit / timeout) **unsubscribes**
-  it server-side and sends Bye.
-- If `--subscribe-id` was passed (reusing an existing subscription), the
-  subscription is **left intact** — the caller owns its lifecycle.
-- `--ephemeral` remains as an explicit "always unsubscribe" override.
+Ownership-based cleanup for cooperating **single-event** consumers on the
+same host, using the same configuration directory:
+- Automatic creation can idempotently return the same subscription ID to
+  multiple consumers. Each holds a shared OS file lock until it exits. A
+  clean exit releases only that consumer's lease; server-side unsubscribe
+  happens only when the final participating consumer exits and the group
+  owns the subscription.
+- An automatic create (no `--subscribe-id`) or `--ephemeral` marks the
+  subscription as owned by the group. Ownership survives the original
+  owner's exit, so a remaining consumer can perform final cleanup.
+- A consumer with `--subscribe-id` also holds a lease. If every consumer
+  only borrows the subscription, final exit **leaves it intact**; an external
+  caller owns its lifecycle. An explicit borrower sharing an automatically
+  created subscription may become responsible for the group's final cleanup.
+- Ensure/create and final deletion use the same identity-scoped mutex, so a
+  starting consumer cannot acquire a lease on an ID being deleted. Waiting
+  for this local mutex does not retry a control-plane request.
+- Cleanup failure is returned and written to stderr, retaining the ownership
+  marker. The root signal handler still controls signal exit codes; a stopped
+  process alone does not prove successful remote cleanup.
+- Coordination requires all participants to use this single-event lifecycle.
+  Older binaries and multi-event commands retain their existing per-run
+  cleanup and can still delete a shared subscription. Mixing these modes,
+  cross-host coordination, and automatic crash recovery are not covered.
 - Help/docs warn: avoid `kill -9` (skips the unsubscribe → leaked
   server-side subscription: "subscription already exists" on restart,
   duplicate delivery). Prefer SIGTERM or closing stdin.
@@ -91,6 +108,13 @@ Ownership-based cleanup:
   subscription is still present (reuse case preserved).
 - T4c (control): `kill -9` leaves subscribe_id lingering (documented risk;
   we only guarantee SIGTERM is clean, we do not fix kill -9 itself).
+- T4d: two single-event consumers receive the same subscription ID; either
+  exit order preserves the subscription while one lease remains, and final
+  exit deletes it exactly once if the group owns it.
+- T4e: automatic-owner/explicit-borrower combinations preserve ownership
+  until final exit; a group containing only borrowers does not unsubscribe.
+- T4f: final deletion excludes concurrent creation, and a failed deletion
+  preserves its error, stderr diagnostic, and ownership marker.
 
 ### 5. Subscription-create retry orchestration and local guard
 
