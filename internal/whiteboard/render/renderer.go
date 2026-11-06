@@ -246,6 +246,19 @@ func (r *renderer) sceneBounds() Bounds {
 		}
 		add(current.worldX, current.worldY)
 		add(current.worldX+current.width, current.worldY+current.height)
+		if rendersRotation(current) {
+			angle, ok := finiteNumber(current.node["angle"])
+			if ok && angle != 0 {
+				// Retain the original box for unrotated placeholder labels.
+				cx, cy := current.worldX+current.width/2, current.worldY+current.height/2
+				sin, cos := math.Sincos(math.Mod(angle, 360) * math.Pi / 180)
+				for _, dx := range []float64{-current.width / 2, current.width / 2} {
+					for _, dy := range []float64{-current.height / 2, current.height / 2} {
+						add(cx+dx*cos-dy*sin, cy+dx*sin+dy*cos)
+					}
+				}
+			}
+		}
 	}
 	if math.IsInf(minX, 1) {
 		return Bounds{X: 0, Y: 0, Width: 640, Height: 360}
@@ -254,6 +267,26 @@ func (r *renderer) sceneBounds() Bounds {
 		X: minX - DefaultPadding, Y: minY - DefaultPadding,
 		Width:  math.Max(1, maxX-minX+2*DefaultPadding),
 		Height: math.Max(1, maxY-minY+2*DefaultPadding),
+	}
+}
+
+// rendersRotation follows the rendered geometry, including rotated placeholders.
+func rendersRotation(current *item) bool {
+	if current.placeholder {
+		return true
+	}
+	switch current.nodeType {
+	case "path":
+		pathObject, _ := current.node["path"].(map[string]any)
+		data, _ := stringValue(pathObject["data"])
+		_, okWidth := positiveNumber(pathObject["intrinsicWidth"])
+		_, okHeight := positiveNumber(pathObject["intrinsicHeight"])
+		return data == "" || !pathPattern.MatchString(data) || !okWidth || !okHeight
+	case "icon":
+		catalogID, _ := stringValue(current.node["catalogId"])
+		return catalogID != "task/task-done"
+	default:
+		return true
 	}
 }
 
