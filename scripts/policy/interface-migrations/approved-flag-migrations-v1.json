@@ -201,6 +201,26 @@
       },
       "state": "pending",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "kind": "requiredness_change",
+      "command": "dws dev liteapp create",
+      "flag": {
+        "name": "desc",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "required": true,
+          "scope": "local"
+        }
+      },
+      "state": "pending",
+      "reason": "按轻应用创建产品契约将 --desc 收紧为 trim 后非空必填；Schema、帮助与运行时校验同步升级。旧客户端省略 desc 的调用需要迁移到显式描述后再发布，批准范围仅限该命令的该参数 requiredness 变更。"
     }
   ]
 }
