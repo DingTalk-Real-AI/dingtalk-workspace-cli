@@ -219,7 +219,7 @@
           "scope": "local"
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "按轻应用创建产品契约将 --desc 收紧为 trim 后非空必填；Schema、帮助与运行时校验同步升级。旧客户端省略 desc 的调用需要迁移到显式描述后再发布，批准范围仅限该命令的该参数 requiredness 变更。"
     }
   ]
