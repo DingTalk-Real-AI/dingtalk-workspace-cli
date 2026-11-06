@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 监听消息/@我/已读/撤回/reaction/群成员加入/群成员退出，审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/添加、听记创建/纪要生成或互动卡片回调。命令前缀：dws event。
+description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、Schema 查询、实时消费与业务 Schema 版本读取。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,11 +9,11 @@ metadata:
       - dws
 ---
 
-# 钉钉个人事件
+# 钉钉个人与应用事件
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
-实时个人事件以外，消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
+本 Skill 负责实时个人事件及应用事件的发现、Schema 查询与消费；发送/历史消息、审批处理、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用 `event consume`。
@@ -39,6 +39,7 @@ metadata:
 | 好友申请/添加成功 | [好友参考](references/event-contact.md)：`event consume` |
 | 互动卡片回调 | [卡片参考](references/event-card.md) |
 | 听记创建/纪要生成 | <!-- dws-intent: event.listen.minutes -->`dws event consume`，见 [听记参考](references/event-minutes.md) |
+| 应用事件发现 → Schema → 消费 | 读取 [应用事件参考](references/event-app.md)，使用 `event list --category appEvent`、`event schema`、`event consume` |
 | 查看事件目录 | `dws event list --category <分类>` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
 | 查看状态 / 停止 | `dws event status` / `dws event stop <subscribe_id> --dry-run`，确认后再 `--yes` |
@@ -76,6 +77,10 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 - Todo 扁平事件提供 `task_id`、标题、角色、状态阶段和时间字段；用真实 `task_id` 交给 `dws todo`，字段差异见 [Todo 事件参考](references/event-todo.md)。
 - 互动卡片输出 `type/event_id/timestamp/subscribe_id/payload`；操作者 `operatorDTO.uid`，`triggerTimestamp` 等三个时间戳照原样保留；回退见 [互动卡片参考](references/event-card.md)。
 
+### 应用事件
+
+应用事件从登录后的远端目录发现，Schema 的 `jq_root_path` 为 `.payload`；业务字段留在 `payload` 中。flatten 顶层 `payload_schema_version` 对应信封/查询参数 `payloadSchemaVersion`，平台协议 `schemaVersion` 不进入 flatten。发现、订阅限制、版本查询边界、NDJSON 示例与开放态验收见 [应用事件参考](references/event-app.md)。
+
 ## 安全与失败处理
 
 开源 normal 获取缺失 AppKey，无需 AppSecret；custom／定制版除外。[排障](references/event-im-operations.md)。
@@ -101,16 +106,17 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 ## Reference
 
-| 何时读取 | Reference |
-|---|---|
-| 任务索引 | [event-im.md](references/event-im.md) |
-| EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) |
-| ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) |
-| 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) |
-| Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) |
-| OA 审批事件 | [event-oa.md](references/event-oa.md) |
-| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) |
-| Todo 待办事件 | [event-todo.md](references/event-todo.md) |
-| 好友事件 | [event-contact.md](references/event-contact.md) |
-| 互动卡片回调事件 | [event-card.md](references/event-card.md) |
-| 日历创建/修改/取消、过滤与去重 | [event-calendar.md](references/event-calendar.md) |
+| Topic | Reference | 何时读取 |
+|---|---|---|
+| 应用事件开放态与消费链路 | [event-app.md](references/event-app.md) | 应用事件发现、Schema、consume、版本字段及验收 |
+| 任务索引 | [event-im.md](references/event-im.md) | 不确定加载哪个 reference |
+| EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) | 群生命周期、显式 EventKey 或多事件组合 |
+| ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) | 启动/托管/关闭 consumer |
+| 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) | 解析事件或自动回复 |
+| Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) | 订阅控制或失败恢复 |
+| OA 审批事件 | [event-oa.md](references/event-oa.md) | 七个 OA EventKey 与审批字段解析 |
+| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) | VoIP EventKey 与邀请字段、敏感输出边界 |
+| Todo 待办事件 | [event-todo.md](references/event-todo.md) | Todo EventKey、角色范围与待办字段 |
+| 好友事件 | [event-contact.md](references/event-contact.md) | 好友 EventKey、申请与添加字段解析 |
+| 互动卡片回调事件 | [event-card.md](references/event-card.md) | 回调订阅与 payload 解析 |
+| 日历创建/修改/取消、过滤与去重 | [event-calendar.md](references/event-calendar.md) | 日程事件订阅与去重 |

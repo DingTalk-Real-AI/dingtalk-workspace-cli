@@ -128,7 +128,7 @@ func newLiteappCreateCommand(runner executor.Runner) *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:     "create",
 		Short:   "创建轻应用（创建即发布挂工作台，并注册统一应用与 OAuth 凭证）",
-		Example: "  dws dev liteapp create --name 周报助手 --homepage-url https://example.com --request-id 6f1c2b3a-uuid --dry-run --format json",
+		Example: "  dws dev liteapp create --name 周报助手 --homepage-url https://example.com --desc '周报自动化助手' --request-id 6f1c2b3a-uuid --dry-run --format json",
 		Safety: contract.SafetySpec{
 			// requestId is optional: without it a retry creates a duplicate
 			// app, so the unconditional contract must stay non-idempotent.
@@ -141,7 +141,7 @@ func newLiteappCreateCommand(runner executor.Runner) *cobra.Command {
 			{Name: "name", Usage: "应用名称，必填，trim 后非空", Required: true, ValidationMode: corecmd.ValidationShortcut, RequiredError: "--name 不能为空", Trim: true, Bind: "name"},
 			{Name: "homepage-url", Usage: "移动端首页地址，必填，http(s) URL", Required: true, ValidationMode: corecmd.ValidationShortcut, RequiredError: "--homepage-url 不能为空", Trim: true, Bind: "homepageUrl"},
 			{Name: "pc-url", Usage: "PC 端首页地址，可选，缺省取移动端首页地址", Trim: true, OmitEmpty: true, Bind: "pcUrl"},
-			{Name: "desc", Usage: "应用描述，可选", Trim: true, OmitEmpty: true, Bind: "desc"},
+			{Name: "desc", Usage: "应用描述，必填，trim 后非空", Required: true, ValidationMode: corecmd.ValidationShortcut, RequiredError: "--desc 不能为空", Trim: true, Bind: "desc"},
 			{Name: "icon-media-id", Usage: "图标文件 media_id（logoImg 格式）；不接受 http 地址；不传自动生成默认图标", Trim: true, OmitEmpty: true, Bind: "iconMediaId"},
 			{Name: "request-id", Usage: "可选请求 ID；不传不保证幂等，传入后同键同参数重试返回首次结果、参数变化拒绝", Trim: true, OmitEmpty: true, Bind: "requestId"},
 		},
@@ -150,12 +150,13 @@ func newLiteappCreateCommand(runner executor.Runner) *cobra.Command {
 				ProductID: "dev", Name: "create_lite_app", CanonicalPath: "dev.create_lite_app",
 				CLIPath: "dev liteapp create", PrimaryCLIPath: "dev liteapp create",
 			},
-			Description: "经确认后创建钉钉企业内部轻应用，创建即发布挂工作台并注册统一应用与 OAuth 凭证；status 通常为 PUBLISHED，若返回 UNPUBLISHED 表示工作台发布未完成，不要当作已上线。request-id 可选：只有带 request-id 时才提供条件幂等；凭证生成失败时仍可成功，appKey/secret/secretMask 为 null 且带 warning，处置：告知用户稍后在开发者后台重试，并用 dev liteapp credential 补查",
+			Description: "经确认后创建钉钉企业内部轻应用，创建即发布挂工作台并注册统一应用与 OAuth 凭证；name、homepage-url、desc 必须提供且 trim 后非空；status 通常为 PUBLISHED，若返回 UNPUBLISHED 表示工作台发布未完成，不要当作已上线。request-id 可选：只有带 request-id 时才提供条件幂等；凭证生成失败时仍可成功，appKey/secret/secretMask 为 null 且带 warning，处置：告知用户稍后在开发者后台重试，并用 dev liteapp credential 补查",
+			Parameters:  []contract.ParamDecl{{Name: "desc", Required: boolPtr(true)}},
 			DryRun:      devAppDryRun,
 			Result:      liteappResultSpec(`{"type":"object","properties":{"appId":{"type":"integer","description":"创建成功的轻应用 ID"},"appName":{"type":"string","description":"应用名称"},"homepageUrl":{"type":"string","description":"移动端首页地址"},"pcUrl":{"type":"string","description":"PC 端首页地址"},"desc":{"type":"string","description":"应用描述"},"iconUrl":{"type":"string","description":"图标地址"},"orgId":{"type":"integer","description":"组织 ID"},"appKey":{"type":["string","null"],"description":"OAuth 应用标识；凭证生成降级时为 null"},"secret":{"type":["string","null"],"description":"OAuth secret 明文；仅限用户明确需要时使用；凭证生成降级时为 null"},"secretMask":{"type":["string","null"],"description":"OAuth secret 掩码；凭证生成降级时为 null"},"unifiedAppId":{"type":["string","null"],"description":"创建时注册的统一应用 ID；统一应用注册未完成时为 null"},"status":{"type":["string","null"],"description":"轻应用发布状态；可能为 PUBLISHED 或未完成发布的 UNPUBLISHED"},"requestId":{"type":["string","null"],"description":"请求 ID；仅传入 request-id 时回显"},"warning":{"type":["string","null"],"description":"成功但存在降级或部分副作用时的警告；无警告时为 null"}}}`, "secret"),
 			Interface:   devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "经用户确认后创建轻应用；通常返回 PUBLISHED，若 status=UNPUBLISHED 表示尚未完成工作台发布；request-id 可选且只有传入时才有条件幂等；凭证降级时 appKey/secret 为 null 且带 warning",
+				AgentSummary: "经用户确认后创建轻应用；name、homepage-url、desc 必须提供且 trim 后非空；通常返回 PUBLISHED，若 status=UNPUBLISHED 表示尚未完成工作台发布；request-id 可选且只有传入时才有条件幂等；凭证降级时 appKey/secret 为 null 且带 warning",
 				UseWhen:      []string{"需要在当前组织创建一个新的钉钉轻应用并直接发布到工作台"},
 				AvoidWhen: []string{
 					"需要管理已有应用时使用 dev liteapp update/delete 等子命令",

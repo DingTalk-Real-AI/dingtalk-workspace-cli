@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -749,6 +750,300 @@ func TestClientDebugLogRedactsSensitivePayloadFields(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("debug log missing %q: %s", want, out)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageClientListEventsDWSDirectory(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodGet || r.URL.Path != "/event/list" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("x-user-access-token") != "token" {
+			t.Fatalf("x-user-access-token = %q", r.Header.Get("x-user-access-token"))
+		}
+		result := map[string]any{
+			"total": 4,
+			"categories": []map[string]any{
+				{
+					"category": "im",
+					"events": []map[string]any{
+						{"eventKey": " remote_event ", "name": "远程事件", "eventSource": "app-1"},
+						{"eventKey": "remote_event", "name": "重复事件"},
+					},
+				},
+				{
+					"category": "oa",
+					"events": []map[string]any{
+						{"eventKey": "remote_event", "name": "跨类重复"},
+					},
+				},
+			},
+			"items": []map[string]any{{"eventKey": "ignored_item"}},
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	events, err := c.ListEvents(t.Context())
+	if err != nil {
+		t.Fatalf("ListEvents() error = %v", err)
+	}
+	if calls != 1 || len(events) != 1 {
+		t.Fatalf("calls/events = %d/%#v", calls, events)
+	}
+	if events[0].EventKey != "remote_event" || events[0].Category != "im" || events[0].EventSource != "app-1" {
+		t.Fatalf("event = %#v", events[0])
+	}
+}
+
+func TestCrossPlatformCoverageClientListEventsCompatibilityShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "array shape with snake_case fields",
+			body: `{"success":true,"result":[{"event_key":" array_event ","name":"  数组  ","category":" oa "}]}`,
+			want: []string{"array_event"},
+		},
+		{
+			name: "items preferred over list",
+			body: `{"success":true,"result":{"items":[{"eventKey":"items_event"}],"list":[{"eventKey":"list_event"}]}}`,
+			want: []string{"items_event"},
+		},
+		{
+			name: "list fallback skips empty keys",
+			body: `{"success":true,"result":{"list":[{"eventKey":"list_event"},{"eventKey":"   "}]}}`,
+			want: []string{"list_event"},
+		},
+		{
+			name: "bare null body",
+			body: `null`,
+			want: nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			c := NewClient(srv.URL, Identity{AccessToken: "token"})
+			events, err := c.ListEvents(t.Context())
+			srv.Close()
+			if err != nil {
+				t.Fatalf("ListEvents() error = %v", err)
+			}
+			got := make([]string, 0, len(events))
+			for _, event := range events {
+				got = append(got, event.EventKey)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("events = %v, want %v", got, tc.want)
+			}
+			if tc.name == "array shape with snake_case fields" && (events[0].Name != "数组" || events[0].Category != "oa") {
+				t.Fatalf("trimmed name/category = %q/%q", events[0].Name, events[0].Category)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageClientListCatalogPaginationAndFilters(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/event/catalog" {
+			t.Fatalf("request path = %s", r.URL.Path)
+		}
+		queries = append(queries, r.URL.RawQuery)
+		var result map[string]any
+		switch r.URL.Query().Get("pageNo") {
+		case "1":
+			result = map[string]any{
+				"total": 3,
+				"categories": []map[string]any{
+					{"category": "appEvent", "events": []map[string]any{
+						{"eventKey": "order_created", "name": "订单创建", "eventSource": "appEvent", "producerUnifiedAppId": "producer-app", "description": "订单创建后通知订阅人", "scope": "example.order.read"},
+						{"eventKey": "order_updated", "name": "订单更新", "eventSource": "appEvent", "producerUnifiedAppId": "producer-app"},
+					}},
+				},
+			}
+		case "2":
+			result = map[string]any{
+				"total": 3,
+				"categories": []map[string]any{
+					{"category": "appEvent", "events": []map[string]any{
+						{"eventKey": "order_paid", "name": "订单支付", "eventSource": "appEvent", "producerUnifiedAppId": "producer-app"},
+					}},
+				},
+			}
+		default:
+			t.Fatalf("unexpected pageNo = %q", r.URL.Query().Get("pageNo"))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token"})
+	events, err := c.ListCatalog(t.Context(), CatalogOptions{Keyword: "订单", ProducerUnifiedAppID: "producer-app"})
+	if err != nil {
+		t.Fatalf("ListCatalog() error = %v", err)
+	}
+	if len(events) != 3 || events[0].EventKey != "order_created" || events[2].EventKey != "order_paid" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events[0].Description != "订单创建后通知订阅人" || events[0].Scope != "example.order.read" || events[0].ProducerUnifiedAppID != "producer-app" {
+		t.Fatalf("event fields = %#v", events[0])
+	}
+	if len(queries) != 2 {
+		t.Fatalf("catalog queries = %#v", queries)
+	}
+	for i, wantPage := range []string{"1", "2"} {
+		parsed, err := url.ParseQuery(queries[i])
+		if err != nil {
+			t.Fatalf("parse query: %v", err)
+		}
+		if parsed.Get("pageNo") != wantPage || parsed.Get("pageSize") != "100" ||
+			parsed.Get("keyword") != "订单" || parsed.Get("producerUnifiedAppId") != "producer-app" {
+			t.Fatalf("query[%d] = %q", i, queries[i])
+		}
+	}
+}
+
+func TestCrossPlatformCoverageClientListCatalogFailsClosedOnIncompleteEmptyPage(t *testing.T) {
+	var page int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		result := map[string]any{"total": 3}
+		if page == 1 {
+			result["categories"] = []map[string]any{{"category": "appEvent", "events": []map[string]any{{"eventKey": "order_created"}, {"eventKey": "order_updated"}}}}
+		} else {
+			result["categories"] = []map[string]any{}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token"})
+	if _, err := c.ListCatalog(t.Context(), CatalogOptions{}); err == nil || !strings.Contains(err.Error(), "catalog pagination incomplete") {
+		t.Fatalf("ListCatalog() error = %v, want incomplete pagination error", err)
+	}
+}
+
+func TestCrossPlatformCoverageClientGetSchemaContract(t *testing.T) {
+	var gotEventKey string
+	var gotVersion string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/event/schema" {
+			t.Fatalf("request path = %s", r.URL.Path)
+		}
+		gotEventKey = r.URL.Query().Get("eventKey")
+		gotVersion = r.URL.Query().Get("payloadSchemaVersion")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"result": map[string]any{
+				"eventKey":             "order created",
+				"displayName":          "订单创建",
+				"description":          "订单创建后通知订阅人",
+				"category":             "appEvent",
+				"producerUnifiedAppId": "producer-app",
+				"payloadSchemaVersion": "4",
+				"payloadSchema": map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"orderId": map[string]any{"type": "string", "description": "订单 ID"}},
+					"required":   []any{"orderId"},
+				},
+				"scope": "example.order.read",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token"})
+	schema, err := c.GetSchema(t.Context(), "订单 created", "")
+	if err != nil {
+		t.Fatalf("GetSchema() error = %v", err)
+	}
+	if gotEventKey != "订单 created" {
+		t.Fatalf("eventKey query = %q", gotEventKey)
+	}
+	if gotVersion != "" {
+		t.Fatalf("payloadSchemaVersion query = %q, want omitted", gotVersion)
+	}
+	if schema.EventKey != "order created" || schema.DisplayName != "订单创建" || schema.Category != "appEvent" ||
+		schema.ProducerUnifiedAppID != "producer-app" || schema.Scope != "example.order.read" ||
+		schema.PayloadSchemaVersion != "4" {
+		t.Fatalf("schema = %#v", schema)
+	}
+	props, _ := schema.PayloadSchema["properties"].(map[string]any)
+	if schema.PayloadSchema["type"] != "object" || props["orderId"] == nil {
+		t.Fatalf("payloadSchema = %#v", schema.PayloadSchema)
+	}
+	if _, err := c.GetSchema(t.Context(), "   ", ""); err == nil {
+		t.Fatal("blank eventKey accepted")
+	}
+
+	gotVersion = "sentinel"
+	schema, err = c.GetSchema(t.Context(), "订单 created", " 3 ")
+	if err != nil {
+		t.Fatalf("GetSchema(version) error = %v", err)
+	}
+	if gotVersion != "3" {
+		t.Fatalf("payloadSchemaVersion query = %q, want 3", gotVersion)
+	}
+	if schema.PayloadSchemaVersion != "4" {
+		t.Fatalf("response payloadSchemaVersion = %q, want server value 4", schema.PayloadSchemaVersion)
+	}
+}
+
+func TestCrossPlatformCoverageClientGetSchemaErrorEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success":   false,
+			"errorCode": "EVENT_NOT_AVAILABLE",
+			"errorMsg":  "event unavailable",
+			"arguments": []string{"trace-1"},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token"})
+	_, err := c.GetSchema(t.Context(), "missing_event", "")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != ErrorCodeEventNotAvailable {
+		t.Fatalf("GetSchema() error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageClientGetSchemaVersionErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+	}{
+		{name: "not_found", code: ErrorCodeSchemaVersionNotFound},
+		{name: "illegal", code: ErrorCodeIllegalParameter},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.URL.Query().Get("payloadSchemaVersion"); got != "9" {
+					t.Fatalf("payloadSchemaVersion = %q", got)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"success":   false,
+					"errorCode": tc.code,
+					"errorMsg":  "invalid schema query",
+				})
+			}))
+			t.Cleanup(srv.Close)
+			c := NewClient(srv.URL, Identity{AccessToken: "token"})
+			_, err := c.GetSchema(t.Context(), "order_created", "9")
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.Code != tc.code {
+				t.Fatalf("GetSchema() error = %v", err)
+			}
+		})
 	}
 }
 

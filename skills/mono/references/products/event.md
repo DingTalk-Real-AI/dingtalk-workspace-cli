@@ -13,7 +13,7 @@
 
 开源版默认 `normal` 模式只需要用户 token 和 AppKey，不要求用户提供 AppSecret。已有 AppKey 沿用本地身份；本地元数据缺失时，CLI 从当前事件 MCP 的 `/cli/clientId` 自动获取，仅用于本次调用并传给后台 bus，不写入 token/profile/app 配置。`custom` 模式和定制版不使用此兜底；取得 AppKey 不代表已验证 token 的应用归属，仍由服务端校验。
 
-自动获取失败时按结构化 `reason` 和 `retryable` 处理；网络暂时失败、429、5xx 可按预算重试，取消、拒绝或无效数据不盲目重试。不要引导默认模式用户提供 AppSecret。排查云端差异时只记录配置目录及字段存在性，不输出凭据；`auth status` 不能证明 AppKey 完整，`event list` 是本地目录，不能证明远端事件连接正常。
+自动获取失败时按结构化 `reason` 和 `retryable` 处理；网络暂时失败、429、5xx 可按预算重试，取消、拒绝或无效数据不盲目重试。不要引导默认模式用户提供 AppSecret。排查云端差异时只记录配置目录及字段存在性，不输出凭据；`auth status` 不能证明 AppKey 完整；官方分类始终读取 CLI 内置目录；应用事件登录后读取远端目录。未登录时提示应用目录不可用；无筛选浏览的远端故障可能降级为官方项，带应用筛选时远端故障报错。不要把降级结果当作完整应用目录。
 
 ## Core commands
 
@@ -33,7 +33,7 @@
 | `dws event stop <subscribe_id> --dry-run` / `--yes` | 先预览，再确认取消订阅并停止对应本地消费 |
 | `dws event stop --all --dry-run` / `--yes` | 先预览，再确认清理当前身份下全部个人订阅 |
 
-注意区分两个 schema：`dws event schema <event_key>` 查事件的输出字段；`dws schema "event consume" --compact` 查 consume 命令自身的入参（统一内嵌 ToolSpec，含 parameters + 位置参数）。`source` 是 reviewed command identity 的 provenance；`event list/schema` 是 `interface_mode=local`，`event consume/status/stop` 因同时编排远端订阅控制面与本地 bus 而是 `interface_mode=composite`，不要把 identity 与实现机制混为一谈。
+注意区分两个 schema：`dws event schema <event_key>` 查事件的输出字段；`dws schema "event consume" --compact` 查 consume 命令自身的入参（统一内嵌 ToolSpec，含 parameters + 位置参数）。`source` 是 reviewed command identity 的 provenance；`event list` 与 `event schema` 登录后都会访问远端（组织事件目录 / 应用事件业务 Schema）并与内置定义合并，`event consume/status/stop` 同时编排远端订阅控制面与本地 bus，均为 `interface_mode=composite`，不要把 identity 与实现机制混为一谈。
 
 ## Event catalog
 
@@ -367,3 +367,9 @@ dws event consume user_calendar_event_changed --calendar-ids primary --change-ty
 - VoIP reference: `skills/multi/dingtalk-event/references/event-voip.md`
 - Todo reference: `skills/multi/dingtalk-event/references/event-todo.md`
 - Contact reference: `skills/multi/dingtalk-event/references/event-contact.md`
+
+## 应用事件消费
+
+应用事件已在目标分支接入 `dws event list --category appEvent` → `dws event schema <event_key> --flatten` → `dws event consume <event_key> --flatten -f ndjson`。登录后读取远端目录，Schema 描述 `.payload`；订阅采用 `ruleType=all` 且不传 filterRule，不接受目标、角色或消息 Filter。flatten 的 `payload_schema_version` 对应信封/查询参数 `payloadSchemaVersion`；平台协议 `schemaVersion` 不进入 flatten。应用事件可用 `dws event schema <event_key> --payload-schema-version <ver>` 查询指定已发布业务 Schema，省略时查询当前生效版本；官方事件不接受该参数。
+
+详细发现规则、版本映射、NDJSON 示例和开放态验收以 [应用事件参考](../../../multi/dingtalk-event/references/event-app.md) 为准。应用定义配置走 `dws dev event`，接收钉钉回调的配置走 `dws dev app event`，不要混用。

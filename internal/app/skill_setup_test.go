@@ -355,6 +355,20 @@ func TestCrossPlatformCoverageResolveSkillSetupTargetsDetectsZCode(t *testing.T)
 	if err := os.MkdirAll(filepath.Join(home, ".zcode"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// 机器级 /Applications 探测绕过 HOME 隔离：本机装有 ZCode.app 或
+	// MiniMax Code.app 时会向 targets 注入额外条目，测试必须显式屏蔽，
+	// 只验证 HOME 内 .zcode 目录的检测路径。
+	machineApps := map[string]bool{
+		filepath.Join(string(filepath.Separator), "Applications", "ZCode.app"):        true,
+		filepath.Join(string(filepath.Separator), "Applications", "MiniMax Code.app"): true,
+	}
+	originalStat := skillSetupStat
+	testseam.Swap(t, &skillSetupStat, func(path string) (os.FileInfo, error) {
+		if machineApps[path] {
+			return nil, os.ErrNotExist
+		}
+		return originalStat(path)
+	})
 
 	got, err := resolveSkillSetupTargets("all", skillSetupModeMulti)
 	if err != nil {

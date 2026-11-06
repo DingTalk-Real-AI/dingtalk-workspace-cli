@@ -272,8 +272,16 @@ func TestCrossPlatformCoveragePersonalRegistryEdgeCases(t *testing.T) {
 	if got := PublicAvailabilityError("private"); got == nil || !strings.Contains(got.Error(), "private") {
 		t.Fatalf("availability error = %v", got)
 	}
-	if _, _, err := BuildRuleParam("unknown", RuleOptions{}); err == nil {
-		t.Fatal("unknown event accepted")
+	// Unknown keys subscribe as application events: rule "all", empty param;
+	// targets and non-"all" rules are rejected.
+	if ruleType, ruleParam, err := BuildRuleParam("unknown", RuleOptions{}); err != nil || ruleType != "all" || len(ruleParam) != 0 {
+		t.Fatalf("unknown event = (%q, %#v, %v), want application event (\"all\", {}, nil)", ruleType, ruleParam, err)
+	}
+	if _, _, err := BuildRuleParam("unknown", RuleOptions{UserID: "u"}); err == nil {
+		t.Fatal("unknown event user target accepted")
+	}
+	if _, _, err := BuildRuleParam("unknown", RuleOptions{RuleType: "at"}); err == nil {
+		t.Fatal("unknown event custom rule accepted")
 	}
 	if _, _, err := BuildRuleParam(EventMention, RuleOptions{RuleType: "group"}); err == nil {
 		t.Fatal("wrong rule accepted")

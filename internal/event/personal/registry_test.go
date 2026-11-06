@@ -299,8 +299,11 @@ func TestLegacyEventKeysAreUnknown(t *testing.T) {
 		if _, ok := Lookup(key); ok {
 			t.Fatalf("Lookup(%q) succeeded, want unknown", key)
 		}
-		if _, _, err := BuildRuleParam(key, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
-			t.Fatalf("BuildRuleParam(%q) error = %v, want unknown personal event key", key, err)
+		// Unknown keys subscribe as application events: fixed rule "all"
+		// with an empty rule param.
+		ruleType, ruleParam, err := BuildRuleParam(key, RuleOptions{})
+		if err != nil || ruleType != "all" || len(ruleParam) != 0 {
+			t.Fatalf("BuildRuleParam(%q) = (%q, %#v, %v), want application event (\"all\", {}, nil)", key, ruleType, ruleParam, err)
 		}
 	}
 }
