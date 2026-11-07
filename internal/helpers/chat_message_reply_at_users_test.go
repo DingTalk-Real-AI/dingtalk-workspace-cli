@@ -10,6 +10,28 @@ import (
 	"testing"
 )
 
+// replyGuardResponses answers the topic quote-reply preflight that runs
+// before every non-dry-run reply: the quoted message lookup and the
+// conversation info lookup for an ordinary (non-topic) group.
+func replyGuardResponses(rest ...string) []string {
+	return append([]string{
+		`{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`,
+		`{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`,
+	}, rest...)
+}
+
+func lastReplySendCall(t *testing.T, calls []wukongWeeklySyncCall) wukongWeeklySyncCall {
+	t.Helper()
+	if len(calls) == 0 {
+		t.Fatalf("no calls recorded")
+	}
+	call := calls[len(calls)-1]
+	if call.server != "chat" || call.tool != "send_personal_message" {
+		t.Fatalf("target = %s/%s, want chat/send_personal_message", call.server, call.tool)
+	}
+	return call
+}
+
 func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 	root := newChatCommand()
 	command, remaining, err := root.Find([]string{"message", "reply"})
@@ -36,7 +58,7 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 			text:          "@DBAAAAAAAAAAiE <@DCAAAAAAAAAAiE> 收到",
 			wantOpenIDs:   []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"},
 			wantText:      "<@DBAAAAAAAAAAiE> <@DCAAAAAAAAAAiE> 收到",
-			wantCallCount: 1,
+			wantCallCount: 3,
 		},
 		{
 			name:    "user ids resolve to open dingtalk ids",
@@ -48,13 +70,13 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 			},
 			wantOpenIDs:   []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"},
 			wantText:      "<@DBAAAAAAAAAAiE> <@DCAAAAAAAAAAiE> 收到",
-			wantCallCount: 2,
+			wantCallCount: 4,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caller := &wukongWeeklySyncCaller{responses: tt.responses}
+			caller := &wukongWeeklySyncCaller{responses: replyGuardResponses(tt.responses...)}
 			_, _, err := executeWukongWeeklySyncCommand(
 				t,
 				"chat",
@@ -73,10 +95,7 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 			if len(caller.calls) != tt.wantCallCount {
 				t.Fatalf("calls = %#v, want %d", caller.calls, tt.wantCallCount)
 			}
-			call := caller.calls[len(caller.calls)-1]
-			if call.server != "chat" || call.tool != "send_personal_message" {
-				t.Fatalf("target = %s/%s, want chat/send_personal_message", call.server, call.tool)
-			}
+			call := lastReplySendCall(t, caller.calls)
 			if got := call.args["atOpenDingTalkIds"]; !reflect.DeepEqual(got, tt.wantOpenIDs) {
 				t.Fatalf("atOpenDingTalkIds = %#v, want %#v", got, tt.wantOpenIDs)
 			}
@@ -95,7 +114,7 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 }
 
 func TestChatMessageReplyWithoutAtUsersOmitsMentionPayload(t *testing.T) {
-	caller := &wukongWeeklySyncCaller{}
+	caller := &wukongWeeklySyncCaller{responses: replyGuardResponses()}
 	_, _, err := executeWukongWeeklySyncCommand(
 		t,
 		"chat",
@@ -110,18 +129,19 @@ func TestChatMessageReplyWithoutAtUsersOmitsMentionPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reply returned error: %v", err)
 	}
-	if len(caller.calls) != 1 {
-		t.Fatalf("calls = %#v, want one send call", caller.calls)
+	if len(caller.calls) != 3 {
+		t.Fatalf("calls = %#v, want guard lookups plus one send call", caller.calls)
 	}
-	if _, exists := caller.calls[0].args["atOpenDingTalkIds"]; exists {
-		t.Fatalf("atOpenDingTalkIds unexpectedly present: %#v", caller.calls[0].args)
+	call := lastReplySendCall(t, caller.calls)
+	if _, exists := call.args["atOpenDingTalkIds"]; exists {
+		t.Fatalf("atOpenDingTalkIds unexpectedly present: %#v", call.args)
 	}
 }
 
 func TestChatMessageReplyAtUsersResolutionFailureIsReported(t *testing.T) {
 	// The directory lookup succeeds but returns no mapping for the userId, so
 	// resolution fails and the reply must not be sent with an unresolved @.
-	caller := &wukongWeeklySyncCaller{responses: []string{`{"result":[]}`}}
+	caller := &wukongWeeklySyncCaller{responses: replyGuardResponses(`{"result":[]}`)}
 	_, _, err := executeWukongWeeklySyncCommand(
 		t,
 		"chat",
@@ -150,7 +170,7 @@ func TestChatMessageReplyAtUsersResolutionFailureIsReported(t *testing.T) {
 func TestChatMessageReplyAtUsersMergesWithAtOpenDingTalkIDs(t *testing.T) {
 	// An id passed through both flags is sent once, and ids given only via
 	// --at-open-dingtalk-ids stay ahead of the ones --at-users adds.
-	caller := &wukongWeeklySyncCaller{}
+	caller := &wukongWeeklySyncCaller{responses: replyGuardResponses()}
 	_, _, err := executeWukongWeeklySyncCommand(
 		t,
 		"chat",
@@ -167,11 +187,11 @@ func TestChatMessageReplyAtUsersMergesWithAtOpenDingTalkIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reply returned error: %v", err)
 	}
-	if len(caller.calls) != 1 {
-		t.Fatalf("calls = %#v, want one send call", caller.calls)
+	if len(caller.calls) != 3 {
+		t.Fatalf("calls = %#v, want guard lookups plus one send call", caller.calls)
 	}
 	want := []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"}
-	if got := caller.calls[0].args["atOpenDingTalkIds"]; !reflect.DeepEqual(got, want) {
+	if got := lastReplySendCall(t, caller.calls).args["atOpenDingTalkIds"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("atOpenDingTalkIds = %#v, want %#v", got, want)
 	}
 }
