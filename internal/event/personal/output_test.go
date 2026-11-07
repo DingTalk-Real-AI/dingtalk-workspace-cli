@@ -14,6 +14,7 @@
 package personal
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1631,5 +1632,136 @@ func TestCrossPlatformCoverageOutputSchemaFriendEvents(t *testing.T) {
 		if !ok || len(enum) != 1 || enum[0] != eventKey {
 			t.Fatalf("%s: type enum = %#v", eventKey, typeProperty["enum"])
 		}
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputUnknownEventKeyUsesAppEventOutput(t *testing.T) {
+	data := `{
+		"eventId":"app-event-1",
+		"eventKey":"app_demo_order_created",
+		"occurredAtMs":1793568000123,
+		"subId":"app-sub-1",
+		"payloadSchemaVersion":"4",
+		"payload":{
+			"orderId":"order-1",
+			"订单标题":"中文标题",
+			"明细":[{"名称":"商品甲","数量":2},{"名称":"商品乙","备注":"加急"}],
+			"扩展":{"深层":{"再深一层":{"保留":true}}}
+		}
+	}`
+	projected, err := ProjectOutput(transport.Event{
+		EventID:       "outer-event",
+		EventBornTime: 11,
+		EventType:     "app_demo_order_created",
+		SubscribeID:   "outer-sub",
+		Data:          data,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got, ok := projected.(AppEventOutput)
+	if !ok {
+		t.Fatalf("ProjectOutput() type = %T, want AppEventOutput", projected)
+	}
+	if got.Type != "app_demo_order_created" || got.EventID != "app-event-1" || got.Timestamp != 1793568000123 || got.SubscribeID != "outer-sub" || got.PayloadSchemaVersion != "4" {
+		t.Fatalf("AppEventOutput envelope = %#v", got)
+	}
+
+	// The payload passes through verbatim: the output holds the exact source
+	// payload bytes without dropping, reordering, or reformatting fields.
+	decoded, err := decodePersonalEventData(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(decoded.Payload) {
+		t.Fatalf("source payload is not valid JSON: %s", decoded.Payload)
+	}
+	if !bytes.Equal(got.Payload, decoded.Payload) {
+		t.Fatalf("payload = %s, want verbatim source bytes %s", got.Payload, decoded.Payload)
+	}
+
+	// Business fields live only under payload, matching the jq_root_path
+	// ".payload" published by the event schema document for app events.
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"type", "event_id", "timestamp", "subscribe_id", "payload_schema_version", "payload"} {
+		if _, ok := envelope[field]; !ok {
+			t.Fatalf("flattened output missing %q: %s", field, encoded)
+		}
+	}
+	if len(envelope) != 6 {
+		t.Fatalf("flattened output has unexpected top-level fields: %s", encoded)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(envelope["payload"], &payload); err != nil {
+		t.Fatalf("payload is not a JSON object: %s", encoded)
+	}
+	for _, key := range []string{"orderId", "订单标题", "明细", "扩展"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("payload lost business field %q: %s", key, payload)
+		}
+	}
+	for _, fragment := range []string{"中文标题", "商品甲", "加急", `"再深一层":{"保留":true}`} {
+		if !strings.Contains(string(encoded), fragment) {
+			t.Fatalf("flattened output lost nested value %q: %s", fragment, encoded)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputAppEventFallsBackToTransportFields(t *testing.T) {
+	projected, err := ProjectOutput(transport.Event{
+		EventID:       "outer-event",
+		EventBornTime: 123,
+		SubscribeID:   "outer-sub",
+		Data:          `{"eventKey":"app_demo_order_created","payload":{"biz":true}}`,
+	})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got, ok := projected.(AppEventOutput)
+	if !ok {
+		t.Fatalf("ProjectOutput() type = %T, want AppEventOutput", projected)
+	}
+	if got.Type != "app_demo_order_created" || got.EventID != "outer-event" || got.Timestamp != 123 || got.SubscribeID != "outer-sub" {
+		t.Fatalf("fallback fields = %#v", got)
+	}
+	if string(got.Payload) != `{"biz":true}` {
+		t.Fatalf("payload = %s, want original bytes", got.Payload)
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputKnownEventWithoutProjectorStillUnsupported(t *testing.T) {
+	// No built-in registry entry currently lacks a dedicated projector, so
+	// construct one: the seam adds a known definition whose event type is not
+	// covered by the ProjectOutput switch and must keep the unsupported error
+	// instead of falling into the generic app-event projection.
+	known := "user_known_without_projector"
+	testseam.Swap(t, &definitions, []Definition{{
+		EventKey: known,
+		Category: "im",
+		RuleType: "all",
+		Status:   StatusEnabled,
+	}})
+	if _, ok := Lookup(known); !ok {
+		t.Fatalf("Lookup(%q) = false, want known definition after seam swap", known)
+	}
+
+	ev := transport.Event{
+		EventID:   "outer-event",
+		EventType: known,
+		Data:      `{"eventKey":"` + known + `","payload":{"body":{"keep":true}}}`,
+	}
+	projected, err := ProjectOutput(ev)
+	if err == nil || !strings.Contains(err.Error(), `unsupported personal event type "user_known_without_projector"`) {
+		t.Fatalf("ProjectOutput() error = %v, want unsupported personal event type", err)
+	}
+	if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+		t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
 	}
 }

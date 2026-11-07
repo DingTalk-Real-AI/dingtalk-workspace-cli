@@ -34,10 +34,12 @@ func TestCrossPlatformCoverageEventCommandsWireTrimmedRootRuntimeToken(t *testin
 	oldConsume := eventRunPersonalConsume
 	oldStatus := eventRunPersonalStatus
 	oldStop := eventRunPersonalStop
+	oldList := eventRunPersonalList
 	t.Cleanup(func() {
 		eventRunPersonalConsume = oldConsume
 		eventRunPersonalStatus = oldStatus
 		eventRunPersonalStop = oldStop
+		eventRunPersonalList = oldList
 	})
 
 	flags := &GlobalFlags{Token: "  runtime-canary  ", ClientID: " root-client "}
@@ -76,6 +78,15 @@ func TestCrossPlatformCoverageEventCommandsWireTrimmedRootRuntimeToken(t *testin
 	stopRoot.AddCommand(stopCmd)
 	if err := stopCmd.RunE(stopCmd, []string{"sub-runtime"}); err != nil {
 		t.Fatalf("stop RunE() error = %v", err)
+	}
+
+	eventRunPersonalList = func(_ *cobra.Command, opts personalListOptions) error {
+		assertIdentity(opts.ExplicitToken, opts.ClientIDOverride)
+		return nil
+	}
+	listCmd := newEventListCommand(flags)
+	if err := listCmd.RunE(listCmd, nil); err != nil {
+		t.Fatalf("list RunE() error = %v", err)
 	}
 
 	listenCmd := newEventListenIMCommand(flags)

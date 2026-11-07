@@ -273,15 +273,17 @@ func executeAgentExampleCapture(t testing.TB, args []string) (agentExampleCaptur
 }
 
 type agentExampleFiles struct {
-	root      string
-	markdown  string
-	json      string
-	batch     string
-	job       string
-	binary    string
-	image     string
-	skillZIP  string
-	mcpConfig string
+	root            string
+	markdown        string
+	json            string
+	batch           string
+	job             string
+	binary          string
+	image           string
+	skillZIP        string
+	mcpConfig       string
+	secret          string
+	eventDefinition string
 }
 
 // Unbind examples require an existing binding, but no credentials or running
@@ -309,6 +311,8 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 	image := filepath.Join(root, "chart.png")
 	skillZIP := filepath.Join(root, "example-skill.zip")
 	mcpConfig := filepath.Join(root, "mcp.json")
+	secret := filepath.Join(root, "old-secret.txt")
+	eventDefinition := filepath.Join(root, "hr-employee-joined.json")
 	var skillBytes bytes.Buffer
 	archive := zip.NewWriter(&skillBytes)
 	entry, err := archive.Create("example-skill/SKILL.md")
@@ -322,29 +326,42 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 		t.Fatal(err)
 	}
 	for path, content := range map[string][]byte{
-		skillZIP:  skillBytes.Bytes(),
-		mcpConfig: []byte(`{"name":"offline-example","configString":"{\"mcpServers\":{\"example\":{\"url\":\"https://example.invalid/mcp\"}}}"}`),
-		markdown:  []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
-		jsonFile:  []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
-		batch:     []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
-		job:       []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
-		binary:    []byte("%PDF-1.4\n%%EOF\n"),
-		image:     {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+		filepath.Join(root, "ai-interview-invite.json"):          []byte(`{"candidateInfoList":[{"candidateId":"c","jobId":"j","bizFlowId":"f"}],"sendSms":false,"sendMail":false}`),
+		filepath.Join(root, "ai-interview-question-add.json"):    []byte(`{"questionGroupCode":"PROFESSIONAL_SKILL","description":"请介绍仓库管理经验","examinationPoint":"仓库管理","evaluationMethod":"SCORING","questionType":"QUESTION_ANSWER","answerTime":180000}`),
+		filepath.Join(root, "ai-interview-question-update.json"): []byte(`{"description":"请介绍仓库管理经验","examinationPoint":"仓库管理","evaluationMethod":"SCORING","questionType":"QUESTION_ANSWER","answerTime":180000,"options":[],"optionReferenceAnswer":[],"textReferenceAnswer":""}`),
+		filepath.Join(root, "interview-create.json"):             []byte(`{"rounds":[{"startTime":1800000000000,"endTime":1800003600000,"way":1,"interviewerUserIds":["u1"]}]}`),
+		filepath.Join(root, "interview-update.json"):             []byte(`{"startTime":1800000000000,"endTime":1800003600000,"reasonCode":"verified-reason","interviewerUserIds":["u1"],"ccUserIds":[],"interviewCommentNotice":false}`),
+		// 更新只提供变化字段；不复用含 creatorUserId 等创建专用字段的 job.json。
+		filepath.Join(root, "job-update.json"): []byte(`{"name":"高级 Java 工程师"}`),
+		// dev event create/update 示例共用的事件定义：必须能通过本地文件预检
+		// （JSON 对象 + 必填字段 + 样例符合 Schema）。
+		eventDefinition: []byte(`{"eventKey":"app_user_hr_employee_joined","name":"员工入职","description":"员工完成入职时由 HR 系统产生的事件","payloadSchema":{"type":"object","properties":{"employeeId":{"type":"string","description":"员工工号"},"employeeName":{"type":"string","description":"员工姓名"},"departmentId":{"type":"string","description":"入职部门 ID"},"entryDate":{"type":"string","description":"入职日期"}},"required":["employeeId","employeeName"]},"samplePayload":{"employeeId":"E-1001","employeeName":"张三","departmentId":"dept_10","entryDate":"2026-10-28"}}`),
+		skillZIP:        skillBytes.Bytes(),
+		mcpConfig:       []byte(`{"name":"offline-example","configString":"{\"mcpServers\":{\"example\":{\"url\":\"https://example.invalid/mcp\"}}}"}`),
+		markdown:        []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
+		jsonFile:        []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
+		batch:           []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
+		job:             []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
+		binary:          []byte("%PDF-1.4\n%%EOF\n"),
+		image:           {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+		secret:          []byte("dry-run-secret-fixture"),
 	} {
 		if err := os.WriteFile(path, content, 0o600); err != nil {
 			t.Fatalf("write dry-run fixture %s: %v", path, err)
 		}
 	}
 	return agentExampleFiles{
-		root:      root,
-		markdown:  "./" + filepath.Base(markdown),
-		json:      "./" + filepath.Base(jsonFile),
-		batch:     "./" + filepath.Base(batch),
-		job:       "./" + filepath.Base(job),
-		binary:    "./" + filepath.Base(binary),
-		image:     "./" + filepath.Base(image),
-		skillZIP:  "./" + filepath.Base(skillZIP),
-		mcpConfig: "./" + filepath.Base(mcpConfig),
+		root:            root,
+		markdown:        "./" + filepath.Base(markdown),
+		json:            "./" + filepath.Base(jsonFile),
+		batch:           "./" + filepath.Base(batch),
+		job:             "./" + filepath.Base(job),
+		binary:          "./" + filepath.Base(binary),
+		image:           "./" + filepath.Base(image),
+		skillZIP:        "./" + filepath.Base(skillZIP),
+		mcpConfig:       "./" + filepath.Base(mcpConfig),
+		secret:          "./" + filepath.Base(secret),
+		eventDefinition: "./" + filepath.Base(eventDefinition),
 	}
 }
 
@@ -391,6 +408,10 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 				replacement = files.skillZIP
 			} else if strings.Contains(strings.ToLower(value), "png") {
 				replacement = files.image
+			} else if strings.HasSuffix(strings.ToLower(value), "hr-employee-joined.json") {
+				// dev event create/update 的事件定义输入必须是合法 JSON 对象，
+				// 不能落到默认二进制 fixture。
+				replacement = files.eventDefinition
 			} else {
 				replacement = files.binary
 			}
@@ -398,6 +419,9 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 			replacement = files.binary
 		case "content-file":
 			replacement = files.markdown
+		case "old-secret", "old-client-secret":
+			// Keep the @ source prefix: the flag only accepts @file or stdin.
+			replacement = "@" + files.secret
 		case "contents-file":
 			replacement = files.json
 		case "config-file":

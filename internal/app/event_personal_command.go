@@ -36,6 +36,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -92,10 +93,14 @@ type personalConsumeOptions struct {
 }
 
 type personalListOptions struct {
-	Category       string
-	EnabledOnly    bool
-	IncludePending bool
-	Format         string
+	Category         string
+	EnabledOnly      bool
+	IncludePending   bool
+	Format           string
+	Keyword          string
+	ProducerAppID    string
+	ExplicitToken    string
+	ClientIDOverride string
 }
 
 type personalStatusOptions struct {
@@ -169,10 +174,11 @@ func runtimePersonalEventClientID() string {
 	return strings.TrimSpace(os.Getenv("DWS_CLIENT_ID"))
 }
 
-func newEventSchemaCommand() *cobra.Command {
+func newEventSchemaCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var asIdentity string
 	var formatRaw string
 	var flatten bool
+	var payloadSchemaVersion string
 	cmd := &cobra.Command{
 		Use:   "schema <event_key>",
 		Short: "显示事件 schema",
@@ -180,9 +186,19 @@ func newEventSchemaCommand() *cobra.Command {
 
 默认描述兼容 transport envelope；Agent 或脚本使用 --flatten 时，应同时查询
 --flatten Schema。互动卡片回调的回答、问题、操作者、业务与会话上下文位于
-payload.body，结构化业务上下文优先读取 payload.body.actionData.context。`,
+payload.body，结构化业务上下文优先读取 payload.body.actionData.context。
+
+官方事件读取 CLI 内置定义；应用事件（不在内置目录中的 eventKey）登录后查询
+DWS 已发布的业务 Schema——返回的 schema 描述业务 payload 本身，消费输出中
+业务字段位于 payload（见输出 jq_root_path）。
+
+应用事件可用 --payload-schema-version 指定已发布业务 Schema 版本；省略时
+查询当前生效版本。该参数原样透传给 portal/callback，CLI 不做本地合法性校验；
+DRAFT、超长或从未发布的版本由服务端返回错误且不回退最新版。官方内置事件
+不接受该参数。`,
 		Example: `  dws event schema user_card_action_triggered --flatten -f json
-  dws event schema user_im_message_receive_at --flatten -f json`,
+  dws event schema user_im_message_receive_at --flatten -f json
+  dws event schema app_user_order_created --payload-schema-version 3 -f json`,
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -192,7 +208,11 @@ payload.body，结构化业务上下文优先读取 payload.body.actionData.cont
 			}
 			def, ok := personal.Lookup(args[0])
 			if !ok {
-				return fmt.Errorf("unknown personal event key %q", args[0])
+				return runRemoteEventSchema(c, args[0], formatRaw, flatten, payloadSchemaVersion,
+					eventExplicitToken(globalFlags), eventExplicitClientID(globalFlags))
+			}
+			if strings.TrimSpace(payloadSchemaVersion) != "" {
+				return apperrors.NewValidation("--payload-schema-version only applies to app events")
 			}
 			if !def.Public {
 				return personal.PublicAvailabilityError(args[0])
@@ -203,6 +223,8 @@ payload.body，结构化业务上下文优先读取 payload.body.actionData.cont
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
 	cmd.Flags().BoolVar(&flatten, "flatten", false, "显示 --flatten 消费模式对应的顶层业务字段 schema")
+	cmd.Flags().StringVar(&payloadSchemaVersion, "payload-schema-version", "",
+		"应用事件已发布业务 Schema 版本（可选）；省略=当前生效版本，原样透传为 payloadSchemaVersion")
 	hideEventInternalFlags(cmd, "as")
 	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{
 		Name:        "event_key",
@@ -224,22 +246,25 @@ payload.body，结构化业务上下文优先读取 payload.body.actionData.cont
 				CLIPath:        "event schema",
 				PrimaryCLIPath: "event schema",
 			},
-			Description: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
+			Description: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式；应用事件可用 --payload-schema-version 查历史已发布版本",
 			Interface: &contract.InterfaceSpec{
-				Mode:         "local",
+				Mode:         "composite",
 				Availability: "available",
-				Reason:       "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+				Reason:       "Reviewed composite workflow: built-in official-event payload definitions with a remote published business-schema lookup for organization app events; no single pinned RPC represents the result.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM、OA、VoIP、Todo、日历、互动卡片或听记 event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式；应用事件可用 --payload-schema-version 查历史已发布版本",
+				UseWhen: []string{
+					"已知任一公开个人 IM、OA、VoIP、Todo、日历、互动卡片或听记 event_key，消费前需要理解 --flatten 输出字段或 payload 契约",
+					"已知应用事件 eventKey，需要当前或指定已发布 payloadSchemaVersion 的业务 Schema",
+				},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
 				},
 				Examples: []string{
 					"dws event schema user_im_message_receive_at --flatten --format json",
-					"dws event schema user_card_action_triggered --flatten --format json",
+					"dws event schema app_user_order_created --payload-schema-version 3 --format json",
 				},
 			},
 		},
@@ -248,7 +273,10 @@ payload.body，结构化业务上下文优先读取 payload.body.actionData.cont
 }
 
 func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
-	items := personal.Catalog(opts.Category, opts.EnabledOnly, opts.IncludePending)
+	items, err := loadPersonalEventCatalog(c.Context(), opts, c.ErrOrStderr())
+	if err != nil {
+		return fmt.Errorf("event list --as user: %w", err)
+	}
 	if opts.Format == "json" {
 		enc := json.NewEncoder(c.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -263,6 +291,121 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 	return tw.Flush()
 }
 
+// loadPersonalEventCatalog serves official events from the CLI built-in
+// registry (offline by design, never fetched remotely) and app events only
+// through the remote catalog interface.
+func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, warn io.Writer) ([]personal.Definition, error) {
+	if warn == nil {
+		warn = io.Discard
+	}
+	category := strings.TrimSpace(opts.Category)
+	keyword := strings.TrimSpace(opts.Keyword)
+	producer := strings.TrimSpace(opts.ProducerAppID)
+
+	// 官方事件固定来自内置目录：producer 筛选只可能命中应用事件，
+	// keyword 在本地按与远端一致的 eventKey 全值等值（忽略大小写）过滤。
+	appEventSource := category == personal.CatalogSourceTypeAppEvent
+	remoteCategory := category
+	if appEventSource {
+		remoteCategory = ""
+	}
+	official := personal.Catalog(category, opts.EnabledOnly, opts.IncludePending)
+	if producer != "" || appEventSource {
+		official = nil
+	} else if keyword != "" {
+		official = filterPersonalCatalogByKeyword(official, keyword)
+	}
+
+	// 只有查询可能覆盖应用事件时才访问远端：内置官方分类直接短路，离线可用。
+	// appEvent 是来源选择器而非业务分类；producer 只可能命中应用事件，不做短路。
+	// 远端独有的分类仍可能命中应用事件。
+	if category != "" && producer == "" && !appEventSource && isPersonalOfficialCategory(category) {
+		return official, nil
+	}
+
+	configDir := defaultConfigDir()
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, "", opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
+	if err != nil {
+		if isPersonalEventCredentialMissing(err) {
+			fmt.Fprintf(warn, "WARN: 未登录或凭证缺失，自建应用事件目录不可用，仅展示内置官方事件\n")
+			return official, nil
+		}
+		return nil, err
+	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL("", configDir), identity, opts.ExplicitToken)
+	events, err := client.ListCatalog(ctx, personal.CatalogOptions{
+		SourceType:           personal.CatalogSourceTypeAppEvent,
+		Category:             remoteCategory,
+		Keyword:              keyword,
+		ProducerUnifiedAppID: producer,
+	})
+	if err != nil {
+		// 未加筛选的浏览容忍应用事件源故障：官方事件完整可用，降级只走
+		// stderr。带筛选的查询可能命中应用事件，必须 fail-closed 报错，
+		// 不返回可能缺失命中项的假完整结果。
+		if category == "" && keyword == "" && producer == "" {
+			fmt.Fprintf(warn, "WARN: 应用事件目录获取失败(%v)，仅展示内置官方事件\n", err)
+			return official, nil
+		}
+		return nil, fmt.Errorf("event list --as user: 应用事件目录获取失败: %w", err)
+	}
+
+	items := official
+	for _, event := range events {
+		// 官方键优先：内置目录已提供该事件的权威定义，远端同名条目跳过。
+		if _, known := personal.Lookup(event.EventKey); known {
+			continue
+		}
+		if remoteCategory != "" && event.Category != remoteCategory {
+			continue
+		}
+		description := event.Description
+		if description == "" {
+			description = event.Name
+		}
+		items = append(items, personal.Definition{
+			EventKey:             event.EventKey,
+			DisplayName:          event.Name,
+			Description:          description,
+			Category:             event.Category,
+			Status:               personal.StatusRemote,
+			EventSource:          event.EventSource,
+			ProducerUnifiedAppID: event.ProducerUnifiedAppID,
+			Scope:                event.Scope,
+			Public:               true,
+		})
+	}
+	return items, nil
+}
+
+// isPersonalOfficialCategory reports whether a category is owned by the CLI's
+// built-in official registry. Unknown categories may still be returned by the
+// app-event source and must not be short-circuited before the remote catalog.
+func isPersonalOfficialCategory(category string) bool {
+	for _, def := range personal.Catalog("", true, true) {
+		if def.Category == category {
+			return true
+		}
+	}
+	return false
+}
+
+// filterPersonalCatalogByKeyword mirrors the remote catalog keyword contract:
+// full eventKey equality ignoring case; no prefix, substring, or name match.
+func filterPersonalCatalogByKeyword(defs []personal.Definition, keyword string) []personal.Definition {
+	var out []personal.Definition
+	for _, def := range defs {
+		if strings.EqualFold(def.EventKey, keyword) {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
+func isPersonalEventCredentialMissing(err error) bool {
+	return errors.Is(err, authpkg.ErrTokenDataNotFound) || errors.Is(err, os.ErrNotExist)
+}
+
 func renderPersonalSchema(w io.Writer, def personal.Definition, format string, flatten bool) error {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
@@ -274,6 +417,76 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string, f
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(personal.BuildSchemaDocumentForMode(def, flatten))
+}
+
+// remoteEventSchemaDocument renders the published business payload schema of
+// an organization app event; the shape intentionally mirrors the built-in
+// SchemaDocument projection. jq_root_path tells consumers where the schema's
+// fields live in the delivered personal-event data (payload.<field>).
+type remoteEventSchemaDocument struct {
+	EventKey             string         `json:"event_key"`
+	DisplayName          string         `json:"display_name"`
+	Description          string         `json:"description,omitempty"`
+	Category             string         `json:"category,omitempty"`
+	ProducerUnifiedAppID string         `json:"producer_unified_app_id,omitempty"`
+	PayloadSchemaVersion string         `json:"payload_schema_version,omitempty"`
+	Scope                string         `json:"scope,omitempty"`
+	JQRootPath           string         `json:"jq_root_path"`
+	Schema               map[string]any `json:"schema"`
+}
+
+// App events expose a single payload projection: the published business
+// payloadSchema describes the payload object itself, so --flatten is accepted
+// for invocation parity with built-in official events and changes nothing.
+func runRemoteEventSchema(c *cobra.Command, eventKey, format string, flatten bool, payloadSchemaVersion, explicitToken, clientIDOverride string) error {
+	_ = flatten
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = "json"
+	}
+	if format != "json" {
+		return fmt.Errorf("event schema only supports json output")
+	}
+	ctx := c.Context()
+	configDir := defaultConfigDir()
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, "", explicitToken, personalIdentityOptions{ClientID: clientIDOverride})
+	if err != nil {
+		if isPersonalEventCredentialMissing(err) {
+			return fmt.Errorf("unknown personal event key %q; app-event schema requires login (dws auth login)", eventKey)
+		}
+		return fmt.Errorf("event schema: %w", err)
+	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL("", configDir), identity, explicitToken)
+	result, err := client.GetSchema(ctx, eventKey, payloadSchemaVersion)
+	if err != nil {
+		var apiErr *personal.APIError
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeEventNotAvailable {
+			return fmt.Errorf("unknown personal event key %q", eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeSchemaNotAvailable {
+			return fmt.Errorf("event %q has no published schema; for an app event the developer must publish the definition, for an official event upgrade dws if the key is missing", eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeSchemaVersionNotFound {
+			return fmt.Errorf("payload schema version %q is not published for event %q", strings.TrimSpace(payloadSchemaVersion), eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeIllegalParameter {
+			return fmt.Errorf("invalid payload schema version %q for event %q", strings.TrimSpace(payloadSchemaVersion), eventKey)
+		}
+		return fmt.Errorf("event schema: %w", err)
+	}
+	enc := json.NewEncoder(c.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(remoteEventSchemaDocument{
+		EventKey:             result.EventKey,
+		DisplayName:          result.DisplayName,
+		Description:          result.Description,
+		Category:             result.Category,
+		ProducerUnifiedAppID: result.ProducerUnifiedAppID,
+		PayloadSchemaVersion: result.PayloadSchemaVersion,
+		Scope:                result.Scope,
+		JQRootPath:           ".payload",
+		Schema:               result.PayloadSchema,
+	})
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
@@ -768,7 +981,16 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 	for _, eventKey := range keys {
 		def, ok := personalLookupDefinition(eventKey)
 		if !ok {
-			return nil, fmt.Errorf("unknown personal event key %q", eventKey)
+			// Application events (outside the built-in catalog) are scope
+			// neutral: the shared --user/--group values may belong to the
+			// official events in this selection, so target validation happens
+			// per plan after they are cleared. Message filters are rejected
+			// here because the server pins app-event subscriptions to an
+			// empty filterRule.
+			if strings.TrimSpace(opts.QueryCSV) != "" || strings.TrimSpace(opts.FilterJSON) != "" {
+				return nil, fmt.Errorf("--query/--filter-json require all selected events to be message receive events; %s is not", eventKey)
+			}
+			continue
 		}
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
@@ -818,10 +1040,20 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 
 	plans := make([]personalConsumeOptions, 0, len(keys))
 	for _, eventKey := range keys {
-		def, _ := personalLookupDefinition(eventKey)
+		def, ok := personalLookupDefinition(eventKey)
 		plan := opts
 		plan.EventKey = eventKey
 		plan.EventKeys = nil
+		if !ok {
+			// Application event: the fixed "all" rule carries no target; the
+			// shared --user/--group/--role-types values belonged to the
+			// official events in this selection. Per-plan validation below
+			// re-runs with the cleared values.
+			plan.UserID = ""
+			plan.OpenDingTalkID = ""
+			plan.GroupID = ""
+			plan.RoleTypes = nil
+		}
 		switch def.RuleType {
 		case "at", "all":
 			plan.UserID = ""
@@ -965,9 +1197,16 @@ func validatePersonalUnfilteredEventOptions(eventKey string, opts personalConsum
 	if len(changed) == 0 {
 		return nil
 	}
-	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	trimmedKey := strings.TrimSpace(eventKey)
+	def, ok := personalLookupDefinition(trimmedKey)
 	if !ok {
-		return nil
+		if trimmedKey == "" {
+			// Implicit reuse (--subscribe-id without a positional event key):
+			// the key is resolved from the subscription lookup and validation
+			// re-runs against it, so nothing is rejected here.
+			return nil
+		}
+		return fmt.Errorf("%s not supported for application event %s", strings.Join(changed, ", "), eventKey)
 	}
 	categoryName := map[string]string{
 		"minutes": "minutes",
@@ -1135,6 +1374,9 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if ruleType == "" {
 			if def, ok := personal.Lookup(eventKey); ok {
 				ruleType = def.RuleType
+			} else {
+				// Application events subscribe with the fixed "all" rule.
+				ruleType = "all"
 			}
 		}
 		sub.SubscribeID = strings.TrimSpace(opts.SubscribeID)

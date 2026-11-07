@@ -299,8 +299,11 @@ func TestLegacyEventKeysAreUnknown(t *testing.T) {
 		if _, ok := Lookup(key); ok {
 			t.Fatalf("Lookup(%q) succeeded, want unknown", key)
 		}
-		if _, _, err := BuildRuleParam(key, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
-			t.Fatalf("BuildRuleParam(%q) error = %v, want unknown personal event key", key, err)
+		// Unknown keys subscribe as application events: fixed rule "all"
+		// with an empty rule param.
+		ruleType, ruleParam, err := BuildRuleParam(key, RuleOptions{})
+		if err != nil || ruleType != "all" || len(ruleParam) != 0 {
+			t.Fatalf("BuildRuleParam(%q) = (%q, %#v, %v), want application event (\"all\", {}, nil)", key, ruleType, ruleParam, err)
 		}
 	}
 }
@@ -1197,5 +1200,20 @@ func TestIdempotencyKeySeparatesTargetUIDTypes(t *testing.T) {
 	}, "")
 	if staffIDKey == openIDKey {
 		t.Fatalf("idempotency key collapsed for different targetUidType: %s", staffIDKey)
+	}
+}
+
+func TestCrossPlatformCoverageBuildRuleParamRejectsBlankKeyAndAppEventTargets(t *testing.T) {
+	if _, _, err := BuildRuleParam("   ", RuleOptions{}); err == nil || !strings.Contains(err.Error(), "unknown personal event key") {
+		t.Fatalf("blank key error = %v", err)
+	}
+	for name, opts := range map[string]RuleOptions{
+		"--open-dingtalk-id": {OpenDingTalkID: "ou-1"},
+		"--group":            {GroupID: "cid-1"},
+		"--role-types":       {RoleTypes: []string{"creator"}},
+	} {
+		if _, _, err := BuildRuleParam("app_user_demo_event", opts); err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("%s rejection error = %v", name, err)
+		}
 	}
 }

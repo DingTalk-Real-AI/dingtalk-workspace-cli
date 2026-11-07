@@ -4,7 +4,7 @@
 
 开源版默认 `normal` 模式只需要用户 token 和 AppKey，不要求用户提供 AppSecret。已有 AppKey 沿用本地身份；本地元数据缺失时，CLI 从当前事件 MCP 的 `/cli/clientId` 自动获取，仅用于本次调用并传给后台 bus，不写入 token/profile/app 配置。`custom` 模式和定制版不使用此兜底；取得 AppKey 不代表已验证 token 的应用归属，仍由服务端校验。
 
-自动获取失败时按结构化 `reason` 和 `retryable` 处理；网络暂时失败、429、5xx 可按预算重试，取消、拒绝或无效数据不盲目重试。不要引导默认模式用户提供 AppSecret。排查云端差异时只记录配置目录及字段存在性，不输出凭据；`auth status` 不能证明 AppKey 完整，`event list` 是本地目录，不能证明远端事件连接正常。
+自动获取失败时按结构化 `reason` 和 `retryable` 处理；网络暂时失败、429、5xx 可按预算重试，取消、拒绝或无效数据不盲目重试。不要引导默认模式用户提供 AppSecret。排查云端差异时只记录配置目录及字段存在性，不输出凭据；`auth status` 不能证明 AppKey 完整；`event list` 的官方事件固定来自 CLI 内置目录（离线可用），自建应用事件登录后从远端目录获取——未登录或远端故障时官方事件照常展示，仅应用事件缺失并附 WARN。
 
 ## Filter
 

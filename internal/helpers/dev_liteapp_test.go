@@ -71,7 +71,7 @@ func TestCrossPlatformCoverageLiteappDeclaresUnifiedRolloutAndTerminalOutcomes(t
 		name string
 		args []string
 	}{
-		{name: "create", args: []string{"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--yes"}},
+		{name: "create", args: []string{"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--desc", "周报助手", "--yes"}},
 		{name: "update", args: []string{"update", "uni-5005426001", "--desc", "新描述", "--yes"}},
 		{name: "delete", args: []string{"delete", "uni-5005426001", "--yes"}},
 		{name: "list", args: []string{"list"}},
@@ -239,7 +239,7 @@ func TestCrossPlatformCoverageLiteappDispatchesThroughDevAppProduct(t *testing.T
 
 func TestCrossPlatformCoverageLiteappWriteCommandsRequireYes(t *testing.T) {
 	for _, args := range [][]string{
-		{"create", "--name", "周报助手", "--homepage-url", "https://example.com"},
+		{"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--desc", "周报助手"},
 		{"update", "uni-5005426001", "--desc", "新描述"},
 		{"delete", "uni-5005426001"},
 	} {
@@ -254,9 +254,23 @@ func TestCrossPlatformCoverageLiteappWriteCommandsRequireYes(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageLiteappCreateRequiresNonEmptyDescription(t *testing.T) {
+	for _, descArgs := range [][]string{{}, {"--desc", "   "}} {
+		runner := &captureRunner{}
+		args := append([]string{"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--yes"}, descArgs...)
+		_, err := executeLiteapp(t, runner, args...)
+		if err == nil || !strings.Contains(err.Error(), "--desc") {
+			t.Fatalf("args=%v error = %v, want non-empty --desc validation", args, err)
+		}
+		if runner.last.Tool != "" {
+			t.Fatalf("args=%v must not dispatch on validation failure, got %q", args, runner.last.Tool)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageLiteappDryRunPropagatesToInvocation(t *testing.T) {
 	runner := &captureRunner{}
-	if _, err := executeLiteapp(t, runner, "create", "--name", "周报助手", "--homepage-url", "https://example.com", "--dry-run"); err != nil {
+	if _, err := executeLiteapp(t, runner, "create", "--name", "周报助手", "--homepage-url", "https://example.com", "--desc", "周报助手", "--dry-run"); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !runner.last.DryRun {
@@ -391,7 +405,7 @@ func TestCrossPlatformCoverageLiteappCreateCredentialDegradation(t *testing.T) {
 		},
 	}}
 	out, err := executeLiteapp(t, runner,
-		"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--yes")
+		"create", "--name", "周报助手", "--homepage-url", "https://example.com", "--desc", "周报助手", "--yes")
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

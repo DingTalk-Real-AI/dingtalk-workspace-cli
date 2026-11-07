@@ -591,7 +591,11 @@ func TestCrossPlatformCoverageEventCommandValidationCoverage(t *testing.T) {
 			t.Errorf("consume args %#v unexpectedly succeeded", args)
 		}
 	}
-	for _, maker := range []func() *cobra.Command{newEventListCommand, newEventStatusCommand, newEventStopCommand} {
+	for _, maker := range []func() *cobra.Command{
+		func() *cobra.Command { return newEventListCommand() },
+		newEventStatusCommand,
+		newEventStopCommand,
+	} {
 		if err := execute(t, maker(), "--as", "bad"); err == nil {
 			t.Fatal("invalid event identity succeeded")
 		}

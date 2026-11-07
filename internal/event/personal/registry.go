@@ -61,19 +61,23 @@ const (
 const (
 	StatusEnabled = "enabled"
 	StatusPending = "pending"
+	StatusRemote  = "remote"
 )
 
 type Definition struct {
-	EventKey       string                `json:"event_key"`
-	DisplayName    string                `json:"display_name"`
-	Description    string                `json:"description"`
-	Category       string                `json:"category"`
-	RuleType       string                `json:"rule_type"`
-	Status         string                `json:"status"`
-	RequiredParams []string              `json:"required_params"`
-	Constraints    *ParameterConstraints `json:"constraints,omitempty"`
-	Auth           map[string]any        `json:"auth,omitempty"`
-	Public         bool                  `json:"-"`
+	EventKey             string                `json:"event_key"`
+	DisplayName          string                `json:"display_name"`
+	Description          string                `json:"description"`
+	Category             string                `json:"category"`
+	RuleType             string                `json:"rule_type"`
+	Status               string                `json:"status"`
+	EventSource          string                `json:"event_source,omitempty"`
+	ProducerUnifiedAppID string                `json:"producer_unified_app_id,omitempty"`
+	Scope                string                `json:"scope,omitempty"`
+	RequiredParams       []string              `json:"required_params"`
+	Constraints          *ParameterConstraints `json:"constraints,omitempty"`
+	Auth                 map[string]any        `json:"auth,omitempty"`
+	Public               bool                  `json:"-"`
 }
 
 type ParameterConstraints struct {
@@ -596,7 +600,10 @@ func cloneMap(in map[string]any) map[string]any {
 func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, ruleParam map[string]any, err error) {
 	def, ok := Lookup(eventKey)
 	if !ok {
-		return "", nil, fmt.Errorf("unknown personal event key %q", eventKey)
+		if strings.TrimSpace(eventKey) == "" {
+			return "", nil, fmt.Errorf("unknown personal event key %q", eventKey)
+		}
+		return buildAppEventRuleParam(eventKey, opts)
 	}
 	if opts.RuleType != "" && opts.RuleType != def.RuleType {
 		return "", nil, fmt.Errorf("--rule %q does not match %s rule %q", opts.RuleType, eventKey, def.RuleType)
@@ -664,6 +671,33 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
+}
+
+// buildAppEventRuleParam handles application events (event keys outside the
+// built-in catalog). The server pins their subscription to rule type "all"
+// with a blank filterRule and rejects any target or filter argument, so the
+// CLI mirrors that contract locally; a nil ruleParam keeps filterRule empty
+// on the wire ("{}" would trip the server's FILTER_RULE_NOT_SUPPORTED guard).
+func buildAppEventRuleParam(eventKey string, opts RuleOptions) (string, map[string]any, error) {
+	if opts.RuleType != "" && opts.RuleType != "all" {
+		return "", nil, fmt.Errorf("--rule %q does not match application event rule \"all\"", opts.RuleType)
+	}
+	userID := strings.TrimSpace(opts.UserID)
+	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
+	groupID := strings.TrimSpace(opts.GroupID)
+	if userID != "" {
+		return "", nil, fmt.Errorf("--user is not supported for application event %s", eventKey)
+	}
+	if openDingTalkID != "" {
+		return "", nil, fmt.Errorf("--open-dingtalk-id is not supported for application event %s", eventKey)
+	}
+	if groupID != "" {
+		return "", nil, fmt.Errorf("--group is not supported for application event %s", eventKey)
+	}
+	if len(opts.RoleTypes) > 0 {
+		return "", nil, fmt.Errorf("--role-types is not supported for application event %s", eventKey)
+	}
+	return "all", nil, nil
 }
 
 func normalizeTodoRoleTypes(values []string) ([]string, error) {

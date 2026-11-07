@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 监听消息/@我/已读/撤回/reaction/群成员加入/群成员退出，审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/添加、听记创建/纪要生成或互动卡片回调。命令前缀：dws event。
+description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、和事件Schema 查询、实时消费。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,11 +9,11 @@ metadata:
       - dws
 ---
 
-# 钉钉个人事件
+# 钉钉个人与应用事件
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
-实时个人事件以外，消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
+个人事件以外，应用事件经远端目录发现（见 [应用事件参考](references/event-app.md)）；消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用 `event consume`。
@@ -39,18 +39,14 @@ metadata:
 | 好友申请/添加成功 | [好友参考](references/event-contact.md)：`event consume` |
 | 互动卡片回调 | [卡片参考](references/event-card.md) |
 | 听记创建/纪要生成 | <!-- dws-intent: event.listen.minutes -->`dws event consume`，见 [听记参考](references/event-minutes.md) |
+| 应用事件发现 → 事件 Schema → 消费 | [event-app.md](references/event-app.md)：`event list --category appEvent`、`event schema`、`event consume` |
 | 查看事件目录 | `dws event list --category <分类>` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
 | 查看状态 / 停止 | `dws event status` / `dws event stop <subscribe_id> --dry-run`，确认后再 `--yes` |
 
-默认 `--events message`。可选事件为 `message`、`reaction`、`read`、`recall`：
+默认 `--events message`，可选 `message,reaction,read,recall`。`at-me/all-direct/all-group` 只支持 message；`sender` 只能选一个 `--user`/`--open-dingtalk-id`/`--user-query`；`group` 只能选一个 `--chat-id`/`--chat-query`；混入非 message 时不能用 `--query`。
 
-- `at-me`、`all-direct`、`all-group` 只支持 `message`，且不接受目标。
-- `sender` 必须且只能传 `--user`、`--open-dingtalk-id` 或 `--user-query` 之一。
-- `group` 必须且只能传 `--chat-id` 或 `--chat-query` 之一。
-- `--query` 只用于纯 `message` 监听；混入 reaction/read/recall 时不得使用。
-
-OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或消息过滤；Todo 三个 EventKey 仅接受 `--role-types creator,executor,participant`，省略时取并集；好友、听记各两个 EventKey 约束同 OA。每项独立订阅并共享 bus。
+OA/好友/听记各 EventKey 使用 `ruleType=all`、空 `filterRule`，不接受目标或消息过滤；Todo 仅接受 `--role-types creator,executor,participant`，省略取并集。每项独立订阅并共享 bus。
 
 <!-- dws-intent: event.listen.card -->互动卡片使用 `dws event consume user_card_action_triggered --flatten -f ndjson`、`ruleType=all`、`filterRule={}`；不接受目标、角色或消息过滤。结构化上下文在 `payload.body.actionData.context`：`questions[].id` 关联 `answers[question_id]` 读取 `selected`，详见 [卡片参考](references/event-card.md)。
 
@@ -58,7 +54,7 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 <!-- dws-intent: event.listen.calendar -->主日历创建/新增参与/修改/取消使用 `dws event consume user_calendar_event_changed --flatten -f ndjson`；过滤与去重见 [日历参考](references/event-calendar.md)。
 
-姓名/群名必须唯一解析，零命中或多候选在创建订阅前停止。解析、监听、状态、停止使用同一 `--profile`，不得跨组织搬运 ID。
+姓名/群名零命中或多候选时停止；解析、监听、状态、停止使用同一 `--profile`，不得跨组织搬运 ID。
 
 ### EventKey 索引
 
@@ -68,12 +64,11 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 - 正常消费使用当前用户 OAuth、`--flatten` 和 NDJSON；stdout 仅事件，stderr 为生命周期状态。
 - 单事件 ready：`[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`。
-- 多事件先逐条输出 subscription，全部就绪后输出 `[event] ready event_count=<n> bus_pid=<pid>`。等 ready，不用 `sleep` 猜测。
-- 有界任务用 `--max-events N`/`--duration 10m`；干净退出会取消本次新建订阅。无界任务由宿主持续读 stdout；用 SIGTERM 或 bounded exit，不用 `kill -9`。
-- 自发消息会被 self-loop 过滤。按已授权规则决定是否回复；回复用真实 `conversation_id`/`sender_open_dingtalk_id`，见[回复交接](references/event-im-output.md)。
+- 多事件先逐条输出 subscription，全部就绪后输出 `[event] ready event_count=<n> bus_pid=<pid>`；等 ready，不用 `sleep` 猜测。
+- 有界任务用 `--max-events N`/`--duration 10m`，干净退出取消本次新订阅；无界任务用 SIGTERM 或 bounded exit，不用 `kill -9`。
+- 自发消息会被 self-loop 过滤；回复用真实 `conversation_id`/`sender_open_dingtalk_id`，见[回复交接](references/event-im-output.md)。
 - 扁平消息/动作字段按事件类型读取：已读为 `reader_open_dingtalk_id`，撤回为 `recaller_open_dingtalk_id`，回应为 `reaction_name`、`operation_type`。媒体优先通过聊天读取命令加 `--download-resources`，已知消息 ID 用 `dws chat message download-media`。
-- OA 扁平事件提供审批实例、任务和状态字段；字段差异、原始回退条件及与 OA 命令的稳定 ID 交接以 [OA 事件参考](references/event-oa.md) 为准。
-- Todo 扁平事件提供 `task_id`、标题、角色、状态阶段和时间字段；用真实 `task_id` 交给 `dws todo`，字段差异见 [Todo 事件参考](references/event-todo.md)。
+- OA/Todo 扁平事件提供审批实例/任务与 `task_id` 等字段；稳定 ID 交接见对应 reference。
 - 互动卡片输出 `type/event_id/timestamp/subscribe_id/payload`；操作者 `operatorDTO.uid`，`triggerTimestamp` 等三个时间戳照原样保留；回退见 [互动卡片参考](references/event-card.md)。
 
 ## 安全与失败处理
@@ -94,8 +89,7 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 ## 何时查询 Schema
 
-- 已知 Golden Route 时直接执行，不先跑 `event list`。
-- 解析业务字段时用 `dws event schema <event_key> --flatten`。
+- 已知 Golden Route 直接执行；解析业务字段用 `dws event schema <event_key> --flatten`。
 - 参数或安全不确定时用 `dws schema --cli-path "event +listen-im" --compact` 或对应 compact leaf。
 - `event schema` 描述事件 payload；顶层 `dws schema` 描述 CLI 命令，两者不要混用。
 
@@ -103,13 +97,14 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 | 何时读取 | Reference |
 |---|---|
+| 应用事件发现、事件 Schema、版本与安全 | [event-app.md](references/event-app.md) |
 | 任务索引 | [event-im.md](references/event-im.md) |
 | EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) |
 | ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) |
 | 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) |
 | Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) |
 | OA 审批事件 | [event-oa.md](references/event-oa.md) |
-| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) |
+| VoIP 通话邀请 | [event-voip.md](references/event-voip.md) |
 | Todo 待办事件 | [event-todo.md](references/event-todo.md) |
 | 好友事件 | [event-contact.md](references/event-contact.md) |
 | 互动卡片回调事件 | [event-card.md](references/event-card.md) |
