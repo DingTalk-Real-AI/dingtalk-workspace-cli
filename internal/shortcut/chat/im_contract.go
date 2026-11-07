@@ -62,8 +62,8 @@ type IMCapabilityBoundary struct {
 }
 
 var currentIMCapabilityBoundaries = []IMCapabilityBoundary{
-	{Capability: "thread-write", Supported: false, Alternative: "quote reply with +messages-reply; thread reading with +thread-replies"},
-	{Capability: "bot-rich-media", Supported: false, Alternative: "bot text/markdown, or current-user file/image send"},
+	{Capability: "thread-write", Supported: true, Alternative: "personal +messages-reply --reply-in-thread; original chat thread reply remains available; Bot Thread write unsupported"},
+	{Capability: "bot-rich-media", Supported: true, Alternative: "bot image-url and single-target local file via +messages-send; native audio/video and arbitrary interactive cards unsupported"},
 	{Capability: "card-action-callback", Supported: false, Alternative: "streaming text card create/update only"},
 	{Capability: "resource-resume", Supported: false, Alternative: "atomic whole-file download with explicit retry"},
 	{Capability: "group-member-full-pagination", Supported: true, Alternative: "+chat-members-list or +group-members"},

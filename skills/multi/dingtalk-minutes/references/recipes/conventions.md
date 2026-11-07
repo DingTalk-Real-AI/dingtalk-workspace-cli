@@ -1,44 +1,33 @@
-# 业务域通用规范
+# Minutes Recipe 通用约束
 
-> 仅服务本 skill 已迁入的行动指南。安全门控、危险操作确认、`--format json` 等已在本 skill 的 `SKILL.md` 中定义，此处不重复。
+> 返回入口：[DingTalk Minutes Skill](../../SKILL.md) · [Reference 与脚本索引](../minutes.md) · [兼容 Recipe](../lite-recipes.md)
 
-## 批量查询规范
+本页只约束仍使用旧 Recipe 名称的兼容调用方，不复制根 Skill 的完整执行契约。
 
-| # | 规范 |
-|---|------|
-| 1 | **并行查详情**：拿到多个 ID 后，用 `&` 合并到同一条 Shell 命令并行执行 + `wait`，**严禁逐条串行** |
-| 2 | **翻页**：分页接口须拉全直至无更多 |
-| 3 | **优先批量 API**：有批量接口则用批量；无则按 #1 并行 |
-| 4 | **群消息**：必须先 `chat search --query` 得 `openConversationId`，再 `chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older`；多群同条命令并行 |
-| 5 | **列表少轮次**：带条件搜索/列表 → 一次采全详情；**禁止**无新参数时重复同一 `list` / `search` |
+## 目标与 ID
 
-## 多源并行采集（公共模式）
+| 字段 | 真实来源 | 后续用途 |
+|---|---|---|
+| `taskUuid` | Minutes 搜索/列表/创建的真实结果，或可信听记 URL 解析 | 所有详情、内容、更新、权限、下载与异步产物命令 |
+| 成员 UID | 同 profile 下 AI Search/Contact 的唯一人员结果 | `+share/+unshare` 与需要身份绑定的发言人替换 |
+| `sessionId` | upload create 的真实结果 | upload complete/cancel 与状态恢复 |
+| `taskId` | 异步 create 的真实结果 | 继续轮询或恢复，不能重新 create 代替 |
 
-> recipe 引用方式：`按「多源并行采集」执行（关键词=<X>，时间=<Y>至<Z>）`。
+标题、姓名、手机号、列表顺序和“最新一条”都不能替代稳定 ID。目标零命中、多候选、跨组织或分页未完成时停止并消歧。
 
-- 同条 Shell：`&` 并行 + `wait`；分页须采全。
-- 只保留与主题相关的数据，无关丢弃。
-- 有批量详情接口优先；否则并行拉详情（见上表 #1）。
-- 具体采哪些产品列表由对应 **行动指南 recipe** 与当前产品参考决定；不要引入本文档未覆盖的产品路线。
+## 分页与批量
 
-## 字段术语与 ID 传递
+- 完整列表和逐字稿必须读取到端点穷尽并检查 `complete=true`；缺 token、cursor 不前进/循环、页数上限或某页失败都属于不完整。
+- 优先使用发布的批量接口或 Shortcut；没有批量能力时采用有界执行，不把 shell `& wait` 写成通用要求。
+- 批量结果逐项记录目标、动作、成功、失败与未知状态。部分成功返回完整 ledger，不只汇报成功项。
 
-> list 返回 JSON 后，必须提取下表字段传给后续命令。**禁止用其他字段替代。**
+## 写入与恢复
 
-| 字段 | 来源 | 传递给 |
-|------|------|--------|
-| `taskUuid` | `minutes list` | `minutes get summary/info/batch --id(s)` |
-| `userId` | `aisearch person` / `contact user search` / `contact dept list-members` | `contact user get --ids`、`todo --executors`、`calendar --users` |
-| `deptId` | `contact dept search` | `contact dept list-members --ids <deptId1,deptId2...>`；多子部门时对每个子部门分别 `dept search` 取 id |
-| `nodeId` | `drive search` / `wiki node search` | `doc read/update --node`、`drive copy/move/rename/delete --node` |
-| `nodeId` | `wiki node list` 中的 folder 类型节点 / `wiki node create --type folder` | `wiki node list --folder`、`wiki node create --folder`、`drive upload --folder`、`drive copy/move --folder` |
-| `eventId` | `calendar event list` | `calendar event get/update --id` |
-| `processInstanceId` | `oa approval list-*` | `oa approval detail/approve --instance-id` |
-| `openConversationId` | `chat search` | `chat message list/send --group` |
-| `todoTaskId` | `todo task list` | `todo task update/done --task-id` |
-| `reportId` | `report inbox list` / `report outbox list` | `report entry get/stats --report-id` |
-| `baseId` / `tableId` | `aitable base search` | `aitable record query --base-id --table-id` |
-| `dentryUuid` | `drive list` / `drive mkdir` | `drive info/download/copy/move/rename/delete --node`、`drive list/mkdir/upload/copy/move --folder` |
-| `dentryId` | `drive info` 的数字字段 | 仅用于 `chat message send --dentry-id` |
+- Runtime 要求确认时，远端写调用数在确认前必须为 0；dry-run 也必须为 0。
+- 非幂等或状态未知的 create/update 不盲目重试。先按真实 ID 读回，再决定只恢复未完成步骤。
+- 写入成功必须有业务回执和必要读回证据；退出码 0、HTTP 200 或 `success=true` 单独都不足以证明完成。
 
-**ID 边界硬约束**：`dentryId` 通常是纯数字，只表示聊天文件消息需要的钉盘条目数字 ID；它不是父目录 ID。遇到 `drive --node/--folder`、`doc --node`、`wiki node --folder` 时，只能使用 `dentryUuid` / `nodeId` / 文档 URL。若当前上下文只有数字型 `dentryId`，必须先重新 `drive list` / `drive search` / `wiki node list` 获取正确 ID，不能把该数字直接代入后续命令。
+## 跨产品传递
+
+- Minutes 只交付真实听记内容和稳定 ID；写文档、建待办、发消息分别切换 `dingtalk-doc`、`dingtalk-todo`、`dingtalk-chat`。
+- 跨产品传递时保留来源听记的 `taskUuid/title/profile`，不得把另一个组织或另一个候选的字段拼接到当前对象。

@@ -17,6 +17,8 @@ Hrbrain 是钉钉组织大脑，提供人才池管理、员工档案查询、人
 | `talent-pool list` | 查询人才池列表 | - | 可选 `--keyword`、`--pool-type`、`--creator`、`--labels`（逗号分隔）、`--page`、`--page-size`（默认 1/20） |
 | `talent-pool detail` | 获取人才池详情 | `--pool-code` | 根据人才池编码查询 |
 | `talent-pool employees` | 查询人才池内人员列表 | `--pool-code` | 可选 `--page`、`--page-size`（默认 1/20） |
+| `talent-pool save` | 创建或更新人才池 | `--pool-name` | 写操作，需确认（`--yes`）。不传 `--pool-code` 为新建，传 `--pool-code` 为更新；可选 `--pool-desc`、`--rule-json`（JSON 对象字符串）、`--pool-tags`（JSON 数组） |
+| `talent-pool move-members` | 人才池人员出入池 | `--pool-code` `--opt-type` `--staff-ids` | 写操作，需确认（`--yes`）。`--opt-type` 仅 `ENTERING`（入池）/`LEAVING`（出池）；`--staff-ids` 逗号分隔工号；可选 `--remark` |
 
 ### profile (员工档案管理)
 
@@ -42,6 +44,8 @@ Hrbrain 是钉钉组织大脑，提供人才池管理、员工档案查询、人
 - 查看列表 → `talent-pool list`
 - 详情 → `talent-pool detail`
 - 池内人员 → `talent-pool employees`
+- 新建或修改人才池（名称/描述/规则/标识）→ `talent-pool save`（写操作，需 `--yes`）
+- 把人员移入/移出人才池 → `talent-pool move-members`（写操作，需 `--yes`）
 
 用户说"员工档案/档案数据/员工信息模块":
 - 元数据结构 → `profile metadata`
@@ -68,6 +72,15 @@ dws hrbrain talent-pool list --page 1 --page-size 20 --format json
 dws hrbrain talent-pool list --keyword "储备干部" --pool-type TYPE --creator USER_ID --format json
 dws hrbrain talent-pool detail --pool-code POOL_CODE --format json
 dws hrbrain talent-pool employees --pool-code POOL_CODE --page 1 --page-size 20 --format json
+
+# 创建或更新人才池、人员出入池（写操作，确认后加 --yes）
+dws hrbrain talent-pool save --pool-name "储备干部池" --yes --format json
+dws hrbrain talent-pool save --pool-code POOL_CODE --pool-name "储备干部池" --pool-desc "描述" \
+  --rule-json '{"auto":true}' \
+  --pool-tags '[{"label":"共享人才池","setting":{"color":"#fff","backgroundColor":"#000"}}]' \
+  --yes --format json
+dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type ENTERING --staff-ids WORK_NO1,WORK_NO2 --yes --format json
+dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type LEAVING --staff-ids WORK_NO1 --remark "转岗" --yes --format json
 
 # 员工档案：先查元数据确定字段编码，再批量查数据
 dws hrbrain profile metadata --work-no WORK_NO --format json
@@ -105,6 +118,8 @@ dws hrbrain search employees-structured \
 ## 注意事项
 
 - `--data-queries`、`--fields`、`--origin-json` 均为 JSON 字符串参数，必须是合法 JSON，否则命令直接报错。
+- `talent-pool save` 的 `--rule-json` 必须是合法 JSON 对象字符串，`--pool-tags` 必须是非空 JSON 数组；`talent-pool save` / `talent-pool move-members` 为写操作，`confirmation=user_required`，非交互环境须在用户明确授权后追加 `--yes`。
+- `talent-pool move-members` 的 `--opt-type` 仅接受 `ENTERING`（入池）或 `LEAVING`（出池），其它值直接报错。
 - `--staff-ids`、`--labels`、`--order-by` 为逗号分隔字符串，非 JSON 数组。
 - `--page`/`--page-size` 默认值为 1/20；全局安装的旧版本 `dws` 可能不识别分页 flag，需确认二进制版本已包含 hrbrain 分页支持。
 - `talent-pool list` 需要账号单独开通人才池查看权限；返回 `errorCode=2002` 时提示用户联系管理员开通权限，而非重试或换 profile。

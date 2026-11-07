@@ -451,7 +451,7 @@ func TestDeclareLeafMetadataInstallsConfirmSafetyForUserRequired(t *testing.T) {
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	if err := cmd.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(cmd); err == nil {
 		t.Fatal("want confirmation_required without --yes")
 	}
 	if called {
@@ -461,7 +461,7 @@ func TestDeclareLeafMetadataInstallsConfirmSafetyForUserRequired(t *testing.T) {
 		t.Fatal(err)
 	}
 	called = false
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("with --yes: %v", err)
 	}
 	if !called {
@@ -523,7 +523,7 @@ func TestDeclareLeafMetadataDefersConfirmUntilCallTool(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "flag --id is required") {
 		t.Fatalf("missing id: %v, want RunE validation before confirm", err)
 	}
@@ -534,7 +534,7 @@ func TestDeclareLeafMetadataDefersConfirmUntilCallTool(t *testing.T) {
 	if err := cmd.Flags().Set("id", "x"); err != nil {
 		t.Fatal(err)
 	}
-	err = cmd.Execute()
+	err = corecmd.ExecuteForTest(cmd)
 	if err == nil || (!strings.Contains(err.Error(), "confirmation_required") && !strings.Contains(err.Error(), "需要用户确认")) {
 		t.Fatalf("valid args without --yes: %v, want confirmation_required", err)
 	}
@@ -594,7 +594,7 @@ func TestDeclareLeafMetadataValidateRunsBeforeConfirmSafety(t *testing.T) {
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "flag --id is required") {
 		t.Fatalf("Execute() error = %v, want Validate failure before confirmation", err)
 	}

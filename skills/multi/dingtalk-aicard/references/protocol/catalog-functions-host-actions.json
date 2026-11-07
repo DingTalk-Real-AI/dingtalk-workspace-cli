@@ -1,0 +1,607 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-functions-host-actions.json",
+  "title": "DingTalk AICard Protocol V0.8 DingTalk host actions",
+  "description": "0 components and 7 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {},
+  "functions": {
+    "copyText": {
+      "type": "object",
+      "description": "Copies text.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "void",
+      "properties": {
+        "call": {
+          "const": "copyText"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "anyOf": [
+                {
+                  "maxLength": 65536,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object",
+          "anyOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            },
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "openChat": {
+      "type": "object",
+      "description": "Opens a conversation.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "void",
+      "properties": {
+        "call": {
+          "const": "openChat"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "openConversationId": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "openConversationId"
+          ],
+          "type": "object",
+          "anyOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            },
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "previewImages": {
+      "type": "object",
+      "description": "Previews 1–100 images. If `current` is provided, it must identify an item in the predetermined `urls` array.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "void",
+      "properties": {
+        "call": {
+          "const": "previewImages"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "current": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "urls": {
+              "anyOf": [
+                {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                      },
+                      {
+                        "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                      }
+                    ]
+                  },
+                  "maxItems": 100,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "urls"
+          ],
+          "type": "object",
+          "anyOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            },
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+            }
+          ],
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "current"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "current": {
+                    "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+                  },
+                  "urls": {
+                    "anyOf": [
+                      {
+                        "type": "array"
+                      },
+                      {
+                        "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                          },
+                          {
+                            "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "previewVideo": {
+      "type": "object",
+      "description": "Previews a video.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "void",
+      "properties": {
+        "call": {
+          "const": "previewVideo"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "posterUrl": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "url": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object",
+          "anyOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            },
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "promptText": {
+      "type": "object",
+      "description": "Opens a single-line input panel. Use `args.initialValue` for prefilled text; `text` is the result field returned after confirmation and cannot be used as an input parameter. Static bindings and string functions evaluated in advance are allowed; client-side expressions and `maxLength` are not supported. Canceling does not write back a value. See ./examples/host-action.json for a complete message example.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"text\": {\n              \"description\": \"Text entered by the user and returned after confirmation. This is a result field, not the input parameter for prefilled text.\",\n              \"maxLength\": 65536,\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"text\"\n          ],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "object",
+      "properties": {
+        "call": {
+          "const": "promptText"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "initialValue": {
+              "anyOf": [
+                {
+                  "maxLength": 65536,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ],
+              "description": "Text prefilled when the input panel opens. May be a string, data binding, or value function pre-evaluated to a string. If omitted, the input is initially empty."
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ],
+              "description": "Prompt shown by the desktop input panel. It is not inserted into the input value, and mobile clients currently do not display it."
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ],
+              "description": "The title of the input panel."
+            }
+          },
+          "required": [],
+          "type": "object",
+          "allOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            }
+          ]
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "showConfirm": {
+      "type": "object",
+      "description": "Shows a confirmation dialog. The call is rejected when `message` is empty and `title` is omitted. Canceling returns `confirmed=false`.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"confirmed\": {\n              \"type\": \"boolean\"\n            }\n          },\n          \"required\": [\n            \"confirmed\"\n          ],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "object",
+      "properties": {
+        "call": {
+          "const": "showConfirm"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "cancelText": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "confirmText": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "message"
+          ],
+          "type": "object",
+          "anyOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            },
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+            }
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "message": {
+                    "const": ""
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              },
+              "then": {
+                "required": [
+                  "title"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    },
+    "showModal": {
+      "type": "object",
+      "description": "Shows a dialog with custom buttons. Currently 1–2 buttons are supported, and parameters must be evaluated in advance. The cancel button added by desktop clients returns an empty `selectedId`.\n\nResult schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"success\"\n        },\n        \"data\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"selectedId\": {\n              \"maxLength\": 4096,\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"selectedId\"\n          ],\n          \"type\": \"object\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"data\"\n      ],\n      \"additionalProperties\": false\n    },\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"status\": {\n          \"const\": \"failed\"\n        }\n      },\n      \"required\": [\n        \"status\"\n      ],\n      \"additionalProperties\": false\n    }\n  ]\n}\n```",
+      "returnType": "object",
+      "properties": {
+        "call": {
+          "const": "showModal"
+        },
+        "args": {
+          "additionalProperties": false,
+          "properties": {
+            "buttons": {
+              "anyOf": [
+                {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "anyOf": [
+                              {
+                                "maxLength": 4096,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                              },
+                              {
+                                "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                              }
+                            ]
+                          },
+                          "title": {
+                            "anyOf": [
+                              {
+                                "maxLength": 256,
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                              },
+                              {
+                                "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                      },
+                      {
+                        "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                      }
+                    ]
+                  },
+                  "maxItems": 2,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/DataBinding"
+                },
+                {
+                  "$ref": "./common-types-basic.json#/$defs/FunctionCall"
+                }
+              ]
+            }
+          },
+          "required": [
+            "message",
+            "buttons"
+          ],
+          "type": "object",
+          "allOf": [
+            {
+              "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+            }
+          ]
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "allowedCallers": "rendererOnly"
+    }
+  },
+  "$defs": {
+    "anyComponent": false,
+    "anyFunction": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/copyText"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/openChat"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/previewImages"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/previewVideo"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/promptText"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/showConfirm"
+        },
+        {
+          "$ref": "./catalog-functions-host-actions.json#/functions/showModal"
+        }
+      ]
+    }
+  }
+}

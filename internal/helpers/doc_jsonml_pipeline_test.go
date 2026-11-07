@@ -76,7 +76,7 @@ func TestCrossPlatformCoverageJSONMLInputSanitizingAndShapeCoercion(t *testing.T
 func TestCrossPlatformCoveragePrepareJSONMLBody(t *testing.T) {
 	strict := jsonMLTestCommand(t, false)
 	valid := `{"jsonml":["root",{},["p",{},["span",{},"ok"]]]}`
-	if got, err := prepareJsonMLBody(strict, valid); err != nil || !strings.Contains(got, `"root"`) {
+	if got, err := PrepareDocJSONMLBody(strict, valid); err != nil || !strings.Contains(got, `"root"`) {
 		t.Fatalf("valid wrapper = %q, %v", got, err)
 	}
 	if got, err := prepareJsonMLBody(strict, `["root",{},["p",{},["span",{},"ok"]]]`); err != nil || !strings.Contains(got, `"root"`) {
@@ -113,7 +113,7 @@ func TestCrossPlatformCoveragePrepareJSONMLNode(t *testing.T) {
 		`["p",{},["span",{},"ok"]]`,
 		`{"jsonml":[["p",{},["span",{},"ok"]]]}`,
 	} {
-		if got, err := prepareJsonMLNode(strict, raw); err != nil || !strings.Contains(got, `"p"`) {
+		if got, err := PrepareDocJSONMLNode(strict, raw); err != nil || !strings.Contains(got, `"p"`) {
 			t.Errorf("prepareJsonMLNode(%q) = %q, %v", raw, got, err)
 		}
 	}

@@ -2,10 +2,11 @@
 // Licensed under the Apache License, Version 2.0
 
 // Package upgrade provides self-update functionality for the DWS CLI
-// using GitHub Releases as the data source.
+// using npm Registry by default and explicitly configured GitHub Releases.
 package upgrade
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,6 +88,7 @@ type ReleaseInfo struct {
 	Prerelease bool
 	HTMLURL    string
 	Assets     []GitHubAsset
+	NPM        *NPMPackage
 }
 
 // VersionEntry represents a single version in the version list.
@@ -106,17 +108,22 @@ const (
 	ReleaseTrackAll     ReleaseTrack = "all"
 )
 
-// Client communicates with the GitHub Releases API.
+// Client queries the selected release source.
 type Client struct {
-	httpClient *http.Client
-	owner      string
-	repo       string
-	baseURL    string // overridable for testing or mirrors
-	configErr  error
+	httpClient  *http.Client
+	owner       string
+	repo        string
+	baseURL     string // overridable for testing or mirrors
+	registryURL string // 非空时为 npm 包元数据根地址，不使用 GitHub。
+	configErr   error
+	anonymous   bool // 自动检查不继承显式升级请求的凭据权限。
 }
 
-// NewClient creates a GitHub release client with default settings.
+// NewClient 默认查询 npm；显式 GitHub 配置继续使用原有升级源。
 func NewClient() *Client {
+	if !hasExplicitGitHubSource() {
+		return newRegistryClient()
+	}
 	baseURL := gitHubAPIBase
 	if env := os.Getenv("DWS_UPGRADE_URL"); env != "" {
 		baseURL = strings.TrimRight(env, "/")
@@ -146,6 +153,9 @@ func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
 	if err := c.validateConfig(); err != nil {
 		return nil, err
 	}
+	if c.registryURL != "" {
+		return c.fetchRegistryRelease(context.Background(), "latest", ReleaseTrackRelease)
+	}
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, c.owner, c.repo)
 
 	var gh GitHubRelease
@@ -158,11 +168,29 @@ func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
 
 // FetchLatestReleaseForTrack returns the latest release in the requested track.
 func (c *Client) FetchLatestReleaseForTrack(track ReleaseTrack) (*ReleaseInfo, error) {
+	return c.FetchLatestReleaseForTrackContext(context.Background(), track)
+}
+
+// FetchLatestReleaseForTrackContext 让自动检查与显式升级共用来源，并保留调用方预算。
+func (c *Client) FetchLatestReleaseForTrackContext(ctx context.Context, track ReleaseTrack) (*ReleaseInfo, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+	if c.registryURL != "" {
+		switch track {
+		case ReleaseTrackRelease, "":
+			return c.fetchRegistryRelease(ctx, "latest", ReleaseTrackRelease)
+		case ReleaseTrackBeta:
+			return c.fetchRegistryRelease(ctx, "beta", ReleaseTrackBeta)
+		default:
+			return nil, fmt.Errorf("未知升级轨道: %s", track)
+		}
+	}
 	switch track {
 	case ReleaseTrackBeta:
-		return c.FetchLatestPrerelease()
+		return c.fetchLatestGitHubRelease(ctx, ReleaseTrackBeta)
 	case ReleaseTrackRelease, "":
-		return c.FetchLatestStableRelease()
+		return c.fetchLatestGitHubRelease(ctx, ReleaseTrackRelease)
 	default:
 		return nil, fmt.Errorf("未知升级轨道: %s", track)
 	}
@@ -171,38 +199,38 @@ func (c *Client) FetchLatestReleaseForTrack(track ReleaseTrack) (*ReleaseInfo, e
 // FetchLatestStableRelease returns the newest non-draft, non-prerelease release
 // whose tag is a formal semantic version (vX.Y.Z).
 func (c *Client) FetchLatestStableRelease() (*ReleaseInfo, error) {
-	releases, err := c.fetchReleases()
+	return c.FetchLatestReleaseForTrack(ReleaseTrackRelease)
+}
+
+func (c *Client) fetchLatestGitHubRelease(ctx context.Context, track ReleaseTrack) (*ReleaseInfo, error) {
+	releases, err := c.fetchReleasesContext(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("获取正式 release 版本失败: %w", err)
+		return nil, fmt.Errorf("获取 %s 版本失败: %w", track, err)
 	}
 	for i := range releases {
-		if !releaseMatchesTrack(releases[i], ReleaseTrackRelease) {
+		if !releaseMatchesTrack(releases[i], track) {
 			continue
 		}
 		return ghReleaseToInfo(&releases[i]), nil
 	}
-	return nil, fmt.Errorf("未找到正式 release 版本（需要非 pre-release 且 tag 形如 vX.Y.Z）")
+	return nil, fmt.Errorf("未找到 %s 版本", track)
 }
 
 // FetchLatestPrerelease returns the newest non-draft prerelease.
 func (c *Client) FetchLatestPrerelease() (*ReleaseInfo, error) {
-	releases, err := c.fetchReleases()
-	if err != nil {
-		return nil, fmt.Errorf("获取 beta 版本失败: %w", err)
-	}
-	for i := range releases {
-		if !releaseMatchesTrack(releases[i], ReleaseTrackBeta) {
-			continue
-		}
-		return ghReleaseToInfo(&releases[i]), nil
-	}
-	return nil, fmt.Errorf("未找到 beta 版本（需要 GitHub pre-release 且 tag 形如 vX.Y.Z-*）")
+	return c.FetchLatestReleaseForTrack(ReleaseTrackBeta)
 }
 
 // FetchReleaseByTag returns the release for a specific tag (e.g. "v1.0.5").
 func (c *Client) FetchReleaseByTag(tag string) (*ReleaseInfo, error) {
 	if err := c.validateConfig(); err != nil {
 		return nil, err
+	}
+	if c.registryURL != "" {
+		if !validNPMVersion(stripV(tag)) {
+			return nil, fmt.Errorf("无效的 npm 发行版本: %q", tag)
+		}
+		return c.fetchRegistryRelease(context.Background(), stripV(tag), ReleaseTrackAll)
 	}
 	if !strings.HasPrefix(tag, "v") {
 		tag = "v" + tag
@@ -225,6 +253,12 @@ func (c *Client) FetchAllReleases() ([]VersionEntry, error) {
 // FetchReleaseVersions returns non-draft releases matching the requested track,
 // newest first. The GitHub API already returns releases newest first.
 func (c *Client) FetchReleaseVersions(track ReleaseTrack) ([]VersionEntry, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+	if c.registryURL != "" {
+		return c.fetchRegistryVersions(context.Background(), track)
+	}
 	ghReleases, err := c.fetchReleases()
 	if err != nil {
 		return nil, fmt.Errorf("获取版本列表失败: %w", err)
@@ -246,13 +280,14 @@ func (c *Client) FetchReleaseVersions(track ReleaseTrack) ([]VersionEntry, error
 }
 
 func (c *Client) fetchReleases() ([]GitHubRelease, error) {
-	if err := c.validateConfig(); err != nil {
-		return nil, err
-	}
+	return c.fetchReleasesContext(context.Background())
+}
+
+func (c *Client) fetchReleasesContext(ctx context.Context) ([]GitHubRelease, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", c.baseURL, c.owner, c.repo)
 
 	var ghReleases []GitHubRelease
-	if err := c.getJSON(url, &ghReleases); err != nil {
+	if err := c.getJSONContext(ctx, url, &ghReleases); err != nil {
 		return nil, err
 	}
 	return ghReleases, nil
@@ -334,7 +369,11 @@ func ExtractDigestSHA256(digest string) string {
 
 // getJSON performs a GET request and decodes the JSON response.
 func (c *Client) getJSON(url string, target interface{}) error {
-	req, err := http.NewRequest("GET", url, nil)
+	return c.getJSONContext(context.Background(), url, target)
+}
+
+func (c *Client) getJSONContext(ctx context.Context, url string, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
@@ -342,8 +381,10 @@ func (c *Client) getJSON(url string, target interface{}) error {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	if token := githubToken(); token != "" {
-		req.Header.Set("Authorization", "token "+token)
+	if !c.anonymous {
+		if token := githubToken(); token != "" {
+			req.Header.Set("Authorization", "token "+token)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)

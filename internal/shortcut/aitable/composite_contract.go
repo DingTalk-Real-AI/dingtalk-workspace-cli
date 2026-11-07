@@ -9,7 +9,38 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
+
+func aitableBaseCompositeResultSpec(operation string) *contract.ResultSpec {
+	// Reuse the composite receipt fields; only the entity-specific result differs.
+	spec := aitableTableBootstrapResultSpec()
+	var schema map[string]any
+	// The shared literal is validated by the Result Schema regression gate.
+	_ = json.Unmarshal(spec.DataSchema, &schema)
+	schema["description"] = "Base 复合操作的执行计划、验证证据、恢复信息和导航链接"
+	properties := schema["properties"].(map[string]any)
+	properties["operation"] = map[string]any{"type": "string", "description": "复合操作标识", "const": operation}
+	properties["requestedCount"] = map[string]any{"type": "integer", "description": "请求处理的对象数量", "minimum": 0}
+	properties["completedCount"] = map[string]any{"type": "integer", "description": "已完成并验证的对象或步骤数量", "minimum": 0}
+	properties["failedCount"] = map[string]any{"type": "integer", "description": "未完成的对象数量", "minimum": 0}
+	object := helpers.AitableNavigationObjectSchema()
+	object["description"] = "已确认 Base 及导航链接；失败时同结构位于 error.details.result.result"
+	entityProperties := object["properties"].(map[string]any)
+	entityProperties["newBaseId"] = map[string]any{"type": "string", "description": "复制生成的新 Base ID；不会使用源 Base ID 替代"}
+	entityProperties["base"] = map[string]any{"type": "object", "description": "复制后读回的 Base 原始响应", "additionalProperties": true}
+	entityProperties["tables"] = map[string]any{"type": "array", "description": "已完成创建及验证的数据表", "items": map[string]any{
+		"type": "object", "description": "已验证数据表及其访问链接", "additionalProperties": true,
+		"properties": map[string]any{
+			"tableId": entityProperties["tableId"], "name": map[string]any{"type": "string", "description": "数据表名称"},
+			"fieldCount": map[string]any{"type": "integer", "description": "读回的字段数量"},
+			"url":        entityProperties["url"], "links": entityProperties["links"],
+		},
+	}}
+	properties["result"] = object
+	spec.DataSchema, _ = json.Marshal(schema)
+	return spec
+}
 
 func aitableCompositeContractWithResult(command, description, useWhen, avoidWhen, example string, result *contract.ResultSpec) corecmd.ContractDecl {
 	declaration := aitableCompositeContract(command, description, useWhen, avoidWhen, example)
@@ -17,6 +48,9 @@ func aitableCompositeContractWithResult(command, description, useWhen, avoidWhen
 	return declaration
 }
 
+// aitableTableBootstrapResultSpec describes independently verified structures.
+// Optional navigation also permits explicit server nulls, which runtime keeps
+// authoritative instead of replacing them with an earlier receipt value.
 func aitableTableBootstrapResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{
@@ -43,11 +77,45 @@ func aitableTableBootstrapResultSpec() *contract.ResultSpec {
 				"nextCommand":{"type":"string","description":"用于核验或恢复的下一条可执行命令"},
 				"knownSideEffects":{"type":"array","description":"已确认发生的远端副作用","items":{"type":"object","description":"一个已确认副作用","additionalProperties":true}},
 				"warnings":{"type":"array","description":"不阻断最终验证的警告信息","items":{"type":"string"}},
-				"result":{"type":"object","description":"成功时创建并验证的数据表结构","properties":{"baseId":{"type":"string","description":"目标 Base ID"},"tableId":{"type":"string","description":"新数据表稳定 ID"},"tableName":{"type":"string","description":"新数据表名称"},"fields":{"type":"array","description":"读回验证后的字段结构","items":{"type":"object","description":"一个已验证字段","additionalProperties":true}}},"required":["baseId","tableId","tableName","fields"],"additionalProperties":true}
+				"result":{"type":"object","description":"成功时创建并验证的数据表结构","properties":{"baseId":{"type":"string","description":"目标 Base ID"},"tableId":{"type":"string","description":"新数据表稳定 ID"},"tableName":{"type":"string","description":"新数据表名称"},"url":{"type":["string","null"],"description":"MCP 返回的新表访问链接，携带 sheetId"},"links":{"type":["array","null"],"description":"数据表目标与父级 Base 的访问上下文","items":{"type":"object","additionalProperties":true}},"fields":{"type":"array","description":"读回验证后的字段结构","items":{"type":"object","description":"一个已验证字段","additionalProperties":true}}},"required":["baseId","tableId","tableName","fields"],"additionalProperties":true}
 			},
 			"required":["contractVersion","operation","status","executed","retryable"],
 			"additionalProperties":false
 		}`),
+	}
+}
+
+func aitableImportFileResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePending,
+			contract.ResultOutcomePartialFailure,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(`{
+			"type":"object",
+			"description":"本地文件导入的执行计划、importId、任务状态和恢复检查点",
+			"properties":{
+				"contractVersion":{"type":"string","description":"复合操作业务回执版本","const":"aitable.composite.v1"},
+				"operation":{"type":"string","description":"复合操作标识","const":"import_file"},
+				"status":{"type":"string","description":"导入闭环当前状态","enum":["success","planned","pending","partial_success","unknown"]},
+				"executed":{"type":"boolean","description":"是否已开始执行远端操作"},
+				"retryable":{"type":"boolean","description":"当前状态是否允许直接重试"},
+				"completedCount":{"type":"integer","description":"已完成步骤数量","minimum":0},
+				"resolved":{"type":"object","description":"已解析的文件、Base 和 importId","additionalProperties":true},
+				"plan":{"type":"array","description":"有序导入步骤","items":{"type":"object","description":"一个导入步骤","additionalProperties":true}},
+				"verification":{"type":"object","description":"服务端确认的导入状态","additionalProperties":true},
+				"checkpoint":{"type":"object","description":"pending 或未知状态的恢复检查点","additionalProperties":true},
+				"nextCommand":{"type":"string","description":"只续等同一 importId 的建议命令"},
+				"knownSideEffects":{"type":"array","description":"已确认的申请或上传副作用","items":{"type":"object","description":"一个已确认副作用","additionalProperties":true}},
+				"warnings":{"type":"array","description":"不阻断结果的警告","items":{"type":"string"}},
+				"result":{"type":"object","description":"脱敏后的导入任务结果及导航链接","properties":{"mode":{"type":"string","description":"initial 或 resume"},"importId":{"type":"string","description":"继续等待使用的原导入 ID"},"baseId":{"type":"string","description":"任务绑定的 Base ID"},"tableId":{"type":"string","description":"已知追加目标表 ID"},"tableIds":{"type":["array","null"],"description":"服务端返回的新增表候选 ID","items":{"type":"string"}},"url":{"type":["string","null"],"description":"服务端返回的 Base 或追加表访问链接"},"links":{"type":["array","null"],"description":"导入目标及父级访问链接","items":{"type":"object","description":"一个访问链接","additionalProperties":true}},"response":{"type":"object","description":"保留业务状态的脱敏原始响应","additionalProperties":true}},"additionalProperties":true}
+			},
+			"required":["contractVersion","operation","status","executed","retryable"],
+			"additionalProperties":false
+		}`),
+		SensitivePaths: []string{"result.response.uploadUrl", "result.response.authorization"},
 	}
 }
 

@@ -1,0 +1,607 @@
+{
+  "name": "发起人",
+  "type": "start",
+  "nodeId": "sid-startevent",
+  "properties": {},
+  "childNode": {
+    "type": "route",
+    "prevId": "sid-startevent",
+    "nodeId": "8d8f_5a0f",
+    "conditionNodes": [
+      {
+        "name": "条件1",
+        "type": "condition",
+        "prevId": "8d8f_5a0f",
+        "nodeId": "fb7f_68f2",
+        "properties": {
+          "conditions": [
+            [
+              {
+                "paramKey": "dingtalk_origin_dept",
+                "type": "dingtalk_actioner_dept_condition",
+                "paramLabel": "发起人",
+                "isEmpty": false,
+                "conds": [
+                  {
+                    "type": "dept",
+                    "value": "TODO_DEPT_ID_1",
+                    "attrs": {
+                      "name": "A部门",
+                      "memberCount": 4
+                    }
+                  },
+                  {
+                    "type": "user",
+                    "value": "TODO_USER_ID_4",
+                    "attrs": {
+                      "name": "示例审批人四",
+                      "avatar": ""
+                    }
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "childNode": {
+          "isDefaultName": false,
+          "name": "固定审批人",
+          "prevId": "fb7f_68f2",
+          "type": "approver",
+          "nodeId": "1918_5cd3",
+          "properties": {
+            "actionerRules": [
+              {
+                "approvals": [
+                  {
+                    "userName": "示例审批人一",
+                    "workNo": "TODO_USER_ID_1"
+                  },
+                  {
+                    "userName": "示例审批人二",
+                    "workNo": "TODO_USER_ID_2"
+                  }
+                ],
+                "isEmpty": false,
+                "actType": "and",
+                "type": "target_approval"
+              }
+            ],
+            "activateType": "ALL",
+            "approvalType": "MANUAL",
+            "agreeAll": true
+          },
+          "childNode": {
+            "isDefaultName": false,
+            "name": "直属主管",
+            "prevId": "1918_5cd3",
+            "type": "approver",
+            "nodeId": "3d09_da0a",
+            "properties": {
+              "actionerRules": [
+                {
+                  "isEmpty": false,
+                  "formula": "ReportLineManager(corpId,originator,1)",
+                  "subType": "reportLineManager",
+                  "type": "target_formula"
+                }
+              ],
+              "noneActionerAction": "admin",
+              "activateType": "ONE_BY_ONE",
+              "approvalType": "MANUAL",
+              "agreeAll": false
+            },
+            "childNode": {
+              "isDefaultName": false,
+              "name": "发起人自己",
+              "prevId": "3d09_da0a",
+              "type": "approver",
+              "nodeId": "fe6c_903f",
+              "properties": {
+                "actionerRules": [
+                  {
+                    "isEmpty": false,
+                    "type": "target_originator"
+                  }
+                ],
+                "activateType": "ONE_BY_ONE",
+                "approvalType": "MANUAL",
+                "agreeAll": false
+              },
+              "childNode": {
+                "isDefaultName": false,
+                "name": "部门主管",
+                "prevId": "fe6c_903f",
+                "type": "approver",
+                "nodeId": "28c0_a523",
+                "properties": {
+                  "actionerRules": [
+                    {
+                      "level": 1,
+                      "autoUp": true,
+                      "isEmpty": false,
+                      "actType": "",
+                      "type": "target_management"
+                    }
+                  ],
+                  "noneActionerAction": "admin",
+                  "activateType": "ONE_BY_ONE",
+                  "approvalType": "MANUAL",
+                  "agreeAll": false
+                },
+                "childNode": {
+                  "isDefaultName": true,
+                  "name": "审批人",
+                  "prevId": "28c0_a523",
+                  "type": "approver",
+                  "nodeId": "6b59_be14",
+                  "properties": {
+                    "actionerRules": [
+                      {
+                        "isEmpty": false,
+                        "formula": "ManagerOfDept(corpId,$('DepartmentField_EA5DNJML9JS0'),1)",
+                        "subType": "managerOfDept",
+                        "actType": "",
+                        "type": "target_formula"
+                      }
+                    ],
+                    "noneActionerAction": "admin",
+                    "activateType": "ONE_BY_ONE",
+                    "approvalType": "MANUAL",
+                    "agreeAll": false
+                  },
+                  "childNode": {
+                    "isDefaultName": true,
+                    "name": "审批人",
+                    "prevId": "6b59_be14",
+                    "type": "approver",
+                    "nodeId": "d22c_5854",
+                    "properties": {
+                      "actionerRules": [
+                        {
+                          "select": [
+                            "allStaff"
+                          ],
+                          "isEmpty": false,
+                          "range": {
+                            "approvals": [],
+                            "labels": []
+                          },
+                          "actType": "",
+                          "type": "target_select",
+                          "key": "manual_d22c_5854_f505_7ec7",
+                          "multi": 1
+                        }
+                      ],
+                      "activateType": "ONE_BY_ONE",
+                      "approvalType": "MANUAL",
+                      "agreeAll": false
+                    },
+                    "childNode": {
+                      "isDefaultName": false,
+                      "name": "连续多级主管",
+                      "prevId": "d22c_5854",
+                      "type": "approver",
+                      "nodeId": "db2a_fb04",
+                      "properties": {
+                        "actionerRules": [
+                          {
+                            "labelNames": [
+                              "子管理员"
+                            ],
+                            "isEmpty": false,
+                            "type": "target_managers_labels",
+                            "levels": [],
+                            "labels": [
+                              "TODO_LABEL_ID_1"
+                            ]
+                          }
+                        ],
+                        "noneActionerAction": "admin",
+                        "activateType": "ONE_BY_ONE",
+                        "approvalType": "MANUAL",
+                        "agreeAll": false
+                      },
+                      "childNode": {
+                        "isDefaultName": false,
+                        "name": "表单内联系人",
+                        "prevId": "db2a_fb04",
+                        "type": "approver",
+                        "nodeId": "6402_75ed",
+                        "properties": {
+                          "actionerRules": [
+                            {
+                              "paramKey": "InnerContactField_RVKBXBDIT7K0",
+                              "isEmpty": false,
+                              "actType": "",
+                              "label": "联系人",
+                              "type": "target_formcomponent_approval"
+                            }
+                          ],
+                          "noneActionerAction": "admin",
+                          "activateType": "ONE_BY_ONE",
+                          "approvalType": "MANUAL",
+                          "agreeAll": false
+                        },
+                        "childNode": {
+                          "isDefaultName": true,
+                          "name": "出纳",
+                          "prevId": "6402_75ed",
+                          "type": "approver",
+                          "nodeId": "9e62_7a47",
+                          "properties": {
+                            "actionerRules": [
+                              {
+                                "labelNames": "出纳",
+                                "isEmpty": false,
+                                "actType": "and",
+                                "type": "target_label",
+                                "labels": "TODO_LABEL_ID_5"
+                              }
+                            ],
+                            "noneActionerAction": "admin",
+                            "activateType": "ALL",
+                            "approvalType": "MANUAL",
+                            "agreeAll": true,
+                            "pickActioners": []
+                          },
+                          "childNode": {
+                            "isDefaultName": false,
+                            "name": "审批矩阵",
+                            "prevId": "9e62_7a47",
+                            "type": "approver",
+                            "nodeId": "c705_1f5b",
+                            "properties": {
+                              "actionerRules": [
+                                {
+                                  "expression": {
+                                    "subFilters": [
+                                      {
+                                        "conds": [
+                                          {
+                                            "op": "IN",
+                                            "columnId": 167001,
+                                            "id": "DepartmentField_EA5DNJML9JS0",
+                                            "type": "form"
+                                          }
+                                        ],
+                                        "operator": "AND"
+                                      }
+                                    ],
+                                    "operator": "OR"
+                                  },
+                                  "roleColumnId": 167002,
+                                  "matrixId": 114001,
+                                  "actType": "",
+                                  "type": "target_matrix_approval"
+                                }
+                              ],
+                              "noneActionerAction": "admin",
+                              "activateType": "ONE_BY_ONE",
+                              "approvalType": "MANUAL",
+                              "agreeAll": false,
+                              "pickActioners": []
+                            },
+                            "childNode": {
+                              "name": "抄送人",
+                              "prevId": "c705_1f5b",
+                              "type": "notifier",
+                              "nodeId": "1cc3_959a",
+                              "properties": {
+                                "actionerRules": [
+                                  {
+                                    "select": [
+                                      "allStaff"
+                                    ],
+                                    "range": {},
+                                    "type": "target_select",
+                                    "key": "manual_1cc3_959a_6bf9_54c0",
+                                    "multi": 1
+                                  },
+                                  {
+                                    "type": "target_label",
+                                    "labels": "TODO_LABEL_ID_2",
+                                    "labelNames": "负责人"
+                                  },
+                                  {
+                                    "type": "target_label",
+                                    "labels": "TODO_LABEL_ID_3",
+                                    "labelNames": "财务"
+                                  },
+                                  {
+                                    "type": "target_management",
+                                    "level": 2
+                                  },
+                                  {
+                                    "type": "target_approval",
+                                    "approvals": [
+                                      {
+                                        "userName": "示例审批人四",
+                                        "workNo": "TODO_USER_ID_4",
+                                        "value": "TODO_USER_ID_4",
+                                        "name": "示例审批人四"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              "isDefaultName": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "默认条件",
+        "type": "condition",
+        "prevId": "8d8f_5a0f",
+        "nodeId": "c6ce_f79b",
+        "properties": {
+          "conditions": [
+            []
+          ]
+        },
+        "isdefault": true,
+        "childNode": {
+          "name": "办理人",
+          "isDefaultName": false,
+          "type": "audit",
+          "prevId": "c6ce_f79b",
+          "nodeId": "eb01_9fba",
+          "properties": {
+            "activateType": "ALL",
+            "agreeAll": true,
+            "actionerRules": [
+              {
+                "type": "target_approval",
+                "approvals": [
+                  {
+                    "personalPhoto": "TODO_AVATAR_URL",
+                    "userName": "示例审批人三",
+                    "workNo": "TODO_USER_ID_3",
+                    "value": "TODO_USER_ID_3",
+                    "name": "示例审批人三"
+                  },
+                  {
+                    "userName": "示例审批人四",
+                    "workNo": "TODO_USER_ID_4",
+                    "value": "TODO_USER_ID_4",
+                    "name": "示例审批人四"
+                  }
+                ],
+                "isEmpty": false,
+                "actType": "and"
+              }
+            ]
+          },
+          "childNode": {
+            "name": "办理人",
+            "isDefaultName": true,
+            "type": "audit",
+            "prevId": "eb01_9fba",
+            "nodeId": "eb60_6d9b",
+            "properties": {
+              "activateType": "ONE_BY_ONE",
+              "agreeAll": false,
+              "actionerRules": [
+                {
+                  "type": "target_originator",
+                  "isEmpty": false
+                }
+              ]
+            },
+            "childNode": {
+              "name": "直接主管",
+              "isDefaultName": true,
+              "type": "audit",
+              "prevId": "eb60_6d9b",
+              "nodeId": "97f8_806e",
+              "properties": {
+                "activateType": "ALL",
+                "agreeAll": true,
+                "actionerRules": [
+                  {
+                    "type": "target_management",
+                    "level": 1,
+                    "isEmpty": false,
+                    "autoUp": true,
+                    "actType": "and"
+                  }
+                ],
+                "noneActionerAction": "admin",
+                "pickActioners": []
+              },
+              "childNode": {
+                "name": "发起人自选办理人",
+                "isDefaultName": false,
+                "type": "audit",
+                "prevId": "97f8_806e",
+                "nodeId": "2067_e141",
+                "properties": {
+                  "activateType": "ONE_BY_ONE",
+                  "agreeAll": false,
+                  "actionerRules": [
+                    {
+                      "type": "target_select",
+                      "multi": 0,
+                      "select": [
+                        "allStaff"
+                      ],
+                      "range": {
+                        "approvals": [],
+                        "labels": [],
+                        "allStaff": null
+                      },
+                      "isEmpty": false,
+                      "key": "manual_2067_e141_2f72_e595"
+                    }
+                  ]
+                },
+                "childNode": {
+                  "name": "角色办理人",
+                  "isDefaultName": false,
+                  "type": "audit",
+                  "prevId": "2067_e141",
+                  "nodeId": "531e_48f8",
+                  "properties": {
+                    "activateType": "ALL",
+                    "agreeAll": true,
+                    "actionerRules": [
+                      {
+                        "type": "target_label",
+                        "labelNames": "财务",
+                        "labels": "TODO_LABEL_ID_3",
+                        "isEmpty": false,
+                        "actType": "and"
+                      },
+                      {
+                        "type": "target_label",
+                        "labelNames": "人事",
+                        "labels": "TODO_LABEL_ID_4",
+                        "isEmpty": false
+                      }
+                    ],
+                    "noneActionerAction": "admin",
+                    "pickActioners": []
+                  },
+                  "childNode": {
+                    "name": "表单内联系人联系人",
+                    "isDefaultName": false,
+                    "type": "audit",
+                    "prevId": "531e_48f8",
+                    "nodeId": "b8e3_8b59",
+                    "properties": {
+                      "activateType": "ALL",
+                      "agreeAll": true,
+                      "actionerRules": [
+                        {
+                          "type": "target_formcomponent_approval",
+                          "paramKey": "InnerContactField_RVKBXBDIT7K0",
+                          "isEmpty": false,
+                          "label": "联系人",
+                          "actType": "and"
+                        }
+                      ],
+                      "noneActionerAction": "admin",
+                      "pickActioners": []
+                    },
+                    "childNode": {
+                      "type": "parallelGateway",
+                      "prevId": "b8e3_8b59",
+                      "nodeId": "25eb_bcc1",
+                      "conditionNodes": [
+                        {
+                          "name": "并行分支-条件1",
+                          "type": "condition",
+                          "prevId": "25eb_bcc1",
+                          "nodeId": "af1e_8350",
+                          "properties": {
+                            "conditions": [
+                              []
+                            ]
+                          },
+                          "isDefaultName": false,
+                          "childNode": {
+                            "name": "连接器",
+                            "isDefaultName": true,
+                            "type": "connector",
+                            "prevId": "af1e_8350",
+                            "nodeId": "4c43_99be",
+                            "properties": {
+                              "agreeAll": false,
+                              "activateType": "ONE_BY_ONE",
+                              "actionType": "connector",
+                              "actionerRules": [
+                                {
+                                  "name": "sysParams",
+                                  "value": {
+                                    "corpId": "TODO_CORP_ID",
+                                    "appUuid": "TODO_APP_UUID",
+                                    "staffId": "#userId",
+                                    "actionInstanceId": "TODO_ACTION_INSTANCE_ID",
+                                    "scene": "approve"
+                                  }
+                                },
+                                {
+                                  "name": "extParams",
+                                  "value": {
+                                    "procInstId": "#procInstId",
+                                    "actionName": "TODO_ACTION_NAME"
+                                  }
+                                },
+                                {
+                                  "name": "conditions",
+                                  "value": []
+                                },
+                                {
+                                  "name": "sync",
+                                  "value": false
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "name": "并行分支条件2",
+                          "type": "condition",
+                          "prevId": "25eb_bcc1",
+                          "nodeId": "b33e_bfcc",
+                          "properties": {
+                            "conditions": [
+                              []
+                            ]
+                          },
+                          "isDefaultName": false,
+                          "childNode": {
+                            "name": "审批人",
+                            "isDefaultName": true,
+                            "type": "approver",
+                            "prevId": "b33e_bfcc",
+                            "nodeId": "c152_1281",
+                            "properties": {
+                              "activateType": "ONE_BY_ONE",
+                              "agreeAll": false,
+                              "actionerRules": [
+                                {
+                                  "type": "target_originator",
+                                  "isEmpty": false
+                                }
+                              ],
+                              "approvalType": "MANUAL"
+                            }
+                          }
+                        }
+                      ],
+                      "properties": {
+                        "isMultipleRoute": true,
+                        "gatewayDirection": "fork",
+                        "joinGatewayRef": "85e9_67e4"
+                      },
+                      "childNode": {
+                        "type": "parallelGateway",
+                        "prevId": "25eb_bcc1",
+                        "nodeId": "85e9_67e4",
+                        "properties": {
+                          "isMultipleRoute": false,
+                          "gatewayDirection": "join"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "properties": {}
+  }
+}

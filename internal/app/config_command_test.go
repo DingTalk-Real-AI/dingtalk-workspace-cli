@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
 
@@ -49,7 +50,7 @@ func TestConfigListTable(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +75,7 @@ func TestConfigListShowHidden(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--show-hidden"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +93,7 @@ func TestConfigListCategory(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--category", "auth"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +114,7 @@ func TestConfigListJSON(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--json", "--show-hidden"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +142,7 @@ func TestConfigListShowValues(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--show-values"})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -166,7 +167,7 @@ func TestConfigListEmpty(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{})
 
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 

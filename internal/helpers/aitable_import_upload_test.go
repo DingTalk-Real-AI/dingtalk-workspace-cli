@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func runAitableImportUploadCommand(t *testing.T, args ...string) (*aitableTestCaller, error) {
@@ -25,7 +27,7 @@ func runAitableImportUploadCommand(t *testing.T, args ...string) (*aitableTestCa
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(append([]string{"import", "upload"}, args...))
-	return caller, cmd.ExecuteContext(context.Background())
+	return caller, corecmd.ExecuteContextForTest(cmd, context.Background())
 }
 
 func TestAitableImportUploadRequiresPositiveFileSize(t *testing.T) {

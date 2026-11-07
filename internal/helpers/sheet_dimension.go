@@ -80,13 +80,17 @@ func newDimensionCmds() []*cobra.Command {
 			if length > 5000 {
 				return fmt.Errorf("--length 最大为 5000，当前值: %d", length)
 			}
-			return callMCPTool("insert_dimension", map[string]any{
-				"nodeId":    mustGetFlag(cmd, "node"),
-				"sheetId":   mustGetFlag(cmd, "sheet-id"),
+			toolArgs, err := BuildBatchInsertDimensionArgs(map[string]any{
+				"sheet-id":  mustGetFlag(cmd, "sheet-id"),
 				"dimension": dimension,
 				"position":  mustGetFlag(cmd, "position"),
 				"length":    length,
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("insert_dimension", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(insertDimensionCmd, LeafSpec{

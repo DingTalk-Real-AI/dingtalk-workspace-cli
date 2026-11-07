@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build darwin || linux
+//go:build darwin || linux || openharmony
 
 package keychain
 
@@ -71,6 +71,53 @@ func platformRemoveAuthTokenEntries(service string) error {
 	for _, path := range paths {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && firstErr == nil {
 			firstErr = fmt.Errorf("remove keychain entry %q: %w", filepath.Base(path), err)
+		}
+	}
+	return firstErr
+}
+
+func platformRemoveAccountEntriesWithPrefixes(service string, prefixes []string) error {
+	dir := StorageDir(service)
+	entries, err := authEntriesReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read keychain storage: %w", err)
+	}
+	encodedPrefixes := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		if strings.TrimSpace(prefix) != "" {
+			encodedPrefixes = append(encodedPrefixes, strings.TrimSuffix(safeFileName(prefix), ".enc"))
+		}
+	}
+	var firstErr error
+	for _, entry := range entries {
+		matched := false
+		for _, prefix := range encodedPrefixes {
+			if strings.HasPrefix(entry.Name(), prefix) && strings.HasSuffix(entry.Name(), ".enc") {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		info, infoErr := authEntryInfo(entry)
+		if infoErr != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("inspect keychain entry %q: %w", entry.Name(), infoErr)
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("keychain entry %q is not a regular file", entry.Name())
+			}
+			continue
+		}
+		if removeErr := os.Remove(filepath.Join(dir, entry.Name())); removeErr != nil && !os.IsNotExist(removeErr) && firstErr == nil {
+			firstErr = fmt.Errorf("remove keychain entry %q: %w", entry.Name(), removeErr)
 		}
 	}
 	return firstErr

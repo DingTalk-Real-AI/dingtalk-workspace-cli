@@ -157,6 +157,205 @@ func TestResolveCommandReference(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePublicFlagIssue(t *testing.T) {
+	root := testCommandRoot()
+	login, _, err := root.Find([]string{"auth", "login"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login.Flags().String("public", "", "public input")
+	login.Flags().String("legacy", "", "legacy input")
+	login.PersistentFlags().String("command-persistent", "", "command persistent input")
+	root.PersistentFlags().String("global", "", "global input")
+	if err := login.Flags().MarkHidden("legacy"); err != nil {
+		t.Fatal(err)
+	}
+
+	if issue := publicFlagIssue(root, "dws auth login", []string{"public"}); issue != "" {
+		t.Fatalf("public flag rejected: %s", issue)
+	}
+	if issue := publicFlagIssue(root, "dws auth login", []string{"command-persistent"}); issue != "" {
+		t.Fatalf("command persistent flag rejected: %s", issue)
+	}
+	if issue := publicFlagIssue(root, "dws auth login", []string{"legacy"}); !strings.Contains(issue, "--legacy is hidden") {
+		t.Fatalf("hidden flag issue = %q", issue)
+	}
+	if issue := publicFlagIssue(root, "dws auth login", []string{"missing"}); !strings.Contains(issue, "--missing does not exist") {
+		t.Fatalf("missing flag issue = %q", issue)
+	}
+	if issue := publicFlagIssue(root, "dws auth login", []string{"global"}); issue != "" {
+		t.Fatalf("persistent flag rejected: %s", issue)
+	}
+	parentLocal := &cobra.Command{Use: "parent"}
+	parentLocal.Flags().String("parent-local", "", "not inherited")
+	child := &cobra.Command{Use: "child", RunE: func(*cobra.Command, []string) error { return nil }}
+	parentLocal.AddCommand(child)
+	root.AddCommand(parentLocal)
+	if issue := publicFlagIssue(root, "dws parent child", []string{"parent-local"}); !strings.Contains(issue, "--parent-local does not exist") {
+		t.Fatalf("parent local flag issue = %q", issue)
+	}
+	if issue := publicFlagIssue(root, "dws command-that-does-not-exist", []string{"missing"}); issue != "" {
+		t.Fatalf("invalid command should be handled by path validation, got flag issue: %s", issue)
+	}
+	if flag := commandFlag(nil, "missing"); flag != nil {
+		t.Fatalf("nil command returned flag: %#v", flag)
+	}
+}
+
+func TestCrossPlatformCoverageEnforceVisibleFlags(t *testing.T) {
+	root := t.TempDir()
+	chat := filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "chat.md")
+	if !enforceVisibleFlags(root, chat) {
+		t.Fatal("chat multi skill must enforce visible flags")
+	}
+	for _, path := range []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "SKILL.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "aitable", "record.md"),
+	} {
+		if !enforceVisibleFlags(root, path) || qualifiedShortcutProduct(path) != "aitable" {
+			t.Fatalf("aitable flag audit skipped: %s", path)
+		}
+	}
+	if qualifiedShortcutProduct(filepath.Join(root, "skills", "multi", "dingtalk-aitable-extra", "SKILL.md")) != "" {
+		t.Fatal("sibling product was incorrectly matched")
+	}
+	if enforceVisibleFlags(root, filepath.Join(root, "skills", "mono", "SKILL.md")) {
+		t.Fatal("unmigrated skill unexpectedly enforces visible flags")
+	}
+}
+
+func TestCrossPlatformCoverageAitableSkillFlagReferences(t *testing.T) {
+	for _, docPath := range []string{"skills/multi/dingtalk-aitable", "skills/mono/references/products/aitable"} {
+		directory := t.TempDir()
+		path := filepath.Join(directory, filepath.FromSlash(docPath))
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("Use `+record-query --all --max-records 100`; 当前无 `+record-create`，当前没有 `+no-create`，不要猜 `+import-csv`.\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		refs, err := extractReferences(filepath.Join(directory, "skills"))
+		if err != nil || len(refs) != 1 || refs[0].Text != "dws aitable +record-query --all --max-records 100" {
+			t.Fatalf("references: %#v / %v", refs, err)
+		}
+		root := &cobra.Command{Use: "dws"}
+		product := &cobra.Command{Use: "aitable"}
+		query := &cobra.Command{Use: "+record-query", Run: func(*cobra.Command, []string) {}}
+		query.Flags().Bool("all", false, "")
+		query.Flags().Int("max-records", 10000, "")
+		product.AddCommand(query)
+		root.AddCommand(product)
+		var stdout, stderr bytes.Buffer
+		if code := run(directory, root, &stdout, &stderr); code != 0 {
+			t.Fatalf("valid flags rejected: %s", &stderr)
+		}
+		if err := query.Flags().MarkHidden("all"); err != nil {
+			t.Fatal(err)
+		}
+		stderr.Reset()
+		if code := run(directory, root, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "--all is hidden") {
+			t.Fatalf("hidden flag accepted: %s", &stderr)
+		}
+		if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("Use `+record-query --missing value`.\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		stderr.Reset()
+		if code := run(directory, root, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "--missing does not exist") {
+			t.Fatalf("missing flag accepted: %s", &stderr)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageExtractReferencesQualifiesChatShortcutSnippets(t *testing.T) {
+	directory := t.TempDir()
+	chat := filepath.Join(directory, "skills", "multi", "dingtalk-chat")
+	if err := os.MkdirAll(chat, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(chat, "SKILL.md"),
+		[]byte("Use `+chat-create --name <name> --member-query <members>`.\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	refs, err := extractReferences(filepath.Join(directory, "skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 1 || refs[0].Text != "dws chat +chat-create --name <name> --member-query <members>" {
+		t.Fatalf("chat shortcut refs = %#v", refs)
+	}
+}
+
+func TestCrossPlatformCoverageExtractReferencesSkipsNonShortcutPlusSnippets(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "skills", "multi", "dingtalk-aitable")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte("时区 `+08:00`，命令 `+record-query --all`。\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := extractReferences(filepath.Join(directory, "skills"))
+	if err != nil || len(refs) != 1 || refs[0].Text != "dws aitable +record-query --all" {
+		t.Fatalf("non-command plus snippet was extracted: %#v / %v", refs, err)
+	}
+}
+
+func TestCrossPlatformCoverageRunRejectsHiddenFlagInLaterChatReference(t *testing.T) {
+	root := testCommandRoot()
+	login, _, err := root.Find([]string{"auth", "login"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login.Flags().String("public", "", "public input")
+	login.Flags().String("legacy", "", "legacy input")
+	if err := login.Flags().MarkHidden("legacy"); err != nil {
+		t.Fatal(err)
+	}
+
+	directory := t.TempDir()
+	skills := filepath.Join(directory, "skills", "multi", "dingtalk-chat")
+	if err := os.MkdirAll(skills, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "Use `dws auth login --public value`.\nUse `dws auth login --legacy value`.\n"
+	if err := os.WriteFile(filepath.Join(skills, "SKILL.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(directory, root, &stdout, &stderr); code != 1 {
+		t.Fatalf("hidden flag code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--legacy is hidden") {
+		t.Fatalf("missing hidden flag failure: %s", stderr.String())
+	}
+}
+
+func TestCrossPlatformCoverageRunRejectsMissingFlagInChatReference(t *testing.T) {
+	root := testCommandRoot()
+	directory := t.TempDir()
+	skills := filepath.Join(directory, "skills", "multi", "dingtalk-chat")
+	if err := os.MkdirAll(skills, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "Use `dws auth login --removed value`.\n"
+	if err := os.WriteFile(filepath.Join(skills, "SKILL.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(directory, root, &stdout, &stderr); code != 1 {
+		t.Fatalf("missing flag code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--removed does not exist") {
+		t.Fatalf("missing flag failure: %s", stderr.String())
+	}
+}
+
 func TestIsPlaceholder(t *testing.T) {
 	for _, token := range []string{"<cmd>", "<子命令>", "[optional]"} {
 		if !isPlaceholder(token) {

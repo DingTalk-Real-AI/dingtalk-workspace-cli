@@ -1813,21 +1813,32 @@ function resolveSkillMode() {
 // is only refreshed when the new bundle actually carries that tree — an
 // empty/corrupt multi/ (or a missing mono tree) must never wipe a previously
 // good cache.
-function cacheUserSkills(extractedSkillsRoot) {
-  const cacheBase = path.join(os.homedir(), ".dws", "skills");
+function cacheUserSkills(extractedSkillsRoot, publishFn = publishCacheAtomically, homeDir = os.homedir()) {
+  const cacheBase = path.join(homeDir, ".dws", "skills");
+
+  const refreshCache = (label, sourceDir, cacheDir) => {
+    try {
+      publishFn(sourceDir, cacheDir);
+    } catch (err) {
+      console.warn(
+        `⚠️  ${label} Skill cache refresh failed at ${cacheDir}; the CLI is installed. ` +
+          `Run 'dws skill setup' to refresh Skills: ${err.message}`,
+      );
+    }
+  };
 
   const monoSource = fs.existsSync(path.join(extractedSkillsRoot, "mono", "SKILL.md"))
     ? path.join(extractedSkillsRoot, "mono")
     : extractedSkillsRoot;
   if (fs.existsSync(path.join(monoSource, "SKILL.md"))) {
     const monoCache = path.join(cacheBase, "mono");
-    publishCacheAtomically(monoSource, monoCache);
+    refreshCache("Mono", monoSource, monoCache);
   }
 
   const multiSource = path.join(extractedSkillsRoot, "multi");
   if (multiTreeHasSkills(multiSource)) {
     const multiCache = path.join(cacheBase, "multi");
-    publishCacheAtomically(multiSource, multiCache);
+    refreshCache("Multi", multiSource, multiCache);
   }
 }
 
@@ -1848,11 +1859,18 @@ function main() {
   if (!fs.existsSync(archivePath)) {
     throw new Error(`missing platform archive: ${archivePath}`);
   }
+
+  extractArchive(archivePath, vendorDir);
+
+  if (process.env.DWS_NO_SKILLS === "1") {
+    console.log("DWS_NO_SKILLS=1 — skipping bundled Skill extraction, installation, state, and cache updates.");
+    return;
+  }
+
   if (!fs.existsSync(skillsPath)) {
     throw new Error(`missing skills archive: ${skillsPath}`);
   }
 
-  extractArchive(archivePath, vendorDir);
   extractSkills(skillsPath, skillsStaging);
 
   // For backward compatibility, the zip root carries a copy of mono content
@@ -1897,6 +1915,7 @@ module.exports = {
   copyPathLexicallySync,
   movePathRecoverablySync,
   publishCacheAtomically,
+  cacheUserSkills,
   publishCanonicalLinksAtomically,
   publishManagedMonoSkillSetAtomically,
   publishManagedMultiSkillSetAtomically,

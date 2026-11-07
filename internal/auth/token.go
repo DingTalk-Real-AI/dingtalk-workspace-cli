@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -95,9 +96,16 @@ type TokenData struct {
 	UserName       string    `json:"user_name,omitempty"`
 	CorpName       string    `json:"corp_name,omitempty"`
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
-	UpdatedAt      string    `json:"updated_at,omitempty"`
-	Source         string    `json:"source,omitempty"`
-	LoginRegion    string    `json:"login_region,omitempty"`
+	// OIDCProvider is the sole OIDC session discriminator; endpoint and secret
+	// mode fields below do not identify the login source.
+	OIDCProvider string `json:"oidc_provider,omitempty"`
+	// OIDC sessions keep their Portal and credential mode across invocations.
+	// The secret itself lives in the application keychain slot, never this DTO.
+	MCPBaseURL              string `json:"mcp_base_url,omitempty"`
+	MCPClientSecretRequired bool   `json:"mcp_client_secret_required,omitempty"`
+	UpdatedAt               string `json:"updated_at,omitempty"`
+	Source                  string `json:"source,omitempty"`
+	LoginRegion             string `json:"login_region,omitempty"`
 	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
 	// matched historical profile whose userId was never resolved. It is never
 	// persisted as token material.
@@ -114,6 +122,38 @@ type TokenData struct {
 	// refresh_token the server has already rotated; the marker forces the
 	// rotated credential back into that slot.
 	RepairOrganizationMirror bool `json:"-"`
+}
+
+type profileMigrationLoginRetryError struct {
+	cause error
+}
+
+// profileLoginRetryGuidance is the user-facing recovery instruction key. The
+// display copy is resolved through i18n so --intl logins render the English
+// catalog entry while the default flow keeps the Chinese instruction.
+const profileLoginRetryGuidance = "请保持 --profile 参数不变，并重新执行 dws auth login"
+
+func (e *profileMigrationLoginRetryError) Error() string {
+	return i18n.T(profileLoginRetryGuidance)
+}
+
+func (e *profileMigrationLoginRetryError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+// LoginRetryGuidance returns the user-facing recovery instruction for login
+// errors that require the same profile-scoped authorization to be repeated.
+// Technical causes remain available through the original error chain for logs
+// and diagnostics, but must not be included in the command's display message.
+func LoginRetryGuidance(err error) (string, bool) {
+	var retryErr *profileMigrationLoginRetryError
+	if !errors.As(err, &retryErr) || retryErr == nil {
+		return "", false
+	}
+	return retryErr.Error(), true
 }
 
 // tokenPersistenceWritePlan is the single source of truth for deciding which
@@ -264,10 +304,11 @@ func writeTokenMarker(configDir string, manual bool) error {
 		return err
 	}
 	tmp := filepath.Join(configDir, tokenJSONFile+"."+uuid.New().String()+".tmp")
+	defer func() { _ = tokenRemove(tmp) }()
 	if err := tokenWriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return tokenRename(tmp, filepath.Join(configDir, tokenJSONFile))
+	return renameAuthFile(tmp, filepath.Join(configDir, tokenJSONFile), tokenRename)
 }
 
 // ReadTokenMarkerRevision returns the current credential publication revision.
@@ -339,10 +380,13 @@ func SaveLoginTokenData(configDir string, data *TokenData) error {
 	if data == nil {
 		return fmt.Errorf("token data is empty")
 	}
+	data.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, data); err != nil {
+		return fmt.Errorf("local login state cannot be safely updated: %w", err)
+	}
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
-	data.FreshAuthorization = true
 	if err := preflightTokenWritePersistence(configDir, data); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
@@ -355,7 +399,29 @@ func SaveLoginTokenData(configDir string, data *TokenData) error {
 // migration in LoadTokenDataForProfile) must use this instead of SaveTokenData
 // to avoid deadlocking on the non-reentrant lock.
 func saveTokenDataLocked(configDir string, data *TokenData) error {
+	return saveTokenDataLockedForSelector(configDir, data, RuntimeProfile())
+}
+
+// saveTokenDataLockedForSelector 在已持有 auth 锁时按显式主管选择器计算写计划。
+// 受管数字员工因此可以写入自己的精确 identity slot，同时不成为当前 Profile。
+func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSelector string) error {
+	return saveTokenDataLockedForSelectorAndSecret(configDir, data, runtimeSelector, "")
+}
+
+// Caller holds the auth lock. The direct-login secret participates in the same
+// snapshot and rollback as the profile and token slots, never a separate write.
+func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, runtimeSelector, clientSecret string) error {
+	// OIDC login retains the normal organization-scoped login support when
+	// contact cannot resolve a user. The existing persistence plan still
+	// prevents that credential from overwriting an exact account identity.
+	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || (data.UserID == "" && !data.isOIDCSession())) {
+		return fmt.Errorf("direct login persistence requires a complete identity and application")
+	}
+
 	if h := edition.Get(); h.SaveToken != nil {
+		if clientSecret != "" {
+			return fmt.Errorf("edition token hook does not support transactional client credentials")
+		}
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
@@ -365,6 +431,8 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		if err != nil {
 			return err
 		}
+		initialProfilesVersion := cfg.Version
+		preMigrationPlan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
 		// A login may be the first operation after upgrading. Finish a v1
 		// registry migration before an upsert can raise profiles.json to v2;
 		// otherwise untouched organizations would permanently lose their chance
@@ -384,7 +452,7 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 		if err := ensureProfilesWritable(cfg); err != nil {
 			return err
 		}
-		plan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
+		plan := planTokenPersistenceWrites(cfg, data, runtimeSelector)
 		if err := validateTokenPersistenceWritePlan(cfg, data, plan); err != nil {
 			return err
 		}
@@ -413,7 +481,33 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 			plan.WriteOrganization,
 		)
 		if err != nil {
+			if data.FreshAuthorization &&
+				initialProfilesVersion < profilesVersion &&
+				cfg.Version >= profilesVersion &&
+				strings.TrimSpace(plan.RuntimeSelector) != "" &&
+				!preMigrationPlan.WriteOrganization &&
+				plan.WriteOrganization &&
+				keychain.IsDEKMissing(err) {
+				logging.AuthDebug(
+					"auth.token.persist.retry_after_profile_migration",
+					"from_version", initialProfilesVersion,
+					"to_version", cfg.Version,
+					"runtime_profile", plan.RuntimeSelector,
+					"corp_id", corpID,
+					"identity_selector", plan.ExactSelector,
+					"reason", "organization_slot_dek_missing",
+				)
+				return &profileMigrationLoginRetryError{cause: err}
+			}
 			return err
+		}
+		if clientSecret != "" {
+			previous, legacy, err := snapshotExchangeClientSecret(data.ClientID)
+			if err != nil {
+				return fmt.Errorf("cannot snapshot application credentials")
+			}
+			snapshot.clientID, snapshot.clientSecret = data.ClientID, previous
+			snapshot.legacyClientSecret = legacy
 		}
 		preserveManualDefault := !plan.MakeCurrent &&
 			snapshot.marker.known &&
@@ -424,6 +518,11 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 				return errors.Join(operationErr, fmt.Errorf("rollback token persistence: %w", rollbackErr))
 			}
 			return operationErr
+		}
+		if clientSecret != "" {
+			if err := oauthSaveClientSecret(data.ClientID, clientSecret); err != nil {
+				return rollback(fmt.Errorf("save application credentials failed"))
+			}
 		}
 		if plan.WriteIdentity {
 			if err := tokenSaveKeychainForIdentity(corpID, userID, data); err != nil {
@@ -927,13 +1026,16 @@ type tokenMarkerSnapshot struct {
 }
 
 type tokenPersistenceSnapshot struct {
-	profiles *ProfilesConfig
-	corpID   string
-	userID   string
-	identity tokenSlotSnapshot
-	org      tokenSlotSnapshot
-	legacy   tokenSlotSnapshot
-	marker   tokenMarkerSnapshot
+	clientID           string
+	clientSecret       string
+	legacyClientSecret string
+	profiles           *ProfilesConfig
+	corpID             string
+	userID             string
+	identity           tokenSlotSnapshot
+	org                tokenSlotSnapshot
+	legacy             tokenSlotSnapshot
+	marker             tokenMarkerSnapshot
 }
 
 func cloneProfilesConfig(cfg *ProfilesConfig) *ProfilesConfig {
@@ -1124,6 +1226,23 @@ func snapshotTokenPersistence(
 
 func restoreTokenPersistence(configDir string, snapshot tokenPersistenceSnapshot) error {
 	var rollbackErr error
+	if snapshot.clientID != "" {
+		for _, slot := range []struct{ account, value string }{
+			{secretAccountKey(snapshot.clientID), snapshot.clientSecret},
+			{legacyClientSecretAccountKey(snapshot.clientID), snapshot.legacyClientSecret},
+		} {
+			var err error
+			if slot.value == "" {
+				err = authKeychainRemove(keychain.Service, slot.account)
+			} else {
+				err = authKeychainSet(keychain.Service, slot.account, slot.value)
+			}
+			if err != nil {
+				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("restore application credentials failed"))
+			}
+		}
+	}
+
 	if err := tokenSaveProfiles(configDir, cloneProfilesConfig(snapshot.profiles)); err != nil {
 		rollbackErr = errors.Join(rollbackErr, err)
 	}

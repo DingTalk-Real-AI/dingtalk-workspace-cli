@@ -81,6 +81,35 @@ func TestSelectFieldsTopLevel(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageOutputProjectionsPreserveExactJSONNumbers(t *testing.T) {
+	payload := map[string]any{
+		"result": json.RawMessage(`{"content":{"integer":9007199254740993,"decimal":1.2300,"exponent":1e3}}`),
+	}
+	var fields bytes.Buffer
+	if err := WriteFiltered(&fields, FormatJSON, payload, "result", ""); err != nil {
+		t.Fatalf("WriteFiltered(fields) error = %v", err)
+	}
+	for _, literal := range []string{"9007199254740993", "1.2300", "1e3"} {
+		if !strings.Contains(fields.String(), literal) {
+			t.Fatalf("fields output lost numeric literal %s: %s", literal, fields.String())
+		}
+	}
+	var jq bytes.Buffer
+	if err := WriteFiltered(&jq, FormatJSON, payload, "", ".result.content.integer"); err != nil {
+		t.Fatalf("WriteFiltered(jq) error = %v", err)
+	}
+	if strings.TrimSpace(jq.String()) != "9007199254740993" {
+		t.Fatalf("jq output = %q", jq.String())
+	}
+	var table bytes.Buffer
+	if err := Write(&table, FormatTable, payload); err != nil {
+		t.Fatalf("Write(table) error = %v", err)
+	}
+	if !strings.Contains(table.String(), "9007199254740993") {
+		t.Fatalf("table output lost exact integer: %s", table.String())
+	}
+}
+
 func TestSelectFieldsArray(t *testing.T) {
 	payload := []any{
 		map[string]any{"id": "1", "name": "Alice", "age": 30},

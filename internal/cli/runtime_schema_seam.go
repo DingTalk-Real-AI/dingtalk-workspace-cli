@@ -24,7 +24,7 @@ import (
 // the cli.* convenience aliases so the delivery root's own code reads flat;
 // no separate cli shim packages exist.
 
-type RuntimeSchemaConstraints = runtimeannotate.RuntimeSchemaConstraints
+type RuntimeSchemaConstraints = contract.RuntimeSchemaConstraints
 
 var (
 	AttachRuntimeSchema                = runtimeannotate.AttachRuntimeSchema

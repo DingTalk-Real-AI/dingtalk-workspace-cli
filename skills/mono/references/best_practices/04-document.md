@@ -135,3 +135,13 @@ doc update --node abc123 --content-file /tmp/new-content.md --mode overwrite
 doc read --node abc123
 # → 检查输出是否包含预期内容的关键标题和段落
 ```
+
+### 原子范围编辑
+
+局部替换使用 `dws doc block update --node <ID> --start-block-id <START> --end-block-id <END>`。
+端点为真实 UUID，成对、同为顶层、顺序闭区间，与 `--block-id` 互斥。
+使用 `--content-format markdown --content "第一段\n\n第二段"`，或
+`--content-format jsonml --jsonml-nodes '[["p",{},"第一段"],["p",{},"第二段"]]'`。
+插入 `doc block insert` 同样接受两种序列格式。用 `--ref-block` 配合 `--where before/after` 定位到已有块的相邻位置；Markdown 或 JSONML 序列也可用 `--index` 指定顶层插入位置（从 0 到当前块数量，包含末尾），`--ref-block` 优先。旧 `--element` 单 JSONML/element 输入仍可使用，旧单 JSONML 无参照块时仍追加到末尾。
+JSONML 序列可使用紧凑 JSON 或带空白/换行的 JSON；`doc +update --content @file` 还支持从文件读取。新插入/范围/序列写入必须收到非空、有序且无重复的 `newBlockIds` 回执；空确认或缺失/无效 IDs 表示远端可能已执行、结果未知，先读取正文确认，不自动重试。
+`doc +update --command block_replace` 的范围写入也只发一次 MCP 请求；不得模拟首块替换加剩余删除。

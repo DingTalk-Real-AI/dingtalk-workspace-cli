@@ -14,7 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -29,11 +31,19 @@ type guardedMutationCall struct {
 type guardedMutationCaller struct {
 	calls  []guardedMutationCall
 	dryRun bool
+	// responses optionally overrides the default empty-tool-result reply by
+	// tool name, so flows whose guard performs its own lookup (group owner
+	// removal) can feed the lookup a realistic payload.
+	responses map[string]string
 }
 
 func (c *guardedMutationCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, guardedMutationCall{productID: productID, toolName: toolName, args: args})
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
+	text := c.responses[toolName]
+	if text == "" {
+		text = `{}`
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
 func (*guardedMutationCaller) Format() string { return "json" }
@@ -64,7 +74,13 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func requireTypedConfirmationError(t *testing.T, err error) {
@@ -166,7 +182,7 @@ func executeGuardedMailMutationCommand(t *testing.T, caller edition.ToolCaller, 
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestMailMessageShareToChatRequiresConfirmationBeforeToolCall(t *testing.T) {
@@ -316,10 +332,10 @@ func TestSheetBatchClearRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "all"}},
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet2", "range": "C1:D5", "type": "all"}},
-			},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
@@ -356,10 +372,10 @@ func TestSheetBatchUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "content"}},
-				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 2, "count": 3}},
-			},
+				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 1, "count": 3}},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
@@ -373,6 +389,204 @@ func TestSheetBatchUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("dry-run tool calls = %#v, want none", caller.calls)
+	}
+}
+
+// ── Issue #1096: 6 commands tightened to user_required ──────────────────
+
+func TestCrossPlatformCoverageCalendarEventDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"event", "delete", "--id", "event-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"event", "delete", "--id", "event-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed event delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "delete_calendar_event",
+		args:      map[string]any{"eventId": "event-1"},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCrossPlatformCoverageCalendarAttendeeDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"attendee", "delete", "--event", "event-1", "--attendees", "user-1,user-2")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"attendee", "delete", "--event", "event-1", "--attendees", "user-1,user-2", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed attendee delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "remove_calendar_participant",
+		args: map[string]any{
+			"eventId":           "event-1",
+			"attendeesToRemove": []string{"user-1", "user-2"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCrossPlatformCoverageCalendarRoomDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"room", "delete", "--event", "event-1", "--rooms", "room-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"room", "delete", "--event", "event-1", "--rooms", "room-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed room delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "delete_meeting_room",
+		args: map[string]any{
+			"eventId": "event-1",
+			"roomIds": []string{"room-1"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupMembersRemoveRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"group", "members", "remove", "--id", "conv-1", "--users", "user-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	// The confirmed path is pinned exactly. With the chat product resolvable
+	// (os.Args) and a member list on the owner lookup, guardGroupOwnerRemoval
+	// pages the group once (cursor "0") and the remove itself is the only
+	// other remote call: exactly 2 calls, each with its full argument
+	// contract. The removed member is an openDingTalkID distinct from the
+	// owner, so no userId→openDingTalkId resolution call intervenes.
+	removedOpenID := helperCurrentDOpenID
+	ownerOpenID := "D-OWNER-NOT-IN-REMOVAL-LIST"
+	caller = &guardedMutationCaller{responses: map[string]string{
+		"get_group_members": `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + ownerOpenID + `"}]}}`,
+	}}
+	testseam.Swap(t, &os.Args, []string{"dws", "chat"})
+	err = executeGuardedMutationCommand(t, caller, newChatCommand,
+		"group", "members", "remove", "--id", "conv-1", "--users", removedOpenID, "--yes")
+	if err != nil {
+		t.Fatalf("confirmed group members remove returned error: %v", err)
+	}
+	wantCalls := []guardedMutationCall{
+		{
+			productID: "chat",
+			toolName:  "get_group_members",
+			args: map[string]any{
+				"openconversation_id": "conv-1",
+				"cursor":              "0",
+			},
+		},
+		{
+			productID: "chat",
+			toolName:  "remove_group_member",
+			args: map[string]any{
+				"openConversationId": "conv-1",
+				"userIdList":         []string{removedOpenID},
+			},
+		},
+	}
+	if len(caller.calls) != len(wantCalls) {
+		t.Fatalf("confirmed tool calls = %#v, want exactly %d calls (%s then %s)",
+			caller.calls, len(wantCalls), wantCalls[0].toolName, wantCalls[1].toolName)
+	}
+	for i, want := range wantCalls {
+		got := caller.calls[i]
+		if got.productID != want.productID || got.toolName != want.toolName || !reflect.DeepEqual(got.args, want.args) {
+			t.Fatalf("confirmed call[%d] = {product=%q tool=%q args=%#v}, want {product=%q tool=%q args=%#v}",
+				i, got.productID, got.toolName, got.args, want.productID, want.toolName, want.args)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageMinutesReplaceTextRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newMinutesCommand,
+		"replace-text", "--id", "task-1", "--search", "old", "--replace", "new")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newMinutesCommand,
+		"replace-text", "--id", "task-1", "--search", "old", "--replace", "new", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed replace-text returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "replace_minutes_text",
+		args: map[string]any{
+			"taskUuid":     "task-1",
+			"originalText": "old",
+			"replacedText": "new",
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCrossPlatformCoverageDocPermissionUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newDocCommand,
+		"permission", "update", "--node", "node-1", "--users", "user-1", "--role", "EDITOR")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newDocCommand,
+		"permission", "update", "--node", "node-1", "--users", "user-1", "--role", "EDITOR", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed permission update returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "update_permission",
+		args: map[string]any{
+			"nodeId":  "node-1",
+			"roleId":  "EDITOR",
+			"userIds": []string{"user-1"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
 	}
 }
 
@@ -500,6 +714,293 @@ func TestSheetConfirmationGuardCoversEveryProtectedLeaf(t *testing.T) {
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("dry-run tool calls = %#v, want none", caller.calls)
+			}
+		})
+	}
+}
+
+// executeGuardedPermissionRemoveCommand mirrors executeGuardedMutationCommand
+// but additionally rewrites os.Args so resolveProductID routes doc/wiki
+// auto-routed tools to their real MCP server (doc → doc, wiki → wiki).
+func executeGuardedPermissionRemoveCommand(t *testing.T, caller *guardedMutationCaller, build func() *cobra.Command, args ...string) error {
+	t.Helper()
+	testseam.Protect(t, &os.Args)
+	root := build()
+	os.Args = append([]string{"dws", root.Name()}, args...)
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	if root.PersistentFlags().Lookup("yes") == nil {
+		root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
+	}
+	if root.PersistentFlags().Lookup("dry-run") == nil {
+		root.PersistentFlags().Bool("dry-run", false, "preview without executing")
+	}
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if root.InOrStdin() == os.Stdin {
+		root.SetIn(strings.NewReader(""))
+	}
+	root.SetArgs(args)
+	return corecmd.ExecuteForTest(root)
+}
+
+// TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall pins the
+// destructive confirmation gate on the three batch remove entry points
+// (drive/doc permission remove, wiki member remove). Removing up to 30
+// USER/DEPT/CONVERSATION/TAG members in one call can revoke access for whole
+// departments, chats, or role groups, so every invocation — new --members
+// format and legacy --users alike — must confirm first: without --yes the
+// command fails with the typed confirmation_required error and performs zero
+// MCP calls; with --yes it dispatches exactly one call with the complete,
+// precise tool arguments; --dry-run previews without any call.
+func TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall(t *testing.T) {
+	cases := []struct {
+		name     string
+		build    func() *cobra.Command
+		args     []string
+		product  string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:    "drive permission remove --members",
+			build:   newDriveCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--members", `[{"type":"CONVERSATION","id":"cid1"},{"type":"TAG","id":"t1","corpId":"c1"}]`},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId": "n1",
+				"members": []map[string]any{
+					{"type": "CONVERSATION", "id": "cid1"},
+					{"type": "TAG", "id": "t1", "corpId": "c1"},
+				},
+			},
+		},
+		{
+			name:    "drive permission remove --users",
+			build:   newDriveCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--users", "uid1,uid2"},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId":  "n1",
+				"userIds": []string{"uid1", "uid2"},
+			},
+		},
+		{
+			name:    "doc permission remove --members",
+			build:   newDocCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--members", `[{"type":"USER","id":"u1","corpId":"c1"}]`},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId":  "n1",
+				"members": []map[string]any{{"type": "USER", "id": "u1", "corpId": "c1"}},
+			},
+		},
+		{
+			name:    "wiki member remove --members",
+			build:   newWikiCommand,
+			args:    []string{"member", "remove", "--workspace", "ws1", "--members", `[{"type":"DEPT","id":"d1","corpId":"c1"}]`},
+			product: "wiki",
+			tool:    "remove_member",
+			wantArgs: map[string]any{
+				"workspaceId": "ws1",
+				"members":     []map[string]any{{"type": "DEPT", "id": "d1", "corpId": "c1"}},
+			},
+		},
+		{
+			name:    "wiki member remove --users",
+			build:   newWikiCommand,
+			args:    []string{"member", "remove", "--workspace", "ws1", "--users", "uid1"},
+			product: "wiki",
+			tool:    "remove_member",
+			wantArgs: map[string]any{
+				"workspaceId": "ws1",
+				"userIds":     []string{"uid1"},
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// 1) 未确认：typed confirmation_required 错误 + 零 MCP 调用。
+			caller := &guardedMutationCaller{}
+			err := executeGuardedPermissionRemoveCommand(t, caller, tc.build, tc.args...)
+			requireTypedConfirmationError(t, err)
+			if len(caller.calls) != 0 {
+				t.Fatalf("tool calls before confirmation = %#v, want none", caller.calls)
+			}
+
+			// 2) 明确确认（--yes）：恰好一次调用，参数完整且精确。
+			confirmed := &guardedMutationCaller{}
+			if err := executeGuardedPermissionRemoveCommand(t, confirmed, tc.build, append(append([]string(nil), tc.args...), "--yes")...); err != nil {
+				t.Fatalf("confirmed remove returned error: %v", err)
+			}
+			if len(confirmed.calls) != 1 {
+				t.Fatalf("tool calls = %d, want exactly 1: %+v", len(confirmed.calls), confirmed.calls)
+			}
+			call := confirmed.calls[0]
+			if call.productID != tc.product || call.toolName != tc.tool {
+				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(call.args, tc.wantArgs) {
+				t.Fatalf("tool args = %#v, want %#v", call.args, tc.wantArgs)
+			}
+
+			// 3) --dry-run 预览：不触发任何 MCP 调用。
+			dryRun := &guardedMutationCaller{dryRun: true}
+			if err := executeGuardedPermissionRemoveCommand(t, dryRun, tc.build, append(append([]string(nil), tc.args...), "--dry-run")...); err != nil {
+				t.Fatalf("dry-run remove returned error: %v", err)
+			}
+			if len(dryRun.calls) != 0 {
+				t.Fatalf("dry-run tool calls = %#v, want none", dryRun.calls)
+			}
+		})
+	}
+}
+
+// TestSetShareScopeRequiresConfirmationBeforeToolCall pins the destructive
+// confirmation gate on both set-share-scope entry points across all three
+// visibility tiers. Setting a share scope can open a whole node / wiki space to
+// the org or the internet, so every invocation must confirm first: without
+// --yes the command fails with the typed confirmation_required error and
+// performs zero MCP calls; with --yes it dispatches exactly one call with the
+// precise tool arguments; --dry-run previews without any call. The interactive
+// prompt is covered on both paths too: a piped "no" declines with the typed
+// 用户取消了操作 validation error and zero calls, a piped "yes" dispatches the
+// exact same single call as --yes.
+func TestSetShareScopeRequiresConfirmationBeforeToolCall(t *testing.T) {
+	cases := []struct {
+		name     string
+		build    func() *cobra.Command
+		args     []string
+		product  string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:     "drive PRIVATE",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "PRIVATE"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "PRIVATE"},
+		},
+		{
+			name:     "drive ORGANIZATION",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "ORGANIZATION", "--role", "READER"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "ORGANIZATION", "defaultRole": "READER"},
+		},
+		{
+			name:     "drive PUBLIC",
+			build:    newDriveCommand,
+			args:     []string{"permission", "set-share-scope", "--node", "n1", "--visibility", "PUBLIC", "--role", "DOWNLOADER"},
+			product:  "drive",
+			tool:     "set_share_scope",
+			wantArgs: map[string]any{"nodeId": "n1", "targetVisibility": "PUBLIC", "defaultRole": "DOWNLOADER"},
+		},
+		{
+			name:     "wiki PRIVATE",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "PRIVATE"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "PRIVATE"},
+		},
+		{
+			name:     "wiki ORGANIZATION",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "ORGANIZATION", "--role", "EDITOR"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "ORGANIZATION", "defaultRole": "EDITOR"},
+		},
+		{
+			name:     "wiki PUBLIC",
+			build:    newWikiCommand,
+			args:     []string{"permission", "set-share-scope", "--workspace", "ws1", "--visibility", "PUBLIC", "--role", "DOWNLOADER"},
+			product:  "wiki",
+			tool:     "set_space_share_scope",
+			wantArgs: map[string]any{"workspaceId": "ws1", "targetVisibility": "PUBLIC", "defaultRole": "DOWNLOADER"},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// 1) 未确认（EOF stdin）：typed confirmation_required + 零 MCP 调用。
+			caller := &guardedMutationCaller{}
+			err := executeGuardedMutationCommand(t, caller, tc.build, tc.args...)
+			requireTypedConfirmationError(t, err)
+			if len(caller.calls) != 0 {
+				t.Fatalf("tool calls before confirmation = %#v, want none", caller.calls)
+			}
+
+			// 2) 明确确认（--yes）：恰好一次调用，参数精确。
+			confirmed := &guardedMutationCaller{}
+			if err := executeGuardedMutationCommand(t, confirmed, tc.build, append(append([]string(nil), tc.args...), "--yes")...); err != nil {
+				t.Fatalf("confirmed set-share-scope returned error: %v", err)
+			}
+			if len(confirmed.calls) != 1 {
+				t.Fatalf("tool calls = %d, want exactly 1: %+v", len(confirmed.calls), confirmed.calls)
+			}
+			call := confirmed.calls[0]
+			if call.productID != tc.product || call.toolName != tc.tool {
+				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(call.args, tc.wantArgs) {
+				t.Fatalf("tool args = %#v, want %#v", call.args, tc.wantArgs)
+			}
+
+			// 3) --dry-run 预览：不触发任何 MCP 调用。
+			dryRun := &guardedMutationCaller{dryRun: true}
+			if err := executeGuardedMutationCommand(t, dryRun, tc.build, append(append([]string(nil), tc.args...), "--dry-run")...); err != nil {
+				t.Fatalf("dry-run set-share-scope returned error: %v", err)
+			}
+			if len(dryRun.calls) != 0 {
+				t.Fatalf("dry-run tool calls = %#v, want none", dryRun.calls)
+			}
+
+			// 4) 交互拒绝（stdin "no\n"）：typed validation「用户取消了操作」+ 零调用。
+			// ConfirmSafety 把显式拒绝与 EOF 区分开——EOF 走 confirmation_required
+			// （阶段 1），拒绝走本阶段，两者都不得派发。
+			declined := &guardedMutationCaller{}
+			declineRoot := tc.build()
+			declineRoot.SetIn(strings.NewReader("no\n"))
+			err = executeGuardedMutationCommand(t, declined, func() *cobra.Command { return declineRoot }, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+				t.Fatalf("declined set-share-scope error = %v, want 用户取消了操作", err)
+			}
+			var declineErr *apperrors.Error
+			if !stderrors.As(err, &declineErr) || declineErr.Category != apperrors.CategoryValidation {
+				t.Fatalf("declined error = %#v, want typed validation category (exit 3)", err)
+			}
+			if len(declined.calls) != 0 {
+				t.Fatalf("declined tool calls = %#v, want none", declined.calls)
+			}
+
+			// 5) 交互同意（stdin "yes\n"）：恰好一次调用，参数与 --yes 路径完全一致
+			// （管道授权与 flag 授权必须同构，不得产生第二套装配）。
+			accepted := &guardedMutationCaller{}
+			acceptRoot := tc.build()
+			acceptRoot.SetIn(strings.NewReader("yes\n"))
+			if err := executeGuardedMutationCommand(t, accepted, func() *cobra.Command { return acceptRoot }, tc.args...); err != nil {
+				t.Fatalf("accepted set-share-scope returned error: %v", err)
+			}
+			if len(accepted.calls) != 1 {
+				t.Fatalf("accepted tool calls = %d, want exactly 1: %+v", len(accepted.calls), accepted.calls)
+			}
+			if accepted.calls[0].productID != tc.product || accepted.calls[0].toolName != tc.tool {
+				t.Fatalf("accepted tool call = %s/%s, want %s/%s", accepted.calls[0].productID, accepted.calls[0].toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(accepted.calls[0].args, tc.wantArgs) {
+				t.Fatalf("accepted tool args = %#v, want %#v", accepted.calls[0].args, tc.wantArgs)
 			}
 		})
 	}

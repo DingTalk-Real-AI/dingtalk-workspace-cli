@@ -13,7 +13,7 @@ dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪�
 ## 本地文件边界
 
 - `--file` 只接受当前工作目录内已存在的相对路径；禁止绝对路径、`..` 或符号链接逃逸。
-- `--folder` 与 `--workspace` 都是可选位置；都不传时导入默认根目录。通常只提供一个；当前 Runtime 在两者同时出现时会一并传给服务端，未声明客户端优先级，不要依赖 `--folder` 覆盖 `--workspace`。
+- `--folder` 与 `--workspace` 都是可选位置且互斥。对支持在线转换的格式，两者都不传时，Runtime 先读取当前组织唯一 `orgSpace`，把其 `rootFolderId` 作为 `targetFolderId` 后再创建导入会话；若空间为零个、多个、无权限或缺少 `rootFolderId`，会在写入前停止并要求显式提供目标，禁止选择第一项或猜 ID。`--folder` 取值首选用户提供的 alidocs URL 或真实 `nodeId`；不得使用普通文件 `drive info` 返回的父级 `folderId`。
 - CLI 负责上传和格式转换。不要先用 Python/Office 库解析文件，不要安装本地依赖来伪造在线导入结果，也不要手写 HTTP 上传。
 - 白名单外格式（如 HTML/PDF）自动改走原文件上传，返回 `fallback=upload`、`converted=false`；不得报告成已经转换为可编辑在线文档。
 - “在线改/协作编辑/转在线文档”属于导入转换；“存着/归档/保留原文件/不要转换”属于 `dingtalk-drive` 纯上传。目标为文档空间时，纯上传使用 `drive upload --workspace <WORKSPACE_ID>`，不要因容器叫“文档空间”就误报为在线文档。

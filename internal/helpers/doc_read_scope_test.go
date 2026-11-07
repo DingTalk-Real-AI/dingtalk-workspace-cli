@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -68,7 +69,7 @@ func executeDocReadScopeCommand(t *testing.T, caller *docReadScopeCaller, args .
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDocReadScopeFlagsAndValidation(t *testing.T) {
@@ -193,7 +194,7 @@ func TestCrossPlatformCoverageDocReadScopeMapsArgumentsAndWritesOutput(t *testin
 			"read", "--node", "doc-2", "--content-format", "jsonml",
 			"--scope", "tags", "--tags", "h1,h2",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("execute: %v", err)
 		}
 		want := map[string]any{
@@ -249,7 +250,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := installDocReadScopeCaller(t, tt.caller)
-			err := runDocReadScope("doc-1", "", "", 0, false, "", "ignored", tt.output, "", 0, false)
+			err := runDocReadScope("doc-1", "", "", 0, false, "", "ignored", tt.output, "", 0, false, false)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want %q", err, tt.wantErr)
@@ -277,7 +278,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{"jsonml":"[\"fragment\",{}]"}`}
 		stdout := installDocReadScopeCaller(t, caller)
 		outputPath := filepath.Join(t.TempDir(), "fragment.json")
-		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false); err != nil {
+		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		var receipt map[string]any
@@ -292,7 +293,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 	t.Run("human output reports missing fragment", func(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{}`, format: "raw"}
 		stdout := installDocReadScopeCaller(t, caller)
-		if err := runDocReadScope("doc-1", "", "", 0, false, "", "", "", "", 0, false); err != nil {
+		if err := runDocReadScope("doc-1", "", "", 0, false, "", "", "", "", 0, false, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		if !strings.Contains(stdout.String(), "未匹配到节点") {
@@ -304,7 +305,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{"jsonml":"[\"fragment\",{}]"}`, format: "raw"}
 		stdout := installDocReadScopeCaller(t, caller)
 		outputPath := filepath.Join(t.TempDir(), "fragment.json")
-		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false); err != nil {
+		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		if !strings.Contains(stdout.String(), "JSONML fragment 已写入 "+outputPath) {

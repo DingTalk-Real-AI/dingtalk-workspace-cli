@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -211,7 +212,7 @@ func runDrivePushTest(t *testing.T, caller *driveSyncMockCaller, localDir string
 	testseam.Swap(t, &os.Args, append([]string{"dws", "drive"}, full...))
 	root.SetArgs(append([]string{"drive"}, full...))
 
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func runDriveMirrorUploadCommandCapture(t *testing.T, command string, caller *driveSyncMockCaller, localDir string) (error, string, int) {
@@ -231,7 +232,7 @@ func runDriveMirrorUploadCommandCapture(t *testing.T, command string, caller *dr
 	full := []string{command, "--local-folder", localDir, "--remote-folder", "ROOT", "--yes"}
 	testseam.Swap(t, &os.Args, append([]string{"dws", "drive"}, full...))
 	root.SetArgs(append([]string{"drive"}, full...))
-	return root.Execute(), out.String(), putCalls
+	return corecmd.ExecuteForTest(root), out.String(), putCalls
 }
 
 func assertMirrorUploadFailedJSON(t *testing.T, output string) {

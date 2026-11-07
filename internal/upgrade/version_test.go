@@ -25,6 +25,13 @@ func TestCompareVersions(t *testing.T) {
 		{"1.0.5-rc1", "1.0.6-beta", -1},
 		{"2.0.0", "1.99.99", 1},
 		{"0.0.1", "0.0.0", 1},
+		{"1.0.58+build", "1.0.58", 0},
+		{"1.0.58+build", "1.0.57", 1},
+		{"1.0.58+build.1", "1.0.58+build.2", 0},
+		{"v1.0.58-preview+botat-verify", "1.0.58", -1},
+		{"v1.0.58-preview+botat-verify", "1.0.58-preview", 0},
+		{"1.0.65-beta.1+local", "1.0.65-beta.2", -1},
+		{"1.0.65-beta.2", "1.0.65-beta.1+build", 1},
 	}
 
 	for _, tt := range tests {
@@ -46,6 +53,12 @@ func TestNeedsUpgrade(t *testing.T) {
 		{"v1.0.6", "1.0.7", true},
 		{"v1.0.6-beta.1", "1.0.6", true},
 		{"v1.0.6", "1.0.6-beta.1", false},
+		{"v1.0.58-preview+botat-verify", "1.0.47", false},
+		{"v1.0.58+foo", "1.0.47", false},
+		{"v1.0.70+local", "1.0.64", false},
+		{"v1.0.64+local", "1.0.64", false},
+		{"v1.0.65-beta.1+local", "1.0.65-beta.2", true},
+		{"v1.0.65-beta.2", "1.0.99+build.1", true},
 	}
 
 	for _, tt := range tests {

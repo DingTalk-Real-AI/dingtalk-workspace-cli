@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 func TestCrossPlatformCoverageSafeRedirectPolicyAgentMetadataHeaders(t *testing.T) {
@@ -30,6 +32,7 @@ func TestCrossPlatformCoverageSafeRedirectPolicyAgentMetadataHeaders(t *testing.
 		}
 		req.Header.Set(HeaderAgentVersion, "1.2.3-test")
 		req.Header.Set(HeaderAgentExt, `{"ua":"test-agent-value"}`)
+		req.Header.Set(requestmeta.DingTalkExtHeader, `{"umid":"test-runtime-value"}`)
 		req.Header.Set("Authorization", "Bearer test-token")
 		req.Header.Set("x-user-access-token", "test-token")
 		return req
@@ -41,11 +44,18 @@ func TestCrossPlatformCoverageSafeRedirectPolicyAgentMetadataHeaders(t *testing.
 			t.Fatalf("agent version = %q, want retained", got)
 		}
 		gotExt := request.Header.Get(HeaderAgentExt)
+		gotRuntimeExt := request.Header.Get(requestmeta.DingTalkExtHeader)
 		if wantExt && gotExt == "" {
 			t.Fatal("agent extension was removed")
 		}
+		if wantExt && gotRuntimeExt == "" {
+			t.Fatal("runtime extension was removed")
+		}
 		if !wantExt && gotExt != "" {
 			t.Fatalf("agent extension leaked across origins: %q", gotExt)
+		}
+		if !wantExt && gotRuntimeExt != "" {
+			t.Fatalf("runtime extension leaked across origins: %q", gotRuntimeExt)
 		}
 		for _, key := range []string{"Authorization", "x-user-access-token"} {
 			got := request.Header.Get(key)

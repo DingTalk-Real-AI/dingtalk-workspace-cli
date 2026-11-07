@@ -22,8 +22,158 @@ the nine contracts above.
 `AI Behavior` is evaluated by a `pull_request_target` workflow that never
 checks out or executes PR code. It writes the exact `AI Behavior` status to the
 current PR head. Its Files API read is bracketed by base/head revision checks,
-so a synchronize race fails closed. The same workflow supplies a successful
-`AI Behavior` check run on protected `main` pushes for release governance.
+and Ready/Draft state transitions cancel older evaluations and verify the live
+state, so a synchronize or state race fails closed. A Draft revision publishes
+an explicit failing `AI Behavior` status; marking it Ready first replaces that
+status with `pending` and only then evaluates the normal policy. The same
+workflow supplies a successful `AI Behavior` check run on protected `main`
+pushes for release governance.
+
+### PR #1463 的精确公开补丁准入
+
+维护者已单独批准 PR #1463 的完整公开补丁。`AI Behavior` 仅为这个
+PR 保留一次精确例外：仓库、作者 `haofeng0705`、分支
+`codex/sync-aitable-public-fixes`、`main` 目标及开放状态均须一致，
+Ready/Draft 和当前 base/head 的前后检查仍然生效。批准基线固定为
+`3f0fc94111b1f9cd34e47468980b1f1a723ca69a`，批准提交固定为
+`53de9d92c9b310798d7f42a385e162273330442b`；授权保存在主分支工作流，
+不读取 PR 内的可变授权声明。
+
+补丁内容来自 GitHub 只读 Git commit/tree 和 Files API，PR get/compare
+API 用于核对身份和祖先关系。四个完整 Git tree 用于比较批准及当前
+补丁的全部路径、增改状态、修改前后 blob、
+文件模式和类型；截断、额外文件、重命名、删除和非普通文件均不能
+获得例外。批准补丁必须恰为 44 个文件，其中受保护路径恰为：
+
+- `scripts/policy/skill-command-check/main.go`
+- `scripts/policy/skill-command-check/main_test.go`
+
+当前 base 必须是当前 head 的祖先。治理合入后，业务分支可以合入或
+变基到新主分支；只有完整 44 文件差异与固定批准补丁完全一致才通过。
+任何业务修复改变内容、模式、类型或修改前基线，都必须重新审核并更新
+主分支上的批准提交，不能由同一个业务 PR 扩大自己的授权。
+
+普通 AI PR 的 30 文件上限和全部保护目录规则保持不变。这个例外只
+决定 `AI Behavior` 准入，其他八项必需检查仍须成功；引入例外的治理
+PR 也仍由旧主分支规则检查，维护者的单次 bootstrap bypass 须单独
+记录，不能将它当作本规则已通过或其他 CI 已通过的证据。
+
+### PR #1502 的精确 Chat Thread 退役补丁准入
+
+本治理记录仅针对 PR #1502 的完整公开补丁。固定身份为仓库
+`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
+`codex/fix-chat-thread-promote-retirement`、同仓 `main` 目标及开放状态；
+批准基线为 `59d1da576c6983582d5be11401e7efe07aaaa238`，批准提交为
+`c70ede29e0860a88e309bb540f27d888e9d8a8ab`。完整差异必须恰为 15 个文件，
+唯一受保护路径为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
+
+该路径只将已经由主分支批准的 `chat thread promote` 退役记录从
+`pending` 改为 `consumed`。CLI 已达到隐藏后的 after 状态时，迁移检查器
+要求同步消费；保留 `pending` 会失败。在业务变化之前单独消费也会失败，
+因此状态更新必须与完整退役补丁一起交付，不能删除或提前拆出以避开政策。
+
+#1502 复用上述四个完整 Git tree 与 Files API 交叉校验，严格比较所有路径、
+增改状态、修改前后 blob、模式和类型。Ready/Draft、base/head、仓库、作者、
+分支和开放状态仍在读取前后核对，当前 base 必须是当前 head 的祖先。
+治理合入后可以纳入新 main，但业务差异必须仍与固定的完整 15 文件补丁
+完全一致；任何额外文件、删除、重命名或内容变化都须重新审核。原 #1463
+记录和普通 AI PR 的 30 文件上限、受保护路径规则继续生效，未向整个迁移
+清单或任何目录授予通用写权限。
+
+本记录只有经维护者评审、通过独立治理流程进入 main 后，才成为后续
+#1502 运行的 base-owned authority；提交治理 PR 本身不授予合并或 bypass
+权限，治理 PR 也不能消费 #1502 的例外。保留业务 PR 的 `ai-generated`
+标记，不在业务 PR 内修改授权工作流。其他八项必需检查和独立评审仍须
+完成；如治理流程需要 bootstrap bypass，必须另行明确授权并记录。
+
+### PR #1529 的精确公开同步补丁准入
+
+#1529 的接口契约审批与业务实现分开交付。治理前置提交 G0
+`ca900aa3f802151591ddb59ca42ca37a4c950102` 只修改以下三个 policy 文件，
+不提前变更命令行为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`：
+  为 `dws aitable api-key create/list/revoke` 迁至
+  `dws aitable supabase api-key create/list/revoke` 新增三条 `pending` 记录。
+  旧 argv 保留可执行但隐藏，Schema tool 标识与参数保持不变。
+- `scripts/policy/schema-compat/main.go`：精确批准数字员工 create、publish
+  两个 tool 从各自既有 MCP RPC 引用转为 `composite` 且清空引用；另批准
+  `dingtalk-tag.update_skill` 从无约束声明变为 `enabled`、`file` 必须且只能
+  选择其一。其他 tool、接口引用、模式和约束变化仍按既有规则检查。
+- `scripts/policy/schema-compat/main_test.go`：为上述两条模式迁移和一条约束
+  迁移提供回归测试，包括拒绝未获批准的邻近变化。
+
+#1530 已将上述治理前置合入主分支 M
+`a391c42c7de6c7e86fc19f92aa1f18e630ed402e`。初次业务候选的原生 macOS
+新增代码覆盖率为 1089/1092，缺少三个错误返回分支。业务候选 C1
+`4fdf11c739e22d348d3e2878c20a168540b92b1d` 仅在现有两份测试文件中补齐
+这些回归：Codex 进度模式下拒绝未确认完成的正文，以及 A2UI 卡片处理和
+最终审计失败的错误透传。生产源码未因本次补测改变。
+
+候选 C1 的 macOS 覆盖率任务在 GitHub CI 运行 `39210879935` 中触及
+20 分钟的任务时限：helpers 阶段已通过，执行到第 42 个应用批次时被取消，
+尚未进入覆盖率判定。macOS 任务时限调整为与 Windows 一致的 30 分钟，
+为完整原生测试和 runner 耗时波动留出空间；测试选择、单批次 15 分钟时限、
+100% 新增代码覆盖率目标与失败判定均保持不变。
+
+当前批准基线与提交更新为 M、C1。旧 G0 到 C0
+`0c75478b9d12316b566595177a45ce6b420003f9` 的批准仅保留为历史，不能用于
+包含新测试内容的补丁。本次仍恰为 100 文件，未增加产品能力或受保护路径。
+业务实现达到迁移后的状态时，只将同三条已批准记录从 `pending` 改为
+`consumed`，不得更改其他内容；迁移批准和 Schema 检查器不需再次修改。
+
+本精确例外固定为 PR #1529、仓库
+`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
+`codex/sync-qwenwork-1.0.65`、同仓 `main` 目标及开放状态。
+批准基线与提交分别为上述 M、C1；完整差异必须恰为 100 个文件，唯一
+受保护路径为：
+
+- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
+
+授权复用四个完整 Git tree 和 Files API 交叉校验，比较全部路径、增改
+状态、修改前后 blob、模式和类型，并在读取前后核对 Ready/Draft、
+base/head 与 PR 身份；当前 base 必须是当前 head 的祖先。治理工作流、
+本测试和本文档不属于获准业务补丁。治理进入 main 后，业务分支可合入
+或变基到新 main，但完整差异仍必须等于 M→C1；最终 head 不必等于 C1。
+任何业务修复或主分支演进改变这 100 路径中任一差异的前后内容、模式、
+类型或增改状态，都须重新评审并更新主分支授权，不能沿用旧批准。
+
+本记录不扩大整个迁移清单、Schema 检查器或任何目录的写权限。#1463、
+#1502 的精确边界与普通 AI PR 的 30 文件上限、受保护路径规则保持不变。
+本治理 PR 自身由当前主分支规则检查，不能使用 #1529 的例外自授权；
+提交治理 PR 不授予合并或 bypass 权限。治理变更须经过独立维护者评审，
+如需要 bootstrap 授权，必须另行明确批准并记录；#1530 的一次授权已消费，
+不得用于本次更新。只有本次治理进入 main，
+这些记录才成为业务运行的 base-owned authority。业务 PR 保留
+`ai-generated` 标记，其他八项必需检查与独立评审仍须完成。
+
+## Draft pull-request feedback
+
+A Draft pull request runs the independent `Draft CI` workflow. Its single
+`Draft Fast Gate` provides bounded development feedback: it verifies the
+synthetic merge identity, package plan, formatting, `go vet`, Actions syntax,
+reviewer routing, installer smoke, build, release-fragment lifecycle, and
+lightweight repository policy.
+
+The Draft result is not Code Admission and is never a substitute for `Lint`,
+`Test`, `Coverage`, `Policy`, `Edition`, `Interface Integrity`, `AI Behavior`,
+`CLI Smoke`, or `Mock MCP`. GitHub records conditionally skipped formal jobs as
+successful checks, so absence alone is not a safe admission boundary. The
+base-owned `AI Behavior` status therefore fails every Draft revision explicitly;
+because it is one of the nine required contexts, skipped formal jobs cannot
+satisfy the ruleset. Marking the pull request Ready changes that status to
+`pending` before policy evaluation and starts complete tier-selected admission
+on the current head SHA. Merge remains blocked until all nine contexts succeed.
+
+Converting a ready pull request back to Draft creates a new skipped formal CI
+run in the same PR concurrency group, cancelling any in-progress heavy
+admission work; it also replaces `AI Behavior` with a failing Draft status and
+starts `Draft Fast Gate`. A later `ready_for_review` event cancels any remaining
+Draft validation, marks `AI Behavior` pending, and runs full admission again.
+Editing only a Draft title or body does not consume a runner; changing its base
+branch revalidates the synthetic merge.
 
 ## Exact CHANGELOG-only fast path
 
@@ -90,6 +240,110 @@ documentation changes are rejected. It still rejects invalid dates or
 versions, missing bullets, placeholder `TODO`/`TBD`, unmanaged-section
 changes, and unsafe tree modes.
 
+## Exact admitted-merge reuse on main
+
+Pull requests and protected `main` pushes remain separate GitHub trust events,
+so all nine required contexts are still published for both SHAs. For an
+ordinary merge whose final tree is identical to the already admitted PR head,
+the protected-main run may reuse that exact admission only when the PR already
+executed the complete coverage suite. It then avoids executing the same
+expensive suites again. This changes work performed inside the existing jobs;
+it does not add a new job or weaken the branch ruleset.
+
+The classifier fails closed unless it can prove every one of these facts:
+
+- the push is a non-forced update and the workflow SHA equals the event's exact
+  `after` SHA;
+- the new commit is a standard two-parent merge whose first parent is the event
+  `before` SHA and whose second parent is the admitted PR head;
+- exactly one closed PR binds that head, the `main` base, and the merge commit;
+- the merge commit tree and PR-head tree are byte-for-byte identical;
+- `.github/workflows/ci.yml` and
+  `.github/workflows/ai-behavior-check.yml` have the same Git blobs on the
+  previous main tip and the PR head, so a PR cannot redefine a check that
+  authorizes its own reuse;
+- the PR head has successful latest GitHub Actions checks for all nine required
+  Code Admission contexts, all completed before merge;
+- the base-owned `AI Behavior` status targets that exact PR URL, and its
+  `pull_request_target` workflow run binds the same head repository, branch,
+  SHA, and pre-merge completion time;
+- exactly one successful, completed `pull_request` run of the protected `CI`
+  workflow binds the eight CI-owned contexts to that PR head before it merged;
+- all five complete current-coverage shards plus supporting coverage completed
+  successfully in that same run, proving this was not a scoped profile;
+- that run owns exactly one non-expired `coverage-report` artifact with a
+  published SHA-256 digest and the same head SHA; the archive's admission
+  manifest independently binds the run ID, head SHA, and `full` profile kind.
+
+Merged-PR discovery tolerates GitHub's commit-to-PR association index lag. A
+protected-main push fires within seconds of the merge, and a single-shot
+association lookup was observed returning zero matches for eligible merges in
+production, silently forcing the complete suite. The classifier therefore
+re-polls discovery on a bounded budget (`DWS_ADMITTED_MERGE_RETRY_ATTEMPTS`
+attempts, `DWS_ADMITTED_MERGE_RETRY_INTERVAL_MS` apart; twelve attempts at
+five seconds by default) and additionally consults the most recently updated
+closed `main` PRs under the identical exact filter, because the merge
+transaction records `merge_commit_sha` on the PR before the push event fires.
+Only zero-match discovery retries; an ambiguous or mismatched result throws
+immediately, and an exhausted budget keeps the complete protected-main suite.
+
+When those facts hold, `Lint` publishes the bound PR head, run, artifact, and
+digest. The existing `coverage-main-metadata` job downloads the artifact by
+numeric ID, revalidates its API identity, verifies the downloaded archive's
+digest before extraction, validates the manifest and `coverage.txt`, and saves
+the profile under the exact merge SHA cache key. A lookup-only restore must
+then observe that exact key. `Test`, `Coverage`, `Policy`, `Edition`,
+`Interface Integrity`, `CLI Smoke`, and `Mock MCP` still report their stable
+required names while explicitly recording or verifying the reused admission;
+base-owned `AI Behavior` remains independent.
+The non-ruleset `Validate Runtime Payload` helper still executes on the merge
+SHA because that protected-main validation is not guaranteed to have run on
+every full-suite PR.
+
+Any missing, duplicate, stale, or mismatched API evidence keeps the existing
+complete protected-main suite. If an already-bound artifact later cannot be
+downloaded or fails its digest, manifest, or profile validation, the existing
+main-cache helper recomputes the complete coverage profile authoritatively
+instead of promoting those bytes. Squash/rebase merges, stale branches whose
+merge tree differs, direct pushes, and PRs that modify the CI workflow are
+therefore ineligible. A standard PR that ran only scoped coverage is also
+ineligible because it cannot populate a complete future merge-base profile.
+In particular, the governance PR that introduces or changes this mechanism
+must itself run the complete post-merge suite; only later eligible source
+merges can use the optimization.
+
+## Fail-fast cancellation on pull-request runs
+
+The first substantive job failure in a pull-request admission run cancels the
+whole run, so already-doomed siblings stop consuming hosted runners and
+concurrency slots while the author iterates. Cancellation is implemented by
+one `fail-fast-*` tripwire helper job per watched job: a job-level `needs`
+evaluates only after every watched job completes, so a shared watcher could
+not react to the first failure, while a dedicated tripwire fires the moment
+its own job fails. Matrix jobs react after their last leg completes; the
+matrix `fail-fast: false` contract is deliberately preserved so every broken
+shard still reports in one run before the tripwire cancels the remainder.
+
+Each tripwire also depends on `lint` directly and fires only after a
+successful lint classification, so the Draft-gated lint job remains the
+single admission entry point: a failed lint already skips every dependent
+job, and Draft revisions never reach a tripwire.
+
+Tripwires are scoped to `pull_request` events. Protected-main pushes run to
+completion: they are the coverage-cache producer and need the full failure
+picture for post-merge triage. `lint` is exempt because its failure skips
+every dependent job anyway; `coverage-main-metadata` is exempt because it is
+push-only.
+
+A cancelled admission run still fails the nine required contexts — a
+cancelled or skipped check is not a success — so fail-fast can never authorize
+a merge; it only reclaims wasted work. Tripwire check runs are helper
+contexts outside the ruleset.
+`TestCIFailFastTripwiresWatchEverySubstantiveJob` derives the watched set
+from the live job graph, so a new substantive job without a tripwire, or a
+tripwire orphaned by a removed or exempted job, fails the workflow contract
+tests.
+
 ## Risk tiers and downstream boundaries
 
 `Lint` resolves the complete base/head diff before any helper is skipped.
@@ -99,7 +353,7 @@ Unknown or truncated input fails closed into the high-risk tier.
 |---|---|---|
 | Documentation-only | Only prose/documentation assets; no executable, generated, workflow, packaging, or interface surface | Documentation and repository-asset validation; expensive code helpers skip while every required context still succeeds |
 | Standard | Ordinary code change with a stable package graph | Race tests for changed Go packages and their reverse dependencies; candidate and merge-base coverage over the same impacted scope and `coverpkg`; representative Darwin/Windows compilation |
-| High-risk / protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure classification | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
+| High-risk / unproven protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or a protected-main revision without exact admitted-merge evidence | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
 
 Domain helpers (`Edition`, `Interface Integrity`, `CLI Smoke`, and `Mock MCP`,
 for example) execute their substantive suites when the diff can affect that
@@ -108,16 +362,22 @@ contexts still report a successful, explicit unaffected result. Release-script
 tests follow the same impact rule. This preserves the ruleset contract without
 charging every developer for unrelated work.
 
-Platform-sensitive changes additionally run native changed-code coverage.
-Protected `main` always runs native tests; generic portable changes are held to
-the Linux changed-code gate rather than being forced to manufacture
-platform-only coverage.
+Platform-sensitive changes additionally run native changed-code coverage. A
+protected-main revision without exact admitted-merge reuse always runs native
+tests; eligible merges retain the native evidence already recorded on the PR
+head. Generic portable changes are held to the Linux changed-code gate rather
+than being forced to manufacture platform-only coverage.
 
 Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
 an explicit manual dispatch). A failing downstream run remains a real
 regression and must be repaired, but it must not be represented by a synthetic
-successful PR check.
+successful PR check. The workflow executes the isolated profile storage,
+routing, migration, and aggregation chain without repeating the complete
+`internal/auth`, `internal/app`, and `test/cli` package suites. Those Go
+regressions remain owned by the protected-main test and coverage shards. The
+release E2E validation uses the same boundary so release verification does not
+duplicate an already admitted commit's complete Go suite.
 
 ```mermaid
 flowchart TB
@@ -132,7 +392,10 @@ flowchart TB
   ADMISSION --> S["CLI Smoke"]
   ADMISSION --> M["Mock MCP"]
   ADMISSION --> MAIN["Protected main"]
-  MAIN --> NATIVE["Full native platform matrix"]
+  MAIN --> REUSE{"Exact full-suite PR evidence?"}
+  REUSE -->|yes| RECORDED["Reuse admission and exact coverage artifact"]
+  REUSE -->|no| NATIVE["Full native platform matrix"]
+  MAIN --> PAYLOAD["Validate Runtime Payload"]
   MAIN --> E2E["Multi-profile E2E"]
   MAIN --> RELEASE["Release delivery"]
 ```
@@ -147,13 +410,132 @@ maintainer pool. A current-head approval or change request is preserved; after
 a new push, stale activity does not suppress a fresh request, and an
 outstanding change requester is preferred for continuity.
 
-The branch ruleset keeps one human approval and all nine strict required
-contexts, and requires someone other than the latest pusher to approve after
-the most recent head update. Repository auto-merge is enabled for ready PRs,
-so a PR merges after that approval and the current revision's nine checks are
-green. If `main` advances, strict checks rerun before merge. The reviewer
-router is orchestration, not a quality context, and must not be added to the
-ruleset.
+The branch rulesets keep one human approval and all nine strict required
+contexts, require someone other than the latest pusher to approve after the
+most recent head update, and restrict `main` updates to the dedicated Reviewer
+Router App in pull-request mode plus the designated Formula publishers and
+break-glass identities. Repository auto-merge is enabled for ready PRs, so the
+App-owned request records the automation intent while the App's synchronous
+merge path waits for that approval and the current revision's nine green
+checks. If `main` advances, strict checks rerun before merge. The
+reviewer routing job uses the built-in `GITHUB_TOKEN` to request reviewers with
+`Contents: read` and `Pull requests: write`. A separate base-owned cleanup job
+isolates the merge-authority permissions (`Contents: write` and `Pull
+requests: write`), checks out only the exact event base policy, and revalidates
+the live event base/head. Before reading App credentials, its built-in token
+normalizes every request that is not already owned by the reviewed App with the
+fixed headline/body, rejects workflow-skip metadata, and proves that the exact
+repository-owned `main-merge-writers` rule denies that token any bypass. It
+never enables auto-merge. A PR that changes `.github/workflows/**` is an
+explicit manual-only case: the trusted step skips App token minting and
+auto-merge enablement instead of granting the App `Workflows` permission, and
+reconciliation clears any older App-owned request rather than merging it. Any
+authority failure clears a remaining request and
+leaves the PR manual-only. The job then mints a current-repository installation token
+for the dedicated Reviewer Router GitHub App, proves its emitted slug matches
+the reviewed `REVIEWER_ROUTER_APP_SLUG`, rechecks the App-side ruleset boundary, and
+enables native auto-merge with fixed metadata. This
+identity boundary is required because GitHub suppresses
+most workflow events created by the built-in token; using it for auto-merge would
+silently skip the merge commit's protected-main CI and baseline-cache
+producer. Token minting or takeover fails closed without falling back to
+`GITHUB_TOKEN`: every non-reviewed request is cleared before credentials are
+read. During the staged migration away from metadata-triggered full admission,
+the required `Test` context independently repeats the same built-in-identity
+check as a shadow assertion. GitHub's read APIs may omit `parameters` for the strict
+`update_allows_fetch_and_merge: false` value, so the gate accepts only that
+exact omission or a one-field `parameters` object containing explicit boolean
+`false`; every other present shape or value fails closed. The gate then binds
+the same ruleset node through GraphQL and requires its non-null
+`updateAllowsFetchAndMerge` value to be exactly `false`. It also requires its
+own built-in token to report
+`current_user_can_bypass: never`. The minted App separately requires
+`pull_requests_only` on that writer rule and `never` on every other active main
+ruleset before it can enable, reconcile, or synchronously merge. The read-only
+`Test`
+token may receive a repository projection with both merge-default properties
+omitted; it accepts only that complete omission or exact `MERGE_MESSAGE` plus
+`PR_TITLE`/`BLANK`, while partial or malformed projections fail closed.
+The same unprivileged `pull_request` job may receive an empty repository-variable
+projection for an external fork. Only when the event head repository differs
+from the base repository does it substitute the exact reviewed public slug
+`dingtalk-dws-reviewer-router` for identity comparison. An empty variable on a
+same-repository PR and every malformed non-empty value still fail closed. This
+fallback neither mints a token nor grants merge authority; the base-owned
+Router continues to require its minted App slug to equal the repository
+variable before any mutation. The minted App's `Contents: write` token must
+observe the exact reviewed defaults
+before either mutation path proceeds. GitHub hides the complete
+`bypass_actors` list from low-privilege callers, so the rollout audit must still
+keep the writer list at exactly the Reviewer App, `haofeng0705` (ID
+`30925823`), and `PeterGuy326` (ID `47820304`). The required check finally
+accepts a null or exact App-owned
+request after a short takeover grace period. Null is safe from the suppressed
+event path because the built-in Actions identity cannot update `main`; other
+permitted identities produce either a main push or the trusted closed-PR
+repair. Drafts skip the identity step, while `ready_for_review`, `edited`,
+and revision events explicitly start fresh admission for readiness, title, and
+code changes. `auto_merge_enabled` wakes only the lightweight base-owned
+Router; because it does not change the head SHA, it reuses the existing nine
+admission results instead of restarting the full graph. Neither CI nor Router
+reacts to `auto_merge_disabled`, so a human can deliberately leave the PR
+manual-only for break-glass handling.
+Reviewer routing remains available. The protected-main push that deploys the
+workflow automatically migrates every open, ready non-App request and repairs
+unsafe App metadata; it disables workflow-skipping requests for correction.
+Because GitHub's deferred native auto-merge path does not reliably apply an
+App's pull-request-only ruleset bypass, a zero-permission approval-signal
+workflow and completed `CI` / `Code Admission — AI Behavior` workflows wake the
+same trusted default-branch reconciliation through `workflow_run`. That event
+is only a wake-up signal: the privileged job does not consume its pull-request
+payload or artifacts and does not check out the triggering run's code. It
+re-enumerates open `main` PRs through the API and attempts only an exact
+App-owned request through the synchronous PR merge endpoint. Immediately before
+each attempt it revalidates the App's ruleset boundary and PR intent, supplies
+the current head SHA, and treats server-declared not-ready or
+concurrent-revision responses as retriable. An exact behind-main state is also
+retriable before the merge request. The exact transient pair
+`mergeable=null` and `mergeable_state=unknown` is likewise deferred without a
+merge request; it is not treated as evidence that the PR is admissible.
+`mergeable=false`、`dirty`、`draft` 及缺失的 `mergeable` 同样提前延后。
+`mergeable=true + blocked` 不会被一律跳过：主干写入限制可能使这个状态持续存在，
+因此仍由 App 尝试同步合并，让 GitHub 强制执行审批和必需检查。
+精确的 HTTP 403 `Resource not accessible by integration` 只有在同一 App
+重新读取并证明 PR 仍打开、head 未变、目标仍为本仓库 `main`，且状态为 `behind`、
+`true + blocked` 或原有显式不可合并状态时才可重试；其他 403 仍为失败。
+The live preflight requires the
+exact repository-owned approval ruleset and exact nine-check strict quality
+ruleset, with every context bound to the GitHub Actions App
+(`integration_id=15368`) and the Reviewer Router App unable to bypass either;
+a missing, disabled, incorrectly sourced, or weakened gate fails closed before
+merge. GitHub—not the workflow—decides whether the
+merge is admissible. A staggered twice-hourly schedule provides eventual
+recovery, and a manual `workflow_dispatch` from `main` is the immediate
+idempotent retry path.
+Reconciliation never enables an originally null request. The reviewer router
+is orchestration, not a quality context, and
+must not be added to the ruleset.
+
+Disabling the App-owned request before the reconcile job's final PR read keeps
+the PR manual-only. GitHub can atomically bind the subsequent merge to the head
+SHA, but it cannot bind that call to the auto-merge intent; a disable racing
+after the final read may therefore lose to the in-flight merge. Closing the PR
+or changing its head blocks the attempt only if GitHub observes that state
+before accepting the merge endpoint call; no client-side action can revoke a
+merge that the server has already accepted.
+
+The merge endpoint has no expected-base precondition. Reconciliation checks
+that the base is this repository's `main` immediately before and after the call,
+but a retarget racing after the final read is not atomically preventable in the
+workflow. Operators must disable the App-owned intent and wait for all running
+`Reviewer routing` reconciliation jobs to finish before retargeting a PR; a
+stronger adversarial guarantee requires a GitHub-side branch/ruleset control.
+
+GitHub may omit `pull_request_target` for security-sensitive head branch names,
+including names that look like commit SHAs. Those PRs cannot use Router App
+takeover or the closed-event repair: rename the branch for the supported path,
+or use the designated break-glass identity with a safe final message so main
+push CI remains the exact-SHA producer.
 
 ## Running focused gates locally
 
@@ -184,6 +566,26 @@ candidate SHA。
 `check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
 flag 迁移。
 
+The race suite keeps nine reviewed `internal/app` test-name partitions but
+dispatches them through three balanced physical lanes. Each partition remains
+an independent Go test process, so process-global command registries are
+released between partitions; the lane is only the hosted-runner scheduling
+unit. `scripts/ci/run-app-race-tests.sh` owns both the partition set and the
+lane map, and the workflow contract proves that each focused/full-suite matrix
+contains exactly those three lanes and that their union contains every
+partition exactly once.
+
+The initial lane balance is evidence-based rather than alphabetical by job.
+Across 11 successful full-suite runs sampled on 2026-09-03, replaying the
+recorded partition step durations produced a slowest-lane median of 8m53s,
+p90 of 9m02s, and maximum of 9m08s. The 20-minute job timeout remains unchanged
+as regression headroom. The scheduling model predicts 33 to 27 successful jobs
+per ordinary full-suite PR and about 40-50 seconds lower completion time for the
+last PR when two to four full suites arrive two minutes apart. These are rollout
+targets, not post-change measurements; maintainers must validate them against
+live overlapping runs and rebalance the helper-owned lane map if the slowest
+lane p95 exceeds 12 minutes.
+
 Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
 与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
 stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过
@@ -200,12 +602,24 @@ base_ref=$(git merge-base HEAD origin/main)
 `make coverage-gate` is an enforcement step, not a profile generator. For a
 standard PR, CI derives changed packages and their reverse-dependency test
 closure, then generates candidate and merge-base profiles with the same test
-scope and `coverpkg`. High-risk and protected-main runs use the complete
-profiles. The complete candidate profile is produced by disjoint per-shard
-helper jobs (`scripts/ci/test-packages.sh list-coverage`, kept serial with
-`-p 1` inside each shard; `verify` proves the shard union equals the
-full-suite scope exactly once) and concatenated in the aggregate job before
-enforcement. The complete merge-base profile is restored from an exact-key
+scope and `coverpkg`. High-risk and protected-main runs without exact
+admitted-merge reuse use the complete profiles. The complete candidate profile
+is produced by five fixed per-shard
+helper jobs (`scripts/ci/test-packages.sh list-coverage`; `verify`
+proves the shard union equals the full-suite scope exactly once). Packages
+remain serial within each runner except for the large `remaining` shard, which
+uses fixed package parallelism `-p 2` to overlap its two independent long tails
+without requesting another runner. The `internal/app` package is handled
+separately: it reuses the existing reviewed test-name partitions and balances
+them across the same five coverage jobs, so each partition gets a fresh Go test
+process and releases process-global command registries. The assignment is
+validated in both directions and reduces the long tail without requesting
+another hosted runner. The partition and final shard profiles are
+deterministically unioned by source block before enforcement. This does not add
+matrix jobs. The same bounded in-job runner owns every trusted cold full-profile
+fallback, so PR baseline, metadata promotion, Formula promotion, and repair do
+not reintroduce the long-lived app process. The complete merge-base profile is
+restored from an exact-key
 cache written by the last green `main` push of that same commit (key:
 merge-base SHA plus resolved Go version); any miss falls back to recomputing
 it in a merge-base worktree. The trusted `main` producer and PR consumer use
@@ -213,7 +627,78 @@ the same dedicated cache profile path because GitHub includes that path in the
 cache version; the runtime-facing candidate and baseline filenames remain
 separate. Near-miss reuse is forbidden — the caches carry no prefix restore
 keys, because a neighbouring commit's profile would compare the candidate
-against the wrong baseline. Supporting and (when
+against the wrong baseline. PR concurrency is keyed by PR number, so a later
+revision cancels the stale run instead of letting obsolete test matrices
+compete with the replacement for hosted runners. If cancellation interrupts a
+cold-cache fallback, the latest run recomputes the same exact merge-base
+profile authoritatively. Main concurrency remains keyed by pushed SHA, so a
+newer main push cannot cancel a predecessor's producer.
+
+Every supported main advancement path has an exact-SHA producer. The required
+`Test` context rejects GitHub workflow-skip directives in PR and auto-merge
+metadata, reruns when that metadata is enabled, disabled, or edited, and
+verifies the live App/writer-ruleset identity contract. Reviewer Router
+additionally binds auto-merge to the exact head OID and writes a fixed safe
+merge headline/body. The sole break-glass publisher must retain a safe final
+message; the release-controlled Formula-only path
+is the sole supported use of `[skip ci]`. A source push that cannot prove exact
+admitted-merge reuse saves the newly assembled profile after the aggregate gate
+passes. An eligible tree-identical merge instead verifies and promotes the
+bound PR run's immutable coverage artifact to the exact merge-SHA key. A trusted
+documentation or release-seal push independently verifies that the complete
+`before...after` diff contains only the reviewed metadata allowlist, restores
+only the exact `before` cache, recomputes the full profile if the chain is
+cold, and makes that helper a dependency of the required `Coverage` context.
+Release-generated Formula commits intentionally retain `[skip ci]`; after
+their nine synthetic contexts are sealed, an independent release-governance
+job creates an acknowledgement and emits a `coverage-baseline-promote`
+repository dispatch. The default-branch promotion
+workflow revalidates the exact single-parent Formula identity, successful
+parent and target contexts, and main containment before it promotes the exact
+parent cache or performs the same full fallback. Every target-main producer
+follows its save with a lookup-only restore and requires
+`cache-hit=true` for the exact key; this turns the cache action's otherwise
+warning-only upload failure or prefix match into a hard failure. Formula
+promotion additionally updates one release-created `Coverage Baseline Cache`
+check. A separate confirmation job waits for that exact check-run ID while npm
+and mirrors remain dependent only on the immutable publication job; cache
+failure therefore makes the final delivery gate red without creating a
+partially published release. Once Formula sealing exposes its SHA, a later
+publication verification failure cannot suppress that confirmation job.
+
+A separate base-owned `pull_request_target: closed` safety net covers the final
+merged SHA even if a human or integration changes the merge message after PR
+checks finish. Skip directives alone do not suppress `pull_request_target`,
+subject to GitHub's separate security-sensitive branch-name restriction above.
+That job executes no PR code and only dispatches after binding the exact
+closed-event PR number and stable head SHA to merged-PR facts
+(`merged_at`, `base.ref`, and `merge_commit_sha`) and proving `main`
+containment. It does not compare the later REST `base.sha`, which follows the
+live base branch after merge. Because GitHub makes default-branch caches
+read-only to `pull_request_target`, the dispatcher first waits up to one minute
+for a run from the exact protected
+`.github/workflows/ci.yml` workflow and exits when that normal producer exists.
+A successful main CI hard-verifies the exact key itself. A completed
+non-success run starts a separate base-owned `workflow_run` dispatcher, which
+binds the exact CI workflow ID/path, run ID/attempt, conclusion, upstream
+repository, `main` branch, and head SHA. That trigger is also cache-read-only,
+so either trusted dispatcher uses `repository_dispatch`; its producer
+revalidates the merged-PR or failed-CI identity, checks out the contained SHA,
+and produces/verifies the exact full cache.
+An hourly schedule and a main-only manual dispatch repair the event-time main
+SHA after a direct break-glass push or cache eviction. The dispatch exception
+is intentional: unlike an ordinary event created by `GITHUB_TOKEN`, GitHub
+allows `repository_dispatch` to start another workflow. A legacy built-in-token
+merge can suppress the closed event too, which is why the required `Test`
+identity gate and dedicated Reviewer Router App are still mandatory.
+
+A cold miss can still occur during a producer race or after cache eviction,
+but it remains fail-safe: the PR recomputes the authoritative baseline with a
+30-minute job budget and saves a PR-scoped copy for same-PR reruns. It is no
+longer possible for a supported main-advance path to omit its producer
+silently. That PR-scoped fallback save remains a best-effort acceleration and
+does not replace the normal push, metadata, Formula, and merged-PR repair
+producers. Supporting and (when
 platform-selected) native profiles are generated before the aggregate
 `Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
@@ -226,7 +711,9 @@ badge is presentation only and is never read as a gate input.
 CLI 兼容检查只使用 modern Interface Snapshot 这一处权威比较 seam，并从 PR
 merge-base 和最近的可达 stable release 生成权威快照。本治理机制合入后，
 merge-base 拥有生成器、比较器和已审批迁移清单，因此 candidate 不能通过修改
-helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking change。首次
+helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking change。已批准的
+招聘产品整体退役使用精确的 base-owned 回执，范围、bootstrap 和旧 PR 更新要求见
+[已完成的招聘产品退役回执](cli-interface-flag-migrations.md#已完成的招聘产品退役回执)。首次
 bootstrap 仍由 merge-base 已有的 modern helper 做无豁免比较，并只接受 candidate
 提交中的规范空清单；完整边界见下方治理文档。
 
@@ -246,7 +733,9 @@ tool、parameter、mapping、positional execution、constraint 与 safety 语义
 
 The `main` quality ruleset must enable strict required-status-check policy
 (`strict_required_status_checks_policy=true`) so a PR is revalidated whenever
-`main` advances. It must require these exact contexts and no legacy aliases:
+`main` advances. Every entry must select the GitHub Actions App
+(`integration_id=15368`), not “any source”. It must require these exact
+context/source pairs and no legacy aliases:
 
 - `Lint`
 - `Test`
@@ -265,4 +754,11 @@ unproducible required context.
 
 The branch ruleset also requires one approval after the latest push. Enable
 repository auto-merge and automatic head-branch deletion; keep the base-owned
-reviewer router outside the required-context list.
+reviewer router outside the required-context list. Install its dedicated
+GitHub App only on this repository with `Contents: read and write` and `Pull
+requests: read and write`; do not grant Actions, Workflows, or Administration.
+Give it pull-request-only bypass on `main-merge-writers` and no bypass on any
+other ruleset. Store the App client ID and lowercase slug in repository
+variables `REVIEWER_ROUTER_APP_CLIENT_ID` and `REVIEWER_ROUTER_APP_SLUG`, and
+its private key in repository secret `REVIEWER_ROUTER_APP_PRIVATE_KEY`. Do not
+reuse release, Homebrew, or personal tokens for this boundary.

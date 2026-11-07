@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "service": "devdoc",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+search-docs": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "严格验证 success、result.items、文档 URL 身份和分页一致性；但 exact 与 raw 对运行时随机 zero-match 候选都返回语义近邻，无法满足 public list/search 的保证零命中证明，因此保持 unavailable。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}

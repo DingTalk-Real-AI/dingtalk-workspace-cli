@@ -7,14 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // RecordUpsertByKey creates or updates exactly one record selected by a unique
@@ -136,25 +141,42 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 		writeStep.Status = "unknown"
 		writeStep.Error = writeErr.Error()
 	}
+	// Match batch updates: a definite input rejection must not be recovered
+	// from an old row that happens to already contain the requested values.
+	if isRecordWriteInputRejection(writeErr) {
+		writeStep.Status = "failed"
+		result.CompletedSteps = append(result.CompletedSteps, writeStep)
+		result.Status = "failed"
+		result.FailedCount = 1
+		return compositeError(result, writeErr, false)
+	}
 	result.CompletedSteps = append(result.CompletedSteps, writeStep)
 
-	verified, verifyErr := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
-	if verifyErr == nil && verified != nil {
-		verifyErr = verifyRecordCells(verified, cells)
-	}
-	if verifyErr != nil || verified == nil {
+	verified, verifyErr := verifyRecordBatchEventually(rt, tool, baseID, tableID, nil, nil,
+		func(rt *shortcut.RuntimeContext, baseID, tableID string, _ []map[string]any, _ map[string]any) (map[string]any, error) {
+			record, err := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
+			if err != nil {
+				return nil, err
+			}
+			if record == nil {
+				return nil, pendingRecordReadback(fmt.Errorf("read-back found no record for the unique key"))
+			}
+			return record, newRecordFieldTypeResolver(rt, baseID, tableID).verify(record, cells)
+		})
+	if verifyErr != nil {
 		result.Status = "unknown"
 		result.FailedCount = 1
 		// An update targets a known record ID and is safe to retry. A create whose
 		// effect could not be read back must be resolved by the unique-key query
 		// first; an immediate blind retry could duplicate the row under eventual
-		// consistency.
-		retryable := action == "update"
+		// consistency. A schema lookup failure needs only read-side recovery.
+		retryable := action == "update" && !isPendingRecordReadback(verifyErr)
 		result.Retryable = retryable
-		if verifyErr == nil {
-			verifyErr = fmt.Errorf("read-back found no record for the unique key")
+		verificationStatus := "failed"
+		if isPendingRecordReadback(verifyErr) {
+			verificationStatus = "pending"
 		}
-		result.Verification = map[string]any{"status": "failed", "error": verifyErr.Error()}
+		result.Verification = map[string]any{"status": verificationStatus, "error": verifyErr.Error()}
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "write call also returned an error: "+writeErr.Error())
 		}
@@ -162,6 +184,9 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 			"nextStep":   "query the unique key again and verify its cells before retrying",
 			"keyFieldId": keyFieldID,
 			"keyValue":   keyValue,
+		}
+		if verified != nil {
+			result.Checkpoint["recordId"] = recordID(verified)
 		}
 		return compositeError(result, verifyErr, retryable)
 	}
@@ -214,6 +239,9 @@ func queryUniqueRecordByKey(rt *shortcut.RuntimeContext, baseID, tableID, fieldI
 	})
 	if err != nil {
 		return nil, err
+	}
+	if guard := responseGuardCursor(data); guard != "" {
+		return nil, helpers.NonResumableCursorResponseError(guard, false)
 	}
 	records, found := findRecords(data)
 	if !found {
@@ -292,6 +320,10 @@ func responseHasMore(data map[string]any) bool {
 	}
 	for _, key := range []string{"nextCursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "error-v1:") {
+				continue
+			}
 			return true
 		}
 	}
@@ -312,18 +344,360 @@ func recordID(record map[string]any) string {
 	return ""
 }
 
-func verifyRecordCells(record map[string]any, expected map[string]any) error {
+func verifyRecordCells(record map[string]any, expected map[string]any, fieldTypes map[string]string) error {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("read-back record %q is missing cells", recordID(record))
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if !exists || !reflect.DeepEqual(got, want) {
+		fieldType := fieldTypes[fieldID]
+		if !exists {
+			if isMultiSelectFieldType(fieldType) && isEmptyJSONList(want) {
+				continue
+			}
+			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
+		}
+		if !recordCellValueEqual(got, want, fieldType) {
 			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
 		}
 	}
 	return nil
+}
+
+// recordCellValueEqual accepts scalar projections only for proven field types.
+// Comparison is intentionally asymmetric: a scalar write may read
+// back as {id,name}; an ID object may gain a current name. An object write
+// must never be verified by a scalar response that dropped the requested ID
+// or other identity fields. Notable may
+// omit or return null for an empty multi-select, so that projection is accepted
+// only after get_fields proves the field type.
+func recordCellValueEqual(got, want any, fieldType string) bool {
+	if reflect.DeepEqual(got, want) {
+		return true
+	}
+	if isMultiSelectFieldType(fieldType) && got == nil && isEmptyJSONList(want) {
+		return true
+	}
+	switch strings.ToLower(fieldType) {
+	case "number", "currency", "progress", "rating":
+		actual, actualOK := recordNumericValue(got)
+		expected, expectedOK := recordNumericValue(want)
+		return actualOK && expectedOK && actual.Cmp(expected) == 0
+	case "date":
+		return recordDateValueEqual(got, want)
+	case "url":
+		return recordURLValueEqual(got, want)
+	}
+	if strings.EqualFold(fieldType, "singleSelect") {
+		return selectionObjectMatchesValue(got, want)
+	}
+	if !isMultiSelectFieldType(fieldType) {
+		return false
+	}
+	gotList, gotOK := got.([]any)
+	wantList, wantOK := want.([]any)
+	if !gotOK || !wantOK || len(gotList) != len(wantList) || !selectionLikeList(gotList) || !selectionLikeList(wantList) {
+		return false
+	}
+	used := make([]bool, len(gotList))
+	for _, wantItem := range wantList {
+		matched := false
+		for index, gotItem := range gotList {
+			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesValue(gotItem, wantItem)) {
+				continue
+			}
+			used[index] = true
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// recordNumericValue compares JSON decimal representations without float64
+// rounding. Objects, booleans, NaN and non-JSON numeric strings are not numbers.
+func recordNumericValue(value any) (*big.Rat, bool) {
+	raw, err := json.Marshal(value)
+	if text, ok := value.(string); ok {
+		raw = []byte(text)
+	}
+	if err != nil {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var decoded any
+	if !json.Valid(raw) || decoder.Decode(&decoded) != nil {
+		return nil, false
+	}
+	number, ok := decoded.(json.Number)
+	if !ok {
+		return nil, false
+	}
+	text := string(number)
+	// Verification must not allocate huge integers for an untrusted exponent.
+	// Outside this conservative range, leave the value unverified.
+	if len(text) > 128 {
+		return nil, false
+	}
+	if i := strings.IndexAny(text, "eE"); i >= 0 {
+		exponent, err := strconv.Atoi(text[i+1:])
+		if err != nil || exponent < -1000 || exponent > 1000 {
+			return nil, false
+		}
+	}
+	return new(big.Rat).SetString(text)
+}
+
+func recordCellsMayNeedFields(record map[string]any, expected map[string]any) bool {
+	actual, ok := record["cells"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for fieldID, want := range expected {
+		got, exists := actual[fieldID]
+		if !exists {
+			return true
+		}
+		if isEmptyJSONList(want) && (!exists || got == nil) {
+			return true
+		}
+		if exists && !reflect.DeepEqual(got, want) && (selectionProjectionShapes(got, want) || scalarProjectionShapes(got, want)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMultiSelectFieldType(fieldType string) bool {
+	return strings.EqualFold(fieldType, "multipleSelect") || strings.EqualFold(fieldType, "multiSelect")
+}
+
+func isEmptyJSONList(value any) bool {
+	items, ok := value.([]any)
+	return ok && len(items) == 0
+}
+
+// Limit schema reads to scalar pairs that could be number/date projections.
+func scalarProjectionShapes(got, want any) bool {
+	actual, ok := got.(string)
+	if !ok {
+		return false
+	}
+	if _, ok := recordNumericValue(got); ok {
+		_, numeric := recordNumericValue(want)
+		return numeric
+	}
+	_, err := time.Parse(time.RFC3339Nano, actual)
+	_, validDate := recordDateWriteTime(want)
+	return err == nil && validDate
+}
+
+func selectionProjectionShapes(got, want any) bool {
+	if object, gotObject := got.(map[string]any); gotObject {
+		if expected, wantObject := want.(map[string]any); wantObject {
+			_, gotID := object["id"].(string)
+			_, wantID := expected["id"].(string)
+			return gotID && wantID
+		}
+		_, wantScalar := want.(string)
+		return wantScalar
+	}
+	if _, wantObject := want.(map[string]any); wantObject {
+		_, gotScalar := got.(string)
+		return gotScalar
+	}
+	gotList, gotOK := got.([]any)
+	wantList, wantOK := want.([]any)
+	return gotOK && wantOK && selectionLikeList(gotList) && selectionLikeList(wantList)
+}
+
+type recordFieldTypeResolver struct {
+	rt               *shortcut.RuntimeContext
+	baseID, tableID  string
+	loaded           bool
+	fieldTypes       map[string]string
+	fieldTypeLoadErr error
+	fields           []map[string]any
+}
+
+func newRecordFieldTypeResolver(rt *shortcut.RuntimeContext, baseID, tableID string) *recordFieldTypeResolver {
+	return &recordFieldTypeResolver{rt: rt, baseID: baseID, tableID: tableID}
+}
+
+func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeResolver {
+	return &recordFieldTypeResolver{loaded: true, fields: fields, fieldTypes: recordFieldTypesFromFields(fields)}
+}
+
+func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
+	exactErr := verifyRecordCells(record, expected, nil)
+	if exactErr == nil || !recordCellsMayNeedFields(record, expected) {
+		return exactErr
+	}
+	fieldTypes, err := r.resolve()
+	if err != nil {
+		return pendingRecordReadback(fmt.Errorf("cannot load fields for record verification: %w", err))
+	}
+	canonical, err := recordVerificationCells(expected, record["cells"].(map[string]any), r.fields)
+	if err != nil {
+		return pendingRecordReadback(err)
+	}
+	return verifyRecordCells(record, canonical, fieldTypes)
+}
+
+// Only verification expectations are rewritten. Writes retain the server's
+// field addressing semantics; unreadable/ambiguous metadata cannot prove success.
+func recordVerificationCells(expected, actual map[string]any, fields []map[string]any) (map[string]any, error) {
+	byID := map[string]int{}
+	byName := map[string][]string{}
+	namesComplete := true
+	for _, field := range fields {
+		id := stringValue(field, "fieldId", "id")
+		name := stringValue(field, "fieldName", "name")
+		byID[id]++
+		byName[name] = append(byName[name], id)
+		if name == "" {
+			namesComplete = false
+		}
+	}
+	canonical := make(map[string]any, len(expected))
+	for selector, want := range expected {
+		id := selector
+		_, present := actual[selector]
+		if byID[id] == 0 && !present {
+			matches := byName[selector]
+			// Match names exactly, as the server does. Do not infer selector
+			// kind from an ID prefix or broaden name matching in the verifier.
+			if !namesComplete || len(matches) != 1 {
+				return nil, fmt.Errorf("cannot uniquely resolve field %q for record verification", selector)
+			}
+			id = matches[0]
+		}
+		if id == "" || byID[id] > 1 {
+			return nil, fmt.Errorf("invalid field ID for record verification of %q", selector)
+		}
+		if previous, exists := canonical[id]; exists && !reflect.DeepEqual(previous, want) {
+			return nil, fmt.Errorf("conflicting expectations for field %q; record verification is incomplete", id)
+		}
+		canonical[id] = want
+	}
+	return canonical, nil
+}
+
+func (r *recordFieldTypeResolver) resolve() (map[string]string, error) {
+	if !r.loaded {
+		r.loaded = true
+		r.fields, r.fieldTypeLoadErr = loadRecordFields(r.rt, r.baseID, r.tableID)
+		r.fieldTypes = recordFieldTypesFromFields(r.fields)
+	}
+	return r.fieldTypes, r.fieldTypeLoadErr
+}
+
+func loadRecordFields(rt *shortcut.RuntimeContext, baseID, tableID string) ([]map[string]any, error) {
+	data, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return nil, err
+	}
+	fields, found, err := aitabletarget.FindObjectList(data, "fields", "fieldList")
+	if err != nil {
+		return nil, err
+	}
+	if !found || len(fields) == 0 {
+		return nil, fmt.Errorf("get_fields response is missing a non-empty fields collection")
+	}
+	next, more, known := aitabletarget.Pagination(data)
+	if more || (next != "" && !known) {
+		return nil, fmt.Errorf("get_fields response is incomplete; record verification is pending")
+	}
+	return fields, nil
+}
+
+func recordFieldTypesFromFields(fields []map[string]any) map[string]string {
+	fieldTypes := make(map[string]string, len(fields))
+	for _, field := range fields {
+		fieldID := strings.TrimSpace(stringValue(field, "fieldId", "id"))
+		fieldType := strings.TrimSpace(stringValue(field, "type", "fieldType"))
+		if fieldID != "" && fieldType != "" {
+			fieldTypes[fieldID] = fieldType
+		}
+	}
+	return fieldTypes
+}
+
+// selectionObjectMatchesValue accepts the server's current option name only
+// when the requested stable ID survives. Unrecognized requested keys and scalar
+// responses cannot prove an object write.
+func selectionObjectMatchesValue(got, want any) bool {
+	if expected, ok := want.(map[string]any); ok {
+		actual, ok := got.(map[string]any)
+		if !ok {
+			return false
+		}
+		id, ok := expected["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" || actual["id"] != id {
+			return false
+		}
+		for key := range expected {
+			if key != "id" && key != "name" {
+				return false
+			}
+		}
+		return true
+	}
+	return selectionObjectMatchesScalar(got, want)
+}
+
+// recordURLValueEqual recognizes only the documented string-to-{text,link}
+// conversion, after get_fields has established that this is a URL field.
+func recordURLValueEqual(got, want any) bool {
+	expected, ok := want.(string)
+	if !ok {
+		return false
+	}
+	actual, ok := got.(map[string]any)
+	return ok && actual["text"] == expected && actual["link"] == expected
+}
+
+func selectionObjectMatchesScalar(objectValue, scalarValue any) bool {
+	object, ok := objectValue.(map[string]any)
+	if !ok {
+		return false
+	}
+	scalar, ok := scalarValue.(string)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"id", "name", "optionId", "optionName"} {
+		if value, exists := object[key].(string); exists && value == scalar {
+			return true
+		}
+	}
+	return false
+}
+
+func selectionLikeList(values []any) bool {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+		case map[string]any:
+			if _, hasID := typed["id"]; !hasID {
+				if _, hasName := typed["name"]; !hasName {
+					if _, hasOptionID := typed["optionId"]; !hasOptionID {
+						if _, hasOptionName := typed["optionName"]; !hasOptionName {
+							return false
+						}
+					}
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func sortedMapKeys(values map[string]any) []string {

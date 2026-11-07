@@ -36,6 +36,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -80,6 +81,9 @@ type personalConsumeOptions struct {
 	UserID           string
 	OpenDingTalkID   string
 	GroupID          string
+	RoleTypes        []string
+	CalendarIDs      []string
+	ChangeTypes      []string
 	ControlBaseURL   string
 	StreamTicketMode string
 	StreamTicketURL  string
@@ -89,10 +93,14 @@ type personalConsumeOptions struct {
 }
 
 type personalListOptions struct {
-	Category       string
-	EnabledOnly    bool
-	IncludePending bool
-	Format         string
+	Category         string
+	EnabledOnly      bool
+	IncludePending   bool
+	Format           string
+	Keyword          string
+	ProducerAppID    string
+	ExplicitToken    string
+	ClientIDOverride string
 }
 
 type personalStatusOptions struct {
@@ -154,6 +162,7 @@ var (
 	personalLoadTokenData               = authpkg.LoadTokenData
 	personalLoadProfiles                = authpkg.LoadProfiles
 	personalClientID                    = authpkg.ClientID
+	personalClientIDMetadata            = authpkg.ClientIDMetadata
 	personalRuntimeEventClientID        = runtimePersonalEventClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
 )
@@ -165,13 +174,31 @@ func runtimePersonalEventClientID() string {
 	return strings.TrimSpace(os.Getenv("DWS_CLIENT_ID"))
 }
 
-func newEventSchemaCommand() *cobra.Command {
+func newEventSchemaCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var asIdentity string
 	var formatRaw string
 	var flatten bool
+	var payloadSchemaVersion string
 	cmd := &cobra.Command{
-		Use:               "schema <event_key>",
-		Short:             "显示事件 schema",
+		Use:   "schema <event_key>",
+		Short: "显示事件 schema",
+		Long: `显示指定个人事件的输出字段 Schema。
+
+默认描述兼容 transport envelope；Agent 或脚本使用 --flatten 时，应同时查询
+--flatten Schema。互动卡片回调的回答、问题、操作者、业务与会话上下文位于
+payload.body，结构化业务上下文优先读取 payload.body.actionData.context。
+
+官方事件读取 CLI 内置定义；应用事件（不在内置目录中的 eventKey）登录后查询
+DWS 已发布的业务 Schema——返回的 schema 描述业务 payload 本身，消费输出中
+业务字段位于 payload（见输出 jq_root_path）。
+
+应用事件可用 --payload-schema-version 指定已发布业务 Schema 版本；省略时
+查询当前生效版本。该参数原样透传给 portal/callback，CLI 不做本地合法性校验；
+DRAFT、超长或从未发布的版本由服务端返回错误且不回退最新版。官方内置事件
+不接受该参数。`,
+		Example: `  dws event schema user_card_action_triggered --flatten -f json
+  dws event schema user_im_message_receive_at --flatten -f json
+  dws event schema app_user_order_created --payload-schema-version 3 -f json`,
 		Args:              cobra.ExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -181,7 +208,11 @@ func newEventSchemaCommand() *cobra.Command {
 			}
 			def, ok := personal.Lookup(args[0])
 			if !ok {
-				return fmt.Errorf("unknown personal event key %q", args[0])
+				return runRemoteEventSchema(c, args[0], formatRaw, flatten, payloadSchemaVersion,
+					eventExplicitToken(globalFlags), eventExplicitClientID(globalFlags))
+			}
+			if strings.TrimSpace(payloadSchemaVersion) != "" {
+				return apperrors.NewValidation("--payload-schema-version only applies to app events")
 			}
 			if !def.Public {
 				return personal.PublicAvailabilityError(args[0])
@@ -192,6 +223,8 @@ func newEventSchemaCommand() *cobra.Command {
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
 	cmd.Flags().BoolVar(&flatten, "flatten", false, "显示 --flatten 消费模式对应的顶层业务字段 schema")
+	cmd.Flags().StringVar(&payloadSchemaVersion, "payload-schema-version", "",
+		"应用事件已发布业务 Schema 版本（可选）；省略=当前生效版本，原样透传为 payloadSchemaVersion")
 	hideEventInternalFlags(cmd, "as")
 	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{
 		Name:        "event_key",
@@ -213,22 +246,25 @@ func newEventSchemaCommand() *cobra.Command {
 				CLIPath:        "event schema",
 				PrimaryCLIPath: "event schema",
 			},
-			Description: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
+			Description: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式；应用事件可用 --payload-schema-version 查历史已发布版本",
 			Interface: &contract.InterfaceSpec{
-				Mode:         "local",
+				Mode:         "composite",
 				Availability: "available",
-				Reason:       "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+				Reason:       "Reviewed composite workflow: built-in official-event payload definitions with a remote published business-schema lookup for organization app events; no single pinned RPC represents the result.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM 或 OA event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式；应用事件可用 --payload-schema-version 查历史已发布版本",
+				UseWhen: []string{
+					"已知任一公开个人 IM、OA、VoIP、Todo、日历、互动卡片或听记 event_key，消费前需要理解 --flatten 输出字段或 payload 契约",
+					"已知应用事件 eventKey，需要当前或指定已发布 payloadSchemaVersion 的业务 Schema",
+				},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
 				},
 				Examples: []string{
 					"dws event schema user_im_message_receive_at --flatten --format json",
-					"dws event schema user_oa_approval_task_created --flatten --format json",
+					"dws event schema app_user_order_created --payload-schema-version 3 --format json",
 				},
 			},
 		},
@@ -237,7 +273,10 @@ func newEventSchemaCommand() *cobra.Command {
 }
 
 func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
-	items := personal.Catalog(opts.Category, opts.EnabledOnly, opts.IncludePending)
+	items, err := loadPersonalEventCatalog(c.Context(), opts, c.ErrOrStderr())
+	if err != nil {
+		return fmt.Errorf("event list --as user: %w", err)
+	}
 	if opts.Format == "json" {
 		enc := json.NewEncoder(c.OutOrStdout())
 		enc.SetIndent("", "  ")
@@ -252,6 +291,121 @@ func runPersonalEventList(c *cobra.Command, opts personalListOptions) error {
 	return tw.Flush()
 }
 
+// loadPersonalEventCatalog serves official events from the CLI built-in
+// registry (offline by design, never fetched remotely) and app events only
+// through the remote catalog interface.
+func loadPersonalEventCatalog(ctx context.Context, opts personalListOptions, warn io.Writer) ([]personal.Definition, error) {
+	if warn == nil {
+		warn = io.Discard
+	}
+	category := strings.TrimSpace(opts.Category)
+	keyword := strings.TrimSpace(opts.Keyword)
+	producer := strings.TrimSpace(opts.ProducerAppID)
+
+	// 官方事件固定来自内置目录：producer 筛选只可能命中应用事件，
+	// keyword 在本地按与远端一致的 eventKey 全值等值（忽略大小写）过滤。
+	appEventSource := category == personal.CatalogSourceTypeAppEvent
+	remoteCategory := category
+	if appEventSource {
+		remoteCategory = ""
+	}
+	official := personal.Catalog(category, opts.EnabledOnly, opts.IncludePending)
+	if producer != "" || appEventSource {
+		official = nil
+	} else if keyword != "" {
+		official = filterPersonalCatalogByKeyword(official, keyword)
+	}
+
+	// 只有查询可能覆盖应用事件时才访问远端：内置官方分类直接短路，离线可用。
+	// appEvent 是来源选择器而非业务分类；producer 只可能命中应用事件，不做短路。
+	// 远端独有的分类仍可能命中应用事件。
+	if category != "" && producer == "" && !appEventSource && isPersonalOfficialCategory(category) {
+		return official, nil
+	}
+
+	configDir := defaultConfigDir()
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, "", opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
+	if err != nil {
+		if isPersonalEventCredentialMissing(err) {
+			fmt.Fprintf(warn, "WARN: 未登录或凭证缺失，自建应用事件目录不可用，仅展示内置官方事件\n")
+			return official, nil
+		}
+		return nil, err
+	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL("", configDir), identity, opts.ExplicitToken)
+	events, err := client.ListCatalog(ctx, personal.CatalogOptions{
+		SourceType:           personal.CatalogSourceTypeAppEvent,
+		Category:             remoteCategory,
+		Keyword:              keyword,
+		ProducerUnifiedAppID: producer,
+	})
+	if err != nil {
+		// 未加筛选的浏览容忍应用事件源故障：官方事件完整可用，降级只走
+		// stderr。带筛选的查询可能命中应用事件，必须 fail-closed 报错，
+		// 不返回可能缺失命中项的假完整结果。
+		if category == "" && keyword == "" && producer == "" {
+			fmt.Fprintf(warn, "WARN: 应用事件目录获取失败(%v)，仅展示内置官方事件\n", err)
+			return official, nil
+		}
+		return nil, fmt.Errorf("event list --as user: 应用事件目录获取失败: %w", err)
+	}
+
+	items := official
+	for _, event := range events {
+		// 官方键优先：内置目录已提供该事件的权威定义，远端同名条目跳过。
+		if _, known := personal.Lookup(event.EventKey); known {
+			continue
+		}
+		if remoteCategory != "" && event.Category != remoteCategory {
+			continue
+		}
+		description := event.Description
+		if description == "" {
+			description = event.Name
+		}
+		items = append(items, personal.Definition{
+			EventKey:             event.EventKey,
+			DisplayName:          event.Name,
+			Description:          description,
+			Category:             event.Category,
+			Status:               personal.StatusRemote,
+			EventSource:          event.EventSource,
+			ProducerUnifiedAppID: event.ProducerUnifiedAppID,
+			Scope:                event.Scope,
+			Public:               true,
+		})
+	}
+	return items, nil
+}
+
+// isPersonalOfficialCategory reports whether a category is owned by the CLI's
+// built-in official registry. Unknown categories may still be returned by the
+// app-event source and must not be short-circuited before the remote catalog.
+func isPersonalOfficialCategory(category string) bool {
+	for _, def := range personal.Catalog("", true, true) {
+		if def.Category == category {
+			return true
+		}
+	}
+	return false
+}
+
+// filterPersonalCatalogByKeyword mirrors the remote catalog keyword contract:
+// full eventKey equality ignoring case; no prefix, substring, or name match.
+func filterPersonalCatalogByKeyword(defs []personal.Definition, keyword string) []personal.Definition {
+	var out []personal.Definition
+	for _, def := range defs {
+		if strings.EqualFold(def.EventKey, keyword) {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
+func isPersonalEventCredentialMissing(err error) bool {
+	return errors.Is(err, authpkg.ErrTokenDataNotFound) || errors.Is(err, os.ErrNotExist)
+}
+
 func renderPersonalSchema(w io.Writer, def personal.Definition, format string, flatten bool) error {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
@@ -263,6 +417,76 @@ func renderPersonalSchema(w io.Writer, def personal.Definition, format string, f
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(personal.BuildSchemaDocumentForMode(def, flatten))
+}
+
+// remoteEventSchemaDocument renders the published business payload schema of
+// an organization app event; the shape intentionally mirrors the built-in
+// SchemaDocument projection. jq_root_path tells consumers where the schema's
+// fields live in the delivered personal-event data (payload.<field>).
+type remoteEventSchemaDocument struct {
+	EventKey             string         `json:"event_key"`
+	DisplayName          string         `json:"display_name"`
+	Description          string         `json:"description,omitempty"`
+	Category             string         `json:"category,omitempty"`
+	ProducerUnifiedAppID string         `json:"producer_unified_app_id,omitempty"`
+	PayloadSchemaVersion string         `json:"payload_schema_version,omitempty"`
+	Scope                string         `json:"scope,omitempty"`
+	JQRootPath           string         `json:"jq_root_path"`
+	Schema               map[string]any `json:"schema"`
+}
+
+// App events expose a single payload projection: the published business
+// payloadSchema describes the payload object itself, so --flatten is accepted
+// for invocation parity with built-in official events and changes nothing.
+func runRemoteEventSchema(c *cobra.Command, eventKey, format string, flatten bool, payloadSchemaVersion, explicitToken, clientIDOverride string) error {
+	_ = flatten
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = "json"
+	}
+	if format != "json" {
+		return fmt.Errorf("event schema only supports json output")
+	}
+	ctx := c.Context()
+	configDir := defaultConfigDir()
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, "", explicitToken, personalIdentityOptions{ClientID: clientIDOverride})
+	if err != nil {
+		if isPersonalEventCredentialMissing(err) {
+			return fmt.Errorf("unknown personal event key %q; app-event schema requires login (dws auth login)", eventKey)
+		}
+		return fmt.Errorf("event schema: %w", err)
+	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL("", configDir), identity, explicitToken)
+	result, err := client.GetSchema(ctx, eventKey, payloadSchemaVersion)
+	if err != nil {
+		var apiErr *personal.APIError
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeEventNotAvailable {
+			return fmt.Errorf("unknown personal event key %q", eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeSchemaNotAvailable {
+			return fmt.Errorf("event %q has no published schema; for an app event the developer must publish the definition, for an official event upgrade dws if the key is missing", eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeSchemaVersionNotFound {
+			return fmt.Errorf("payload schema version %q is not published for event %q", strings.TrimSpace(payloadSchemaVersion), eventKey)
+		}
+		if errors.As(err, &apiErr) && apiErr.Code == personal.ErrorCodeIllegalParameter {
+			return fmt.Errorf("invalid payload schema version %q for event %q", strings.TrimSpace(payloadSchemaVersion), eventKey)
+		}
+		return fmt.Errorf("event schema: %w", err)
+	}
+	enc := json.NewEncoder(c.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(remoteEventSchemaDocument{
+		EventKey:             result.EventKey,
+		DisplayName:          result.DisplayName,
+		Description:          result.Description,
+		Category:             result.Category,
+		ProducerUnifiedAppID: result.ProducerUnifiedAppID,
+		PayloadSchemaVersion: result.PayloadSchemaVersion,
+		Scope:                result.Scope,
+		JQRootPath:           ".payload",
+		Schema:               result.PayloadSchema,
+	})
 }
 
 func runPersonalEventConsume(c *cobra.Command, opts personalConsumeOptions) error {
@@ -285,7 +509,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	rawFormat := ""
@@ -296,13 +520,13 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode([]string{opts.EventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -337,6 +561,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			_, eventKey, _, err := personalEnsureSubscription(ctx, client, identity, opts)
 			if err != nil {
 				return fmt.Errorf("event consume --as user: %w", err)
+			}
+			if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
 			opts.EventKey = eventKey
 		}
@@ -468,6 +695,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
+	if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
+	}
 	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
 	ownsSubscription := selfCreated || opts.Ephemeral
 	var cleanupOnce sync.Once
@@ -558,14 +788,14 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode(opts.EventKeys, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(false, opts.Flatten)
 
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -751,12 +981,21 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 	for _, eventKey := range keys {
 		def, ok := personalLookupDefinition(eventKey)
 		if !ok {
-			return nil, fmt.Errorf("unknown personal event key %q", eventKey)
+			// Application events (outside the built-in catalog) are scope
+			// neutral: the shared --user/--group values may belong to the
+			// official events in this selection, so target validation happens
+			// per plan after they are cleared. Message filters are rejected
+			// here because the server pins app-event subscriptions to an
+			// empty filterRule.
+			if strings.TrimSpace(opts.QueryCSV) != "" || strings.TrimSpace(opts.FilterJSON) != "" {
+				return nil, fmt.Errorf("--query/--filter-json require all selected events to be message receive events; %s is not", eventKey)
+			}
+			continue
 		}
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, err
 		}
 		switch def.RuleType {
@@ -801,10 +1040,20 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 
 	plans := make([]personalConsumeOptions, 0, len(keys))
 	for _, eventKey := range keys {
-		def, _ := personalLookupDefinition(eventKey)
+		def, ok := personalLookupDefinition(eventKey)
 		plan := opts
 		plan.EventKey = eventKey
 		plan.EventKeys = nil
+		if !ok {
+			// Application event: the fixed "all" rule carries no target; the
+			// shared --user/--group/--role-types values belonged to the
+			// official events in this selection. Per-plan validation below
+			// re-runs with the cleared values.
+			plan.UserID = ""
+			plan.OpenDingTalkID = ""
+			plan.GroupID = ""
+			plan.RoleTypes = nil
+		}
 		switch def.RuleType {
 		case "at", "all":
 			plan.UserID = ""
@@ -833,10 +1082,18 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 	consume.PrintDryRun(w, preview)
 	for i, plan := range plans {
 		ruleType, ruleParam, _ := personal.BuildRuleParam(plan.EventKey, personal.RuleOptions{
-			UserID: plan.UserID, OpenDingTalkID: plan.OpenDingTalkID, GroupID: plan.GroupID,
+			UserID:         plan.UserID,
+			OpenDingTalkID: plan.OpenDingTalkID,
+			GroupID:        plan.GroupID,
+			RoleTypes:      plan.RoleTypes,
+			CalendarIDs:    plan.CalendarIDs,
+			ChangeTypes:    plan.ChangeTypes,
 		})
 		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
-		ruleJSON, _ := personal.CanonicalJSON(ruleParam)
+		ruleJSON := ""
+		if ruleParam != nil {
+			ruleJSON, _ = personal.CanonicalJSON(ruleParam)
+		}
 		fmt.Fprintf(w, "  subscription[%d]  : event_key=%s rule_type=%s rule_param=%s",
 			i, plan.EventKey, ruleType, ruleJSON)
 		if filter != "" {
@@ -853,18 +1110,22 @@ func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
 	if flatten {
 		return personal.ProjectOutput
 	}
-	return nil
+	return personal.ProjectTransportOutput
 }
 
-func validatePersonalEventOutputMode(flatten, debugRawEvents bool, format consume.Format) error {
-	if !flatten {
-		return nil
-	}
-	if debugRawEvents {
+func validatePersonalEventOutputMode(eventKeys []string, flatten, debugRawEvents bool, format consume.Format) error {
+	if flatten && debugRawEvents {
 		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
 	}
-	if format == consume.FormatRaw {
+	if flatten && format == consume.FormatRaw {
 		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	if format == consume.FormatRaw && !debugRawEvents {
+		for _, eventKey := range eventKeys {
+			if strings.TrimSpace(eventKey) == personal.EventVoIPCallReceiveInvite {
+				return fmt.Errorf("--format raw for VoIP events requires explicit --debug-raw-events")
+			}
+		}
 	}
 	return nil
 }
@@ -885,7 +1146,7 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 }
 
 func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return err
 	}
 	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -893,6 +1154,9 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
+		CalendarIDs:    opts.CalendarIDs,
+		ChangeTypes:    opts.ChangeTypes,
 	}); err != nil {
 		return err
 	}
@@ -900,19 +1164,97 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 	return err
 }
 
-func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
-	changed := personalOAOptionNames(opts)
+func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
+	if strings.TrimSpace(opts.SubscribeID) != "" && (opts.CalendarIDs != nil || opts.ChangeTypes != nil) {
+		return fmt.Errorf("--calendar-ids/--change-types are not supported when reusing --subscribe-id")
+	}
+	if eventKey == personal.EventCalendarEventChanged {
+		if strings.TrimSpace(opts.QueryCSV) != "" || strings.TrimSpace(opts.FilterJSON) != "" {
+			return fmt.Errorf("--query/--filter-json are not supported for calendar events; use --calendar-ids/--change-types")
+		}
+		if _, _, err := personal.BuildRuleParam(eventKey, personal.RuleOptions{
+			RuleType:       opts.Rule,
+			UserID:         opts.UserID,
+			OpenDingTalkID: opts.OpenDingTalkID,
+			GroupID:        opts.GroupID,
+			RoleTypes:      opts.RoleTypes,
+			CalendarIDs:    opts.CalendarIDs,
+			ChangeTypes:    opts.ChangeTypes,
+		}); err != nil {
+			return err
+		}
+	} else if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+		return fmt.Errorf("--calendar-ids/--change-types are only supported for %s", personal.EventCalendarEventChanged)
+	}
+	if err := validatePersonalUnfilteredEventOptions(eventKey, opts); err != nil {
+		return err
+	}
+	return validatePersonalTodoOptions(eventKey, opts)
+}
+
+func validatePersonalUnfilteredEventOptions(eventKey string, opts personalConsumeOptions) error {
+	changed := personalUnsupportedOptionNames(opts)
 	if len(changed) == 0 {
 		return nil
 	}
-	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
-	if !ok || def.Category != "oa" {
+	trimmedKey := strings.TrimSpace(eventKey)
+	def, ok := personalLookupDefinition(trimmedKey)
+	if !ok {
+		if trimmedKey == "" {
+			// Implicit reuse (--subscribe-id without a positional event key):
+			// the key is resolved from the subscription lookup and validation
+			// re-runs against it, so nothing is rejected here.
+			return nil
+		}
+		return fmt.Errorf("%s not supported for application event %s", strings.Join(changed, ", "), eventKey)
+	}
+	categoryName := map[string]string{
+		"minutes": "minutes",
+		"oa":      "OA",
+		"voip":    "VoIP",
+		"card":    "card",
+	}[def.Category]
+	if categoryName == "" {
 		return nil
 	}
-	return fmt.Errorf("%s not supported for OA event %s", strings.Join(changed, ", "), eventKey)
+	return fmt.Errorf("%s not supported for %s event %s", strings.Join(changed, ", "), categoryName, eventKey)
 }
 
-func personalOAOptionNames(opts personalConsumeOptions) []string {
+func personalUnsupportedOptionNames(opts personalConsumeOptions) []string {
+	var changed []string
+	for _, item := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--user", value: opts.UserID},
+		{name: "--open-dingtalk-id", value: opts.OpenDingTalkID},
+		{name: "--group", value: opts.GroupID},
+		{name: "--query", value: opts.QueryCSV},
+		{name: "--filter-json", value: opts.FilterJSON},
+	} {
+		if strings.TrimSpace(item.value) != "" {
+			changed = append(changed, item.name)
+		}
+	}
+	if len(opts.RoleTypes) > 0 {
+		changed = append(changed, "--role-types")
+	}
+	return changed
+}
+
+func validatePersonalTodoOptions(eventKey string, opts personalConsumeOptions) error {
+	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	if !ok || def.Category != "todo" {
+		return nil
+	}
+	changed := personalTodoUnsupportedOptionNames(opts)
+	if len(changed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for Todo event %s", strings.Join(changed, ", "), eventKey)
+}
+
+func personalTodoUnsupportedOptionNames(opts personalConsumeOptions) []string {
 	var changed []string
 	for _, item := range []struct {
 		name  string
@@ -944,7 +1286,7 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalPreparedSubscription{}, err
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return personalPreparedSubscription{}, err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -952,6 +1294,9 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
+		CalendarIDs:    opts.CalendarIDs,
+		ChangeTypes:    opts.ChangeTypes,
 	})
 	if err != nil {
 		return personalPreparedSubscription{}, err
@@ -989,6 +1334,9 @@ func createPreparedPersonalSubscription(ctx context.Context, client *personal.Cl
 
 func ensurePersonalSubscription(ctx context.Context, client *personal.Client, identity personal.Identity, opts personalConsumeOptions) (*personal.Subscription, string, string, error) {
 	if strings.TrimSpace(opts.SubscribeID) != "" {
+		if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+			return nil, "", "", fmt.Errorf("--calendar-ids/--change-types are not supported when reusing --subscribe-id")
+		}
 		sub, err := personalGetSubscription(client, ctx, opts.SubscribeID)
 		if err != nil {
 			return nil, "", "", err
@@ -1016,13 +1364,19 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err := ensurePublicPersonalEvent(eventKey); err != nil {
 			return nil, "", "", err
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if len(opts.RoleTypes) > 0 {
+			return nil, "", "", fmt.Errorf("--role-types is not supported when reusing --subscribe-id")
+		}
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, "", "", err
 		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
 		if ruleType == "" {
 			if def, ok := personal.Lookup(eventKey); ok {
 				ruleType = def.RuleType
+			} else {
+				// Application events subscribe with the fixed "all" rule.
+				ruleType = "all"
 			}
 		}
 		sub.SubscribeID = strings.TrimSpace(opts.SubscribeID)
@@ -1041,7 +1395,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 		return err
 	}
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event status --as user: %w", err)
 	}
@@ -1185,7 +1539,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	configDir := defaultConfigDir()
-	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride})
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -1324,16 +1678,16 @@ func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, bu
 	fmt.Fprintf(w, "cancelled %d personal subscription(s); %s\n", len(subscribeIDs), busState)
 }
 
-func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, options ...personalIdentityOptions) (personal.Identity, error) {
+	opts := personalIdentityOption(options)
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride)
+		// Preserve the stored-token path's profile identity precedence. Only the
+		// internal bus supplies a parent-resolved override directly to the resolver.
+		opts.ClientID = ""
+		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
-	clientIDOverride := ""
-	if len(clientIDOverrides) > 0 {
-		clientIDOverride = strings.TrimSpace(clientIDOverrides[0])
-	}
-	return resolvePersonalEventIdentityWithToken(ctx, configDir, sourceIDOverride, explicitToken, clientIDOverride)
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
 }
 
 // resolvePersonalEventIdentityWithToken resolves only non-sensitive identity
@@ -1342,9 +1696,17 @@ func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, source
 // --token must never be replaced with, persisted into, or used to refresh a
 // local OAuth profile.
 func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+	opts := personalIdentityOptions{}
+	if len(clientIDOverrides) > 0 {
+		opts.ClientID = clientIDOverrides[0]
+	}
+	return resolvePersonalEventIdentityWithTokenOptions(ctx, configDir, sourceIDOverride, explicitToken, opts)
+}
+
+func resolvePersonalEventIdentityWithTokenOptions(ctx context.Context, configDir, sourceIDOverride, explicitToken string, opts personalIdentityOptions) (personal.Identity, error) {
 	explicitToken = strings.TrimSpace(explicitToken)
 	if explicitToken == "" {
-		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride, opts)
 	}
 	if strings.Contains(strings.TrimSpace(authpkg.RuntimeProfile()), ",") {
 		return personal.Identity{}, fmt.Errorf("personal events require exactly one --profile")
@@ -1352,10 +1714,7 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 
 	corpID := resolveRuntimeDefault(ctx, "$corpId")
 	userID := resolveRuntimeDefault(ctx, "$currentUserId")
-	clientID := ""
-	if len(clientIDOverrides) > 0 {
-		clientID = strings.TrimSpace(clientIDOverrides[0])
-	}
+	clientID := strings.TrimSpace(opts.ClientID)
 	if clientID == "" {
 		// An edition hook or explicit environment value is runtime identity,
 		// not persisted app state. Resolve it before profiles.json so a complete
@@ -1388,18 +1747,10 @@ func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourc
 			}
 		}
 	}
-	if clientID == "" {
-		// Persisted/global app credentials are only a fallback after the
-		// selected profile, so an old app config cannot override profile.ClientID.
-		clientID = strings.TrimSpace(personalClientID())
-	}
-	if clientID == "" {
-		if id, _, _, _, resolveErr := personalResolveAppCredentialsStrict(configDir); resolveErr == nil {
-			clientID = strings.TrimSpace(id)
-		}
-	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
+	var err error
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
 
 	sourceID := strings.TrimSpace(sourceIDOverride)
@@ -1456,7 +1807,7 @@ func selectPersonalEventProfileMetadata(cfg *authpkg.ProfilesConfig, selector st
 	return authpkg.ResolveProfileMetadata(cfg, strings.TrimSpace(selector))
 }
 
-func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string) (personal.Identity, error) {
+func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string, options ...personalIdentityOptions) (personal.Identity, error) {
 	accessToken, err := personalResolveAuxiliaryAccessToken(ctx, configDir, "")
 	if err != nil {
 		return personal.Identity{}, err
@@ -1478,17 +1829,15 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	if userID == "" {
 		userID = resolveRuntimeDefault(ctx, "$currentUserId")
 	}
-	if clientID == "" {
-		clientID = personalClientID()
+	opts := personalIdentityOption(options)
+	if id := strings.TrimSpace(opts.ClientID); id != "" {
+		clientID = id
 	}
-	if clientID == "" {
-		if id, _, _, _, err := personalResolveAppCredentialsStrict(configDir); err == nil {
-			clientID = id
-		}
+	clientID, err = resolvePersonalClientID(ctx, configDir, clientID, opts.TicketMode)
+	if err != nil {
+		return personal.Identity{}, err
 	}
-	if clientID == "" {
-		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
-	}
+
 	sourceID := strings.TrimSpace(sourceIDOverride)
 	if sourceID == "" {
 		sourceID = personalEventStreamSourceID("")

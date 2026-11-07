@@ -1,0 +1,518 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-meeting-invitation",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "intro",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "<a atId=\"${/meeting/recipient/openDingTalkId}\">${/meeting/recipient/displayName}</a> ${/meeting/introduction}"
+            }
+          }
+        },
+        {
+          "id": "topic",
+          "component": "ChoicePicker",
+          "variant": "mutuallyExclusive",
+          "displayStyle": "checkbox",
+          "value": {
+            "path": "/form/topic"
+          },
+          "options": [
+            {
+              "label": {
+                "path": "/meeting/topics/0/label"
+              },
+              "value": "pilot"
+            },
+            {
+              "label": {
+                "path": "/meeting/topics/1/label"
+              },
+              "value": "scope"
+            },
+            {
+              "label": "自定义主题",
+              "value": "custom"
+            }
+          ]
+        },
+        {
+          "id": "custom-topic",
+          "component": "TextField",
+          "label": "",
+          "placeholder": "请输入会议主题",
+          "variant": "shortText",
+          "value": {
+            "path": "/form/customTopic"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "call": "arrayGet",
+                "args": {
+                  "value": {
+                    "path": "/form/topic"
+                  },
+                  "index": 0
+                }
+              },
+              "b": "custom"
+            }
+          }
+        },
+        {
+          "id": "step-1",
+          "component": "Text",
+          "text": "1.",
+          "maxLine": 8,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "title-1",
+          "component": "Text",
+          "text": "会议主题是什么？",
+          "maxLine": 8,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "heading-1",
+          "component": "Row",
+          "children": [
+            "step-1",
+            "title-1"
+          ],
+          "gap": 8,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "section-1",
+          "component": "Column",
+          "children": [
+            "heading-1",
+            "topic",
+            "custom-topic"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "attendee-summary",
+          "component": "Text",
+          "text": {
+            "path": "/meeting/attendeeSummary"
+          },
+          "maxLine": 8,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false
+        },
+        {
+          "id": "attendee-missing",
+          "component": "Text",
+          "text": {
+            "path": "/meeting/missingAttendeeHint"
+          },
+          "maxLine": 8,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false
+        },
+        {
+          "id": "attendee-hints",
+          "component": "Column",
+          "children": [
+            "attendee-summary",
+            "attendee-missing"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "attendees",
+          "component": "UserPicker",
+          "title": "请选择参会人",
+          "placeholder": "请选择参会人",
+          "maxSelections": 10,
+          "value": {
+            "path": "/form/attendees"
+          }
+        },
+        {
+          "id": "step-2",
+          "component": "Text",
+          "text": "2.",
+          "maxLine": 8,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "title-2",
+          "component": "Text",
+          "text": "需要邀请哪些人参加？",
+          "maxLine": 8,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "heading-2",
+          "component": "Row",
+          "children": [
+            "step-2",
+            "title-2"
+          ],
+          "gap": 8,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "section-2",
+          "component": "Column",
+          "children": [
+            "heading-2",
+            "attendee-hints",
+            "attendees"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "meeting-modes",
+          "component": "ChoicePicker",
+          "variant": "mutuallyExclusive",
+          "displayStyle": "checkbox",
+          "value": {
+            "path": "/form/meetingModes"
+          },
+          "options": [
+            {
+              "label": "在线会议，自动生成入会链接",
+              "value": "online"
+            },
+            {
+              "label": "线下会议，补充会议地点",
+              "value": "offline"
+            }
+          ]
+        },
+        {
+          "id": "location-label",
+          "component": "Text",
+          "text": "请补充会议地点",
+          "maxLine": 8,
+          "colorToken": "common_level2_base_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "call": "arrayGet",
+                "args": {
+                  "value": {
+                    "path": "/form/meetingModes"
+                  },
+                  "index": 0
+                }
+              },
+              "b": "offline"
+            }
+          }
+        },
+        {
+          "id": "location",
+          "component": "TextField",
+          "label": "",
+          "placeholder": "请输入",
+          "variant": "shortText",
+          "value": {
+            "path": "/form/location"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "call": "arrayGet",
+                "args": {
+                  "value": {
+                    "path": "/form/meetingModes"
+                  },
+                  "index": 0
+                }
+              },
+              "b": "offline"
+            }
+          }
+        },
+        {
+          "id": "step-3",
+          "component": "Text",
+          "text": "3.",
+          "maxLine": 8,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "title-3",
+          "component": "Text",
+          "text": "会议在哪里进行？",
+          "maxLine": 8,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "heading-3",
+          "component": "Row",
+          "children": [
+            "step-3",
+            "title-3"
+          ],
+          "gap": 8,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "section-3",
+          "component": "Column",
+          "children": [
+            "heading-3",
+            "meeting-modes",
+            "location-label",
+            "location"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-hint",
+          "component": "Text",
+          "text": "已根据聊天内容整理，可直接修改：",
+          "maxLine": 8,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false
+        },
+        {
+          "id": "agenda",
+          "component": "TextField",
+          "label": "",
+          "variant": "longText",
+          "value": {
+            "path": "/form/agenda"
+          }
+        },
+        {
+          "id": "step-4",
+          "component": "Text",
+          "text": "4.",
+          "maxLine": 8,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "title-4",
+          "component": "Text",
+          "text": "会议主要讨论什么？",
+          "maxLine": 8,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "id": "heading-4",
+          "component": "Row",
+          "children": [
+            "step-4",
+            "title-4"
+          ],
+          "gap": 8,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "section-4",
+          "component": "Column",
+          "children": [
+            "heading-4",
+            "agenda-hint",
+            "agenda"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "submit-label",
+          "component": "Text",
+          "text": "生成会邀",
+          "maxLine": 8,
+          "bold": true,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_body_text_style__font_size"
+        },
+        {
+          "id": "generate",
+          "component": "Button",
+          "child": "submit-label",
+          "variant": "primary",
+          "action": {
+            "event": {
+              "name": "meeting_invitation_submit",
+              "context": {
+                "requestId": {
+                  "path": "/meeting/requestId"
+                },
+                "form": {
+                  "path": "/form"
+                }
+              }
+            }
+          },
+          "checks": [
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/topic"
+                  }
+                }
+              },
+              "message": "请选择会议主题"
+            },
+            {
+              "condition": {
+                "call": "required",
+                "args": {
+                  "value": {
+                    "path": "/form/attendees"
+                  }
+                }
+              },
+              "message": "请选择参会人"
+            },
+            {
+              "condition": {
+                "call": "cond",
+                "args": {
+                  "if": {
+                    "call": "eq",
+                    "args": {
+                      "a": {
+                        "call": "arrayGet",
+                        "args": {
+                          "value": {
+                            "path": "/form/topic"
+                          },
+                          "index": 0
+                        }
+                      },
+                      "b": "custom"
+                    }
+                  },
+                  "then": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/customTopic"
+                      }
+                    }
+                  },
+                  "else": true
+                }
+              },
+              "message": "请输入自定义主题"
+            }
+          ]
+        },
+        {
+          "id": "footer",
+          "component": "Row",
+          "children": [
+            "generate"
+          ],
+          "gap": 0,
+          "align": "center",
+          "justify": "start",
+          "padding": 0
+        },
+        {
+          "id": "form",
+          "component": "Column",
+          "children": [
+            "section-1",
+            "section-2",
+            "section-3",
+            "section-4",
+            "footer"
+          ],
+          "gap": 16,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "intro",
+            "form"
+          ],
+          "gap": 18,
+          "align": "stretch"
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-meeting-invitation",
+      "path": "/",
+      "value": {
+        "meeting": {
+          "requestId": "demo-meeting-invitation",
+          "recipient": {
+            "openDingTalkId": "demo-attendee-1",
+            "displayName": "林小夏"
+          },
+          "introduction": "我来帮你约一下和客户沟通试点方案的会议。主题已帮你预填好，请补充参会人并确认会议安排：",
+          "topics": [
+            {
+              "id": "pilot",
+              "label": "示例科技 · 协同办公试点方案沟通"
+            },
+            {
+              "id": "scope",
+              "label": "示例科技 · 试点需求与实施范围确认"
+            }
+          ],
+          "attendeeSummary": "尚未选择参会人",
+          "missingAttendeeHint": "请根据会议需要添加参会人"
+        },
+        "form": {
+          "topic": [
+            "pilot"
+          ],
+          "customTopic": "",
+          "attendees": [],
+          "meetingModes": [
+            "online"
+          ],
+          "location": "",
+          "agenda": "1. 确认首批试点的部门、人数和使用场景\n2. 对齐通讯录同步、权限管理的接入要求\n3. 讨论试点排期，明确双方负责人和下一步安排"
+        }
+      }
+    }
+  }
+]

@@ -63,6 +63,8 @@ func driveLatestWindowsScopeValue(value string) (string, bool) {
 	return "", false
 }
 
+var devAppQuoteScopeValue = driveLatestScopeValue
+
 // shellNeedsQuote 报告 r 是否落在「无需引用」白名单之外。
 //
 // 用白名单而非黑名单：漏掉一个元字符就是一个注入口，而白名单漏一个字符只会多加一对无害的

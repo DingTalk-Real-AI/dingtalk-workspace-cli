@@ -1,9 +1,10 @@
 package helpers
 
 import (
-	"os"
+	"errors"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -46,16 +47,13 @@ func TestCrossPlatformCoverageCalendarOptionalFlagsRemainingCoverage(t *testing.
 
 func TestCrossPlatformCoverageCalendarUnknownFlagAndSuggestionRemainingCoverage(t *testing.T) {
 	root := &cobra.Command{Use: "calendar"}
-	group := &cobra.Command{Use: "room"}
+	group := newGroupCommand(&cobra.Command{Use: "room"})
 	group.SuggestionsMinimumDistance = 3
 	group.AddCommand(&cobra.Command{Use: "search", SuggestFor: []string{"serach"}, Run: func(*cobra.Command, []string) {}})
 	root.AddCommand(group)
-	installUnknownVerbFallback(group)
-	oldArgs := os.Args
-	os.Args = []string{"dws", "calendar", "room", "--unknown"}
-	t.Cleanup(func() { os.Args = oldArgs })
-	if err := group.RunE(group, nil); err != nil {
-		t.Fatalf("unknown flag fallback: %v", err)
+	err := group.RunE(group, []string{"serach"})
+	var structured *apperrors.Error
+	if !errors.As(err, &structured) || structured.Reason != "unknown_subcommand" {
+		t.Fatalf("typed suggestion fallback: %#v", err)
 	}
-	printUnknownSubcmdError(group, "serach")
 }

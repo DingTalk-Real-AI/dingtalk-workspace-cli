@@ -8,10 +8,7 @@
 - 数据高亮规则（条件填色）：`view update fill-color-rule` / `view get fill-color-rule`
 - 复制视图：`view duplicate`
 
-> **与 [aitable-view-config.md](./aitable-view-config.md) 的分工**：
-> - `aitable-view-config.md` 讲 `view get/update <attr>` 中 8 个属性：filter / sort / group / visible-fields / field-widths / aggregate / card / timebar。
-> - 本文档讲上面 5 项额外能力（包括 attr 形式的 frozen-cols / row-height / fill-color-rule，以及顶层独立的 lock / duplicate）。
-> 这 5 项**不能**通过 `view update --config '{...}'` 写入，必须用各自专属子命令。
+本文只负责上面 5 项额外能力。普通列顺序/filter/sort/group/列宽，以及 card/timebar/aggregate，均由根 Skill 直接路由到各自 reference；选中本文后不要再加载其他视图 reference。这 5 项**不能**通过 `view update --config '{...}'` 写入，必须用各自专属子命令。
 
 ## 命令矩阵
 
@@ -31,13 +28,13 @@
 
 ```bash
 # 锁定（默认）
-dws aitable view lock --view-id VIEW_ID
+dws aitable view lock --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID
 
 # 解锁
-dws aitable view lock --view-id VIEW_ID --off
+dws aitable view lock --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --off
 
 # 查询当前是否锁定
-dws aitable view get lock --view-id VIEW_ID --format json
+dws aitable view get lock --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 # → {"data": {"baseId": ..., "tableId": ..., "viewId": ..., "locked": true|false}}
 ```
 
@@ -47,13 +44,13 @@ dws aitable view get lock --view-id VIEW_ID --format json
 
 ```bash
 # 冻结从首列起 1 列
-dws aitable view update frozen-cols --view-id VIEW_ID --count 1
+dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 1
 
 # 取消冻结
-dws aitable view update frozen-cols --view-id VIEW_ID --count 0
+dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 0
 
 # 查询当前冻结列数
-dws aitable view get frozen-cols --view-id VIEW_ID --format json
+dws aitable view get frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 # → {"data": {..., "count": 1}}    count 为 null 表示视图未显式设置
 ```
 
@@ -65,10 +62,10 @@ dws aitable view get frozen-cols --view-id VIEW_ID --format json
 
 ```bash
 # 设置行高 — 推荐档位 32 / 56 / 88 / 128
-dws aitable view update row-height --view-id VIEW_ID --cell-height 56
+dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 56
 
 # 查询当前行高
-dws aitable view get row-height --view-id VIEW_ID --format json
+dws aitable view get row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 # → {"data": {..., "cellHeight": 56}}    cellHeight 为 null 表示视图未显式设置（前端按 32 渲染）
 ```
 
@@ -115,7 +112,7 @@ dws aitable view get row-height --view-id VIEW_ID --format json
 
 ```bash
 # 1) 给金额字段 > 100 的单元格上 firstLine5 色
-dws aitable view update fill-color-rule --view-id GRID_ID --json '[
+dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --json '[
   {
     "type":"cell",
     "formatFieldId":"fldAmount",
@@ -125,10 +122,10 @@ dws aitable view update fill-color-rule --view-id GRID_ID --json '[
 ]'
 
 # 2) 清空所有规则
-dws aitable view update fill-color-rule --view-id GRID_ID --json '[]'
+dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --json '[]'
 
 # 3) 查询当前规则
-dws aitable view get fill-color-rule --view-id GRID_ID --format json
+dws aitable view get fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --format json
 # → {"data": [...]} 数组
 ```
 
@@ -138,10 +135,10 @@ dws aitable view get fill-color-rule --view-id GRID_ID --format json
 
 ```bash
 # 显式命名
-dws aitable view duplicate --view-id VIEW_ID --new-name "副本视图"
+dws aitable view duplicate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --new-name "副本视图"
 
 # 系统自动命名（一般是 "原视图名 (副本)"）
-dws aitable view duplicate --view-id VIEW_ID --format json
+dws aitable view duplicate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 # → {"data": {..., "viewId": "<新视图ID>", "sourceViewId": "<原视图ID>", "viewName": "..."}}
 ```
 
@@ -185,7 +182,7 @@ dws aitable view lock --base-id $BASE --table-id $TABLE --view-id $VIEW
 ### 复制一个"金牌客户"视图给销售团队
 
 ```bash
-dws aitable view duplicate --view-id viw_VIP_template --new-name "金牌客户-华东区"
+dws aitable view duplicate --base-id BASE_ID --table-id TABLE_ID --view-id viw_VIP_template --new-name "金牌客户-华东区"
 # 取返回里 data.viewId 进一步定制
 ```
 
@@ -193,6 +190,6 @@ dws aitable view duplicate --view-id viw_VIP_template --new-name "金牌客户-�
 
 ```bash
 # 看实际生效的 conditionalFormats
-dws aitable view get fill-color-rule --view-id VIEW_ID --format json
+dws aitable view get fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 # → 如果是 [] 说明上次写入失败；常见原因：color 用了 hex（必须 firstLineN）/ filter 用了 operator（必须 symbol）
 ```

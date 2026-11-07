@@ -33,6 +33,7 @@ type Comparison struct {
 	Compatible bool     `json:"compatible"`
 	Blocking   []Change `json:"blocking"`
 	Additions  []Change `json:"additions"`
+	Reviewed   []Change `json:"reviewed,omitempty"`
 }
 
 // Change describes one compatibility decision. Before and After are concise,
@@ -113,7 +114,12 @@ func Compare(current, baseline Snapshot, reference string) Comparison {
 			removedPaths = append(removedPaths, path)
 		}
 	}
+	retiredRecruit := reviewedRecruitRetirement(current, baseline)
 	for _, path := range minimalPaths(removedPaths) {
+		if retiredRecruit && path == "dws recruit" {
+			result.Reviewed = append(result.Reviewed, Change{Kind: "product_retirement", Path: path, After: "PR #1485"})
+			continue
+		}
 		kind := "command_alias_removed"
 		if _, canonical := baselineCommands[path]; canonical {
 			kind = "command_removed"

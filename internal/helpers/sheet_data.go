@@ -152,25 +152,29 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
   # 删除匹配内容（替换为空）
   dws sheet replace --node NODE_ID --sheet-id SHEET_ID --find "临时" --replacement ""`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{
-				"nodeId":      mustGetFlag(cmd, "node"),
-				"sheetId":     mustGetFlag(cmd, "sheet-id"),
-				"text":        mustGetFlag(cmd, "find"),
-				"replaceText": mustGetFlag(cmd, "replacement"),
+			input := map[string]any{
+				"sheet-id":    mustGetFlag(cmd, "sheet-id"),
+				"find":        mustGetFlag(cmd, "find"),
+				"replacement": mustGetFlag(cmd, "replacement"),
 			}
 			if v, _ := cmd.Flags().GetString("range"); v != "" {
-				toolArgs["range"] = v
+				input["range"] = v
 			}
 			matchCase, _ := cmd.Flags().GetBool("match-case")
-			toolArgs["matchCase"] = matchCase
+			input["match-case"] = matchCase
 			matchEntireCell, _ := cmd.Flags().GetBool("match-entire-cell")
-			toolArgs["matchEntireCell"] = matchEntireCell
+			input["match-entire-cell"] = matchEntireCell
 			useRegExp, _ := cmd.Flags().GetBool("use-regexp")
-			toolArgs["useRegExp"] = useRegExp
+			input["use-regexp"] = useRegExp
 			matchFormula, _ := cmd.Flags().GetBool("match-formula")
-			toolArgs["matchFormulaText"] = matchFormula
+			input["match-formula"] = matchFormula
 			includeHidden, _ := cmd.Flags().GetBool("include-hidden")
-			toolArgs["includeHidden"] = includeHidden
+			input["include-hidden"] = includeHidden
+			toolArgs, err := BuildBatchReplaceArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("replace_all", toolArgs)
 		},
 	}
@@ -294,9 +298,16 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 
 --csv 支持三种输入：直接传文本、@filepath 从文件读取、- 从 stdin 读取。
+--auto-convert 默认 true，沿用表格系统现有的数字、日期、布尔等类型识别。
+设为 false 时，只关闭非公式字段的自动转换：解码后以 = 开头的字段仍作为公式，
+其他字段按普通文本原样写入（包括 "'=1+1"，前置单引号会保留）。
 --allow-overwrite 默认 false，目标区域有数据时需显式传 --allow-overwrite 才能覆盖。`,
 		Example: `  dws sheet csv-put --node NODE_ID --sheet-id SHEET_ID --start-cell A1 \
     --csv "=1+1,'=1+1"
+
+  dws sheet csv-put --node NODE_ID --sheet-id SHEET_ID --start-cell A1 \
+    --auto-convert=false --csv 'id,date,total
+001,2026/8/1,"=SUM(1,2)"'
 
   dws sheet csv-put --node NODE_ID --sheet-id SHEET_ID --start-cell B2 \
     --csv @data.csv --allow-overwrite
@@ -337,6 +348,10 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 				v, _ := cmd.Flags().GetBool("allow-overwrite")
 				toolArgs["allowOverwrite"] = v
 			}
+			if cmd.Flags().Changed("auto-convert") {
+				v, _ := cmd.Flags().GetBool("auto-convert")
+				toolArgs["autoConvert"] = v
+			}
 			return callMCPTool("set_range_from_csv", toolArgs)
 		},
 	}
@@ -353,22 +368,23 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 				CLIPath:        "sheet csv-put",
 				PrimaryCLIPath: "sheet csv-put",
 			},
-			Description: "将 CSV 值或公式写入起始单元格（= 开头按公式；可自动扩容）。",
+			Description: "将 CSV 值或公式写入起始单元格（可关闭非公式字段的自动类型转换；= 开头仍按公式；可自动扩容）。",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "set_range_from_csv"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "将 CSV 值或公式写入起始单元格（= 开头按公式；可自动扩容）。",
-				UseWhen:      []string{"需要从 CSV/表格文本批量写入值或以 = 开头的公式时优先使用"},
-				AvoidWhen:    []string{"需要超链接/富文本/样式/数据验证用 range update；在末尾追加数据行用 append；覆盖已有数据需 --allow-overwrite；要把 = 开头内容写成字面文本需前加单引号"},
+				AgentSummary: "将 CSV 值或公式写入起始单元格；需要保留日期文本、前导零等原始形式时使用 --auto-convert=false，= 开头仍按公式。",
+				UseWhen:      []string{"需要从 CSV/表格文本批量写入值或公式；要求保留前导零、日期字符串或禁止非公式字段类型推断时使用 --auto-convert=false"},
+				AvoidWhen:    []string{"需要按列指定 dtype/format 用 table-put；需要超链接/富文本/样式/数据验证用 range update；在末尾追加数据行用 append；覆盖已有数据需 --allow-overwrite；要把 = 开头内容写成字面文本需前加单引号"},
 				Examples: []string{
 					"dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --csv @data.csv --allow-overwrite",
-					"dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --csv \"=1+1,'=1+1\"",
+					"dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 --auto-convert=false --csv \"001,2026/8/1,=1+1,'=1+1\"",
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "auto-convert", Property: "autoConvert", InterfaceType: "boolean", Description: "自动推断非公式 CSV 字段的数字、日期、布尔等类型；设为 false 时非公式字段按文本原样写入，= 开头仍作为公式"},
 				{Name: "node", Property: "nodeId"},
 			},
 		},
@@ -377,6 +393,7 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 	csvPutCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	csvPutCmd.Flags().String("csv", "", "CSV 文本、@文件路径 或 - 表示 stdin (必填)")
 	csvPutCmd.Flags().String("start-cell", "", "起始单元格，A1 表示法 (必填)")
+	csvPutCmd.Flags().Bool("auto-convert", true, "自动推断非公式 CSV 字段的数字、日期、布尔等类型；设为 false 时按文本原样写入，= 开头仍作为公式")
 	csvPutCmd.Flags().Bool("allow-overwrite", false, "允许覆盖已有数据 (默认 false)")
 
 	csvGetCmd := &cobra.Command{

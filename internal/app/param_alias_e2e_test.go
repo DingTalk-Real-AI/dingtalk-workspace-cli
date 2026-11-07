@@ -50,6 +50,8 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 // complete without falling back to a validation error.
 func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string {
 	switch tool {
+	case "update_base":
+		return `{"status":"success","data":{"baseId":"base-1","baseName":"Fixture Base"}}`
 	case "list_calendar_events":
 		return `{"success":true,"result":{"events":[],"hasMore":false,"nextCursor":""}}`
 	case "get_calendar_detail":
@@ -96,6 +98,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 			}
 		}
 		return `{"success":true,"nodeId":"node-1","workspaceId":"source-1","folderId":"source-folder"}`
+	case "list_wikiSpaces":
+		return `{"success":true,"wikiSpaces":[{"workspaceId":"drive-1","name":"我的文档"}],"hasMore":false}`
 	case "create_calendar_event":
 		return `{"success":true,"result":{"eventId":"event-1"}}`
 	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":
@@ -119,6 +123,20 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "list_conversation_message_v2", "list_individual_chat_message":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "search_messages":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "list_message_favorites":
+		return `{"result":{"items":[],"hasMore":false}}`
+	case "get_group_members", "list_group_bots":
+		return `{"result":{"list":[],"hasMore":false}}`
+	case "list_conversations_by_category":
+		return `{"result":{"conversations":[{"openConversationId":"fixture-conversation"}],"hasMore":false}}`
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","senderOpenDingTalkId":"` + appFixtureCurrentDOpenID + `","content":"fixture message","resources":[{"resourceId":"resource-1","resourceIdType":"mediaId","resourceType":"image"}]}]}}`
+	case "get_conversation_info":
+		return `{"result":{"openConversationId":"fixture-conversation","convThreadEnabled":false}}`
 	case "search_contact_by_key_word":
 		return `{"result":[{"name":"Fixture User","userId":"fixture-user","openDingTalkId":"D-fixture-user"}]}`
 	case "list_doc_versions":
@@ -158,8 +176,10 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		}
 		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
 		return string(encoded)
-	case "get_cover", "get_node_stats":
+	case "get_cover":
 		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1","views":1}}`
 	case "get_file_publish_status":
 		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
 	case "create_folder", "create_shortcut":
@@ -295,7 +315,11 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	root := NewRootCommand()
 	rootNewCommandRunnerWithFlags = originalRunnerFactory
-	root.SetOut(io.Discard)
+	// Unified-result leaves emit through Cobra's output writer, while legacy
+	// dry-run leaves still write through the process stdout formatter. Point
+	// both surfaces at the same capture file so this protocol-agnostic alias
+	// probe keeps observing the one preview produced by either rollout state.
+	root.SetOut(captureFile)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 
@@ -316,7 +340,15 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	var preview paramAliasDryRunPreview
 	if executeErr == nil {
-		if err := json.Unmarshal(output, &preview); err != nil {
+		previewJSON := output
+		var envelope struct {
+			OK   *bool           `json:"ok"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(output, &envelope); err == nil && envelope.OK != nil && len(envelope.Data) > 0 {
+			previewJSON = envelope.Data
+		}
+		if err := json.Unmarshal(previewJSON, &preview); err != nil {
 			t.Fatalf("decode dry-run preview: %v\noutput=%s", err, output)
 		}
 	}

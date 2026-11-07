@@ -26,10 +26,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -39,6 +41,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -51,13 +54,20 @@ import (
 
 type outputFileContextKey struct{}
 
+// maxFilePutTimeoutSeconds caps the --timeout seconds handed to the direct
+// file-storage PUT budget: 24 hours is far beyond any transfer window a
+// presigned credential can serve, and the cap keeps the nanosecond
+// conversion free of int64 overflow for extreme flag values.
+const maxFilePutTimeoutSeconds = 24 * 60 * 60
+
 var (
 	rootNormalizeProcessProfileArgs = normalizeProcessProfileArgs
 	rootExecuteCommand              = (*cobra.Command).ExecuteC
-	rootNewRootCommandWithEngine    = NewRootCommandWithEngine
+	rootNewRootCommandWithEngine    = newProcessRootCommandWithEngine
 	rootRunPreParse                 = pipeline.RunPreParse
 	rootStopAllStdioClients         = StopAllStdioClients
 	rootLoadPlugins                 = loadPlugins
+	rootPluginLoadHadSideEffects    atomic.Bool
 	rootMkdirAll                    = os.MkdirAll
 	rootCreateTemp                  = os.CreateTemp
 	rootSyncFile                    = (*os.File).Sync
@@ -78,6 +88,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootPluginResolveIdentity       = profilemetadata.ResolveReadOnly
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 	rootEmitResult                  = output.EmitResult
 	rootInstallProcessSignalContext = installProcessSignalContext
@@ -147,7 +158,6 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			}
 		}
 	}()
-
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()
 
@@ -165,15 +175,19 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 
 	timing := NewTimingCollector()
 	defer func() {
+		cleanupStart := time.Now()
 		rootStopAllStdioClients() // Ensure child processes are terminated on exit
 		CloseAuditSink()          // Drain async audit forwards on all exit paths,
 		// including command errors where Cobra skips PersistentPostRunE.
+		timing.Record("business_cleanup", time.Since(cleanupStart))
 		timing.PrintIfEnabled()
 		timing.WriteReportIfEnabled(RawVersion(), SanitizeCommand(os.Args))
 	}()
 
 	// Attach timing collector to context for use by child components
 	ctx := WithTimingCollector(context.Background(), timing)
+	ctx = context.WithValue(ctx, versionCheckArgsKey{}, append([]string(nil), os.Args[1:]...))
+	ctx = context.WithValue(ctx, authStatusProcessStartupKey{}, true)
 	ctx = contextWithAgentMetadataSnapshot(ctx, agentMetadata)
 	ctx, resultStore = output.WithResultStore(ctx)
 	var signalState *processSignalState
@@ -190,21 +204,24 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	// Run PreParse handlers on raw argv before Cobra parses flags.
 	// This corrects model-generated errors like --userId → --user-id
 	// and --limit100 → --limit 100.
-	if err := rootRunPreParse(root, engine); err != nil {
+	preParseStart := time.Now()
+	preParseErr := rootRunPreParse(root, engine)
+	timing.Record("preparse", time.Since(preParseStart))
+	if err := preParseErr; err != nil {
 		err = newPreParseValidationError(err)
-		if interrupted, _ := signalState.outcome(); interrupted != nil {
+		if interrupted, _ := signalState.Outcome(); interrupted != nil {
 			err = interrupted
 		}
+		notice := unknownInvocationNotice(root, err)
 		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(target, result)
+			code, emitErr := emitFailureWithVersionNotice(target, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
 				return
 			}
 		}
-		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(root, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -212,7 +229,9 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	commandPath = telemetryCommandPathForArgs(root, os.Args[1:])
 
 	var err error
+	executeStart := time.Now()
 	executed, err = rootExecuteCommand(root)
+	timing.Record("command_execute", time.Since(executeStart))
 	if executed != nil {
 		commandPath = telemetryCommandPath(executed)
 	}
@@ -229,7 +248,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: abort output sink after command failure: %v\n", abortErr)
 		}
 	}
-	interrupted, primaryCompletedBeforeSignal := signalState.outcome()
+	interrupted, primaryCompletedBeforeSignal := signalState.Outcome()
 	if interrupted != nil && !primaryCompletedBeforeSignal {
 		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			var publicationErr *outputPublicationError
@@ -254,7 +273,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		}
 		var publicationErr *outputPublicationError
 		if err == nil || !stderrors.As(err, &publicationErr) {
-			err = interrupted
+			err = interrupted.WithCancellationDetail(err)
 		}
 	}
 	if err != nil {
@@ -281,11 +300,10 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			exitCode = code
 			return
 		}
-		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
+		notice := unknownInvocationNotice(executed, err)
 		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
-			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
-			code, emitErr := output.EmitResult(executed, result)
+			code, emitErr := emitFailureWithVersionNotice(executed, err, notice)
 			if emitErr == nil {
 				errorMessage = telemetryErrorSummary(err)
 				exitCode = code
@@ -298,7 +316,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			_ = executed.Help()
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
-		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
+		_ = printExecutionError(executed, os.Stdout, os.Stderr, err, notice)
 		errorMessage = telemetryErrorSummary(err)
 		exitCode = apperrors.ExitCode(err)
 		return
@@ -423,8 +441,16 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	var cliErr *helpers.CLIError
 	if stderrors.As(err, &cliErr) && cliErr != nil {
 		info.UpstreamCode = cliErr.Code
+		if cliErr.ServerCode != "" {
+			info.UpstreamCode = cliErr.ServerCode
+		}
 		info.Hint = cliErr.Suggestion
 		info.Operation = cliErr.Operation
+		// Cause is an internal error chain, not a reviewed public diagnostic.
+		// Publish only explicitly authored message, hint and structured metadata.
+		if len(cliErr.Details) > 0 {
+			info.Details = cliErr.Details
+		}
 	}
 	var callErr *transport.CallError
 	if stderrors.As(err, &callErr) && callErr != nil {
@@ -452,7 +478,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	if typed.Hint != "" {
 		info.Hint = typed.Hint
 	}
-	info.Actions = append([]string(nil), typed.Actions...)
+	info.Actions = apperrors.RecoveryActions(err)
 	info.Retryable = typed.RetryableSet && typed.Retryable
 	info.RetryAfterSeconds = typed.RetryAfterSeconds
 	if typed.RPCCode != 0 {
@@ -484,9 +510,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	}
 	info.TechnicalDetail = typed.ServerDiag.TechnicalDetail
 	info.FriendlyHint, info.ActionURL = apperrors.ServerGuidance(typed.ServerDiag)
-	if typed.Cause != nil {
-		info.Cause = typed.Cause.Error()
-	}
+	// Do not reintroduce internal causes through the typed-error projection.
 	if typed.ServerDiag.ServerErrorCode != "" {
 		info.UpstreamCode = typed.ServerDiag.ServerErrorCode
 	}
@@ -513,54 +537,25 @@ func errorTypeForExitCode(code int) string {
 // newPreParseValidationError keeps pipeline handler identity in internal logs
 // while exposing only the underlying parameter-domain error to CLI users.
 func newPreParseValidationError(err error) error {
-	if structured, ok := err.(*apperrors.Error); ok {
-		return structured
-	}
+	// Only the engine's direct diagnostic shell is transparent. Never search
+	// through an authoritative error to find and strip a deeper HandlerError.
 	userErr := err
-	var handlerErr *pipeline.HandlerError
-	if stderrors.As(err, &handlerErr) && handlerErr.Unwrap() != nil {
+	for {
+		handlerErr, ok := userErr.(*pipeline.HandlerError)
+		if !ok || handlerErr.Unwrap() == nil {
+			break
+		}
 		userErr = handlerErr.Unwrap()
 	}
-	return apperrors.NewValidation(
-		userErr.Error(),
+	return apperrors.NormalizeValidation(
+		userErr,
 		apperrors.WithReason("parameter_conflict"),
 		apperrors.WithHint("Remove the duplicate alias/canonical spelling and pass the parameter exactly once."),
-		apperrors.WithCause(userErr),
 	)
 }
 
 func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
-}
-
-// rewordRequiredFlagError rewrites cobra's default missing-required-flag message
-// (`required flag(s) "email" not set`) into the wukong-aligned form
-// (`missing required flag(s): --email`). cobra's ValidateRequiredFlags returns
-// this error directly (it does not pass through FlagErrorFunc), so it is
-// normalised here. The substring "required flag" is preserved for compatibility
-// with existing assertions; flag names gain the "--" prefix and quotes are
-// dropped so error output matches hardcoded cmdutil.ValidateRequiredFlags.
-func rewordRequiredFlagError(err error) error {
-	if err == nil {
-		return err
-	}
-	const pfx = "required flag(s) "
-	const sfx = " not set"
-	msg := err.Error()
-	if !strings.HasPrefix(msg, pfx) || !strings.HasSuffix(msg, sfx) {
-		return err
-	}
-	mid := strings.TrimSuffix(strings.TrimPrefix(msg, pfx), sfx)
-	var flags []string
-	for _, part := range strings.Split(mid, ", ") {
-		if name := strings.Trim(strings.TrimSpace(part), "\""); name != "" {
-			flags = append(flags, "--"+name)
-		}
-	}
-	if len(flags) == 0 {
-		return err
-	}
-	return apperrors.NewValidation(fmt.Sprintf("missing required flag(s): %s", strings.Join(flags, ", ")))
 }
 
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
@@ -570,6 +565,12 @@ func rewordRequiredFlagError(err error) error {
 // 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
 // （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
+	// Explicitly classified and interrupted errors are authoritative even when
+	// their text happens to resemble a known flag typo. Suggestions may enrich
+	// raw parser failures only; they must never relabel an existing contract.
+	if apperrors.PreserveClassification(err) {
+		return err
+	}
 	errMsg := err.Error()
 	// 尾部 hint：换行 + See '...' for usage.
 	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
@@ -579,7 +580,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	if flag, ok := unknownFlagName(errMsg); ok && flag == "from" {
 		switch cmd.CommandPath() {
 		case "dws chat +search-msg", "dws chat +chat-messages":
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint("--from 在消息查询中含义不明确：按发送者过滤请使用 --sender <姓名|userId|openDingTalkId>；指定时间起点请使用 --start <RFC3339>"),
 				apperrors.WithReason("ambiguous_flag"),
@@ -589,7 +590,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 					"Use --start <RFC3339> together with --end <RFC3339> to set a time range",
 				),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
@@ -599,14 +600,14 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 			hint = fmt.Sprintf("Parameter --%s is ambiguous on %q and cannot be normalized safely; choose the intended explicit flag from --help.", flag, cmd.CommandPath())
 			reason = "ambiguous_flag"
 		}
-		return apperrors.NewValidation(
+		return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 			msgWithTail,
 			apperrors.WithHint(hint),
 			apperrors.WithReason(reason),
 			apperrors.WithCause(err),
 			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-		)
+		))
 	}
 
 	// Common flag aliases and suggestions
@@ -625,21 +626,21 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 
 	for flag, suggestion := range suggestions {
 		if strings.Contains(errMsg, "unknown flag: "+flag) {
-			return apperrors.NewValidation(
+			return apperrors.MarkLocalRecovery(apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(suggestion),
 				apperrors.WithReason("unknown_flag"),
 				apperrors.WithCause(err),
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
-			)
+			))
 		}
 	}
 
 	if strings.Contains(errMsg, "unknown flag:") {
 		fix := cmdutil.SuggestFlagFix(cmd, err)
 		if fix.Suggestion != "" {
-			return apperrors.NewValidation(
+			result := apperrors.NewValidation(
 				msgWithTail,
 				apperrors.WithHint(fix.Suggestion),
 				apperrors.WithReason("unknown_flag"),
@@ -647,13 +648,20 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 				apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
 			)
+			if fix.HasCorrection {
+				return apperrors.MarkLocalRecovery(result)
+			}
+			return result
 		}
 	}
 
 	// Fallback：未命中已知别名 / SuggestFlagFix 未给建议的 flag 解析错误
 	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
 	// 行为对齐 wukong / docker / kubectl。
-	return fmt.Errorf("%s%s", errMsg, tail)
+	return apperrors.NormalizeValidation(
+		fmt.Errorf("%w%s", err, tail),
+		apperrors.WithReason("invalid_flag"),
+	)
 }
 
 func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline.FlagProtection, bool) {
@@ -691,16 +699,26 @@ func unknownFlagName(errMsg string) (string, bool) {
 	return flag, flag != ""
 }
 
-func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
+func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error, notices ...*versionNotices) error {
 	var raw apperrors.RawStderrError
 	if stderrors.As(err, &raw) {
 		_, writeErr := fmt.Fprintln(stderr, raw.RawStderr())
 		return writeErr
 	}
 	if wantsJSONErrors(root) {
+		if len(notices) > 0 && notices[0] != nil {
+			return apperrors.PrintJSONWithNotice(stderr, err, notices[0])
+		}
 		return apperrors.PrintJSON(stderr, err)
 	}
-	return apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root))
+	if writeErr := apperrors.PrintHumanAt(stderr, err, resolveVerbosity(root)); writeErr != nil {
+		return writeErr
+	}
+	if len(notices) > 0 && notices[0] != nil {
+		_, writeErr := fmt.Fprintln(stderr, notices[0].Update.Message)
+		return writeErr
+	}
+	return nil
 }
 
 // resolveVerbosity derives the error verbosity level from the root command's flags.
@@ -778,8 +796,9 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 // used as the Schema assembly source root (RegisterSchemaSourceRoot →
 // ResolveSchemaBuild) and by command-surface policy. Installed plugins and
 // user-defined shortcuts must not change the reviewed Schema surface.
-// declarationOnly skips injectStaticServers / helpers.InitDeps so Schema
-// assembly cannot clobber a live process's ToolCaller or plugin endpoints.
+// declarationOnly skips runtime profile selection, injectStaticServers and
+// helpers.InitDeps so Schema assembly cannot clobber a live process's profile,
+// ToolCaller or plugin endpoints.
 func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 	var rootCtx context.Context
 	if len(ctx) > 0 && ctx[0] != nil {
@@ -792,9 +811,21 @@ func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 // optional pipeline engine for input correction. When engine is nil,
 // no pipeline processing is applied.
 func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	return newRootCommandWithAssembly(rootCtx, engine, nil)
+}
+
+// newRootCommandWithAssembly mounts caller-owned additions before the framework
+// snapshots and prepares the final tree. The callback must not execute commands.
+func newRootCommandWithAssembly(rootCtx context.Context, engine *pipeline.Engine, assemble func(*cobra.Command)) *cobra.Command {
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
-	return newRootCommandWithEngine(rootCtx, engine, true, false)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false, assemble)
+}
+
+func newProcessRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	registerSchemaRuntimeDelivery()
+	rootCtx, _ = output.WithResultStore(rootCtx)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
@@ -805,19 +836,174 @@ func newRootPresentationCommand() *cobra.Command {
 	return newRootCommandWithMode(context.Background(), nil, false, true, true)
 }
 
-func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
+func consumeCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen *bool) {
+	if root == nil || flags == nil || invocationSeen == nil {
+		return
+	}
+
+	clientIDFlag := root.PersistentFlags().Lookup("client-id")
+	clientSecretFlag := root.PersistentFlags().Lookup("client-secret")
+	clientIDSet := clientIDFlag != nil && clientIDFlag.Changed
+	clientSecretSet := clientSecretFlag != nil && clientSecretFlag.Changed
+
+	clientID := ""
+	if clientIDSet {
+		clientID = flags.ClientID
+	}
+	clientSecret := ""
+	if clientSecretSet {
+		clientSecret = flags.ClientSecret
+	}
+
+	// Keep GlobalFlags scoped to this execution. A flag omitted from the current
+	// invocation must not retain the value pflag parsed for a previous one.
+	flags.ClientID = clientID
+	flags.ClientSecret = clientSecret
+	if clientIDSet || clientSecretSet {
+		authpkg.SetClientCredentials(clientID, clientSecret)
+	} else if *invocationSeen {
+		// Preserve a programmatically supplied runtime pair on the first execution,
+		// but never carry credentials installed by an earlier execution of this root.
+		authpkg.SetClientCredentials("", "")
+	}
+	*invocationSeen = true
+
+	// Changed is execution state in this reusable command tree, not a lifetime
+	// property. The next parse will set it again for flags actually supplied.
+	if clientIDFlag != nil {
+		clientIDFlag.Changed = false
+	}
+	if clientSecretFlag != nil {
+		clientSecretFlag.Changed = false
+	}
+}
+
+func discardCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen bool) {
+	if flags != nil {
+		flags.ClientID = ""
+		flags.ClientSecret = ""
+	}
+	if root != nil {
+		if flag := root.PersistentFlags().Lookup("client-id"); flag != nil {
+			flag.Changed = false
+		}
+		if flag := root.PersistentFlags().Lookup("client-secret"); flag != nil {
+			flag.Changed = false
+		}
+	}
+	if invocationSeen {
+		authpkg.SetClientCredentials("", "")
+	}
+}
+
+func consumeRootVersionInvocationFlag(root *cobra.Command, requested *bool) {
+	if root == nil || requested == nil {
+		return
+	}
+	flag := root.Flags().Lookup("version")
+	*requested = flag != nil && flag.Changed && *requested
+	if flag != nil {
+		flag.Changed = false
+	}
+}
+
+func discardRootVersionInvocationFlag(root *cobra.Command, requested *bool) {
+	if requested != nil {
+		*requested = false
+	}
+	if root != nil {
+		if flag := root.Flags().Lookup("version"); flag != nil {
+			flag.Changed = false
+		}
+	}
+}
+
+func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, credentialInvocationSeen *bool, versionRequested *bool) {
+	if root == nil || credentialInvocationSeen == nil {
+		return
+	}
+	var delegatorScope *delegatorInvocation
+	if flags != nil {
+		delegatorScope = flags.delegatorInvocation
+	}
+	cleanup := func(current *cobra.Command) {
+		delegatorScope.clear()
+		if principal := current.Flags().Lookup("principal-user-id"); principal != nil {
+			_ = principal.Value.Set("")
+			principal.Changed = false
+		}
+		consumeDelegatorFlags(root)
+		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
+		discardRootVersionInvocationFlag(root, versionRequested)
+		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
+			resetAuthExchangeInvocationFlags(exchange)
+		}
+		for _, name := range []string{"exchange-prepare", "token-exchange"} {
+			if cmd, _, err := root.Find([]string{"auth", name}); err == nil {
+				resetAuthOIDCExchangeInvocationFlags(cmd)
+			}
+		}
+	}
+
+	// Cobra handles --help before PersistentPreRunE. Wrap the inherited help
+	// renderer once at the root so both flag-based and help-command paths clean
+	// partially parsed invocation state after rendering.
+	previousHelp := root.HelpFunc()
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		defer cleanup(cmd)
+		previousHelp(cmd, args)
+	})
+
+	// All prepared nodes share the framework's native validation policy. Use a
+	// single cleanup decorator across the tree; late default commands inherit it.
+	previousValidationError := root.ValidationErrorFunc()
+	validationError := func(current *cobra.Command, stage cobra.ValidationStage, err error) error {
+		// Classify before clearing flags needed for required-flag diagnostics.
+		defer cleanup(current)
+		return previousValidationError(current, stage, err)
+	}
+
+	// Install leaf handlers before the root handler so inherited handlers are
+	// captured without recursively wrapping an already wrapped parent.
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		for _, child := range cmd.Commands() {
+			visit(child)
+		}
+
+		cmd.SetValidationErrorFunc(validationError)
+		installDelegatorInvocationHooks(cmd, delegatorScope)
+
+		previousFlagError := cmd.FlagErrorFunc()
+		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {
+			cleanup(current)
+			return previousFlagError(current, err)
+		})
+	}
+	visit(root)
+}
+
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, assemble ...func(*cobra.Command)) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
-	flags := &GlobalFlags{}
-	authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
+	flags := &GlobalFlags{delegatorInvocation: &delegatorInvocation{}}
+	profileSelector := ""
+	if !declarationOnly {
+		profileSelector = preparseProfileFlag(os.Args[1:])
+		authpkg.SetRuntimeProfile(profileSelector)
+	}
 	runner := rootNewCommandRunnerWithFlags(flags)
+	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
 	if snapshot, ok := agentMetadataSnapshotFromContext(rootCtx); ok {
 		if runtime, ok := runner.(*runtimeRunner); ok {
 			runtime.agentMetadata = &snapshot
 		}
 	}
 
+	credentialInvocationSeen := false
+	rootVersionRequested := false
+	rootVersionShortCircuit := false
 	root := &cobra.Command{
 		Use:               "dws",
 		Short:             "DWS CLI",
@@ -826,11 +1012,59 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		SilenceErrors:     true,
 		SilenceUsage:      true,
 		DisableAutoGenTag: true,
-		Version:           Version(),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Cobra's built-in --version path returns before PersistentPreRunE and
+		// cannot participate in reusable-root credential cleanup. Keep the same
+		// public flag and output in RunE so it crosses the normal invocation
+		// boundary instead.
+		Version: "",
+		RunE:    runRootHelp,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			flags.delegatorInvocation.clear()
+			defer func() {
+				if preRunErr != nil {
+					resetAuthExchangeInvocationFlags(cmd)
+					resetAuthProviderLoginInvocationFlags(cmd)
+					resetAuthOIDCExchangeInvocationFlags(cmd)
+				}
+			}()
+			rootVersionShortCircuit = false
+			if err := beginDelegatorInvocation(cmd); err != nil {
+				return err
+			}
+			snapshot := cmd.Context().Value(delegatorContextKey{}).(delegatorSnapshot)
+			flags.delegatorInvocation.snapshot.Store(&snapshot)
+			// 多棵预创建树串行执行时，恢复当前树拥有的 helper caller。
+			// 显式注入的自定义 caller 仍由嵌入方拥有，不覆盖其装饰器或测试替身。
+			if current, ok := helpers.GetCaller().(recordingToolCaller); ok {
+				if owner, ok := current.inner.(*toolCallerAdapter); ok && owner.flags != nil && owner.flags.delegatorInvocation != nil {
+					helpers.InitDeps(patCaller)
+				}
+			}
+			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
+			if rootVersionRequested && cmd == cmd.Root() {
+				// Preserve Cobra's historical --version behavior: no metadata
+				// validation, edition hook, output lifecycle, or credential mutation.
+				// Only discard credential flags parsed for this non-operational call.
+				discardCredentialInvocationFlags(cmd.Root(), flags, false)
+				rootVersionShortCircuit = true
+				return nil
+			}
+
+			// Cobra command trees can be reused by embedding callers. pflag keeps a
+			// bound flag's value and Changed bit after ExecuteC returns, so consume
+			// credential flags at the execution boundary before any validation or
+			// hook can observe state left by a previous invocation.
+			if isAuthExchangeCommand(cmd) || isAuthProviderLoginCommand(cmd) || isAuthOIDCExchangeCommand(cmd) {
+				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
+				// 清除前次调用安装的全局凭据；本次 flags 在 RunE 或早退时清理。
+				if credentialInvocationSeen {
+					authpkg.SetClientCredentials("", "")
+				}
+				credentialInvocationSeen = true
+			} else {
+				consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			}
+
 			// A public root may be reused by embedding callers through multiple
 			// ExecuteC invocations. Begin each invocation with an empty result
 			// lifecycle while retaining the store pointer observed by Execute's
@@ -880,19 +1114,25 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
-			// Apply OAuth credential overrides from CLI flags (highest priority).
-			if flags.ClientID != "" {
-				authpkg.SetClientID(flags.ClientID)
-			}
-			if flags.ClientSecret != "" {
-				authpkg.SetClientSecret(flags.ClientSecret)
-			}
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
 
+			// Direct file-storage PUT transfers bypass the MCP RPC runner, so the
+			// parsed --timeout must be handed to the helpers upload budget here.
+			// The setter floors at the 5-minute default; short values cannot
+			// shrink the transfer window. The seconds cap also keeps the
+			// nanosecond conversion below the int64 overflow point.
+			putTimeoutSeconds := flags.Timeout
+			if putTimeoutSeconds > maxFilePutTimeoutSeconds {
+				putTimeoutSeconds = maxFilePutTimeoutSeconds
+			}
+			helpers.SetFilePutClientTimeout(time.Duration(putTimeoutSeconds) * time.Second)
+
 			installOutputSinkRunBoundary(cmd)
-			if fn := edition.Get().AfterPersistentPreRun; fn != nil {
+			// 输出初始化在业务 RunE 外层，也可能失败；清理必须包住整个执行入口。
+			cmd.RunE = wrapDelegatorInvocationHook(flags.delegatorInvocation, cmd.RunE, false)
+			if fn := edition.Get().AfterPersistentPreRun; fn != nil && !isAuthStatusReadOnlyCommand(cmd) {
 				if err := fn(cmd, args); err != nil {
 					return err
 				}
@@ -900,6 +1140,11 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) (err error) {
+			if rootVersionShortCircuit {
+				rootVersionShortCircuit = false
+				rootVersionRequested = false
+				return nil
+			}
 			defer func() {
 				if r := recover(); r != nil {
 					warnAbortOutputSink(cmd)
@@ -924,40 +1169,104 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 	}
+	root.Flags().BoolVar(&rootVersionRequested, "version", false, "version for dws")
+	corecmd.ApplyGroupPolicy(root, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	rootArgs := root.Args
+	root.Args = func(cmd *cobra.Command, args []string) error {
+		// Cobra's built-in --version returns before Args validation. Preserve
+		// that behavior only when the current parse explicitly selected the
+		// lifecycle-aware replacement; a prior failed writer must not bypass Args.
+		versionFlag := cmd.Flags().Lookup("version")
+		if versionFlag != nil && versionFlag.Changed && rootVersionRequested {
+			return nil
+		}
+		return rootArgs(cmd, args)
+	}
+	rootRunE := root.RunE
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		if rootVersionRequested {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s version %s\n", cmd.Name(), Version())
+			if err == nil {
+				// 保留版本字符串的 stdout 契约，检查结果走诊断通道。
+				_ = writeVersionCheck(cmd.ErrOrStderr(), commandVersionCheck(cmd, false))
+			}
+			return err
+		}
+		return rootRunE(cmd, args)
+	}
 
 	bindPersistentFlags(root, flags)
-
 	schemaCmd := cli.NewSchemaCommand()
 	mcpCmd := cli.NewMCPCommand()
 	// Wrap the caller so every MCP tool call's shape is recorded to the local
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
-	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
-	mcpCmd.AddCommand(newMCPURLGroup(patCaller))
+	mcpCmd.AddCommand(
+		newMCPMarketGroup(patCaller),
+		newMCPURLGroup(patCaller),
+		newMCPPublishedGroup(patCaller, newAuthenticatedMCPPublishedTransportFactory(runner, flags)),
+	)
+
+	navigationGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupNavigationOnly,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
+	hybridGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupHybrid,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
 
 	utilityCommands := []*cobra.Command{
-		newAuthCommand(patCaller),
-		newProfileCommand(),
+		navigationGroup(newAuthCommand(patCaller)),
+		navigationGroup(newProfileCommand()),
 		newAPICommand(flags),
-		newSkillCommand(),
-		newCacheCommand(),
+		navigationGroup(newSkillCommand()),
+		hybridGroup(newCacheCommand()),
 		newCatalogCommand(),
-		newConfigCommand(),
+		navigationGroup(newConfigCommand()),
 		newDoctorCommand(),
-		newRecoveryCommand(),
-		newEventCommand(flags),
-		newAuditCommand(),
+		hybridGroup(newRecoveryCommand()),
+		navigationGroup(newEventCommand(flags)),
+		navigationGroup(newAuditCommand()),
 		newCompletionCommand(root),
 		newUpgradeCommand(),
 		newVersionCommand(),
 		newPluginCommand(),
-		usage.NewShortcutCommand(),
+		navigationGroup(usage.NewShortcutCommand()),
 		schemaCmd,
-		mcpCmd,
+		navigationGroup(mcpCmd),
 	}
 	root.AddCommand(utilityCommands...)
 
-	if declarationOnly {
+	// The process argv is available before runtime extension initialization.
+	// Read-only status is local: do not let plugin user-context
+	// preloads or edition extension hooks acquire auth locks before its leaf.
+	readonlyStatusInvocation := false
+	processStartup, _ := rootCtx.Value(authStatusProcessStartupKey{}).(bool)
+	if loadRuntimeExtensions && processStartup {
+		if target, args, err := root.Find(os.Args[1:]); err == nil && target.Name() == "status" && target.Parent() != nil && target.Parent().Name() == "auth" {
+			// Parse with Cobra/pflag semantics (including explicit false, last
+			// occurrence wins and --) before choosing the startup path.
+			if authStatusReadOnlyRequested(target, args) {
+				readonlyStatusInvocation = true
+				loadRuntimeExtensions = false
+			}
+		}
+	}
+
+	if declarationOnly || readonlyStatusInvocation {
 		// Schema / surface assembly: mount the reviewed tree only. Do not
 		// injectStaticServers or InitDeps — those mutate process globals and
 		// would clobber a live runtime's caller and plugin endpoints.
@@ -969,7 +1278,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// PAT authorization commands (open-source core)
 	pat.RegisterCommands(root, patCaller)
 
-	if !presentationOnly {
+	if !presentationOnly && !readonlyStatusInvocation {
 		if fn := edition.Get().RegisterExtraCommands; fn != nil {
 			caller := newToolCallerAdapter(runner, flags)
 			fn(root, caller)
@@ -980,18 +1289,40 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// Resolve plugins only after the complete distribution command tree is
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
-		pluginCmds := rootLoadPlugins(root, engine, runner)
-		if len(pluginCmds) > 0 {
+		pluginStart := time.Now()
+		// plugin side effects are monotonic for the process lifetime
+		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
+		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
+		if rootPluginLoadHadSideEffects.Load() || len(pluginCmds) > 0 {
+			// Plugin discovery changes process-global runtime state. Keep the
+			// parent process read-only with respect to persistent Schema cache;
+			// cache repair is delegated to the isolated declaration builder.
+			cli.MarkSchemaCacheRuntimeUncertain()
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}
-	if !presentationOnly {
+	// Read-only status must not invoke edition visibility/server hooks either:
+	// hideNonDirectRuntimeCommands resolves visible products through
+	// VisibleProducts / StaticServers / SupplementServers, and nothing
+	// constrains those overlay hooks from touching credentials or acquiring
+	// the auth lock before the read-only leaf runs. The read-only tree loads
+	// no dynamic products, so the visibility pass has no effect on it.
+	if !presentationOnly && !readonlyStatusInvocation {
 		hideNonDirectRuntimeCommands(root)
 	}
+	for _, mount := range assemble {
+		if mount != nil {
+			mount(root)
+		}
+	}
 	configureRootHelp(root)
-	// Set custom flag error handler for better UX
+	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
 	installReviewedFlagProtectionHandlers(root)
+	if err := corecmd.PrepareCommandTree(root); err != nil {
+		panic(fmt.Sprintf("prepare command tree: %v", err))
+	}
+	installInvocationExitHandlers(root, flags, &credentialInvocationSeen, &rootVersionRequested)
 	root.SetContext(rootCtx)
 
 	return root
@@ -1152,13 +1483,18 @@ func newVersionCommand() *cobra.Command {
 			goVer := "1.24+"
 
 			arch := "MCP Static Endpoint Mode"
+			check := commandVersionCheck(cmd, false)
 
 			if wantJSON {
 				payload := map[string]any{
-					"version":      ver,
-					"edition":      editionName,
-					"architecture": arch,
-					"go":           goVer,
+					"version":       ver,
+					"edition":       editionName,
+					"architecture":  arch,
+					"go":            goVer,
+					"version_check": check,
+				}
+				if notice := noticeForVersion(check, false); notice != nil {
+					payload["_notice"] = notice
 				}
 				if bt != "unknown" {
 					payload["build"] = bt
@@ -1180,6 +1516,7 @@ func newVersionCommand() *cobra.Command {
 			}
 			fmt.Fprintf(w, "%-16s%s\n", "Architecture:", arch)
 			fmt.Fprintf(w, "%-16s%s\n", "Go:", goVer)
+			_ = writeVersionCheck(cmd.ErrOrStderr(), check)
 			return nil
 		},
 	}
@@ -1212,7 +1549,7 @@ func hideNonDirectRuntimeCommands(root *cobra.Command) {
 // hideNonDirectRuntimeCommands) and reservedCommands (the plugin-override
 // blocklist) derive from this single set so they cannot drift apart.
 var builtinCommandNames = map[string]bool{
-	"auth": true, "api": true, "audit": true, "cache": true, "config": true,
+	"aicard": true, "auth": true, "api": true, "audit": true, "cache": true, "config": true,
 	"doctor": true, "event": true, "completion": true, "skill": true,
 	"plugin": true, "profile": true, "recovery": true, "version": true, "help": true,
 	"schema": true, "mcp": true, "upgrade": true,
@@ -1232,10 +1569,10 @@ func commandNameSet(base map[string]bool, extras ...string) map[string]bool {
 
 // staticCommands is the set of built-in commands that stay visible even when
 // they are not backed by a static endpoint product. Asymmetry with
-// reservedCommands is intentional: dev/markdown stay visible but are not
+// reservedCommands is intentional: dev/markdown/html stay visible but are not
 // plugin-reserved, while login/logout are plugin-reserved but are not static
 // top-level commands.
-var staticCommands = commandNameSet(builtinCommandNames, "dev", "markdown")
+var staticCommands = commandNameSet(builtinCommandNames, "dev", "markdown", "html")
 
 // reservedCommands is the set of built-in command names that plugins must
 // not override. This protects core CLI functionality from being hijacked
@@ -1453,6 +1790,10 @@ func installOutputSinkRunBoundary(cmd *cobra.Command) {
 	}
 	openSinkAndRun := func(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
+			// 输出初始化也可能早退；它必须处于一次性授权参数的清理边界内。
+			defer resetAuthExchangeInvocationFlags(cmd)
+			defer resetAuthProviderLoginInvocationFlags(cmd)
+			defer resetAuthOIDCExchangeInvocationFlags(cmd)
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}
@@ -1667,24 +2008,31 @@ type pluginIdentityOwner struct {
 	shareable bool
 }
 
-func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.Runner, profileSelector string) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
 	// variables so that expandPluginVars can resolve ${KEY} references
 	// in plugin.json headers, endpoints, etc. User-set env vars take
 	// precedence (InjectPluginConfigEnv skips already-set keys).
-	rootPluginInjectConfigEnv(pluginLoader)
+	if rootPluginInjectConfigEnv(pluginLoader) {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := rootAuthLoadTokenData(defaultConfigDir())
+	// Resolve the plugin user identity from the profile metadata file only.
+	// Plugin stdio servers need UserID/CorpID as environment identity — never
+	// the access token — and both live in profiles.json, so the keychain-
+	// encrypted token (a ~300ms synchronous security-CLI spawn per
+	// invocation on macOS) is not read during command-tree construction.
+	// The same file-only read is already the telemetry identity pattern.
 	var userCtx *plugin.UserContext
-	if tokenData != nil {
-		// Inject user context if either UserID or CorpID is present.
-		if tokenData.UserID != "" || tokenData.CorpID != "" {
+	if profile, err := rootPluginResolveIdentity(defaultConfigDir(), profileSelector); err == nil && profile != nil {
+		userID := strings.TrimSpace(profile.UserID)
+		corpID := strings.TrimSpace(profile.CorpID)
+		if userID != "" || corpID != "" {
 			userCtx = &plugin.UserContext{
-				UserID: tokenData.UserID,
-				CorpID: tokenData.CorpID,
+				UserID: userID,
+				CorpID: corpID,
 			}
 		}
 	}
@@ -1698,12 +2046,15 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	sortPluginsForRegistration(devPlugins)
 
 	allPlugins := append(userPlugins, devPlugins...)
+	if len(allPlugins) > 0 {
+		rootPluginLoadHadSideEffects.Store(true)
+	}
 	descriptorsByPlugin := make(map[*plugin.Plugin][]mcptypes.ServerDescriptor, len(allPlugins))
 
 	// 3. Resolve every descriptor once, then choose identity winners before
 	// mutating endpoint, auth, or stdio-client registries. This keeps the
 	// visible command and its transport owned by the same plugin.
-	candidates := collectPluginServerCandidates(allPlugins, userCtx)
+	candidates := collectPluginServerCandidates(allPlugins, func() *plugin.UserContext { return userCtx })
 	accepted := selectPluginServerCandidates(root, candidates)
 	for _, candidate := range accepted {
 		if candidate.stdioClient != nil {
@@ -1768,7 +2119,7 @@ func sortPluginsForRegistration(plugins []*plugin.Plugin) {
 
 func collectPluginServerCandidates(
 	plugins []*plugin.Plugin,
-	userCtx *plugin.UserContext,
+	userCtxFn func() *plugin.UserContext,
 ) []pluginServerCandidate {
 	var candidates []pluginServerCandidate
 	for order, owner := range plugins {
@@ -1779,7 +2130,8 @@ func collectPluginServerCandidates(
 				descriptor: descriptor,
 			})
 		}
-		for _, stdioClient := range rootPluginStdioClients(owner, userCtx) {
+		stdioUserCtx := userCtxFn()
+		for _, stdioClient := range rootPluginStdioClients(owner, stdioUserCtx) {
 			descriptor, ok := rootPluginStdioDescriptor(owner, stdioClient)
 			if !ok {
 				continue
@@ -2064,4 +2416,8 @@ func newPipelineEngine() *pipeline.Engine {
 		handlers.PostResponseHandler{},
 	)
 	return engine
+}
+
+func runRootHelp(cmd *cobra.Command, _ []string) error {
+	return cmd.Help()
 }

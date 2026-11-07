@@ -78,26 +78,26 @@ func (c *APIClient) PaginateAll(ctx context.Context, req RawAPIRequest, opts Pag
 			return allResults, fmt.Errorf("分页第 %d 页请求失败 (已获取 %d 页结果): %w", pageCount, pageCount-1, err)
 		}
 
-		result, hasMore, nextToken, parseErr := parsePaginatedResponse(resp)
+		result, hasMore, continuation, parseErr := parsePaginatedResponseDetails(resp)
 		if parseErr != nil {
 			if pageCount == 1 {
 				return nil, parseErr
 			}
-			// Non-first page parse failure: warn the caller so users aren't
-			// silently left with incomplete data.
-			logf(opts.LogWriter, "[pagination] ⚠ 第 %d 页解析失败，停止翻页并返回已获取的 %d 页数据: %v\n", pageCount, pageCount-1, parseErr)
-			return allResults, nil
+			// Never report a partial page set as a successful complete result.
+			return allResults, fmt.Errorf("分页第 %d 页解析失败 (已获取 %d 页结果): %w", pageCount, pageCount-1, parseErr)
 		}
 
 		allResults = append(allResults, result)
 
-		if !hasMore || nextToken == "" {
+		if !hasMore {
 			logf(opts.LogWriter, "[pagination] 数据获取完成 (共 %d 页)\n", pageCount)
 			break
 		}
-
 		// Inject the next page token into the request.
-		req = injectPageToken(req, nextToken)
+		req, parseErr = injectPageTokenWithKey(req, continuation)
+		if parseErr != nil {
+			return allResults, parseErr
+		}
 
 		// Delay between pages to prevent API throttling.
 		select {
@@ -138,86 +138,139 @@ func logf(w io.Writer, format string, args ...any) {
 // parsePaginatedResponse extracts the response payload and pagination info.
 // It auto-detects DingTalk's two pagination patterns.
 func parsePaginatedResponse(resp *RawAPIResponse) (result any, hasMore bool, nextToken string, err error) {
+	result, hasMore, continuation, err := parsePaginatedResponseDetails(resp)
+	return result, hasMore, continuation.Value, err
+}
+
+type paginationContinuation struct {
+	Value      string
+	RequestKey string
+}
+
+func parsePaginatedResponseDetails(resp *RawAPIResponse) (result any, hasMore bool, continuation paginationContinuation, err error) {
 	contentType := resp.Header.Get("Content-Type")
 	if !isJSONContentType(contentType) {
-		return nil, false, "", fmt.Errorf("分页响应非 JSON 格式 (Content-Type: %s)", contentType)
+		if resp.BodyReader != nil {
+			_ = resp.BodyReader.Close()
+		}
+		return nil, false, continuation, fmt.Errorf("分页响应非 JSON 格式 (Content-Type: %s)", contentType)
 	}
 
-	if len(resp.Body) == 0 {
-		return nil, false, "", fmt.Errorf("分页响应体为空 (HTTP %d)", resp.StatusCode)
+	body, readErr := readBoundedResponse(resp)
+	if readErr != nil {
+		return nil, false, continuation, readErr
+	}
+	if len(body) == 0 {
+		return nil, false, continuation, fmt.Errorf("分页响应体为空 (HTTP %d)", resp.StatusCode)
 	}
 
 	var payload map[string]any
-	if unmarshalErr := jsonUnmarshal(resp.Body, &payload); unmarshalErr != nil {
-		return nil, false, "", fmt.Errorf("解析分页 JSON 响应失败: %w", unmarshalErr)
+	if unmarshalErr := jsonUnmarshal(body, &payload); unmarshalErr != nil {
+		return nil, false, continuation, fmt.Errorf("解析分页 JSON 响应失败: %w", unmarshalErr)
 	}
 
 	// Check for DingTalk errors first.
-	if apiErr := checkDingTalkError(payload, resp.StatusCode); apiErr != nil {
-		return nil, false, "", apiErr
+	requestID := firstHeader(resp.Header, "x-acs-request-id", "x-acs-dingtalk-request-id", "x-request-id")
+	if apiErr := checkDingTalkErrorWithRequestID(payload, resp.StatusCode, requestID); apiErr != nil {
+		return nil, false, continuation, apiErr
 	}
 
-	// Pattern 1: cursor/next_cursor/has_more (often nested in "result" or top-level)
-	if resultObj, ok := payload["result"]; ok {
-		if resultMap, isMap := resultObj.(map[string]any); isMap {
-			hasMore, _ = resultMap["has_more"].(bool)
-			if nc, ok := resultMap["next_cursor"].(float64); ok && nc > 0 {
-				nextToken = fmt.Sprintf("%.0f", nc)
+	containers := []map[string]any{payload}
+	if nested, ok := payload["result"].(map[string]any); ok {
+		containers = append([]map[string]any{nested}, containers...)
+	}
+	var hasMoreSet bool
+	for _, container := range containers {
+		for _, key := range []string{"has_more", "hasMore"} {
+			if value, ok := container[key].(bool); ok {
+				if hasMoreSet && hasMore != value {
+					return nil, false, continuation, fmt.Errorf("分页响应包含冲突的 hasMore 字段")
+				}
+				hasMore, hasMoreSet = value, true
 			}
-			return payload, hasMore, nextToken, nil
+		}
+		for _, candidate := range []struct {
+			responseKey string
+			requestKey  string
+		}{
+			{"next_cursor", "cursor"},
+			{"nextCursor", "cursor"},
+			{"next_token", "next_token"},
+			{"nextToken", "nextToken"},
+		} {
+			value := paginationValue(container[candidate.responseKey])
+			if value == "" {
+				continue
+			}
+			if continuation.Value != "" && (continuation.Value != value || continuation.RequestKey != candidate.requestKey) {
+				return nil, false, paginationContinuation{}, fmt.Errorf("分页响应包含冲突的 continuation 字段")
+			}
+			continuation = paginationContinuation{Value: value, RequestKey: candidate.requestKey}
 		}
 	}
-
-	// Top-level has_more / next_cursor
-	if hm, ok := payload["has_more"]; ok {
-		hasMore, _ = hm.(bool)
+	if continuation.Value != "" && !hasMoreSet {
+		hasMore = true
 	}
-	if nc, ok := payload["next_cursor"]; ok {
-		if ncf, isFloat := nc.(float64); isFloat && ncf > 0 {
-			nextToken = fmt.Sprintf("%.0f", ncf)
-		}
+	if hasMore && continuation.Value == "" {
+		return nil, false, paginationContinuation{}, fmt.Errorf("分页响应返回 hasMore=true，但未提供 next cursor/token")
 	}
-
-	// Pattern 2: next_token
-	if nt, ok := payload["next_token"]; ok {
-		if nts, isStr := nt.(string); isStr && nts != "" {
-			nextToken = nts
-			hasMore = true
-		}
-	}
-
-	return payload, hasMore, nextToken, nil
+	return payload, hasMore, continuation, nil
 }
 
 // injectPageToken injects the pagination token into the next request.
 // For GET requests, it's added as a query param; for POST, it's in the body.
 func injectPageToken(req RawAPIRequest, token string) RawAPIRequest {
+	key := "next_token"
+	if req.Method == "GET" && req.Params != nil {
+		for _, candidate := range []string{"cursor", "next_token", "nextToken"} {
+			if _, ok := req.Params[candidate]; ok {
+				key = candidate
+				break
+			}
+		}
+	} else if body, ok := req.Data.(map[string]any); ok {
+		for _, candidate := range []string{"cursor", "next_token", "nextToken"} {
+			if _, exists := body[candidate]; exists {
+				key = candidate
+				break
+			}
+		}
+	}
+	updated, _ := injectPageTokenWithKey(req, paginationContinuation{Value: token, RequestKey: key})
+	return updated
+}
+
+func injectPageTokenWithKey(req RawAPIRequest, continuation paginationContinuation) (RawAPIRequest, error) {
 	method := req.Method
 	if method == "GET" {
 		if req.Params == nil {
 			req.Params = make(map[string]any)
 		}
-		// Try to detect which param name the API uses
-		if _, ok := req.Params["cursor"]; ok {
-			req.Params["cursor"] = token
-		} else if _, ok := req.Params["next_token"]; ok {
-			req.Params["next_token"] = token
-		} else {
-			// Default to next_token for GET requests
-			req.Params["next_token"] = token
-		}
+		req.Params[continuation.RequestKey] = continuation.Value
 	} else {
 		// For POST/PUT requests, inject into the body
 		if bodyMap, ok := req.Data.(map[string]any); ok {
-			if _, hasCursor := bodyMap["cursor"]; hasCursor {
-				bodyMap["cursor"] = token
-			} else {
-				bodyMap["next_token"] = token
-			}
+			bodyMap[continuation.RequestKey] = continuation.Value
 			req.Data = bodyMap
+		} else {
+			return req, fmt.Errorf("分页 continuation 无法注入非 object 请求体")
 		}
 	}
-	return req
+	return req, nil
+}
+
+func paginationValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case float64:
+		if typed > 0 {
+			return fmt.Sprintf("%.0f", typed)
+		}
+	case json.Number:
+		return typed.String()
+	}
+	return ""
 }
 
 // jsonUnmarshal is a helper for JSON unmarshaling.

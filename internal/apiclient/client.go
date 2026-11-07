@@ -23,11 +23,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 const (
@@ -51,26 +57,68 @@ var AllowedMethods = map[string]bool{
 
 var newHTTPRequest = http.NewRequestWithContext
 
+var (
+	multipartWriteField = func(writer *multipart.Writer, key, value string) error {
+		return writer.WriteField(key, value)
+	}
+	multipartCreateFormFile = func(writer *multipart.Writer, fieldName, filename string) (io.Writer, error) {
+		return writer.CreateFormFile(fieldName, filename)
+	}
+)
+
 // RawAPIRequest describes a raw API request to DingTalk OpenAPI.
 type RawAPIRequest struct {
 	Method string         // GET, POST, PUT, PATCH, DELETE
 	Path   string         // /v1.0/calendar/events or full URL
 	Params map[string]any // query parameters
 	Data   any            // request body (JSON), nil for GET
+	File   *FileUpload    // optional single streaming multipart file
+	// Sources are preview-only metadata for deferred stdin/@file inputs.
+	ParamsSource string
+	DataSource   string
+}
+
+// FileUpload describes one multipart file. Reader is set for stdin and tests;
+// when it is nil, Path is opened lazily immediately before the request.
+type FileUpload struct {
+	FieldName string
+	Path      string
+	FileName  string
+	Reader    io.Reader
+}
+
+// MultipartUploadRequest describes a streaming multipart upload used by
+// narrow helper commands that already own an open file reader.
+type MultipartUploadRequest struct {
+	Path      string
+	FieldName string
+	FileName  string
+	File      io.Reader
+	Fields    map[string]string
+	// BearerAuth sends Token through Authorization: Bearer instead of the
+	// DingTalk OAuth header. It is reserved for scoped upload credentials.
+	BearerAuth bool
 }
 
 // RawAPIResponse encapsulates the raw HTTP response.
 type RawAPIResponse struct {
 	StatusCode int
 	Header     http.Header
+	// Body remains available for tests and package callers that construct a
+	// response in memory. Live requests use BodyReader and are consumed once.
 	Body       []byte
+	BodyReader io.ReadCloser
 }
 
 // APIClient wraps an HTTP client for DingTalk OpenAPI calls.
 type APIClient struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	Token      string
+	BaseURL     string
+	HTTPClient  *http.Client
+	Token       string
+	DingTalkExt string
+	// TargetValidator defaults to ValidateTargetHost. Tests may replace it to
+	// exercise transport behavior against an in-process HTTP server.
+	TargetValidator func(string) error
 }
 
 // NewClient creates an APIClient with sensible defaults.
@@ -79,11 +127,13 @@ func NewClient(token, baseURL string) *APIClient {
 		baseURL = DefaultBaseURL
 	}
 	return &APIClient{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		Token:   token,
+		BaseURL:         strings.TrimRight(baseURL, "/"),
+		Token:           token,
+		TargetValidator: ValidateTargetHost,
 		HTTPClient: &http.Client{
-			Transport: defaultTransport(),
-			Timeout:   30 * time.Second,
+			Transport:     defaultTransport(),
+			Timeout:       30 * time.Second,
+			CheckRedirect: ValidateRedirect,
 		},
 	}
 }
@@ -101,17 +151,42 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 	}
 
 	// Security: verify target host before sending token.
-	if err := ValidateTargetHost(fullURL); err != nil {
+	if err := c.validateTarget(fullURL); err != nil {
 		return nil, err
 	}
 
 	var bodyReader io.Reader
-	if req.Data != nil && method != "GET" {
+	var contentType string
+	var openedFile io.Closer
+	if req.File != nil {
+		if method == http.MethodGet {
+			return nil, fmt.Errorf("GET 请求不允许使用 multipart 文件")
+		}
+		fileReader := req.File.Reader
+		if fileReader == nil {
+			file, openErr := os.Open(req.File.Path)
+			if openErr != nil {
+				return nil, fmt.Errorf("打开上传文件失败: %w", openErr)
+			}
+			openedFile = file
+			fileReader = file
+		}
+		defer func() {
+			if openedFile != nil {
+				_ = openedFile.Close()
+			}
+		}()
+		bodyReader, contentType, err = newMultipartBody(req.File, fileReader, req.Data)
+		if err != nil {
+			return nil, err
+		}
+	} else if req.Data != nil && method != "GET" {
 		data, marshalErr := json.Marshal(req.Data)
 		if marshalErr != nil {
 			return nil, fmt.Errorf("marshaling request body: %w", marshalErr)
 		}
 		bodyReader = bytes.NewReader(data)
+		contentType = "application/json"
 	}
 
 	httpReq, err := newHTTPRequest(ctx, method, fullURL, bodyReader)
@@ -131,31 +206,229 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 		// New API: token goes in header.
 		httpReq.Header.Set(AuthHeader, c.Token)
 	}
-	if bodyReader != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		httpReq.Header.Set("Content-Type", contentType)
 	}
 	httpReq.Header.Set("User-Agent", "dws-cli/raw-api")
+	if c.DingTalkExt != "" {
+		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
+	}
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("executing HTTP request: %w", err)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-
 	return &RawAPIResponse{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header,
-		Body:       body,
+		BodyReader: resp.Body,
 	}, nil
+}
+
+// UploadMultipart streams a file and string form fields to an OpenAPI
+// endpoint. This compatibility surface is used by the dingtalk-tag scoped
+// Skill upload flow, whose credential must be sent as a Bearer token.
+func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequest) (*RawAPIResponse, error) {
+	if c == nil || c.HTTPClient == nil {
+		return nil, fmt.Errorf("OpenAPI HTTP client is not configured")
+	}
+	if req.File == nil {
+		return nil, fmt.Errorf("multipart file is required")
+	}
+	fullURL, err := c.buildURL(req.Path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building request URL: %w", err)
+	}
+	if err := c.validateTarget(fullURL); err != nil {
+		return nil, err
+	}
+	// 在创建 pipe 和 goroutine 前统一校验名称，避免用户可控的字段名/文件名
+	// 注入额外 MIME 头或字段；与非流式 newMultipartBody 保持一致。
+	if err := validateMultipartNames(req.FieldName, req.FileName, req.Fields); err != nil {
+		return nil, err
+	}
+
+	pipeReader, pipeWriter := io.Pipe()
+	form := multipart.NewWriter(pipeWriter)
+	writeDone := make(chan error, 1)
+	go func() {
+		writeErr := writeMultipartBody(form, req)
+		if writeErr != nil {
+			_ = pipeWriter.CloseWithError(writeErr)
+		} else {
+			_ = pipeWriter.Close()
+		}
+		writeDone <- writeErr
+	}()
+
+	httpReq, err := newHTTPRequest(ctx, http.MethodPost, fullURL, pipeReader)
+	if err != nil {
+		_ = pipeReader.CloseWithError(err)
+		<-writeDone
+		return nil, fmt.Errorf("creating HTTP request: %w", err)
+	}
+	if req.BearerAuth {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	} else {
+		httpReq.Header.Set(AuthHeader, c.Token)
+	}
+	httpReq.Header.Set("Content-Type", form.FormDataContentType())
+	httpReq.Header.Set("User-Agent", "dws-cli/openapi-upload")
+	if c.DingTalkExt != "" {
+		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
+	}
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		_ = pipeReader.CloseWithError(err)
+		<-writeDone
+		return nil, fmt.Errorf("executing HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, readErr := io.ReadAll(resp.Body)
+	writeErr := <-writeDone
+	if writeErr != nil {
+		return nil, fmt.Errorf("streaming multipart request: %w", writeErr)
+	}
+	if readErr != nil {
+		return nil, fmt.Errorf("reading response body: %w", readErr)
+	}
+	return &RawAPIResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}, nil
+}
+
+// validateMultipartNames 拒绝字段名、文件名和字段键中的 CR/LF，避免用户可控
+// 的名称向 multipart 报文注入额外 MIME 头或字段。流式 UploadMultipart 与非流式
+// newMultipartBody 必须一致校验，否则后者已加固而前者仍可被注入。
+func validateMultipartNames(fieldName, fileName string, fields map[string]string) error {
+	if strings.ContainsAny(fieldName, "\r\n") || strings.ContainsAny(fileName, "\r\n") {
+		return fmt.Errorf("multipart field 或 filename 不能包含换行符")
+	}
+	for key := range fields {
+		if strings.ContainsAny(key, "\r\n") {
+			return fmt.Errorf("multipart 字段名 %q 不能包含换行符", key)
+		}
+	}
+	return nil
+}
+
+func writeMultipartBody(form *multipart.Writer, req MultipartUploadRequest) error {
+	fieldName := strings.TrimSpace(req.FieldName)
+	if fieldName == "" {
+		fieldName = "file"
+	}
+	fieldNames := make([]string, 0, len(req.Fields))
+	for name := range req.Fields {
+		fieldNames = append(fieldNames, name)
+	}
+	sort.Strings(fieldNames)
+	for _, name := range fieldNames {
+		if err := form.WriteField(name, req.Fields[name]); err != nil {
+			return err
+		}
+	}
+	part, err := form.CreateFormFile(fieldName, req.FileName)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, req.File); err != nil {
+		return err
+	}
+	return form.Close()
+}
+
+func (c *APIClient) validateTarget(fullURL string) error {
+	validator := c.TargetValidator
+	if validator == nil {
+		validator = ValidateTargetHost
+	}
+	return validator(fullURL)
+}
+
+func newMultipartBody(upload *FileUpload, fileReader io.Reader, data any) (io.Reader, string, error) {
+	if upload == nil || fileReader == nil {
+		return nil, "", fmt.Errorf("multipart 文件不能为空")
+	}
+	fields := map[string]any{}
+	if data != nil {
+		var ok bool
+		fields, ok = data.(map[string]any)
+		if !ok {
+			return nil, "", fmt.Errorf("使用 --file 时 --data 必须是 JSON object")
+		}
+	}
+	fieldName := strings.TrimSpace(upload.FieldName)
+	if fieldName == "" {
+		fieldName = "file"
+	}
+	filename := strings.TrimSpace(upload.FileName)
+	if filename == "" {
+		filename = filepath.Base(upload.Path)
+	}
+	if filename == "" || filename == "." || filename == string(filepath.Separator) {
+		filename = "stdin"
+	}
+	if strings.ContainsAny(fieldName, "\r\n") || strings.ContainsAny(filename, "\r\n") {
+		return nil, "", fmt.Errorf("multipart field 或 filename 不能包含换行符")
+	}
+	for key := range fields {
+		if strings.ContainsAny(key, "\r\n") {
+			return nil, "", fmt.Errorf("multipart 字段名 %q 不能包含换行符", key)
+		}
+	}
+
+	pipeReader, pipeWriter := io.Pipe()
+	mw := multipart.NewWriter(pipeWriter)
+	contentType := mw.FormDataContentType()
+	go func() {
+		var writeErr error
+		defer func() {
+			if closeErr := mw.Close(); writeErr == nil {
+				writeErr = closeErr
+			}
+			_ = pipeWriter.CloseWithError(writeErr)
+		}()
+
+		keys := make([]string, 0, len(fields))
+		for key := range fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			value, valueErr := multipartFieldValue(fields[key])
+			if valueErr != nil {
+				writeErr = fmt.Errorf("编码 multipart 字段 %q 失败: %w", key, valueErr)
+				return
+			}
+			if writeErr = multipartWriteField(mw, key, value); writeErr != nil {
+				return
+			}
+		}
+		part, partErr := multipartCreateFormFile(mw, fieldName, filepath.Base(filename))
+		if partErr != nil {
+			writeErr = partErr
+			return
+		}
+		_, writeErr = io.Copy(part, fileReader)
+	}()
+	return pipeReader, contentType, nil
+}
+
+func multipartFieldValue(value any) (string, error) {
+	if text, ok := value.(string); ok {
+		return text, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 // buildURL constructs the full request URL from path and query params.
 func (c *APIClient) buildURL(path string, params map[string]any) (string, error) {
+	if strings.Contains(path, "#") {
+		return "", fmt.Errorf("request URL must not contain a fragment")
+	}
 	normalised := NormalisePath(path, c.BaseURL)
 	parsed, err := url.Parse(normalised)
 	if err != nil {
@@ -176,9 +449,8 @@ func (c *APIClient) buildURL(path string, params map[string]any) (string, error)
 // IsLegacyAPI returns true if the URL targets the legacy oapi.dingtalk.com endpoint.
 // Legacy APIs use query-parameter authentication instead of header-based auth.
 func IsLegacyAPI(urlStr string) bool {
-	lower := strings.ToLower(urlStr)
-	return strings.Contains(lower, "oapi.dingtalk.com") ||
-		strings.HasPrefix(lower, LegacyBaseURL)
+	parsed, err := url.Parse(strings.TrimSpace(urlStr))
+	return err == nil && strings.EqualFold(parsed.Hostname(), "oapi.dingtalk.com")
 }
 
 // NormalisePath normalises an API path:

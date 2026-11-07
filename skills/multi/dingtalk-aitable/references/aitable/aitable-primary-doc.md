@@ -4,6 +4,8 @@
 
 当需要为 AI 表格中的记录创建或查询关联的主键文档时使用。主键文档是 primaryDoc 类型字段对应的钉钉在线文档，可通过 `dws doc` 进行内容读写。
 
+若任务包含创建或关联主键文档，必须在首次建表前读取本文件，并把 `primaryDoc` 直接作为新表首字段；不要先以普通 `text` 首字段建表，再删除表、字段或记录重建。
+
 ## 命令
 
 ### 查询主键文档
@@ -17,7 +19,7 @@ dws aitable +record-primary-doc-get --base-id BASE_ID --table-id TABLE_ID --reco
 - `--table-id`（必填）：Table ID
 - `--record-id`（必填）：Record ID
 
-**返回：** `data.nodeId` — 主键文档的 nodeId，可直接传给 `dws doc read/update` 的 `--node` 参数。若该记录尚未创建主键文档，`nodeId` 为 null。
+**返回：** `data.exists` 明确表示主键文档是否已创建。`exists=true` 时同时返回 `data.nodeId`，可直接传给 `dws doc read/update` 的 `--node` 参数；`exists=false` 时不返回 `nodeId`，可调用下方创建命令。
 
 ### 创建主键文档
 

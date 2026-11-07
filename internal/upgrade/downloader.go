@@ -16,7 +16,10 @@ import (
 
 // DownloadConfig holds download configuration.
 type DownloadConfig struct {
-	MaxRetries       int
+	MaxRetries int
+	// MaxBytes 非零时同时限制响应声明大小和实际下载量；零保持既有行为。
+	MaxBytes         int64
+	CheckRedirect    func(*http.Request, []*http.Request) error
 	Timeout          time.Duration
 	ProgressCallback func(downloaded, total int64)
 	ProgressInterval time.Duration
@@ -100,7 +103,7 @@ func doDownload(ctx context.Context, url, destPath string, cfg *DownloadConfig) 
 	}
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{}
+	client := &http.Client{CheckRedirect: cfg.CheckRedirect}
 	if cfg.Timeout > 0 {
 		client.Timeout = cfg.Timeout
 	}
@@ -113,6 +116,9 @@ func doDownload(ctx context.Context, url, destPath string, cfg *DownloadConfig) 
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("下载失败 (HTTP %d): %s", resp.StatusCode, url)
+	}
+	if cfg.MaxBytes > 0 && resp.ContentLength > cfg.MaxBytes {
+		return 0, fmt.Errorf("下载文件超过大小上限 %d 字节", cfg.MaxBytes)
 	}
 
 	out, err := os.Create(destPath)
@@ -134,9 +140,16 @@ func doDownload(ctx context.Context, url, destPath string, cfg *DownloadConfig) 
 		writer = pw
 	}
 
-	n, err := io.Copy(writer, resp.Body)
+	var body io.Reader = resp.Body
+	if cfg.MaxBytes > 0 {
+		body = io.LimitReader(body, cfg.MaxBytes+1)
+	}
+	n, err := io.Copy(writer, body)
 	if err != nil {
 		return 0, fmt.Errorf("写入文件失败: %w", err)
+	}
+	if cfg.MaxBytes > 0 && n > cfg.MaxBytes {
+		return 0, fmt.Errorf("下载文件超过大小上限 %d 字节", cfg.MaxBytes)
 	}
 
 	return n, nil

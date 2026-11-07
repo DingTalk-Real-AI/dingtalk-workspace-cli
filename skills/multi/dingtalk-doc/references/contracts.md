@@ -11,7 +11,7 @@
 | status | 含义 | 后续动作 |
 |---|---|---|
 | `success` | 所有计划步骤完成，且需要验证的内容已经回读 | 可以向用户报告完成 |
-| `partial_success` | 已发生部分副作用，后续步骤失败 | 检查 `steps` 与 `compensation`，不得重放成功步骤 |
+| `partial_success` | 已发生部分副作用，后续步骤失败 | 检查 `steps` 与 `compensation`，不得重放成功步骤；创建后验证失败用返回 nodeId 只读恢复，核对所需章节，不能只凭 fetch 成功或截断正文宣称完整 |
 | `unknown` | 请求已发出但无法确定服务端是否提交 | 先回读目标；创建和追加禁止自动重试 |
 | `retryable` | 服务端明确业务执行尚未开始，且允许重试 | 遵循 `retry_after_seconds`，最多有界重试一次 |
 | `failed` | 已确认没有完成目标动作 | 根据 `retryable`、`actions` 和 details 决定是否重试 |
@@ -19,6 +19,14 @@
 进程退出码为零不能替代业务证据。采用 `doc.operation.v1` 的 shortcut 回执固定提供 `contractVersion/ok/status/complete/operation/steps/data/warnings/compensation`；`target/failures/verification` 只有实际操作返回时才能消费，不是通用字段。`+import` 使用现有导入回执，成功时检查 `success=true`、`taskId`、`documentUrl`、`documentName` 与 `documentType`，不要要求不存在的 `status/steps`。业务 `status` 不应与框架外层 `outcome` 混为一谈。
 
 稳定返回 ID/任务 ID 只用于定位目标、恢复流程或继续查询，不能单独证明写操作成功。成功证据优先级从高到低为：与该操作匹配的明确服务端成功终态 → 契约要求的写后读回匹配 → 仅 transport/退出码；异步任务必须使用返回的任务 ID 查询到成功终态。只有成功终态成立且所有必要回读均匹配时才报告成功；`partial_success`、`unknown`、未完成任务或仅返回资源/任务 ID 都不得报告完成。Runtime 已给出充分回读证据时，不为“再确认一次”重复请求。
+
+## 收尾交付
+
+创建或更新用户要求的最终在线资源并完成必要核验后，按顺序收尾：复用已确认的最终文档 URL（当次回执的 `documentUrl`/`docUrl`/`url`，缺失时用 `doc info` 只读补查）→ 当前宿主提供资源展示能力时，按其声明完成展示请求；所有交付物处理后再最终回复，以 `[名称](完整URL)` 形式保留具名链接，URL 保留原编码，不截断、不缩写、不用省略号替代。宿主未提供展示能力时，直接交付已确认的链接。业务成功标志、正文链接或浏览器已打开，均不替代宿主要求的展示步骤；按宿主回执描述实际交付状态，展示请求已受理不等于界面已展示。
+
+本轮相同 URL 的展示请求已受理后不重复调用；普通只读引用、用户明确排除展示时跳过展示步骤；用户明确要求展示已有资源时，无须新增业务写入。URL 无法确认或展示请求失败时，保留业务结果与已有确定链接并说明限制，不猜地址、不用父级入口冒充直达、不重复业务写入。
+
+创建后的完整示例：`+create` 返回 `docUrl` 且 `verified=true` 时，Runtime 已完成写后核验，直接进入交付——按宿主交付规则请求展示 `[文档名](docUrl)` 并回复用户；复用该核验结果，不额外 `+fetch`，不为展示效果重新创建文档。
 
 ## 分页与完整性
 

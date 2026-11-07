@@ -266,7 +266,9 @@ func buildAgentExampleExecutionPlan(bound BoundCommandRegistry, typedTools map[s
 			if typedTool.DryRun != nil {
 				dryRun := *typedTool.DryRun
 				execution.DryRun = &dryRun
-				execution.Mode = AgentExampleModeDryRun
+				if typedTool.Interface.AgentExecutable() {
+					execution.Mode = AgentExampleModeDryRun
+				}
 			}
 			disposition, hasDisposition := dispositions[index]
 			if hasDisposition {
@@ -280,7 +282,7 @@ func buildAgentExampleExecutionPlan(bound BoundCommandRegistry, typedTools map[s
 				plan.ContractOnly++
 				plan.ReviewedContractOnly++
 				plan.ContractOnlyByReason[disposition.ReasonCode]++
-			} else if execution.DryRun != nil {
+			} else if execution.Mode == AgentExampleModeDryRun {
 				plan.DryRun++
 			} else {
 				plan.Contract++

@@ -527,23 +527,26 @@ func newRangeSetStyleCmd() *cobra.Command {
 			}
 			node := mustGetFlag(cmd, "node")
 			sheetID := mustGetFlag(cmd, "sheet-id")
-			rangeAddr := mustGetFlag(cmd, "range")
-
-			rows, cols, err := parseA1Range(rangeAddr)
+			input := map[string]any{
+				"sheet-id": sheetID,
+				"range":    mustGetFlag(cmd, "range"),
+			}
+			for _, name := range styleFlagNames {
+				if !cmd.Flags().Changed(name) {
+					continue
+				}
+				if name == "font-size" {
+					input[name], _ = cmd.Flags().GetInt(name)
+				} else {
+					input[name], _ = cmd.Flags().GetString(name)
+				}
+			}
+			toolArgs, err := BuildBatchSetStyleArgs(input)
 			if err != nil {
 				return err
 			}
-			spec := readStyleSpecFromFlags(cmd)
-			cells, err := buildStyleCells(spec, rows, cols)
-			if err != nil {
-				return err
-			}
-			return callMCPTool("set_cell_range", map[string]any{
-				"nodeId":       node,
-				"sheetId":      sheetID,
-				"rangeAddress": rangeAddr,
-				"cells":        cells,
-			})
+			toolArgs["nodeId"] = node
+			return callMCPTool("set_cell_range", toolArgs)
 		},
 	}
 	cmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
@@ -667,12 +670,10 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 				return err
 			}
 
-			toolArgs := map[string]any{
-				"nodeId":     node,
-				"operations": operations,
-			}
-			if continueOnErr, _ := cmd.Flags().GetBool("continue-on-error"); continueOnErr {
-				toolArgs["continueOnError"] = true
+			continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
+			toolArgs, err := buildBatchUpdateToolArgsForCommand(node, operations, continueOnError)
+			if err != nil {
+				return err
 			}
 			return callMCPTool("batch_update", toolArgs)
 		},
@@ -699,7 +700,7 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
-				Reason:       "The CLI assembles style cell matrices locally from --ranges or a local batch file and submits them as one sheet/batch_update operations array; no single direct MCP interface represents the wrapper input shape.",
+				Reason:       "The CLI assembles style cell matrices locally from --ranges or a local batch file and submits them as one JSON-encoded sheet/batch_update operation array; no single direct MCP interface represents the wrapper input shape.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "批量为多个区域设置样式，组装为一次 batch_update 原子提交。",

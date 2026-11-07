@@ -80,6 +80,7 @@ func TestEveryStreamBridgeAgentHasAttachmentDeliveryPath(t *testing.T) {
 		"codex":      (*codexAppServerForwarder)(nil),
 		"opencode":   (*opencodeForwarder)(nil),
 		"gemini":     (*geminiAPIForwarder)(nil),
+		"pi":         (*piForwarder)(nil),
 	}
 	for channel := range agentSpecs {
 		impl, ok := implementations[channel]

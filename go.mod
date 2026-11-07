@@ -1,8 +1,13 @@
 module github.com/DingTalk-Real-AI/dingtalk-workspace-cli
 
-go 1.25.9
+go 1.26.7
 
 replace gitlab.alibaba-inc.com/aes/aem-go-sdk => ./third_party/aem-go-sdk
+
+replace safechat-go-sdk => ./third_party/safechat-go-sdk
+
+// v1.10.2 with a Traverse flag-error fix; see third_party/cobra/PATCHES.md.
+replace github.com/spf13/cobra => ./third_party/cobra
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -11,20 +16,28 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creack/pty v1.1.24
+	github.com/dlclark/regexp2 v1.11.5
+	github.com/ebitengine/purego v0.10.2
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/itchyny/gojq v0.12.18
 	github.com/mattn/go-isatty v0.0.20
+	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.5
 	github.com/zalando/go-keyring v0.2.8
-	gitlab.alibaba-inc.com/aes/aem-go-sdk v0.3.0
+	gitlab.alibaba-inc.com/aes/aem-go-sdk v0.4.0
 	golang.org/x/crypto v0.49.0
+	golang.org/x/image v0.31.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
+	google.golang.org/protobuf v1.36.12
+	safechat-go-sdk v0.0.0
 )
 
 require (
@@ -50,7 +63,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
-	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.20.0 // indirect

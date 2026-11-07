@@ -18,6 +18,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
@@ -39,31 +40,32 @@ import (
 //	dws minutes +transcript --keyword 周会
 //	dws minutes +transcript --direction 1
 var Transcript = shortcut.Shortcut{
-	Service:     "minutes",
-	Command:     "+transcript",
-	Product:     "minutes",
-	Description: "读取指定或我最新一条听记的完整逐字稿，并交付分页完整性证据",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes",
+	Command:       "+transcript",
+	Product:       "minutes",
+	Description:   "读取指定或我最新一条听记的完整逐字稿，并交付分页完整性证据",
 	Intent: "当你要读取已知 taskUuid（--id）的完整逐字稿，或不传 --id 自动选择自己最新听记时使用；" +
-		"默认追完 nextToken、跨页去重并输出 complete/pages/nextToken，只有显式 --single-page 才停在一页。" +
+		"默认追完 nextToken、跨页去重，并在 data 输出 complete/pages、在 meta.pagination 输出端点耗尽状态和续页 token；只有显式 --single-page 才停在一页。" +
 		"可用 --direction 控制排序，--keyword 仅在自动选择最新听记时缩小候选；任何分页漂移或中途失败都返回非零而不是把部分原文当成全集。",
 	Risk: shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
 	},
-	Contract: minutesSmartContract(
+	Contract: withMinutesTranscriptResult(minutesSmartContract(
 		"+transcript",
 		"读取指定或最新听记的完整逐字稿",
-		"需要读取逐字稿并自动追完 nextToken、去重段落，同时看到 complete/pages/nextToken 完整性证据时使用；不传 --id 时严格选择最新听记。",
+		"需要读取逐字稿并自动追完 nextToken、去重段落，同时看到 data.complete/data.pages 与 meta.pagination 完整性证据时使用；不传 --id 时严格选择最新听记。",
 		[]string{"只需单个原始分页响应时使用底层转写命令；需要汇总多个制品时使用 +detail"},
 		[]string{"dws minutes +transcript --id <taskUuid>", "dws minutes +transcript --keyword 周会"},
 		nil,
-	),
+	)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid；不传时选择我最新的一条"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "按关键字过滤听记（可选）", Required: false},
 		{Name: "direction", Type: shortcut.FlagString, Desc: "排序方向: 0=正序(默认), 1=倒序（可选）", Required: false, Enum: []string{"0", "1"}},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "单页/续拉的起始 nextToken"},
-		{Name: "single-page", Type: shortcut.FlagBool, Desc: "只读取一页；输出 complete/nextToken"},
+		{Name: "single-page", Type: shortcut.FlagBool, Desc: "只读取一页；输出 data.complete 与 meta.pagination.next_token"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "100", Desc: "自动翻页安全上限"},
 	},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"page-limit"}, Description: "--page-limit 必须大于 0"}},
@@ -113,13 +115,7 @@ var Transcript = shortcut.Shortcut{
 		}
 		result, readErr := collectMinutesTranscript(rt, taskUUID, direction, rt.Str("cursor"), rt.Bool("single-page"), rt.Int("page-limit"))
 		payload := minutesdata.TranscriptPayload(taskUUID, direction, result)
-		if err := rt.Output(payload); err != nil {
-			return err
-		}
-		if readErr != nil {
-			return minutesTranscriptReadError(taskUUID, result, readErr)
-		}
-		return nil
+		return outputMinutesTranscriptResult(rt, payload, result, readErr)
 	},
 }
 

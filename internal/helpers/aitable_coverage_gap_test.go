@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -14,8 +15,11 @@ import (
 
 func TestCrossPlatformCoverageAITablePageParsingRemainingEdges(t *testing.T) {
 	for name, raw := range map[string]string{
-		"trailing invalid JSON": `{"records":[]} {`,
-		"data not object":       `{"data":[]}`,
+		"trailing invalid JSON":              `{"records":[]} {`,
+		"data not object":                    `{"data":[]}`,
+		"missing records with nextCursor":    `{"data":{"nextCursor":"c"}}`,
+		"missing records with hasMore":       `{"data":{"hasMore":true}}`,
+		"missing records with invalid count": `{"data":{"totalCount":"invalid"}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parseRecordQueryPage(raw); err == nil {
@@ -23,6 +27,40 @@ func TestCrossPlatformCoverageAITablePageParsingRemainingEdges(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCrossPlatformCoverageParseRecordQueryPageEmptyFinalPage(t *testing.T) {
+	t.Run("without totalCount", func(t *testing.T) {
+		page, err := parseRecordQueryPage(`{"data":{}}`)
+		if err != nil {
+			t.Fatalf("parseRecordQueryPage(`{\"data\":{}}`) unexpected error: %v", err)
+		}
+		if len(page.Records) != 0 {
+			t.Fatalf("expected 0 records, got %d", len(page.Records))
+		}
+		if page.NextCursor != "" {
+			t.Fatalf("expected empty NextCursor, got %q", page.NextCursor)
+		}
+		if page.TotalCount != nil {
+			t.Fatalf("expected nil TotalCount, got %v", *page.TotalCount)
+		}
+	})
+
+	t.Run("with totalCount", func(t *testing.T) {
+		page, err := parseRecordQueryPage(`{"data":{"totalCount":0}}`)
+		if err != nil {
+			t.Fatalf("parseRecordQueryPage(`{\"data\":{\"totalCount\":0}}`) unexpected error: %v", err)
+		}
+		if len(page.Records) != 0 {
+			t.Fatalf("expected 0 records, got %d", len(page.Records))
+		}
+		if page.NextCursor != "" {
+			t.Fatalf("expected empty NextCursor, got %q", page.NextCursor)
+		}
+		if page.TotalCount == nil || *page.TotalCount != 0 {
+			t.Fatalf("expected TotalCount 0, got %v", page.TotalCount)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageAITableOptionalCountNumericTypes(t *testing.T) {
@@ -79,7 +117,7 @@ func TestCrossPlatformCoverageAITableExplicitUnlimitedPaginationE2E(t *testing.T
 	}
 	caller := &aitableTestCaller{responses: responses}
 	out := installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 0); err != nil {
+	if err := recordQueryFetchAll(context.Background(), map[string]any{}, 0); err != nil {
 		t.Fatalf("explicit unlimited pagination failed: %v", err)
 	}
 	if len(caller.calls) != len(responses) {

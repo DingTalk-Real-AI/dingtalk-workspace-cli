@@ -31,6 +31,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 )
 
 // oauthHTTPClient is a dedicated HTTP client for OAuth operations with
@@ -40,29 +41,29 @@ var oauthHTTPClient = &http.Client{
 }
 
 var (
-	oauthListen          = net.Listen
-	oauthOpenBrowser     = openBrowser
-	oauthLoginTimeout    = 5 * time.Minute
-	oauthApprovalTimeout = 10 * time.Minute
-	oauthPollInterval    = 5 * time.Second
-	oauthSuccessPause    = 2 * time.Second
-	oauthLoadToken       = LoadTokenData
-	oauthLoadTokenLocked = loadTokenDataForProfileLocked
-	oauthAcquireLock     = AcquireDualLock
-	oauthMarkProfile     = MarkProfileStatus
-	oauthFetchClientID   = FetchClientIDFromMCP
-	oauthExchange        = func(p *OAuthProvider, ctx context.Context, code string) (*TokenData, error) {
+	oauthListen               = net.Listen
+	oauthOpenBrowser          = openBrowser
+	resolveAuthRuntimeContext = runtimecontext.Resolve
+	oauthLoginTimeout         = 5 * time.Minute
+	oauthApprovalTimeout      = 10 * time.Minute
+	oauthPollInterval         = 5 * time.Second
+	oauthSuccessPause         = 2 * time.Second
+	oauthLoadToken            = LoadTokenData
+	oauthLoadTokenForProfile  = LoadTokenDataForProfile
+	oauthLoadTokenLocked      = loadTokenDataForProfileLocked
+	oauthAcquireLock          = AcquireDualLock
+	oauthMarkProfile          = MarkProfileStatus
+	oauthFetchClientID        = FetchClientIDFromMCP
+	oauthExchange             = func(p *OAuthProvider, ctx context.Context, code string) (*TokenData, error) {
 		return p.exchangeCode(ctx, code)
 	}
 	oauthCheckStatus = func(p *OAuthProvider, ctx context.Context, token string) (*CLIAuthStatus, error) {
 		return p.CheckCLIAuthEnabled(ctx, token)
 	}
-	oauthGetAdmins     = GetSuperAdmins
-	oauthSendApply     = SendCliAuthApply
-	oauthSaveToken     = SaveTokenData
-	oauthHasAppConfig  = HasAppConfig
-	oauthSaveAppConfig = SaveAppConfig
-	oauthRefreshToken  = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
+	oauthGetAdmins    = GetSuperAdmins
+	oauthSendApply    = SendCliAuthApply
+	oauthSaveToken    = SaveTokenData
+	oauthRefreshToken = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
 		return p.refreshWithRefreshToken(ctx, data)
 	}
 	oauthSleep = time.Sleep
@@ -91,13 +92,15 @@ func oauthSendApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID
 
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
-	configDir    string
-	clientID     string
-	logger       *slog.Logger
-	Output       io.Writer
-	httpClient   *http.Client
-	NoBrowser    bool
-	TargetCorpID string
+	configDir     string
+	clientID      string
+	credentials   *AppCredentialPair
+	credentialErr error
+	logger        *slog.Logger
+	Output        io.Writer
+	httpClient    *http.Client
+	NoBrowser     bool
+	TargetCorpID  string
 	// IdentityEnricher resolves userId/userName/corpName while the freshly
 	// exchanged access token is still only in memory.
 	IdentityEnricher func(context.Context, *TokenData) error
@@ -106,12 +109,69 @@ type OAuthProvider struct {
 
 // NewOAuthProvider creates a new OAuth provider.
 func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
-	return &OAuthProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		logger:     logger,
-		Output:     os.Stderr,
-		httpClient: oauthHTTPClient,
+	pair, err := resolveOAuthCredentialPair(configDir)
+	p := &OAuthProvider{
+		configDir:     configDir,
+		credentialErr: err,
+		logger:        logger,
+		Output:        os.Stderr,
+		httpClient:    oauthHTTPClient,
+	}
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	} else {
+		// Keep the legacy observable constructor value for callers that only
+		// inspect the provider. Login always resets this before managed MCP use.
+		p.clientID = ClientID()
+	}
+	return p
+}
+
+func resolveOAuthCredentialPair(configDir string) (*AppCredentialPair, error) {
+	if pair, selected, err := credentialPairFromValues(runtimeCredentialValues()); selected || err != nil {
+		if err != nil {
+			return nil, ErrFlagCredentialPairIncomplete
+		}
+		return &pair, nil
+	}
+	if pair, selected, err := credentialPairFromValues(os.Getenv(EnvClientID), os.Getenv(EnvClientSecret), string(CredentialSourceEnv), ErrEnvCredentialPairIncomplete); selected || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	pair, err := ResolveAppConfigCredentialPair(configDir)
+	if err == nil {
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	if errors.Is(err, ErrAppConfigMissing) || errors.Is(err, ErrClientIDEmpty) || errors.Is(err, ErrClientSecretEmpty) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func runtimeCredentialValues() (string, string, string, error) {
+	clientMu.RLock()
+	id, secret, fromMCP := runtimeClientID, runtimeClientSecret, clientIDFromMCP
+	clientMu.RUnlock()
+	if fromMCP {
+		return "", "", string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+	}
+	return id, secret, string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+}
+
+func (p *OAuthProvider) snapshotCredentialPair() {
+	pair, err := resolveOAuthCredentialPair(p.configDir)
+	p.credentials = nil
+	p.credentialErr = err
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
 	}
 }
 
@@ -120,9 +180,8 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 // credentials. Complete runtime AppKey/AppSecret overrides skip this reset.
 func (p *OAuthProvider) resetCredentialState() {
 	p.clientID = ""
-	clientMu.Lock()
-	clientIDFromMCP = false
-	clientMu.Unlock()
+	p.credentials = nil
+	clearRuntimeCredentials()
 }
 
 func (p *OAuthProvider) output() io.Writer {
@@ -136,6 +195,10 @@ func (p *OAuthProvider) output() io.Writer {
 // 1. If force=false, try silent token refresh first (refresh_token)
 // 2. If all silent methods fail (or force=true), fall back to browser OAuth flow
 func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, error) {
+	p.snapshotCredentialPair()
+	if p.credentialErr != nil {
+		return nil, fmt.Errorf("应用凭证配置无效: %w", p.credentialErr)
+	}
 	// Smart degradation: try silent refresh before opening browser.
 	if !force {
 		data, err := oauthLoadToken(p.configDir)
@@ -154,10 +217,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				if p.logger != nil {
 					p.logger.Debug("access_token still valid, skipping login")
 				}
-				// Even on early return, persist custom app credentials if provided
-				// via --client-id/--client-secret flags. Without this, the flags
-				// are only in runtime globals and lost when the process exits.
-				p.persistAppConfigIfNeeded()
 				return data, nil
 			}
 			// Case 2: refresh using refresh_token (with lock to prevent concurrent refresh).
@@ -167,7 +226,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				}
 				refreshed, rErr := p.lockedRefresh(ctx)
 				if rErr == nil {
-					p.persistAppConfigIfNeeded()
 					return refreshed, nil
 				}
 				if p.logger != nil {
@@ -181,11 +239,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
-		p.clientID = runtimeClientID
-		clientMu.Lock()
-		clientIDFromMCP = false
-		clientMu.Unlock()
+	if p.credentials != nil {
+		p.clientID = p.credentials.ClientID
+		clearMCPRuntimeCredentials()
 	} else {
 		// Defensive reset: clear any stale credential state from previous login
 		// methods so we can re-fetch clientID from MCP. This ensures --force
@@ -239,10 +295,15 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackProcessedCode   string // The auth code that has been successfully processed
 		callbackAuthDisabled    bool
 		callbackApplySent       bool   // Whether apply request was sent
+		callbackHasDwsApply     bool   // Whether the server reports an existing apply request
 		callbackSelectedAdminId string // Selected admin ID for apply
 		callbackCodeInProgress  string // Code currently being processed (to prevent concurrent exchange)
 		callbackTokenMu         sync.Mutex
 	)
+
+	runtimeSnapshot := resolveAuthRuntimeContext()
+	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
+	browserURL, _ := runtimeSnapshot.AttachToURL(authURL)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(CallbackPath, func(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +322,8 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackTokenMu.Lock()
 		processedCode := callbackProcessedCode
 		processedAuthDisabled := callbackAuthDisabled
+		processedApplySent := callbackApplySent
+		processedHasDwsApply := callbackHasDwsApply
 		codeInProgress := callbackCodeInProgress
 		hasToken := callbackToken != nil
 
@@ -268,10 +331,18 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if code != "" && code == processedCode {
 			callbackTokenMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if processedAuthDisabled {
+			switch {
+			case !processedAuthDisabled:
+				// CLI auth is enabled; show success page.
+				_, _ = fmt.Fprint(w, renderSuccessHTML())
+			case processedApplySent || processedHasDwsApply:
+				// User has an in-flight apply (this session or a previous
+				// one); show the dedicated approval-pending page.
+				_, _ = fmt.Fprint(w, applyPendingHTML)
+			default:
+				// CLI auth is disabled and no apply is in flight; show the
+				// apply form so the user can submit a new request.
 				_, _ = fmt.Fprint(w, notEnabledHTML)
-			} else {
-				_, _ = fmt.Fprint(w, successHTML)
 			}
 			return
 		}
@@ -288,10 +359,18 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if code == "" && hasToken {
 			callbackTokenMu.Unlock()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if processedAuthDisabled {
+			switch {
+			case !processedAuthDisabled:
+				// CLI auth is enabled; show success page.
+				_, _ = fmt.Fprint(w, renderSuccessHTML())
+			case processedApplySent || processedHasDwsApply:
+				// User has an in-flight apply; show the dedicated
+				// approval-pending page.
+				_, _ = fmt.Fprint(w, applyPendingHTML)
+			default:
+				// CLI auth is disabled and no apply is in flight; show the
+				// apply form.
 				_, _ = fmt.Fprint(w, notEnabledHTML)
-			} else {
-				_, _ = fmt.Fprint(w, successHTML)
 			}
 			return
 		}
@@ -355,6 +434,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		// Reset apply state for new authorization (user switched org)
 		if previouslyProcessed {
 			callbackApplySent = false
+			callbackHasDwsApply = false
 			callbackSelectedAdminId = ""
 		}
 		callbackTokenMu.Unlock()
@@ -374,6 +454,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			"corp_id", strings.TrimSpace(tokenData.CorpID),
 			"enabled", cliAuthEnabled,
 			"denial_reason", denialReason,
+			"has_dws_apply", authStatus != nil && authStatus.Result != nil && authStatus.Result.HasDwsApply,
 		)
 
 		// Server-provided errorMsg (nil-safe), surfaced both on the page and to
@@ -383,22 +464,29 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			serverMsg = authStatus.ErrorMsg
 		}
 
-		// Update CLI auth disabled state
+		// Update CLI auth disabled state and the server-reported apply flag.
+		// hasDwsApply is surfaced to the page via /api/status so the page does
+		// not need a second /cli/cliAuthEnabled lookup on init.
 		callbackTokenMu.Lock()
 		callbackAuthDisabled = !cliAuthEnabled
+		if authStatus != nil && authStatus.Result != nil && authStatus.Result.HasDwsApply {
+			callbackHasDwsApply = true
+		}
 		callbackTokenMu.Unlock()
 
 		// Display appropriate HTML based on auth status and denial reason
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		switch {
 		case cliAuthEnabled:
-			_, _ = fmt.Fprint(w, successHTML)
+			_, _ = fmt.Fprint(w, renderSuccessHTML())
 		case denialReason == "user_forbidden" || denialReason == "user_not_allowed":
 			_, _ = fmt.Fprint(w, accessDeniedHTML)
 		case denialReason == "channel_not_allowed" || denialReason == "channel_required":
 			_, _ = fmt.Fprint(w, channelDeniedHTML)
 		case denialReason == "enterprise_not_authorized":
 			_, _ = fmt.Fprint(w, renderEnterpriseDeniedHTML(serverMsg))
+		case authStatus != nil && authStatus.Result != nil && authStatus.Result.HasDwsApply:
+			_, _ = fmt.Fprint(w, applyPendingHTML)
 		default:
 			_, _ = fmt.Fprint(w, notEnabledHTML)
 		}
@@ -442,15 +530,29 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 		callbackTokenMu.Lock()
 		token := callbackToken
+		applySent := callbackApplySent || callbackHasDwsApply
 		callbackTokenMu.Unlock()
 		if token == nil {
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
+			return
+		}
+		// Idempotent shortcut: an apply already recorded for this session
+		// must not reach the backend again; duplicate submissions answer
+		// success so the page lands on the approval-pending view.
+		if applySent {
+			_, _ = w.Write([]byte(`{"success":true,"result":true}`))
 			return
 		}
 		result, err := oauthSendApplyForLoginRegion(ctx, token.AccessToken, adminStaffID, p.LoginRegion)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
+		}
+		// A retried request can reach the backend after the first attempt
+		// already created the application; the follow-up business error
+		// "already applied" is the goal state, so normalize it to success.
+		if !result.Success && isAlreadyAppliedError(result) {
+			result = &SendApplyResponse{Success: true, Result: true}
 		}
 		// Mark apply as sent and save selected admin on success
 		if result.Success && result.Result {
@@ -468,12 +570,14 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		w.Header().Set("Content-Type", "application/json")
 		callbackTokenMu.Lock()
 		applySent := callbackApplySent
+		hasDwsApply := callbackHasDwsApply
 		selectedAdminId := callbackSelectedAdminId
 		callbackTokenMu.Unlock()
 		data, _ := json.Marshal(map[string]any{
 			"clientId":        p.clientID,
-			"authorizeUrl":    AuthorizeURLForLoginRegion(p.LoginRegion),
+			"authorizeUrl":    browserURL,
 			"applySent":       applySent,
+			"hasDwsApply":     hasDwsApply,
 			"selectedAdminId": selectedAdminId,
 		})
 		_, _ = w.Write(data)
@@ -501,10 +605,28 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	// Success page endpoint
 	mux.HandleFunc("/success", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, successHTML)
+		_, _ = fmt.Fprint(w, renderSuccessHTML())
 	})
 
-	server := &http.Server{Handler: mux}
+	// Apply pending page endpoint
+	mux.HandleFunc("/applyPending", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, applyPendingHTML)
+	})
+
+	// noStore prevents browsers from caching callback pages and API
+	// responses: a stale cached page or /api/status response would keep
+	// showing the apply form even after the server reports hasDwsApply.
+	//
+	// NOTE: no route on this server serves a static asset; the pages' only
+	// external images come from a CDN and are unaffected by this header.
+	// If this server starts serving static assets in the future, use a more
+	// nuanced strategy (no-store for API/dynamic pages,
+	// public + max-age for static assets).
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		mux.ServeHTTP(w, r)
+	})}
 	go func() {
 		if serveErr := server.Serve(listener); !errors.Is(serveErr, http.ErrServerClosed) {
 			select {
@@ -519,13 +641,12 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
 	if !p.NoBrowser {
-		if err := oauthOpenBrowser(authURL); err != nil && p.logger != nil {
-			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+		if err := oauthOpenBrowser(browserURL); err != nil && p.logger != nil {
+			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error_category", "browser_open_failed")
 		}
 	}
 
@@ -533,7 +654,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	_, _ = fmt.Fprintln(p.output(), i18n.T("🔐 登录钉钉"))
 	_, _ = fmt.Fprintln(p.output(), "")
 	_, _ = fmt.Fprintln(p.output(), i18n.T("请在浏览器中完成扫码授权。"))
-	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), authURL)
+	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), browserURL)
 	_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 等待授权中..."))
 
 	timeout := time.NewTimer(oauthLoginTimeout)
@@ -562,7 +683,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	if result.cliAuthDisabled {
 		switch result.denialReason {
 		case "user_forbidden", "user_not_allowed":
-			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员将您加入授权名单"))
+			return nil, errors.New(i18n.T("该组织尚未开启CLI数据访问权限"))
 		case "channel_not_allowed", "channel_required":
 			return nil, errors.New(i18n.T("当前渠道未获得该组织授权，或组织已开启渠道管控，请联系组织管理员开通渠道访问权限，或升级到最新版本的 CLI"))
 		case "enterprise_not_authorized":
@@ -573,7 +694,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		}
 
 		_, _ = fmt.Fprintln(p.output(), "")
-		_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 该组织尚未开启 CLI 数据访问权限，请在浏览器中提交授权申请..."))
+		_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 该组织尚未开启CLI数据访问权限，请在浏览器中提交授权申请..."))
 
 		// Poll for CLI auth status while waiting
 		applyTimeout := time.NewTimer(oauthApprovalTimeout)
@@ -610,12 +731,20 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				// Check if CLI auth is now enabled (admin approved)
 				if currentToken != nil {
 					authStatus, err := oauthCheckStatus(p, ctx, currentToken.AccessToken)
-					if err == nil && classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL")) == "" {
-						_, _ = fmt.Fprintf(p.output(), "\r%s\n", i18n.T("✅ 权限已开启，继续登录..."))
-						oauthSleep(oauthSuccessPause)
-						result.token = currentToken
-						result.cliAuthDisabled = false
-						goto continueLogin
+					if err == nil {
+						if classifyDenialReason(authStatus, os.Getenv("DWS_CHANNEL")) == "" {
+							_, _ = fmt.Fprintf(p.output(), "\r%s\n", i18n.T("✅ 权限已开启，继续登录..."))
+							oauthSleep(oauthSuccessPause)
+							result.token = currentToken
+							result.cliAuthDisabled = false
+							goto continueLogin
+						}
+						// The user may have submitted an apply request in a previous
+						// session; the server tracks it in hasDwsApply. Treat it as
+						// applied so the terminal shows the approval-pending status.
+						if authStatus.Result != nil && authStatus.Result.HasDwsApply {
+							applySent = true
+						}
 					}
 				}
 
@@ -659,18 +788,8 @@ continueLogin:
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
 
-	// Persist app credentials (with secret) if using custom client credentials.
-	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	// Persist the exact pair snapshotted before authorization began.
 	p.persistAppConfigIfNeeded()
-
-	// Always persist clientId to app.json so future process startups
-	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
-	if p.clientID != "" {
-		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !oauthHasAppConfig(p.configDir) {
-			_ = oauthSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
-		}
-	}
 
 	return tokenData, nil
 }
@@ -687,7 +806,21 @@ func oauthExchangeDisplayError(err error) string {
 // Storage and refresh failures retain their original cause; only a confirmed
 // missing credential is reported as ErrTokenDataNotFound.
 func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error) {
-	data, err := oauthLoadToken(p.configDir)
+	return p.getTokenSnapshotForProfile(ctx, RuntimeProfile(), func() (*TokenData, error) {
+		return oauthLoadToken(p.configDir)
+	})
+}
+
+// GetTokenSnapshotForProfile returns a valid token for one explicit profile
+// without consulting or mutating the process-wide runtime profile.
+func (p *OAuthProvider) GetTokenSnapshotForProfile(ctx context.Context, profile string) (*TokenData, error) {
+	return p.getTokenSnapshotForProfile(ctx, profile, func() (*TokenData, error) {
+		return oauthLoadTokenForProfile(p.configDir, profile)
+	})
+}
+
+func (p *OAuthProvider) getTokenSnapshotForProfile(ctx context.Context, profile string, load func() (*TokenData, error)) (*TokenData, error) {
+	data, err := load()
 	if err != nil {
 		if errors.Is(err, ErrTokenDataNotFound) || os.IsNotExist(err) {
 			return nil, fmt.Errorf("%s: %w", i18n.T("未登录，请运行 dws auth login"), ErrTokenDataNotFound)
@@ -703,7 +836,7 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 
 	// Slow path: token expired — try locked refresh.
 	if data.IsRefreshTokenValid() {
-		refreshed, rErr := p.lockedRefresh(ctx)
+		refreshed, rErr := p.lockedRefreshForProfile(ctx, profile)
 		if rErr == nil {
 			return refreshed, nil
 		}
@@ -715,6 +848,12 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		}
 		if p.logger != nil {
 			p.logger.Warn(i18n.T("refresh_token 刷新失败"), "error", rErr)
+		}
+		if data.isOIDCSession() {
+			if ClassifyRefreshFailure(rErr) == RefreshFailureTransient {
+				return nil, rErr
+			}
+			return nil, oidcRefreshReauthorizationError(data, rErr)
 		}
 		var exchangeErr *MCPTokenExchangeError
 		if errors.As(rErr, &exchangeErr) && exchangeErr.requiresReauthorization() {
@@ -729,6 +868,9 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 		_ = oauthMarkProfile(p.configDir, profileSelector, ProfileStatusExpired)
 	}
 
+	if data.isOIDCSession() {
+		return nil, oidcRefreshReauthorizationError(data, ErrTokenDataNotFound)
+	}
 	return nil, fmt.Errorf("%s: %w", i18n.T("所有凭证已失效，请运行 dws auth login 重新登录"), ErrTokenDataNotFound)
 }
 
@@ -776,6 +918,10 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 //	classic race where two callers both see an expired token and both call the
 //	refresh API, invalidating each other's refresh_token.
 func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
+	return p.lockedRefreshForProfile(ctx, RuntimeProfile())
+}
+
+func (p *OAuthProvider) lockedRefreshForProfile(ctx context.Context, profile string) (*TokenData, error) {
 	// Acquire dual-layer lock (process-level + file-level)
 	lock, err := oauthAcquireLock(ctx, p.configDir)
 	if err != nil {
@@ -785,7 +931,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 
 	// Double-check: re-load from disk — another goroutine/process may have refreshed
 	// while we were waiting for the lock.
-	data, err := loadOAuthTokenUnderHeldLock(p.configDir, RuntimeProfile())
+	data, err := loadOAuthTokenUnderHeldLock(p.configDir, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -812,7 +958,9 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 		p.logger.Debug("refreshing token (dual-locked)")
 	}
 	refreshed, rErr := oauthRefreshToken(p, ctx, data)
-	if rErr == nil || !isRefreshTokenRejected(rErr) {
+	// OIDC credentials stay bound to the selected application and Portal. A
+	// rejected refresh never authorizes reading another credential slot.
+	if rErr == nil || data.isOIDCSession() || !isRefreshTokenRejected(rErr) {
 		return refreshed, rErr
 	}
 	// A stale identity slot can survive an older organization-only refresh.
@@ -828,6 +976,12 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	fallback, fErr := p.refreshFromOrgSlot(ctx, data)
 	if fErr != nil {
 		logging.AuthDebug("auth.refresh.fallback.unavailable", "error", fErr)
+		// The organization mirror may be absent for long-lived local logins
+		// that predate mirror publication. Recover from the legacy global
+		// slot before giving up.
+		if recovered, recoverErr := p.recoverRefreshFromLegacyGlobalSlot(ctx, data, rErr); recoverErr == nil {
+			return recovered, nil
+		}
 		return nil, rErr
 	}
 	if p.logger != nil {
@@ -891,6 +1045,123 @@ func (p *OAuthProvider) refreshFromOrgSlot(ctx context.Context, current *TokenDa
 	return refreshed, nil
 }
 
+func (p *OAuthProvider) recoverRefreshFromLegacyGlobalSlot(ctx context.Context, selected *TokenData, refreshErr error) (*TokenData, error) {
+	var exchangeErr *MCPTokenExchangeError
+	if !errors.As(refreshErr, &exchangeErr) || !exchangeErr.requiresReauthorization() {
+		return nil, refreshErr
+	}
+	if selected == nil {
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.triggered",
+		"corp_id", strings.TrimSpace(selected.CorpID),
+		"user_id", strings.TrimSpace(selected.UserID),
+		"refresh_error_code", exchangeErr.Code,
+	)
+	legacy, loadErr := tokenLoadKeychain()
+	if loadErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "error", loadErr)
+		return nil, refreshErr
+	}
+	if legacy == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "reason", "empty_legacy")
+		return nil, refreshErr
+	}
+	if !legacyGlobalRefreshCandidateMatches(p.configDir, selected, legacy) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed",
+			"step", "candidate_mismatch",
+			"legacy_corp_id", strings.TrimSpace(legacy.CorpID),
+			"legacy_user_id", strings.TrimSpace(legacy.UserID),
+		)
+		return nil, refreshErr
+	}
+	recovered := *legacy
+	if strings.TrimSpace(recovered.UserID) == "" {
+		recovered.UserID = strings.TrimSpace(selected.UserID)
+	}
+	if strings.TrimSpace(recovered.UserName) == "" {
+		recovered.UserName = strings.TrimSpace(selected.UserName)
+	}
+	if recovered.IsAccessTokenValid() {
+		if err := oauthSaveTokenLocked(p.configDir, &recovered); err != nil {
+			logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "save", "error", err)
+			return nil, refreshErr
+		}
+		logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "valid_access_token")
+		return &recovered, nil
+	}
+	if !recovered.IsRefreshTokenValid() {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh_expired")
+		return nil, refreshErr
+	}
+	if strings.TrimSpace(recovered.RefreshToken) == strings.TrimSpace(selected.RefreshToken) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "same_refresh_token")
+		return nil, refreshErr
+	}
+	if err := preflightTokenRefreshPersistence(p.configDir, &recovered); err != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "preflight", "error", err)
+		return nil, refreshErr
+	}
+	refreshed, recoverErr := oauthRefreshToken(p, ctx, &recovered)
+	if recoverErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh", "error", recoverErr)
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "refresh")
+	return refreshed, nil
+}
+
+func legacyGlobalRefreshCandidateMatches(configDir string, selected, legacy *TokenData) bool {
+	if selected == nil || legacy == nil {
+		return false
+	}
+	selectedCorpID := strings.TrimSpace(selected.CorpID)
+	legacyCorpID := strings.TrimSpace(legacy.CorpID)
+	if selectedCorpID == "" || legacyCorpID != selectedCorpID {
+		return false
+	}
+	selectedUserID := strings.TrimSpace(selected.UserID)
+	legacyUserID := strings.TrimSpace(legacy.UserID)
+	if legacyUserID != "" {
+		return legacyUserID == selectedUserID
+	}
+	return legacyGlobalBlankUserIDMatchesSingleProfile(configDir, selectedCorpID, selectedUserID)
+}
+
+func legacyGlobalBlankUserIDMatchesSingleProfile(configDir, corpID, userID string) bool {
+	if strings.TrimSpace(corpID) == "" {
+		return false
+	}
+	cfg, err := tokenLoadProfiles(configDir)
+	if err != nil || cfg == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected", "reason", "profiles_error", "error", err)
+		return false
+	}
+	profiles := profilesForCorpID(cfg, corpID)
+	if len(profiles) != 1 {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+			"reason", "multi_profile",
+			"corp_id", strings.TrimSpace(corpID),
+			"profile_count", len(profiles),
+		)
+		return false
+	}
+	profile := profiles[0]
+	if profile != nil && sameProfileIdentity(profile.CorpID, profile.UserID, corpID, userID) {
+		return true
+	}
+	profileUserID := ""
+	if profile != nil {
+		profileUserID = strings.TrimSpace(profile.UserID)
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+		"reason", "identity_mismatch",
+		"selected_user_id", strings.TrimSpace(userID),
+		"profile_user_id", profileUserID,
+	)
+	return false
+}
+
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an
 // external host, exchanges it for tokens, and persists them.
 func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid string) (*TokenData, error) {
@@ -906,15 +1177,21 @@ func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid stri
 		if err := p.persistKnownLoginToken(tokenData); err != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 		}
+		p.persistAppConfigIfNeeded()
 		return tokenData, nil
 	}
 	if err := p.persistLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+	p.persistAppConfigIfNeeded()
 	return tokenData, nil
 }
 
 func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenData) error {
+	return p.persistLoginTokenWithSecret(ctx, tokenData, "")
+}
+
+func (p *OAuthProvider) persistLoginTokenWithSecret(ctx context.Context, tokenData *TokenData, secret string) error {
 	corpID, userID, userName := "", "", ""
 	if tokenData != nil {
 		corpID = strings.TrimSpace(tokenData.CorpID)
@@ -936,8 +1213,19 @@ func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenD
 		"user_id", strings.TrimSpace(tokenData.UserID),
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
+	if secret != "" {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return withProfilesLock(p.configDir, func() error {
+			return saveTokenDataLockedForSelectorAndSecret(p.configDir, tokenData, RuntimeProfile(), secret)
+		})
 	}
 	if err := oauthSaveToken(p.configDir, tokenData); err != nil {
 		return err
@@ -971,6 +1259,10 @@ func (p *OAuthProvider) persistKnownLoginToken(tokenData *TokenData) error {
 	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
 		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
 	}
+	tokenData.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -990,11 +1282,17 @@ func (p *OAuthProvider) Status() (*TokenData, error) {
 // persistAppConfigIfNeeded saves app credentials if custom ones were used.
 // This ensures the client secret is available for future token refreshes.
 func (p *OAuthProvider) persistAppConfigIfNeeded() {
-	// Check if custom credentials were provided via runtime flags
-	clientID, clientSecret := getRuntimeCredentials()
-	if clientID == "" || clientSecret == "" {
+	if p == nil {
 		return
 	}
+	if p.credentials == nil {
+		p.snapshotCredentialPair()
+	}
+	if p.credentialErr != nil || p.credentials == nil {
+		return
+	}
+	clientID := p.credentials.ClientID
+	clientSecret := p.credentials.ClientSecret
 
 	// Skip if using default placeholder credentials
 	if clientID == DefaultClientID {

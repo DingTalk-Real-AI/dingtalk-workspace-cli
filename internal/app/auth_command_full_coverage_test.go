@@ -14,8 +14,10 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -93,8 +95,8 @@ func TestCrossPlatformCoverageAuthCoverageFormsParentAndTargets(t *testing.T) {
 		t.Fatal("auth parent should render help")
 	}
 	edition.Override(&edition.Hooks{HideAuthLogin: true})
-	if got := buildAuthCommand(nil).Commands(); len(got) != 7 {
-		t.Fatalf("hidden-login subcommands = %d, want 7", len(got))
+	if got := buildAuthCommand(nil).Commands(); len(got) != 9 {
+		t.Fatalf("hidden-login subcommands = %d, want 9", len(got))
 	}
 
 	authRunForm = func(*huh.Form) error { return nil }
@@ -161,9 +163,10 @@ func TestCrossPlatformCoverageAuthCoverageFormsParentAndTargets(t *testing.T) {
 		t.Fatal("manual prompt error should propagate")
 	}
 	authLoginManualCredentialsPrompt = func() (string, string, error) { return "id", "secret", nil }
-	authSaveAppConfig = func(string, *authpkg.AppConfig) error { return errors.New("save") }
-	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err == nil {
-		t.Fatal("app-config save error should propagate")
+	saveCalls := 0
+	authSaveAppConfig = func(string, *authpkg.AppConfig) error { saveCalls++; return errors.New("save") }
+	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err != nil || saveCalls != 0 {
+		t.Fatalf("manual credentials must remain in memory until OAuth succeeds: err=%v saveCalls=%d", err, saveCalls)
 	}
 	authSaveAppConfig = func(string, *authpkg.AppConfig) error { return nil }
 	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err != nil {
@@ -251,8 +254,11 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 		t.Fatal("token save should fail")
 	}
 	authSaveTokenData = func(string, *authpkg.TokenData) error { return nil }
-	if out, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": " token "}); err != nil || !strings.Contains(out, "登录成功") {
-		t.Fatalf("token login = %q, %v", out, err)
+	if out, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": " token "}); err != nil ||
+		!strings.Contains(out, i18n.T("登录成功！")) ||
+		!strings.Contains(out, i18n.T("有效期")) ||
+		!strings.Contains(out, i18n.T("Token 将自动刷新，无需重复登录")) {
+		t.Fatalf("localized token login = %q, %v", out, err)
 	}
 	if out, _, err := authCoverageRunLogin(t, nil, "json", true, map[string]string{"token": "token"}); err != nil || !strings.Contains(out, `"token_valid": true`) {
 		t.Fatalf("json token login = %q, %v", out, err)
@@ -362,7 +368,8 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	authPlanLoginRecommend = func(context.Context, edition.ToolCaller) (*pat.LoginRecommendPlan, error) {
 		return &pat.LoginRecommendPlan{AllGranted: true}, nil
 	}
-	if _, stderr, err := authCoverageRunLogin(t, nil, "table", false, map[string]string{"token": "x"}); err != nil || !strings.Contains(stderr, "全部授权") {
+	if _, stderr, err := authCoverageRunLogin(t, nil, "table", false, map[string]string{"token": "x"}); err != nil ||
+		!strings.Contains(stderr, i18n.T("推荐权限已全部授权或没有可授权项")) {
 		t.Fatalf("all-granted plan = %q, %v", stderr, err)
 	}
 	authPlanLoginRecommend = func(context.Context, edition.ToolCaller) (*pat.LoginRecommendPlan, error) {
@@ -448,17 +455,14 @@ func TestCrossPlatformCoverageAuthCoverageContactEnrichment(t *testing.T) {
 	if err := enrichAuthLoginProfileFromContact(ctx, "cfg", multiOrg, multiOrgData); err != nil || multiOrgData.UserID != "target-user" || multiOrgData.CorpName != "Target Corp" {
 		t.Fatalf("multi-org contact selection = %#v, %v", multiOrgData, err)
 	}
-	if _, ok := contactProfileIdentityFromJSON(
+	if _, ok := authpkg.ContactProfileIdentityFromJSON(
 		[]byte(`{"result":[{"orgEmployeeModel":{"corpId":"other-a","userid":"user-a"}},{"orgEmployeeModel":{"corpId":"other-b","userid":"user-b"}}]}`),
 		"ding",
 	); ok {
 		t.Fatal("multiple nonmatching organizations must not select an arbitrary contact identity")
 	}
-	if _, ok := contactProfileIdentityFromToolResult(nil); ok {
+	if _, ok := authpkg.ContactProfileIdentityFromToolResult(nil); ok {
 		t.Fatal("nil result should not parse")
-	}
-	if got := firstNonEmptyString(" ", " value ", "later"); got != "value" {
-		t.Fatalf("first non-empty = %q", got)
 	}
 }
 
@@ -1096,7 +1100,7 @@ func TestCrossPlatformCoverageAuthCoverageStatusAndLogout(t *testing.T) {
 		return nil, keychain.NewUnavailableError("read", errors.New("status"))
 	}
 	edition.Override(&edition.Hooks{})
-	if out, err := runStatus("table"); err != nil || !strings.Contains(out, "未登录") {
+	if out, err := runStatus("table"); err != nil || !strings.Contains(out, "无法判断") {
 		t.Fatalf("status error = %q, %v", out, err)
 	}
 	if out, err := runStatus("json"); err != nil || !strings.Contains(out, `"authenticated": false`) {
@@ -1432,15 +1436,15 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 		t.Fatal("missing code should fail")
 	}
 	_ = exchange.Flags().Set("code", "code")
-	authOAuthExchange = func(*authpkg.OAuthProvider, context.Context, string, string) (*authpkg.TokenData, error) {
+	testseam.Swap(t, &authExternalExchange, func(context.Context, string, authpkg.ExternalExchangeRequest) (*authpkg.TokenData, error) {
 		return nil, errors.New("exchange")
-	}
+	})
 	if err := exchange.RunE(exchange, nil); err == nil {
 		t.Fatal("exchange error should propagate")
 	}
-	authOAuthExchange = func(*authpkg.OAuthProvider, context.Context, string, string) (*authpkg.TokenData, error) {
-		return &authpkg.TokenData{CorpID: "ding", ExpiresAt: time.Now().Add(time.Hour)}, nil
-	}
+	testseam.Swap(t, &authExternalExchange, func(context.Context, string, authpkg.ExternalExchangeRequest) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{CorpID: "ding", UserID: "user", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	})
 	_ = exchange.Flags().Set("uid", " user ")
 	if err := exchange.RunE(exchange, nil); err != nil || !strings.Contains(out.String(), "ding") {
 		t.Fatalf("exchange = %q, %v", out.String(), err)
@@ -1455,9 +1459,14 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 	removed := 0
 	authDeleteAllTokenData = func(string) error { return nil }
 	authRemove = func(string) error { removed++; return errors.New("ignored") }
-	authDeleteAppConfig = func(string) error { removed++; return errors.New("ignored") }
+	authDeleteAppConfig = func(string) error { removed++; return errors.New("credential cleanup") }
 	edition.Override(&edition.Hooks{})
-	if err := reset.RunE(reset, nil); err != nil || removed != 4 || !strings.Contains(out.String(), "重新登录") {
+	if err := reset.RunE(reset, nil); err == nil || removed != 4 {
+		t.Fatalf("reset credential cleanup = %q, %v, removed=%d", out.String(), err, removed)
+	}
+	authDeleteAppConfig = func(string) error { return nil }
+	removed = 0
+	if err := reset.RunE(reset, nil); err != nil || removed != 3 || !strings.Contains(out.String(), "重新登录") {
 		t.Fatalf("reset = %q, %v, removed=%d", out.String(), err, removed)
 	}
 	edition.Override(&edition.Hooks{IsEmbedded: true})

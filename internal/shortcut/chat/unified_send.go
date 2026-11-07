@@ -36,14 +36,14 @@ var messagesSendReadGroupFile = os.ReadFile
 
 // MessagesSend is the identity-aware common sending entry point. The current
 // user branch reuses the native message leaf's reviewed file-upload flow and
-// existing-mediaId image path. Bot and webhook remain text/Markdown-only
-// because their lower transports do not expose equivalent media contracts.
+// existing-mediaId image path. Bot images and local files reuse the native
+// robot transport; webhook remains limited to text/Markdown.
 var MessagesSend = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-send",
 	Product:     "chat",
 	Description: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
-	Intent:      "当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。文件上传和已有 mediaId 图片仅 current-user 支持，bot/webhook 不支持富媒体。",
+	Intent:      "按身份发送消息；user 的 Markdown 可内联本地图片，先上传并以单条富文本发送。bot/webhook 不支持本地 Markdown 图片。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -65,15 +65,15 @@ var MessagesSend = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
-			UseWhen:      []string{"当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。文件上传和已有 mediaId 图片仅 current-user 支持，bot/webhook 不支持富媒体。"},
-			AvoidWhen:    []string{"需要 bot/webhook 发送媒体、卡片或 thread 回复时不要假设等价支持；改用真实存在的专用下层命令，缺少下层能力时停止"},
+			UseWhen:      []string{"以 user、bot 或 webhook 身份发送消息；user 的 Markdown 正文需要内联本地图片时先上传并发送单条富文本"},
+			AvoidWhen:    []string{"Bot 原生音视频、Webhook 富媒体及任意 Lark Card JSON 未接入；Thread 直接回复使用 +messages-reply --reply-in-thread，A2UI 创建可用 --a2ui-messages，更新仍用 chat message update-a2ui-card"},
 			Examples: []string{
 				"dws chat +messages-send --as user --chat-id <openConversationId> --markdown \"## 周报\" --idempotency-key <key>",
-				"dws chat +messages-send --as user --user <userId> --msg-type file --file ./report.pdf",
+				"dws chat +messages-send --as user --chat-id <openConversationId> --markdown \"结果：![截图](./console.png)\"",
 			},
 		},
 	},
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "identity", Type: shortcut.FlagString, Default: "user", Enum: []string{"user", "bot", "webhook"}, Desc: "发送身份；目标、凭据和幂等参数受发送身份能力矩阵约束"},
 		{Name: "as", Type: shortcut.FlagString, Enum: []string{"user", "bot", "webhook"}, Desc: "--identity 的 lark-cli 对齐别名；受发送身份能力矩阵约束"},
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（user/bot 群聊）；受发送身份能力矩阵约束"},
@@ -83,7 +83,7 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "chat-query", Type: shortcut.FlagString, Desc: "按群名解析唯一群聊（仅 user 的高级发送场景）；受发送身份能力矩阵约束"},
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊接收者 userId（user；包括 --dry-run 也会先通过通讯录搜索精确匹配 openDingTalkId）；受发送身份能力矩阵约束"},
 		{Name: "user-query", Type: shortcut.FlagString, Desc: "按姓名解析唯一 openDingTalkId（仅 user 的高级发送场景）；受发送身份能力矩阵约束"},
-		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊接收者 openDingTalkId（user）；受发送身份能力矩阵约束"},
+		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Aliases: []string{"user-id"}, Desc: "单聊接收者 openDingTalkId（user）；受发送身份能力矩阵约束"},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "批量单聊接收者 userId（bot）；受发送身份能力矩阵约束"},
 		{Name: "open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "批量单聊接收者 openDingTalkId（bot）；受发送身份能力矩阵约束"},
 		// Keep required_when out of Schema: validateMessagesSend already enforces
@@ -93,22 +93,31 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "webhook-token", Type: shortcut.FlagString, Desc: "自定义机器人 Webhook token（identity=webhook 时使用）；受发送身份能力矩阵约束"},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题（不传则从正文生成）"},
 		{Name: "text", Type: shortcut.FlagString, Desc: "纯文本正文"},
-		{Name: "markdown", Type: shortcut.FlagString, Desc: "Markdown 正文"},
-		{Name: "msg-type", Type: shortcut.FlagString, Enum: []string{"text", "markdown", "image", "file", "audio", "video"}, Desc: "内容类型；省略时根据正文、--media-id 或 --file 自动推断"},
+		{Name: "markdown", Type: shortcut.FlagString, Desc: "Markdown 正文；user 可用 ![说明](./image.png) 内联本地图片（不支持引用式图片，dry-run 仅脱敏预览）；bot/webhook 不支持本地图片"},
+		{Name: "msg-type", Type: shortcut.FlagString, Enum: []string{"text", "markdown", "image", "file", "audio", "video", "profile", "share-chat", "a2ui"}, Desc: "内容类型；省略时根据正文、--media-id 或 --file 自动推断"},
 		{Name: "media-id", Type: shortcut.FlagString, Desc: "已有图片 mediaId（仅 user 的 image）"},
-		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内安全相对文件路径（仅 user 的 file/audio/video）"},
+		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内安全相对文件路径（user 的 file/audio/video；bot 仅单目标 file）"},
+		{Name: "a2ui-messages", Type: shortcut.FlagString, Input: []string{"file", "stdin"}, Desc: "user 的 A2UI JSON 字符串数组；与正文/媒体互斥，不接受 Lark Card JSON"},
+		{Name: "card-summary", Type: shortcut.FlagString, Desc: "A2UI 卡片无法渲染时的降级文案；省略时为“互动卡片”，显式空白会被拒绝"},
+		{Name: "support-forward", Type: shortcut.FlagBool, Default: "false", Desc: "允许转发 A2UI 卡片，默认 false；仅用于 --a2ui-messages"},
+		{Name: "biz-card-id", Type: shortcut.FlagString, Desc: "A2UI 业务标识，省略生成；不承诺消息幂等"},
+		{Name: "request-id", Type: shortcut.FlagString, Desc: "A2UI 链路追踪标识，省略生成；不是幂等键"},
+		{Name: "image-url", Type: shortcut.FlagString, Desc: "Bot 图片的 HTTP(S) URL（不接受已有 mediaId）"},
+		{Name: "contact-id", Type: shortcut.FlagString, Desc: "user 发送名片的 openDingTalkId"},
+		{Name: "share-chat-id", Type: shortcut.FlagString, Desc: "user 分享的源群 openConversationId；发送群邀请链接，不是 Lark share_chat 对象"},
+		{Name: "expires-seconds", Type: shortcut.FlagInt, Default: "0", Desc: "群邀请有效期秒数，0 为永久；仅 share-chat 使用"},
 		{Name: "file-path", Type: shortcut.FlagString, Desc: "--file 的兼容别名"},
 		{Name: "uuid", Type: shortcut.FlagString, Desc: "幂等键（仅 user）；受发送身份能力矩阵约束"},
 		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "--uuid 的 lark-cli 对齐别名（仅 user）；受发送身份能力矩阵约束"},
-		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId（user/bot 群聊）"},
+		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId（user/bot 群聊；user 的 a2ui 卡片须与正文 <a atId> 一致）"},
 		{Name: "at-user-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId（bot/webhook）"},
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号（webhook）"},
-		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人"},
+		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人（user 的 a2ui 卡片须与正文 <a atId=\"all\"> 同时出现）"},
 		shortcut.AIMessageTagFlag(),
-	},
+	}, chatDeliveryFlags()...),
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"text", "markdown", "media-id", "file", "file-path"}},
-		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"text", "markdown", "media-id", "file", "file-path"}},
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"text", "markdown", "media-id", "file", "file-path", "image-url", "contact-id", "share-chat-id", "a2ui-messages"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"text", "markdown", "media-id", "file", "file-path", "image-url", "contact-id", "share-chat-id", "a2ui-messages"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"identity", "as"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"group", "chat-id"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"user", "open-dingtalk-id"}},
@@ -129,6 +138,21 @@ var MessagesSend = shortcut.Shortcut{
 }
 
 func validateMessagesSend(rt *shortcut.RuntimeContext) error {
+	if err := prepareChatBody(rt, "text", "markdown"); err != nil {
+		return err
+	}
+	if rt.Bool("wait-delivery") || rt.Str("employee-context") != "" {
+		if messagesSendIdentity(rt) != "user" || (rt.Str("text") == "" && rt.Str("markdown") == "") || (rt.Str("msg-type") != "" && rt.Str("msg-type") != "text" && rt.Str("msg-type") != "markdown") {
+			return fmt.Errorf("delivery options require personal text or Markdown")
+		}
+	}
+	if rt.Str("employee-context") != "" && (rt.StrFirst("chat-id", "group", "chat-query", "user", "user-query") != "") {
+		return fmt.Errorf("employee operator messages require an explicit operator openDingTalkId")
+	}
+	if err := validateEmployeeSend(rt); err != nil {
+		return err
+	}
+
 	identity := messagesSendIdentity(rt)
 	group := rt.StrFirst("chat-id", "group")
 	botGroups, botGroupsErr := messagesSendBotGroups(rt)
@@ -138,7 +162,7 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	chatQuery := rt.Str("chat-query")
 	userID := rt.Str("user")
 	userQuery := rt.Str("user-query")
-	openID := rt.Str("open-dingtalk-id")
+	openID := rt.StrFirst("open-dingtalk-id", "user-id")
 	users := uniqueShortcutStrings(rt.StrSlice("users"))
 	openIDs := uniqueShortcutStrings(rt.StrSlice("open-dingtalk-ids"))
 	atOpenIDs := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids"))
@@ -165,6 +189,9 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	if contentType == "markdown" && rt.Str("text") != "" {
 		return apperrors.NewValidation("--msg-type markdown 必须与 --markdown 一起使用")
 	}
+	if err := validateSendExtensions(rt, identity, contentType); err != nil {
+		return err
+	}
 	switch identity {
 	case "user":
 		targetCount := nonEmptyStringCount(group, chatQuery, userID, userQuery, openID)
@@ -180,7 +207,7 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if (userID != "" || userQuery != "" || openID != "") && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user 单聊不接受 @ 参数；@ 只适用于群聊")
 		}
-		if contentType != "text" && contentType != "markdown" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
+		if contentType != "text" && contentType != "markdown" && contentType != "a2ui" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user image/file/audio/video 当前不接受 @ 参数")
 		}
 		if (group != "" || chatQuery != "") && (contentType == "text" || contentType == "markdown") {
@@ -217,7 +244,7 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 			return apperrors.NewValidation("--uuid 当前仅 user 身份的下层支持")
 		}
 		if !messageIdentitySupportsContent(identity, contentType) {
-			return apperrors.NewValidation("--identity bot 当前下层只支持 text/markdown")
+			return apperrors.NewValidation("--identity bot 支持 text/markdown、image-url 图片和单目标 file；不支持原生音视频、名片或 mediaId 图片")
 		}
 	case "webhook":
 		if chatQuery != "" || userQuery != "" {
@@ -329,6 +356,7 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 	identity := messagesSendIdentity(rt)
 	body := messagesSendBody(rt)
 	title := rt.Str("title")
+	titleExplicit := title != ""
 	if title == "" {
 		title = shortcutMessageTitle(body)
 	}
@@ -341,6 +369,9 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		group, openID, err := messagesSendUserTarget(rt)
 		if err != nil {
 			return err
+		}
+		if contentType == "profile" || contentType == "share-chat" || contentType == "a2ui" {
+			return executeMessagesSendUserShare(rt, group, openID, contentType)
 		}
 		if contentType == "image" {
 			content, _ := json.Marshal(map[string]string{"mediaId": rt.Str("media-id")})
@@ -357,12 +388,62 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		if contentType == "file" || contentType == "audio" || contentType == "video" {
 			return executeMessagesSendUserFile(rt, group, openID, contentType)
 		}
+		if contentType == "text" {
+			body = helpers.NormalizeMessageMentions(body, uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")), rt.Bool("at-all"), true)
+			content, _ := jsonutil.Marshal(map[string]string{"content": body})
+			params := rt.AddAIMessageTag(map[string]any{"msgType": "text", "content": string(content)})
+			addMessagesSendUserTarget(params, group, openID)
+			if ids := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")); len(ids) > 0 {
+				params["atOpenDingTalkIds"] = ids
+			}
+			if rt.Bool("at-all") {
+				params["atAll"] = true
+			}
+			if key := messagesSendIdempotencyKey(rt); key != "" {
+				params["uuid"] = key
+			}
+			return executeUnifiedMessageWrite(rt, "chat", "send_personal_message", params)
+		}
+		if strings.Contains(body, "![") {
+			resolved, report, err := helpers.ResolveMarkdownLocalImages(rt.Command().Context(), body, helpers.MarkdownImageOptions{
+				SafePath: apperrors.SafeInputPath, DryRun: rt.DryRun(),
+			})
+			if err != nil {
+				return err
+			}
+			if report.LocalCount > 0 && !titleExplicit {
+				prefix := strings.TrimSpace(strings.SplitN(body, "![", 2)[0])
+				if prefix == "" {
+					title = "图文消息"
+				} else {
+					title = shortcutMessageTitle(prefix)
+				}
+			}
+			if report.LocalCount > 0 && rt.DryRun() {
+				return rt.Output(map[string]any{
+					"dry_run": true, "executed": false, "preview_kind": "plan",
+					"tool": "send_personal_message", "imageCount": report.LocalCount,
+					"uniquePathCount": report.UniqueCount, "content": "[本地图文内容已脱敏]",
+				})
+			}
+			body = resolved
+		}
 		params := resolvedUserMarkdownParams(rt, ResolvedUserMessageTarget{
 			GroupID:        group,
 			OpenDingTalkID: openID,
 		}, title, body, uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")), rt.Bool("at-all"), messagesSendIdempotencyKey(rt))
 		return executeUnifiedMessageWrite(rt, "chat", "send_personal_message", params)
 	case "bot":
+		contentType, err := messagesSendContentType(rt)
+		if err != nil {
+			return err
+		}
+		if contentType == "image" || contentType == "file" {
+			return executeMessagesSendBotMedia(rt, contentType)
+		}
+		if err := rejectNonUserMarkdownLocalImages(rt, body); err != nil {
+			return err
+		}
 		body = helpers.NormalizeMessageMentions(
 			body,
 			append(
@@ -426,6 +507,9 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		}
 		return executeUnifiedMessageWrite(rt, "bot", "batch_send_robot_msg_to_users", params)
 	case "webhook":
+		if err := rejectNonUserMarkdownLocalImages(rt, body); err != nil {
+			return err
+		}
 		body = helpers.NormalizeMessageMentions(
 			body,
 			append(
@@ -455,6 +539,20 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 	}
 }
 
+func rejectNonUserMarkdownLocalImages(rt *shortcut.RuntimeContext, body string) error {
+	if rt.Str("markdown") == "" || !strings.Contains(body, "![") {
+		return nil
+	}
+	_, report, err := helpers.ResolveMarkdownLocalImages(rt.Command().Context(), body, helpers.MarkdownImageOptions{DryRun: true})
+	if err != nil {
+		return err
+	}
+	if report.LocalCount > 0 {
+		return apperrors.NewValidation("本地 Markdown 图片仅支持 --as user；bot/webhook 不支持本地图片上传")
+	}
+	return nil
+}
+
 func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool string, arguments map[string]any) error {
 	if rt.DryRun() {
 		return rt.Output(map[string]any{
@@ -471,9 +569,15 @@ func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool strin
 			}},
 		})
 	}
+	if err := validateEmployeeSend(rt); err != nil {
+		return err
+	}
 	data, err := rt.CallMCPWriteData(product, tool, arguments)
 	if err != nil {
 		return err
+	}
+	if rt.Bool("wait-delivery") {
+		return helpers.WriteChatDelivery(rt.Command(), data, chatSendConversation(arguments), rt.StrFirst("idempotency-key", "uuid"))
 	}
 	payload := map[string]any{
 		"ok":       true,
@@ -498,6 +602,26 @@ func messagesSendBody(rt *shortcut.RuntimeContext) string {
 func messagesSendContentType(rt *shortcut.RuntimeContext) (string, error) {
 	contentType := strings.ToLower(rt.Str("msg-type"))
 	switch {
+	case rt.Str("a2ui-messages") != "":
+		if contentType != "" && contentType != "a2ui" {
+			return "", apperrors.NewValidation("--a2ui-messages 只支持 a2ui")
+		}
+		return "a2ui", nil
+	case rt.Str("image-url") != "":
+		if contentType != "" && contentType != "image" {
+			return "", apperrors.NewValidation("--image-url 只支持 image")
+		}
+		return "image", nil
+	case rt.Str("contact-id") != "":
+		if contentType != "" && contentType != "profile" {
+			return "", apperrors.NewValidation("--contact-id 只支持 profile")
+		}
+		return "profile", nil
+	case rt.Str("share-chat-id") != "":
+		if contentType != "" && contentType != "share-chat" {
+			return "", apperrors.NewValidation("--share-chat-id 只支持 share-chat")
+		}
+		return "share-chat", nil
 	case rt.Str("media-id") != "":
 		if contentType != "" && contentType != "image" {
 			return "", apperrors.NewValidation("--media-id 只支持 --msg-type image")
@@ -527,7 +651,7 @@ func messagesSendContentType(rt *shortcut.RuntimeContext) (string, error) {
 
 func messagesSendUserTarget(rt *shortcut.RuntimeContext) (group, openID string, err error) {
 	group = rt.StrFirst("chat-id", "group")
-	openID = rt.Str("open-dingtalk-id")
+	openID = rt.StrFirst("open-dingtalk-id", "user-id")
 	if openID != "" || group != "" {
 		return group, openID, nil
 	}
@@ -826,4 +950,9 @@ func shortcutMessageTitle(text string) string {
 
 func init() {
 	shortcut.Register(withReviewedChatShortcutContracts(MessagesSend)...)
+}
+
+func chatSendConversation(arguments map[string]any) string {
+	value, _ := arguments["openConversationId"].(string)
+	return value
 }

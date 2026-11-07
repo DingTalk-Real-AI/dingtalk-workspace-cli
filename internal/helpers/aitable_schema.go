@@ -37,10 +37,10 @@ func aitableSafetyWrite() contract.SafetySpec {
 	}
 }
 
-func aitableSafetyWriteConfirm() contract.SafetySpec {
+func aitableSafetyCreate() contract.SafetySpec {
 	return contract.SafetySpec{
 		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
+		Confirmation: "not_required", Idempotency: "non_idempotent",
 	}
 }
 
@@ -72,6 +72,48 @@ func aitableCompositeInterface(reason string) *contract.InterfaceSpec {
 		Mode:         "composite",
 		Availability: "available",
 		Reason:       reason,
+	}
+}
+
+func aitableDashboardGetResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(`{
+  "type":"object",
+  "description":"get_dashboard 的 MCP 响应信封；Dashboard 元信息保持 MCP 返回的 JSON 类型",
+  "properties":{
+    "data":{
+      "type":"object",
+      "description":"Dashboard 详情",
+      "properties":{
+        "url":{"type":["string","null"],"description":"MCP 返回的仪表盘访问链接，携带 applicationId；显式 null 保留，不代表写后核验完成"},
+        "links":{"type":["array","null"],"description":"仪表盘目标和父级 Base 的访问上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}},
+        "meta":{
+          "description":"决定根布局协议的只读 Dashboard 元信息",
+          "oneOf":[
+            {
+              "type":"object",
+              "properties":{
+                "schemaVersion":{"description":"MCP 返回的原始 JSON 标量；历史 Dashboard 可省略"},
+                "schemaVersionTypeVerified":{"type":"boolean","description":"schemaVersion 是否保留了 storage 中的原始 JSON 标量类型"}
+              },
+              "required":["schemaVersionTypeVerified"],
+              "additionalProperties":true
+            },
+            {"type":"null"}
+          ]
+        }
+      },
+      "required":["meta"],
+      "additionalProperties":true
+    }
+  },
+  "required":["data"],
+  "additionalProperties":true
+}`),
 	}
 }
 
@@ -170,6 +212,135 @@ func aitableGroupedStatsResultSpec() *contract.ResultSpec {
   },
   "required":["results"],
   "additionalProperties":true
+}`),
+	}
+}
+
+func aitableRunAIFieldResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"run_ai_field 的 MCP 响应；仅提交任务，不证明本轮计算完成",
+  "properties":{"data":{"type":"object","description":"AI 字段任务提交结果；已有单元格非空或固定等待结束不能证明本轮完成","properties":{
+    "tasks":{"type":"array","description":"各 AI 字段的独立提交结果；仅 submitted 且真实非空 taskId 确认受理","items":{"type":"object","properties":{
+      "fieldId":{"type":"string","description":"AI 字段 ID"},
+      "taskId":{"type":"string","minLength":1,"pattern":"\\S","description":"服务端真实返回的非空任务 ID；submitted 时必填，只证明受理，不证明计算完成"},
+      "status":{"type":"string","enum":["submitted","conflict","failed","unknown"],"description":"submitted=凭真实非空 taskId 确认受理；conflict=结构化幂等冲突；failed=明确拒绝提交；unknown=受理未知，保留回执且不自动重新触发"},
+      "total":{"type":"integer","description":"任务涉及的记录数"},
+      "error":{"type":"string","description":"冲突、明确拒绝或受理未知时的原始错误信息；不按文案推断冲突"}
+    },"required":["fieldId","status"],"allOf":[{"if":{"properties":{"status":{"const":"submitted","description":"受理已确认状态"}},"required":["status"]},"then":{"required":["taskId"]}}],"additionalProperties":true}},
+    "documentUrl":{"type":"string","description":"查看运行进度和结果的文档链接；本轮终态与目标记录结果可读仍需独立核验"}
+  },"required":["tasks"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableRecordIDsResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: aitableResultSchemaWithDryRun("query_record_ids 的业务结果或 dry-run 请求预览", json.RawMessage(`{
+  "type":"object","description":"query_record_ids 的当前页业务数据；续页状态位于 meta.pagination",
+  "properties":{
+    "recordIds":{"type":"array","description":"按表内顺序返回的记录 ID","items":{"type":"string"}}
+  },
+  "required":["recordIds"],"additionalProperties":true
+}`)),
+	}
+}
+
+func aitableCreateSubRecordsResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"create_sub_records 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"子记录创建结果","properties":{
+    "recordIds":{"type":"array","description":"按输入顺序返回的子记录 ID","items":{"type":"string"}},
+    "hierarchyFieldId":{"type":"string","description":"实际使用的层级关联字段 ID"},
+    "parentRecordId":{"type":"string","description":"父记录 ID 回显"}
+  },"required":["recordIds","hierarchyFieldId","parentRecordId"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableSubmitFormResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"submit_form 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"表单提交后生成的记录标识","properties":{
+    "baseId":{"type":"string","description":"Base ID 回显"},
+    "tableId":{"type":"string","description":"Table ID 回显"},
+    "viewId":{"type":"string","description":"表单视图 ID 回显"},
+    "rowId":{"type":"string","description":"提交后生成的记录 ID"},
+    "version":{"type":"integer","description":"提交后的数据版本号"}
+  },"required":["baseId","tableId","viewId","rowId","version"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableRemoveAttachmentsResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"remove_attachments 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"附件删除结果","properties":{
+    "removedCount":{"type":"integer","description":"本次删除的附件总数"},
+    "affectedFieldIds":{"type":"array","description":"发生删除或清空的附件字段 ID","items":{"type":"string"}}
+  },"required":["removedCount","affectedFieldIds"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableCreateFormResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"create_form_view 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"新建表单视图的标识","properties":{
+    "baseId":{"type":"string","description":"Base ID 回显"},
+    "tableId":{"type":"string","description":"Table ID 回显"},
+    "viewId":{"type":"string","description":"新建的表单视图 ID"},
+    "url":{"type":["string","null"],"description":"表单管理访问链接，携带 sheetId/viewId；显式 null 保留，实际定位由 Web 页面处理"},
+    "links":{"type":["array","null"],"description":"表单对象与父级上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}}
+  },"required":["baseId","tableId","viewId"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableNotifyShareFormResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"notify_share_form_recipients 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"表单通知发送结果","properties":{
+    "baseId":{"type":"string","description":"Base ID 回显"},
+    "tableId":{"type":"string","description":"Table ID 回显"},
+    "viewId":{"type":"string","description":"表单视图 ID 回显"},
+    "recipients":{"type":"array","description":"本次催填目标的当前组织 userId，按实际成员去重；不证明各渠道已送达","items":{"type":"string"}},
+    "sentAt":{"type":"string","description":"服务端记录的发送时间"}
+  },"required":["baseId","tableId","viewId","recipients","sentAt"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
+}`),
+	}
+}
+
+func aitableHiddenFieldsResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type":"object","description":"get_hidden_fields_of_view 的 MCP 响应",
+  "properties":{"data":{"type":"object","description":"视图隐藏字段结果","properties":{
+    "baseId":{"type":"string","description":"Base ID 回显"},
+    "tableId":{"type":"string","description":"Table ID 回显"},
+    "viewId":{"type":"string","description":"视图 ID 回显"},
+    "hiddenFieldIds":{"type":"array","description":"当前视图隐藏的字段 ID","items":{"type":"string"}}
+  },"required":["baseId","tableId","viewId","hiddenFieldIds"],"additionalProperties":true}},
+  "required":["data"],"additionalProperties":true
 }`),
 	}
 }

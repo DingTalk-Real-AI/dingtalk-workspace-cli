@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/common-types-extended.json",
+  "title": "DingTalk AICard Protocol V0.8 Extended Common Types",
+  "description": "DingTalk extended common types for dynamic objects, host arguments and write-back constraints. Result schemas are documented with each host function. See ./common-types-basic.json for basic types and ./common-types-visual.json for colors, font sizes and icons. Read the referenced definitions when basic components use extended types. The DingTalk AICard Protocol V0.8 is split into shards for selective loading. Consumers must assemble and validate the files required by the selected scope.",
+  "$defs": {
+    "LiteralObject": {
+      "type": "object",
+      "description": "Plain object literal. Objects containing `call` are reserved for function calls, while objects whose only key is `path` are reserved for bindings, preventing ambiguous matches with dynamic expressions.",
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "call"
+            ]
+          },
+          {
+            "required": [
+              "path"
+            ],
+            "maxProperties": 1
+          }
+        ]
+      }
+    },
+    "HostStaticValueTree": {
+      "description": "Constraints on the evaluation phase of the host parameter subtree; the actual value type, path, and expression legality are still checked by the existing runtime.",
+      "additionalProperties": {
+        "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+      },
+      "items": {
+        "$ref": "./common-types-extended.json#/$defs/HostStaticValueTree"
+      }
+    },
+    "HostCompiledValueTree": {
+      "description": "Constraints on the evaluation phase of the host parameter subtree; the actual value type, path, and expression legality are still checked by the existing runtime.",
+      "additionalProperties": {
+        "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+      },
+      "items": {
+        "$ref": "./common-types-extended.json#/$defs/HostCompiledValueTree"
+      },
+      "not": {
+        "type": "object",
+        "properties": {
+          "call": {
+            "not": {
+              "enum": [
+                "eq",
+                "ne",
+                "lt",
+                "lte",
+                "gt",
+                "gte",
+                "add",
+                "sub",
+                "mul",
+                "div",
+                "mod",
+                "cond",
+                "and",
+                "or",
+                "not",
+                "objectGet",
+                "arrayGet",
+                "arrayFind",
+                "getLength",
+                "toDouble",
+                "toLong"
+              ]
+            }
+          }
+        },
+        "required": [
+          "call"
+        ]
+      }
+    },
+    "HostResultPath": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^/ui/(?=[^/]*[A-Za-z_-])[A-Za-z0-9_-]+(?:/(?=[^/]*[A-Za-z_-])[A-Za-z0-9_-]+){0,14}$",
+      "description": "Result write-back path. Only object keys under `/ui/` are allowed, with a maximum of 256 ASCII characters and 16 segments including `ui`. Empty segments, all-numeric segments, and escape sequences are prohibited."
+    },
+    "HostActionBinding": {
+      "type": "object",
+      "properties": {
+        "resultPath": {
+          "$ref": "./common-types-extended.json#/$defs/HostResultPath"
+        }
+      },
+      "required": [
+        "resultPath"
+      ],
+      "additionalProperties": false
+    },
+    "HostActionOwner": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "action": {
+                                "$ref": "./common-types-extended.json#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "action"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onComplete": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onComplete"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onComplete": {
+                                "$ref": "./common-types-extended.json#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onComplete"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onLinkClick": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onLinkClick"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onLinkClick": {
+                                "$ref": "./common-types-extended.json#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onLinkClick"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onPreview": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onPreview"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onPreview": {
+                                "$ref": "./common-types-extended.json#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onPreview"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "onTap": {
+                "type": "object",
+                "properties": {
+                  "functionCall": {
+                    "type": "object",
+                    "properties": {
+                      "call": {
+                        "enum": [
+                          "copyText",
+                          "openChat",
+                          "previewImages",
+                          "previewVideo",
+                          "promptText",
+                          "showConfirm",
+                          "showModal"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "call"
+                    ]
+                  }
+                },
+                "required": [
+                  "functionCall"
+                ]
+              }
+            },
+            "required": [
+              "onTap"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "extensions": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^dt_actionBindings(?!V1$)": false
+                        },
+                        "properties": {
+                          "dt_actionBindingsV1": {
+                            "type": "object",
+                            "properties": {
+                              "onTap": {
+                                "$ref": "./common-types-extended.json#/$defs/HostActionBinding"
+                              }
+                            },
+                            "required": [
+                              "onTap"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

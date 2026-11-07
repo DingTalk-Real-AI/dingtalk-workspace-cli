@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/common-types-visual.json",
+  "title": "DingTalk AICard Protocol V0.8 Visual Common Types",
+  "description": "DingTalk visual common types defining ColorToken, SizeToken and IconName. Read entries for the color, font-size and icon fields actually used by the components; this grouping introduces no new style fields or runtime capabilities. The DingTalk AICard Protocol V0.8 is split into shards for selective loading. Consumers must assemble and validate the files required by the selected scope.",
+  "$defs": {
+    "SizeToken": {
+      "type": "string",
+      "description": "DDesign native font size Token ID, used for Text.sizeToken. Prefer selecting IDs with the __font_size suffix according to specific usage; the actual font size is parsed by the current host, and consistent cross-platform font size or line height is not guaranteed, nor will a UIFont style with the same name be automatically applied. Design names like font-size/body, style names without suffixes, and __line_height keys are not font size IDs here.",
+      "anyOf": [
+        {
+          "const": "common_largetitle_text_style__font_size",
+          "description": "Main title, used as the heading for a page or major content section."
+        },
+        {
+          "const": "common_supertitle_text_style__font_size",
+          "description": "Extra-large title, used as the main title for a page or module."
+        },
+        {
+          "const": "common_h1_text_style__font_size",
+          "description": "Level 1 heading, used for card or content area titles."
+        },
+        {
+          "const": "common_h2_text_style__font_size",
+          "description": "Level 2 heading, used for content-group headings."
+        },
+        {
+          "const": "common_h3_text_style__font_size",
+          "description": "Level 3 heading, used for smaller-level content titles."
+        },
+        {
+          "const": "common_h4_text_style__font_size",
+          "description": "Level 4 heading, used for subheadings or supplementary information under a heading."
+        },
+        {
+          "const": "common_body_text_style__font_size",
+          "description": "Main text, used for the primary content."
+        },
+        {
+          "const": "common_action_text_style__font_size",
+          "description": "Action text, used for buttons, links, and other operational copy."
+        },
+        {
+          "const": "common_description_text_style__font_size",
+          "description": "Auxiliary explanation, used for secondary information and supplementary notes."
+        },
+        {
+          "const": "common_footnote_text_style__font_size",
+          "description": "Footnotes, used for sources, notes, image captions, or status tags."
+        },
+        {
+          "const": "common_tiny_text_style__font_size",
+          "description": "Small text prompts, used as subtle hints in space-constrained scenarios."
+        },
+        {
+          "const": "common_subhead_text_style__font_size",
+          "description": "Subtitle, used for supplementary information below the title."
+        },
+        {
+          "type": "string",
+          "description": "Retain existing string inputs. The above items are selection descriptions for known native Tokens, not a closed enumeration. Other Tokens must be confirmed registered by the host. Schema accepting a string does not mean the Token is available; if the host cannot find it, it will fall back to the variant slot."
+        }
+      ],
+      "examples": [
+        "common_largetitle_text_style__font_size",
+        "common_supertitle_text_style__font_size",
+        "common_h1_text_style__font_size",
+        "common_h2_text_style__font_size",
+        "common_h3_text_style__font_size",
+        "common_h4_text_style__font_size",
+        "common_body_text_style__font_size",
+        "common_action_text_style__font_size",
+        "common_description_text_style__font_size",
+        "common_footnote_text_style__font_size",
+        "common_tiny_text_style__font_size",
+        "common_subhead_text_style__font_size"
+      ]
+    },
+    "ColorToken": {
+      "type": "string",
+      "description": "Only the 57 Token IDs listed in the table below are allowed, with case-sensitive names. The description explains their purpose and state semantics; the actual color values and transparency are interpreted by the host according to the current platform and theme, and this protocol does not fix the color values.",
+      "enum": [
+        "extended_yellow0_color",
+        "extended_yellow1_color",
+        "extended_yellow6_color",
+        "extended_orange0_color",
+        "extended_orange1_color",
+        "extended_orange6_color",
+        "extended_red0_color",
+        "extended_red1_color",
+        "extended_red6_color",
+        "extended_magenta0_color",
+        "extended_magenta1_color",
+        "extended_magenta6_color",
+        "extended_purple0_color",
+        "extended_purple1_color",
+        "extended_purple6_color",
+        "extended_deeppurple0_color",
+        "extended_deeppurple1_color",
+        "extended_deeppurple6_color",
+        "extended_blue0_color",
+        "extended_blue1_color",
+        "extended_blue6_color",
+        "extended_darkgreen0_color",
+        "extended_darkgreen1_color",
+        "extended_darkgreen6_color",
+        "extended_green0_color",
+        "extended_green1_color",
+        "extended_green6_color",
+        "common_level1_base_color",
+        "common_level2_base_color",
+        "common_level3_base_color",
+        "common_level4_base_color",
+        "common_stamp_color",
+        "common_link_color",
+        "common_bg_color",
+        "common_fg_z1_color",
+        "common_line_light_color",
+        "common_line_hard_color",
+        "common_red1_color",
+        "common_orange1_color",
+        "common_green1_color",
+        "common_white1_color",
+        "common_white2_color",
+        "common_white3_color",
+        "common_white4_color",
+        "common_white5_color",
+        "common_white6_color",
+        "common_black1_color",
+        "common_black2_color",
+        "common_black3_color",
+        "common_black4_color",
+        "common_black5_color",
+        "common_black6_color",
+        "theme_primary3_color",
+        "theme_primary2_color",
+        "theme_primary_hover_color",
+        "theme_primary1_color",
+        "theme_primary_press_color"
+      ],
+      "oneOf": [
+        {
+          "const": "extended_yellow0_color",
+          "description": "Yellow background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_yellow1_color",
+          "description": "Yellow border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_yellow6_color",
+          "description": "Yellow text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "extended_orange0_color",
+          "description": "Orange background color; used for area background filling in this color scheme."
+        },
+        {
+          "const": "extended_orange1_color",
+          "description": "Orange border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_orange6_color",
+          "description": "Orange text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "extended_red0_color",
+          "description": "Red background color; used for background filling in areas of this color series."
+        },
+        {
+          "const": "extended_red1_color",
+          "description": "Red border color; used for the stroke of areas in this color scheme."
+        },
+        {
+          "const": "extended_red6_color",
+          "description": "Red text color; used for emphasizing text in this color scheme."
+        },
+        {
+          "const": "extended_magenta0_color",
+          "description": "Magenta background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_magenta1_color",
+          "description": "Magenta border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_magenta6_color",
+          "description": "Magenta text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "extended_purple0_color",
+          "description": "Purple background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_purple1_color",
+          "description": "Purple border color; used for the stroke of areas in this color scheme."
+        },
+        {
+          "const": "extended_purple6_color",
+          "description": "Purple text color; used for emphasizing text in this color scheme."
+        },
+        {
+          "const": "extended_deeppurple0_color",
+          "description": "Deep purple background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_deeppurple1_color",
+          "description": "Deep purple border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_deeppurple6_color",
+          "description": "Deep purple text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "extended_blue0_color",
+          "description": "Blue background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_blue1_color",
+          "description": "Blue border color; used for the stroke of areas in this color scheme."
+        },
+        {
+          "const": "extended_blue6_color",
+          "description": "Blue text color; used for emphasizing text in this color scheme."
+        },
+        {
+          "const": "extended_darkgreen0_color",
+          "description": "Dark green background color; used for area background filling in this color scheme."
+        },
+        {
+          "const": "extended_darkgreen1_color",
+          "description": "Dark green border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_darkgreen6_color",
+          "description": "Dark green text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "extended_green0_color",
+          "description": "Green background color; used for background filling in areas of this color scheme."
+        },
+        {
+          "const": "extended_green1_color",
+          "description": "Green border color; used for outlining areas of this color scheme."
+        },
+        {
+          "const": "extended_green6_color",
+          "description": "Green text color; used for text emphasis in this color scheme."
+        },
+        {
+          "const": "common_level1_base_color",
+          "description": "Primary text and icons; used for titles, body text, and other main information."
+        },
+        {
+          "const": "common_level2_base_color",
+          "description": "Secondary text and icons; used for secondary information and auxiliary icons."
+        },
+        {
+          "const": "common_level3_base_color",
+          "description": "Tertiary text and icons; used for weaker supplementary information."
+        },
+        {
+          "const": "common_level4_base_color",
+          "description": "Text and icon color in a disabled state; only conveys visual state."
+        },
+        {
+          "const": "common_stamp_color",
+          "description": "Watermark color; used for low-interference watermark content."
+        },
+        {
+          "const": "common_link_color",
+          "description": "Hyperlink text and highlight border color."
+        },
+        {
+          "const": "common_bg_color",
+          "description": "Background color of the area; used for the background of a page or content area."
+        },
+        {
+          "const": "common_fg_z1_color",
+          "description": "Foreground area background color; used for content areas on top of the base background."
+        },
+        {
+          "const": "common_line_light_color",
+          "description": "Weak divider; used for lighter content separation."
+        },
+        {
+          "const": "common_line_hard_color",
+          "description": "Strong divider line; used for content separation where a clearer boundary is needed."
+        },
+        {
+          "const": "common_red1_color",
+          "description": "Danger state color; used to convey dangerous or erroneous semantics."
+        },
+        {
+          "const": "common_orange1_color",
+          "description": "Warning state color; used for prompts that require the user's attention."
+        },
+        {
+          "const": "common_green1_color",
+          "description": "Success state color; used for success or completion feedback."
+        },
+        {
+          "const": "common_white1_color",
+          "description": "White mask; used for white overlay, actual transparency is determined by the host theme resources."
+        },
+        {
+          "const": "common_white2_color",
+          "description": "White mask (designed as 40% level); used for white overlays, actual transparency is determined by the host theme resources."
+        },
+        {
+          "const": "common_white3_color",
+          "description": "White mask (designed as 30% level); used for white overlays, actual transparency is determined by the host theme resources."
+        },
+        {
+          "const": "common_white4_color",
+          "description": "White mask (designed as 20% level); used for white overlays, actual transparency is interpreted according to the host theme resources."
+        },
+        {
+          "const": "common_white5_color",
+          "description": "White mask (designed as 10% level); used for white overlay, actual transparency is interpreted according to the host theme resources."
+        },
+        {
+          "const": "common_white6_color",
+          "description": "White mask (designed as 5% level); used for white overlay, actual transparency is interpreted according to the host theme resources."
+        },
+        {
+          "const": "common_black1_color",
+          "description": "Black mask; used for black overlay, actual transparency is determined by the host theme resources."
+        },
+        {
+          "const": "common_black2_color",
+          "description": "Black mask (designed as 40% level); used for black overlays, actual opacity is determined by the host theme resources."
+        },
+        {
+          "const": "common_black3_color",
+          "description": "Black mask (designed as 30% level); used for black overlays, actual transparency is resolved according to the host theme resources."
+        },
+        {
+          "const": "common_black4_color",
+          "description": "Black mask (designed as 20% level); used for black overlays, actual transparency is interpreted according to the host theme resources."
+        },
+        {
+          "const": "common_black5_color",
+          "description": "Black mask (designed as 10% level); used for black overlays, actual opacity is interpreted according to the host theme resources."
+        },
+        {
+          "const": "common_black6_color",
+          "description": "Black mask (designed as 5% level); used for black overlays, actual transparency is determined by the host theme resources."
+        },
+        {
+          "const": "theme_primary3_color",
+          "description": "Theme background color; used for the background of areas that carry the theme style."
+        },
+        {
+          "const": "theme_primary2_color",
+          "description": "Light theme color; used for lighter theme color highlights and auxiliary decoration."
+        },
+        {
+          "const": "theme_primary_hover_color",
+          "description": "Theme hover color; used for the visual feedback of the theme color when the pointer hovers."
+        },
+        {
+          "const": "theme_primary1_color",
+          "description": "Theme primary color; used for main theme emphasis."
+        },
+        {
+          "const": "theme_primary_press_color",
+          "description": "Theme pressed color; used for the visual feedback of the theme color when pressed."
+        }
+      ]
+    },
+    "IconName": {
+      "type": "string",
+      "description": "Common type `IconName`: 24 case-sensitive public font-icon names referenced by `Icon.name`. The descriptions below preserve each icon's intended visual meaning and usage from the design mock.",
+      "oneOf": [
+        {
+          "const": "Search_L_outlined",
+          "description": "Search. Used for searching, searching content, searching files, searching images."
+        },
+        {
+          "const": "Language_L_outlined",
+          "description": "Language-switch icon. Used for web search in the design mock."
+        },
+        {
+          "const": "CodeProgram_L_outlined",
+          "description": "Code. Used to run commands in a terminal."
+        },
+        {
+          "const": "Picture_L_outlined",
+          "description": "Image. Used to generate images."
+        },
+        {
+          "const": "Folder_L_outlined",
+          "description": "Folder. Used for reading files."
+        },
+        {
+          "const": "Edit_L_outlined",
+          "description": "Edit or pen icon. Used for writing and creating files."
+        },
+        {
+          "const": "ListView_L_outlined",
+          "description": "List View 1. Used to list files."
+        },
+        {
+          "const": "ManagementBackground_L_outlined",
+          "description": "Admin console icon. The design mock uses it for browser access."
+        },
+        {
+          "const": "Tool_L_outlined",
+          "description": "Tools. Used to call tools, Workspace toolset, MCP toolset, DWS toolset, MCP invocation, and general fallback."
+        },
+        {
+          "const": "Delete_L_outlined",
+          "description": "Delete. Used for file deletion."
+        },
+        {
+          "const": "SpinLoading_L_outlined",
+          "description": "Loading spinner icon. Used for Skill loading and other loading states; the icon name itself does not enable a rotation animation."
+        },
+        {
+          "const": "UploadOne_L_outlined",
+          "description": "Upload. Used for file upload."
+        },
+        {
+          "const": "DownloadAndSave_L_outlined",
+          "description": "Download and save. Used for file downloads."
+        },
+        {
+          "const": "Check_L_outlined",
+          "description": "Check mark. Used to indicate completion or success."
+        },
+        {
+          "const": "Copy_L_outlined",
+          "description": "Copy. Used to copy text, content, or results."
+        },
+        {
+          "const": "Close_L_outlined",
+          "description": "Close, cross. Used to close pop-ups, panels, or pages."
+        },
+        {
+          "const": "More_L_outlined",
+          "description": "More, ellipsis, three dots. Used to open more action menus."
+        },
+        {
+          "const": "Error_L_outlined",
+          "description": "Warning, error reminder, circle with exclamation mark. Used to indicate operation failure or abnormal status."
+        },
+        {
+          "const": "InformationThere_L_outlined",
+          "description": "Information prompt, circular letter i. Used to display instructions or additional information."
+        },
+        {
+          "const": "Setting_L_outlined",
+          "description": "Settings, gear. Used to open settings or adjust configurations."
+        },
+        {
+          "const": "ExpandThere_L_outlined",
+          "description": "Expand. Used to enlarge the content area or expand the panel."
+        },
+        {
+          "const": "Collapse_L_outlined",
+          "description": "Collapse. Used to minimize the content area or collapse the panel."
+        },
+        {
+          "const": "Link_L_outlined",
+          "description": "Link, chain. Used to insert a link or open a related address."
+        },
+        {
+          "const": "Share_L_outlined",
+          "description": "Share, forward. Used for sharing content, conversations, or results."
+        }
+      ]
+    }
+  }
+}

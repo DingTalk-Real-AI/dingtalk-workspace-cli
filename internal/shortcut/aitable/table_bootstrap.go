@@ -5,8 +5,11 @@ package aitable
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -35,7 +38,7 @@ var TableBootstrap = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新数据表名称", Required: true},
-		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config", Required: true},
+		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config，可选 description/aiConfig", Required: true},
 	},
 	Tips: []string{
 		`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`,
@@ -46,9 +49,107 @@ var TableBootstrap = shortcut.Shortcut{
 }
 
 type createdTableStructure struct {
-	TableID  string
-	Fields   []map[string]any
-	Warnings []string
+	TableID    string
+	Fields     []map[string]any
+	Warnings   []string
+	Navigation map[string]any
+}
+
+var bootstrapFieldAllowedKeys = map[string]bool{
+	"fieldName":   true,
+	"type":        true,
+	"config":      true,
+	"description": true,
+	"aiConfig":    true,
+}
+
+func validateBootstrapField(raw any, path string) (string, error) {
+	field, ok := raw.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("%s 必须是 JSON 对象", path)
+	}
+	unknown := make([]string, 0)
+	for key := range field {
+		if !bootstrapFieldAllowedKeys[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return "", fmt.Errorf("%s 包含未知属性 %q；只允许 fieldName、type、config、description、aiConfig", path, unknown[0])
+	}
+
+	name, ok := field["fieldName"].(string)
+	name = strings.TrimSpace(name)
+	fieldType, typeOK := field["type"].(string)
+	if !ok || name == "" || !typeOK || strings.TrimSpace(fieldType) == "" {
+		return "", fmt.Errorf("%s 必须包含非空字符串 fieldName 和 type", path)
+	}
+	if err := aitableprotocol.ValidateFieldName(field["fieldName"].(string)); err != nil {
+		return "", fmt.Errorf("%s.fieldName: %w", path, err)
+	}
+	if config, exists := field["config"]; exists {
+		if _, ok := config.(map[string]any); !ok {
+			return "", fmt.Errorf("%s.config 必须是 JSON 对象", path)
+		}
+	}
+	if raw, exists := field["aiConfig"]; exists {
+		cfg, ok := raw.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("%s.aiConfig 必须是 JSON 对象", path)
+		}
+		// Shared with create_fields, which supports builtin configurations.
+		// create_table capability checks run separately before any writes.
+		if cfg["type"] != "builtin" {
+			prompt, ok := cfg["prompt"].([]any)
+			if !ok || len(prompt) == 0 {
+				return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
+			}
+			for _, raw := range prompt {
+				part, ok := raw.(map[string]any)
+				if !ok {
+					return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
+				}
+				switch part["type"] {
+				case "text":
+					if stringValue(part, "value") == "" {
+						return "", fmt.Errorf("prompt text 片段需要 value")
+					}
+				case "fieldRef":
+					if stringValue(part, "fieldId") == "" {
+						return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+					}
+				default:
+					return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
+				}
+			}
+			expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
+			if expected == "" || expected != fieldType {
+				return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
+			}
+		}
+	}
+	if description, exists := field["description"]; exists {
+		if _, ok := description.(string); !ok {
+			return "", fmt.Errorf("%s.description 必须是字符串", path)
+		}
+	}
+	return name, nil
+}
+
+// create_table does not accept builtin aiConfig or object output. Keep that
+// capability on create_fields/update_field, including the legacy config shape.
+func validateCreateTableCapabilities(fields []any, path string) error {
+	for index, raw := range fields {
+		field, _ := raw.(map[string]any)
+		aiConfig, _ := field["aiConfig"].(map[string]any)
+		config, _ := field["config"].(map[string]any)
+		decorator, _ := config["decoratorConfigs"].(map[string]any)
+		if field["type"] == "object" || aiConfig["type"] == "builtin" || decorator["type"] == "builtin" {
+			return fmt.Errorf("%s[%d] 的 builtin 配置或 object 字段不支持组合建表；请先创建普通表，再用 field create 或 field update 配置内置 AI 字段", path, index)
+		}
+	}
+	return nil
 }
 
 func parseBootstrapFields(raw string) ([]any, error) {
@@ -65,36 +166,35 @@ func parseBootstrapFields(raw string) ([]any, error) {
 	}
 	seen := map[string]bool{}
 	for index, rawField := range fields {
-		field, ok := rawField.(map[string]any)
-		name := strings.TrimSpace(stringValue(field, "fieldName", "name"))
-		if !ok || name == "" || strings.TrimSpace(stringValue(field, "type")) == "" {
-			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d] 必须包含 fieldName 和 type", index))
+		name, err := validateBootstrapField(rawField, fmt.Sprintf("--fields[%d]", index))
+		if err != nil {
+			return nil, tableBootstrapValidation(err.Error())
 		}
 		if seen[name] {
 			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].fieldName %q 不能重复", index, name))
 		}
 		seen[name] = true
-		if config, exists := field["config"]; exists {
-			if _, ok := config.(map[string]any); !ok {
-				return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].config 必须是 JSON 对象", index))
-			}
-		}
 	}
 	return fields, nil
 }
 
 func tableBootstrapValidation(message string) error {
 	return apperrors.NewValidation(message,
-		apperrors.WithHint("字段对象使用 fieldName/type/config；已知参数时直接执行，不需要先调用 --help"),
+		apperrors.WithHint("字段对象使用 fieldName/type/config，可选 description/aiConfig；已知参数时直接执行，不需要先调用 --help"),
 		apperrors.WithActions(`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`),
 		apperrors.WithAvailableFlags("base-id", "name", "fields"),
 	)
 }
 
+// executeTableBootstrap publishes navigation only after the new table and its
+// declared fields pass independent readback; failures retain the recovery ID.
 func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	fields, err := parseBootstrapFields(rt.Str("fields"))
 	if err != nil {
 		return err
+	}
+	if err := validateCreateTableCapabilities(fields, "--fields"); err != nil {
+		return tableBootstrapValidation(err.Error())
 	}
 	baseID, tableName := rt.Str("base-id"), rt.Str("name")
 	result := newCompositeResult("table_bootstrap")
@@ -129,10 +229,14 @@ func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	result.CompletedSteps = []compositeStep{{Index: 1, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(fields), Result: map[string]any{"tableId": created.TableID, "fieldCount": len(created.Fields)}}}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableId": created.TableID, "fieldCount": len(created.Fields)}
 	result.Result = map[string]any{"baseId": baseID, "tableId": created.TableID, "tableName": tableName, "fields": created.Fields}
+	aitablenavigation.Preserve(result.Result, created.Navigation)
 	result.NextCommand = ""
 	return rt.Output(result)
 }
 
+// createAndVerifyTableStructure creates once, reads back the returned ID and
+// fields, and retains server navigation without another request. Navigation
+// never substitutes for table identity or field-structure verification.
 func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableName string, fields []any) (createdTableStructure, error) {
 	created := createdTableStructure{}
 	initialEnd := minInt(15, len(fields))
@@ -154,13 +258,16 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 			created.Warnings = append(created.Warnings, fmt.Sprintf("create_fields offset %d returned an error; final read-back decides success: %v", offset, fieldErr))
 		}
 	}
-	detail, err := rt.CallMCPData(serverMain, "get_tables", map[string]any{"baseId": baseID, "tableIds": []string{created.TableID}})
-	if err != nil || !deepContainsString(detail, created.TableID) {
-		if err == nil {
-			err = fmt.Errorf("get_tables does not identify created tableId %s", created.TableID)
-		}
+	table, err := verifyCreatedTableEventually(rt, baseID, created.TableID)
+	if err != nil {
 		return created, err
 	}
+	// Readback navigation wins per key. Older readers can omit it, in which
+	// case only server-provided creation navigation fills the missing keys.
+	// Explicit null/empty readback values are preserved rather than replaced.
+	created.Navigation = map[string]any{}
+	aitablenavigation.Preserve(created.Navigation, table)
+	aitablenavigation.Preserve(created.Navigation, parityResponseObject(createData))
 	fieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": created.TableID})
 	created.Fields, _ = findNamedObjectList(fieldsData, "fields", "fieldList")
 	if err == nil && created.Fields == nil {

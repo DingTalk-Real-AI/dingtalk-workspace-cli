@@ -175,7 +175,8 @@ fi
 remote_tag_commit() {
   local refs_file="${tmp_dir}/remote-refs"
   if ! run_bounded git ls-remote "$GITEE_PUBLIC_GIT_REMOTE" \
-    "refs/tags/${VERSION}" "refs/tags/${VERSION}^{}" >"$refs_file"; then
+    "refs/tags/${VERSION}" "refs/tags/${VERSION}^{}" \
+    refs/heads/main >"$refs_file"; then
     printf 'error: could not query Gitee tag %s\n' "$VERSION" >&2
     return 1
   fi
@@ -198,6 +199,16 @@ if [ "$remote_commit" = "$target_commit" ]; then
 fi
 if [ -n "$remote_commit" ]; then
   err "Gitee tag ${VERSION} already points to ${remote_commit}; refusing to move it to ${target_commit}"
+fi
+
+# Reuse objects reachable from localized main without fetching unrelated branches.
+# The tag lookup also captured main, so an empty mirror needs no extra query.
+remote_main_commit="$(awk '$2 == "refs/heads/main" { print $1 }' "${tmp_dir}/remote-refs")"
+if [ -n "$remote_main_commit" ]; then
+  if ! run_bounded git fetch --no-tags "$GITEE_PUBLIC_GIT_REMOTE" \
+    '+refs/heads/main:refs/remotes/gitee/main'; then
+    err "could not fetch Gitee main for object reuse; tag ${VERSION} push was not attempted"
+  fi
 fi
 
 echo "   Pushing missing Gitee tag ${VERSION} -> ${target_commit}"

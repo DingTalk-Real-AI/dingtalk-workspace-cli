@@ -11,6 +11,7 @@ import (
 // CompareVersions compares two semver strings (e.g. "1.0.5", "v1.0.6-beta").
 // Returns -1 if a < b, 0 if equal, 1 if a > b.
 // Stable releases sort after prereleases with the same numeric version.
+// Build metadata ("+...") is ignored, as SemVer precedence requires.
 func CompareVersions(a, b string) int {
 	va := parseVersion(a)
 	vb := parseVersion(b)
@@ -37,6 +38,7 @@ type parsedVersion struct {
 
 func parseVersion(v string) parsedVersion {
 	v = strings.TrimPrefix(v, "v")
+	v, _, _ = strings.Cut(v, "+")
 	var prerelease string
 	if idx := strings.IndexByte(v, '-'); idx >= 0 {
 		prerelease = v[idx+1:]

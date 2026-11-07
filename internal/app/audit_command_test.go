@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestAuditTailRejectsNonPositiveLines(t *testing.T) {
@@ -13,7 +15,7 @@ func TestAuditTailRejectsNonPositiveLines(t *testing.T) {
 		cmd.SetArgs([]string{"--lines", n})
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil {
 			t.Fatalf("--lines %s: expected error, got nil", n)
 		}

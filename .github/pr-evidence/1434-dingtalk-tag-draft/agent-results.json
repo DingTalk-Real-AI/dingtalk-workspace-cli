@@ -1,0 +1,1408 @@
+[
+  {
+    "Time": "2026-09-22T17:42:17.541814+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesContract",
+    "Elapsed": 0.2
+  },
+  {
+    "Time": "2026-09-22T17:42:17.765263+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/create_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.787645+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/delete_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.808397+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/entity_search/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.830138+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/list_comments/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.851035+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/psql/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.872195+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/psql/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.893986+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/record_ids/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.914598+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/reply_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.937189+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/aitable/update_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.958389+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/chat/download_media/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:17.981333+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/chat/promote_message_to_thread/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.002645+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/chat/upload_local_conversation_file/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.02432+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/chat/upload_local_conversation_file/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.045006+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/add_dev_app_members/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.066313+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/apply_dev_app_permissions/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.090497+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/connect_restart/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.115077+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/connect_restart/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.138204+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/connect_stop/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.15936+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/connect_stop/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.181548+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/create_dev_app/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.203587+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/create_dev_app_version/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.23339+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/delete_dev_app/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:18.258812+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/disable_dev_app/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:18.28179+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/disable_dev_app_robot/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.304062+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/enable_dev_app/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.326199+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/enable_dev_app_robot/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.347987+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_dev_app/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.370419+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_dev_app/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.392161+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_dev_app_credentials/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.415452+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_dev_app_version_detail/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.438827+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_dev_app_version_status/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.461439+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_extension_robot_config/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.483565+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/get_extension_webapp_config/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.506641+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/list_dev_app/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.529209+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/list_dev_app_events/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.5521+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/list_dev_app_members/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.573631+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/list_dev_app_permissions/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.596586+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/list_dev_app_versions/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.617456+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_auth_config_save/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.639459+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_credential_bind/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.66196+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_credential_debug/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.683244+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_credential_delete/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.705014+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_credential_save/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.728104+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_credential_unbind/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.750836+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_member_add/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.774127+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_member_remove/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.796766+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_service_create/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.821442+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_service_delete/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.844099+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_service_update/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.866049+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_create_hsf/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.887729+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_create_http/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:18.91427+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_debug/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:18.940304+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_delete/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:18.967031+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_publish/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:18.988653+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_update_hsf/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.011209+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/mcp_tool_update_http/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.034652+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/publish_dev_app_version/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.064075+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/query_robot_create_result/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.0897+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/remove_dev_app_members/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.114988+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/remove_dev_app_permissions/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.138389+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/set_extension_robot_config/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.165632+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/set_extension_webapp_config/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.194133+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/submit_robot_create_task/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.22221+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/subscribe_dev_app_events/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.249288+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/unsubscribe_dev_app_events/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.278959+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/update_dev_app/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.304652+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/update_dev_app_security_config/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.332654+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dev/version_check_approval/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.362843+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/connect/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.389486+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/connect_unbind/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.418507+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/create_digital_employee/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.449079+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/create_mcp/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.477714+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/create_skill_from_file/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.50309+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/delete_digital_employee/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.527909+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/delete_mcp/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.553512+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/delete_skill/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.578472+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/get_digital_employee_detail/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.602061+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/get_digital_employee_detail/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.626012+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/get_mcp_detail/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.649232+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/get_skill_detail/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.671838+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/list_digital_employees/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.695299+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/list_mcps/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.717247+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/list_skills/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.74002+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/login/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.762487+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/publish_digital_employee/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.788089+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/query_de_run_status/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.813566+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/query_de_run_status/1",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.837238+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/query_de_trace/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.859534+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/set_visibility/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.881853+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/set_visibility/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.904528+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/update_digital_employee_draft/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:19.929869+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/update_mcp/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.956176+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/dingtalk-tag/update_skill/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:19.979369+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/download_file/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.003473+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/import_get/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.026073+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/media_insert/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.051202+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/media_upload/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:20.07384+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/query_export_job/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.095513+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_create_with_media/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.118128+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_download_overwrite/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.14025+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_media_insert/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.1623+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_media_insert/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.185904+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_media_upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.209162+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_resource_update/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.230335+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_resource_update/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.25319+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_script/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.275778+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/shortcut_script/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.296895+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.31976+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/upload/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.342257+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/doc/whiteboard_insert/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.363415+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/create_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.384417+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/create_file_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.407758+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/download_file/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.429437+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/download_file/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.451366+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/list_comments/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.473922+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/list_comments/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.494681+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/list_file_comments/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.515534+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/list_file_comments/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.536229+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.558367+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/drive/upload/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.579271+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/event/stop/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.601767+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/html/create/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.624662+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/html/fetch/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.647861+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/html/overwrite/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.671958+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/html/patch/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.697274+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/mail/batch_get_users_by_org_emails/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:20.720858+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/mail/export_message_mime/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.74512+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/mail/get_user_by_org_email/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.768746+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/mail/share_message_to_chat/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.795793+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/markdown/create/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:20.818064+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/markdown/diff/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.840292+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/markdown/fetch/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.863484+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/markdown/overwrite/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.885461+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/markdown/patch/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.907582+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/mcp/published_invoke/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.931381+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_apply_permission/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.952897+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_apply_permission/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:20.978407+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_mindmap/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:21.003241+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_mindmap/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.025078+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_prepare_asr/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.046054+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_record_wrap_up/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.066485+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_record_wrap_up/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.087979+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_replace_batch/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.109284+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_replace_batch/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.131197+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_share/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.153406+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_share/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.17544+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_speaker_insights/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.202858+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_speaker_insights/1",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:21.226536+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_speaker_replace/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.248676+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_summary/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.272357+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_sync_asr/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.295305+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_unshare/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.316894+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_unshare/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.339338+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_update/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.362074+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.384362+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_upload/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.404656+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_upload_and_analyze/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.426734+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_upload_and_analyze/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.448458+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/minutes/shortcut_upload_and_notify/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.469618+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/oa/attachment_upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.490668+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/pat/shortcut_browser_policy/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.512594+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/recruit/create_job/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.534648+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/recruit/get_job_detail/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.556468+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/recruit/list_jobs/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.582252+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/create_float_image/0",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:21.603493+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/create_with_data/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.624527+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/create_with_data/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.646193+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/export_csv/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.667129+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/export_csv/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.687993+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/filter_view_get_criteria/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.709394+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/filter_view_info/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.730387+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/filter_view_list_criteria/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.752533+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/get_sheet_changeset/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.774901+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/get_sheet_revision/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.796992+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/media_upload/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.820674+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/shortcut_read/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.842584+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/submit_export_job/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.863033+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/update_float_image/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.885053+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/sheet/write_image/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.906463+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/add_todo_attachment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.928571+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/add_todo_attachment/1",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.950548+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_comment/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.973253+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_complete/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:21.995025+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_create/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.0166+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_remind/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.038219+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_reminder/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.060175+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_reopen/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.08168+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/todo/shortcut_update/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.10269+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/apply_personal_whiteboard_tpl/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.12404+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/apply_public_whiteboard_tpl/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.145251+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/apply_team_whiteboard_tpl/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.166347+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/export_whiteboard/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.18813+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/query_export_job/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.209872+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/save_personal_whiteboard_tpl/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.231989+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/save_team_whiteboard_tpl/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.253475+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun/whiteboard/shortcut_update/0",
+    "Elapsed": 0.02
+  },
+  {
+    "Time": "2026-09-22T17:42:22.256967+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentExamplesDryRun",
+    "Elapsed": 4.72
+  },
+  {
+    "Time": "2026-09-22T17:42:22.325995+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestAgentSelectionScenariosCoverEveryExecutableSchemaTool",
+    "Elapsed": 0.07
+  },
+  {
+    "Time": "2026-09-22T17:42:22.354624+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Test": "TestCrossPlatformCoverageDeapAgentLeavesReachFinalSchema",
+    "Elapsed": 0.03
+  },
+  {
+    "Time": "2026-09-22T17:42:22.358335+08:00",
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Elapsed": 5.483
+  }
+]

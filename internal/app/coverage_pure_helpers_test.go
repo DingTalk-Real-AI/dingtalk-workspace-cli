@@ -15,11 +15,16 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
@@ -132,4 +137,81 @@ func TestCrossPlatformCoverageGetCachedRuntimeTokenSeam(t *testing.T) {
 	if err != nil && strings.TrimSpace(token) != "" {
 		t.Fatalf("failed token resolution must not return a token: %q / %v", token, err)
 	}
+}
+
+// writeProfilesJSON creates a profiles.json file inside dir with the given
+// currentProfile and profiles list. Returns the config dir path.
+func writeProfilesJSON(t *testing.T, dir string, currentProfile string, profiles []authpkg.Profile) string {
+	t.Helper()
+	cfg := authpkg.ProfilesConfig{
+		Version:        1,
+		CurrentProfile: currentProfile,
+		Profiles:       profiles,
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal profiles.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profiles.json"), data, 0o644); err != nil {
+		t.Fatalf("write profiles.json: %v", err)
+	}
+	return dir
+}
+
+func TestCrossPlatformCoverageResolveCorpIDRuntimeDefault(t *testing.T) {
+	t.Run("valid profile returns corpId", func(t *testing.T) {
+		dir := writeProfilesJSON(t, t.TempDir(), "test-profile", []authpkg.Profile{
+			{Name: "test-profile", CorpID: "  corp-42  ", UserID: "u1"},
+		})
+		t.Setenv("DWS_CONFIG_DIR", dir)
+		corpID, ok := resolveCorpIDRuntimeDefault(context.Background())
+		if !ok || corpID != "corp-42" {
+			t.Fatalf("resolveCorpIDRuntimeDefault() = (%q, %v), want (corp-42, true)", corpID, ok)
+		}
+	})
+
+	t.Run("missing profiles.json returns empty", func(t *testing.T) {
+		t.Setenv("DWS_CONFIG_DIR", t.TempDir()) // empty dir, no profiles.json
+		corpID, ok := resolveCorpIDRuntimeDefault(context.Background())
+		if ok || corpID != "" {
+			t.Fatalf("resolveCorpIDRuntimeDefault() = (%q, %v), want (\"\", false)", corpID, ok)
+		}
+	})
+
+	t.Run("profile with empty corpId returns empty", func(t *testing.T) {
+		// normalizeProfilesConfig drops profiles with empty CorpID, so a real
+		// profiles.json cannot produce an empty CorpID in ProfileMetadata.
+		// Use the resolveProfileMetadata seam to inject a profile with a
+		// whitespace-only CorpID to cover the defensive TrimSpace→empty guard.
+		testseam.Swap(t, &resolveProfileMetadata, func(string, string) (*authpkg.ProfileMetadata, error) {
+			return &authpkg.ProfileMetadata{CorpID: "  ", UserID: "u2"}, nil
+		})
+		corpID, ok := resolveCorpIDRuntimeDefault(context.Background())
+		if ok || corpID != "" {
+			t.Fatalf("resolveCorpIDRuntimeDefault() = (%q, %v), want (\"\", false)", corpID, ok)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageEnsureCorpIDRuntimeDefaultExistsGuard(t *testing.T) {
+	// Guarantee that $corpId is registered in the helpers runtimeDefaults map:
+	// either a prior test or the real code path already registered it. If not,
+	// calling ensureCorpIDRuntimeDefault with the original Once will register it.
+	// Then reset the Once and call again: the Do body fires, finds the key
+	// already present, and takes the early-return branch (L90-92).
+	if _, exists := helpers.RuntimeDefaultsSnapshot()[helpers.RuntimeDefaultCorpID]; !exists {
+		// First call registers the real resolver (original Once, first Do).
+		ensureCorpIDRuntimeDefault()
+	}
+	// Confirm the key is now registered.
+	if _, exists := helpers.RuntimeDefaultsSnapshot()[helpers.RuntimeDefaultCorpID]; !exists {
+		t.Fatal("$corpId not registered after ensureCorpIDRuntimeDefault")
+	}
+
+	// Reset the sync.Once so Do() will run its body again on next call.
+	testseam.Swap(t, &corpIDRuntimeDefaultOnce, sync.Once{})
+
+	// Call again: the body runs, finds the key already present, returns early
+	// without re-registering (which would panic on duplicate id).
+	ensureCorpIDRuntimeDefault() // must not panic
 }

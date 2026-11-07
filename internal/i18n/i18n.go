@@ -18,15 +18,16 @@
 // translations with fmt.Sprintf-style placeholders.
 //
 // The active language is resolved from the DWS_LANG environment variable first,
-// then falls back to the LANG environment variable. If neither is set or does
-// not match a supported locale, "en" (English) is used as the default.
+// then falls back to the LANG environment variable. If neither is set or the
+// selected value does not match a supported locale, "zh" (Simplified Chinese)
+// is used as the default.
 //
 // Message catalogs are stored as JSON files under locales/ and embedded at
 // compile time via go:embed.
 //
 // Supported locales:
-//   - "en" — English (default)
-//   - "zh" — Simplified Chinese
+//   - "en" — English
+//   - "zh" — Simplified Chinese (default)
 package i18n
 
 import (
@@ -46,7 +47,7 @@ func init() {
 		Name:         "DWS_LANG",
 		Category:     configmeta.CategoryCore,
 		Description:  "界面语言 (en/zh)，回退到 LANG",
-		DefaultValue: "en",
+		DefaultValue: "zh",
 		Example:      "zh",
 	})
 }
@@ -88,15 +89,30 @@ func SetLang(tag string) {
 	setLangFromRaw(tag)
 }
 
+// LangPinnedByEnv reports whether DWS_LANG explicitly pinned the locale. A
+// locale inherited from LANG is not pinned, so English-first flows may
+// override it.
+func LangPinnedByEnv() bool {
+	return strings.TrimSpace(os.Getenv("DWS_LANG")) != ""
+}
+
+// PushLang overrides the active locale and returns a function restoring the
+// previous one.
+func PushLang(tag string) func() {
+	previous := langStr
+	setLangFromRaw(tag)
+	return func() { setLangFromRaw(previous) }
+}
+
 func setLangFromRaw(raw string) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	switch {
-	case strings.HasPrefix(raw, "zh"):
-		lang = language.Chinese
-		langStr = "zh"
-	default:
+	case strings.HasPrefix(raw, "en"):
 		lang = language.English
 		langStr = "en"
+	default:
+		lang = language.Chinese
+		langStr = "zh"
 	}
 }
 

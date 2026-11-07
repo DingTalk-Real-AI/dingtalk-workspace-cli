@@ -16,8 +16,11 @@
 package minutes
 
 import (
+	"fmt"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
@@ -30,12 +33,13 @@ const listeningNoteCmdTool = "执行听记指令-发起AI听记录音"
 // ── list ────────────────────────────────────────────────────────────────────
 
 var ListMine = shortcut.Shortcut{
-	Service:     "minutes",
-	Command:     "+list-mine",
-	Product:     "minutes",
-	Description: "查询我创建的听记列表",
-	Intent:      "当你想找回自己发起或录制的某次听记（会议纪要），却只记得大概的标题关键字时使用；可按关键字筛选并分页，返回自己创建的听记列表及其 taskUuid，便于后续查看摘要、转写或待办。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes",
+	Command:       "+list-mine",
+	Product:       "minutes",
+	Description:   "查询我创建的听记列表",
+	Intent:        "当你想找回自己发起或录制的某次听记（会议纪要），却只记得大概的标题关键字时使用；可按关键字筛选并分页，返回自己创建的听记列表及其 taskUuid，便于后续查看摘要、转写或待办。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -60,25 +64,32 @@ var ListMine = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws minutes +list-mine --query \"周会\" --limit 10"},
 		},
+		Result:     minutesListResult(),
+		Pagination: minutesCursorPagination(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "关键字筛选"},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "10", Desc: "每页数据条数"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页 token (首页留空)"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取该范围全部分页"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "100", Desc: "自动翻页安全上限"},
 	},
-	Tips: []string{`dws minutes +list-mine --query "周会" --limit 10`},
+	Constraints: minutesListConstraints(false),
+	Tips:        []string{`dws minutes +list-mine --query "周会" --limit 10`},
+	Validate:    validateMinutesList,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return callList(rt, "created")
+		return callList(rt, "mine", "created")
 	},
 }
 
 var ListShared = shortcut.Shortcut{
-	Service:     "minutes",
-	Command:     "+list-shared",
-	Product:     "minutes",
-	Description: "查询他人共享给我的听记列表",
-	Intent:      "当你要找同事分享给你的会议听记、想快速定位别人共享过来的纪要时使用；可按关键字筛选并分页，返回他人共享给你的听记列表及 taskUuid。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes",
+	Command:       "+list-shared",
+	Product:       "minutes",
+	Description:   "查询他人共享给我的听记列表",
+	Intent:        "当你要找同事分享给你的会议听记、想快速定位别人共享过来的纪要时使用；可按关键字筛选并分页，返回他人共享给你的听记列表及 taskUuid。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -103,25 +114,32 @@ var ListShared = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws minutes +list-shared --limit 20"},
 		},
+		Result:     minutesListResult(),
+		Pagination: minutesCursorPagination(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "关键字筛选"},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "10", Desc: "每页数据条数"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页 token (首页留空)"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取该范围全部分页"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "100", Desc: "自动翻页安全上限"},
 	},
-	Tips: []string{`dws minutes +list-shared --limit 20`},
+	Constraints: minutesListConstraints(false),
+	Tips:        []string{`dws minutes +list-shared --limit 20`},
+	Validate:    validateMinutesList,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return callList(rt, "shared")
+		return callList(rt, "shared", "shared")
 	},
 }
 
 var ListAll = shortcut.Shortcut{
-	Service:     "minutes",
-	Command:     "+list-all",
-	Product:     "minutes",
-	Description: "查询我有权限访问的所有听记列表",
-	Intent:      "当你不确定某条听记是自己创建还是别人共享、想在所有可访问的听记中一次性检索时使用；合并「我创建的」和「共享给我的」，按关键字筛选并分页返回全部有权限的听记及 taskUuid。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes",
+	Command:       "+list-all",
+	Product:       "minutes",
+	Description:   "预览或完整查询我有权限访问的听记列表",
+	Intent:        "当你不确定某条听记是自己创建还是别人共享时使用；默认只返回可续拉预览且不声称 accessible 完整，显式 --page-all 才分别追完「我创建的」和「共享给我的」、按 taskUuid 去重，并在两个范围都耗尽后交付 complete=true。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -134,51 +152,204 @@ var ListAll = shortcut.Shortcut{
 			CLIPath:        "minutes +list-all",
 			PrimaryCLIPath: "minutes +list-all",
 		},
-		Description: "查询我有权限访问的所有听记列表",
+		Description: "预览或完整查询我有权限访问的听记列表",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "查询我有权限访问的所有听记列表",
-			UseWhen:      []string{"当你不确定某条听记是自己创建还是别人共享、想在所有可访问的听记中一次性检索时使用；合并「我创建的」和「共享给我的」，按关键字筛选并分页返回全部有权限的听记及 taskUuid。"},
+			AgentSummary: "预览或完整查询我有权限访问的听记列表",
+			UseWhen:      []string{"当你不确定某条听记是自己创建还是别人共享时使用；默认只返回可续拉预览且不声称 accessible 完整，显式 --page-all 才分别追完 mine/shared 并证明完整。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws minutes +list-all --query \"周会\" --limit 20"},
+			Examples:     []string{"dws minutes +list-all --query \"周会\" --page-all"},
 		},
+		Result:     minutesListResult(),
+		Pagination: minutesCursorPagination(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "关键字筛选"},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "10", Desc: "每页数据条数"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页 token (首页留空)"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "单端点预览的分页 token；不能与 --page-all 同用"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "分别追完 mine/shared 并合并 accessible 全集"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "100", Desc: "每个范围的自动翻页安全上限"},
 	},
-	Tips: []string{`dws minutes +list-all --query "周会" --limit 20`},
+	Constraints: minutesListConstraints(true),
+	Tips:        []string{`dws minutes +list-all --query "周会" --page-all`},
+	Validate:    validateMinutesList,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return callList(rt, "noLimit")
+		if rt.Bool("page-all") {
+			return callAccessibleList(rt, map[string]any{})
+		}
+		return callList(rt, "all", "noLimit")
 	},
 }
 
-// callList wraps list_by_keyword_and_time_range for mine/shared/all.
-func callList(rt *shortcut.RuntimeContext, belonging string) error {
-	params := map[string]any{"belongingConditionId": belonging}
-	if rt.Changed("limit") {
-		params["maxResults"] = rt.Int("limit")
+func minutesListConstraints(accessible bool) []shortcut.Constraint {
+	constraints := []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit", "page-limit"}, Description: "--limit 和 --page-limit 必须大于 0"}}
+	if accessible {
+		constraints = append(constraints, shortcut.Constraint{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-all"}})
 	}
+	return constraints
+}
+
+func validateMinutesList(rt *shortcut.RuntimeContext) error {
+	if rt.Int("limit") <= 0 || rt.Int("page-limit") <= 0 {
+		return fmt.Errorf("--limit 和 --page-limit 必须大于 0")
+	}
+	return nil
+}
+
+type minutesListCollection struct {
+	Rows              []map[string]any
+	Pages             int
+	Complete          bool
+	EndpointExhausted bool
+	NextToken         string
+}
+
+// callList wraps one list_by_keyword_and_time_range scope. mine/shared may
+// prove completeness by exhausting their own endpoint. The legacy noLimit/all
+// endpoint is only a preview unless callAccessibleList separately exhausts and
+// merges mine+shared.
+func callList(rt *shortcut.RuntimeContext, scope, belonging string) error {
+	base := map[string]any{"belongingConditionId": belonging, "maxResults": rt.Int("limit")}
 	if rt.Changed("query") {
-		params["keyword"] = rt.Str("query")
+		base["keyword"] = rt.Str("query")
 	}
-	if rt.Changed("cursor") {
-		params["nextToken"] = rt.Str("cursor")
-	}
-	data, err := rt.CallMCPData("minutes", "list_by_keyword_and_time_range", params)
-	if err != nil {
+	result, err := collectMinutesListScope(rt, base, rt.Str("cursor"), rt.Bool("page-all"), rt.Int("page-limit"))
+	if err != nil && result.Pages == 0 {
 		return err
 	}
-	minutes, err := callListProject(data)
-	if err != nil {
+	if scope == "all" {
+		result.Complete = false
+	}
+	payload := minutesListPayload(scope, result)
+	if scope == "all" && !rt.Bool("page-all") {
+		payload["nextAction"] = "dws minutes +list-all --page-all"
+	}
+	return outputMinutesListResult(rt, payload, result, err)
+}
+
+func callAccessibleList(rt *shortcut.RuntimeContext, extra map[string]any) error {
+	result, ledger, err := collectAccessibleMinutes(rt, extra)
+	if err != nil && result.Pages == 0 {
 		return err
 	}
-	return rt.Output(map[string]any{"count": len(minutes), "minutes": minutes})
+	payload := minutesListPayload("all", result)
+	payload["scopeLedger"] = ledger
+	if err != nil {
+		payload["nextAction"] = "retry the incomplete scope with its reported nextToken"
+	}
+	return outputMinutesListResult(rt, payload, result, err)
+}
+
+func collectAccessibleMinutes(rt *shortcut.RuntimeContext, extra map[string]any) (minutesListCollection, []map[string]any, error) {
+	rows := make([]map[string]any, 0)
+	seenIDs := map[string]bool{}
+	ledger := make([]map[string]any, 0, 2)
+	pages := 0
+	for _, item := range []struct{ scope, belonging string }{{"mine", "created"}, {"shared", "shared"}} {
+		base := cloneMinutesListParams(extra)
+		base["belongingConditionId"] = item.belonging
+		base["maxResults"] = rt.Int("limit")
+		if query := rt.Str("query"); query != "" {
+			base["keyword"] = query
+		}
+		part, err := collectMinutesListScope(rt, base, "", true, rt.Int("page-limit"))
+		pages += part.Pages
+		for _, row := range part.Rows {
+			id, _ := row["taskUuid"].(string)
+			if seenIDs[id] {
+				continue
+			}
+			seenIDs[id] = true
+			rows = append(rows, row)
+		}
+		ledgerEntry := map[string]any{"scope": item.scope, "pages": part.Pages, "count": len(part.Rows), "complete": part.Complete}
+		if part.NextToken != "" {
+			ledgerEntry["nextToken"] = part.NextToken
+		}
+		ledger = append(ledger, ledgerEntry)
+		if err != nil {
+			return minutesListCollection{Rows: rows, Pages: pages, Complete: false, EndpointExhausted: false, NextToken: part.NextToken}, ledger, err
+		}
+	}
+	return minutesListCollection{Rows: rows, Pages: pages, Complete: true, EndpointExhausted: true}, ledger, nil
+}
+
+func collectMinutesListScope(rt *shortcut.RuntimeContext, base map[string]any, cursor string, pageAll bool, pageLimit int) (minutesListCollection, error) {
+	result := minutesListCollection{Rows: make([]map[string]any, 0)}
+	seenIDs := map[string]bool{}
+	seenTokens := map[string]bool{}
+	token := cursor
+	for {
+		if seenTokens[token] {
+			return result, fmt.Errorf("minutes list cursor stalled or cycled")
+		}
+		seenTokens[token] = true
+		params := cloneMinutesListParams(base)
+		if token != "" {
+			params["nextToken"] = token
+		}
+		data, err := rt.CallMCPData("minutes", "list_by_keyword_and_time_range", params)
+		if err != nil {
+			return result, err
+		}
+		page, err := minutesdata.ParseListPage(data)
+		if err != nil {
+			return result, err
+		}
+		if !page.HasMoreKnown {
+			return result, fmt.Errorf("minutes list response omits pagination completeness")
+		}
+		projected, err := minutesdata.ProjectList(page)
+		if err != nil {
+			return result, err
+		}
+		for _, row := range projected {
+			id, _ := row["taskUuid"].(string)
+			if seenIDs[id] {
+				continue
+			}
+			seenIDs[id] = true
+			result.Rows = append(result.Rows, row)
+		}
+		result.Pages++
+		result.EndpointExhausted = !page.HasMore
+		result.NextToken = page.NextToken
+		if !page.HasMore {
+			result.Complete = true
+			result.NextToken = ""
+			return result, nil
+		}
+		if !pageAll {
+			return result, nil
+		}
+		if result.Pages >= pageLimit {
+			return result, fmt.Errorf("minutes list exceeded page safety limit %d", pageLimit)
+		}
+		token = page.NextToken
+	}
+}
+
+func minutesListPayload(scope string, result minutesListCollection) map[string]any {
+	payload := map[string]any{
+		"scope": scope, "count": len(result.Rows), "minutes": result.Rows,
+		"pages": result.Pages, "complete": result.Complete, "endpointExhausted": result.EndpointExhausted,
+	}
+	if result.NextToken != "" {
+		payload["nextToken"] = result.NextToken
+	}
+	return payload
+}
+
+func cloneMinutesListParams(source map[string]any) map[string]any {
+	cloned := make(map[string]any, len(source)+2)
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 // callListProject reshapes the raw list_by_keyword_and_time_range response into a
@@ -206,7 +377,7 @@ var RecordStart = shortcut.Shortcut{
 	Command:     "+record-start",
 	Product:     "minutes",
 	Description: "发起听记（开始录音）",
-	Intent:      "当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；可选传入 AI 助理会话 ID。当前网关 create 回执不返回 taskUuid，只能证明录音指令已被接受；随后需用 +latest/+search 定位新听记。",
+	Intent:      "当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；可选传入 AI 助理会话 ID。只有回执明确返回 taskUuid 时才标记为已绑定并允许后续控制；若只确认受理则返回 controlReady=false 并停止，绝不通过最新一条听记猜测录音目标。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -228,10 +399,11 @@ var RecordStart = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "发起听记（开始录音）",
-			UseWhen:      []string{"当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；网关 create 只返回已接受回执，不返回 taskUuid，随后需用 +latest/+search 定位新听记。"},
+			UseWhen:      []string{"当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；只有回执明确返回 taskUuid 才能继续控制，未返回时必须报告未绑定并停止。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws minutes +record-start --session-id <sessionId>"},
 		},
+		Result: minutesRecordResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -256,13 +428,13 @@ var RecordPause = shortcut.Shortcut{
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Contract: minutesContract(
+	Contract: withMinutesRecordResult(minutesContract(
 		"+record-pause",
 		"暂停听记录音",
 		"实时听记仍在录制，但要临时中断且保留后续恢复能力时使用；必须传当前录制任务的 taskUuid。",
 		[]string{"会议已经结束时使用 +record-stop；只是查看听记状态或内容时使用只读命令"},
 		[]string{"dws minutes +record-pause --id <taskUuid>"},
-	),
+	)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -287,13 +459,13 @@ var RecordResume = shortcut.Shortcut{
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Contract: minutesContract(
+	Contract: withMinutesRecordResult(minutesContract(
 		"+record-resume",
 		"恢复听记录音",
 		"实时听记此前已暂停、现在要继续向同一 taskUuid 追加录音时使用。",
 		[]string{"已经结束的听记不能恢复；要新建录制时使用 +record-start"},
 		[]string{"dws minutes +record-resume --id <taskUuid>"},
-	),
+	)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -318,13 +490,13 @@ var RecordStop = shortcut.Shortcut{
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Contract: minutesContract(
+	Contract: withMinutesRecordResult(minutesContract(
 		"+record-stop",
 		"结束听记录音",
 		"会议结束且要永久停止指定 taskUuid 的实时录制，让服务进入转写和纪要处理阶段时使用。",
 		[]string{"仍计划继续录音时使用 +record-pause；结束后不能通过 +record-resume 继续同一条录制"},
 		[]string{"dws minutes +record-stop --id <taskUuid>"},
-	),
+	)),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -348,12 +520,23 @@ func executeRecordCommand(rt *shortcut.RuntimeContext, expectedCmd, taskUUID str
 	if err != nil {
 		return err
 	}
-	return rt.Output(map[string]any{
-		"accepted": true,
-		"command":  expectedCmd,
-		"taskUuid": taskUUID,
-		"result":   result,
-	})
+	boundTaskUUID := taskUUID
+	if expectedCmd == "create" {
+		boundTaskUUID = minutesdata.TaskUUID(result)
+	}
+	payload := map[string]any{
+		"accepted":     true,
+		"command":      expectedCmd,
+		"bound":        boundTaskUUID != "",
+		"controlReady": boundTaskUUID != "",
+		"result":       result,
+	}
+	if boundTaskUUID != "" {
+		payload["taskUuid"] = boundTaskUUID
+	} else {
+		payload["reason"] = "gateway_did_not_return_task_uuid"
+	}
+	return rt.Output(payload)
 }
 
 // ── mind-graph ──────────────────────────────────────────────────────────────

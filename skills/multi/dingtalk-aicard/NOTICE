@@ -1,0 +1,12 @@
+DingTalk AI Card Skill V0.8
+Copyright 2026 Alibaba Group (Skill-authored material, except where noted)
+
+This Skill is distributed under the Apache License, Version 2.0, in LICENSE.
+Its references/protocol/ directory includes definitions and descriptions
+retained or adapted from the A2UI 1.0 reference. Keep the protocol's own
+LICENSE and NOTICE with that directory; its NOTICE records the pinned
+upstream revision, DingTalk modifications, and attribution.
+
+This Skill is maintained by DingTalk. It is not published or endorsed by the
+A2UI project. Apache-2.0 grants no trademark rights; references to A2UI
+identify the upstream work.

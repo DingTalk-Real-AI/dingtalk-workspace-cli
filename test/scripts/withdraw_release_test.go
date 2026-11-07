@@ -341,6 +341,7 @@ mkdir -p "$dist"
 for asset in \
   dws-darwin-amd64.tar.gz dws-darwin-arm64.tar.gz \
   dws-linux-amd64.tar.gz dws-linux-arm64.tar.gz \
+  dws-openharmony-arm64.tar.gz \
   dws-windows-amd64.zip dws-windows-arm64.zip \
   dws-skills.zip; do
   printf '%s %s\n' "$version" "$asset" > "$dist/$asset"
@@ -349,6 +350,7 @@ done
   for asset in \
     dws-darwin-amd64.tar.gz dws-darwin-arm64.tar.gz \
     dws-linux-amd64.tar.gz dws-linux-arm64.tar.gz \
+    dws-openharmony-arm64.tar.gz \
     dws-windows-amd64.zip dws-windows-arm64.zip \
     dws-skills.zip; do
     printf '%064d  %s\n' 0 "$asset"

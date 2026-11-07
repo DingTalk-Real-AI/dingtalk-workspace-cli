@@ -117,6 +117,56 @@ func TestCrossPlatformCoverageRegisterFlagsAllKinds(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageStringSliceMatchesPflagSemantics(t *testing.T) {
+	cmd := newTestCommand()
+	RegisterFlags(cmd, []FlagSpec{{Name: "items", Shorthand: "i", Kind: KindStringSlice, Default: "default,values"}})
+	flag := cmd.Flags().Lookup("items")
+	if flag == nil || flag.DefValue != "[default,values]" || flag.Value.Type() != "stringSlice" {
+		t.Fatalf("string-slice flag = %#v", flag)
+	}
+	if err := cmd.Flags().Parse([]string{`--items=a,"b,c"`, "-i", "d"}); err != nil {
+		t.Fatalf("Parse string-slice: %v", err)
+	}
+	got, err := cmd.Flags().GetStringSlice("items")
+	if err != nil || !reflect.DeepEqual(got, []string{"a", "b,c", "d"}) {
+		t.Fatalf("GetStringSlice = %#v, %v", got, err)
+	}
+	sliceValue, ok := flag.Value.(interface {
+		Append(string) error
+		Replace([]string) error
+		GetSlice() []string
+	})
+	if !ok {
+		t.Fatalf("string-slice value does not implement pflag SliceValue: %T", flag.Value)
+	}
+	if err := sliceValue.Replace([]string{"replacement"}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if err := sliceValue.Append("tail"); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if got := sliceValue.GetSlice(); !reflect.DeepEqual(got, []string{"replacement", "tail"}) {
+		t.Fatalf("GetSlice after Replace/Append = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
+	var value commandStringSliceValue
+	if err := value.Set(""); err != nil {
+		t.Fatalf("empty set: %v", err)
+	}
+	if got := value.GetSlice(); got == nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v", got)
+	}
+	if err := value.Set(`"`); err == nil {
+		t.Fatal("unbalanced quote accepted")
+	}
+	got, err := readCommandStringSlice("")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v %v", got, err)
+	}
+}
+
 func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {
 	AnnotateFlagAlias(nil, "alias", "canonical")
 
@@ -294,8 +344,16 @@ func TestCrossPlatformCoverageValidateRequired(t *testing.T) {
 	plain := []FlagSpec{{Name: "content", Usage: "C", Required: true}}
 	cmd := newTestCommand()
 	RegisterFlags(cmd, plain)
-	if err := ValidateRequired(cmd, plain); err == nil || !strings.Contains(err.Error(), "content") {
+	err := ValidateRequired(cmd, plain)
+	if err == nil || !strings.Contains(err.Error(), "content") {
 		t.Fatalf("missing plain required err = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing plain required exit code = %d, want %d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "missing_required_flags" {
+		t.Fatalf("missing plain required error = %#v, want validation/missing_required_flags", err)
 	}
 	_ = cmd.Flags().Set("content", "x")
 	if err := ValidateRequired(cmd, plain); err != nil {
@@ -451,6 +509,45 @@ func TestCrossPlatformCoverageBuildArgsIntZeroBoolUnsetSliceEmpty(t *testing.T) 
 	}
 	if len(args) != 0 {
 		t.Fatalf("args = %#v, want empty", args)
+	}
+}
+
+func TestCrossPlatformCoverageBuildArgsDeclaredBooleanDefaultPreservesExplicitChoice(t *testing.T) {
+	for _, tc := range []struct {
+		name, flag, value string
+		want              bool
+	}{
+		{name: "omitted sends strict false"},
+		{name: "explicit true", flag: "protect", value: "true", want: true},
+		{name: "explicit false", flag: "protect", value: "false"},
+		{name: "alias true", flag: "p", value: "true", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := []FlagSpec{{Name: "protect", Kind: KindBool, Bind: "allowBestEffort", Default: "false", ArgDefault: "false", Aliases: []string{"p"}}}
+			cmd := newTestCommand()
+			RegisterFlags(cmd, flags)
+			if tc.flag != "" {
+				if err := cmd.Flags().Set(tc.flag, tc.value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			args, err := BuildArgs(cmd, flags)
+			if err != nil || args["allowBestEffort"] != tc.want {
+				t.Fatalf("args=%#v err=%v want=%v", args, err, tc.want)
+			}
+			if tc.flag == "" && flagNameProvided(cmd, flags[0]) {
+				t.Fatal("payload default became an explicit choice for presence constraints")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageBuildArgsRejectsMalformedBooleanDefault(t *testing.T) {
+	flags := []FlagSpec{{Name: "protect", Kind: KindBool, ArgDefault: "not-a-bool"}}
+	cmd := newTestCommand()
+	RegisterFlags(cmd, flags)
+	if _, err := BuildArgs(cmd, flags); err == nil || !strings.Contains(err.Error(), "ArgDefault") {
+		t.Fatalf("malformed declaration default accepted: %v", err)
 	}
 }
 
@@ -715,6 +812,26 @@ func TestCrossPlatformCoverageValidateConstraints(t *testing.T) {
 	custom := []Constraint{{Kind: Custom, Flags: []string{"a"}, Description: "由 Validate 执行"}}
 	if err := ValidateConstraints(build("a"), flags, custom); err != nil {
 		t.Fatalf("custom constraint must be a no-op in ValidateConstraints, got %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageConstraintPresenceOnlyIsOptIn(t *testing.T) {
+	flags := []FlagSpec{{Name: "desc", Usage: "Description", Aliases: []string{"description"}}, {Name: "name", Usage: "Name", Default: "default"}}
+	for _, flag := range []string{"", "desc", "description"} {
+		for _, presenceOnly := range []bool{false, true} {
+			cmd := newTestCommand()
+			RegisterFlags(cmd, flags)
+			if flag != "" {
+				if err := cmd.Flags().Set(flag, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := ValidateConstraints(cmd, flags, []Constraint{{Kind: AtLeastOne, Flags: []string{"desc", "name"}, PresenceOnly: presenceOnly}})
+			wantValid := presenceOnly && flag != ""
+			if (err == nil) != wantValid {
+				t.Fatalf("flag=%q presenceOnly=%v err=%v", flag, presenceOnly, err)
+			}
+		}
 	}
 }
 
@@ -1004,7 +1121,7 @@ func TestCrossPlatformCoverageNewCommandOrchestration(t *testing.T) {
 	}
 
 	cmd.SetArgs([]string{"--a", "v"})
-	if err := cmd.Execute(); err != nil {
+	if err := ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(order, []string{"validate", "dispatch"}) {
@@ -1036,7 +1153,7 @@ func TestCrossPlatformCoverageNewCommandRunEEscapeHatch(t *testing.T) {
 
 	missing := newEscape()
 	missing.SetArgs(nil)
-	if err := missing.Execute(); err == nil {
+	if err := ExecuteForTest(missing); err == nil {
 		t.Fatal("escape hatch must still enforce a declared Required flag")
 	}
 	if ran {
@@ -1045,7 +1162,7 @@ func TestCrossPlatformCoverageNewCommandRunEEscapeHatch(t *testing.T) {
 
 	satisfied := newEscape()
 	satisfied.SetArgs([]string{"--x", "value"})
-	if err := satisfied.Execute(); err != nil {
+	if err := ExecuteForTest(satisfied); err != nil {
 		t.Fatalf("escape hatch must run once the declaration is satisfied: %v", err)
 	}
 	if !ran {
@@ -1074,7 +1191,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 	}
 	cmd := New(spec)
 	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "need") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "need") {
 		t.Fatalf("required err = %v", err)
 	}
 	if validated || dispatched {
@@ -1085,7 +1202,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 	validated, dispatched = false, false
 	cmd = New(spec)
 	cmd.SetArgs([]string{"--need", "a", "--other", "b"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "互斥") {
 		t.Fatalf("constraint err = %v", err)
 	}
 	if validated || dispatched {
@@ -1105,7 +1222,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 		},
 	})
 	cmd.SetArgs([]string{"--x", "v"})
-	if err := cmd.Execute(); !errors.Is(err, boom) {
+	if err := ExecuteForTest(cmd); !errors.Is(err, boom) {
 		t.Fatalf("validate hook err = %v", err)
 	}
 	if dispatched {
@@ -1123,7 +1240,7 @@ func TestCrossPlatformCoverageNewCommandStopsOnFailures(t *testing.T) {
 		},
 	})
 	cmd.SetArgs([]string{"--y", "v"})
-	if err := cmd.Execute(); !errors.Is(err, boom) {
+	if err := ExecuteForTest(cmd); !errors.Is(err, boom) {
 		t.Fatalf("BuildArgs err = %v", err)
 	}
 	if dispatched {
@@ -1149,7 +1266,7 @@ func TestCrossPlatformCoverageNewCommandDeclineCancels(t *testing.T) {
 	cmd.SetIn(strings.NewReader("no\n"))
 	cmd.SetErr(&strings.Builder{})
 	cmd.SetArgs([]string{"--x", "v"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("decline err = %v", err)
 	}
 	if dispatched {
@@ -1258,7 +1375,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateDispatch(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--n-alias", "via-alias", "--count", "4", "--on", "--ids", " a , b ", "--yes", "pos1"})
-	if err := cmd.Execute(); err != nil {
+	if err := ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if seen.str != "via-alias" {
@@ -1298,7 +1415,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateHonorsConfirmation(t *testing
 	declined := build()
 	declined.SetIn(strings.NewReader("no\n"))
 	declined.SetArgs([]string{"--x", "v"})
-	if err := declined.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(declined); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("declined orchestrate err = %v", err)
 	}
 	if ran {
@@ -1307,7 +1424,7 @@ func TestCrossPlatformCoverageNewCommandOrchestrateHonorsConfirmation(t *testing
 	// --yes bypasses the prompt and runs it.
 	confirmed := build()
 	confirmed.SetArgs([]string{"--x", "v", "--yes"})
-	if err := confirmed.Execute(); err != nil {
+	if err := ExecuteForTest(confirmed); err != nil {
 		t.Fatal(err)
 	}
 	if !ran {
@@ -1575,7 +1692,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	declined := build(nil)
 	declined.SetIn(strings.NewReader("no\n"))
 	declined.SetArgs(nil)
-	if err := declined.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := ExecuteForTest(declined); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("declined guard-first err = %v", err)
 	}
 	if ran {
@@ -1587,7 +1704,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	confirmed := build(nil)
 	confirmed.SetIn(strings.NewReader("yes\n"))
 	confirmed.SetArgs(nil)
-	if err := confirmed.Execute(); err == nil || !strings.Contains(err.Error(), "x") {
+	if err := ExecuteForTest(confirmed); err == nil || !strings.Contains(err.Error(), "x") {
 		t.Fatalf("confirmed guard-first required err = %v", err)
 	}
 	if ran {
@@ -1599,7 +1716,7 @@ func TestCrossPlatformCoverageNewCommandConfirmFirstAnnotationAndOrder(t *testin
 	satisfied := build(nil)
 	satisfied.SetIn(strings.NewReader("yes\n"))
 	satisfied.SetArgs([]string{"--x", "v"})
-	if err := satisfied.Execute(); err != nil {
+	if err := ExecuteForTest(satisfied); err != nil {
 		t.Fatalf("satisfied guard-first err = %v", err)
 	}
 	if !ran {
@@ -1632,7 +1749,7 @@ func TestCrossPlatformCoverageNewCommandRunEHonorsConfirmation(t *testing.T) {
 	blocked := build()
 	blocked.SetIn(strings.NewReader(""))
 	blocked.SetArgs(nil)
-	err := blocked.Execute()
+	err := ExecuteForTest(blocked)
 	var appErr *apperrors.Error
 	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("RunE confirmation err = %#v, want confirmation_required", err)
@@ -1643,7 +1760,7 @@ func TestCrossPlatformCoverageNewCommandRunEHonorsConfirmation(t *testing.T) {
 
 	confirmed := build()
 	confirmed.SetArgs([]string{"--yes"})
-	if err := confirmed.Execute(); err != nil {
+	if err := ExecuteForTest(confirmed); err != nil {
 		t.Fatalf("confirmed RunE err = %v", err)
 	}
 	if !ran {
@@ -1664,7 +1781,7 @@ func TestCrossPlatformCoverageNewCommandPreflightEnumGate(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--mode", "zzz"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), `参数 --mode 取值 "zzz" 不合法`) {
+	if err := ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), `参数 --mode 取值 "zzz" 不合法`) {
 		t.Fatalf("preflight enum err = %v", err)
 	}
 	if dispatched {
@@ -2132,6 +2249,45 @@ func TestCrossPlatformCoverageAttachContractOverwritesLegacySelectionSources(t *
 	}
 }
 
+func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T) {
+	required := true
+	enum := []string{"safe"}
+	anyOf := []contract.FormatAlternative{{Format: "json"}}
+	parameters := []contract.ParamDecl{{Name: "mode", Required: &required, Enum: enum, AnyOf: anyOf}}
+	cmd := newTestCommand()
+	AttachContract(cmd, testWriteSafety(), ContractDecl{
+		Description: "description",
+		Parameters:  parameters,
+		Interface: &contract.InterfaceSpec{
+			Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "summary", UseWhen: []string{"use"}, AvoidWhen: []string{"avoid"}, Examples: []string{"dws t"},
+		},
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "test", Name: "command", CanonicalPath: "test.command", CLIPath: "t",
+		},
+	}, "short", "long")
+
+	required = false
+	enum[0] = "mutated"
+	anyOf[0].Format = "mutated"
+	parameters[0].Name = "changed"
+
+	got, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || len(got.Parameters) != 1 {
+		t.Fatalf("RuntimeContractFinal = %#v, %v", got, ok)
+	}
+	parameter := got.Parameters[0]
+	if parameter.Name != "mode" || len(parameter.Enum) != 1 || parameter.Enum[0] != "safe" ||
+		parameter.Required == nil || !*parameter.Required {
+		t.Fatalf("caller mutation reached owned contract payload: %#v", parameter)
+	}
+	if len(parameter.AnyOf) != 1 || parameter.AnyOf[0].Format != "json" {
+		t.Fatalf("caller AnyOf mutation reached owned contract payload: %#v", parameter.AnyOf)
+	}
+}
+
 func TestCrossPlatformCoverageAttachContractIdentityCLIPrimaryFillAndAliases(t *testing.T) {
 	baseSel := contract.SelectionSpec{
 		AgentSummary: "s", UseWhen: []string{"u"}, AvoidWhen: []string{"a"}, Examples: []string{"dws t"},
@@ -2214,5 +2370,126 @@ func TestCrossPlatformCoverageEmbedContractSkipsBlankAndHiddenFlags(t *testing.T
 		if strings.Contains(key, "ghost") {
 			t.Fatalf("hidden flag must not be annotated: %s", key)
 		}
+	}
+}
+
+// TestWaitResourceStronglyTypedDTOs verifies waitResource handles struct and
+// struct pointer results via JSON normalization (P1 fix for auto-CR).
+// UnmarshalableDTO cannot round-trip through encoding/json (channels are
+// unsupported), driving the waitResource slow path's marshal error.
+type UnmarshalableDTO struct {
+	TaskID string `json:"task_id"`
+	Ch     chan int
+}
+
+func TestWaitResourceStronglyTypedDTOs(t *testing.T) {
+	type TaskDTO struct {
+		TaskID string `json:"task_id"`
+		Status string `json:"status"`
+	}
+	type NestedDTO struct {
+		Meta struct {
+			ResourceID string `json:"resource_id"`
+		} `json:"meta"`
+	}
+
+	tests := []struct {
+		name          string
+		data          any
+		query         string
+		wantResource  string
+		wantErrSubstr string
+	}{
+		{
+			name:         "map[string]any fast path",
+			data:         map[string]any{"task_id": "abc123"},
+			query:        "task_id",
+			wantResource: "abc123",
+		},
+		{
+			name:         "struct value",
+			data:         TaskDTO{TaskID: "struct-456", Status: "running"},
+			query:        "task_id",
+			wantResource: "struct-456",
+		},
+		{
+			name:         "struct pointer",
+			data:         &TaskDTO{TaskID: "ptr-789", Status: "pending"},
+			query:        "task_id",
+			wantResource: "ptr-789",
+		},
+		{
+			name:          "nested struct dotted query",
+			data:          NestedDTO{},
+			query:         "meta.resource_id",
+			wantResource:  "",
+			wantErrSubstr: "not found",
+		},
+		{
+			name: "nested struct with value",
+			data: func() NestedDTO {
+				var d NestedDTO
+				d.Meta.ResourceID = "nested-xyz"
+				return d
+			}(),
+			query:        "meta.resource_id",
+			wantResource: "nested-xyz",
+		},
+		{
+			name:          "nil data",
+			data:          nil,
+			query:         "task_id",
+			wantErrSubstr: "nil",
+		},
+		{
+			name:          "non-object data (string)",
+			data:          "not-an-object",
+			query:         "task_id",
+			wantErrSubstr: "not an object",
+		},
+		{
+			name:          "non-object data (slice)",
+			data:          []string{"a", "b"},
+			query:         "task_id",
+			wantErrSubstr: "not an object",
+		},
+		{
+			name:          "missing query field in struct",
+			data:          TaskDTO{TaskID: "abc"},
+			query:         "nonexistent",
+			wantErrSubstr: "not found",
+		},
+		{
+			name:          "unmarshalable payload (channel field)",
+			data:          UnmarshalableDTO{TaskID: "chan"},
+			query:         "task_id",
+			wantErrSubstr: "cannot be serialized to JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decl := &contract.WaitSpec{
+				ResourceQuery: tt.query,
+			}
+			result := output.Success(tt.data)
+			resource, err := waitResource(decl, result)
+
+			if tt.wantErrSubstr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErrSubstr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+					t.Errorf("error = %q; want substring %q", err.Error(), tt.wantErrSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resource != tt.wantResource {
+				t.Errorf("resource = %q; want %q", resource, tt.wantResource)
+			}
+		})
 	}
 }

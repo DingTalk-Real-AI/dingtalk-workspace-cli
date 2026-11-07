@@ -21,7 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 const schemaResolveMetaCacheChildEnv = "DWS_SCHEMA_RESOLVE_META_CACHE_CHILD"
@@ -33,6 +35,14 @@ const schemaResolveMetaCacheChildEnv = "DWS_SCHEMA_RESOLVE_META_CACHE_CHILD"
 func TestResolveMetaAndLeafHelpReuseAssembledMetaCache(t *testing.T) {
 	if os.Getenv(schemaResolveMetaCacheChildEnv) == "1" {
 		registerSchemaRuntimeDelivery()
+		// A caller may select a profile after parsing process argv (for example
+		// while executing against several profiles). Cold metadata assembly must
+		// preserve that selection just as a warm lookup does.
+		testseam.Swap(t, &os.Args, []string{"dws", "--profile=argv-profile"})
+		previousProfile := authpkg.RuntimeProfile()
+		t.Cleanup(func() { authpkg.SetRuntimeProfile(previousProfile) })
+		const activeProfile = "active-delivery-profile"
+		authpkg.SetRuntimeProfile(activeProfile)
 
 		counts := cli.RuntimeSchemaMetadataLoadCounts()
 		if counts.Catalog != 0 || counts.MetaIndex != 0 {
@@ -47,6 +57,9 @@ func TestResolveMetaAndLeafHelpReuseAssembledMetaCache(t *testing.T) {
 		if counts.Catalog != 1 || counts.MetaIndex != 1 {
 			t.Fatalf("after first ResolveMeta counts = %#v, want Catalog=1 MetaIndex=1", counts)
 		}
+		if got := authpkg.RuntimeProfile(); got != activeProfile {
+			t.Fatalf("cold ResolveMeta changed profile to %q, want %q", got, activeProfile)
+		}
 
 		for range 4 {
 			if _, ok := cli.ResolveMeta("dev app delete"); !ok {
@@ -57,8 +70,14 @@ func TestResolveMetaAndLeafHelpReuseAssembledMetaCache(t *testing.T) {
 		if counts.Catalog != 1 || counts.MetaIndex != 1 {
 			t.Fatalf("after steady ResolveMeta counts = %#v", counts)
 		}
+		if got := authpkg.RuntimeProfile(); got != activeProfile {
+			t.Fatalf("warm ResolveMeta changed profile to %q, want %q", got, activeProfile)
+		}
 
 		root := NewRootCommand()
+		if got := authpkg.RuntimeProfile(); got != "argv-profile" {
+			t.Fatalf("runtime root did not initialize argv profile: %q", got)
+		}
 		var helpOut bytes.Buffer
 		root.SetOut(&helpOut)
 		root.SetErr(io.Discard)

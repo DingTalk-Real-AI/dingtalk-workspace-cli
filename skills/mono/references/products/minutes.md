@@ -1,5 +1,9 @@
 # AI听记 (minutes) 命令参考
 
+### 导出包签名清理
+
+`dws minutes +export-pack --id <taskUuid> --output <新相对目录>` 会递归清理 basic/summary/keywords/transcript/todos 文本中的已识别 OSS/AWS 签名 URL 和独立凭据字段，分别替换为 `[signed-url-removed]`、`[credential-removed]`；普通链接保留。发布前扫描发现残留则不发布目录。manifest/返回值提供 `sanitized/redactionCount/redactionKinds/sanitizationScope`，文本文件提供逐项清理次数。`complete=true` 只指所选产物和发布流程，当前 `offlineImagesComplete=false`，不得声称摘要图片已下载；二进制媒体不属于文本扫描范围，本阶段不提供文件 hash/内容读回验证。
+
 ## 命令层级结构（防混淆，必须先读）
 
 minutes 模块的命令是**两级或三级结构**，不同层级之间不能混用、跳级或遗漏：
@@ -311,9 +315,20 @@ dws minutes
 │   ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]
 │   ├── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
 │   └── apply --id <uuid> --policy <2-4>
-└── tag <subcommand>                 # 听记标签/分组管理（标签在听记页面手动创建）
+├── template <subcommand>            # 系统/个人纪要模板与后续听记默认模板
+│   ├── list-system [--locale] [--limit] [--cursor]
+│   ├── list-custom [--limit] [--cursor]
+│   ├── create --title "..." --prompt "..." [--brief-intro "..."]
+│   ├── update --template-key <key> [--title] [--prompt] [--brief-intro]
+│   ├── delete --template-key <key>
+│   └── set-default --template-id <id> | --template-key <key>
+└── tag <subcommand>                 # 听记标签/分组查询、自定义标签与单条听记关联
     ├── list                         # 查询我的听记标签/分组列表（返回 tagId 和标签名称）
-    └── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
+    ├── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
+    ├── create --display-name "..."
+    ├── delete --tag-id <tagId>
+    ├── add --id <taskUuid> --tag-ids <tagId1,tagId2> [--locale]
+    └── remove --id <taskUuid> --tag-ids <tagId1,tagId2>
 ```
 
 ## 命令总览
@@ -912,7 +927,7 @@ Flags:
 
 触发创建听记思维导图任务。触发成功后，可通过 `mind-graph status` 轮询任务状态。状态：0=进行中，1=成功，2=失败。
 
-**重要：当用户要求"生成思维导图/创建脑图"时，必须调用此命令（`mind-graph create`），严禁自行生成 HTML 或其他格式的思维导图。** 思维导图由服务端专业引擎生成，AI 不应尝试自己构造思维导图内容。
+**重要：当用户要求在听记详情中生成内置思维导图时，使用此命令（`mind-graph create`），严禁自行生成 HTML 或其他格式的思维导图。** 思维导图由服务端专业引擎生成，AI 不应尝试自己构造思维导图内容。
 
 ### 查询思维导图状态
 ```
@@ -1251,11 +1266,11 @@ Usage:
   dws minutes tag list
 ```
 
-查询当前用户在听记页面手动创建的所有标签或分组列表。无需传入额外参数，系统自动识别当前用户身份。
+查询当前用户的标签或分组列表。无需传入额外参数，系统自动识别当前用户身份。
 返回所有标签/分组的列表，每条记录包含 tagId 和标签名称。获取到 tagId 后，可使用 `dws minutes tag query --tag-id <tagId>` 查询该标签下的听记列表。
 
 **注意事项：**
-- 标签/分组在听记页面手动创建，此命令仅提供查询能力
+- 自定义标签可在听记页面或使用 `tag create` 创建；此命令用于查询已有标签
 - 返回的 tagId 用于后续 `tag query` 命令的 `--tag-id` 参数
 
 ### 根据标签ID查询听记列表
@@ -1278,7 +1293,37 @@ tagId 可通过 `dws minutes tag list` 获取。
 **注意事项：**
 - `--tag-id` 必填，值来自 `dws minutes tag list` 返回的 tagId
 - 支持分页，使用 `--cursor` 传入上一次返回的 nextToken
-- 标签/分组在听记页面手动创建，不支持通过 CLI 创建标签
+- 自定义标签可使用 `tag create --display-name "<名称>"` 创建，返回的 tagId 可直接查询或关联听记
+
+### 创建、删除及关联听记标签
+
+```text
+dws minutes tag create --display-name "项目复盘" --format json
+dws minutes tag delete --tag-id <真实tagId> --format json
+dws minutes tag add --id <taskUuid> --tag-ids <真实tagId1,真实tagId2> --format json
+dws minutes tag remove --id <taskUuid> --tag-ids <真实tagId1,真实tagId2> --format json
+```
+
+- 创建本人自定义标签，名称非空白、最多50个UTF-16单元；返回真实 tagId 和保存名称，不自动关联听记。同名系统或自定义标签不能重复创建；同名推荐标签可能先被删除，创建失败不会恢复。
+- delete 删除本人自定义标签定义并异步清理所有听记关联；remove 只移除指定听记的关联，不删除定义。系统或推荐标签不能删除，已同步的知识库文件不会撤回。
+- add/remove 的 --id 是有效 taskUuid，不能传 taskId 或完整链接。每次原始输入1–20个本人有效自定义标签ID，去首尾空白后按首次顺序去重；添加后总关联最多20个。add 可传 --locale 用于已配置知识库同步，缺省为zh。
+- 批量首个失败后停止，已成功项不回滚。APPLIED/UNCHANGED是确认成功，FAILED是写结果未知，NOT_PROCESSED是未执行；统一输出按 succeeded/unknown/failed 表达。存在成功项及未知/失败项时为 partial_failure，无成功项为 failure，均不得当作全部完成或自动重放整批。
+- 写入按 leaf Schema 和 Runtime confirmation 执行，成功后按真实ID读取核对。
+
+### 纪要模板与默认模板
+
+| 命令 | 参数与作用 |
+|---|---|
+| `dws minutes template list-system [--locale zh_CN] [--limit 20] [--cursor <token>]` | 系统模板目录，每页1–50条，返回 templateId、title和brief |
+| `dws minutes template list-custom [--limit 5] [--cursor <token>]` | 当前用户个人模板，每页1–10条，返回 templateKey、完整prompt和version |
+| `dws minutes template create --title "<标题>" --prompt "<提示词>" [--brief-intro "<简介>"]` | 创建个人模板，不自动设置默认 |
+| `dws minutes template update --template-key <真实key> [--title "<标题>"] [--prompt "<提示词>"] [--brief-intro "<简介>"]` | 至少显式提供一个更新字段；省略保留旧值，空简介也保留旧简介 |
+| `dws minutes template delete --template-key <真实key>` | 幂等删除本人个人模板，不删除已有听记、不清除默认设置 |
+| `dws minutes template set-default --template-id <真实id>` 或 `--template-key <真实key>` | 系统与个人模板二选一，可选 --locale，只影响后续听记 |
+
+模板列表每次只读一页；依据 `meta.pagination.endpoint_exhausted` 判断续页，将 `meta.pagination.next_token` 原样传给 --cursor，系统模板保持相同locale。空items不等于遍历结束。系统templateId和个人templateKey不可混用，不能用空串占位，官方ID不能填diy。
+
+标题非空白且最多150个UTF-16单元；prompt非空白并原样保留空格和换行，最大长度由服务端配置校验，不截断。创建或修改前确认用户标题和提示词；写结果不确定时先list-custom对账，不自动重试。version=0有效，删除结果wasDefault=null表示原默认状态未知，官方默认的templateKey=null有效。模板变更不会重新生成已有听记。
 
 ## 意图判断
 
@@ -1536,29 +1581,29 @@ tagId 可通过 `dws minutes tag list` 获取。
 - "把这个纪要内容变得更精简一点"
 
 ### 生成思维导图
-用户说"生成思维导图/创建脑图/帮我添加思维导图/基于这个听记做思维导图/把会议内容做成脑图" → `mind-graph create`
+用户明确要求在听记详情中生成内置思维导图 → 优先 `dws minutes +mindmap --id <taskUuid>`。原子命令 `mind-graph create/status` 仅在需要底层控制时使用。独立 .amind 文件创建或主题读写使用 [mind.md](./mind.md)；仅提到脑图、思维导图或提供听记 URL 不足以覆盖明确的独立文件意图，目标未明先消歧。
 
-**关键约束（必须严格遵守，违反视为严重错误）：**
-1. **思维导图必须且只能通过 `dws minutes mind-graph create` 命令生成**，由服务端写回到听记本身。这是"听记内置的思维导图能力"，生成结果会直接挂在听记详情页上，用户在听记里就能看到。
+**以下约束只适用于听记内置生成，不适用于获授权读取听记后另存独立脑图：**
+1. **听记内置思维导图由服务端生成并写回听记本身**；优先使用 `dws minutes +mindmap` 完成创建及有界轮询，只有需要底层控制时使用 `mind-graph create/status`。这是"听记内置的思维导图能力"，生成结果会直接挂在听记详情页上，用户在听记里就能看到。
 2. **严禁以下任何"自行构造"的替代方案**（这些都是错误做法）：
    - [禁止] 先 `get summary` / `get transcription` 拿到内容，再用 AI 自己整理出思维导图结构（Markdown / OPML / JSON 等）展示给用户
    - [禁止] 调用 app-development-skill / ai-app / 任何前端构建能力，用 `@antv/g6`、`markmap`、`jsmind`、`mermaid`、ECharts 等库生成 HTML/网页版思维导图
    - [禁止] 调用 `generate_image` 或任何绘图工具生成思维导图图片
    - [禁止] 路由到其他 Agent（如 ai-app）来"创建一个思维导图应用"
    - [禁止] 任何形式的"我帮你画一个/生成一个网页/部署一个在线预览链接"
-3. **唯一正确做法**：从用户输入中拿到 taskUuid（URL 场景见下方"URL 直达"），直接调用 `mind-graph create`，然后用 `mind-graph status` 轮询直到状态为 1（成功），最后告知用户"思维导图已生成，可在听记详情页查看"即可。**不需要**先调 `get summary` 等任何读取命令——服务端会基于听记自身内容生成。
+3. **执行方式**：从用户输入中取得 taskUuid（URL 场景见下方"URL 直达"），优先调用 `minutes +mindmap`；根据返回区分完成、待恢复或失败，pending 使用同一目标的 `--resume`，不重复创建。只有确需原子控制时才调用 `mind-graph create/status`；成功后告知用户可在听记详情查看。**不需要**先调 `get summary` 等任何读取命令——服务端会基于听记自身内容生成。
 
 **URL 直达场景：**
-当用户输入形如 `https://shanji.dingtalk.com/app/transcribes/{taskUuid}` 的链接 + "创建思维导图/生成脑图"等诉求时：
+当用户输入形如 `https://shanji.dingtalk.com/app/transcribes/{taskUuid}` 的链接，且目标明确为该听记内置思维导图时：
 1. 直接从 URL 路径末段提取 taskUuid
-2. **直接** `dws minutes mind-graph create --id <taskUuid> --format json`
-3. 用 `mind-graph status` 轮询
+2. 优先 `dws minutes +mindmap --id <taskUuid> --format json`
+3. 按 Shortcut 返回区分成功或同目标 `--resume`；不自动切换为独立文件
 4. 严禁中间插入 `get summary` / `get transcription` 等任何"先读取内容"的步骤，更严禁基于读到的内容自行构造思维导图
 
-**自然语言示例：**
-- "帮我添加思维导图"
-- "生成思维导图"
-- "帮我创建一个脑图"
+**以下示例须在已明确听记内置目标的上下文中使用；不得据此吞掉独立脑图请求：**
+- "帮我给这个听记添加思维导图"
+- "在这个听记中生成思维导图"
+- "给听记生成内置脑图"
 - "把这个听记做成思维导图"
 - "生成这个会议的思维导图"
 - "基于这个听记创建思维导图"
@@ -1685,6 +1730,14 @@ tagId 可通过 `dws minutes tag list` 获取。
 1. 用户说"帮我看看'周会'标签下的听记" → AI 先获取标签列表
 2. 调用 `dws minutes tag list --format json` → 从返回中按名称匹配找到 tagId
 3. 调用 `dws minutes tag query --tag-id <tagId> --format json`
+
+### 听记标签维护与纪要模板
+
+- “创建听记标签/新建分组” → `tag create --display-name "<名称>"`；“删除这个标签” → `tag delete --tag-id <真实tagId>`。
+- “给这条听记添加标签/移除标签” → `tag add/remove --id <taskUuid> --tag-ids <真实tagIds>`；不能把移除关联解释为删除标签定义。
+- “查询系统模板/可选纪要模板” → `template list-system`；“我的个人模板” → `template list-custom`，完整请求须依据meta.pagination续页。
+- “创建/修改/删除个人纪要模板” → `template create/update/delete`；“以后默认用这个模板” → `template set-default`，按真实templateId或templateKey二选一。
+- 维护模板不等于重写当前听记。用户要求修改已有纪要正文时仍用对应的summary内容命令；写前锁定唯一目标并按Runtime confirmation执行。
 
 ### 修改听记标题
 用户说"改听记标题/重命名听记/修改标题" → `update title`
@@ -2013,7 +2066,8 @@ loop:
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [minutes_recent_summary.py](../../scripts/minutes_recent_summary.py) | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
-| [minutes_extract_todos.py](../../scripts/minutes_extract_todos.py) | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
+
+行动项读取不再提供独立脚本：单条用 `dws minutes +action-items --id <taskUuid>`；多条用 `dws minutes +detail --ids <uuid1,uuid2> --artifacts todos`。
 
 ## 反例 / 回归案例
 

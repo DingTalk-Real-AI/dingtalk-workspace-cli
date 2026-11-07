@@ -24,13 +24,10 @@ func TestRootHelpHidesRecoveredModules(t *testing.T) {
 	for _, module := range []string{
 		"aisearch", "contract",
 		"chat", "drive", "minutes", "mail", "credit",
-		"credit-risk", "finance", "message", "notify", "doc",
+		"credit-risk", "finance", "message", "notify", "doc", "recruit",
 	} {
 		if strings.Contains(got, "  "+module+" ") {
 			t.Fatalf("root help should not show hidden module %q:\n%s", module, got)
 		}
-	}
-	if !strings.Contains(got, "● recruit ") {
-		t.Fatalf("root help should show explicitly registered recruit module:\n%s", got)
 	}
 }

@@ -4,6 +4,7 @@
 package smart
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -134,7 +135,7 @@ func TestCrossPlatformCoverageWikiNewDocResolution(t *testing.T) {
 		{"parser error", nil, "Docs", "", false},
 		{"zero", map[string]any{"wikiSpaces": []any{}}, "Docs", "", false},
 		{"unique exact", map[string]any{"wikiSpaces": []any{map[string]any{"workspaceId": "w1", "name": " docs "}, map[string]any{"workspaceId": "w2", "name": "Plan"}}}, "Docs", "w1", true},
-		{"unique fallback", map[string]any{"wikiSpaces": []any{map[string]any{"workspaceId": "w1", "name": "Docs Team"}}}, "Docs", "w1", true},
+		{"unique fuzzy rejected", map[string]any{"wikiSpaces": []any{map[string]any{"workspaceId": "w1", "name": "Docs Team"}}}, "Docs", "", false},
 		{"multiple", map[string]any{"wikiSpaces": []any{map[string]any{"workspaceId": "w1", "name": "Docs 1"}, map[string]any{"workspaceId": "w2", "name": "Docs 2"}}}, "Docs", "", false},
 	}
 	for _, tc := range cases {
@@ -144,6 +145,40 @@ func TestCrossPlatformCoverageWikiNewDocResolution(t *testing.T) {
 				t.Fatalf("got=%q err=%v want=%q ok=%v", got, err, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageWikiNewDocExactNameBeforeWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name, spaces string
+		ok           bool
+	}{
+		{"unique fuzzy", `[{"workspaceId":"w","name":"Docs Team"}]`, false},
+		{"duplicate exact", `[{"workspaceId":"w","name":"Docs"},{"workspaceId":"w2","name":"docs"}]`, false},
+		{"unique exact", `[{"workspaceId":"w","name":" docs "},{"workspaceId":"w2","name":"Docs Team"}]`, true},
+	} {
+		for _, dry := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/dry=%t", tc.name, dry), func(t *testing.T) {
+				var calls []string
+				fake := &stubMailboxCaller{onCall: func(tool string) { calls = append(calls, tool) }, byTool: map[string]string{
+					"search_wikiSpaces": `{"wikiSpaces":` + tc.spaces + `}`,
+					"create_file":       `{"success":true,"nodeId":"n"}`,
+					"get_document_info": `{"success":true,"nodeId":"n"}`,
+				}}
+				args := []string{"wiki", "+wiki-new-doc", "--space", "Docs", "--title", "Doc"}
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				err := runShortcutErr(t, fake, args...)
+				wantCalls := "search_wikiSpaces"
+				if tc.ok && !dry {
+					wantCalls += ",create_file,get_document_info"
+				}
+				if (err == nil) != tc.ok || strings.Join(calls, ",") != wantCalls {
+					t.Fatalf("err=%v calls=%v, want success=%t calls=%s", err, calls, tc.ok, wantCalls)
+				}
+			})
+		}
 	}
 }
 

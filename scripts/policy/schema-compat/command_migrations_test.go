@@ -13,6 +13,79 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
 )
 
+func TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailability(t *testing.T) {
+	baseline := baselineContract()
+	current := cloneContract(baseline)
+	mutateTool(&current, func(tool *toolSchema) { tool.Availability = "unavailable" })
+	migration := interfacesnapshot.CommandMigration{
+		Kind: interfacesnapshot.CommandMigrationAvailability,
+		Legacy: interfacesnapshot.CommandMigrationSide{
+			Command: "dws doc create",
+			Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+			After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+		},
+		Schema: interfacesnapshot.CommandMigrationSchema{
+			ProductID:    "doc",
+			SourceToolID: "doc.create",
+			Parameters:   []interfacesnapshot.CommandParameterMigration{},
+			Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+		},
+		State:  interfacesnapshot.CommandMigrationPending,
+		Reason: "Reviewed fail-closed availability hardening.",
+	}
+
+	normalized, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "unavailable" {
+		t.Fatalf("normalized availability = %q", got)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("availability hardening failures = %v", failures)
+	}
+
+	unrelated := cloneContract(current)
+	mutateTool(&unrelated, func(tool *toolSchema) { tool.Risk = "high" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, unrelated, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, unrelated), "\n"); !strings.Contains(failures, "changed risk") {
+		t.Fatalf("unrelated risk drift was hidden: %q", failures)
+	}
+
+	alreadyAfter := cloneContract(current)
+	if _, err := normalizeSchemaCommandMigrations(alreadyAfter, current, []interfacesnapshot.CommandMigration{migration}); err != nil {
+		t.Fatalf("consumed merge-base availability should remain inert: %v", err)
+	}
+	wrongPath := cloneContract(current)
+	mutateTool(&wrongPath, func(tool *toolSchema) { tool.PrimaryCLIPath = "doc other" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, wrongPath, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "available" {
+		t.Fatalf("wrong-path migration changed availability to %q", got)
+	}
+	wrong := cloneContract(current)
+	mutateTool(&wrong, func(tool *toolSchema) { tool.Availability = "available" })
+	if _, err := normalizeSchemaCommandMigrations(baseline, wrong, []interfacesnapshot.CommandMigration{migration}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("wrong availability error = %v", err)
+	}
+
+	compatibilityVisible := migration
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if _, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{compatibilityVisible}); err != nil {
+		t.Fatalf("compatibility-visible availability hardening must authorize the exact Schema transition: %v", err)
+	}
+	if _, err := normalizeSchemaCommandMigrations(baseline, baseline, []interfacesnapshot.CommandMigration{compatibilityVisible}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("compatibility-visible receipt must not authorize unchanged Schema availability: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection(t *testing.T) {
 	baseline := schemaCommandMigrationContract(false)
 	current := schemaCommandMigrationContract(true)
@@ -37,6 +110,44 @@ func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjectio
 	}
 	if failures := strings.Join(checkCompatibility(normalized, unrelated), "\n"); !strings.Contains(failures, `lost parameter "keep"`) {
 		t.Fatalf("unrelated parameter removal was hidden: %s", failures)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaConsumedFlagExtractionAfterBaseline(t *testing.T) {
+	before := schemaCommandMigrationContract(false)
+	after := schemaCommandMigrationContract(true)
+	for _, contract := range []*schemaContract{&before, &after} {
+		product := contract.Products["chat"]
+		delete(product.Tools, "chat.move")
+		contract.Products["chat"] = product
+	}
+	migration := schemaCommandMigrationAuthorizations()[1]
+	migration.State = interfacesnapshot.CommandMigrationConsumed
+
+	normalized, err := normalizeSchemaCommandMigrations(after, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should be inert for an after-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("after-state extraction remained incompatible: %v", failures)
+	}
+
+	normalized, err = normalizeSchemaCommandMigrations(before, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should still normalize a stable before-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("stable before-state extraction remained incompatible: %v", failures)
+	}
+
+	republished := cloneContract(after)
+	product := republished.Products["chat"]
+	tool := product.Tools["chat.create_group"]
+	tool.Parameters["thread"] = before.Products["chat"].Tools["chat.create_group"].Parameters["thread"]
+	product.Tools["chat.create_group"] = tool
+	republished.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(after, republished, []interfacesnapshot.CommandMigration{migration}); err == nil {
+		t.Fatal("consumed extraction accepted a current Schema that republished the extracted parameter")
 	}
 }
 
@@ -701,6 +812,164 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun(t *testing.T
 	if code := run(args, &stdout, &stderr); code != 2 ||
 		!strings.Contains(stderr.String(), `introduced unregistered required Schema parameter "must"`) {
 		t.Fatalf("unregistered required addition code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestCrossPlatformCoverageChatPromoteAvailabilityRetirementLifecycle(t *testing.T) {
+	tests := []struct {
+		name             string
+		candidateState   string
+		currentCLIHidden bool
+		mutateCurrent    func(*schemaContract)
+		wantCode         int
+		wantError        []string
+	}{
+		{
+			name:             "consumed hidden command authorizes atomic availability and ref retirement",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+		},
+		{
+			name:             "pending visible command cannot retire Schema early",
+			candidateState:   interfacesnapshot.CommandMigrationPending,
+			currentCLIHidden: false,
+			wantCode:         1,
+			wantError:        []string{"changed availability", "changed interface_ref"},
+		},
+		{
+			name:             "consumed migration rejects a different retired ref",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) {
+					tool.InterfaceRef = `{"product_id":"im","rpc_name":"other"}`
+				})
+			},
+			wantCode:  2,
+			wantError: []string{"does not match reviewed interface tuple"},
+		},
+		{
+			name:             "consumed migration rejects a different interface mode",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) { tool.InterfaceMode = "composite" })
+			},
+			wantCode:  2,
+			wantError: []string{"does not match reviewed interface tuple"},
+		},
+		{
+			name:             "authorized retirement does not hide safety drift",
+			candidateState:   interfacesnapshot.CommandMigrationConsumed,
+			currentCLIHidden: true,
+			mutateCurrent: func(contract *schemaContract) {
+				mutateChatPromoteTool(contract, func(tool *toolSchema) { tool.Risk = "high" })
+			},
+			wantCode:  1,
+			wantError: []string{"changed risk"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			baselinePath := filepath.Join(directory, "baseline.json")
+			currentPath := filepath.Join(directory, "current.json")
+			approvedPath := filepath.Join(directory, "approved.json")
+			candidatePath := filepath.Join(directory, "candidate.json")
+			currentSnapshotPath := filepath.Join(directory, "current-snapshot.json")
+			baseSnapshotPath := filepath.Join(directory, "base-snapshot.json")
+			stableSnapshotPath := filepath.Join(directory, "stable-snapshot.json")
+
+			current := chatPromoteRetirementContract(true)
+			if test.mutateCurrent != nil {
+				test.mutateCurrent(&current)
+			}
+			writeSchemaContractFile(t, baselinePath, chatPromoteRetirementContract(false))
+			writeRawSchemaContractFile(t, currentPath, current)
+			writeCommandMigrationManifestFile(t, approvedPath, chatPromoteRetirementManifest(interfacesnapshot.CommandMigrationPending))
+			writeCommandMigrationManifestFile(t, candidatePath, chatPromoteRetirementManifest(test.candidateState))
+			writeInterfaceSnapshotFile(t, currentSnapshotPath, chatPromoteRetirementSnapshot(test.currentCLIHidden))
+			writeInterfaceSnapshotFile(t, baseSnapshotPath, chatPromoteRetirementSnapshot(false))
+			writeInterfaceSnapshotFile(t, stableSnapshotPath, chatPromoteRetirementSnapshot(false))
+
+			args := []string{
+				"--check", baselinePath,
+				"--current", currentPath,
+				"--approved-command-migrations", approvedPath,
+				"--candidate-command-migrations", candidatePath,
+				"--migration-current-snapshot", currentSnapshotPath,
+				"--migration-base-snapshot", baseSnapshotPath,
+				"--migration-stable-snapshot", stableSnapshotPath,
+			}
+			var stdout, stderr strings.Builder
+			if code := run(args, &stdout, &stderr); code != test.wantCode {
+				t.Fatalf("run code=%d, want %d; stderr=%s", code, test.wantCode, stderr.String())
+			}
+			for _, want := range test.wantError {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("stderr=%q, want substring %q", stderr.String(), want)
+				}
+			}
+		})
+	}
+
+	t.Run("already retired baseline rejects a stale interface tuple", func(t *testing.T) {
+		baseline := chatPromoteRetirementContract(true)
+		mutateChatPromoteTool(&baseline, func(tool *toolSchema) {
+			tool.InterfaceRef = `{"product_id":"im","rpc_name":"convert_message_to_thread"}`
+		})
+		migration := chatPromoteRetirementManifest(interfacesnapshot.CommandMigrationConsumed).Migrations[0]
+		if _, err := normalizeSchemaCommandMigrations(
+			baseline,
+			chatPromoteRetirementContract(true),
+			[]interfacesnapshot.CommandMigration{migration},
+		); err == nil || !strings.Contains(err.Error(), "does not match reviewed interface tuple") {
+			t.Fatalf("stale after-state interface tuple error = %v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageContactDingtalkIDAvailabilityRetirementLifecycle(t *testing.T) {
+	directory := t.TempDir()
+	baselinePath := filepath.Join(directory, "baseline.json")
+	currentPath := filepath.Join(directory, "current.json")
+	approvedPath := filepath.Join(directory, "approved.json")
+	candidatePath := filepath.Join(directory, "candidate.json")
+	currentSnapshotPath := filepath.Join(directory, "current-snapshot.json")
+	baseSnapshotPath := filepath.Join(directory, "base-snapshot.json")
+	stableSnapshotPath := filepath.Join(directory, "stable-snapshot.json")
+
+	current := contactDingtalkRetirementContract(true)
+	writeSchemaContractFile(t, baselinePath, contactDingtalkRetirementContract(false))
+	writeRawSchemaContractFile(t, currentPath, current)
+	writeCommandMigrationManifestFile(t, approvedPath, contactDingtalkRetirementManifest(interfacesnapshot.CommandMigrationPending))
+	writeCommandMigrationManifestFile(t, candidatePath, contactDingtalkRetirementManifest(interfacesnapshot.CommandMigrationConsumed))
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, contactDingtalkRetirementSnapshot(true))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, contactDingtalkRetirementSnapshot(false))
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, contactDingtalkRetirementSnapshot(false))
+
+	args := []string{
+		"--check", baselinePath,
+		"--current", currentPath,
+		"--approved-command-migrations", approvedPath,
+		"--candidate-command-migrations", candidatePath,
+		"--migration-current-snapshot", currentSnapshotPath,
+		"--migration-base-snapshot", baseSnapshotPath,
+		"--migration-stable-snapshot", stableSnapshotPath,
+	}
+	var stdout, stderr strings.Builder
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("consumed composite retirement code=%d stderr=%s", code, stderr.String())
+	}
+
+	// 消费了收据但退役后的 interface tuple 不在评审表内时必须失败关闭。
+	mutateContactDingtalkTool(&current, func(tool *toolSchema) { tool.InterfaceMode = interfaceModeMCP })
+	writeRawSchemaContractFile(t, currentPath, current)
+	stderr.Reset()
+	if code := run(args, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "does not match reviewed interface tuple") {
+		t.Fatalf("wrong retired interface tuple code=%d stderr=%q", code, stderr.String())
 	}
 }
 
@@ -1548,6 +1817,137 @@ func schemaCommandMigrationSnapshot(after bool) interfacesnapshot.Snapshot {
 			ExcludedFlags:           []string{"help"},
 		},
 		Commands: commands,
+	}
+}
+
+func chatPromoteRetirementContract(after bool) schemaContract {
+	tool := toolSchema{
+		PrimaryCLIPath: "chat thread promote",
+		InterfaceMode:  interfaceModeMCP,
+		InterfaceRef:   `{"product_id":"im","rpc_name":"convert_message_to_thread"}`,
+		Availability:   "available",
+		Parameters:     map[string]parameterSchema{},
+		Effect:         "write",
+		Risk:           "medium",
+		Confirmation:   "not_required",
+		Idempotency:    "idempotent",
+	}
+	if after {
+		tool.Availability = "unavailable"
+		tool.InterfaceRef = ""
+	}
+	return schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"chat": {Tools: map[string]toolSchema{"chat.promote_message_to_thread": tool}},
+	}}
+}
+
+func mutateChatPromoteTool(contract *schemaContract, mutate func(*toolSchema)) {
+	product := contract.Products["chat"]
+	tool := product.Tools["chat.promote_message_to_thread"]
+	mutate(&tool)
+	product.Tools["chat.promote_message_to_thread"] = tool
+	contract.Products["chat"] = product
+}
+
+func chatPromoteRetirementManifest(state string) interfacesnapshot.CommandMigrationManifest {
+	return interfacesnapshot.CommandMigrationManifest{
+		Version: interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{{
+			Kind: interfacesnapshot.CommandMigrationAvailability,
+			Legacy: interfacesnapshot.CommandMigrationSide{
+				Command: "dws chat thread promote",
+				Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+				After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+			},
+			Schema: interfacesnapshot.CommandMigrationSchema{
+				ProductID:    "chat",
+				SourceToolID: "chat.promote_message_to_thread",
+				Parameters:   []interfacesnapshot.CommandParameterMigration{},
+				Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+			},
+			State:  state,
+			Reason: "Retire chat thread promote after the command migration is consumed.",
+		}},
+	}
+}
+
+func chatPromoteRetirementSnapshot(hidden bool) interfacesnapshot.Snapshot {
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{"dws __complete", "dws __completeNoDesc", "dws completion", "dws help"},
+			ExcludedFlags:           []string{"help"},
+		},
+		Commands: []interfacesnapshot.Command{
+			{Path: "dws", Runnable: true, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+			{Path: "dws chat thread promote", Runnable: true, Hidden: hidden, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+		},
+	}
+}
+
+func contactDingtalkRetirementContract(after bool) schemaContract {
+	tool := toolSchema{
+		PrimaryCLIPath: "contact user get-by-dingtalk-id",
+		InterfaceMode:  interfaceModeMCP,
+		InterfaceRef:   `{"product_id":"contact","rpc_name":"get_user_id_by_dingtalk_id"}`,
+		Availability:   "available",
+		Parameters:     map[string]parameterSchema{},
+		Effect:         "read",
+		Risk:           "low",
+		Confirmation:   "not_required",
+		Idempotency:    "idempotent",
+	}
+	if after {
+		tool.Availability = "unavailable"
+		tool.InterfaceMode = "composite"
+		tool.InterfaceRef = ""
+	}
+	return schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"contact": {Tools: map[string]toolSchema{"contact.get_user_id_by_dingtalk_id": tool}},
+	}}
+}
+
+func mutateContactDingtalkTool(contract *schemaContract, mutate func(*toolSchema)) {
+	product := contract.Products["contact"]
+	tool := product.Tools["contact.get_user_id_by_dingtalk_id"]
+	mutate(&tool)
+	product.Tools["contact.get_user_id_by_dingtalk_id"] = tool
+	contract.Products["contact"] = product
+}
+
+func contactDingtalkRetirementManifest(state string) interfacesnapshot.CommandMigrationManifest {
+	return interfacesnapshot.CommandMigrationManifest{
+		Version: interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{{
+			Kind: interfacesnapshot.CommandMigrationAvailability,
+			Legacy: interfacesnapshot.CommandMigrationSide{
+				Command: "dws contact user get-by-dingtalk-id",
+				Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+				After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+			},
+			Schema: interfacesnapshot.CommandMigrationSchema{
+				ProductID:    "contact",
+				SourceToolID: "contact.get_user_id_by_dingtalk_id",
+				Parameters:   []interfacesnapshot.CommandParameterMigration{},
+				Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+			},
+			State:  state,
+			Reason: "Retire contact user get-by-dingtalk-id after the command migration is consumed.",
+		}},
+	}
+}
+
+func contactDingtalkRetirementSnapshot(hidden bool) interfacesnapshot.Snapshot {
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{"dws __complete", "dws __completeNoDesc", "dws completion", "dws help"},
+			ExcludedFlags:           []string{"help"},
+		},
+		Commands: []interfacesnapshot.Command{
+			{Path: "dws", Runnable: true, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+			{Path: "dws contact user get-by-dingtalk-id", Runnable: true, Hidden: hidden, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+		},
 	}
 }
 

@@ -2,6 +2,8 @@
 
 > 当用户要创建 formula 类型字段、编写表内计算公式、做派生指标时，必须先读本文档。
 
+> 当前生产契约边界（2026-09-23）：`create_fields` / `update_field` 的工具 Schema 尚未显式列出 `config.formula`；下方语法和示例不是该生产入口已可用的保证。先核对服务端契约与发布状态，未确认时不要试写；不得改用建表绕过原有目标。已返回 fieldId 但 `verificationStatus=pending` 或读回 `FIELD_NOT_FOUND` 时保留原回执，只读核对，不重新创建。`--wait` 仅验证字段结构可读，不证明公式计算结果已完成。
+
 ## 1. 何时使用 formula 字段
 
 | 场景 | 用 formula | 不用 formula |
@@ -221,4 +223,6 @@ dws aitable field update \
   --format json
 ```
 
-更新时只需传新的 `formula` 表达式，系统会自动重新计算所有记录。
+更新时只需传新的 `formula` 表达式，但 mutation 成功不等于历史记录已经完成计算。先用 `field get` 核对表达式，再用 `record query --field-ids <输入字段ID,结果字段ID>` 对少量已知输入同时投影输入和结果；省略结果 fieldId 后的缺值不能判为计算失败。
+
+公式结果持续为空或 `null` 时，先用页面、计算状态或等价只读路径交叉验证。不得通过更新业务记录来“触发重算”；配置正确但仍无法证明结果时，标记为 MCP 查询链路或平台计算问题。lookup/filterUp 同样需要用已知关联/筛选命中的小样本验证实际值，COUNT 必须与相同条件的真实记录数核对，不自动换字段规避错误。

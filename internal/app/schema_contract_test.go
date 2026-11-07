@@ -402,6 +402,7 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 		"chat.send_personal_message",
 		"chat.send_robot_message",
 		"chat.reply_personal_message",
+		"chat.upload_local_conversation_file",
 	)
 
 	send, ok := snapshot.Tools["chat.send_personal_message"]
@@ -426,6 +427,23 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	if _, exists := snapshot.Tools["chat.upload_conversation_file"]; exists {
 		t.Fatal("downlined chat file upload must not be advertised in Schema")
 	}
+	upload, exists := snapshot.Tools["chat.upload_local_conversation_file"]
+	if !exists || schemaContractString(upload["primary_cli_path"]) != "chat conversation-file upload" {
+		t.Fatalf("upload definition = %#v", upload)
+	}
+	if schemaContractString(upload["interface_mode"]) != "composite" || schemaContractString(upload["availability"]) != "available" {
+		t.Fatalf("upload interface = %#v/%#v", upload["interface_mode"], upload["availability"])
+	}
+	uploadParams := schemaContractMap(upload["parameters"])
+	if required, _ := uploadParams["file"]["required"].(bool); !required {
+		t.Fatalf("upload --file required = %#v", uploadParams["file"]["required"])
+	}
+	result := schemaContractMap(upload["result"])
+	dataSchema := schemaContractMap(result["data_schema"])
+	properties := schemaContractMap(dataSchema["properties"])
+	if _, ok := properties["dentryId"]; !ok {
+		t.Fatalf("upload result = %#v", result)
+	}
 
 	botReply := snapshot.Tools["chat.send_robot_message"]
 	botParams := schemaContractMap(botReply["parameters"])
@@ -445,12 +463,12 @@ func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := schemaContractPayloadForBoundCanonicals(t, root, "calendar.remove_calendar_participant")
 	tool := snapshot.Tools["calendar.remove_calendar_participant"]
-	// Runtime does not gate this path today; Schema confirmation must follow metadata.runtime_gate.
-	if got := tool["confirmation"]; got != "not_required" {
-		t.Fatalf("calendar attendee delete confirmation = %#v, want not_required", got)
+	// Removing attendees affects others and is irreversible; confirmation must be user_required.
+	if got := tool["confirmation"]; got != "user_required" {
+		t.Fatalf("calendar attendee delete confirmation = %#v, want user_required", got)
 	}
-	if got := tool["risk"]; got != "medium" {
-		t.Fatalf("calendar attendee delete risk = %#v, want medium", got)
+	if got := tool["risk"]; got != "high" {
+		t.Fatalf("calendar attendee delete risk = %#v, want high", got)
 	}
 }
 

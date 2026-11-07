@@ -338,6 +338,27 @@ func (s *PersonalSource) handleFrame(conn *websocket.Conn, data []byte, emit dws
 	if err != nil {
 		return fmt.Errorf("personal source: decode dataframe: %w", err)
 	}
+	if strings.EqualFold(df.Type, "SYSTEM") {
+		resp := payload.NewSuccessDataFrameResponse()
+		switch df.GetTopic() {
+		case "ping":
+			resp = payload.NewDataFrameAckPong(df.GetMessageId())
+			resp.Data = df.Data
+		case "disconnect":
+			// 先确认控制帧，再由重连循环关闭本连接并重新申请 ticket。
+		default:
+			resp = payload.NewDataFrameResponse(payload.DataFrameResponseStatusCodeKHandlerNotFound)
+		}
+		resp.SetHeader(payload.DataFrameHeaderKMessageId, df.GetMessageId())
+		resp.SetHeader(payload.DataFrameHeaderKContentType, payload.DataFrameContentTypeKJson)
+		if err := conn.WriteJSON(resp); err != nil {
+			return retryPersonal(fmt.Errorf("personal source: write system ack: %w", err))
+		}
+		if df.GetTopic() == "disconnect" {
+			return retryPersonal(errors.New("personal source: server requested reconnect"))
+		}
+		return nil
+	}
 	raw := s.rawEventFromDataFrame(df)
 	logPersonalDataFrame(raw, df.Data)
 	emit(raw)

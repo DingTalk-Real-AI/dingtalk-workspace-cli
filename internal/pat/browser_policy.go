@@ -71,6 +71,13 @@ func patConfigDir() string {
 	return filepath.Join(homeDir, ".dws")
 }
 
+// BrowserPolicyConfigDir returns the exact configuration directory used by
+// the native PAT command. Shortcut adapters use this narrow seam so their
+// write/readback cycle cannot drift to a different policy file.
+func BrowserPolicyConfigDir() string {
+	return patConfigDir()
+}
+
 func LoadBrowserPolicy(configDir string) (*BrowserPolicy, error) {
 	path := patPolicyPath(configDir)
 	data, err := patPolicyReadFile(path)
@@ -201,6 +208,32 @@ func SetBrowserPolicy(configDir, explicitAgentCode string, enabled bool) (Browse
 		OpenBrowser: enabled,
 		Source:      "default",
 	}, nil
+}
+
+// ReadStoredBrowserPolicy reads the exact default or explicitly named agent
+// entry without consulting the process agent-code environment. This is the
+// verification companion to SetBrowserPolicy: callers can prove the same
+// target was persisted rather than observing an environment-selected fallback.
+func ReadStoredBrowserPolicy(configDir, explicitAgentCode string) (BrowserPolicySelection, error) {
+	agentCode, err := resolveBrowserPolicyWriteAgentCode(explicitAgentCode)
+	if err != nil {
+		return BrowserPolicySelection{}, err
+	}
+	policy, err := LoadBrowserPolicy(configDir)
+	if err != nil {
+		return BrowserPolicySelection{}, err
+	}
+	if agentCode != "" {
+		entry, ok := policy.Agents[agentCode]
+		if !ok {
+			return BrowserPolicySelection{}, fmt.Errorf("PAT browser policy agent entry was not persisted")
+		}
+		return BrowserPolicySelection{Scope: "agent", AgentCode: agentCode, OpenBrowser: entry.OpenBrowser, Source: "agent"}, nil
+	}
+	if policy.Default == nil {
+		return BrowserPolicySelection{}, fmt.Errorf("PAT browser policy default entry was not persisted")
+	}
+	return BrowserPolicySelection{Scope: "default", OpenBrowser: policy.Default.OpenBrowser, Source: "default"}, nil
 }
 
 func newBrowserPolicyCommand() *cobra.Command {

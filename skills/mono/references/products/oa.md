@@ -7,14 +7,19 @@
 Usage:
   dws oa approval list-pending [flags]
 Example:
-  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00"
-  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --query 关键词
+  dws oa approval list-pending --create-time-from 2026-03-10 --create-time-to 2026-03-31
+  dws oa approval list-pending --query 关键词 --process-code <code> --page 1 --limit 20
 Flags:
-      --end string   结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
-      --page string  分页页码 (可选)
-      --limit string 每页大小 (可选)
-      --start string 开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
-      --query string  关键字搜索 (可选)
+      --page int                       分页页码（默认 1）
+      --limit int                      每页大小（默认 20，最大 100）
+      --query string                   关键字搜索
+      --process-code string            审批模板 code
+      --originator-user-id string      审批单发起人 userId
+      --create-time-from string        发起时间起始（yyyy-MM-dd）
+      --create-time-to string          发起时间截止（yyyy-MM-dd，含当日）
+      --finish-time-from string        完成时间起始（yyyy-MM-dd）
+      --finish-time-to string          完成时间截止（yyyy-MM-dd，含当日）
+      --create-before string           创建时间
 ```
 
 ### 获取审批实例详情
@@ -35,6 +40,7 @@ Flags:
 - 已有钉盘 `spaceId/fileId`，需要为当前用户批量开通下载权限：`attachment authorize-download`
 - 需要在审批场景内批量预览附件：`attachment authorize-preview`
 - 需要把本地文件上传为审批附件（自动完成初始化+PUT+提交）：`attachment upload`
+- 需要把本地图片上传取 mediaIdV2（组装 DDPhotoField 图片控件 value）：`image upload`
 
 #### 获取审批附件临时下载链接
 
@@ -94,6 +100,19 @@ Flags:
 
 该命令一条命令完成审批附件上传的全部三步：先调用 `oa/init_attachment_upload_info` 初始化获取 OSS 上传地址与签名凭证，再将本地文件二进制 HTTP PUT 上传到 OSS，最后调用 `oa/commit_attachment_upload_info` 提交入库；返回结果包含 fileId、spaceId、fileName、fileSize、fileType。`--file-name` 不传时默认使用本地文件名，`--md5` 不传时自动根据文件内容计算，无需手动初始化或提交。
 
+#### 上传本地图片为审批图片（DDPhotoField）素材
+
+```
+Usage:
+  dws oa approval image upload [flags]
+Example:
+  dws oa approval image upload --file ./证据图.png --format json
+Flags:
+      --file string   本地图片路径 (jpg/jpeg/png/gif/webp/bmp，≤10MB；超过 2MB 自动压缩) (必填)
+```
+
+该命令将本地图片上传到钉钉文件服务（bizType=approval_image），返回 mediaIdV2，供组装 DDPhotoField 图片控件 value（数组转义字符串内嵌 mediaIdV2）随 `create-instance` 提交；图片已是公网 URL 时无需调用本命令，直接组装 URL 提交。
+
 ### 同意审批
 
 > **CAUTION:** 审批决策不可撤回 — 执行前必须向用户确认。
@@ -147,19 +166,32 @@ Flags:
       --instance-id string   审批实例 ID (必填)
 ```
 
-### 查询我已发起的审批实例记录
+### 查询当前用户在指定审批模板下发起的审批实例记录
 ```
 Usage:
   dws oa approval list-initiated [flags]
 Example:
   dws oa approval list-initiated --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --limit 20
 Flags:
-      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)，与 start 间隔不超过120天 (必填)
       --limit string          每页大小，最大 20 (必填)
       --cursor string         分页游标，首次传 0 (必填)
       --process-code string   表单 processCode (必填)
-      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)，与 end 间隔不超过120天 (必填)
 ```
+
+### 查询可管理的审批模板及详情
+
+```bash
+dws oa approval template list --format json
+dws oa approval template detail --process-code PROC-EXAMPLE --format json
+```
+
+- `template list` 无业务参数，调用 `oa/list_manage_templates`，查询当前用户在当前组织可管理的模板。
+- `template detail` 只接收一个必填的 `--process-code`，调用 `oa/get_template_detail` 时转换为单元素 `processCodes` 数组。
+- 两个命令通过统一输出的 `data.templates` 返回模板数组；详情中的 `schemaContent` 和 `processConfig` 保留为服务端 JSON 字符串，其余模板字段原样保留。
+- 管理权限列表与 `list-forms` 的可发起模板列表语义不同。查看审批实例使用 `oa approval detail`；读取发起审批所需字段定义使用 `form-schema`。
+- 服务端 `success=false`（例如 `dingOpenErrcode=830001`）会使命令失败。
 
 ### 获取当前用户可见的审批表单列表
 ```
@@ -207,6 +239,8 @@ Flags:
 - `result.processDescription` — 表单描述
 - `result.content` — 表单组件 JSON 字符串，包含表单项（items）和标题等配置
 
+考勤套件发起链路的服务端前置命令（`dws attendance approve` 组与 `+` shortcut）见 attendance.md 对应章节；四个套件的发起工作流与纪律见下方「套件发起工作流（独立文档）」指针表。
+
 ### 流程预测
 
 ```
@@ -214,11 +248,9 @@ Usage:
   dws oa approval forecast-process [flags]
 Example:
   # 简单预测
-  dws oa approval forecast-process --process-code PROC-xxx --dept-id -1 --form-values '{"单行输入框":"测试内容"}'
-  # 指定部门预测
-  dws oa approval forecast-process --process-code PROC-xxx --dept-id 12345 --form-values '{"金额":"5000"}'
+  dws oa approval forecast-process --process-code PROC-xxx --dept-id <deptId> --form-values '{"单行输入框":"测试内容"}'
   # 高级用法：传入完整 JSON
-  dws oa approval forecast-process --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[[{"name":"单行输入框","value":"测试"}]]}'
+  dws oa approval forecast-process --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[[{"name":"单行输入框","value":"测试"}]]}'
 Flags:
       --process-code string   审批模板 processCode（简单模式必填）
       --form-values string    表单值 JSON，格式 '{"控件名称":"值"}'（简单模式必填）
@@ -227,6 +259,8 @@ Flags:
 ```
 
 > **注意：** forecast 接口的 `formComponentValues` 比 create-instance 多一层数组包裹（`[[{...}]]`），CLI 简单模式已自动处理，高级模式需自行包裹。`processCode`、`deptId`、`formComponentValues` 三个字段均为必填，`userId` 由系统从登录态自动填充。
+
+> **deptId 必须已核验：** 先从当前用户信息确定真实 `deptId`（`dws contact user get-self` 读 `orgEmployeeModel.depts[].deptId`，多部门时经用户确认）；`-1` 仅代表根部门，禁止照抄示例。简单模式三参数一次传齐，不得缺参试探。`forecast-process` 必须使用已核验的 `deptId` 和准备提交的最终表单值，任一值变化后重新预测；缺必填业务值必须追问，不得自行补齐。
 
 #### 流程预测的作用
 
@@ -297,34 +331,36 @@ Flags:
 
 #### 执行摘要
 
-- **如果用户未明确给出 `processCode`，必须固定走 `search-forms` → `form-schema` → 收集表单值 → `forecast-process` → 自选节点选人 → `create-instance`**，不要跳过 `form-schema` 直接拼请求。
-- **如果用户明确给出 `processCode`，固定走 `form-schema` → 收集表单值 → `forecast-process` → 自选节点选人 → `create-instance`**，不要跳过 `form-schema` 直接拼请求。
-- **`form-schema` 返回的 `content` 不是创建 payload 的原样模板。** 它主要用于识别控件 `label`（即 name）、`id`、控件类型（componentName）和选项值范围；真正的 `formComponentValues` 中 `value` 结构以本文的控件值格式表为准。
-- **`forecast-process` 返回的自选节点必须在发起前让用户选人。** 若 `workflowActivityRuleVOs` 中有 `targetSelect: true` 的节点，必须提示用户选择处理人，并将结果通过 `targetSelectActioners` 传入 `create-instance`。
-- **所有人员类参数使用 userId。** 若用户给的是姓名，先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 解析成 userId。**严禁把姓名直接写进** `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。
+- **未明确给出 `processCode` 时先 `search-forms`，已给出则跳过；其后固定走 `form-schema` → 收集表单值 → `forecast-process` → 自选节点选人 → `create-instance`**，不得跳过 `form-schema` 直接拼请求。
+- **`forecast-process` 返回的自选节点必须在发起前让用户选人。** 见「流程预测」节与「严禁行为」。
 - **创建实例前一次性汇总确认。** `create-instance` 是写操作，执行前一次性展示模板、表单值、流程预测结果和审批人/抄送人供用户确认。
 
 #### 严禁行为
 
 - **严禁跳过 `form-schema`。** 未拿到表单 Schema 前，不得调用 `create-instance`。
-- **严禁复用旧的 Schema 结果。** 每次发起实例前都必须重新调用 `form-schema`，模板可能已被修改。
-- **严禁在存在不支持必填控件时强行发起。** 若 `form-schema` 返回的必填控件中有不支持类型（如计算公式、流水号、OCR 等），直接告知用户不支持通过 CLI 发起。**注意：附件控件 `DDAttachment` 已支持通过 CLI 提交**，先用 `dws oa approval attachment upload --file <path>` 获取字段再组装为 value 提交，不属于不支持类型。
+- **严禁在存在不支持必填控件时强行发起。** 若 `form-schema` 返回的必填控件中有不支持类型（如计算公式、流水号、OCR 等），直接告知用户不支持通过 CLI 发起。**注意：附件控件 `DDAttachment` 已支持通过 CLI 提交**，先用 `dws oa approval attachment upload --file <path>` 获取字段再组装为 value 提交，不属于不支持类型；**图片控件 `DDPhotoField` 亦已支持**，先用 `dws oa approval image upload --file <path>` 取 mediaIdV2 再组装 value 提交，同样不属于不支持类型。
 - **严禁把 `form-schema` 返回的 `content` 当成可直接提交的 payload 模板。**
-- **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId。
+- **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先经 aisearch person 按姓名解析为 userId。
 - **严禁在未得到用户确认前直接执行真实提单。**
 - **严禁猜测控件名称或选项值。** 必须从 `form-schema` 返回中提取。
-- **严禁跳过 `forecast-process` 中的自选节点选人。** 若预测返回 `targetSelect: true` 的节点，必须让用户选人后再发起。
+- **严禁在发起后的验收环节重复执行写命令。** `create-instance` 成功后，验收只用只读的 `tasks --instance-id` / `detail --instance-id` 核对状态与表单存储；重复执行 `create-instance` 会直接产生重复审批单。
+- **严禁跳过 `forecast-process` 中的自选节点选人。** 若预测返回 `targetSelect: true` 的节点，必须让用户选人并将结果通过 `targetSelectActioners` 传入 `create-instance`。
+- **严禁使用未核验的 `deptId` 或照抄示例占位值发起。** `create-instance` 与 `forecast-process` 使用同一已核验 `deptId`（见「流程预测」节）。
+
+#### 模板不支持 CLI 发起时：submitUrl 链接引导
+
+当模板不支持 CLI 发起（含不支持必填控件、请假套件特例哺乳假/需上传证明材料等；补卡图片证据已可用 `dws oa approval image upload` 取 mediaIdV2 提交，不再列为不支持项）时，引导用户点击 `dws attendance +get-approve-template` 返回的 `submitUrl` 提交。链接展示规范：使用 Markdown 可点击链接格式 `[formName](submitUrl)`（如 `[员工请假](https://...)`）；如存在更匹配的模板可放在列表前面，但不要只返回推荐模板，必须同时返回其它可用模板供用户选择，且每个模板都应是用户可直接点击的 Markdown 链接。
 
 #### 最小判断表
 
 | 你手上有什么 | 下一步 |
 |---|---|
-| 只有口语需求，比如"帮我发起请假审批" | 先 `search-forms --query 请假` |
+| 只有口语需求，比如"帮我发起请假审批" | 请假/补卡/外出/加班走 `dws attendance +get-approve-template`（--type leave / repair-check / travel / overtime）定位模板（见 [oa/oa-leave.md](oa/oa-leave.md) / [oa/oa-supply.md](oa/oa-supply.md) / [oa/oa-goout.md](oa/oa-goout.md) / [oa/oa-overtime.md](oa/oa-overtime.md)）；其他审批先 `search-forms --query <关键词>` |
 | 已拿到 `processCode` | 直接 `form-schema --process-code <code>` |
 | 已拿到 Schema | 向用户展示控件列表，收集表单值 |
 | 已收集表单值 | `forecast-process` 预测流程走向 |
-| 预测返回有 `targetSelect: true` 节点 | 让用户为自选节点选人（`dws aisearch person --query "<姓名>" --dimension name --format json` 解析姓名） |
-| 预测完成，自选节点已选人 | 汇总确认后 `create-instance --yes` |
+| 预测返回有 `targetSelect: true` 节点 | 让用户为自选节点选人（经 aisearch person 解析姓名） |
+| 预测完成，自选节点已选人 | 汇总确认后 `create-instance` |
 | 用户明确说"不走模板流程，直接指定审批人" | 使用 `directAppointedApprovers`（高级模式） |
 
 #### 工作流
@@ -334,9 +370,9 @@ Flags:
 2. form-schema  --process-code <code> → 拿到控件列表、类型、选项值
 3. 检查 Schema 中是否有不支持的必填控件  → 若有则直接告知用户不支持发起
 4. 收集表单值                       → 向用户展示控件列表，收集用户填写的表单值
-5. forecast-process                  → 根据表单值预测流程走向，识别自选节点
-6. 自选节点选人                       → 若预测返回 targetSelect=true 的节点，让用户选人（用 dws aisearch person --query "<姓名>" --dimension name --format json 解析姓名）
-7. 汇总确认后 create-instance --yes  → 展示完整信息（表单值 + 流程路径 + 审批人），用户确认后执行发起
+5. forecast-process                  → 用已核验 deptId 与最终表单值预测流程走向，识别自选节点
+6. 自选节点选人                       → 若预测返回 targetSelect=true 的节点，让用户选人（经 aisearch person 解析姓名）
+7. 汇总确认后 create-instance → 展示完整信息（表单值 + 流程路径 + 审批人），用户确认后执行发起
 ```
 
 > **IMPORTANT：每次发起实例前都必须重新调用 `form-schema` 查询模板。** 即使用户之前查询过同一个 processCode，模板可能已被修改（控件增减、选项变更、必填属性调整等），不得复用旧的 Schema 结果。
@@ -345,37 +381,37 @@ Flags:
 
 > **核心目标：流程清晰，步骤有序，避免重复询问。**
 
-1. **先查 Schema 再收集表单值（步骤 2→4）：** `form-schema` 后向用户展示需要填写的控件列表，然后一次性收集全部表单值。不要在未拿到 Schema 前就问用户填什么。
+1. **先查 Schema 再收集表单值（步骤 2→4）：** `form-schema` 后先展示控件列表，再一次性收集全部表单值；未拿到 Schema 前不得问用户填什么。
 
-2. **流程预测后再选自选审批人（步骤 5→6）：** `forecast-process` 返回流程路径和自选节点后：
-   - 先向用户展示完整的流程路径（经过哪些节点、各节点处理人）
-   - 对 `targetSelect: true` 的节点，提示用户"节点「{activityName}」需要您自选{actorType}人"
-   - 用 `dws aisearch person --query "<姓名>" --dimension name --format json` 帮用户查找并选人
-   - 若有多个自选节点，一次性收集所有自选节点的选人结果
+2. **流程预测后再选自选审批人（步骤 5→6）：** `forecast-process` 后先展示完整流程路径（各节点与处理人）；对 `targetSelect: true` 节点提示「节点「{activityName}」需要您自选{actorType}人」，用 `dws aisearch person --query "<姓名>" --dimension name --format json` 帮用户查找并选人；多个自选节点一次性收集，禁止逐个询问。
 
-3. **单次汇总确认（步骤 7）：** 发起前一次性展示完整信息供用户确认：
-   - 审批模板名称
-   - 表单各控件值
-   - 流程预测结果（审批路径）
-   - 各节点审批人/抄送人（含自选节点选人结果）
+3. **单次汇总确认（步骤 7）：** 发起前一次性展示模板名称、各控件值、预测审批路径、各节点审批人/抄送人（含自选选人结果），并遵守：
+   - **单选确认**：一个单选问题（如「确认发起 / 取消发起」），完整汇总置于问题或选项描述中一并展示；附属决策（如非必填自选节点是否留空）须在确认前收集或按默认值并入汇总，禁止拆成多个并列问题。
+   - **零括号主干形态**：汇总主干只写字段名与核心值，禁止括号内描述——模板编码、userId、多选/服务端裁决/窗口类型/通道验收等技术细节不入正文，选项描述同样不加括号尾注（写「加 --yes 真实提交」不写「加 --yes 真实提交（服务端已验证）」）；技术证据留档于命令字符串、临时文件或技术报告。示例：「模板：加班-new / 加班人：文疏、公 元yt / 时间：2026-09-01 21:00 → 23:00 / 时长：每人 2.00 小时」
+   - **空条目控件不进汇总**：汇总只展示有业务值的控件；服务端自动处理、以空条目组装的控件（如加班补偿自动配置）不展示该字段，技术结论需告知时另用说明句，不与表单值并列
 
-**反例（禁止）：**
--  未查 Schema 就直接问用户填什么表单值
--  流程预测后逐个节点分别询问选人，而非一次性收集
--  用户确认前直接执行发起
+4. **开放信息统一收集（请假/外出起止范围，请假/补卡/外出/加班事由）：**
+   - **时间范围（请假与外出；补卡时刻由意图词与班次推导，不走此交互）**：按天计 → 日期即全天，无需此问；按半天/小时计且用户未限定上/下午/时刻时，问「全天 / 仅上午 / 仅下午」，按有效单位展示口径（小时计 → 全天 09:00→18:00、仅上午 09:00→12:00、仅下午 12:00→18:00；半天计 → 全天上午至下午、仅上午/仅下午），须保留自定义起止时刻通道；跨多天时起止日分别确定口径；选项时刻仅为示意，以用户实际班次为准；禁止默认全天。
+   - **事由/理由**：常见快捷选项 + **必须有自由输入通道**（不得只给选项变相预筛），命中即用、未命中自由输入。常见选项：请假（身体不适/家中有事/处理私事）、补卡（忘记打卡/考勤设备故障/外出办公未打卡）、外出（拜访客户/参加会议/外勤办事）、加班（赶项目进度/客户需求/临时任务）。
+   - **纯对话环境**（无选择组件）：退化为文本提问并结束回合等用户输入，属合规模式；但半天/小时计的时间范围仍须明确问，禁止默认全天。
+   - **话术硬约束**：选项与提问一律纯中文，技术字段与英文枚举不进入用户可见文案。
+
+5. **选择澄清优先（交互形态硬约束）：** 凡有离散选项或预设取值的澄清与确认（模板、类型/班次、时间范围、加班逐日时长、事由等），宿主有选择交互组件时必须用**选择澄清**（快捷预设 + 「其他」自由输入），禁止退化为纯文本 `___` 填空；仅纯对话宿主才用文本提问。快捷预设只是加速项，不得变相预筛或替代用户裁决。
+
+**反例（禁止）：** 未查 Schema 就问表单值；预测后逐个节点询问选人；确认前直接发起；半天/小时计未问时间范围默认全天；发起确认拆成多个并列问题；汇总或选项描述夹带括号内技术描述（如「加班人（userId）」）；宿主有选择组件时把时长/事由等离散澄清退化为纯文本填空。
 
 ```
 Usage:
   dws oa approval create-instance [flags]
 Example:
-  # 简单发起（Agent 在汇总确认后需加 --yes）
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试内容"}' --yes
+  # 简单发起（deptId 须为已核验的真实部门 ID；Agent 在汇总确认后需加 --yes）
+  dws oa approval create-instance --process-code PROC-xxx --dept-id <deptId> --form-values '{"单行输入框":"测试内容"}'
   # 指定审批人（OR=或签，AND=会签，NONE=单人）
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --yes
+  dws oa approval create-instance --process-code PROC-xxx --dept-id <deptId> --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR
   # 指定抄送人
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --cc-list "userId1" --cc-position START --yes
+  dws oa approval create-instance --process-code PROC-xxx --dept-id <deptId> --form-values '{"单行输入框":"测试"}' --cc-list "userId1" --cc-position START
   # 高级用法：传入完整 JSON（支持 directAppointedApprovers、targetSelectActioners 等全部字段）
-  dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}]}' --yes
+  dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[{"name":"单行输入框","value":"测试"}]}'
 Flags:
       --process-code string              审批模板 processCode（简单模式必填）
       --form-values string               表单值 JSON，格式 '{"控件名称":"值"}'（简单模式必填）
@@ -401,9 +437,10 @@ Flags:
 - 先用 `form-schema` 识别有哪些控件、每个控件的 `label`（name）、`componentName`（type）、选项值范围以及明细子控件结构。
 - **`form-schema` 返回的 `content` 不是可直接提交的原样模板。** 它提供控件定义，`value` 结构须按下方控件值格式表组装。
 - 提交时必须保证每个控件的 `name`（即 label）与 Schema 中的 `props.label` **完全一致**。
-- 如果用户提供的是人员信息，先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId 后再写入对应控件。
+- 如果用户提供的是人员信息，先经 aisearch person 按姓名解析为 userId 后再写入对应控件。
 - 单选/多选控件提交的是选项文本（option value），该值从 `form-schema` 返回的选项定义中取得。
 - `InnerContactField`、`DepartmentField`、`TableField`、`DDDateRangeField`、`DDAttachment` 等控件的 `value` 结构各不相同，必须按下方格式表单独组装，不要套用文本控件的写法。
+- `TableField` 的 `value` 必须序列化为二维数组字符串，每行是子控件 `name/value` 对象数组；不是以子控件 label 为 key 的行对象数组。`--form-values` 只转换顶层字段映射，和 `--request` 一样原样传递该字符串，不转换明细内部结构。完整示例见 [TableField 控件说明](oa/oa-form-components.md#tablefield明细控件)。
 - `TextNote`（文字说明）不收集数据，**不要**出现在 `formComponentValues` 中。
 
 #### 表单控件值格式速查
@@ -423,14 +460,14 @@ Flags:
 | 时间区间 | `DDDateRangeField` | JSON 数组字符串 | `'["2026-07-27","2026-07-30"]'` | label 为数组 `["开始","结束"]`，用开始时间 label 作 name            |
 | 金额控件 | `MoneyField` | 数字字符串 | `"1500.50"` | 自动显示大写金额                                              |
 | 电话控件 | `PhoneField` | 手机号字符串 | `"13800138000"` |                                                       |
-| 联系人控件 | `InnerContactField` | userId | `"user123"` | 多人时传 JSON 数组 `'["user1","user2"]'`；choice="0"单选/"1"多  |
+| 联系人控件 | `InnerContactField` | userId JSON 数组字符串 | `'["user123"]'` | 单选也传单元素数组，不传裸 userId；choice="0"单选/"1"多  |
 | 部门控件 | `DepartmentField` | 部门 ID | `"12345"` | 多部门传 JSON 数组；multiple=true 时支持多选                      |
 | 省市区控件 | `AddressField` | JSON 数组字符串 | `'["浙江省","杭州市","西湖区"]'` | 三级联动；needDetail=true 时末尾加详细地址                         |
-| 图片控件 | `DDPhotoField` | URL 数组转义字符串 | `"[\"http://example.com/img1.jpg\"]"` | 支持 URL 直接提交；**不支持本地文件上传** |
+| 图片控件 | `DDPhotoField` | 数组转义字符串（URL 或 mediaIdV2） | `"[\"http://example.com/img1.jpg\"]"` | **支持通过 CLI 提交**：本地图片先 `dws oa approval image upload --file <path>` 取 mediaIdV2 再组装 value；公网 URL 直接提交 |
 | 附件控件 | `DDAttachment` | JSON 数组转义字符串 | `"[{\"spaceId\":\"xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"xxx\"}]"` | **支持通过 CLI 提交**：先用 `dws oa approval attachment upload --file <path>` 获取 fileId/spaceId/fileName/fileSize/fileType，再组装为 DDAttachment value 提交 |
 | 评分控件 | `StarRatingField` | 数字字符串 | `"4"` | limit 控制最大星数（默认 5）                                    |
 | 关联审批单 | `RelateField` | 审批实例 ID | `"q-xxx"` | 须为当前组织下已存在的实例                                         |
-| 明细控件 | `TableField` | JSON 数组字符串 | `'[{"子控件名":"值1"},{"子控件名":"值2"}]'` | 不可嵌套 TableField；不可含 DDMultiSelectField/DDPhotoField；最大 100 行 |
+| 明细控件 | `TableField` | 二维 name/value 数组的 JSON 字符串 | `'[[{"name":"子控件名","value":"值1"}],[{"name":"子控件名","value":"值2"}]]'` | 不可嵌套 TableField；不可含 DDMultiSelectField/DDPhotoField；最大 100 行 |
 | 身份证控件 | `IdCardField` | 身份证号 | `"330102199001011234"` | 内置格式校验                                                |
 | 文字说明 | `TextNote` | — | — | **不收集数据**，不会出现在 formComponentValues 中                 |
 
@@ -450,12 +487,12 @@ Flags:
 > # 1) 上传附件，拿到 fileId/spaceId/fileName/fileSize/fileType
 > dws oa approval attachment upload --file ./a.pdf
 > # 2) 组装 value 后先向用户展示提单汇总；确认前不要追加 --yes
-> dws oa approval create-instance --process-code PROC-xxx \
+> dws oa approval create-instance --process-code PROC-xxx --dept-id <deptId> \
 >   --form-values '{"附件":"[{\"spaceId\":\"163xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"643xxx\"}]"}'
 > # 用户确认模板、表单值、流程路径和人员后，才可在同一命令末尾追加 --yes
 > ```
 
-> **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**（见上方速查表），仅不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。
+> **`DDPhotoField`（图片控件）已支持通过 CLI 提交：** 本地图片先用 `dws oa approval image upload --file <path>` 上传取 mediaIdV2，再组装 value（数组转义字符串）随 `create-instance` 提交（见上方速查表）；公网图片 URL 可直接填入 value 提交。
 
 如果目标审批模板包含上述控件，不要硬拼 `form-values`；应告知用户这些字段无需填写或需要在钉钉客户端补充。
 
@@ -510,23 +547,7 @@ Flags:
 ]
 ```
 - `actionerKey`：自选节点的规则 key，可通过获取审批单流程节点信息接口获取 `actorKey`
-- `actionerStaffIds`：操作人 userId 列表
-
-**审批类型（approvers actionType）说明：**
-
-| 值 | 含义 | 说明 |
-|----|------|------|
-| `AND` | 会签 | 所有审批人都必须审批通过 |
-| `OR` | 或签 | 任一审批人审批即可 |
-| `NONE` | 单人审批 | 只有一个审批人 |
-
-**抄送时间点（ccPosition）说明：**
-
-| 值 | 含义 |
-|----|------|
-| `START` | 审批发起时抄送 |
-| `FINISH` | 审批完成时抄送 |
-| `START_FINISH` | 发起和完成时都抄送 |
+- `actionerStaffIds`：操作人 **userId** 列表（userId 即员工工号，**不是员工 uid**——传 uid 短号会导致审批人节点异常，实测；姓名解析 userId 见上方执行摘要）
 
 #### 表单控件约束
 
@@ -551,6 +572,20 @@ Flags:
 ```
 
 后续可用该 processInstanceId 执行 `detail`、`tasks`、`records`、`revoke` 等操作。
+
+### 套件发起工作流（独立文档）
+
+四个考勤套件的发起工作流已拆分为独立文档（均不走 search-forms）：
+
+| 套件 | 触发意图 | 工作流文档 |
+|---|---|---|
+| 请假（DDHolidayField） | "请假/请X天假/请年假/请事假/请病假/提交请假" | [oa/oa-leave.md](oa/oa-leave.md) |
+| 补卡（DDBizSuite · attendance.supply） | "补卡/忘打卡/补打卡/帮我补上次的卡" | [oa/oa-supply.md](oa/oa-supply.md) |
+| 外出（DDBizSuite · attendance.goout） | "外出/公出/提交外出/帮我提外出申请" | [oa/oa-goout.md](oa/oa-goout.md) |
+| 加班（DDBizSuite · attendance.batchovertime） | "加班/提交加班/帮我提加班申请/代XX提交加班"（无歧义窗口自算 + 歧义窗口两阶段，时长结果须经用户手动确认） | [oa/oa-overtime.md](oa/oa-overtime.md) |
+
+出差仍按 attendance 域 `+get-approve-template` 的提交链接引导（`--type out`，与外出 `--type travel` 注意分流）。
+
 ### 获取审批任务的被催办人 userId
 
 > **催办必须两步串联：** ① `ding-info` 获取被催办人 `userId` → ② `ding message send` 发送催办消息。禁止跳过第一步直接猜测 userId。
@@ -625,7 +660,6 @@ Flags:
 ```
 MCP 工具: `list_pending_tasks`。
 
-
 ### 查询我处理过的审批单
 ```
 Usage:
@@ -633,9 +667,11 @@ Usage:
 Example:
   dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --process-instance-status string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
 ```
 ### 查询我已经提交的审批单
 ```
@@ -644,9 +680,11 @@ Usage:
 Example:
   dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --process-instance-status string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
 ```
 ### 查询抄送我的审批单
 ```
@@ -655,10 +693,14 @@ Usage:
 Example:
   dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
+      --unread-only bool                仅查询未读抄送审批
 ```
+
+以上四类个人审批列表（list-pending / list-executed / list-submitted / list-cc）均使用当前登录身份；切换账号请使用全局 `--profile`，不支持通过 `--user-id` 覆盖当前用户。
 
 ### 以管理员身份查询审批实例列表
 
@@ -715,7 +757,7 @@ MCP 工具: `dingflow_comments`；参数: processInstanceId, text（对应 --ins
 Usage:
   dws oa approval oa-cc-noticer [flags]
 Example:
-  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "68674200835816"
+  dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "<userId>"
   dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1,userId2" --operator-id "123123"
 Flags:
       --instance-id string   审批实例 ID (必填)
@@ -763,7 +805,6 @@ Flags:
       --remark string               退回说明 (可选)
 ```
 
-
 ## 意图判断
 
 用户说"待审批/待处理审批" → `approval list-pending`
@@ -772,6 +813,7 @@ Flags:
 用户说"授权下载审批钉盘文件/批量开通附件下载权限" → `approval attachment authorize-download`（需 --file-infos，最多 10 项）
 用户说"预览审批附件/批量授权预览附件" → `approval attachment authorize-preview`（需 --instance-id 和 --file-ids，最多 20 项；评论附件增加 --with-comment-attachment）
 用户说"上传审批附件/把文件上传为审批附件" → `approval attachment upload`（需 --file；可选 --file-name 默认本地文件名、--md5 自动计算；一条命令完成 init+put+commit）
+用户说"上传审批图片/把图片上传到审批取 mediaId" → `approval image upload`（需 --file；jpg/jpeg/png/gif/webp/bmp，≤10MB，>2MB 自动压缩；返回 mediaIdV2 供组装 DDPhotoField value）
 用户说"同意审批/批准" → 先 `tasks` 获取 taskId，再 `approve`
 用户说"拒绝审批/驳回" → 先 `tasks` 获取 taskId，再 `reject`
 用户说"撤回审批/取消审批" → `approval revoke`
@@ -784,12 +826,16 @@ Flags:
   - 在 `form-schema` 之后、`create-instance` 之前调用
   - 返回的 `workflowActivityRuleVOs` 中 `targetSelect: true` 的节点需要用户自选审批人
   - 自选结果组装为 `targetSelectActioners` 传入 `create-instance`
-用户说"发起审批/提交审批/帮我发起XX审批/新建审批单/提一个XX审批/帮我提XX申请" → 五步流程：① `search-forms --query XX` 获取 processCode → ② `form-schema --process-code <code>` 获取表单字段定义 → ③ 阅读 [oa-form-components.md](oa/oa-form-components.md) 和 [oa-process-nodes.md](oa/oa-process-nodes.md) 后组装表单值 → ④ `forecast-process` 预测流程走向并识别自选节点 → ⑤ 若有自选节点让用户选人，确认后 `create-instance --yes` 发起
+用户说"请假/请X天假/请年假/请事假/请病假/提交请假/帮我请假" → 请假套件工作流（见 [oa/oa-leave.md](oa/oa-leave.md)）：`dws attendance +get-approve-template --type leave` 定位模板（不走 search-forms），后续按套件文档执行
+用户说"补卡/忘打卡/补打卡/帮我补上次的卡" → 补卡套件工作流（见 [oa/oa-supply.md](oa/oa-supply.md)）：`dws attendance +get-approve-template --type repair-check` 定位模板（不走 search-forms），后续按套件文档执行
+用户说"外出/公出/提交外出/帮我提外出申请" → 外出套件工作流（见 [oa/oa-goout.md](oa/oa-goout.md)）：`dws attendance +get-approve-template --type travel` 定位模板（不走 search-forms；出差是 --type out，注意分流），后续按套件文档执行
+用户说"加班/提交加班/帮我提加班申请/代XX提交加班" → 加班套件工作流（见 [oa/oa-overtime.md](oa/oa-overtime.md)）：`dws attendance +get-approve-template --type overtime` 定位模板（不走 search-forms）；无歧义窗口自算 + 歧义窗口两阶段，时长结果须经用户手动确认，后续按套件文档执行
+用户说"发起审批/提交审批/帮我发起XX审批/新建审批单/提一个XX审批/帮我提XX申请" → 五步流程：① `search-forms --query XX` 获取 processCode（请假/补卡/外出除外，见上方条目）→ ② `form-schema --process-code <code>` 获取表单字段定义 → ③ 阅读 [oa-form-components.md](oa/oa-form-components.md) 和 [oa-process-nodes.md](oa/oa-process-nodes.md) 后组装表单值 → ④ `forecast-process` 预测流程走向并识别自选节点 → ⑤ 若有自选节点让用户选人，确认后 `create-instance` 发起
   - 如果用户已知 processCode，可跳过第①步
   - `--form-values` 的 key 必须与 `form-schema` 返回的控件 label 一致
   - `forecast-process` 返回自选节点时必须让用户选人，不得跳过
   - 执行前**必须向用户确认**表单内容、流程预测结果、审批人和抄送人
-  - 示例："帮我发起一个AI审批单" → ① `search-forms --query AI` → ② `form-schema --process-code <code>` → ③ 组装表单值 → ④ `forecast-process` → ⑤ 向用户确认流程走向和自选审批人后 `create-instance --yes`
+  - 示例："帮我发起一个AI审批单" → ① `search-forms --query AI` → ② `form-schema --process-code <code>` → ③ 组装表单值 → ④ `forecast-process` → ⑤ 向用户确认流程走向和自选审批人后 `create-instance`
 用户说"我有哪些待审的任务" → `approval tasks`
 用户说"我发起的审批单" -> `approval list-submitted`
 用户说"我审批/处理过的审批单" -> `approval list-executed`
@@ -803,7 +849,7 @@ Flags:
 
 ```bash
 # 1. 查看待我处理的审批 — 提取 processInstanceId
-dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --format json
+dws oa approval list-pending --create-time-from 2026-03-10 --create-time-to 2026-03-10 --format json
 
 # 2. 查看审批详情 — 了解审批内容
 dws oa approval detail --instance-id <processInstanceId> --format json
@@ -836,12 +882,12 @@ dws oa approval form-schema --process-code <code> --format json
 dws oa approval list-initiated --process-code <code> \
   --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" \
   --cursor 0 --limit 20 --format json
-  
+
 # 9. 我处理过的审批单
 dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json
-# 10. 我发起的审批单 
+# 10. 我发起的审批单
 dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json
-# 11. 抄送我的审批单 
+# 11. 抄送我的审批单
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 
 # 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
@@ -855,24 +901,26 @@ dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --rem
 dws oa approval oa-comments --instance-id <processInstanceId> --content "同意，请尽快处理" --format json
 
 # 14. 对审批实例进行抄送（processInstanceId 来自 list-pending 或 detail）
-dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "68674200835816" --format json
+dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "<userId>" --format json
 dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users "userId1,userId2" --format json
 
-# 18. 发起审批（完整流程：搜表单 → 查 Schema → 收集表单值 → 流程预测 → 自选节点选人 → 发起）
-# 18a. 模糊搜索表单获取 processCode
+# 15. 发起审批（完整流程：搜表单 → 查 Schema → 收集表单值 → 流程预测 → 自选节点选人 → 发起）
+# 15a. 模糊搜索表单获取 processCode
 dws oa approval search-forms --query AI --format json
-# 18b. 查询表单 Schema 获取字段定义
+# 15b. 查询表单 Schema 获取字段定义
 dws oa approval form-schema --process-code <code> --format json
-# 18c. 收集表单值（向用户展示控件列表，用户填写后组装 form-values）
-# 18d. 流程预测（根据表单值预测审批走向，识别自选审批人节点；processCode/deptId/formValues 必填，userId 由登录态自动填充）
-dws oa approval forecast-process --process-code <code> --dept-id -1 --form-values '{"单行输入框":"测试内容"}' --format json
-# 18e. 若 forecast 返回 targetSelect=true 的节点，用 dws aisearch person --query "<姓名>" --dimension name --format json 帮用户选人
-# 18f. 发起审批实例（form-values 的 key 须与 Schema 中控件 label 一致）
-dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试内容"}' --yes --format json
-# 18g. 发起并指定审批人和抄送人
-dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --cc-list "userId3" --cc-position START --yes --format json
-# 18h. 发起并使用 forecast 自选审批人结果（高级模式）
-dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}],"targetSelectActioners":[{"actionerKey":"manual_33ff_89cb_da91_e3aa","actionerStaffIds":["userId_选人A"]}]}' --yes --format json
+# 15c. 收集表单值（向用户展示控件列表，用户填写后组装 form-values）
+# 15d. 流程预测（根据表单值预测审批走向，识别自选审批人节点；processCode/deptId/formValues 必填，userId 由登录态自动填充）
+dws oa approval forecast-process --process-code <code> --dept-id <deptId> --form-values '{"单行输入框":"测试内容"}' --format json
+# 15e. 若 forecast 返回 targetSelect=true 的节点，经 aisearch person 解析姓名帮用户选人
+# 15f. 发起审批实例（form-values 的 key 须与 Schema 中控件 label 一致；deptId 为已核验真实部门 ID）
+dws oa approval create-instance --process-code <code> --dept-id <deptId> --form-values '{"单行输入框":"测试内容"}' --format json
+# 15g. 发起并指定审批人和抄送人
+dws oa approval create-instance --process-code <code> --dept-id <deptId> --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --cc-list "userId3" --cc-position START --format json
+# 15h. 发起并使用 forecast 自选审批人结果（高级模式）
+dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[{"name":"单行输入框","value":"测试"}],"targetSelectActioners":[{"actionerKey":"manual_33ff_89cb_da91_e3aa","actionerStaffIds":["userId_选人A"]}]}' --format json
+
+# 16. 套件发起（请假/补卡/外出/加班）：各套件工作流见上方「套件发起工作流（独立文档）」指针表
 ```
 
 ## 上下文传递表
@@ -893,7 +941,8 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 
 ## 注意事项
 
-- `--start` / `--end` 使用 ISO-8601 格式（如 2026-03-10T00:00:00+08:00）
+- `list-pending` 使用 `--create-time-from/to`、`--finish-time-from/to` 日期筛选，格式为 `yyyy-MM-dd`；不再接受旧 `--start` / `--end`
+- `list-initiated` / `list-by-admin` 的 `--start` / `--end` 仍使用 ISO-8601 格式（如 2026-03-10T00:00:00+08:00）
 - `approve` / `reject` / `redirect-task` 需先通过 `tasks` 获取 `taskId`
 - `redirect-task` 的 `--to-actioner-id` 可通过 `dws contact user search` 获取目标用户 userId
 - `revoke` 只能撤销自己发起的审批
@@ -902,19 +951,13 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 - `list-initiated` 的 `--start` / `--end` 区间有后端上限（约 120 天）。超过上限会返回误导性的 `business_error: 时间戳无效`（实为区间过长，不是时间格式问题）。跨度大时请拆成多段短区间分别查询
 - `list-by-admin` 需要当前用户具备 OA 审批管理员权限，否则查不到数据；只查个人维度审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。高级模式 `--request` 中 `startTime`/`endTime` 为 `yyyy-MM-dd HH:mm:ss` 格式字符串（不再接受毫秒时间戳）；`pageSize` 上限为 20，超过会报错（简单模式为 `--limit`）
 
-- `form-schema` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取；返回的 `content` 字段为 JSON 字符串，需解析后查看表单组件（items）定义。
-- `create-instance` 发起前**必须先阅读** [oa-form-components.md](oa/oa-form-components.md)（控件值格式）和 [oa-process-nodes.md](oa/oa-process-nodes.md)（流程节点规则），再调用 `form-schema` 获取表单字段定义，确保 `--form-values` 中的 key 与控件 label 完全一致。
-- `create-instance` 发起前**应先调用 `forecast-process`** 预测流程走向，识别自选审批人节点（`targetSelect: true`），让用户选人后再提交。
-- `create-instance` 的 `--form-values` 接受 JSON 格式 `'{"控件名称":"值"}'`，代码会自动转为 `[{"name":"控件名称","value":"值"}]`。
-- `create-instance` 简单模式适合常见场景；如需 `directAppointedApprovers`（指定审批人覆盖模板流程）或 `targetSelectActioners`（自选审批节点）等高级字段，使用 `--request` 传完整 JSON。`--request` 与简单模式 flags 互斥。
-- `create-instance` 会创建真实审批数据；Agent 只有在用户确认模板、表单值、流程路径和人员后才能传入 `--yes`。
-- `create-instance` 返回的 processInstanceId 可用于 `detail`、`tasks`、`records`、`revoke` 等后续操作。
-- `forecast-process` 的 `processCode`、`deptId`、`formComponentValues` 三个字段均为必填（`userId` 由系统自动填充）；`formComponentValues` 比 `create-instance` 多一层数组包裹（`[[{...}]]`），CLI 简单模式已自动处理。
-- `forecast-process` 返回 `workflowActivityRuleVOs` 中 `targetSelect: true` 的节点，其 `workflowActor.actorKey` 必须作为 `targetSelectActioners` 的 `actionerKey` 传入 `create-instance`。
-
 ## 自动化脚本
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [oa_pending_review.py](../../scripts/oa_pending_review.py) | 查看待审批列表+逐条显示详情 | `python oa_pending_review.py --days 7` |
 | [oa_batch_approve.py](../../scripts/oa_batch_approve.py) | 批量同意/拒绝审批项 | `python oa_batch_approve.py --action approve --days 7` |
+
+### 创建和更新模板路由
+
+用户要创建或更新审批模板时，继续读取 [oa-template-write.md](oa-template-write.md)。不要凭本文件直接组装 `--schema-content` 或 `--process-config`。

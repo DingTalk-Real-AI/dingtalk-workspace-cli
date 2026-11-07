@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
@@ -37,6 +38,24 @@ func TestCrossPlatformCoverageRunPreParseArgsRewritesReviewedCommandBeforeFlags(
 	}
 	if *executed != "dws chat +good:project" {
 		t.Fatalf("executed = %q", *executed)
+	}
+}
+
+func TestCrossPlatformCoverageCommandFallbackPrecedesLaterProtectedFlag(t *testing.T) {
+	root, _ := commandFallbackPipelineRoot()
+	root.PersistentFlags().Bool("yes", false, "")
+	engine := commandFallbackPipelineEngine(map[string]CommandPathFallback{
+		"chat +bad": {From: "chat +bad", Mode: "rewrite", To: "chat +good"},
+	})
+	engine.Register(reviewedProtectionTestHandler{})
+	raw := []string{"chat", "+bad", "--types", "value"}
+	ctx, err := RunPreParseArgs(root, engine, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"chat", "+good", "--types", "value"}
+	if ctx == nil || ctx.Command != "dws chat +good" || !reflect.DeepEqual(ctx.Args, want) {
+		t.Fatalf("fallback before protected flag = %#v, want args=%v", ctx, want)
 	}
 }
 
@@ -346,6 +365,21 @@ func commandFallbackPipelineRoot() (*cobra.Command, *string) {
 	group := &cobra.Command{Use: "group"}
 	group.AddCommand(cmdutil.HintSubCmd("search", "use dws chat search"))
 	chat.AddCommand(good, other, search, group)
+	corecmd.ApplyGroupPolicy(group, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	corecmd.ApplyGroupPolicy(chat, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	corecmd.ApplyGroupPolicy(root, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 	root.AddCommand(chat)
 	return root, executed
 }

@@ -9,7 +9,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -39,11 +43,41 @@ func TestMain(m *testing.M) {
 	if os.Getenv(helpersShellStubEnv) == "1" {
 		os.Exit(runHelpersShellStub())
 	}
+	// Cobra's Windows pre-exec hook walks the process table on every Execute*
+	// call to detect Explorer launches. Helpers tests execute command trees
+	// thousands of times, and none of those in-process invocations can be an
+	// Explorer launch, so keep that production-only check out of the test
+	// process. This also prevents every new exhaustive harness from having to
+	// remember a test-local override.
+	originalMousetrapHelpText := cobra.MousetrapHelpText
+	cobra.MousetrapHelpText = ""
 	code := m.Run()
+	cobra.MousetrapHelpText = originalMousetrapHelpText
 	if helpersShellStubBaseDir != "" {
-		_ = os.RemoveAll(helpersShellStubBaseDir)
+		if err := retryHelpersFixtureCleanup(func() error { return os.RemoveAll(helpersShellStubBaseDir) }); err != nil {
+			fmt.Fprintln(os.Stderr, "helpers executable fixture cleanup:", err)
+			code = 1
+		}
 	}
 	os.Exit(code)
+}
+
+// Windows can retain a mapped executable briefly after its process exits.
+// Remove fixture executables before testing.TempDir's one-shot cleanup runs.
+// A persistent lock still fails the test; assertions and process exits are never retried.
+func retryHelpersFixtureCleanup(remove func() error) error {
+	delays := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 4 * time.Second}
+	for attempt := 0; ; attempt++ {
+		err := remove()
+		if err == nil || os.IsNotExist(err) {
+			return nil
+		}
+		sharingFailure := os.IsPermission(err) || errors.Is(err, syscall.Errno(32)) || errors.Is(err, syscall.Errno(33))
+		if runtime.GOOS != "windows" || !sharingFailure || attempt == len(delays) {
+			return err
+		}
+		time.Sleep(delays[attempt])
+	}
 }
 
 func runHelpersShellStub() int {

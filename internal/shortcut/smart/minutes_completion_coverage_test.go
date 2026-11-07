@@ -5,7 +5,9 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -31,10 +34,23 @@ func runMinutesCLIWithWriter(t *testing.T, caller *smartCoverageCaller, writer i
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(writer)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	return root.Execute()
+	executed, err := corecmd.ExecuteCForTest(root)
+	if err != nil || !output.UsesUnifiedResult(executed) {
+		return err
+	}
+	code, _, emitErr := output.EmitStoredResult(executed)
+	if emitErr != nil {
+		return emitErr
+	}
+	if code != 0 {
+		return fmt.Errorf("command result exit code %d", code)
+	}
+	return nil
 }
 
 func TestCrossPlatformCoverageMinutesSmartContractFinalizer(t *testing.T) {
@@ -113,6 +129,18 @@ func TestCrossPlatformCoverageMinutesLatestAndActionItemsBranchesE2E(t *testing.
 			payload, _, err := runMinutesCLI(t, &smartCoverageCaller{responses: test.responses, failAt: test.failAt}, args...)
 			if (err != nil) != test.wantError {
 				t.Fatalf("payload=%#v err=%v", payload, err)
+			}
+			if !test.wantError {
+				if payload["state"] != "known_empty" || payload["complete"] != true || payload["itemCount"] != float64(0) || payload["taskUuid"] != "u1" {
+					t.Fatalf("typed action payload=%#v", payload)
+				}
+			}
+			if test.name == "todo parse" {
+				errorPayload := payload["error"].(map[string]any)
+				details := errorPayload["details"].(map[string]any)
+				if details["state"] != "unsupported_shape" || details["complete"] != false {
+					t.Fatalf("unsupported action payload=%#v", payload)
+				}
 			}
 		})
 	}
@@ -195,6 +223,11 @@ func TestCrossPlatformCoverageMinutesDetailRemainingBranchesE2E(t *testing.T) {
 	if err != nil || payload["complete"] != true {
 		t.Fatalf("detail all payload=%#v err=%v", payload, err)
 	}
+	todosEnvelope := payload["todos"].(map[string]any)
+	todosResult := todosEnvelope["result"].(map[string]any)
+	if todosResult["state"] != "known_empty" || todosResult["itemCount"] != float64(0) || todosResult["complete"] != true {
+		t.Fatalf("detail todos truth=%#v", todosResult)
+	}
 	if err := runMinutesCLIWithWriter(t, all, smartMinutesFailWriter{}, "minutes", "+detail", "--id", "u1", "--artifacts", "basic"); err == nil {
 		t.Fatal("detail single output failure accepted")
 	}
@@ -214,6 +247,12 @@ func TestCrossPlatformCoverageMinutesDetailRemainingBranchesE2E(t *testing.T) {
 		payload, output, err = runMinutesCLI(t, caller, "minutes", "+detail", "--id", "u1", "--artifacts", artifact)
 		if err == nil || output == "" || payload["complete"] != false {
 			t.Fatalf("detail parse %s payload=%#v err=%v", artifact, payload, err)
+		}
+		if artifact == "todos" {
+			todos := payload["todos"].(map[string]any)
+			if todos["state"] != "unsupported_shape" || todos["complete"] != false {
+				t.Fatalf("detail todos unsupported=%#v", todos)
+			}
 		}
 	}
 

@@ -48,7 +48,7 @@ func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLink
 		for _, agent := range []string{".claude", ".openclaw"} {
 			link := filepath.Join(home, agent, "skills", name)
 			info, err := os.Lstat(link)
-			if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			if err != nil || !isSkillPathLink(info.Mode()) {
 				t.Fatalf("%s link = %#v, %v", link, info, err)
 			}
 			if _, err := os.Stat(filepath.Join(link, "SKILL.md")); err != nil {
@@ -62,7 +62,7 @@ func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLink
 	}
 	for _, agent := range []string{".claude", ".openclaw"} {
 		info, err := os.Lstat(filepath.Join(home, agent, "skills", "dingtalk-chat"))
-		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		if err != nil || !isSkillPathLink(info.Mode()) {
 			t.Fatalf("idempotent upgrade replaced %s link: %#v, %v", agent, info, err)
 		}
 	}
@@ -127,7 +127,7 @@ func TestCrossPlatformCoverageCanonicalCustomRootsSymlinkedParentsAndLexicalVict
 		for _, name := range []string{"dingtalk-chat", "dingtalk-shared"} {
 			path := filepath.Join(base, name)
 			info, statErr := os.Lstat(path)
-			if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
+			if statErr != nil || !isSkillPathLink(info.Mode()) {
 				t.Fatalf("expected canonical link %s: %#v, %v", path, info, statErr)
 			}
 			body, readErr := os.ReadFile(filepath.Join(path, "SKILL.md"))
@@ -144,7 +144,7 @@ func TestCrossPlatformCoverageCanonicalSkillLinksFallBackToCopies(t *testing.T) 
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testseam.Swap(t, &upgradeSymlink, func(string, string) error { return errors.New("links unavailable") })
+	testseam.Swap(t, &upgradeCreateSkillLink, func(string, string, string) error { return errors.New("links unavailable") })
 
 	multiRoot := writeMultiBundle(t, t.TempDir(), "dingtalk-chat")
 	result, err := UpgradeSkillLocations(multiRoot)
@@ -153,7 +153,7 @@ func TestCrossPlatformCoverageCanonicalSkillLinksFallBackToCopies(t *testing.T) 
 	}
 	dest := filepath.Join(home, ".claude", "skills", "dingtalk-chat")
 	info, err := os.Lstat(dest)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if err != nil || !info.IsDir() || isSkillPathLink(info.Mode()) {
 		t.Fatalf("copy fallback = %#v, %v", info, err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "SKILL.md")); err != nil {
@@ -491,7 +491,7 @@ func TestCrossPlatformCoverageUpgradeAgentBranchFailures(t *testing.T) {
 					if err := os.MkdirAll(base, 0o755); err != nil {
 						t.Fatal(err)
 					}
-					testseam.Swap(t, &upgradeSymlink, func(string, string) error { return errors.New("link denied") })
+					testseam.Swap(t, &upgradeCreateSkillLink, func(string, string, string) error { return errors.New("link denied") })
 					origCopy := upgradeCopyDir
 					testseam.Swap(t, &upgradeCopyDir, func(src, dst string) error {
 						if strings.HasPrefix(filepath.Clean(dst), filepath.Clean(base)+string(filepath.Separator)) {

@@ -251,12 +251,31 @@ func prepareJsonMLBody(cmd *cobra.Command, raw string) (string, error) {
 	return cleaned, nil
 }
 
+// PrepareDocJSONMLBody exposes the shared strict JSONML write pipeline to
+// higher-level Doc commands. It validates a complete document body and
+// requires a root node; optional repair remains controlled by the caller's
+// --fix-jsonml flag when that flag exists.
+func PrepareDocJSONMLBody(cmd *cobra.Command, raw string) (string, error) {
+	return prepareJsonMLBody(cmd, raw)
+}
+
 // prepareJsonMLNode processes the JSONML array passed to `doc block
 // insert/update --element` (a single JSONML block node, not a body).
 //
 // Pipeline: [JSON repair] → coerce → parse → validate → marshal.
 // No root 校验——block 级操作不要求 root 根节点。
 func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
+	return prepareJsonMLBlockInput(cmd, rawElement, nil)
+}
+
+// PrepareDocJSONMLBlockInput preserves the decoded single/sequence carrier through shortcut dispatch.
+func PrepareDocJSONMLBlockInput(cmd *cobra.Command, raw string) (string, bool, error) {
+	sequence := false
+	normalized, err := prepareJsonMLBlockInput(cmd, raw, &sequence)
+	return normalized, sequence, err
+}
+
+func prepareJsonMLBlockInput(cmd *cobra.Command, rawElement string, sequence *bool) (string, error) {
 	if rawElement == "" {
 		return "", fmt.Errorf("--content-format jsonml 要求通过 --element 提供 JSONML 数组")
 	}
@@ -306,6 +325,13 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 		return "", fmt.Errorf("--content-format jsonml 要求 --element 为 JSON 数组，实际类型: %T", node)
 	}
 
+	if sequence != nil && len(nodeArr) > 0 {
+		if _, nested := nodeArr[0].([]any); nested {
+			*sequence = true
+			return prepareDecodedDocJSONMLNodes(cmd, nodeArr)
+		}
+	}
+
 	// Block writes accept one node. Unwrap a scoped-read fragment only when it
 	// resolves to exactly one node; nested fragments inside a regular node are
 	// spliced recursively.
@@ -339,8 +365,19 @@ func prepareJsonMLNode(cmd *cobra.Command, rawElement string) (string, error) {
 		fmt.Fprintf(os.Stderr, "[WARN] %s\n", summary)
 	}
 
+	if err := prepareSuggestionNodeUUIDs(cmd, strippedNode, fixJSON); err != nil {
+		return "", err
+	}
+
 	out, _ := json.Marshal(node)
 	return stripInputUnsafeChars(string(out)), nil
+}
+
+// PrepareDocJSONMLNode exposes the shared strict JSONML write pipeline for a
+// single block node. Unlike PrepareDocJSONMLBody, it does not require a root
+// document node.
+func PrepareDocJSONMLNode(cmd *cobra.Command, raw string) (string, error) {
+	return prepareJsonMLNode(cmd, raw)
 }
 
 func emitFixNotes(notes []string) {

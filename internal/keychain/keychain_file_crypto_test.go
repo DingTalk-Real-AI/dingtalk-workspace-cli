@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || openharmony
 
 package keychain
 
@@ -21,5 +21,12 @@ func TestFileKeychainGCMConstructionErrors(t *testing.T) {
 	ciphertext := make([]byte, ivBytes+tagBytes)
 	if _, err := decryptDataWithGCM(ciphertext, key, failGCM); !errors.Is(err, wantErr) {
 		t.Fatalf("decrypt GCM error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageFileDEKDecryptErrorClassification(t *testing.T) {
+	err := fileDEKCiphertextMismatchError()
+	if !IsCiphertextKeyMismatch(err) {
+		t.Fatalf("fileDEKCiphertextMismatchError() = %v, want ciphertext key mismatch", err)
 	}
 }

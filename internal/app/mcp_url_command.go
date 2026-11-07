@@ -21,6 +21,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -43,6 +44,11 @@ func newMCPURLGroup(caller edition.ToolCaller) *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	corecmd.ApplyGroupPolicy(group, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 	group.AddCommand(newMCPURLGetCommand(caller))
 	return group
 }
@@ -118,24 +124,33 @@ func newMCPURLGetCommand(caller edition.ToolCaller) *cobra.Command {
 }
 
 func writeMCPURLResult(cmd *cobra.Command, result *edition.ToolResult) error {
-	if result == nil {
-		return fmt.Errorf("MCP 元服务返回空结果")
+	payload, err := decodeMCPMetaResult(result)
+	if err != nil {
+		return err
 	}
-	// get_mcp_server_url returns one JSON document in its first non-empty text
-	// block. Other block types and trailing blocks are intentionally ignored.
+	return output.WriteCommandPayload(cmd, payload, output.FormatJSON)
+}
+
+// decodeMCPMetaResult returns the JSON document in the first non-empty text
+// block of an mcp-meta tool result. Other block types and trailing blocks are
+// intentionally ignored.
+func decodeMCPMetaResult(result *edition.ToolResult) (any, error) {
+	if result == nil {
+		return nil, fmt.Errorf("MCP 元服务返回空结果")
+	}
 	for _, block := range result.Content {
 		if block.Type != "text" || strings.TrimSpace(block.Text) == "" {
 			continue
 		}
 		if err := apperrors.ClassifyMCPResponseText(block.Text); err != nil {
-			return err
+			return nil, err
 		}
 
 		var payload any
 		if err := json.Unmarshal([]byte(block.Text), &payload); err != nil {
-			return fmt.Errorf("MCP 元服务返回了无效 JSON: %w", err)
+			return nil, fmt.Errorf("MCP 元服务返回了无效 JSON: %w", err)
 		}
-		return output.WriteCommandPayload(cmd, payload, output.FormatJSON)
+		return payload, nil
 	}
-	return fmt.Errorf("MCP 元服务返回空结果")
+	return nil, fmt.Errorf("MCP 元服务返回空结果")
 }

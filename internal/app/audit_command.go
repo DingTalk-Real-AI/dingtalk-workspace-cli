@@ -16,6 +16,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,12 @@ func newAuditCommand() *cobra.Command {
 	// products.audit). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "audit",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-shared"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("DWS 运行契约", "dingtalk-shared", "references/runtime-contract.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查看、导出和校验本地操作审计日志",
 			UseWhen: []string{
@@ -63,7 +70,10 @@ func newAuditTailCommand() *cobra.Command {
 		Short: "查看最近的审计记录",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if n < 1 {
-				return fmt.Errorf("--lines 必须为正整数，收到 %d", n)
+				return apperrors.NewValidation(
+					fmt.Sprintf("--lines 必须为正整数，收到 %d", n),
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			dir := auditDir()
 			file, err := audit.LatestAuditFile(dir)

@@ -27,6 +27,30 @@ func (f upgradeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, erro
 
 type upgradeFailWriter struct{}
 
+func TestCrossPlatformCoverageDefaultUpgradeRegistry(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_URL", "")
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	t.Setenv("DWS_UPGRADE_REGISTRY", "")
+	client := NewClient()
+	if client.registryURL != defaultNPMRegistry+"/"+npmPackageName || client.baseURL != "" {
+		t.Fatalf("默认主动升级未选择 npm Registry: %#v", client)
+	}
+}
+
+func TestCrossPlatformCoverageExplicitGitHubUpgradeCredentials(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "fixture-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "token fixture-token" {
+			t.Error("显式 GitHub 升级未保留已配置的认证行为")
+		}
+		_, _ = io.WriteString(w, `{"tag_name":"v1.2.3"}`)
+	}))
+	defer server.Close()
+	if _, err := NewClientWithBaseURL(server.URL).FetchLatestRelease(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (upgradeFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
 func TestCrossPlatformCoverageDownloaderEdgeCases(t *testing.T) {
@@ -253,7 +277,7 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 		t.Fatalf("directory home error = %v", err)
 	}
 
-	home := t.TempDir()
+	home := filepath.ToSlash(t.TempDir())
 	upgradeUserHomeDir = func() (string, error) { return home, nil }
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "SKILL.md"), []byte("skill"), 0o600); err != nil {
@@ -278,8 +302,9 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 	if err := EnsureUpgradeDirectories(); err != nil {
 		t.Fatal(err)
 	}
-	if got := DownloadCacheDir(); !strings.HasPrefix(got, home) {
-		t.Fatalf("download cache dir = %q", got)
+	// Windows 接受正斜杠输入，filepath.Join 返回原生分隔符；比较完整目标路径。
+	if got, want := DownloadCacheDir(), filepath.Join(home, ".dws", "cache", "downloads"); got != want {
+		t.Fatalf("download cache dir = %q, want %q", got, want)
 	}
 
 	modeDir := filepath.Join(t.TempDir(), "mode")

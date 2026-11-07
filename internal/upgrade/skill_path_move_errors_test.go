@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -152,6 +153,21 @@ func TestCrossPlatformCoverageSkillPathPermissionRestorationErrors(t *testing.T)
 		}
 	})
 
+	t.Run("writable staging walk error", func(t *testing.T) {
+		testseam.Swap(t, &skillPathWalkDir, func(root string, fn fs.WalkDirFunc) error {
+			return fn(root, nil, errors.New("walk failed"))
+		})
+		chmodCalled := false
+		testseam.Swap(t, &skillPathChmod, func(string, os.FileMode) error {
+			chmodCalled = true
+			return nil
+		})
+		makeSkillPathTreeWritable("ignored")
+		if chmodCalled {
+			t.Fatal("walk error must not chmod any path")
+		}
+	})
+
 	t.Run("writable mode preparation", func(t *testing.T) {
 		entry := skillPathModeDirEntry{mode: os.ModeDir | 0o500}
 		testseam.Swap(t, &skillPathWalkDir, func(root string, fn fs.WalkDirFunc) error {
@@ -168,6 +184,32 @@ func TestCrossPlatformCoverageSkillPathPermissionRestorationErrors(t *testing.T)
 		}
 		if chmodMode != 0o700 || len(modes) != 1 || modes[0].path != "source" || modes[0].mode != 0o500 {
 			t.Fatalf("prepared mode = %v, records = %#v", chmodMode, modes)
+		}
+	})
+
+	t.Run("junction directory skips recursion", func(t *testing.T) {
+		linkMode := os.ModeSymlink
+		if runtime.GOOS == "windows" {
+			linkMode = os.ModeIrregular
+		}
+		entry := skillPathModeDirEntry{mode: os.ModeDir | linkMode | 0o500}
+		testseam.Swap(t, &skillPathWalkDir, func(root string, fn fs.WalkDirFunc) error {
+			if err := fn(root, entry, nil); err != nil && err != filepath.SkipDir {
+				return err
+			}
+			return nil
+		})
+		chmodCalled := false
+		testseam.Swap(t, &skillPathChmod, func(string, os.FileMode) error {
+			chmodCalled = true
+			return nil
+		})
+		modes, err := prepareSkillPathTreeRemoval("source")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if chmodCalled || len(modes) != 0 {
+			t.Fatalf("junction must not be chmodded or recorded: chmod=%t modes=%#v", chmodCalled, modes)
 		}
 	})
 
@@ -417,6 +459,40 @@ func TestCrossPlatformCoverageSkillPathVerificationErrors(t *testing.T) {
 		}
 		if err := verifySkillPathCopy(src, dst); err == nil || !strings.Contains(err.Error(), "类型") {
 			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("link type mismatch", func(t *testing.T) {
+		base := t.TempDir()
+		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+		if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(dst, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &skillPathLstat, func(path string) (os.FileInfo, error) {
+			if path == src {
+				return skillPathFakeInfo{mode: os.ModeSymlink}, nil
+			}
+			return os.Lstat(path)
+		})
+		if err := verifySkillPathCopy(src, dst); err == nil || !strings.Contains(err.Error(), "类型") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("link target mismatch", func(t *testing.T) {
+		base := t.TempDir()
+		src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+		if err := os.Symlink("one", src); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		if err := os.Symlink("two", dst); err != nil {
+			t.Fatal(err)
+		}
+		if err := verifySkillPathCopy(src, dst); err == nil || !strings.Contains(err.Error(), "符号链接目标不一致") {
+			t.Fatalf("expected link target mismatch error, got: %v", err)
 		}
 	})
 

@@ -92,6 +92,8 @@ func WaitAutoPageDelay(rt *RuntimeContext) error {
 	case <-rt.Command().Context().Done():
 		return rt.Command().Context().Err()
 	case <-timer.C:
-		return nil
+		// Both channels may be ready after a scheduling delay. Cancellation
+		// must win even when select chooses the timer branch.
+		return rt.Command().Context().Err()
 	}
 }

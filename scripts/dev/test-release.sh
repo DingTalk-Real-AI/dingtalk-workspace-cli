@@ -1,13 +1,12 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-VERSION="v1.0.6"
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+VERSION="${VERSION:-v0.0.0-SNAPSHOT}"
 
-echo "==> Running GoReleaser snapshot..."
-goreleaser release --snapshot --clean
-
-echo "==> Running post-goreleaser.sh..."
-DWS_PACKAGE_VERSION=$VERSION ./scripts/release/post-goreleaser.sh
+cd "$ROOT"
+echo "==> Building the pinned cross-platform release snapshot..."
+make package VERSION="$VERSION"
 
 echo "==> Verifying artifacts..."
 echo "Binary version:"

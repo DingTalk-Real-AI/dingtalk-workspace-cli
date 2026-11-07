@@ -25,9 +25,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 // setupMCPConfigDir creates a temp config dir with mcp_url pointing to the
@@ -328,6 +331,108 @@ func TestCheckCLIAuthEnabled_Disabled(t *testing.T) {
 		t.Fatal("expected CLIAuthEnabled=false")
 	}
 	t.Logf("✅ Normal disabled response: success=%v, enabled=%v", status.Success, status.Result.CLIAuthEnabled)
+}
+
+// TestCrossPlatformCoverageCLIAuthRequestsCarryAgentCodeHeader verifies that
+// the three CLI auth management endpoints attach the x-dingtalk-dws-agent-code
+// header when an agent code is detected and omit it otherwise.
+func TestCrossPlatformCoverageCLIAuthRequestsCarryAgentCodeHeader(t *testing.T) {
+	const (
+		agentCodeHeader = "x-dingtalk-dws-agent-code"
+		detectedCode    = "test-host-agent"
+	)
+
+	var (
+		mu   sync.Mutex
+		seen = map[string]string{}
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path] = r.Header.Get(agentCodeHeader)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case CLIAuthEnabledPath:
+			_ = json.NewEncoder(w).Encode(CLIAuthStatus{Success: true, Result: &CLIAuthResult{CLIAuthEnabled: true}})
+		case SuperAdminPath:
+			_ = json.NewEncoder(w).Encode(SuperAdminResponse{Success: true, Result: []SuperAdmin{{StaffID: "admin-1", Name: "Admin"}}})
+		case SendCliAuthApplyPath:
+			_ = json.NewEncoder(w).Encode(SendApplyResponse{Success: true, Result: true})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	testseam.Swap(t, &oauthHTTPClient, server.Client())
+	t.Cleanup(PushMCPBaseURLOverride(server.URL))
+
+	ctx := context.Background()
+	call := func(path string) error {
+		switch path {
+		case CLIAuthEnabledPath:
+			p := &OAuthProvider{httpClient: server.Client()}
+			_, err := p.CheckCLIAuthEnabled(ctx, "token")
+			return err
+		case SuperAdminPath:
+			_, err := doGetSuperAdmins(ctx, "token")
+			return err
+		case SendCliAuthApplyPath:
+			_, err := doSendCliAuthApply(ctx, "token", "admin-1")
+			return err
+		default:
+			return fmt.Errorf("unknown endpoint %q", path)
+		}
+	}
+	paths := []string{CLIAuthEnabledPath, SuperAdminPath, SendCliAuthApplyPath}
+
+	t.Run("agent code detected", func(t *testing.T) {
+		t.Setenv(AgentCodeEnv, detectedCode)
+		mu.Lock()
+		seen = map[string]string{}
+		mu.Unlock()
+		for _, path := range paths {
+			if err := call(path); err != nil {
+				t.Fatalf("%s: %v", path, err)
+			}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, path := range paths {
+			if got := seen[path]; got != detectedCode {
+				t.Errorf("%s header = %q, want %q", path, got, detectedCode)
+			}
+		}
+	})
+
+	t.Run("agent code absent", func(t *testing.T) {
+		// Clear every detection channel (T0 env, T1 fingerprints, T2
+		// VSCODE_BRAND, T3 bundle id) so DetectAgentCode deterministically
+		// resolves empty even on a host running inside an agent IDE.
+		for _, k := range []string{
+			AgentCodeEnv, "VSCODE_BRAND", "__CFBundleIdentifier",
+			"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "OPENCLAW_BUNDLE_ROOT",
+			"OPENCLAW_RUNTIME_ROLE", "HERMES_HOME", "CODEX_SANDBOX",
+		} {
+			t.Setenv(k, "")
+		}
+		mu.Lock()
+		seen = map[string]string{}
+		mu.Unlock()
+		for _, path := range paths {
+			if err := call(path); err != nil {
+				t.Fatalf("%s: %v", path, err)
+			}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, path := range paths {
+			if got := seen[path]; got != "" {
+				t.Errorf("%s header = %q, want empty", path, got)
+			}
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------

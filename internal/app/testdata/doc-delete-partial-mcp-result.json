@@ -1,0 +1,22 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"blockId\": \"partial-P,partial-Q\", \"deletedBlockIds\": [\"partial-P\", \"partial-Q\"], \"success\": false, \"errorCode\": \"SOURCE_UNAVAILABLE\", \"logId\": \"trace-doc-delete-partial\", \"message\": \"2 block deletion suggestion(s) recorded. Failed block(s): missing-block\", \"notFoundBlockIds\": [], \"errorMsg\": \"Some block deletion suggestions failed\"}"
+    }
+  ],
+  "structuredContent": {
+    "blockId": "partial-P,partial-Q",
+    "deletedBlockIds": [
+      "partial-P",
+      "partial-Q"
+    ],
+    "success": false,
+    "errorCode": "SOURCE_UNAVAILABLE",
+    "logId": "trace-doc-delete-partial",
+    "message": "2 block deletion suggestion(s) recorded. Failed block(s): missing-block",
+    "notFoundBlockIds": [],
+    "errorMsg": "Some block deletion suggestions failed"
+  },
+  "isError": false
+}

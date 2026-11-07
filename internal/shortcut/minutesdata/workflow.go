@@ -146,29 +146,13 @@ func SpeakerSummaryTask(data map[string]any) (taskID, status string, err error) 
 	return taskID, status, nil
 }
 
-// SpeakerSummaryResult requires a concrete result payload. The API returns a
-// business error while processing, so an empty object is never ready.
+// SpeakerSummaryResult is the compatibility projection of the typed parser.
 func SpeakerSummaryResult(data map[string]any) (any, error) {
-	if err := validateEnvelope(data); err != nil {
-		return nil, err
+	parsed := ParseSpeakerSummary(data)
+	if parsed.State != SpeakerReady {
+		return nil, fmt.Errorf("minutes speaker summary %s: %s", parsed.State, parsed.Reason)
 	}
-	result, exists := data["result"]
-	if !exists || result == nil {
-		return nil, fmt.Errorf("minutes speaker summary response has no result")
-	}
-	switch value := result.(type) {
-	case map[string]any:
-		if len(value) == 0 {
-			return nil, fmt.Errorf("minutes speaker summary result is empty")
-		}
-	case []any:
-		if value == nil {
-			return nil, fmt.Errorf("minutes speaker summary result is null")
-		}
-	default:
-		return nil, fmt.Errorf("minutes speaker summary result has type %T", result)
-	}
-	return result, nil
+	return parsed.Result, nil
 }
 
 // HotWords extracts the explicit current personal hot-word set. [] is valid;

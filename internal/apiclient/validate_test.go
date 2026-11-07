@@ -127,7 +127,7 @@ func TestMaskToken(t *testing.T) {
 func TestValidateTargetHost(t *testing.T) {
 	// Allowed hosts
 	allowed := []string{
-		"https://api.dingtalk.com/v1.0/contact/users/me",
+		"https://api.dingtalk.com/v1.0/example/resources",
 		"https://oapi.dingtalk.com/topapi/v2/user/get",
 		"https://API.DINGTALK.COM/v1.0/test",
 		"https://OAPI.DINGTALK.COM/topapi/test",

@@ -384,12 +384,10 @@ func TestExchangeCodeForTokenPreparesBeforeRemoteAndMarksFresh(t *testing.T) {
 	writeFutureProfilesForLoginPreflight(t, configDir)
 
 	oldClient := oauthHTTPClient
-	oldSaveSecret := oauthSaveClientSecret
 	oldGet := authKeychainGet
 	oldValidate := authValidateEntries
 	t.Cleanup(func() {
 		oauthHTTPClient = oldClient
-		oauthSaveClientSecret = oldSaveSecret
 		authKeychainGet = oldGet
 		authValidateEntries = oldValidate
 	})
@@ -407,7 +405,6 @@ func TestExchangeCodeForTokenPreparesBeforeRemoteAndMarksFresh(t *testing.T) {
 			)),
 		}, nil
 	})}
-	oauthSaveClientSecret = func(string, string) error { return nil }
 	authKeychainGet = func(string, string) (string, error) {
 		localReads.Add(1)
 		return "", errors.New("unrelated local token is unreadable")
@@ -794,6 +791,18 @@ func TestPrepareLoginPersistenceUnreadableGlobalFailsClosedBeforeRemote(t *testi
 	err := prepareLoginPersistence(fixture.configDir)
 	if !errors.Is(err, globalErr) || !strings.Contains(err.Error(), "refusing to overwrite") {
 		t.Fatalf("prepareLoginPersistence() error = %v, want unreadable-global protection", err)
+	}
+}
+
+func TestCrossPlatformCoveragePrepareLoginPersistenceCiphertextMismatchDefersRepairUntilFreshLogin(t *testing.T) {
+	fixture := newHalfMigratedLoginFixture(t)
+	fixture.store.setReadError(keychain.AccountToken, keychain.ErrCiphertextKeyMismatch)
+
+	if err := prepareLoginPersistence(fixture.configDir); err != nil {
+		t.Fatalf("prepareLoginPersistence() error = %v, want deferred fresh-login repair", err)
+	}
+	if _, err := fixture.store.token(keychain.AccountToken); !keychain.IsCiphertextKeyMismatch(err) {
+		t.Fatalf("legacy token after preparation error = %v, want preserved ciphertext mismatch", err)
 	}
 }
 

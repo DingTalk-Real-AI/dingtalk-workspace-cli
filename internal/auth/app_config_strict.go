@@ -15,7 +15,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"os"
 )
 
@@ -93,53 +92,7 @@ func ResolveAppCredentialsStrict(configDir string) (
 	// The half-set warning is surfaced via EnvHalfSet() so the CLI can
 	// stderr-warn the user during preflight.
 
-	// Step 2: app config from disk
-	cfg, loadErr := LoadAppConfig(configDir)
-	if loadErr != nil {
-		return "", "", CredentialSourceUnknown, CredentialSourceUnknown,
-			fmt.Errorf("load app config: %w", loadErr)
-	}
-	if cfg == nil {
-		return "", "", CredentialSourceUnknown, CredentialSourceUnknown, ErrAppConfigMissing
-	}
-
-	if cfg.ClientID == "" {
-		return "", "", CredentialSourceUnknown, CredentialSourceUnknown, ErrClientIDEmpty
-	}
-	clientID = cfg.ClientID
-	clientIDSource = CredentialSourceAppConfig
-
-	// Resolve secret. Source depends on the SecretInput shape:
-	// - IsPlain (no Ref) → it's stored as plaintext in the config file
-	// - has Ref → it's a SecretRef pointing at keychain/file
-	wasPlain := cfg.ClientSecret.IsPlain()
-	resolved, resolveErr := ResolveSecret(cfg.ClientSecret)
-	if resolveErr != nil {
-		return "", "", CredentialSourceUnknown, CredentialSourceUnknown,
-			fmt.Errorf("%w: %v", ErrSecretResolve, resolveErr)
-	}
-	if resolved == "" {
-		return "", "", clientIDSource, CredentialSourceUnknown, ErrClientSecretEmpty
-	}
-
-	secret = resolved
-	if wasPlain {
-		secretSource = CredentialSourcePlainConfig
-	} else {
-		// For SecretRef we map Source verbatim (keychain / file / future)
-		switch cfg.ClientSecret.Ref.Source {
-		case "keychain":
-			secretSource = CredentialSourceKeychain
-		default:
-			// File-backed secrets share the "plain_config" category from
-			// the consumer's perspective: stored as readable bytes outside
-			// keychain. Status output renders them as "plain_config" so
-			// users see "secret is not in keychain".
-			secretSource = CredentialSourcePlainConfig
-		}
-	}
-
-	return clientID, secret, clientIDSource, secretSource, nil
+	return resolveAppConfigCredentials(configDir)
 }
 
 // EnvHalfSet reports whether exactly one of (DWS_CLIENT_ID, DWS_CLIENT_SECRET)

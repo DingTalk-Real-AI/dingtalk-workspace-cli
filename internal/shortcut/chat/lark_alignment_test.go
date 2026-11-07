@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -24,15 +26,17 @@ type larkAlignmentCall struct {
 }
 
 type larkAlignmentCaller struct {
-	calls             []larkAlignmentCall
-	dryRun            bool
-	failTarget        string
-	failProductTool   string
-	failProductToolAt map[string]int
-	callCounts        map[string]int
-	category          string
-	responses         map[string]string
-	sequenceResponses map[string][]string
+	calls              []larkAlignmentCall
+	dryRun             bool
+	failTarget         string
+	failProductTool    string
+	failProductCause   error
+	failProductToolAt  map[string]int
+	failProductAtCause map[string]error
+	callCounts         map[string]int
+	category           string
+	responses          map[string]string
+	sequenceResponses  map[string][]string
 }
 
 func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -46,9 +50,15 @@ func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, 
 	}
 	f.callCounts[key]++
 	if f.failProductTool == key {
+		if f.failProductCause != nil {
+			return nil, f.failProductCause
+		}
 		return nil, errors.New("fixture lower call failed")
 	}
 	if f.failProductToolAt[key] == f.callCounts[key] {
+		if f.failProductAtCause[key] != nil {
+			return nil, f.failProductAtCause[key]
+		}
 		return nil, errors.New("fixture sequenced lower call failed")
 	}
 	text := `{"success":true}`
@@ -74,6 +84,17 @@ func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, 
 			},
 		})
 		text = string(payload)
+	case "chat/get_conversation_info":
+		encoded, _ := json.Marshal(map[string]any{"result": map[string]any{"openConversationId": args["openConversationId"], "createAt": "2026-01-01T00:00:00+08:00"}})
+		text = string(encoded)
+	case "chat/list_top_conversations":
+		text = `{"result":{"conversations":[],"hasMore":false}}`
+	case "im/list_user_define_conv_categories":
+		text = `{"result":{"categories":[]}}`
+	case "im/list_message_favorites":
+		text = `{"result":{"items":[],"hasMore":false}}`
+	case "im/list_conv_categories_by_conv":
+		text = `{"result":{"categories":[]}}`
 	case "im/create_group_conversation":
 		text = `{"result":{"cid":"internal-cid","openCid":"open-cid"}}`
 	case "im/create_and_send_card":
@@ -105,7 +126,7 @@ func (f *larkAlignmentCaller) DryRun() bool   { return f.dryRun }
 func (f *larkAlignmentCaller) Fields() string { return "" }
 func (f *larkAlignmentCaller) JQ() string     { return "" }
 
-func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallInference(t *testing.T) {
+func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T) {
 	t.Run("group name to bots", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/search_groups":    `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
@@ -114,10 +135,27 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-bots", "--group", "项目群"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "list_group_bots" || fake.calls[1].args["openConversationId"] != "cid-project" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+
+	t.Run("group name to role list", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+			"im/list_custom_group_roles": `{"result":{"roles":[]}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
+		if err := corecmd.ExecuteForTest(root); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 2 || fake.calls[1].tool != "list_custom_group_roles" ||
+			fake.calls[1].args["openConversationId"] != "cid-project" {
 			t.Fatalf("calls = %#v", fake.calls)
 		}
 	})
@@ -129,7 +167,7 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-invite-url", "--chat-query", "项目群"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "get_group_invite_url" || fake.calls[1].args["openConversationId"] != "cid-project" {
@@ -142,7 +180,7 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-invite-url", "--chat-query", "cid-fixture-chat-0001"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "get_group_invite_url" ||
@@ -156,13 +194,329 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+messages-recall", "--message-ids", "msg", "--yes"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[0].tool != "list_messages_by_ids" || fake.calls[1].tool != "recall_message" || fake.calls[1].args["openConversationId"] != "cid" {
 			t.Fatalf("calls = %#v", fake.calls)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageChatRoleSetUserRejectsEmptyRolesBeforeAnyCall(t *testing.T) {
+	if err := validateChatRoleIDs(nil); err == nil {
+		t.Fatal("zero-length role IDs unexpectedly accepted")
+	}
+
+	tests := []struct {
+		name    string
+		roleIDs string
+		yes     bool
+	}{
+		{name: "before confirmation", roleIDs: ""},
+		{name: "after confirmation", roleIDs: "", yes: true},
+		{name: "blank element after confirmation", roleIDs: "role-1, ", yes: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			args := []string{
+				"chat", "+chat-role-set-user",
+				"--group", "项目群",
+				"--user", "user-1",
+				"--role-ids", tt.roleIDs,
+			}
+			if tt.yes {
+				args = append(args, "--yes")
+			}
+			root.SetArgs(args)
+			if err := corecmd.ExecuteForTest(root); err == nil {
+				t.Fatal("empty role IDs unexpectedly accepted")
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("empty role IDs reached group resolution or write: %#v", fake.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleRemoveUserRejectsEmptyRolesAndDeduplicates(t *testing.T) {
+	for _, roleIDs := range []string{"", "role-1, "} {
+		fake := &larkAlignmentCaller{}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{
+			"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1",
+			"--role-ids", roleIDs, "--yes",
+		})
+		if err := corecmd.ExecuteForTest(root); err == nil {
+			t.Fatalf("role IDs %q unexpectedly accepted", roleIDs)
+		}
+		if len(fake.calls) != 0 {
+			t.Fatalf("invalid role IDs reached discovery/write: %#v", fake.calls)
+		}
+	}
+
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+		"im/query_custom_user_roles": `{"result":[]}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1",
+		"--role-ids", " role-1,role-1,role-2 ", "--yes",
+	})
+	if err := corecmd.ExecuteForTest(root); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fake.calls[1].args["openRoleIds"], []string{"role-1", "role-2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("openRoleIds = %#v, want %#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleSetUserConfirmedPassesExactParams(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+		"im/query_custom_user_roles": `{"result":[{"openRoleId":"role-1"},{"openRoleId":"role-2"}]}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+chat-role-set-user",
+		"--group", "项目群",
+		"--user", "user-1",
+		"--role-ids", " role-1 ,role-2 ",
+		"--yes",
+	})
+	if err := corecmd.ExecuteForTest(root); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 3 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != "set_custom_user_roles" || fake.calls[2].tool != "query_custom_user_roles" {
+		t.Fatalf("calls = %#v", fake.calls)
+	}
+	want := map[string]any{
+		"openConversationId": "cid-project",
+		"openRoleIds":        []string{"role-1", "role-2"},
+		"userId":             "user-1",
+	}
+	if !reflect.DeepEqual(fake.calls[1].args, want) {
+		t.Fatalf("write args = %#v, want %#v", fake.calls[1].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleCommandsResolveNamesToExactBusinessCalls(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		tool string
+		want map[string]any
+	}{
+		{
+			name: "add",
+			args: []string{"chat", "+chat-role-add", "--group", "项目群", "--name", "管理员", "--yes"},
+			tool: "add_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "name": "管理员"},
+		},
+		{
+			name: "update",
+			args: []string{"chat", "+chat-role-update", "--group", "项目群", "--role-id", "role-1", "--name", "新名称", "--yes"},
+			tool: "update_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleId": "role-1", "name": "新名称"},
+		},
+		{
+			name: "remove",
+			args: []string{"chat", "+chat-role-remove", "--group", "项目群", "--role-id", "role-1", "--yes"},
+			tool: "remove_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleId": "role-1"},
+		},
+		{
+			name: "remove user roles",
+			args: []string{"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1,role-2", "--yes"},
+			tool: "remove_custom_user_roles",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleIds": []string{"role-1", "role-2"}, "userId": "user-1"},
+		},
+		{
+			name: "query user roles",
+			args: []string{"chat", "+chat-role-query-user", "--group", "项目群", "--user", "user-1"},
+			tool: "query_custom_user_roles",
+			want: map[string]any{"openConversationId": "cid-project", "userId": "user-1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			responses := map[string]string{
+				"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+			}
+			if tt.tool == "remove_custom_user_roles" {
+				responses["im/query_custom_user_roles"] = `{"result":[]}`
+			}
+			fake := &larkAlignmentCaller{responses: responses}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tt.args)
+			if err := corecmd.ExecuteForTest(root); err != nil {
+				t.Fatal(err)
+			}
+			wantCalls := 2
+			if tt.tool == "remove_custom_user_roles" {
+				wantCalls = 3
+			}
+			if len(fake.calls) != wantCalls || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != tt.tool {
+				t.Fatalf("calls = %#v", fake.calls)
+			}
+			if !reflect.DeepEqual(fake.calls[1].args, tt.want) {
+				t.Fatalf("business args = %#v, want %#v", fake.calls[1].args, tt.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleSetUserFailsClosedWhenReadbackDiffers(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+		"im/set_custom_user_roles":   `{"success":true}`,
+		"im/query_custom_user_roles": `{"result":[]}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1",
+		"--role-ids", "role-1", "--yes",
+	})
+	err := corecmd.ExecuteForTest(root)
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "chat_role_assignment_unverified" || typed.Retryable {
+		t.Fatalf("error = %#v, want terminal postcondition failure", err)
+	}
+	if len(fake.calls) != 3 || fake.calls[2].tool != "query_custom_user_roles" {
+		t.Fatalf("calls = %#v", fake.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleReadbackAndFailureBoundaries(t *testing.T) {
+	openUser := fixtureCurrentDOpenID
+	if got := chatRoleUserParams("cid", openUser); got["openDingTalkId"] != openUser || got["userId"] != nil {
+		t.Fatalf("open identity params = %#v", got)
+	}
+
+	roleIDs, known := chatRoleIDsFromUserQuery(map[string]any{
+		"result": map[string]any{"roles": []any{
+			" role-1 ", " ",
+			map[string]any{"openRoleId": nil, "roleId": "role-2"},
+			map[string]any{"id": "role-3"},
+			float64(4),
+		}},
+	})
+	if !known || !reflect.DeepEqual(roleIDs, []string{"role-1", "role-2", "role-3"}) {
+		t.Fatalf("mixed role IDs = %#v, known=%t", roleIDs, known)
+	}
+	for _, tc := range []struct {
+		name  string
+		data  map[string]any
+		want  []string
+		known bool
+	}{
+		{name: "single object", data: map[string]any{"result": map[string]any{"openRoleId": "role-1"}}, want: []string{"role-1"}, known: true},
+		{name: "unknown object", data: map[string]any{"result": map[string]any{"name": "role"}}, known: false},
+		{name: "string slice", data: map[string]any{"result": []string{" role-1 ", "role-1"}}, want: []string{"role-1"}, known: true},
+		{name: "invalid shape", data: map[string]any{"result": "role-1"}, known: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, gotKnown := chatRoleIDsFromUserQuery(tc.data)
+			if gotKnown != tc.known || !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("role IDs = %#v, known=%t; want %#v, %t", got, gotKnown, tc.want, tc.known)
+			}
+		})
+	}
+	if sameChatRoleIDSet([]string{"role-1"}, []string{"role-2"}) {
+		t.Fatal("different same-length role sets compare equal")
+	}
+
+	searchResponse := map[string]string{
+		"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+	}
+	t.Run("role list lower failure converges", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: searchResponse, failProductTool: "im/list_custom_group_roles"}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
+		if err := corecmd.ExecuteForTest(root); err == nil {
+			t.Fatal("role list lower failure returned nil")
+		}
+	})
+	t.Run("dry run publishes write and verification plan", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: searchResponse, dryRun: true}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--dry-run"})
+		if err := corecmd.ExecuteForTest(root); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].tool != "search_groups" {
+			t.Fatalf("dry-run calls = %#v, want discovery only", fake.calls)
+		}
+	})
+	for _, tc := range []struct {
+		name      string
+		command   string
+		failTool  string
+		responses map[string]string
+		wantCalls int
+	}{
+		{name: "write failure", command: "+chat-role-set-user", failTool: "im/set_custom_user_roles", responses: searchResponse, wantCalls: 2},
+		{name: "verification read failure", command: "+chat-role-set-user", failTool: "im/query_custom_user_roles", responses: searchResponse, wantCalls: 3},
+		{name: "remove remains assigned", command: "+chat-role-remove-user", responses: map[string]string{
+			"im/search_groups":           searchResponse["im/search_groups"],
+			"im/query_custom_user_roles": `{"result":[{"openRoleId":"role-1"}]}`,
+		}, wantCalls: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: tc.responses, failProductTool: tc.failTool}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs([]string{"chat", tc.command, "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"})
+			if err := corecmd.ExecuteForTest(root); err == nil {
+				t.Fatal("failed or unverifiable role write returned nil")
+			}
+			if len(fake.calls) != tc.wantCalls {
+				t.Fatalf("calls = %#v, want %d", fake.calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleCommandsStopAmbiguousNamesBeforeBusinessCalls(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "list", args: []string{"chat", "+chat-role-list", "--group", "项目群"}},
+		{name: "add", args: []string{"chat", "+chat-role-add", "--group", "项目群", "--name", "管理员", "--yes"}},
+		{name: "update", args: []string{"chat", "+chat-role-update", "--group", "项目群", "--role-id", "role-1", "--name", "新名称", "--yes"}},
+		{name: "remove", args: []string{"chat", "+chat-role-remove", "--group", "项目群", "--role-id", "role-1", "--yes"}},
+		{name: "set user roles", args: []string{"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"}},
+		{name: "remove user roles", args: []string{"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"}},
+		{name: "query user roles", args: []string{"chat", "+chat-role-query-user", "--group", "项目群", "--user", "user-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/search_groups": `{"result":[{"openConversationId":"cid-a","title":"项目群"},{"openConversationId":"cid-b","title":"项目群"}],"hasMore":false}`,
+			}}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tt.args)
+			if err := corecmd.ExecuteForTest(root); err == nil {
+				t.Fatal("ambiguous group name unexpectedly reached a role operation")
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != "search_groups" {
+				t.Fatalf("ambiguous group reached a business call: %#v", fake.calls)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageChatCreateAddsCurrentUserAndNormalizesResult(t *testing.T) {
@@ -177,7 +531,7 @@ func TestCrossPlatformCoverageChatCreateAddsCurrentUserAndNormalizesResult(t *te
 		"--thread",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -218,7 +572,7 @@ func TestCrossPlatformCoverageChatCreateResolvesEveryNaturalMemberBeforeCreating
 		"--member-query", "张三",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 {
@@ -246,7 +600,7 @@ func TestCrossPlatformCoverageChatCreateNaturalMemberAmbiguityStopsBeforeProfile
 		"--member-query", "张三",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("ambiguous member unexpectedly created a group")
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "search_contact_by_key_word" {
@@ -267,7 +621,7 @@ func TestCrossPlatformCoverageChatCreateNaturalMemberDryRunUsesSameResolutionCha
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 ||
@@ -322,7 +676,7 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != 1 {
@@ -372,7 +726,7 @@ func TestCrossPlatformCoverageMessagesSendRejectsUnsupportedIdentityCapability(t
 		"--uuid", "unsupported",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("bot uuid unexpectedly accepted")
 	}
 	if len(fake.calls) != 0 {
@@ -420,7 +774,7 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 		},
 		{
 			name:    "flag-list",
-			args:    []string{"chat", "+flag-list", "--cursor", "3", "--size", "30"},
+			args:    []string{"chat", "+flag-list", "--no-enrich", "--cursor", "3", "--size", "30"},
 			product: "im",
 			tool:    "list_message_favorites",
 			wantArgs: map[string]any{
@@ -435,13 +789,20 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
-			if len(fake.calls) != 1 {
+			wantCalls := 1
+			if tt.name == "flag-create" || tt.name == "flag-cancel" {
+				wantCalls = 2
+				if fake.calls[0].tool != "list_messages_by_ids" {
+					t.Fatal("source validation missing")
+				}
+			}
+			if len(fake.calls) != wantCalls {
 				t.Fatalf("calls = %#v, want 1", fake.calls)
 			}
-			call := fake.calls[0]
+			call := fake.calls[len(fake.calls)-1]
 			if call.product != tt.product || call.tool != tt.tool || !reflect.DeepEqual(call.args, tt.wantArgs) {
 				t.Fatalf("call = %#v, want %s/%s %#v", call, tt.product, tt.tool, tt.wantArgs)
 			}
@@ -449,14 +810,14 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageObservedChatRenameAliasResolvesNameBeforeWrite(t *testing.T) {
+func TestCrossPlatformCoverageChatRenameAliasResolvesNameBeforeWrite(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目评测群"}],"hasMore":false}`,
+		"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目旧群"}],"hasMore":false}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-rename", "--group", "项目评测群", "--name", "项目讨论群", "--yes"})
-	if err := root.Execute(); err != nil {
+	root.SetArgs([]string{"chat", "+chat-rename", "--group", "项目旧群", "--name", "项目讨论群", "--yes"})
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != "update_group_name" {
@@ -469,6 +830,7 @@ func TestCrossPlatformCoverageObservedChatRenameAliasResolvesNameBeforeWrite(t *
 
 func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids":    `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`,
 		"chat/send_personal_message": `{"result":{"openMessageId":"new-msg","openConvThreadId":"thread-1","sendStatus":"accepted"}}`,
 	}}
 	helpers.InitDeps(fake)
@@ -484,13 +846,13 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 		"--idempotency-key", "reply-uuid",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 {
-		t.Fatalf("calls = %#v, want 1", fake.calls)
+	if len(fake.calls) != 2 {
+		t.Fatalf("calls = %#v, want 2", fake.calls)
 	}
-	call := fake.calls[0]
+	call := fake.calls[1]
 	if call.product != "chat" || call.tool != "send_personal_message" {
 		t.Fatalf("reply call = %#v", call)
 	}
@@ -526,7 +888,7 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 }
 
 func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
@@ -538,16 +900,16 @@ func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) 
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 0 {
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_messages_by_ids" {
 		t.Fatalf("reply dry-run reached write transport: %#v", fake.calls)
 	}
 }
 
 func TestCrossPlatformCoverageFlagBatchContinuesAndPublishesFailureLedger(t *testing.T) {
-	fake := &larkAlignmentCaller{failTarget: "m2"}
+	fake := &larkAlignmentCaller{failTarget: "m2", sequenceResponses: map[string][]string{"im/list_messages_by_ids": {`{"result":[{"openMessageId":"m1","openConversationId":"cid"}]}`, `{"result":[{"openMessageId":"m2","openConversationId":"cid"}]}`}}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
@@ -558,10 +920,10 @@ func TestCrossPlatformCoverageFlagBatchContinuesAndPublishesFailureLedger(t *tes
 		"--conversation-id", "cid",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("partial batch failure returned success")
 	}
-	if len(fake.calls) != 2 {
+	if len(fake.calls) != 4 {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
 	var payload map[string]any
@@ -589,7 +951,7 @@ func TestCrossPlatformCoverageConversationSetTopBatchDryRunPublishesActionsWitho
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 0 {
@@ -617,9 +979,9 @@ func TestCrossPlatformCoverageMessagesMgetDryRunPublishesMultiResourceDownloadPl
 		"chat", "+messages-mget",
 		"--msg-ids", "msg",
 		"--download-resources",
-		"--dry-run",
+		"--dry-run", "--no-reactions",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 ||
@@ -638,7 +1000,7 @@ func TestCrossPlatformCoverageMessagesMgetDryRunPublishesMultiResourceDownloadPl
 }
 
 func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + "D-resolved" + `"}]}`}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
@@ -649,17 +1011,17 @@ func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *test
 		"--text", "收到",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 2 ||
-		fake.calls[0].product != "contact" ||
-		fake.calls[0].tool != "search_contact_by_key_word" ||
-		fake.calls[1].tool != "send_personal_message" {
+	if len(fake.calls) != 3 ||
+		fake.calls[1].product != "contact" ||
+		fake.calls[1].tool != "search_contact_by_key_word" ||
+		fake.calls[2].tool != "send_personal_message" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
 	var content map[string]string
-	if err := json.Unmarshal([]byte(fake.calls[1].args["content"].(string)), &content); err != nil {
+	if err := json.Unmarshal([]byte(fake.calls[2].args["content"].(string)), &content); err != nil {
 		t.Fatal(err)
 	}
 	if content["srcMsgSendOpenDingTalkId"] != "D-resolved" {
@@ -678,7 +1040,7 @@ func TestCrossPlatformCoverageMessagesReplyInfersSenderFromReferencedMessage(t *
 		"--text", "收到",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 ||
@@ -737,7 +1099,7 @@ func TestCrossPlatformCoverageChatListDefaultsToGroupsAndSupportsLarkAliases(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--exclude-muted", "--page-size", "20"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_all_conversations" {
@@ -782,7 +1144,7 @@ func TestCrossPlatformCoverageChatListIncludesP2PAndRejectsInvalidTypes(t *testi
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "group,p2p", "--page-token", "3"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if fake.calls[0].args["cursor"] != 3 || fake.calls[0].args["limit"] != 20 {
@@ -804,7 +1166,7 @@ func TestCrossPlatformCoverageChatListIncludesP2PAndRejectsInvalidTypes(t *testi
 	helpers.InitDeps(&larkAlignmentCaller{})
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "channel"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("invalid --types unexpectedly accepted")
 	}
 }
@@ -825,7 +1187,7 @@ func TestCrossPlatformCoverageChatListP2POnlyDropsGroups(t *testing.T) {
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "p2p", "--limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if fake.calls[0].args["limit"] != 5 {
@@ -875,8 +1237,8 @@ func TestCrossPlatformCoverageFeedGroupQueryDoesNotMisreportMissingItemWhenSourc
 		"--category-id", "1",
 		"--conversation-ids", "cid-a,cid-later",
 	})
-	if err := root.Execute(); err != nil {
-		t.Fatal(err)
+	if err := corecmd.ExecuteForTest(root); err == nil {
+		t.Fatal("unknown membership must be nonzero")
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {

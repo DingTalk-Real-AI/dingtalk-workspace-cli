@@ -3,6 +3,7 @@ package scripts_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload"
 )
 
 var releasePlatformAssets = []string{
@@ -23,6 +26,65 @@ var releasePlatformAssets = []string{
 	"dws-windows-arm64.zip",
 }
 
+func releaseArtifactVerificationEnv(t *testing.T) []string {
+	t.Helper()
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("LookPath(go) error = %v", err)
+	}
+	shimDir := t.TempDir()
+	shim := fmt.Sprintf(`#!/bin/sh
+if [ "$#" -ge 2 ] && [ "$1" = "version" ] && [ "$2" = "-m" ]; then
+  case "${3:-}" in
+    *openharmony*)
+      printf '%%s: go1.26.7\n' "${3:-dws}"
+      printf '\tbuild\tGOOS=openharmony\n'
+      printf '\tbuild\tGOARCH=arm64\n'
+      printf '\tbuild\tCGO_ENABLED=0\n'
+      exit 0
+      ;;
+  esac
+  printf '%%s: go1.26.7\n' "${3:-dws}"
+  printf '\tdep\tsafechat-go-sdk\tv0.0.0\n'
+  printf '\tbuild\tCGO_ENABLED=1\n'
+  exit 0
+fi
+# These archives contain synthetic version markers, not executable ELF files.
+# scripts/build/linux-abi tests the real ELF/version-table rejection paths.
+if [ "$#" -ge 2 ] && [ "$1" = "run" ] && [ "$2" = "./scripts/build/linux-abi" ]; then
+  exit 0
+fi
+exec %q "$@"
+`, realGo)
+	mustWriteFile(t, filepath.Join(shimDir, "go"), []byte(shim), 0o755)
+	// verify-openharmony-artifact.sh needs a reader; keep the fixture
+	// platform-independent instead of depending on a host readelf.
+	mustWriteFile(t, filepath.Join(shimDir, "readelf"), []byte(`#!/bin/sh
+case "$1" in
+  -h)
+    printf 'ELF Header:\n  Type:  EXEC (Executable file)\n  Machine:  AArch64\n'
+    ;;
+  -l)
+    printf 'Elf file type is EXEC\nThere are no program headers in this file.\n'
+    ;;
+  -d)
+    printf 'There is no dynamic section in this file.\n'
+    ;;
+esac
+exit 0
+`), 0o755)
+
+	env := os.Environ()
+	pathValue := shimDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	for i, value := range env {
+		if strings.HasPrefix(value, "PATH=") {
+			env[i] = "PATH=" + pathValue
+			return env
+		}
+	}
+	return append(env, "PATH="+pathValue)
+}
+
 func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	t.Helper()
 	stage := t.TempDir()
@@ -30,17 +92,62 @@ func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	if strings.HasSuffix(asset, ".zip") {
 		binary = "dws.exe"
 	}
-	mustWriteFile(t, filepath.Join(stage, binary), []byte("fake release binary\n"+version+"\n"), 0o755)
+	writeReleaseRuntimeFixture(t, stage, asset)
+	container, err := runtimepayload.BuildContainer(filepath.Join(stage, ".dws-runtime", runtimepayload.PayloadVersion), 12<<20)
+	if err != nil {
+		t.Fatalf("BuildContainer(%s): %v", asset, err)
+	}
+	binaryData := append([]byte("fake release binary\n"+version+"\n"), container...)
+	mustWriteFile(t, filepath.Join(stage, binary), binaryData, 0o755)
 	if strings.HasSuffix(asset, ".zip") {
-		mustRun(t, stage, "zip", "-q", filepath.Join(dist, asset), binary)
+		mustRun(t, stage, "zip", "-qr", filepath.Join(dist, asset), binary)
 		return
 	}
 	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), binary)
 }
 
+func writeReleaseRuntimeFixture(t *testing.T, stage, asset string) {
+	t.Helper()
+	var target, library string
+	switch {
+	case strings.HasPrefix(asset, "dws-darwin-amd64"):
+		target, library = "darwin/amd64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-darwin-arm64"):
+		target, library = "darwin/arm64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-linux-amd64"):
+		target, library = "linux/amd64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-linux-arm64"):
+		target, library = "linux/arm64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-windows-amd64"):
+		target, library = "windows/amd64", "x7k2m9p4q1w864.dll"
+	case strings.HasPrefix(asset, "dws-windows-arm64"):
+		target, library = "windows/arm64", "x7k2m9p4q1w864.dll"
+	default:
+		t.Fatalf("unsupported release fixture asset %q", asset)
+	}
+	writeRuntimePayloadFixture(t, filepath.Join(stage, ".dws-runtime", runtimepayload.PayloadVersion), target, library)
+}
+
+func writeRuntimePayloadFixture(t *testing.T, root, target, library string) {
+	t.Helper()
+	libraryData := []byte("fake runtime library for " + target + "\n")
+	librarySum := sha256.Sum256(libraryData)
+	configData := []byte("fake config for " + target + "\n")
+	configSum := sha256.Sum256(configData)
+	mustWriteFile(t, filepath.Join(root, "skt.bin"), configData, 0o600)
+	mustWriteFile(t, filepath.Join(root, library), libraryData, 0o755)
+
+	manifest := fmt.Sprintf(
+		"{\n  \"format_version\": 3,\n  \"payload_version\": %q,\n  \"target\": %q,\n  \"library\": %q,\n  \"library_sha256\": \"%x\",\n  \"config\": \"skt.bin\",\n  \"config_sha256\": \"%x\"\n}\n",
+		runtimepayload.PayloadVersion, target, library, librarySum, configSum,
+	)
+	mustWriteFile(t, filepath.Join(root, "manifest.json"), []byte(manifest), 0o644)
+}
+
 func writeReleaseChecksums(t *testing.T, dist string, includeSkills bool) {
 	t.Helper()
 	assets := append([]string{}, releasePlatformAssets...)
+	assets = append(assets, "dws-openharmony-arm64.tar.gz")
 	if includeSkills {
 		assets = append(assets, "dws-skills.zip")
 	}
@@ -64,8 +171,24 @@ func seedVersionedReleaseArtifacts(t *testing.T, dist, version string) {
 	for _, asset := range releasePlatformAssets {
 		writeVersionedReleaseArchive(t, dist, asset, version)
 	}
+	writeOpenHarmonyReleaseArchive(t, dist, version)
 	mustWriteFile(t, filepath.Join(dist, "dws-skills.zip"), []byte("fake skills\n"), 0o644)
 	writeReleaseChecksums(t, dist, true)
+}
+
+func writeOpenHarmonyReleaseArchive(t *testing.T, dist, version string) {
+	t.Helper()
+	stage := t.TempDir()
+	// A minimal ET_EXEC AArch64 ELF64 header keeps the real `file` command
+	// happy; readelf and go metadata come from the verification shims.
+	binaryData := append([]byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}, make([]byte, 8)...)
+	header := make([]byte, 48)
+	binary.LittleEndian.PutUint16(header[0:2], 2)   // e_type = ET_EXEC
+	binary.LittleEndian.PutUint16(header[2:4], 183) // e_machine = AArch64
+	binaryData = append(binaryData, header...)
+	binaryData = append(binaryData, []byte("fake openharmony binary\n"+version+"\n0123456789abcdef0123456789abcdef01234567\n")...)
+	mustWriteFile(t, filepath.Join(stage, "dws"), binaryData, 0o755)
+	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, "dws-openharmony-arm64.tar.gz"), "dws")
 }
 
 type releaseTestRepo struct {
@@ -92,6 +215,15 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 	remote := filepath.Join(base, "remote.git")
 	mustRun(t, base, "git", "init", "--bare", remote)
 	mustRun(t, base, "git", "init", "-b", "main", root)
+	// Git can detach automatic maintenance after a push. If that background
+	// process outlives the test, testing.TempDir may race with writes in the
+	// bare remote and fail cleanup with "directory not empty". These tiny test
+	// repositories never need automatic maintenance, so keep all Git work
+	// synchronous and bounded by the commands below.
+	for _, repo := range []string{remote, root} {
+		mustRun(t, repo, "git", "config", "maintenance.auto", "false")
+		mustRun(t, repo, "git", "config", "gc.auto", "0")
+	}
 	mustRun(t, root, "git", "config", "user.name", "Release Test")
 	mustRun(t, root, "git", "config", "user.email", "release-test@example.com")
 
@@ -539,12 +671,18 @@ func TestReleaseNpmPackingIgnoresLifecycleScripts(t *testing.T) {
 	mustWriteFile(t, filepath.Join(packageDir, "README.md"), []byte("test package\n"), 0o644)
 	outputTarball := filepath.Join(t.TempDir(), "package.tgz")
 	cmd := exec.Command("sh", filepath.Join(sourceRoot, "scripts", "release", "pack-npm-package.sh"), packageDir, outputTarball)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("pack-npm-package error = %v\noutput:\n%s", err, output)
+	// The script's contract — the one release.yml consumes through command
+	// substitution — is that stdout carries only the integrity value. npm/npx
+	// diagnostics (registry deprecation notices, fund/audit banners) belong to
+	// stderr and must not pollute the assertion.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("pack-npm-package error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
-	if !strings.HasPrefix(strings.TrimSpace(string(output)), "sha512-") {
-		t.Fatalf("pack output is not an integrity value: %s", output)
+	if !strings.HasPrefix(strings.TrimSpace(stdout.String()), "sha512-") {
+		t.Fatalf("pack stdout is not an integrity value: %s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 	if _, err := os.Stat(outputTarball); err != nil {
 		t.Fatalf("packed tarball missing: %v", err)
@@ -615,6 +753,7 @@ esac
 		"dws-windows-amd64.zip",
 		"dws-linux-arm64.tar.gz",
 		"dws-darwin-arm64.tar.gz",
+		"dws-openharmony-arm64.tar.gz",
 	}, "\n")
 	script := filepath.Join(sourceRoot, "scripts", "release", "verify-github-release-assets.sh")
 	run := func(assets string, draft bool, releaseTag, releaseID string) (string, string, error) {
@@ -745,6 +884,7 @@ esac
 		{id: "1007", name: "dws-windows-amd64.zip"},
 		{id: "1004", name: "dws-linux-amd64.tar.gz"},
 		{id: "1006", name: "dws-skills.zip"},
+		{id: "1009", name: "dws-openharmony-arm64.tar.gz"},
 	}
 	rowsFor := func(items []releaseAsset) string {
 		var rows []string
@@ -933,6 +1073,31 @@ esac
 	}
 	if output, err := run(workflowSHA, "failure"); err == nil || !strings.Contains(output, "missing successful job publish-release") {
 		t.Fatalf("failed recovery delivery job passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseWorkflowDeliveryJobNamesMatchWorkflow(t *testing.T) {
+	t.Parallel()
+
+	const signedRuntimeJob = "Verify Apple Developer ID signatures"
+	workflow := readReleaseWorkflow(t)
+	if got := strings.Count(workflow, "name: "+signedRuntimeJob); got != 1 {
+		t.Fatalf("release workflow contains %d %q jobs, want 1", got, signedRuntimeJob)
+	}
+
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	verifier, err := os.ReadFile(filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh"))
+	if err != nil {
+		t.Fatalf("ReadFile(delivery verifier) error = %v", err)
+	}
+	if got := strings.Count(string(verifier), `"`+signedRuntimeJob+`"`); got != 4 {
+		t.Fatalf("delivery verifier contains %d %q requirements, want 4", got, signedRuntimeJob)
+	}
+	if strings.Contains(string(verifier), "Validate signed runtime package") {
+		t.Fatal("delivery verifier contains a renamed signed-runtime job")
 	}
 }
 
@@ -2096,7 +2261,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 
 			cmd := exec.Command("bash", script)
 			cmd.Dir = sourceRoot
-			cmd.Env = append(os.Environ(),
+			cmd.Env = append(releaseArtifactVerificationEnv(t),
 				"DIST_DIR="+dist,
 				"VERSION="+test.version,
 				"DWS_RELEASE_CHANNEL="+test.channel,
@@ -2167,7 +2332,7 @@ func TestReleaseMirrorFailsClosedWhenPointerCannotBeRead(t *testing.T) {
 
 			cmd := exec.Command("bash", script)
 			cmd.Dir = sourceRoot
-			cmd.Env = append(os.Environ(),
+			cmd.Env = append(releaseArtifactVerificationEnv(t),
 				"DIST_DIR="+dist,
 				"VERSION=v1.2.3-beta.1",
 				"DWS_RELEASE_CHANNEL=prerelease",
@@ -2204,7 +2369,7 @@ func TestReleaseMirrorRepairsHistoricalAssetsWithoutMovingNewerPointer(t *testin
 	mustWriteFile(t, fakeOSSUtil, []byte("#!/bin/sh\nset -eu\nprevious=\npenultimate=\nfor arg in \"$@\"; do penultimate=\"$previous\"; previous=\"$arg\"; done\nlast=\"$previous\"\ncase \"$penultimate\" in oss://*) printf 'v1.2.4-beta.1\\n' > \"$last\"; exit 0 ;; esac\nprintf '%s\\n' \"$last\" >> \"$OSSUTIL_LOG\"\n"), 0o755)
 	cmd := exec.Command("bash", filepath.Join(sourceRoot, "scripts", "release", "sync-to-oss.sh"))
 	cmd.Dir = sourceRoot
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(releaseArtifactVerificationEnv(t),
 		"DIST_DIR="+dist,
 		"VERSION=v1.2.3-beta.1",
 		"DWS_RELEASE_CHANNEL=prerelease",
@@ -2264,14 +2429,14 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	dist := t.TempDir()
 	seedVersionedReleaseArtifacts(t, dist, "v1.2.3")
 	cmd := exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("artifact verification error = %v\noutput:\n%s", err, output)
 	}
 
 	writeReleaseChecksums(t, dist, false)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	output, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "dws-skills.zip exactly once") {
 		t.Fatalf("missing checksum was not blocked: err=%v\noutput:\n%s", err, output)
@@ -2280,7 +2445,7 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeReleaseChecksums(t, dist, true)
 	mustWriteFile(t, filepath.Join(dist, "dws-linux-riscv64.tar.gz"), []byte("unexpected\n"), 0o644)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "public release assets") {
 		t.Fatalf("extra public archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}
@@ -2291,7 +2456,7 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeVersionedReleaseArchive(t, dist, "dws-windows-arm64.zip", "v1.2.2")
 	writeReleaseChecksums(t, dist, true)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-windows-arm64.zip binary") {
 		t.Fatalf("mixed-version archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}

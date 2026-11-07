@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -325,7 +327,7 @@ func runOAAttachmentUpload(cmd *cobra.Command, _ []string) error {
 		}, output.WithDryRun()))
 	}
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 	defer cancel()
 
 	// Step 1: 初始化上传，拿到 OSS 上传地址、签名头与 uploadKey。
@@ -369,11 +371,11 @@ func runOAAttachmentUpload(cmd *cobra.Command, _ []string) error {
 }
 
 func newOAAttachmentCommand() *cobra.Command {
-	attachmentCmd := &cobra.Command{
+	attachmentCmd := newGroupCommand(&cobra.Command{
 		Use:   "attachment",
 		Short: "审批附件授权、上传、下载与链接管理",
 		RunE:  groupRunE,
-	}
+	})
 
 	downloadURLCmd := NewLeafCommand(LeafSpec{
 		Use:           "download-url",
@@ -611,6 +613,10 @@ func newOAAttachmentCommand() *cobra.Command {
 // get_process_instances_by_admin.
 const oaAdminQueryMaxPageSize = float64(20)
 
+func normalizeOAAdminQueryValidation(err error) error {
+	return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag_value"))
+}
+
 // validateOARequestProcessCode checks the processCode field of a decoded
 // --request payload: the tool requires it, and the backend answers a bad
 // processCode with success:true and an empty list, so reject it client-side.
@@ -698,7 +704,7 @@ func validateOARequestTimeRange(request map[string]any) error {
 
 // ──────────────────────────────────────────────────────────
 // dws oa — OA 审批
-// MCP tools（tools/list）: list_pending_approvals, get_processInstance_detail,
+// MCP tools（tools/list）: get_todo_tasks, get_processInstance_detail,
 // approve_processInstance, reject_processInstance, revoke_processInstance,
 // get_processInstance_records, list_initiated_instances, list_pending_tasks,
 // list_user_visible_process, append_task, search_form, oa_ding_user, revert_task,
@@ -708,65 +714,648 @@ func validateOARequestTimeRange(request map[string]any) error {
 // auth_preview_attachment, init_attachment_upload_info, commit_attachment_upload_info
 // ──────────────────────────────────────────────────────────
 
+const oaApprovalListDateLayout = "2006-01-02"
+
+type oaApprovalListOptions struct {
+	includeCreateBefore bool
+	includeLegacyRange  bool
+	includeUnreadOnly   bool
+	includeSizeAlias    bool
+	includeStatus       bool
+}
+
+var oaApprovalListStringProperties = []struct {
+	flag     string
+	property string
+}{
+	{flag: "query", property: "query"},
+	{flag: "process-code", property: "processCode"},
+	{flag: "originator-user-id", property: "originatorUserId"},
+	{flag: "create-time-from", property: "createTimeFrom"},
+	{flag: "create-time-to", property: "createTimeTo"},
+	{flag: "finish-time-from", property: "finishTimeFrom"},
+	{flag: "finish-time-to", property: "finishTimeTo"},
+}
+
+func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDecl {
+	pageProperty := "pageNumber"
+	if options.includeLegacyRange {
+		pageProperty = ""
+	}
+	params := []contract.ParamDecl{
+		{Name: "page", Property: pageProperty},
+		{Name: "limit", Property: "pageSize"},
+	}
+	for _, binding := range oaApprovalListStringProperties {
+		params = append(params, contract.ParamDecl{Name: binding.flag, Property: binding.property})
+	}
+	if options.includeStatus {
+		params = append(params, contract.ParamDecl{Name: "process-instance-status", Property: "processInstanceStatus"})
+	}
+	if options.includeCreateBefore {
+		params = append(params, contract.ParamDecl{Name: "create-before", Property: "createBefore"})
+	}
+	if options.includeLegacyRange {
+		params = append(params,
+			contract.ParamDecl{Name: "start"},
+			contract.ParamDecl{Name: "end"},
+		)
+	}
+	if options.includeUnreadOnly {
+		params = append(params, contract.ParamDecl{Name: "unread-only", Property: "unreadOnly"})
+	}
+	return params
+}
+
+func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[string]any, error) {
+	page, err := oaApprovalListIntFlag(cmd, "page", 1)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := oaApprovalListIntFlag(cmd, "limit", 20)
+	if err != nil {
+		return nil, err
+	}
+	if options.includeSizeAlias && cmd.Flags().Changed("size") {
+		limit, err = oaApprovalListIntFlag(cmd, "size", 20)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if page <= 0 {
+		return nil, apperrors.NewValidation("--page 必须大于 0")
+	}
+	if limit <= 0 || limit > 100 {
+		return nil, apperrors.NewValidation("--limit 必须在 1 到 100 之间")
+	}
+
+	args := map[string]any{"pageNumber": page, "pageSize": limit}
+	for _, binding := range oaApprovalListStringProperties {
+		value, _ := cmd.Flags().GetString(binding.flag)
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(binding.flag, "create-time-") || strings.HasPrefix(binding.flag, "finish-time-") {
+			if _, err := time.Parse(oaApprovalListDateLayout, value); err != nil {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 必须是 yyyy-MM-dd 格式")
+			}
+		}
+		args[binding.property] = value
+	}
+	if options.includeStatus {
+		if value, _ := cmd.Flags().GetString("process-instance-status"); strings.TrimSpace(value) != "" {
+			args["processInstanceStatus"] = strings.TrimSpace(value)
+		}
+	}
+	if options.includeCreateBefore {
+		value, _ := cmd.Flags().GetString("create-before")
+		if value = strings.TrimSpace(value); value != "" {
+			args["createBefore"] = value
+		}
+	}
+	if options.includeLegacyRange {
+		for _, binding := range []struct {
+			flag     string
+			property string
+		}{{flag: "start", property: "createTimeFrom"}, {flag: "end", property: "createTimeTo"}} {
+			value, _ := cmd.Flags().GetString(binding.flag)
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, exists := args[binding.property]; exists {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 不能与对应的 yyyy-MM-dd 日期参数同时使用")
+			}
+			parsed, parseErr := time.Parse(time.RFC3339, value)
+			if parseErr != nil {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 必须是 ISO-8601 格式")
+			}
+			args[binding.property] = parsed.Format(oaApprovalListDateLayout)
+		}
+	}
+	for _, pair := range [][2]string{{"createTimeFrom", "createTimeTo"}, {"finishTimeFrom", "finishTimeTo"}} {
+		fromRaw, fromOK := args[pair[0]].(string)
+		toRaw, toOK := args[pair[1]].(string)
+		if !fromOK || !toOK {
+			continue
+		}
+		from, _ := time.Parse(oaApprovalListDateLayout, fromRaw)
+		to, _ := time.Parse(oaApprovalListDateLayout, toRaw)
+		if from.After(to) {
+			return nil, apperrors.NewValidation(pair[0] + " 不能晚于 " + pair[1])
+		}
+	}
+	if options.includeUnreadOnly && cmd.Flags().Changed("unread-only") {
+		value, _ := cmd.Flags().GetBool("unread-only")
+		args["unreadOnly"] = value
+	}
+	return args, nil
+}
+
+func oaApprovalListIntFlag(cmd *cobra.Command, name string, fallback int) (int, error) {
+	raw, _ := cmd.Flags().GetString(name)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, apperrors.NewValidation("--" + name + " 必须是整数")
+	}
+	return value, nil
+}
+
+func addOAApprovalListFlags(cmd *cobra.Command, options oaApprovalListOptions) {
+	pageDefault, limitDefault := "1", "20"
+	if options.includeLegacyRange {
+		pageDefault, limitDefault = "", ""
+	}
+	cmd.Flags().String("page", pageDefault, "分页页码（默认 1）")
+	cmd.Flags().String("limit", limitDefault, "每页大小（默认 20，最大 100）")
+	if options.includeSizeAlias {
+		cmd.Flags().String("size", "", "每页大小（兼容别名）")
+		cmd.Flags().Lookup("size").Hidden = true
+	}
+	cmd.Flags().String("query", "", "关键字搜索（可选）")
+	cmd.Flags().String("process-code", "", "审批模板 code（可选）")
+	cmd.Flags().String("originator-user-id", "", "审批单发起人 userId（可选）")
+	if options.includeStatus {
+		cmd.Flags().String("process-instance-status", "", "审批状态，如 NEW/RUNNING/COMPLETED/TERMINATED（可选）")
+	}
+	cmd.Flags().String("create-time-from", "", "发起时间起始，格式 yyyy-MM-dd（可选）")
+	cmd.Flags().String("create-time-to", "", "发起时间截止，格式 yyyy-MM-dd，含当日（可选）")
+	cmd.Flags().String("finish-time-from", "", "审批完成时间起始，格式 yyyy-MM-dd（可选）")
+	cmd.Flags().String("finish-time-to", "", "审批完成时间截止，格式 yyyy-MM-dd，含当日（可选）")
+	if options.includeCreateBefore {
+		cmd.Flags().String("create-before", "", "创建时间（可选）")
+	}
+	if options.includeLegacyRange {
+		cmd.Flags().String("start", "", "兼容参数：发起时间起始，ISO-8601 格式（建议使用 --create-time-from）")
+		cmd.Flags().String("end", "", "兼容参数：发起时间截止，ISO-8601 格式（建议使用 --create-time-to）")
+	}
+	if options.includeUnreadOnly {
+		cmd.Flags().Bool("unread-only", false, "仅查询未读抄送审批（可选）")
+	}
+}
+
+func oaTemplateJSONFlag(name, property, usage, shape string, required bool) LeafFlag {
+	return LeafFlag{Name: name, Bind: property, Usage: usage + "；支持直接 JSON、@文件或 - 标准输入", Required: required, MarkRequired: required, OmitEmpty: true, Input: []string{corecmd.InputFile, corecmd.InputStdin}, Transform: func(raw string) (any, error) {
+		var value any
+		if err := json.Unmarshal([]byte(raw), &value); err != nil || value == nil {
+			return nil, apperrors.NewValidation("--" + name + " 必须是有效且非 null 的 JSON")
+		}
+		switch shape {
+		case "object":
+			if _, ok := value.(map[string]any); !ok {
+				return nil, apperrors.NewValidation("--" + name + " 必须是 JSON 对象，不能是数组或重复编码的字符串")
+			}
+		case "objects", "strings":
+			items, ok := value.([]any)
+			if !ok {
+				return nil, apperrors.NewValidation("--" + name + " 必须是 JSON 数组")
+			}
+			for _, item := range items {
+				valid := false
+				if shape == "objects" {
+					_, valid = item.(map[string]any)
+				} else {
+					_, valid = item.(string)
+				}
+				if !valid {
+					return nil, apperrors.NewValidation("--" + name + " 数组元素类型不正确")
+				}
+			}
+			// RawMessage preserves explicit [] (BuildArgs omits empty Go slices),
+			// while the MCP encoder still sends a JSON array, not a string.
+			return json.RawMessage(raw), nil
+		}
+		return raw, nil
+	}}
+}
+
+// validateOATemplateWriteSources keeps document and individual-flag inputs
+// disjoint; the update target may also be supplied explicitly for readability.
+func validateOATemplateWriteSources(cmd *cobra.Command, args []string) error {
+	if err := cobra.NoArgs(cmd, args); err != nil {
+		return err
+	}
+	if !cmd.Flags().Changed("from-document") {
+		return nil
+	}
+	if strings.TrimSpace(mustGetFlag(cmd, "from-document")) == "" {
+		return apperrors.NewValidation("--from-document 必须是 JSON 文档的绝对路径")
+	}
+	for _, flag := range []string{"name", "schema-content", "process-config", "description", "icon-url", "form-config", "node-config", "condition-rule", "plugin-configs", "visible-range", "manager-user-ids", "static-workflow", "append-enable", "duplicate-removal", "expected-version"} {
+		if cmd.Flags().Changed(flag) {
+			return apperrors.NewValidation("--from-document 不能与 --" + flag + " 混用；请在 JSON 文档中设置该字段")
+		}
+	}
+	return nil
+}
+
+func oaTemplateDocumentArgs(cmd *cobra.Command) (map[string]any, error) {
+	path := mustGetFlag(cmd, "from-document")
+	if !filepath.IsAbs(path) {
+		return nil, apperrors.NewValidation("--from-document 必须是 JSON 文档的绝对路径（不加 @）")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, apperrors.NewValidation("无法读取 --from-document: " + err.Error())
+	}
+	defer file.Close()
+	stat, err := file.Stat()
+	const maxSize = 4 << 20
+	if err != nil || !stat.Mode().IsRegular() || stat.Size() > maxSize {
+		return nil, apperrors.NewValidation("--from-document 必须是大小不超过 4 MiB 的普通文件")
+	}
+	raw, _ := io.ReadAll(io.LimitReader(file, maxSize+1))
+	fields, err := decodeOATemplateDocument(bytes.TrimPrefix(raw, []byte{0xef, 0xbb, 0xbf}))
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]any, len(fields))
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		value := fields[key]
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, apperrors.NewValidation(key + " 不能为 null；沿用原配置请省略该字段")
+		}
+		switch key {
+		case "name", "description", "iconUrl", "processCode", "staticWorkflow", "appendEnable", "duplicateRemoval":
+			if key == "processCode" && cmd.Name() != "update" {
+				return nil, apperrors.NewValidation("创建文档不接受 processCode")
+			}
+			var text string
+			if err := json.Unmarshal(value, &text); err != nil {
+				return nil, apperrors.NewValidation(key + " 必须是字符串")
+			}
+			if key == "name" || key == "processCode" {
+				text = strings.TrimSpace(text)
+			}
+			allowed := map[string][]string{"staticWorkflow": {"0", "1"}, "appendEnable": {"y", "n"}, "duplicateRemoval": {"true", "false"}}
+			if choices, ok := allowed[key]; ok && !slices.Contains(choices, text) {
+				return nil, apperrors.NewValidation(key + " 必须是字符串 " + strings.Join(choices, " / "))
+			}
+			result[key] = text
+		case "schemaContent", "processConfig", "formConfig", "nodeConfig", "conditionRule":
+			text := string(value)
+			if len(value) > 0 && value[0] == '"' {
+				_ = json.Unmarshal(value, &text)
+			}
+			shape := "json"
+			if key == "schemaContent" || key == "processConfig" {
+				shape = "object"
+			}
+			normalized, err := oaTemplateJSONFlag(key, key, "", shape, false).Transform(text)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateOATemplateDocumentStructure(key, []byte(text)); err != nil {
+				return nil, err
+			}
+			result[key] = normalized
+		case "pluginConfigs", "visibleRange", "managerUserIds":
+			if err := validateOATemplateDocumentArray(key, value); err != nil {
+				return nil, err
+			}
+			result[key] = json.RawMessage(value)
+		case "expectedVersion":
+			if cmd.Name() == "update" {
+				return nil, apperrors.NewValidation("更新文档不接受 expectedVersion")
+			}
+			var n any
+			decoder := json.NewDecoder(bytes.NewReader(value))
+			decoder.UseNumber()
+			_ = decoder.Decode(&n)
+			number, ok := n.(json.Number)
+			if !ok {
+				return nil, apperrors.NewValidation("expectedVersion 必须是数值")
+			}
+			f, err := number.Float64()
+			if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+				return nil, apperrors.NewValidation("expectedVersion 必须是有限数值")
+			}
+			result[key] = number
+		default:
+			return nil, apperrors.NewValidation("JSON 文档包含不支持的字段 " + key + "；请使用 MCP 参数名（如 schemaContent）")
+		}
+	}
+	if cmd.Name() == "update" && cmd.Flags().Changed("process-code") {
+		code := strings.TrimSpace(mustGetFlag(cmd, "process-code"))
+		if code == "" {
+			return nil, apperrors.NewValidation("--process-code 不能为空")
+		}
+		if existing, ok := result["processCode"]; ok && existing != code {
+			return nil, apperrors.NewValidation("--process-code 与文档 processCode 不一致")
+		}
+		result["processCode"] = code
+	}
+	required := []string{"name", "schemaContent"}
+	if cmd.Name() == "update" {
+		required = append(required, "processCode", "processConfig")
+	}
+	for _, key := range required {
+		value, ok := result[key].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, apperrors.NewValidation("JSON 文档必填字段 " + key + " 不能为空")
+		}
+	}
+	return result, nil
+}
+
+func decodeOATemplateDocument(raw []byte) (map[string]json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, apperrors.NewValidation("文档不是有效的 JSON: " + err.Error())
+	}
+	if token != json.Delim('{') {
+		return nil, apperrors.NewValidation("JSON 文档顶层必须是对象")
+	}
+	fields := map[string]json.RawMessage{}
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, apperrors.NewValidation("文档 JSON 字段名无效")
+		}
+		key := token.(string)
+		if _, exists := fields[key]; exists {
+			return nil, apperrors.NewValidation("JSON 文档字段重复: " + key)
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, apperrors.NewValidation("文档 JSON 字段 " + key + " 无效: " + err.Error())
+		}
+		fields[key] = value
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, apperrors.NewValidation("文档 JSON 对象未结束")
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		return nil, apperrors.NewValidation("文档 JSON 包含多余内容")
+	}
+	return fields, nil
+}
+
+func validateOATemplateDocumentArray(key string, raw []byte) error {
+	var values []json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return apperrors.NewValidation(key + " 必须是非 null 的 JSON 数组")
+	}
+	for _, value := range values {
+		if key == "managerUserIds" {
+			var id string
+			if err := json.Unmarshal(value, &id); err != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return apperrors.NewValidation(key + " 元素必须是字符串")
+			}
+			continue
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(value, &fields); err != nil || fields == nil {
+			return apperrors.NewValidation(key + " 元素必须是对象")
+		}
+		types := map[string]string{"pluginId": "number", "pluginKey": "string", "pluginConfig": "string", "enable": "boolean"}
+		if key == "visibleRange" {
+			types = map[string]string{"corpId": "string", "processCode": "string", "visibleType": "number", "visibleValue": "string", "unactiveFlag": "number", "id": "number"}
+		}
+		names := make([]string, 0, len(fields))
+		for name := range fields {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		for _, name := range names {
+			kind, ok := types[name]
+			if !ok {
+				return apperrors.NewValidation(key + " 包含不支持的字段 " + name)
+			}
+			var decoded any
+			decoder := json.NewDecoder(bytes.NewReader(fields[name]))
+			decoder.UseNumber()
+			_ = decoder.Decode(&decoded)
+			valid := false
+			switch kind {
+			case "string":
+				_, valid = decoded.(string)
+			case "number":
+				_, valid = decoded.(json.Number)
+			case "boolean":
+				_, valid = decoded.(bool)
+			}
+			if !valid {
+				return apperrors.NewValidation(key + "." + name + " 必须是 " + kind)
+			}
+		}
+	}
+	return nil
+}
+
+func validateOATemplateDocumentStructure(key string, raw []byte) error {
+	if key != "schemaContent" && key != "processConfig" {
+		return nil
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return apperrors.NewValidation(key + " 必须是 JSON 对象")
+	}
+	if key == "schemaContent" {
+		type schemaItem struct {
+			ComponentName string `json:"componentName"`
+			Props         struct {
+				ID string `json:"id"`
+			} `json:"props"`
+			Children []schemaItem `json:"children"`
+		}
+		var items []schemaItem
+		if err := json.Unmarshal(root["items"], &items); err != nil || items == nil {
+			return apperrors.NewValidation("schemaContent.items 必须是控件数组")
+		}
+		seen := map[string]bool{}
+		var walkItems func([]schemaItem) error
+		walkItems = func(list []schemaItem) error {
+			for _, item := range list {
+				if item.ComponentName == "" || strings.TrimSpace(item.Props.ID) == "" || seen[item.Props.ID] {
+					return apperrors.NewValidation("schemaContent 控件必须包含 componentName 和唯一的 props.id")
+				}
+				seen[item.Props.ID] = true
+				if len(item.Children) > 0 {
+					if err := walkItems(item.Children); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+		return walkItems(items)
+	}
+	seen := map[string]bool{}
+	var visit func(json.RawMessage) error
+	visit = func(value json.RawMessage) error {
+		var node struct {
+			ID         string            `json:"nodeId"`
+			Type       string            `json:"type"`
+			Child      json.RawMessage   `json:"childNode"`
+			Conditions []json.RawMessage `json:"conditionNodes"`
+		}
+		if err := json.Unmarshal(value, &node); err != nil || strings.TrimSpace(node.ID) == "" || node.Type == "" || seen[node.ID] {
+			return apperrors.NewValidation("processConfig 节点必须包含 type 和唯一的 nodeId")
+		}
+		seen[node.ID] = true
+		if len(node.Child) > 0 && string(node.Child) != "null" {
+			if err := visit(node.Child); err != nil {
+				return err
+			}
+		}
+		for _, child := range node.Conditions {
+			if err := visit(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return visit(raw)
+}
+
+// oaTemplateCreateRejection uses the OAPI business code, never message matching.
+func oaTemplateCreateRejection(response map[string]any) error {
+	if response["success"] == true {
+		return nil
+	}
+	code := fmt.Sprint(response["dingOpenErrcode"])
+	var reason, guidance string
+	switch code {
+	case "810001":
+		reason = "template_name_conflict"
+		guidance = "请选择：重新命名后创建、更新已有模板（先定位模板并读取详情，保留已有字段 ID 和未修改配置），或取消创建。"
+	case "810002":
+		reason = "template_count_limit"
+		guidance = "请清理无效模板或联系管理员调整模板容量后重试，也可以选择更新已有模板或取消创建；重新命名不能解决数量上限。"
+	default:
+		return nil
+	}
+	return apperrors.NewAPI(fmt.Sprintf("创建审批模板失败（dingOpenErrcode=%s，errorMsg=%v）。%s", code, response["errorMsg"], guidance),
+		apperrors.WithReason(reason), apperrors.WithActions(guidance),
+		apperrors.WithDetails(map[string]any{"dingOpenErrcode": response["dingOpenErrcode"], "errorMsg": response["errorMsg"]}))
+}
+
+func callOATemplateWriteResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	if cmd.Flags().Changed("from-document") {
+		documentArgs, err := oaTemplateDocumentArgs(cmd)
+		if err != nil {
+			return nil, err
+		}
+		args = documentArgs
+	} else {
+		for flag, property := range map[string]string{"description": "description", "icon-url": "iconUrl"} {
+			if !cmd.Flags().Changed(flag) {
+				delete(args, property)
+			}
+		}
+	}
+	if corecmd.BoolFlag(cmd, "dry-run") || deps.Caller.DryRun() {
+		return output.Success(map[string]any{"server": "oa", "tool": tool, "arguments": args, "executed": false}, output.WithDryRun()), nil
+	}
+	data, err := CallMCPToolDataOnServer(cmd.Context(), "oa", tool, args)
+	if err != nil {
+		// The shared MCP layer preserves business-error JSON in CLIError.Message.
+		var toolError *CLIError
+		if tool == "create_process_template" && errors.As(err, &toolError) && toolError.Code == CodeMCPToolError {
+			var response map[string]any
+			if json.Unmarshal([]byte(toolError.Message), &response) == nil {
+				if rejection := oaTemplateCreateRejection(response); rejection != nil {
+					return nil, rejection
+				}
+			}
+		}
+		return nil, err
+	}
+	response, ok := data.(map[string]any)
+	if tool == "create_process_template" {
+		if rejection := oaTemplateCreateRejection(response); rejection != nil {
+			return nil, rejection
+		}
+	}
+	if !ok || response["success"] != true || isErrorCodeValue(response["dingOpenErrcode"]) {
+		return nil, apperrors.NewInternal(fmt.Sprintf("oa/%s 未返回成功响应（dingOpenErrcode=%v，errorMsg=%v）", tool, response["dingOpenErrcode"], response["errorMsg"]))
+	}
+	result, _ := response["result"].(map[string]any)
+	code, _ := result["processCode"].(string)
+	if strings.TrimSpace(code) == "" {
+		return nil, apperrors.NewInternal("oa/" + tool + " result 缺少有效 processCode")
+	}
+	return output.Success(map[string]any{"processCode": code}), nil
+}
+
+func callOATemplateResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	data, err := CallMCPToolDataOnServer(cmd.Context(), "oa", tool, args)
+	if err != nil {
+		return nil, err
+	}
+	response, ok := data.(map[string]any)
+	if !ok || response["success"] != true || isErrorCodeValue(response["dingOpenErrcode"]) {
+		return nil, apperrors.NewInternal(fmt.Sprintf("oa/%s 未返回成功响应（dingOpenErrcode=%v）", tool, response["dingOpenErrcode"]))
+	}
+	templates, ok := response["result"].([]any)
+	if !ok {
+		return nil, apperrors.NewInternal("oa/" + tool + " result 必须是模板数组")
+	}
+	for _, item := range templates {
+		if _, ok := item.(map[string]any); !ok {
+			return nil, apperrors.NewInternal("oa/" + tool + " 模板记录必须是对象")
+		}
+	}
+	if tool == "get_template_detail" && len(templates) > 1 {
+		return nil, apperrors.NewInternal("oa/get_template_detail 返回了多个模板")
+	}
+	return output.Success(map[string]any{"templates": templates}), nil
+}
+
 func newOaCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/oa.json
 	// products.oa). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "oa",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("OA 审批深度指南", "dingtalk-misc", "references/oa.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "查询和处理 OA 审批实例、任务、记录、抄送、评论与附件授权",
+			AgentSummary: "查询和处理 OA 审批实例、任务、记录、抄送、评论与附件授权，管理审批模板及表单和流程配置",
 			UseWhen: []string{
 				"查看待审、已办、已发起或抄送审批，并执行同意、拒绝、撤销、转交等审批动作时",
 				"获取审批附件下载链接，或为当前用户授权下载、预览审批附件时",
+				"查询当前组织可管理的审批模板、读取模板配置，或创建和更新审批模板时",
 			},
 			AvoidWhen: []string{
 				"不要用于普通待办任务或工作日志；需要实时监听未来的审批任务/实例事件时使用 event consume",
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "oa",
 		Short: "OA 审批 / 同意 / 拒绝 / 撤销",
-		Long:  `管理钉钉 OA 审批：待办查询、审批详情、同意、拒绝、撤销、操作记录、已发起列表、表单列表与附件授权。`,
+		Long:  `管理钉钉 OA 审批：待办查询、审批详情、同意、拒绝、撤销、操作记录、已发起列表、表单列表、模板管理与附件授权。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	approvalCmd := &cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE}
+	approvalCmd := newGroupCommand(&cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE})
 
 	approvalListPendingCmd := &cobra.Command{
 		Use:     "list-pending",
 		Short:   "查询待我处理的审批",
-		Example: `  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --query 关键词`,
+		Example: `  dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 			if err != nil {
 				return err
 			}
-			endMs, err := parseISOTimeToMillis("end", mustGetFlag(cmd, "end"))
-			if err != nil {
-				return err
-			}
-			if err := validateTimeRange(startMs, endMs); err != nil {
-				return err
-			}
-			argsMap := map[string]any{
-				"starTime": float64(startMs),
-				"endTime":  float64(endMs),
-			}
-			if v, _ := cmd.Flags().GetString("page"); v != "" {
-				if n, err := strconv.ParseFloat(v, 64); err == nil {
-					argsMap["pageNum"] = n
-				}
-			}
-			if v := flagOrFallback(cmd, "limit", "size"); v != "" {
-				if n, err := strconv.ParseFloat(v, 64); err == nil {
-					argsMap["pageSize"] = n
-				}
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
-			}
-			return callMCPTool("list_pending_approvals", argsMap)
+			return callMCPTool("get_todo_tasks", argsMap)
 		},
 	}
 	DeclareLeafMetadata(approvalListPendingCmd, LeafSpec{
@@ -782,30 +1371,25 @@ func newOaCommand() *cobra.Command {
 				CLIPath:        "oa approval list-pending",
 				PrimaryCLIPath: "oa approval list-pending",
 			},
-			Description: "查询当前用户待处理的审批单列表",
+			Description: "查询当前登录用户待处理的审批任务列表",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_pending_approvals"},
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_todo_tasks"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户待处理的审批单列表",
+				AgentSummary: "查询当前登录用户待处理的审批任务列表",
 				UseWhen:      []string{"需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"},
 				AvoidWhen: []string{
 					"已知实例只要 taskId 时改用 dws oa approval tasks",
 					"不要用本命令执行同意/拒绝",
 				},
 				Examples: []string{
-					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
-					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词",
+					"dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31",
+					"dws oa approval list-pending --query 关键词 --page 1 --limit 20",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "end", Property: "endTime"},
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNum"},
-				{Name: "start", Property: "starTime"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true}),
 		},
 	})
 
@@ -1077,7 +1661,7 @@ func newOaCommand() *cobra.Command {
 
 	approvalListInitiatedCmd := &cobra.Command{
 		Use:     "list-initiated",
-		Short:   "查询审批模板下已发起的审批记录",
+		Short:   "查询当前用户在指定审批模板下发起的审批实例列表",
 		Example: `  dws oa approval list-initiated --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --limit 20  # processCode 来自管理后台配置`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "process-code"); err != nil {
@@ -1118,15 +1702,15 @@ func newOaCommand() *cobra.Command {
 				CLIPath:        "oa approval list-initiated",
 				PrimaryCLIPath: "oa approval list-initiated",
 			},
-			Description: "查询当前用户已发起的审批实例列表",
+			Description: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_initiated_instances"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户已发起的审批实例列表",
-				UseWhen:      []string{"已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"},
+				AgentSummary: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表，需提供 processCode、起止时间，单次查询时间跨度不超过120天",
+				UseWhen:      []string{"已知 processCode，需要按起止时间(跨度≤120天)查询自己发起的审批实例基础信息时"},
 				AvoidWhen: []string{
 					"不知道 processCode 时先用 dws oa approval list-forms",
 					"要撤销实例时先确认 instanceId 再改用 revoke",
@@ -1282,14 +1866,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取当前用户已经处理过的审批单列表",
 		Example: `  dws oa approval list-executed  --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeStatus: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_done_tasks", argsMap)
 		},
@@ -1325,10 +1904,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeStatus: true}),
 		},
 	})
 	// 已发起
@@ -1337,14 +1913,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取当前用户已发起的审批单列表",
 		Example: `  dws oa approval list-submitted --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeStatus: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_submitted_instances", argsMap)
 		},
@@ -1380,10 +1951,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeStatus: true}),
 		},
 	})
 	// 抄送
@@ -1392,14 +1960,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取抄送当前用户的审批单列表",
 		Example: `  dws oa approval list-cc --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeUnreadOnly: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_noticed_instances", argsMap)
 		},
@@ -1435,10 +1998,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeUnreadOnly: true}),
 		},
 	})
 
@@ -1708,6 +2268,236 @@ func newOaCommand() *cobra.Command {
 		},
 	}
 
+	templateListCmd := NewLeafCommand(LeafSpec{
+		Use:           "list",
+		Short:         "查询用户在当前组织可管理的审批模板",
+		Example:       "dws oa approval template list",
+		Server:        "oa",
+		Tool:          "list_manage_templates",
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callOATemplateResult,
+		Validate:      cobra.NoArgs,
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "list_manage_templates",
+				CanonicalPath:  "oa.list_manage_templates",
+				CLIPath:        "oa approval template list",
+				PrimaryCLIPath: "oa approval template list",
+			},
+			Description: "查询用户在当前组织可管理的审批模板",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_manage_templates"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询用户在当前组织可管理的审批模板",
+				UseWhen:      []string{"需要枚举当前组织中自己有管理权限的审批模板并取得 processCode 时"},
+				AvoidWhen:    []string{"需要单个模板的表单 Schema 和流程配置时使用 dws oa approval template detail；查询可发起模板时使用 dws oa approval list-forms"},
+				Examples:     []string{"dws oa approval template list"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"templates":{"type":"array","description":"当前用户在当前组织可管理的审批模板列表","items":{"type":"object","properties":{"processCode":{"type":"string","description":"审批模板 code"},"flowTitle":{"type":"string","description":"列表中的模板名称"}},"additionalProperties":true}}},"required":["templates"],"additionalProperties":false}`),
+			},
+		},
+	})
+	templateDetailCmd := NewLeafCommand(LeafSpec{
+		Use:           "detail",
+		Short:         "获取审批模板详情，返回表单 Schema 和流程配置",
+		Example:       "dws oa approval template detail --process-code <code>",
+		Server:        "oa",
+		Tool:          "get_template_detail",
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callOATemplateResult,
+		Validate:      cobra.NoArgs,
+		Flags: []LeafFlag{{
+			Name: "process-code", Usage: "单个审批模板 code（必填）", Bind: "processCodes", Trim: true, Required: true, MarkRequired: true,
+			Transform: func(raw string) (any, error) { return []string{raw}, nil },
+		}},
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_template_detail",
+				CanonicalPath:  "oa.get_template_detail",
+				CLIPath:        "oa approval template detail",
+				PrimaryCLIPath: "oa approval template detail",
+			},
+			Description: "获取审批模板详情，返回表单 Schema 和流程配置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_template_detail"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取审批模板详情，返回表单 Schema 和流程配置",
+				UseWhen:      []string{"已知一个 processCode，需要读取审批模板的 schemaContent 和 processConfig 以检查表单和流程配置时"},
+				AvoidWhen:    []string{"尚不知道可管理模板的 processCode 时先用 dws oa approval template list；查看审批实例时使用 dws oa approval detail"},
+				Examples:     []string{"dws oa approval template detail --process-code <code>"},
+			},
+			Parameters: []contract.ParamDecl{{Name: "process-code", Property: "processCodes", InterfaceType: "array"}},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"templates":{"type":"array","description":"审批模板详情；schemaContent 和 processConfig 保持服务端 JSON 字符串格式","items":{"type":"object","properties":{"processCode":{"type":"string","description":"审批模板 code"},"name":{"type":"string","description":"详情中的模板名称"},"schemaContent":{"type":"string","description":"表单 Schema，内容为 JSON 字符串"},"processConfig":{"type":"string","description":"流程配置，内容为 JSON 字符串"}},"additionalProperties":true}}},"required":["templates"],"additionalProperties":false}`),
+			},
+		},
+	})
+
+	const templateCreateDescription = "创建新的 OA 审批模板，返回 processCode。名称唯一性和模板数量上限由创建 MCP 校验，不预查模板列表；返回同名错误时应选择重新命名后创建、更新已有模板或取消创建，不自动重试或覆盖。数量超限时需清理无效模板或联系管理员调整容量，重新命名不能解决数量上限。dry-run 仅校验参数，不能证明名称可用。建议先用 template detail 参考已有模板。支持 --from-document 绝对路径读取完整 JSON 配置（schemaContent/processConfig 对象自动转 JSON 字符串）；或逐项提供 name、schema-content；不传 process-config 时创建包含发起人节点、一个审批人节点和一个抄送人节点的默认流程。不传可见范围时全员可见。创建后使用 template detail 核对状态。"
+	const templateCreateExample = `dws oa approval template create --name '出差申请' --schema-content '{"items":[{"componentName":"TextField","props":{"id":"TextField-reason","label":"出差事由","required":true}}]}'`
+	templateCreateCmd := NewLeafCommand(LeafSpec{
+		Use: "create", Short: "创建审批模板", Long: templateCreateDescription, Example: templateCreateExample,
+		Server: "oa", Tool: "create_process_template",
+		Flags: []LeafFlag{
+			{Name: "from-document", Usage: "完整模板配置 JSON 文档的绝对路径；与逐项配置互斥", OmitEmpty: true},
+			{Name: "name", Bind: "name", Usage: "模板名称（未提供 --from-document 时必填）", Trim: true, OmitEmpty: true, RequiredWhen: "未提供 --from-document 时必填"},
+			oaTemplateJSONFlag("schema-content", "schemaContent", "表单 JSON 对象；控件 props.id 必须唯一，更新时保留已有 id", "object", false),
+			oaTemplateJSONFlag("process-config", "processConfig", "流程 JSON 对象；每个节点包含 nodeId；创建不传时由服务端生成发起人、一个审批人和一个抄送人的默认流程", "object", false),
+			{Name: "description", Bind: "description", Usage: "模板描述；不传则创建使用默认值/更新沿用已有；显式空字符串提交清空"},
+			{Name: "icon-url", Bind: "iconUrl", Usage: "图标链接或内置标识，如 collection；不传则沿用默认或已有值"},
+			oaTemplateJSONFlag("form-config", "formConfig", "节点字段权限 JSON；创建不传时所有字段可见可编辑，更新不传沿用已有", "json", false),
+			oaTemplateJSONFlag("node-config", "nodeConfig", "节点配置 JSON；更新不传沿用已有", "json", false),
+			oaTemplateJSONFlag("condition-rule", "conditionRule", "条件规则 JSON；流程包含条件分支时配合使用", "json", false),
+			oaTemplateJSONFlag("plugin-configs", "pluginConfigs", "插件对象数组 JSON（pluginId、pluginKey、pluginConfig、enable）；更新不传沿用已有", "objects", false),
+			oaTemplateJSONFlag("visible-range", "visibleRange", "可发起范围对象数组 JSON（visibleType: 0部门/1人员/2角色/3群组，visibleValue）；创建不传全员可见，更新不传沿用已有", "objects", false),
+			oaTemplateJSONFlag("manager-user-ids", "managerUserIds", "表单管理员 userId 字符串数组 JSON；更新不传沿用已有", "strings", false),
+			{Name: "static-workflow", Bind: "staticWorkflow", Usage: "流程类型：1 静态，0 动态；更新不传沿用已有", Enum: []string{"0", "1"}, OmitEmpty: true},
+			{Name: "append-enable", Bind: "appendEnable", Usage: "是否支持加签：y 支持，n 不支持；更新不传沿用已有", Enum: []string{"y", "n"}, OmitEmpty: true},
+			{Name: "duplicate-removal", Bind: "duplicateRemoval", Usage: "审批人去重：true 去重，false 不去重；更新不传沿用已有", Enum: []string{"true", "false"}, OmitEmpty: true},
+			{Name: "expected-version", Bind: "expectedVersion", Usage: "乐观锁版本（仅创建接口可选数值）", Trim: true, OmitEmpty: true, Transform: func(raw string) (any, error) {
+				n, err := strconv.ParseFloat(raw, 64)
+				if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+					return nil, apperrors.NewValidation("--expected-version 必须是有限数值")
+				}
+				return n, nil
+			}},
+		},
+		Constraints: []LeafConstraint{
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "name"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "schema-content"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "process-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "description"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "icon-url"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "form-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "node-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "condition-rule"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "plugin-configs"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "visible-range"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "manager-user-ids"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "static-workflow"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "append-enable"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "duplicate-removal"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "expected-version"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "name"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "schema-content"}}},
+		Validate: validateOATemplateWriteSources, ResultCall: callOATemplateWriteResult, OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "oa", Name: "create_process_template", CanonicalPath: "oa.create_process_template", CLIPath: "oa approval template create", PrimaryCLIPath: "oa approval template create"},
+			Description: templateCreateDescription,
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest},
+			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "create_process_template"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "创建审批模板并返回 processCode", UseWhen: []string{"需要新建审批模板，已准备完整 JSON 配置文档或模板名称和表单 JSON 时；创建后用 template detail 核对返回的 processCode"}, AvoidWhen: []string{"修改已有模板使用 template update；发起审批实例使用 oa approval create；只读配置使用 template detail"}, Examples: []string{templateCreateExample}},
+			Parameters: []contract.ParamDecl{{Name: "name", Property: "name", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"},
+				{Name: "schema-content", Property: "schemaContent", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"},
+				{Name: "process-config", Property: "processConfig", InterfaceType: "string"},
+				{Name: "description", Property: "description", InterfaceType: "string"},
+				{Name: "icon-url", Property: "iconUrl", InterfaceType: "string"},
+				{Name: "form-config", Property: "formConfig", InterfaceType: "string"},
+				{Name: "node-config", Property: "nodeConfig", InterfaceType: "string"},
+				{Name: "condition-rule", Property: "conditionRule", InterfaceType: "string"},
+				{Name: "plugin-configs", Property: "pluginConfigs", InterfaceType: "array"},
+				{Name: "visible-range", Property: "visibleRange", InterfaceType: "array"},
+				{Name: "manager-user-ids", Property: "managerUserIds", InterfaceType: "array"},
+				{Name: "static-workflow", Property: "staticWorkflow", InterfaceType: "string"},
+				{Name: "append-enable", Property: "appendEnable", InterfaceType: "string"},
+				{Name: "duplicate-removal", Property: "duplicateRemoval", InterfaceType: "string"},
+				{Name: "expected-version", Property: "expectedVersion", InterfaceType: "number"}},
+			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"processCode":{"type":"string","description":"创建或更新成功的审批模板编码"}},"required":["processCode"],"additionalProperties":false}`)},
+		},
+	})
+
+	const templateUpdateDescription = "更新已有 OA 审批模板，返回 processCode。更新前必须用 template detail 读取当前配置，基于原 schemaContent 和 processConfig 修改；保留已有控件 id，流程节点须包含 nodeId。支持 --from-document 绝对路径读取完整 JSON 配置，文件需包含 processCode（也可单独传 --process-code）、name、schemaContent、processConfig；或逐项提供对应参数。不传可选字段时沿用已有配置；description、icon-url 的显式空字符串及数组字段的显式 [] 会传给服务端。更新后再次读取 detail 核对结果。"
+	const templateUpdateExample = `dws oa approval template update --process-code PROC-EXAMPLE --name '出差申请' --schema-content '{"items":[{"componentName":"TextField","props":{"id":"TextField-reason","label":"出差事由","required":true}}]}' --process-config '{"type":"start","name":"发起人","nodeId":"sid-startevent","properties":{}}'`
+	templateUpdateCmd := NewLeafCommand(LeafSpec{
+		Use: "update", Short: "更新审批模板", Long: templateUpdateDescription, Example: templateUpdateExample,
+		Server: "oa", Tool: "update_process_template",
+		Flags: []LeafFlag{
+			{Name: "from-document", Usage: "完整模板配置 JSON 文档的绝对路径；与逐项配置互斥（更新可额外指定 process-code）", OmitEmpty: true},
+			{Name: "name", Bind: "name", Usage: "模板名称（未提供 --from-document 时必填）", Trim: true, OmitEmpty: true, RequiredWhen: "未提供 --from-document 时必填"},
+			oaTemplateJSONFlag("schema-content", "schemaContent", "表单 JSON 对象；控件 props.id 必须唯一，更新时保留已有 id", "object", false),
+			oaTemplateJSONFlag("process-config", "processConfig", "流程 JSON 对象；每个节点包含 nodeId；创建不传时由服务端生成发起人、一个审批人和一个抄送人的默认流程", "object", false),
+			{Name: "description", Bind: "description", Usage: "模板描述；不传则创建使用默认值/更新沿用已有；显式空字符串提交清空"},
+			{Name: "icon-url", Bind: "iconUrl", Usage: "图标链接或内置标识，如 collection；不传则沿用默认或已有值"},
+			oaTemplateJSONFlag("form-config", "formConfig", "节点字段权限 JSON；创建不传时所有字段可见可编辑，更新不传沿用已有", "json", false),
+			oaTemplateJSONFlag("node-config", "nodeConfig", "节点配置 JSON；更新不传沿用已有", "json", false),
+			oaTemplateJSONFlag("condition-rule", "conditionRule", "条件规则 JSON；流程包含条件分支时配合使用", "json", false),
+			oaTemplateJSONFlag("plugin-configs", "pluginConfigs", "插件对象数组 JSON（pluginId、pluginKey、pluginConfig、enable）；更新不传沿用已有", "objects", false),
+			oaTemplateJSONFlag("visible-range", "visibleRange", "可发起范围对象数组 JSON（visibleType: 0部门/1人员/2角色/3群组，visibleValue）；创建不传全员可见，更新不传沿用已有", "objects", false),
+			oaTemplateJSONFlag("manager-user-ids", "managerUserIds", "表单管理员 userId 字符串数组 JSON；更新不传沿用已有", "strings", false),
+			{Name: "static-workflow", Bind: "staticWorkflow", Usage: "流程类型：1 静态，0 动态；更新不传沿用已有", Enum: []string{"0", "1"}, OmitEmpty: true},
+			{Name: "append-enable", Bind: "appendEnable", Usage: "是否支持加签：y 支持，n 不支持；更新不传沿用已有", Enum: []string{"y", "n"}, OmitEmpty: true},
+			{Name: "duplicate-removal", Bind: "duplicateRemoval", Usage: "审批人去重：true 去重，false 不去重；更新不传沿用已有", Enum: []string{"true", "false"}, OmitEmpty: true},
+			{Name: "process-code", Bind: "processCode", Usage: "要更新的审批模板 code（从 template detail 获取）", Trim: true, OmitEmpty: true, RequiredWhen: "未提供 --from-document 时必填"},
+		},
+		Constraints: []LeafConstraint{
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "name"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "schema-content"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "process-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "description"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "icon-url"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "form-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "node-config"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "condition-rule"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "plugin-configs"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "visible-range"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "manager-user-ids"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "static-workflow"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "append-enable"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"from-document", "duplicate-removal"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "name"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "schema-content"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "process-code"}},
+			{Kind: LeafAtLeastOne, Flags: []string{"from-document", "process-config"}}},
+		Validate: validateOATemplateWriteSources, ResultCall: callOATemplateWriteResult, OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "oa", Name: "update_process_template", CanonicalPath: "oa.update_process_template", CLIPath: "oa approval template update", PrimaryCLIPath: "oa approval template update"},
+			Description: templateUpdateDescription,
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest},
+			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "update_process_template"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "更新审批模板并返回 processCode", UseWhen: []string{"需要用完整 JSON 配置文档或逐项参数修改审批模板，且已用 template detail 读取当前表单和流程配置时；保留已有控件 id，更新后再次读取核对"}, AvoidWhen: []string{"新建模板使用 template create；尚未读取原配置时先用 template detail；处理审批任务使用 oa approval approve/reject"}, Examples: []string{templateUpdateExample}},
+			Parameters: []contract.ParamDecl{{Name: "name", Property: "name", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"},
+				{Name: "schema-content", Property: "schemaContent", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"},
+				{Name: "process-config", Property: "processConfig", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"},
+				{Name: "description", Property: "description", InterfaceType: "string"},
+				{Name: "icon-url", Property: "iconUrl", InterfaceType: "string"},
+				{Name: "form-config", Property: "formConfig", InterfaceType: "string"},
+				{Name: "node-config", Property: "nodeConfig", InterfaceType: "string"},
+				{Name: "condition-rule", Property: "conditionRule", InterfaceType: "string"},
+				{Name: "plugin-configs", Property: "pluginConfigs", InterfaceType: "array"},
+				{Name: "visible-range", Property: "visibleRange", InterfaceType: "array"},
+				{Name: "manager-user-ids", Property: "managerUserIds", InterfaceType: "array"},
+				{Name: "static-workflow", Property: "staticWorkflow", InterfaceType: "string"},
+				{Name: "append-enable", Property: "appendEnable", InterfaceType: "string"},
+				{Name: "duplicate-removal", Property: "duplicateRemoval", InterfaceType: "string"},
+				{Name: "process-code", Property: "processCode", InterfaceType: "string", RequiredWhen: "未提供 --from-document 时必填"}},
+			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"processCode":{"type":"string","description":"创建或更新成功的审批模板编码"}},"required":["processCode"],"additionalProperties":false}`)},
+		},
+	})
+
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "审批模板管理", RunE: groupRunE})
+	templateCmd.AddCommand(templateListCmd, templateDetailCmd, templateCreateCmd, templateUpdateCmd)
+
 	approvalFormSchemaCmd := &cobra.Command{
 		Use: "form-schema", Short: "查询审批模板的表单 Schema",
 		Example: "dws oa approval form-schema --process-code <processCode>",
@@ -1750,7 +2540,7 @@ func newOaCommand() *cobra.Command {
 	})
 	approvalForecastCmd := &cobra.Command{
 		Use: "forecast-process", Short: "根据表单值预测审批流程与自选节点",
-		Example: "dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
+		Example: "dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '{\"金额\":\"100\"}'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
 				request, err := decodeOARequest(raw)
@@ -1797,8 +2587,8 @@ func newOaCommand() *cobra.Command {
 				UseWhen:      []string{"已知道 processCode 且已根据表单 Schema 组装字段，需要在发起前确认审批路径或自选节点时"},
 				AvoidWhen:    []string{"需要真正创建审批单时改用 create-instance；未获得字段定义时先用 form-schema"},
 				Examples: []string{
-					"dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
-					"dws oa approval forecast-process --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[[{\"name\":\"金额\",\"value\":\"100\"}]]}'",
+					"dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '{\"金额\":\"100\"}'",
+					"dws oa approval forecast-process --request '{\"processCode\":\"PROC-xxx\",\"deptId\":123,\"formComponentValues\":[[{\"name\":\"金额\",\"value\":\"100\"}]]}'",
 				},
 			},
 			// Simple-mode flags are mapping exclusions (encoded inside ProcessForecastPopRequest).
@@ -1819,17 +2609,23 @@ func newOaCommand() *cobra.Command {
 			request, _ := cmd.Flags().GetString("request")
 			processCode, _ := cmd.Flags().GetString("process-code")
 			if request == "" && processCode == "" {
-				return fmt.Errorf("--request、--process-code 至少指定一个")
+				return apperrors.NewValidation("--request、--process-code 至少指定一个", apperrors.WithReason("invalid_flag_group"))
 			}
 			if request != "" {
 				for _, name := range listByAdminSimpleFlags {
 					if cmd.Flags().Changed(name) {
-						return fmt.Errorf("--request 与 --%s 不能同时指定", name)
+						return apperrors.NewValidation(
+							fmt.Sprintf("--request 与 --%s 不能同时指定", name),
+							apperrors.WithReason("invalid_flag_group"),
+						)
 					}
 				}
 			}
 			if processCode != "" && !cmd.Flags().Changed("start") {
-				return fmt.Errorf("--process-code、--start 必须同时指定（缺少 --start）")
+				return apperrors.NewValidation(
+					"--process-code、--start 必须同时指定（缺少 --start）",
+					apperrors.WithReason("invalid_flag_group"),
+				)
 			}
 			return nil
 		},
@@ -1837,36 +2633,42 @@ func newOaCommand() *cobra.Command {
 			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
 				request, err := decodeOARequest(raw)
 				if err != nil {
-					return fmt.Errorf("--request JSON 解析失败: %w", err)
+					return normalizeOAAdminQueryValidation(fmt.Errorf("--request JSON 解析失败: %w", err))
 				}
 				if err := validateOARequestProcessCode(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateOARequestPageSize(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateOARequestTimeRange(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				return callMCPTool("get_process_instances_by_admin", map[string]any{"ProcessInstanceListQueryRequest": request})
 			}
 			if err := validateRequiredFlags(cmd, "process-code", "start"); err != nil {
-				return err
+				return normalizeOAAdminQueryValidation(err)
 			}
 			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
 			if err != nil {
-				return err
+				return normalizeOAAdminQueryValidation(err)
 			}
 			cursor, err := strconv.ParseFloat(mustGetFlag(cmd, "cursor"), 64)
 			if err != nil {
-				return fmt.Errorf("--cursor 必须为数字: %w", err)
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--cursor 必须为数字: %w", err))
+			}
+			if math.IsNaN(cursor) || math.IsInf(cursor, 0) {
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--cursor 必须为有限数字，got: %s", mustGetFlag(cmd, "cursor")))
 			}
 			pageSize, err := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
 			if err != nil {
-				return fmt.Errorf("--limit 必须为数字: %w", err)
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须为数字: %w", err))
+			}
+			if math.IsNaN(pageSize) || math.IsInf(pageSize, 0) {
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须为有限数字，got: %s", mustGetFlag(cmd, "limit")))
 			}
 			if pageSize < 1 || pageSize > oaAdminQueryMaxPageSize {
-				return fmt.Errorf("--limit 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), mustGetFlag(cmd, "limit"))
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), mustGetFlag(cmd, "limit")))
 			}
 			request := map[string]any{
 				"processCode": mustGetFlag(cmd, "process-code"),
@@ -1877,10 +2679,10 @@ func newOaCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("end"); v != "" {
 				endMs, err := parseISOTimeToMillis("end", v)
 				if err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateTimeRange(startMs, endMs); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				request["endTime"] = formatOAAdminQueryTime(endMs)
 			}
@@ -1932,7 +2734,7 @@ func newOaCommand() *cobra.Command {
 	})
 	approvalCreateCmd := &cobra.Command{
 		Use: "create-instance", Short: "发起审批实例（需要 --yes 确认）",
-		Example: "dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}' --yes",
+		Example: "dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '{\"事由\":\"测试\"}' --yes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !commandDryRun(cmd) {
 				yes, _ := cmd.Flags().GetBool("yes")
@@ -1982,7 +2784,15 @@ func newOaCommand() *cobra.Command {
 					request["ccPosition"] = position
 				}
 			}
-			return callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request})
+			if err := callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request}); err != nil {
+				// 已知的服务端业务拒绝（如补卡卡点已绑定审批单）翻译为中文文案；
+				// 未命中时保留原始错误。
+				if msg := createInstanceDenialMessage(err); msg != "" {
+					return errors.New(msg)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 	DeclareLeafMetadata(approvalCreateCmd, LeafSpec{
@@ -2009,8 +2819,8 @@ func newOaCommand() *cobra.Command {
 				UseWhen:      []string{"用户确认要发起审批，且已查询表单 Schema、核对字段及审批路径后使用"},
 				AvoidWhen:    []string{"只需预测流程时使用 forecast-process；用户尚未确认或字段未按 Schema 核对时不要发起"},
 				Examples: []string{
-					"dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}'",
-					"dws oa approval create-instance --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[{\"name\":\"事由\",\"value\":\"测试\"}],\"targetSelectActioners\":[{\"actionerKey\":\"manual-node\",\"actionerStaffIds\":[\"user-id\"]}]}'",
+					"dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '{\"事由\":\"测试\"}'",
+					"dws oa approval create-instance --request '{\"processCode\":\"PROC-xxx\",\"deptId\":123,\"formComponentValues\":[{\"name\":\"事由\",\"value\":\"测试\"}],\"targetSelectActioners\":[{\"actionerKey\":\"manual-node\",\"actionerStaffIds\":[\"user-id\"]}]}'",
 				},
 			},
 			// Simple-mode flags are mapping exclusions (encoded inside ProcessInstanceCreationPopRequest).
@@ -2020,13 +2830,7 @@ func newOaCommand() *cobra.Command {
 		},
 	})
 
-	approvalListPendingCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
-	approvalListPendingCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
-	approvalListPendingCmd.Flags().String("page", "", "分页页码 (可选)")
-	approvalListPendingCmd.Flags().String("limit", "", "每页大小 (可选)")
-	approvalListPendingCmd.Flags().String("size", "", "每页大小 (可选)")
-	approvalListPendingCmd.Flags().Lookup("size").Hidden = true
-	approvalListPendingCmd.Flags().String("query", "", "关键字搜索（可选）")
+	addOAApprovalListFlags(approvalListPendingCmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 
 	approvalDetailCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalApproveCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
@@ -2039,8 +2843,8 @@ func newOaCommand() *cobra.Command {
 	approvalRevokeCmd.Flags().String("remark", "", "撤销说明 (可选)")
 	approvalRecordsCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalListInitiatedCmd.Flags().String("process-code", "", "表单 processCode (必填)")
-	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
-	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
+	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)，与 end 间隔不超过120天 (必填)")
+	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)，与 start 间隔不超过120天 (必填)")
 	approvalListInitiatedCmd.Flags().String("cursor", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().String("next-token", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().Lookup("next-token").Hidden = true
@@ -2054,15 +2858,9 @@ func newOaCommand() *cobra.Command {
 	approvalListFormsCmd.Flags().Lookup("size").Hidden = true
 	approvalSearchFormsCmd.Flags().String("query", "", "关键字（匹配 processCode 或表单名称）(必填)")
 	approvalDingInfoCmd.Flags().String("task-id", "", "审批任务 ID (必填)")
-	approvalExecutedListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalExecutedListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalExecutedListCmd.Flags().String("query", "", "关键字搜索（可选）")
-	approvalSubmittedListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalSubmittedListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalSubmittedListCmd.Flags().String("query", "", "关键字搜索（可选）")
-	approvalCcListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalCcListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalCcListCmd.Flags().String("query", "", "关键字搜索（可选）")
+	addOAApprovalListFlags(approvalExecutedListCmd, oaApprovalListOptions{includeStatus: true})
+	addOAApprovalListFlags(approvalSubmittedListCmd, oaApprovalListOptions{includeStatus: true})
+	addOAApprovalListFlags(approvalCcListCmd, oaApprovalListOptions{includeUnreadOnly: true})
 	approvalTransferCmd.Flags().String("task-id", "", "审批任务 ID (必填)")
 	approvalTransferCmd.Flags().String("to-actioner-id", "", "转交目标用户 ID (必填)")
 	approvalTransferCmd.Flags().String("remark", "", "转交说明 (可选)")
@@ -2179,7 +2977,24 @@ func newOaCommand() *cobra.Command {
 		approvalCreateCmd,
 	)
 	approvalCmd.AddCommand(newOAAttachmentCommand())
+	approvalCmd.AddCommand(newOAImageCommand())
+	approvalCmd.AddCommand(templateCmd)
 	root.AddCommand(approvalCmd)
 
 	return root
+}
+
+// createInstanceDenialMessage 将 start_process_instance 已知的服务端业务拒绝
+// （错误文本子串匹配）翻译为面向用户的中文文案；未命中已知拒绝时返回
+// 空串，调用方回退原始错误。
+func createInstanceDenialMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "the supply check point has already been bound to an approval"):
+		return "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	}
+	return ""
 }

@@ -28,6 +28,7 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 		"content":            "普通消息",
 		"openMessageId":      "msg-1",
 		"msgType":            "text",
+		"messageAiSendFlag":  "DWS",
 		"conversationTitle":  "群A",
 		"openConversationId": "cid1",
 		"emotionReplyList": []any{
@@ -39,6 +40,9 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 	}
 	if row["messageId"] != "msg-1" || row["conversationId"] != "cid1" || row["messageType"] != "text" {
 		t.Errorf("atMeProject stable identity = %#v", row)
+	}
+	if row["messageAiSendFlag"] != "DWS" {
+		t.Errorf("atMeProject AI send flag = %#v", row)
 	}
 	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
 		t.Errorf("atMeProject reactions = %#v", row["reactions"])
@@ -90,13 +94,17 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 	// nested sender + plain text + messageId
 	row := searchMsgProject(map[string]any{
-		"sender":     map[string]any{"nick": "千启"},
-		"createTime": "2026-07-19 13:37:03",
-		"content":    "命中关键词的消息",
-		"msgId":      "mid1",
+		"sender":            map[string]any{"nick": "千启"},
+		"createTime":        "2026-07-19 13:37:03",
+		"content":           "命中关键词的消息",
+		"msgId":             "mid1",
+		"messageAiSendFlag": "DWS",
 	})
 	if row["sender"] != "千启" || row["text"] != "命中关键词的消息" {
 		t.Fatalf("searchMsgProject = %#v", row)
+	}
+	if row["messageAiSendFlag"] != "DWS" {
+		t.Fatalf("searchMsgProject AI send flag = %#v", row)
 	}
 
 	// Canonical ID precedence and rich-text extraction must match typed search.

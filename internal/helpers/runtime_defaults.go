@@ -26,6 +26,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+// RuntimeDefaultCorpID is the runtimeDefault placeholder key for the current
+// logged-in enterprise corpId. It is the single source of truth shared by the
+// registration chain (internal/app registers a resolver under this key) and
+// the read chain (resolveCurrentCorpID looks it up here), so both sides always
+// agree. Changing the placeholder string in this one place updates both.
+const RuntimeDefaultCorpID = "$corpId"
+
 var (
 	runtimeDefaultsMu sync.RWMutex
 	runtimeDefaults   = make(map[string]edition.RuntimeDefaultFn, 4)

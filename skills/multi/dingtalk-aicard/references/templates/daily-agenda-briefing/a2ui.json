@@ -1,0 +1,3585 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-daily-agenda-briefing-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "title-tabbed",
+          "component": "Text",
+          "text": {
+            "path": "/briefing/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h1_text_style__font_size",
+          "bold": true,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/textProfile"
+              },
+              "b": "mobile"
+            }
+          }
+        },
+        {
+          "id": "title-overview",
+          "component": "Text",
+          "text": {
+            "path": "/briefing/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h1_text_style__font_size",
+          "bold": true,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/textProfile"
+              },
+              "b": "desktop"
+            }
+          }
+        },
+        {
+          "id": "title",
+          "component": "Column",
+          "children": [
+            "title-tabbed",
+            "title-overview"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "source-note",
+          "component": "Text",
+          "text": {
+            "path": "/briefing/sourceNote"
+          },
+          "maxLine": 40,
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "summary",
+          "component": "Markdown",
+          "content": {
+            "path": "/briefing/summary"
+          }
+        },
+        {
+          "id": "intro",
+          "component": "Column",
+          "children": [
+            "title",
+            "intro-copy"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "today-title",
+          "component": "Text",
+          "text": "今日事务",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h1_text_style__font_size"
+        },
+        {
+          "id": "today-heading",
+          "component": "Column",
+          "children": [
+            "today-title",
+            "section-chips"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/layoutMode"
+              },
+              "b": "tabbed"
+            }
+          }
+        },
+        {
+          "id": "timeline-busy__0",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/0/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__0",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/0/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__0",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/0/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__1",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/1/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__1",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/1/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__1",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/1/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__2",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/2/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__2",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/2/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__2",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/2/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__3",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/3/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__3",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/3/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__3",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/3/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__4",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/4/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__4",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/4/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__4",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/4/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__5",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/5/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__5",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/5/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__5",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/5/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__6",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/6/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__6",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/6/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__6",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/6/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__7",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/7/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__7",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/7/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__7",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/7/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__8",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/8/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__8",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/8/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__8",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/8/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__9",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/9/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__9",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/9/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__9",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/9/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__10",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/10/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__10",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/10/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__10",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/10/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-busy__11",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/11/state"
+              },
+              "b": "busy"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FF8BE4B0",
+          "weight": 1
+        },
+        {
+          "id": "timeline-free__11",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/11/state"
+              },
+              "b": "free"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColorToken": "common_line_light_color",
+          "weight": 1
+        },
+        {
+          "id": "timeline-conflict__11",
+          "component": "Column",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/timeline/segments/11/state"
+              },
+              "b": "conflict"
+            }
+          },
+          "children": [],
+          "padding": 9,
+          "gap": 0,
+          "align": "stretch",
+          "backgroundColor": "#FFFF9C66",
+          "weight": 1
+        },
+        {
+          "id": "timeline-bar",
+          "component": "Row",
+          "children": [
+            "timeline-busy__0",
+            "timeline-free__0",
+            "timeline-conflict__0",
+            "timeline-busy__1",
+            "timeline-free__1",
+            "timeline-conflict__1",
+            "timeline-busy__2",
+            "timeline-free__2",
+            "timeline-conflict__2",
+            "timeline-busy__3",
+            "timeline-free__3",
+            "timeline-conflict__3",
+            "timeline-busy__4",
+            "timeline-free__4",
+            "timeline-conflict__4",
+            "timeline-busy__5",
+            "timeline-free__5",
+            "timeline-conflict__5",
+            "timeline-busy__6",
+            "timeline-free__6",
+            "timeline-conflict__6",
+            "timeline-busy__7",
+            "timeline-free__7",
+            "timeline-conflict__7",
+            "timeline-busy__8",
+            "timeline-free__8",
+            "timeline-conflict__8",
+            "timeline-busy__9",
+            "timeline-free__9",
+            "timeline-conflict__9",
+            "timeline-busy__10",
+            "timeline-free__10",
+            "timeline-conflict__10",
+            "timeline-busy__11",
+            "timeline-free__11",
+            "timeline-conflict__11"
+          ],
+          "gap": 1,
+          "align": "center",
+          "padding": 0,
+          "cornerRadius": 3,
+          "justify": "start"
+        },
+        {
+          "id": "timeline-start",
+          "component": "Text",
+          "text": {
+            "path": "/timeline/start"
+          },
+          "variant": "caption",
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 1,
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "timeline-end",
+          "component": "Text",
+          "text": {
+            "path": "/timeline/end"
+          },
+          "variant": "caption",
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 1,
+          "colorToken": "common_level3_base_color"
+        },
+        {
+          "id": "timeline-scale",
+          "component": "Row",
+          "children": [
+            "timeline-start",
+            "timeline-end"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "spaceBetween"
+        },
+        {
+          "id": "timeline",
+          "component": "Column",
+          "children": [
+            "timeline-bar",
+            "timeline-scale"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-notice-info__0",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/0/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/0/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "agenda-notice-warning__0",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/0/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_orange1_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/0/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "agenda-rail__0",
+          "component": "Row",
+          "children": [
+            "agenda-rail-size__0"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch",
+          "cornerRadius": 2,
+          "backgroundColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-rail-inset__0",
+          "component": "Row",
+          "children": [
+            "agenda-rail-leading-space__0",
+            "agenda-rail__0"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/0/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-time__0",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/0/time"
+          },
+          "maxLine": 4,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location__0",
+          "component": "Row",
+          "children": [
+            "agenda-location-icon__0",
+            "agenda-location-text__0"
+          ],
+          "gap": 4,
+          "padding": 0,
+          "align": "center",
+          "justify": "start",
+          "weight": 1
+        },
+        {
+          "id": "agenda-metadata__0",
+          "component": "Row",
+          "children": [
+            "agenda-time__0",
+            "agenda-location__0"
+          ],
+          "gap": 12,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "agenda-event-body__0",
+          "component": "Column",
+          "children": [
+            "agenda-title__0",
+            "agenda-metadata__0"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "agenda-event-line__0",
+          "component": "Row",
+          "children": [
+            "agenda-rail-inset__0",
+            "agenda-event-body__0"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-reject-icon__0",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "ReduceCircled_L_outlined"
+          },
+          "colorToken": "common_orange1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-reject-label__0",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-reject-content__0",
+          "component": "Row",
+          "children": [
+            "agenda-reject-icon__0",
+            "agenda-reject-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-reject__0",
+          "component": "Row",
+          "children": [
+            "agenda-reject-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/0/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-accept-icon__0",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "CheckCircle_L_outlined"
+          },
+          "colorToken": "common_green1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-accept-label__0",
+          "component": "Text",
+          "text": "接受",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-accept-content__0",
+          "component": "Row",
+          "children": [
+            "agenda-accept-icon__0",
+            "agenda-accept-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-accept__0",
+          "component": "Row",
+          "children": [
+            "agenda-accept-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_accept_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/0/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-response__0",
+          "component": "Row",
+          "children": [
+            "agenda-reject__0",
+            "agenda-accept__0"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/agenda/0/canRespond"
+          }
+        },
+        {
+          "id": "agenda-panel__0",
+          "component": "Column",
+          "children": [
+            "agenda-notice-info__0",
+            "agenda-notice-warning__0",
+            "agenda-event-line__0",
+            "agenda-response__0"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 18,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-notice-info__1",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/1/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/1/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "agenda-notice-warning__1",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/1/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_orange1_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/1/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "agenda-rail__1",
+          "component": "Row",
+          "children": [
+            "agenda-rail-size__1"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch",
+          "cornerRadius": 2,
+          "backgroundColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-rail-inset__1",
+          "component": "Row",
+          "children": [
+            "agenda-rail-leading-space__1",
+            "agenda-rail__1"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/1/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-time__1",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/1/time"
+          },
+          "maxLine": 4,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location__1",
+          "component": "Row",
+          "children": [
+            "agenda-location-icon__1",
+            "agenda-location-text__1"
+          ],
+          "gap": 4,
+          "padding": 0,
+          "align": "center",
+          "justify": "start",
+          "weight": 1
+        },
+        {
+          "id": "agenda-metadata__1",
+          "component": "Row",
+          "children": [
+            "agenda-time__1",
+            "agenda-location__1"
+          ],
+          "gap": 12,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "agenda-event-body__1",
+          "component": "Column",
+          "children": [
+            "agenda-title__1",
+            "agenda-metadata__1"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "agenda-event-line__1",
+          "component": "Row",
+          "children": [
+            "agenda-rail-inset__1",
+            "agenda-event-body__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-reject-icon__1",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "ReduceCircled_L_outlined"
+          },
+          "colorToken": "common_orange1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-reject-label__1",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-reject-content__1",
+          "component": "Row",
+          "children": [
+            "agenda-reject-icon__1",
+            "agenda-reject-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-reject__1",
+          "component": "Row",
+          "children": [
+            "agenda-reject-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/1/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-accept-icon__1",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "CheckCircle_L_outlined"
+          },
+          "colorToken": "common_green1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-accept-label__1",
+          "component": "Text",
+          "text": "接受",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-accept-content__1",
+          "component": "Row",
+          "children": [
+            "agenda-accept-icon__1",
+            "agenda-accept-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-accept__1",
+          "component": "Row",
+          "children": [
+            "agenda-accept-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_accept_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/1/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-response__1",
+          "component": "Row",
+          "children": [
+            "agenda-reject__1",
+            "agenda-accept__1"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/agenda/1/canRespond"
+          }
+        },
+        {
+          "id": "agenda-panel__1",
+          "component": "Column",
+          "children": [
+            "agenda-notice-info__1",
+            "agenda-notice-warning__1",
+            "agenda-event-line__1",
+            "agenda-response__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 18,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-notice-info__2",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/2/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/2/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "agenda-notice-warning__2",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/2/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_orange1_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/2/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "agenda-rail__2",
+          "component": "Row",
+          "children": [
+            "agenda-rail-size__2"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch",
+          "cornerRadius": 2,
+          "backgroundColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-rail-inset__2",
+          "component": "Row",
+          "children": [
+            "agenda-rail-leading-space__2",
+            "agenda-rail__2"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-title__2",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/2/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-time__2",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/2/time"
+          },
+          "maxLine": 4,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location__2",
+          "component": "Row",
+          "children": [
+            "agenda-location-icon__2",
+            "agenda-location-text__2"
+          ],
+          "gap": 4,
+          "padding": 0,
+          "align": "center",
+          "justify": "start",
+          "weight": 1
+        },
+        {
+          "id": "agenda-metadata__2",
+          "component": "Row",
+          "children": [
+            "agenda-time__2",
+            "agenda-location__2"
+          ],
+          "gap": 12,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "agenda-event-body__2",
+          "component": "Column",
+          "children": [
+            "agenda-title__2",
+            "agenda-metadata__2"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "agenda-event-line__2",
+          "component": "Row",
+          "children": [
+            "agenda-rail-inset__2",
+            "agenda-event-body__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-reject-icon__2",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "ReduceCircled_L_outlined"
+          },
+          "colorToken": "common_orange1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-reject-label__2",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-reject-content__2",
+          "component": "Row",
+          "children": [
+            "agenda-reject-icon__2",
+            "agenda-reject-label__2"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-reject__2",
+          "component": "Row",
+          "children": [
+            "agenda-reject-content__2"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/2/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-accept-icon__2",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "CheckCircle_L_outlined"
+          },
+          "colorToken": "common_green1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-accept-label__2",
+          "component": "Text",
+          "text": "接受",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-accept-content__2",
+          "component": "Row",
+          "children": [
+            "agenda-accept-icon__2",
+            "agenda-accept-label__2"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-accept__2",
+          "component": "Row",
+          "children": [
+            "agenda-accept-content__2"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_accept_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/2/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-response__2",
+          "component": "Row",
+          "children": [
+            "agenda-reject__2",
+            "agenda-accept__2"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/agenda/2/canRespond"
+          }
+        },
+        {
+          "id": "agenda-panel__2",
+          "component": "Column",
+          "children": [
+            "agenda-notice-info__2",
+            "agenda-notice-warning__2",
+            "agenda-event-line__2",
+            "agenda-response__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 18,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-notice-info__3",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/3/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_link_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/3/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "agenda-notice-warning__3",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/3/notice"
+          },
+          "maxLine": 20,
+          "bold": true,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_orange1_color",
+          "icon": {
+            "name": "InformationThere_L_outlined"
+          },
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/agenda/3/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "agenda-rail__3",
+          "component": "Row",
+          "children": [
+            "agenda-rail-size__3"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch",
+          "cornerRadius": 2,
+          "backgroundColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-rail-inset__3",
+          "component": "Row",
+          "children": [
+            "agenda-rail-leading-space__3",
+            "agenda-rail__3"
+          ],
+          "padding": 0,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-title__3",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/3/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-time__3",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/3/time"
+          },
+          "maxLine": 4,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location__3",
+          "component": "Row",
+          "children": [
+            "agenda-location-icon__3",
+            "agenda-location-text__3"
+          ],
+          "gap": 4,
+          "padding": 0,
+          "align": "center",
+          "justify": "start",
+          "weight": 1
+        },
+        {
+          "id": "agenda-metadata__3",
+          "component": "Row",
+          "children": [
+            "agenda-time__3",
+            "agenda-location__3"
+          ],
+          "gap": 12,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "agenda-event-body__3",
+          "component": "Column",
+          "children": [
+            "agenda-title__3",
+            "agenda-metadata__3"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0,
+          "weight": 1
+        },
+        {
+          "id": "agenda-event-line__3",
+          "component": "Row",
+          "children": [
+            "agenda-rail-inset__3",
+            "agenda-event-body__3"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-reject-icon__3",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "ReduceCircled_L_outlined"
+          },
+          "colorToken": "common_orange1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-reject-label__3",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-reject-content__3",
+          "component": "Row",
+          "children": [
+            "agenda-reject-icon__3",
+            "agenda-reject-label__3"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-reject__3",
+          "component": "Row",
+          "children": [
+            "agenda-reject-content__3"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/3/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-accept-icon__3",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "CheckCircle_L_outlined"
+          },
+          "colorToken": "common_green1_color",
+          "sizeToken": "common_h4_text_style__font_size",
+          "maxLine": 1
+        },
+        {
+          "id": "agenda-accept-label__3",
+          "component": "Text",
+          "text": "接受",
+          "maxLine": 4,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "agenda-accept-content__3",
+          "component": "Row",
+          "children": [
+            "agenda-accept-icon__3",
+            "agenda-accept-label__3"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6,
+          "justify": "center"
+        },
+        {
+          "id": "agenda-accept__3",
+          "component": "Row",
+          "children": [
+            "agenda-accept-content__3"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_accept_event",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "eventId": {
+                  "path": "/agenda/3/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "agenda-response__3",
+          "component": "Row",
+          "children": [
+            "agenda-reject__3",
+            "agenda-accept__3"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/agenda/3/canRespond"
+          }
+        },
+        {
+          "id": "agenda-panel__3",
+          "component": "Column",
+          "children": [
+            "agenda-notice-info__3",
+            "agenda-notice-warning__3",
+            "agenda-event-line__3",
+            "agenda-response__3"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 18,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "agenda-events",
+          "component": "Column",
+          "children": [
+            "agenda-panel__0",
+            "agenda-panel__1",
+            "agenda-panel__2",
+            "agenda-panel__3"
+          ],
+          "gap": 9,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "agenda-section",
+          "component": "Column",
+          "children": [
+            "timeline",
+            "agenda-events"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "or",
+            "args": {
+              "values": [
+                {
+                  "call": "eq",
+                  "args": {
+                    "a": {
+                      "path": "/view/layoutMode"
+                    },
+                    "b": "overview"
+                  }
+                },
+                {
+                  "call": "eq",
+                  "args": {
+                    "a": {
+                      "path": "/view/selectedSection"
+                    },
+                    "b": "agenda"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "approval-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "approval-notice-info__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "bold": true,
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/0/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "approval-notice-warning__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "bold": true,
+          "colorToken": "common_orange1_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/0/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "approval-title-line__0",
+          "component": "Row",
+          "children": [
+            "approval-title__0",
+            "approval-notice-info__0",
+            "approval-notice-warning__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "approval-details__0",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/0/details"
+          },
+          "maxLine": 30,
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "approval-reject-label__0",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-reject-content__0",
+          "component": "Column",
+          "children": [
+            "approval-reject-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-reject__0",
+          "component": "Row",
+          "children": [
+            "approval-reject-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/0/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-approve-label__0",
+          "component": "Text",
+          "text": "批准",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-approve-content__0",
+          "component": "Column",
+          "children": [
+            "approval-approve-label__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-approve__0",
+          "component": "Row",
+          "children": [
+            "approval-approve-content__0"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_approve_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/0/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-operations__0",
+          "component": "Row",
+          "children": [
+            "approval-reject__0",
+            "approval-approve__0"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/approvals/0/canOperate"
+          }
+        },
+        {
+          "id": "approval-panel__0",
+          "component": "Column",
+          "children": [
+            "approval-title-line__0",
+            "approval-details__0",
+            "approval-operations__0"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "approval-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/title"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "approval-notice-info__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "bold": true,
+          "colorToken": "common_link_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/1/tone"
+              },
+              "b": "info"
+            }
+          }
+        },
+        {
+          "id": "approval-notice-warning__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/notice"
+          },
+          "sizeToken": "common_footnote_text_style__font_size",
+          "maxLine": 6,
+          "bold": true,
+          "colorToken": "common_orange1_color",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/approvals/1/tone"
+              },
+              "b": "warning"
+            }
+          }
+        },
+        {
+          "id": "approval-title-line__1",
+          "component": "Row",
+          "children": [
+            "approval-title__1",
+            "approval-notice-info__1",
+            "approval-notice-warning__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "approval-details__1",
+          "component": "Text",
+          "text": {
+            "path": "/approvals/1/details"
+          },
+          "maxLine": 30,
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "approval-reject-label__1",
+          "component": "Text",
+          "text": "拒绝",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-reject-content__1",
+          "component": "Column",
+          "children": [
+            "approval-reject-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-reject__1",
+          "component": "Row",
+          "children": [
+            "approval-reject-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_reject_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/1/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-approve-label__1",
+          "component": "Text",
+          "text": "批准",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "approval-approve-content__1",
+          "component": "Column",
+          "children": [
+            "approval-approve-label__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-approve__1",
+          "component": "Row",
+          "children": [
+            "approval-approve-content__1"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_approve_approval",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "approvalId": {
+                  "path": "/approvals/1/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "approval-operations__1",
+          "component": "Row",
+          "children": [
+            "approval-reject__1",
+            "approval-approve__1"
+          ],
+          "gap": 8,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/approvals/1/canOperate"
+          }
+        },
+        {
+          "id": "approval-panel__1",
+          "component": "Column",
+          "children": [
+            "approval-title-line__1",
+            "approval-details__1",
+            "approval-operations__1"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "approval-section",
+          "component": "Column",
+          "children": [
+            "approval-panel__0",
+            "approval-panel__1"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "or",
+            "args": {
+              "values": [
+                {
+                  "call": "eq",
+                  "args": {
+                    "a": {
+                      "path": "/view/layoutMode"
+                    },
+                    "b": "overview"
+                  }
+                },
+                {
+                  "call": "eq",
+                  "args": {
+                    "a": {
+                      "path": "/view/selectedSection"
+                    },
+                    "b": "approval"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "todo-section",
+          "component": "Column",
+          "children": [
+            "todo-panel__0",
+            "todo-panel__1",
+            "todo-panel__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "todo"
+            }
+          }
+        },
+        {
+          "id": "focus-heading",
+          "component": "Text",
+          "text": "重点关注",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h3_text_style__font_size"
+        },
+        {
+          "id": "focus-list",
+          "component": "Column",
+          "children": [],
+          "gap": 2,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "focus-section",
+          "component": "Column",
+          "children": [
+            "focus-heading",
+            "focus-list"
+          ],
+          "gap": 6,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "path": "/view/showFocus"
+          }
+        },
+        {
+          "id": "preparation-heading",
+          "component": "Text",
+          "text": "会前准备",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h3_text_style__font_size"
+        },
+        {
+          "id": "preparation-list",
+          "component": "Column",
+          "children": [],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-section",
+          "component": "Column",
+          "children": [
+            "preparation-heading",
+            "preparation-list"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0,
+          "visible": {
+            "path": "/view/showPreparations"
+          }
+        },
+        {
+          "id": "attention-heading",
+          "component": "Text",
+          "text": {
+            "path": "/view/attentionHeading"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h3_text_style__font_size"
+        },
+        {
+          "id": "attention-number__0",
+          "component": "Text",
+          "text": {
+            "path": "/attention/0/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "attention-text__0",
+          "component": "Text",
+          "text": {
+            "path": "/attention/0/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "attention-item__0",
+          "component": "Row",
+          "children": [
+            "attention-number__0",
+            "attention-text__0"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "attention-number__1",
+          "component": "Text",
+          "text": {
+            "path": "/attention/1/number"
+          },
+          "maxLine": 1,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "attention-text__1",
+          "component": "Text",
+          "text": {
+            "path": "/attention/1/text"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "weight": 1
+        },
+        {
+          "id": "attention-item__1",
+          "component": "Row",
+          "children": [
+            "attention-number__1",
+            "attention-text__1"
+          ],
+          "gap": 10,
+          "align": "start",
+          "padding": 0
+        },
+        {
+          "id": "attention-list",
+          "component": "Column",
+          "children": [
+            "attention-item__0",
+            "attention-item__1"
+          ],
+          "gap": 4,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "attention-section",
+          "component": "Column",
+          "children": [
+            "attention-heading",
+            "attention-list"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "跳过",
+          "maxLine": 4,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "skip-content",
+          "component": "Column",
+          "children": [
+            "skip-label"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 7
+        },
+        {
+          "id": "skip",
+          "component": "Row",
+          "children": [
+            "skip-content"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_skip",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "start-processing-label",
+          "component": "Text",
+          "text": "开始处理",
+          "maxLine": 4,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "start-processing-content",
+          "component": "Column",
+          "children": [
+            "start-processing-label"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 7
+        },
+        {
+          "id": "start-processing",
+          "component": "Row",
+          "children": [
+            "start-processing-content"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "justify": "center",
+          "cornerRadius": 24,
+          "weight": 1,
+          "backgroundColorToken": "common_line_light_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_start_processing",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                }
+              }
+            }
+          },
+          "visible": true
+        },
+        {
+          "id": "footer",
+          "component": "Row",
+          "children": [
+            "skip",
+            "start-processing"
+          ],
+          "gap": 10,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/view/showFooter"
+          }
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "intro",
+            "today-heading",
+            "agenda-heading",
+            "agenda-section",
+            "approval-heading",
+            "approval-section",
+            "todo-section",
+            "focus-section",
+            "preparation-section",
+            "attention-section",
+            "footer"
+          ],
+          "gap": 12,
+          "align": "stretch",
+          "padding": 16
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "intro-copy",
+          "component": "Column",
+          "children": [
+            "source-note",
+            "summary"
+          ],
+          "gap": 0,
+          "padding": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "todo-panel__0",
+          "component": "Column",
+          "children": [
+            "todo-title__0",
+            "todo-details__0",
+            "todo-status__0"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__0",
+          "component": "Text",
+          "text": {
+            "path": "/todos/0/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__0",
+          "component": "Text",
+          "text": {
+            "path": "/todos/0/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__0",
+          "component": "Text",
+          "text": {
+            "path": "/todos/0/statusText"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-panel__1",
+          "component": "Column",
+          "children": [
+            "todo-title__1",
+            "todo-details__1",
+            "todo-status__1"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__1",
+          "component": "Text",
+          "text": {
+            "path": "/todos/1/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__1",
+          "component": "Text",
+          "text": {
+            "path": "/todos/1/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__1",
+          "component": "Text",
+          "text": {
+            "path": "/todos/1/statusText"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-panel__2",
+          "component": "Column",
+          "children": [
+            "todo-title__2",
+            "todo-details__2",
+            "todo-status__2"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 16,
+          "backgroundColorToken": "common_fg_z1_color"
+        },
+        {
+          "id": "todo-title__2",
+          "component": "Text",
+          "text": {
+            "path": "/todos/2/title"
+          },
+          "bold": true,
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "todo-details__2",
+          "component": "Text",
+          "text": {
+            "path": "/todos/2/details"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "todo-status__2",
+          "component": "Text",
+          "text": {
+            "path": "/todos/2/statusText"
+          },
+          "maxLine": 40,
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-rail-leading-space__0",
+          "component": "Column",
+          "children": [],
+          "padding": 2,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-rail-leading-space__1",
+          "component": "Column",
+          "children": [],
+          "padding": 2,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-rail-leading-space__2",
+          "component": "Column",
+          "children": [],
+          "padding": 2,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-rail-leading-space__3",
+          "component": "Column",
+          "children": [],
+          "padding": 2,
+          "gap": 0,
+          "align": "stretch"
+        },
+        {
+          "id": "agenda-rail-size__0",
+          "component": "Divider",
+          "axis": "vertical",
+          "borderWidth": 3,
+          "borderColor": "#00000000"
+        },
+        {
+          "id": "agenda-rail-size__1",
+          "component": "Divider",
+          "axis": "vertical",
+          "borderWidth": 3,
+          "borderColor": "#00000000"
+        },
+        {
+          "id": "agenda-rail-size__2",
+          "component": "Divider",
+          "axis": "vertical",
+          "borderWidth": 3,
+          "borderColor": "#00000000"
+        },
+        {
+          "id": "agenda-rail-size__3",
+          "component": "Divider",
+          "axis": "vertical",
+          "borderWidth": 3,
+          "borderColor": "#00000000"
+        },
+        {
+          "id": "agenda-location-text__0",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/0/location"
+          },
+          "maxLine": 4,
+          "weight": 1,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-icon__0",
+          "component": "Icon",
+          "name": {
+            "path": "/icons/location"
+          },
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-text__1",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/1/location"
+          },
+          "maxLine": 4,
+          "weight": 1,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-icon__1",
+          "component": "Icon",
+          "name": {
+            "path": "/icons/location"
+          },
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-text__2",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/2/location"
+          },
+          "maxLine": 4,
+          "weight": 1,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-icon__2",
+          "component": "Icon",
+          "name": {
+            "path": "/icons/location"
+          },
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-text__3",
+          "component": "Text",
+          "text": {
+            "path": "/agenda/3/location"
+          },
+          "maxLine": 4,
+          "weight": 1,
+          "sizeToken": "common_footnote_text_style__font_size",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-location-icon__3",
+          "component": "Icon",
+          "name": {
+            "path": "/icons/location"
+          },
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "agenda-chip-normal",
+          "component": "Text",
+          "text": {
+            "path": "/counts/agenda"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "agenda"
+            }
+          }
+        },
+        {
+          "id": "agenda-chip-active",
+          "component": "Text",
+          "text": {
+            "path": "/counts/agenda"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "agenda"
+            }
+          }
+        },
+        {
+          "id": "agenda-chip-body",
+          "component": "Column",
+          "children": [
+            "agenda-chip-normal",
+            "agenda-chip-active"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "agenda-chip",
+          "component": "Row",
+          "children": [
+            "agenda-chip-body"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "cornerRadius": 22,
+          "backgroundColorToken": "common_fg_z1_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_select_section",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "section": "agenda"
+              }
+            }
+          }
+        },
+        {
+          "id": "approval-chip-normal",
+          "component": "Text",
+          "text": {
+            "path": "/counts/approval"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "approval"
+            }
+          }
+        },
+        {
+          "id": "approval-chip-active",
+          "component": "Text",
+          "text": {
+            "path": "/counts/approval"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "approval"
+            }
+          }
+        },
+        {
+          "id": "approval-chip-body",
+          "component": "Column",
+          "children": [
+            "approval-chip-normal",
+            "approval-chip-active"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "approval-chip",
+          "component": "Row",
+          "children": [
+            "approval-chip-body"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "cornerRadius": 22,
+          "backgroundColorToken": "common_fg_z1_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_select_section",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "section": "approval"
+              }
+            }
+          }
+        },
+        {
+          "id": "todo-chip-normal",
+          "component": "Text",
+          "text": {
+            "path": "/counts/todo"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "todo"
+            }
+          }
+        },
+        {
+          "id": "todo-chip-active",
+          "component": "Text",
+          "text": {
+            "path": "/counts/todo"
+          },
+          "maxLine": 1,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_action_text_style__font_size",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/selectedSection"
+              },
+              "b": "todo"
+            }
+          }
+        },
+        {
+          "id": "todo-chip-body",
+          "component": "Column",
+          "children": [
+            "todo-chip-normal",
+            "todo-chip-active"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 6
+        },
+        {
+          "id": "todo-chip",
+          "component": "Row",
+          "children": [
+            "todo-chip-body"
+          ],
+          "gap": 0,
+          "align": "center",
+          "padding": 0,
+          "cornerRadius": 22,
+          "backgroundColorToken": "common_fg_z1_color",
+          "action": {
+            "event": {
+              "name": "daily_briefing_select_section",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "briefingId": {
+                  "path": "/briefing/id"
+                },
+                "section": "todo"
+              }
+            }
+          }
+        },
+        {
+          "id": "section-chips",
+          "component": "Row",
+          "children": [
+            "agenda-chip",
+            "approval-chip",
+            "todo-chip"
+          ],
+          "gap": 10,
+          "align": "center",
+          "padding": 0
+        },
+        {
+          "id": "agenda-heading",
+          "component": "Text",
+          "text": "日程",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h3_text_style__font_size",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/layoutMode"
+              },
+              "b": "overview"
+            }
+          }
+        },
+        {
+          "id": "approval-heading",
+          "component": "Text",
+          "text": "审批",
+          "maxLine": 40,
+          "colorToken": "common_level1_base_color",
+          "bold": true,
+          "sizeToken": "common_h3_text_style__font_size",
+          "visible": {
+            "call": "eq",
+            "args": {
+              "a": {
+                "path": "/view/layoutMode"
+              },
+              "b": "overview"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-daily-agenda-briefing-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "businessId": "demo-daily-agenda-briefing"
+        },
+        "briefing": {
+          "id": "demo-briefing-20261014",
+          "title": "📝 晨间早报（2026-10-14）",
+          "summary": "最重要的一件事：**14:00 前完成 v1.2 发布验收。** 已准备好评审资料，有 1 处时间冲突需要你决定。",
+          "sourceNote": "合成演示数据，不读取真实聊天、日历或审批。"
+        },
+        "counts": {
+          "agenda": "日程 4",
+          "approval": "审批 2",
+          "todo": "待办 3"
+        },
+        "view": {
+          "showFocus": false,
+          "showPreparations": false,
+          "showFooter": false,
+          "attentionHeading": "重点关注",
+          "textProfile": "mobile",
+          "selectedSection": "agenda",
+          "layoutMode": "overview"
+        },
+        "timeline": {
+          "start": "09:00",
+          "end": "21:00",
+          "segments": [
+            {
+              "state": "busy"
+            },
+            {
+              "state": "busy"
+            },
+            {
+              "state": "busy"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "conflict"
+            },
+            {
+              "state": "conflict"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "free"
+            },
+            {
+              "state": "free"
+            }
+          ]
+        },
+        "agenda": [
+          {
+            "id": "event-0900",
+            "notice": "带草稿，先确认方案风险",
+            "tone": "info",
+            "title": "示例项目联合验收",
+            "time": "09:00–10:00",
+            "location": "会议室 B-02",
+            "canRespond": false
+          },
+          {
+            "id": "event-1000",
+            "notice": "重点汇报，会前资料已备好",
+            "tone": "info",
+            "title": "示例项目联合验收",
+            "time": "10:00–12:00",
+            "location": "会议室 B-02",
+            "canRespond": false
+          },
+          {
+            "id": "event-1400",
+            "notice": "未响应，1个日程冲突",
+            "tone": "warning",
+            "title": "示例项目联合验收",
+            "time": "14:00–16:00",
+            "location": "会议室 B-02",
+            "canRespond": true
+          },
+          {
+            "id": "event-1400-secondary",
+            "notice": "未响应，1个日程冲突",
+            "tone": "warning",
+            "title": "示例项目联合验收",
+            "time": "14:00–16:00",
+            "location": "会议室 B-02",
+            "canRespond": true
+          }
+        ],
+        "approvals": [
+          {
+            "id": "approval-travel",
+            "title": "用户甲：出差报销1000元",
+            "notice": "建议批准",
+            "tone": "info",
+            "details": "报销金额、出差行程和票据匹配，费用标准符合公司规定",
+            "canOperate": true
+          },
+          {
+            "id": "approval-discount",
+            "title": "用户乙：申请客户折扣 7折",
+            "notice": "待确认",
+            "tone": "warning",
+            "details": "低于公司8折常规底线，超出自动处理范围",
+            "canOperate": true
+          }
+        ],
+        "todos": [
+          {
+            "id": "demo-todo-review",
+            "title": "核对演示项目验收清单",
+            "details": "今天 11:30 前 · 示例项目",
+            "statusText": "待处理"
+          },
+          {
+            "id": "demo-todo-draft",
+            "title": "整理演示汇报材料",
+            "details": "今天 13:00 前 · 示例工作组",
+            "statusText": "进行中"
+          },
+          {
+            "id": "demo-todo-plan",
+            "title": "确认下周演示安排",
+            "details": "今天 17:00 前 · 示例工作组",
+            "statusText": "待处理"
+          }
+        ],
+        "focus": [],
+        "preparations": [],
+        "attention": [
+          {
+            "id": "attention-agent",
+            "number": "1.",
+            "text": "方案改跑示例助手 —— 用户乙反馈风险偏高，接入边界还没核实"
+          },
+          {
+            "id": "attention-api",
+            "number": "2.",
+            "text": "领用、查询接口已上预发 —— 用户丙同步，验收结果仍待确认"
+          }
+        ],
+        "icons": {
+          "location": "Location_L_outlined"
+        }
+      }
+    }
+  }
+]

@@ -274,6 +274,7 @@ Definition（仅声明；不可编译）
 | 层 | 含义 | 今日落点 |
 |---|---|---|
 | **声明（declare）** | `corecmd.Spec` / `LeafSpec` / `ContractDecl` **数据字段**（声明证据；交付见下） | `Flags`/`Constraints`/`Risk`/`ConstParams`/`Contract`；类型真身在 `corecmd/contract`（DTO：`SafetySpec`/`ParamDecl`/`ProductDecl`/`ContractFinalPayload`；**无** Cobra store） |
+| **非叶声明（group declare）** | owning Cobra 命令上的完整 `corecmd.GroupPolicy`；不是 leaf `Spec` 字段 | `Mode` / `Positionals` / `Recovery` 经 `corecmd.ApplyGroupPolicy` 一次编译为 Cobra 行为与私有框架元数据 |
 | **框架转换** | 类型转换并注册（**禁止** JSON 注解桥） | `embedContractDecl` → `corecmd/contractfinal.RegisterRuntimeContractFinal`（annotate + store；全部调用方直调，`corecmd.New` 内部注册） |
 | **注解 seam** | Cobra `dws.schema.*` 写入 | `internal/corecmd/runtimeannotate.AnnotateRuntime*`（框架侧；`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/runtimeannotate` 垫片包已删，一律直引 corecmd） |
 | **Schema 透传** / 交付 | 组装读取注册表，原样投影为 `ToolSpec`；`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`（`ResolveMeta` 自同一组装投影）；go:embed 仅限 reviewed 输入（MCP meta / `param_concepts` 等；reviewed `schema_command_registry/` 已退役，identity 由 collector 收集），映射排除走 Go ledger（`schema_parameter_mapping_ledger.go`），不得 embed Catalog | `internal/cli` 根（交付边界）；ContractFinal store 在 `corecmd/contractfinal`（`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/contractfinal` 垫片包已删） |
@@ -310,7 +311,25 @@ Definition（仅声明；不可编译）
 3. 写副作用：新 Leaf 声明完整 `SafetySpec`（框架 `ConfirmSafety` + Schema Final）；未迁移旧路径显式标注 `runtime_gate`；二者皆无则不合格；
 4. Schema `ToolSpec` 全字段组均落在 §5.0.4 表中某一权威格，禁止无主字段。
 
-#### 5.0.2a 三档声明路径（Tier1 / Tier2 / Tier3）
+#### 5.0.2a 非叶命令契约（`corecmd.GroupPolicy`）
+
+`corecmd.Spec` / `LeafSpec` 继续只定义叶命令。每个拥有子命令的 owning Cobra 命令必须在构造处通过 `corecmd.ApplyGroupPolicy` 声明一份完整 `GroupPolicy`：
+
+| 轴 | 允许值 | 语义 |
+|---|---|---|
+| `Mode` | `navigation_only` / `hybrid` | 仅导航并展示帮助，或同时保留本命令业务执行 |
+| `Positionals` | `reject` / `allow` | 未匹配 token 进入命令恢复，或由本命令业务位置参数消费 |
+| `Recovery` | `sibling` / `deep` / `disabled` | 只建议直接子命令、显式允许后代路径恢复，或完全关闭恢复 |
+
+硬规则：
+
+1. 三个字段必须同时声明；全零值只表示 leaf，不能应用到命令。`navigation_only` 必须 `Positionals=reject`；`Positionals=allow` 必须 `Recovery=disabled`，避免业务 argv 与命令恢复争抢同一 token。
+2. `ApplyGroupPolicy` 是唯一编译入口：navigation 安装统一 help/错误 handler；hybrid 保留 owning `RunE`，仅在声明拒绝 positionals 且开启恢复时包裹 unknown-command 分支。恢复统一投影为有界 `CommandResolution`（最多 3 个建议 + 当前 parent `--help`）；只有 `Recovery=deep` 才可建议完整后代路径。
+3. `GroupPolicy` **不推导** `TraverseChildren`。该 Cobra 字段会改变父级 local flag 是否向子命令传播，必须由原 owning command 显式保留，不能因迁移到 typo guidance 而扩大参数表面。
+4. 最终装配树门禁检查「有 children 必须有 GroupPolicy、leaf 不得残留 GroupPolicy、navigation/hybrid handler 与声明结构一致」。门禁不执行任意 `Args` 函数；`ApplyGroupPolicy` 对 `cobra.NoArgs` / `cobra.ArbitraryArgs` 的编译由 corecmd 单测覆盖。
+5. 命令树合并时，两侧非空 group 都必须先声明 policy；冲突声明、group 与 runnable/parse-bearing leaf 合并、或带 children 的未声明节点均 fail closed。纯 metadata 空壳可采用 typed source policy，不能借此吞掉 flags、hooks 或执行体。
+
+#### 5.0.2b 三档叶声明路径（Tier1 / Tier2 / Tier3）
 
 当前生产允许的三档路径（同一 `ContractFinal` 语义；不是互相否定）：
 
@@ -327,6 +346,15 @@ Definition（仅声明；不可编译）
 3. Tier2 是**迁移态**：具备条件后应升级为 Tier1；不得用它绕开「业务 flag 必须声明」的框架纪律。大规模 Tier2→Tier1 与 Shortcut→mcpbind 属于后续里程碑，**不是**本阶段硬门槛。
 4. `DeclareLeafMetadata` 传入 Flags/Call/RunE/PostMount 等执行面字段直接 panic，防止半接管；**唯一允许的执行钩子是 `Validate`**，与 `ConfirmSafety` 同在 RunE 层（禁止只挂 PreRunE——直接调 `RunE` / `proxySubCmd` 会跳过 PreRunE）。无独立 Caller 的本地/PAT 命令必须提供 `Validate`，否则会回退成确认抢先。
 5. **长期展望**（非当前硬要求）：更多 Shortcut 可收敛到 mcpbind 形态 1/2，并减少仅为参数装配而存在的 `Execute` 函数体。不得把「必须删除 `Shortcut.Execute` / 必须 mcpbind」写成当前门禁。
+
+参数校验与错误治理的接入约定见
+[统一命令框架参数校验方案](unified-validation-errors-v2.md)。Tier1 与 Tier2 的自定义
+Validate 均由 `corecmd.WithValidation` 构造执行包装；失败不会进入后续确认或业务步骤，
+后续步骤错误不重分类。Tier2 的 deferred caller 继续留在迁移接缝中。
+
+Cobra 接入由装配结束后的 `corecmd.PrepareCommandTree` 一次完成，独立命令亦如此；
+`corecmd.New` 不安装 local/final 双层适配器。app 工厂返回已准备的 root，测试扩展需在
+工厂组装回调内挂载。重复执行沿用 Cobra 有状态语义，独立调用需从工厂重新构造。
 
 #### 5.0.3 与目标 `Contract` 的对应
 
@@ -360,6 +388,7 @@ Definition（仅声明；不可编译）
 | | `idempotency` | 评审源（或未来 Contract） | reviewed metadata | 今日非框架声明；不得推断 |
 | | `effect_source` / provenance | 组装派生物 | resolver 写入 `FieldProvenance` | 派生，不手写 |
 | **DryRun** | `preview_kind`, `remote_reads` | 评审源 | `schema_dry_run_capabilities`（正能力声明） | 否；无条目 ≠ 推断「不支持」之外的假能力 |
+| **Wait** | `mode`（`poll`/`event`/`auto`）, `poll_command`, `status_query`, `terminal`（状态→success/failure）, `pending_values`, `event_key`/`match_field`/`resource_query`（event/auto）, `default_timeout_secs` | **声明**（`ContractDecl.Wait` 正能力声明，且必须搭配 ResultInvoke dispatcher + 按模式的 hook：poll↔`WaitPoll`、event↔`WaitEvents`、auto↔两者，构造期配对校验，多余 hook 同样拒绝） | 声明后注册 `--wait`/`--wait-timeout`（框架 flag，不进 toolArgs）；Schema 投影 `wait` 键；auto = 事件优先、流终止/订阅失败回退轮询，一个 deadline 覆盖两阶段并传入 `WaitPoll`/`WaitEvents`（及 `Command().Context()`）；仅 pending 初始结果进入等待，success/failure/partial 原样返回 | 否；未声明命令传 `--wait` = unknown flag。终态失败经统一信封 `error.type: "wait"`（rc=8），超时保持 pending + `meta.operation.timed_out`（rc=0）；轮询间/轮询中/事件消费中超时一律按 pending 关闭 |
 | **Interface** | `interface_mode`, `interface_ref`, `availability`, `reason` | 评审源 | MCP meta + agent metadata 解析 | 否；与 CLI Identity 分离 |
 | **Selection** | `agent_summary`, `use_when`, `avoid_when`, `examples`, `prerequisites`, `tips`, `workflow_refs`, … | 声明（`ContractDecl.Selection` / `ProductDecl`） | `ContractDecl` / `ProductDecl`（`schema_hints/` 已退役） | 可声明；声明载荷**不得携带** `Reviewed`（旧路径专用），携带即组装报错 |
 | **FieldProvenance** | 各字段 winner / candidates | 组装派生物 | Schema 组装器 | 派生；须与 delivered value 一致 |

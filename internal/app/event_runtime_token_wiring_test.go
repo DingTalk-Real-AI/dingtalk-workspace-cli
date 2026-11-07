@@ -19,6 +19,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
@@ -33,10 +34,12 @@ func TestCrossPlatformCoverageEventCommandsWireTrimmedRootRuntimeToken(t *testin
 	oldConsume := eventRunPersonalConsume
 	oldStatus := eventRunPersonalStatus
 	oldStop := eventRunPersonalStop
+	oldList := eventRunPersonalList
 	t.Cleanup(func() {
 		eventRunPersonalConsume = oldConsume
 		eventRunPersonalStatus = oldStatus
 		eventRunPersonalStop = oldStop
+		eventRunPersonalList = oldList
 	})
 
 	flags := &GlobalFlags{Token: "  runtime-canary  ", ClientID: " root-client "}
@@ -77,6 +80,15 @@ func TestCrossPlatformCoverageEventCommandsWireTrimmedRootRuntimeToken(t *testin
 		t.Fatalf("stop RunE() error = %v", err)
 	}
 
+	eventRunPersonalList = func(_ *cobra.Command, opts personalListOptions) error {
+		assertIdentity(opts.ExplicitToken, opts.ClientIDOverride)
+		return nil
+	}
+	listCmd := newEventListCommand(flags)
+	if err := listCmd.RunE(listCmd, nil); err != nil {
+		t.Fatalf("list RunE() error = %v", err)
+	}
+
 	listenCmd := newEventListenIMCommand(flags)
 	if err := listenCmd.RunE(listenCmd, nil); err != nil {
 		t.Fatalf("listen-im RunE() error = %v", err)
@@ -104,7 +116,7 @@ func TestCrossPlatformCoverageEventConsumeParsesRootRuntimeTokenBeforeAndAfterSu
 				return nil
 			}
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			want := "runtime-" + tc.name
@@ -120,7 +132,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 	oldLoadProfiles := personalLoadProfiles
 	oldLoadToken := personalLoadTokenData
 	oldAux := personalResolveAuxiliaryAccessToken
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	oldCredentials := personalResolveAppCredentialsStrict
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
@@ -128,7 +140,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 		personalLoadProfiles = oldLoadProfiles
 		personalLoadTokenData = oldLoadToken
 		personalResolveAuxiliaryAccessToken = oldAux
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		personalResolveAppCredentialsStrict = oldCredentials
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
@@ -141,7 +153,7 @@ func TestCrossPlatformCoverageResolvePersonalEventIdentityWithTokenUsesMetadataO
 		t.Fatal("explicit token identity resolved local OAuth")
 		return "", nil
 	}
-	personalClientID = func() string {
+	personalClientIDMetadata = func(string) string {
 		t.Fatal("explicit root client ID was not preferred")
 		return ""
 	}
@@ -264,18 +276,18 @@ func TestCrossPlatformCoverageSelectedProfileClientPrecedesPersistedGlobalClient
 	oldEdition := edition.Get()
 	oldLoadProfiles := personalLoadProfiles
 	oldRuntimeClientID := personalRuntimeEventClientID
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		personalLoadProfiles = oldLoadProfiles
 		personalRuntimeEventClientID = oldRuntimeClientID
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
 	edition.Override(&edition.Hooks{})
 	personalRuntimeEventClientID = func() string { return "" }
-	personalClientID = func() string { return "stale-global-client" }
+	personalClientIDMetadata = func(string) string { return "stale-global-client" }
 	personalLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
 		return &authpkg.ProfilesConfig{
 			Version:        3,
@@ -299,18 +311,18 @@ func TestCrossPlatformCoverageMalformedPersistedProfilesDoNotBlockRuntimeDefault
 	oldEdition := edition.Get()
 	oldLoadProfiles := personalLoadProfiles
 	oldRuntimeClientID := personalRuntimeEventClientID
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	previousProfile := authpkg.RuntimeProfile()
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		personalLoadProfiles = oldLoadProfiles
 		personalRuntimeEventClientID = oldRuntimeClientID
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		authpkg.SetRuntimeProfile(previousProfile)
 	})
 	authpkg.SetRuntimeProfile("")
 	personalRuntimeEventClientID = func() string { return "" }
-	personalClientID = func() string { return "global-client" }
+	personalClientIDMetadata = func(string) string { return "global-client" }
 	personalLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) {
 		return nil, errors.New("malformed persisted profiles")
 	}
@@ -672,7 +684,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusModeSkipsLocalOAuthIdentity(t *test
 	})
 
 	resolvedLocal := false
-	eventResolvePersonal = func(context.Context, string, string) (personal.Identity, error) {
+	eventResolvePersonal = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		resolvedLocal = true
 		return personal.Identity{}, nil
 	}
@@ -696,7 +708,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusModeSkipsLocalOAuthIdentity(t *test
 		"--stream-source-id", "runtime-source",
 		"--idle-timeout", "0",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("event _bus runtime mode error = %v", err)
 	}
 	if resolvedLocal {

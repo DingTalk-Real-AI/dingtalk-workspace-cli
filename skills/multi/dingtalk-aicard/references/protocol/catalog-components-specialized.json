@@ -1,0 +1,829 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dingtalk.com/card/a2ui/catalog-components-specialized.json",
+  "title": "DingTalk AICard Protocol V0.8 Data display and media",
+  "description": "12 components and 0 functions. A reading shard of the DingTalk public catalog, not a separate runtime catalog. Modified by DingTalk from selected entries of the A2UI v1.0 Basic Catalog; some upstream definitions and descriptions are retained. See NOTICE.",
+  "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+  "protocolVersion": "1.0",
+  "instructions": "Read entries needed for the current task, then follow their $ref dependencies. Common types: ./common-types-basic.json, ./common-types-extended.json and ./common-types-visual.json. Do not load all shards into the model context by default.\nCommon components: ./catalog-components-common.json.\nComposition and repeated layouts: ./catalog-components-composition.json.\nInputs and pickers: ./catalog-components-inputs.json.\nData display and media: ./catalog-components-specialized.json.\nCore functions adapted by DingTalk from A2UI: ./catalog-functions-core.json.\nDingTalk expressions and operators: ./catalog-functions-expressions.json.\nDingTalk host actions: ./catalog-functions-host-actions.json.\nSelect examples from ./examples/README.md; message structures are in ./agent-to-renderer.json.\nThis is the public DingTalk AICard Protocol V0.8 package. Use only the components, fields, functions, and common-type public values listed in the files loaded and assembled for the current scope.\nfallbackMarkdown is an optional DingTalk extension for component-level fallback content. It is used only when the current renderer cannot render the component. Unknown fields and field-validation errors do not trigger it. When omitted, the renderer displays the standard upgrade message.\nSchema references are local file references and require no HTTP access. catalogId is a runtime catalog identifier, not a file path.\nThe #/$defs/anyComponent union describes catalog-specific fields only. Validate complete component instances through the message envelope or loadSchemas().validateComponent, which combines ComponentCommon with this union and rejects unknown fields. The catalog root is not a validation entry point for complete messages or component instances. Complete messages must also conform to the main protocol; dynamic result types, component-tree references, and platform capabilities are validated at runtime.\nExpressions use {\"call\":…, \"args\":…} without an additional profile declaration. A host action must explicitly set functionCall.catalogId to urn:dingtalk:a2ui:host:v1. A public catalog HTTP identifier from a surface or component cannot replace the host Function catalog. For promptText, initialValue is the prefilled-text parameter and text is a result field, not an input parameter.\nAttach form-validation checks to the Button that submits the form. Do not rely on standard event-response fields for automatic write-back.\nUserPicker, ConversationPicker, and ImageUpload require host authorization. Server-side callbacks must still enforce business authorization.",
+  "components": {
+    "ImageList": {
+      "type": "object",
+      "description": "Multiple image thumbnails and quantity aggregation. The current image area is built with height 200; width is constrained by the parent layout.",
+      "properties": {
+        "component": {
+          "const": "ImageList",
+          "description": "Public component type identifier."
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "An array of image URLs, containing at least one item."
+        },
+        "previewEnabled": {
+          "type": "boolean",
+          "description": "Whether clicking can open a preview; omitted means `true`. Preview is enabled only when the group contains a loadable image URL."
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "contain",
+            "cover",
+            "fill",
+            "none",
+            "scaleDown"
+          ],
+          "description": "Image scaling using the CSS `object-fit` vocabulary. Omitted means containment, corresponding to `contain`, unlike Image's omitted crop-to-fill behavior. `contain`/`scaleDown`/`none` map to containment, `cover` to cropping, and `fill` to stretching. Do not send internal renderer scaling names."
+        },
+        "cornerRadius": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Image-group corner radius; omitted means `4`, unlike Image's default of `6`."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "images"
+      ]
+    },
+    "Avatar": {
+      "type": "object",
+      "description": "Avatar image. Without size configuration it uses 48×48, with an outer corner radius equal to one quarter of the actual size. sizeType selects presets or customSize.",
+      "properties": {
+        "component": {
+          "const": "Avatar",
+          "description": "Public component type identifier."
+        },
+        "imageUrl": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Avatar image URL."
+        },
+        "sizeType": {
+          "type": "string",
+          "enum": [
+            "Standard",
+            "Custom"
+          ],
+          "description": "Size type. Set it to `Standard` to use the `size` preset. Set it to `Custom`, or omit it, to use `customSize`; if `customSize` is also omitted, the runtime uses 48px. Other values do not conform to the public Schema."
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "extraSmall",
+            "small",
+            "middle"
+          ],
+          "description": "Size preset, effective only when `sizeType` is `Standard`: `extraSmall` = 20px, `small` = 30px, and `middle` = 48px. If omitted, `middle` is used. Values outside this vocabulary do not conform to the public Schema."
+        },
+        "customSize": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Custom size. Used when sizeType is not Standard; omitted means 48."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "AvatarGroup": {
+      "type": "object",
+      "description": "Avatar stacking and overflow count.",
+      "properties": {
+        "component": {
+          "const": "AvatarGroup",
+          "description": "Public component type identifier."
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "imageUrl": {
+                "type": "string",
+                "description": "An accessible absolute or relative resource address."
+              },
+              "name": {
+                "type": "string",
+                "description": "Used to create a text avatar when no image is available; providing only `imageUrl` is also supported. At least one of `name` and `imageUrl` must be a non-empty string, as checked at runtime."
+              }
+            }
+          },
+          "description": "List of user objects."
+        },
+        "maxVisible": {
+          "type": "integer",
+          "description": "Maximum number of avatars displayed (show +N when exceeded). Omitted means 5."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "items"
+      ]
+    },
+    "Table": {
+      "type": "object",
+      "description": "Table headers, zebra stripes, and paginated data.",
+      "properties": {
+        "component": {
+          "const": "Table",
+          "description": "Public component type identifier."
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "./common-types-basic.json#/$defs/DataBinding"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "meta": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "colKey": {
+                        "type": "string",
+                        "description": "Column key. Each row object is looked up by this key to obtain the cell value for this column; when a row lacks the key, that cell renders empty without affecting other columns."
+                      },
+                      "colName": {
+                        "type": "string",
+                        "description": "Column name shown in the header. When the value is not a string, it falls back to `colKey` and the table still renders."
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "tag",
+                          "link",
+                          "microApp",
+                          "button",
+                          "STRING",
+                          "string",
+                          "OBJECT",
+                          "object",
+                          "MICROAPP",
+                          "microapp",
+                          "BUTTON"
+                        ],
+                        "description": "Column rendering types. It is recommended to use `text`, `tag`, `link`, `microApp`, `button`; other values are used for compatibility with existing cards. For numeric cells, use `text` or `STRING`. The cell value can be directly filled with a JSON number, and the renderer will convert it to text for display; `NUMBER` is not supported."
+                      }
+                    },
+                    "required": [
+                      "colKey",
+                      "colName",
+                      "type"
+                    ]
+                  },
+                  "minItems": 1,
+                  "maxItems": 100,
+                  "description": "Column definitions in display order, from 1 to 100 columns. Every column must declare `colKey`, `colName`, and `type`; if any one is missing, the entire table is replaced by the component fallback (the standard message when `fallbackMarkdown` is not set)."
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {}
+                  },
+                  "minItems": 0,
+                  "maxItems": 1000,
+                  "description": "Row data, up to 1000 rows; each row must be an object whose keys correspond to `colKey` in `meta`. An empty array is allowed and renders a header-only table, but the field itself must still be sent."
+                }
+              },
+              "required": [
+                "meta",
+                "data"
+              ]
+            }
+          ],
+          "description": "Table data with meta (columns) and data (rows)."
+        },
+        "cellPadding": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Cell padding. Omitted means 12 on each horizontal side and 8 on each vertical side. An explicit number applies uniformly to all four sides."
+        },
+        "imageSize": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "The size of the image in the table. Omitted means 30."
+        },
+        "pageSize": {
+          "type": "integer",
+          "description": "Number of rows per page. Defaults to 10 and takes effect only when `pagination` is `true`. Values below 1 are invalid; removing this field restores the default."
+        },
+        "maxLine": {
+          "type": "integer",
+          "description": "Maximum number of display lines for **text-based data cells** (`STRING`, `OBJECT`, and `MICROAPP`); excess text is truncated. Defaults to 3. The table header is unaffected and always allows up to 3 lines. `BUTTON` cells are also unaffected because renderer buttons do not use a line-count setting. Values of 0 or less are normalized to 1; sending 0 directly to the renderer would render no lines and make the column text disappear."
+        },
+        "zebra": {
+          "type": "boolean",
+          "description": "Whether to enable zebra stripes (alternate row coloring). Omitted means false, with no alternating row colors."
+        },
+        "pagination": {
+          "type": "boolean",
+          "description": "Whether pagination is enabled; default `false`. **Pagination is entirely local**: the full dataset is sent once, and changing pages only updates the view without fetching more data from the server. The pagination control is not rendered when the data fits on one page because it would have no effect."
+        },
+        "pageIndex": {
+          "type": "integer",
+          "description": "**Initial** page index (0-based), default is 0. It only determines which page the first frame stops at, and subsequent page turns are controlled by the user. If it exceeds the total number of pages, it is clamped to the last page; negative values are considered invalid. If this field is removed, it defaults to rendering page 0."
+        },
+        "scrollAreaWidth": {
+          "type": "number",
+          "description": "Width of the horizontal scroll area (px), default `600`. When there are too many columns to fit on one screen, the table scrolls horizontally within this width. Must be a positive number."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "data"
+      ]
+    },
+    "Chart": {
+      "type": "object",
+      "description": "Unified public charts: standard data, template rendering, and responsive sizing. **Charts are always clickable for details**, no configuration is needed or possible—the charts in the cards are only a few tens of px high and the values are hard to see; clicking to view the larger image is a basic capability of this component.",
+      "properties": {
+        "component": {
+          "const": "Chart",
+          "description": "Public component type identifier."
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "./common-types-basic.json#/$defs/DataBinding"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Chart types. Current repository real examples include lineChart, histogram, and pieChart."
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "description": "Horizontal axis or category values."
+                      },
+                      "y": {
+                        "type": "number",
+                        "description": "Numerical value."
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "Optional series name."
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  },
+                  "description": "Uses the type and constraints defined by the corresponding catalog Schema."
+                },
+                "config": {
+                  "type": "object",
+                  "description": "Optional chart configurations, such as axes, colors, and padding.",
+                  "properties": {}
+                }
+              },
+              "required": [
+                "type",
+                "data"
+              ]
+            }
+          ],
+          "description": "Chart data binding or real chart data object."
+        },
+        "aspectRatio": {
+          "type": "string",
+          "enum": [
+            "1:1",
+            "2:1",
+            "4:3",
+            "16:9"
+          ],
+          "description": "Responsive aspect ratio. Mutually exclusive with height; effective when height is not configured. When both height and aspectRatio are omitted, `2:1` is used. Do not automatically add this field when a fixed height is already configured."
+        },
+        "height": {
+          "type": "number",
+          "description": "Fixed height. Configuring this field enables a fixed height, and you cannot configure aspectRatio at the same time."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "data"
+      ]
+    },
+    "ProgressBar": {
+      "type": "object",
+      "description": "The public progress component. `variant` unifies continuous bars and compact blocks under the same value, color, and light/dark-theme model. Without a resolved color configuration, the fill uses the host brand color, falling back to built-in light/dark colors if resolution is unavailable.",
+      "properties": {
+        "component": {
+          "const": "ProgressBar",
+          "description": "Public component type identifier."
+        },
+        "variant": {
+          "type": "string",
+          "enum": [
+            "bar",
+            "block"
+          ],
+          "description": "bar is for a continuous progress bar; block is for a compact block-style progress. The renderer displays continuous or block progress according to this mode. Omitted means `bar`."
+        },
+        "value": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Progress value, with a semantic range of 0 to 100; validation fails when the literal is out of bounds, and the data-bound value is restricted to the valid range by the renderer."
+        },
+        "showLabel": {
+          "type": "boolean",
+          "description": "Only effective in bar mode; whether to display percentage text. Omitted means true."
+        },
+        "labelPosition": {
+          "type": "string",
+          "enum": [
+            "start",
+            "inside",
+            "end"
+          ],
+          "description": "Only effective in bar mode; the position of the percentage text is relative to the track, default `end` (right side of the track, spacing 12px). `start` places it on the left side, `inside` overlays it within the filled segment without taking additional horizontal space."
+        },
+        "colorToken": {
+          "$ref": "./common-types-visual.json#/$defs/ColorToken",
+          "description": "Only the 57 IDs in the common `ColorToken` enum are allowed. A DDesign token name for the progress-bar fill, with **the highest color-resolution priority**. When resolved, `customLightColor`, `customDarkColor`, and `color` are ignored. The host resolves it for the current client platform and theme through the same mechanism as `Text.colorToken`. If the host cannot resolve the token, evaluation falls back to the subsequent color sources."
+        },
+        "customLightColor": {
+          "type": "string",
+          "description": "Light-theme color shared by both modes. Supports `#RRGGBB` and `#AARRGGBB`."
+        },
+        "customDarkColor": {
+          "type": "string",
+          "description": "Dark-theme color shared by both modes; `customLightColor` must also be provided. The renderer selects and sends the light or dark value for the current theme. A theme change takes effect after the card's next refresh."
+        },
+        "rounded": {
+          "type": "boolean",
+          "description": "Only effective in bar mode; whether to use capsule rounded corners. Omitted means true."
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "medium",
+            "small"
+          ],
+          "description": "Effective only in `bar` mode: according to the design mock, `medium` uses a 6px track and `small` uses a 4px track. When `rounded` is `true`, the corner radius is half the track height. `block` mode is fixed at 32×32. Omitted means `medium`."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "value"
+      ]
+    },
+    "ElapsedTime": {
+      "type": "object",
+      "description": "Elapsed-time counter.",
+      "properties": {
+        "component": {
+          "const": "ElapsedTime",
+          "description": "Public component type identifier."
+        },
+        "startTime": {
+          "type": "number",
+          "description": "Start timestamp in milliseconds. When omitted, 0 is passed to the renderer. Set an explicit timestamp when a definite start is required rather than relying on host handling of 0."
+        },
+        "prefix": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Left text. If omitted, no prefix text is shown."
+        },
+        "suffix": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Text on the right. If omitted, no suffix text is shown."
+        },
+        "gravity": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "description": "Alignment. Omitted means `left`."
+        },
+        "textStyleType": {
+          "type": "string",
+          "description": "Text style category. The current DingTalk implementation always uses `Standard`; setting this field does not switch to custom styling."
+        },
+        "textStyle": {
+          "type": "string",
+          "description": "Text style preset. The current DingTalk implementation always uses `paragraph`, regardless of this field."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component"
+      ]
+    },
+    "Countdown": {
+      "type": "object",
+      "description": "Countdown and end event.",
+      "properties": {
+        "component": {
+          "const": "Countdown",
+          "description": "Public component type identifier."
+        },
+        "endTime": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "The Unix millisecond timestamp of the countdown target moment. Literals, DataBinding evaluation results, and FunctionCall return values must all be JSON numbers; numeric strings or ISO 8601 date-time strings are not accepted."
+        },
+        "prefix": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Text on the left side of the countdown. If omitted, no prefix text is shown."
+        },
+        "suffix": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Text on the right side of the countdown. If omitted, no suffix text is shown."
+        },
+        "gravity": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "description": "Alignment (left/center/right). Omitted means `left`."
+        },
+        "textStyleType": {
+          "type": "string",
+          "description": "Text style category. The current DingTalk implementation always uses `Standard`; setting this field does not switch to custom styling."
+        },
+        "textStyle": {
+          "type": "string",
+          "description": "Text style preset. The current DingTalk implementation always uses `paragraph`, regardless of this field."
+        },
+        "onComplete": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Action triggered when countdown reaches zero."
+        },
+        "onTap": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Action executed when the component is clicked; only effective if the component declares click capability."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "endTime"
+      ]
+    },
+    "Video": {
+      "type": "object",
+      "description": "Cover, inline playback, and control bar. The current implementation disables autoplay and looping, enables inline playback and controls, and configures a 16:9 poster area with corner radius 6. These settings are determined by the renderer implementation.",
+      "properties": {
+        "component": {
+          "const": "Video",
+          "description": "Component type identification field."
+        },
+        "url": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The URL of the video to display."
+        },
+        "posterUrl": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The URL of the poster image to display before the video plays. If omitted, no custom poster URL is supplied; poster display is handled by the player."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "url"
+      ]
+    },
+    "AudioPlayer": {
+      "type": "object",
+      "description": "Audio cover, title, and playback progress.",
+      "properties": {
+        "component": {
+          "const": "AudioPlayer",
+          "description": "Component type identification field."
+        },
+        "url": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The URL of the audio to be played."
+        },
+        "coverUrl": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Cover image URL. Both PC and mobile render it: `AudioWidget` places it to the left of the player on PC, while the rich-text audio node renders it on mobile. If omitted, the player shows no cover image."
+        },
+        "description": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "A description of the audio, such as a title or summary. If omitted, no custom title is supplied."
+        },
+        "artist": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Artist / Source attribution, displayed on the side of the title. Together with `description`, it forms the text area of the player; if not configured, this line will not be displayed."
+        },
+        "weight": {
+          "type": "number",
+          "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "url"
+      ]
+    },
+    "File": {
+      "type": "object",
+      "description": "File artifact. Its icon is derived from the file type; clicking the row opens the file, and a separate open button appears at the end of the row.",
+      "properties": {
+        "component": {
+          "const": "File",
+          "description": "Public component type identifier."
+        },
+        "fileName": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "The display file name with a suffix, which is also the only input for the renderer to automatically recognize the file icon and type."
+        },
+        "url": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "File download URL. May be an authenticated absolute URL or a relative URL resolvable by the current application."
+        },
+        "mimeType": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Optional MIME type used only for supplementary information and open behavior; it does not affect file-icon selection."
+        },
+        "size": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Optional file size, in bytes; the renderer is responsible for formatting it as KB, MB, or GB. If omitted, no file size is displayed."
+        },
+        "description": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Optional supplementary information, such as file source, generation status, or version. If omitted, auxiliary text is generated from file size and type; without a size, only the type is shown."
+        },
+        "previewUrl": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicString",
+          "description": "Online-preview page URL. When provided, clicking the row opens this URL; otherwise it falls back to `url`. Its semantics differ from `url`, which identifies the file itself. The download button at the end of the row **always** uses `url` and is unaffected by this field."
+        },
+        "onPreview": {
+          "$ref": "./common-types-basic.json#/$defs/Action",
+          "description": "Triggered when the row is clicked. ⚠️ Uses a two-step **open first, then report on success** flow: the renderer first opens `previewUrl`, or `url` when `previewUrl` is omitted, and sends the event to the agent only after the open succeeds. If the file cannot be opened, no event is reported. Therefore, **there is no need** to wait for an `openLink` response from the agent; navigation is immediate. If omitted, the row has no click action."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "fileName",
+        "url"
+      ]
+    },
+    "ImageCarousel": {
+      "type": "object",
+      "description": "DingTalk image carousel component.",
+      "properties": {
+        "component": {
+          "const": "ImageCarousel",
+          "description": "Public component type identifier."
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "Carousel image URL."
+              },
+              "linkUrl": {
+                "type": "string",
+                "description": "Optional URL opened when the carousel item is clicked."
+              },
+              "title": {
+                "type": "string",
+                "description": "Uses the type and constraints defined by the corresponding catalog Schema."
+              },
+              "description": {
+                "type": "string",
+                "description": "Uses the type and constraints defined by the corresponding catalog Schema."
+              }
+            },
+            "required": [
+              "url"
+            ]
+          },
+          "description": "Carousel item. `url` is required; `linkUrl`, title, and description are optional."
+        },
+        "cornerRadius": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicNumber",
+          "description": "Corner radius in px; omitted means `12`. Desktop applies it to carousel images; mobile clips the image group with the outer container. Use a finite non-negative number; `0` gives square corners."
+        },
+        "autoplayIntervalMs": {
+          "type": "integer",
+          "description": "Auto-scroll interval in ms (0 = disabled). Omitted means 0, with automatic scrolling disabled."
+        },
+        "previewEnabled": {
+          "type": "boolean",
+          "description": "Whether clicking can open a preview; omitted means true. Preview is enabled only when a loadable image URL exists."
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "contain",
+            "cover",
+            "fill",
+            "none",
+            "scaleDown"
+          ],
+          "description": "Image scaling method, the vocabulary is consistent with CSS `object-fit` (`contain`/`scaleDown`/`none` → full display, `cover` → cropped to fill, `fill` → stretched to fill). **Only sent when explicitly provided**; values outside the vocabulary (including internal names like `fitCenter`/`fitXY`/`centerCrop`) will be silently reverted to the default."
+        },
+        "weight": {
+          "type": "number",
+          "description": "Flex layout weight (used to allocate space proportionally)."
+        },
+        "fallbackMarkdown": {
+          "type": "string",
+          "description": "Markdown fallback content used when the current renderer cannot render the component."
+        },
+        "visible": {
+          "$ref": "./common-types-basic.json#/$defs/DynamicBoolean",
+          "description": "Visibility control (boolean expression or literal)."
+        }
+      },
+      "required": [
+        "component",
+        "items"
+      ]
+    }
+  },
+  "functions": {},
+  "$defs": {
+    "anyComponent": {
+      "oneOf": [
+        {
+          "$ref": "./catalog-components-specialized.json#/components/AudioPlayer"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/Avatar"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/AvatarGroup"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/Chart"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/Countdown"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/ElapsedTime"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/File"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/ImageCarousel"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/ImageList"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/ProgressBar"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/Table"
+        },
+        {
+          "$ref": "./catalog-components-specialized.json#/components/Video"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "component"
+      }
+    },
+    "anyFunction": false
+  }
+}

@@ -324,6 +324,13 @@ install_authority_const_params_registry() {
   mkdir -p "$worktree/$(dirname "$CONST_PARAMS_REGISTRY_REL")"
   rm -f "$worktree/$CONST_PARAMS_REGISTRY_REL"
   cp "$source_root/$CONST_PARAMS_REGISTRY_REL" "$worktree/$CONST_PARAMS_REGISTRY_REL"
+  # interface_const_params.go imports commandstore; overlay the package onto
+  # historical worktrees or `go run` fails with "no required module provides".
+  if [ -d "$source_root/internal/corecmd/commandstore" ]; then
+    rm -rf "$worktree/internal/corecmd/commandstore"
+    mkdir -p "$worktree/internal/corecmd/commandstore"
+    cp -R "$source_root/internal/corecmd/commandstore/." "$worktree/internal/corecmd/commandstore/"
+  fi
 }
 
 EMPTY_MANIFEST="$TMP_ROOT/empty-migrations.json"

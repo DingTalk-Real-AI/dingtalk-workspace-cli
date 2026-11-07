@@ -17,9 +17,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 var connectStreamCommandContext = exec.CommandContext
@@ -53,10 +55,15 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	}
 	ctx, cancel := applyTimeout(ctx, f.timeout)
 	defer cancel()
+	producedOutput := false
 
 	run := func() (string, string, error) {
+		tools := agentToolProgress{emit: agentProgressSink(ctx)}
+		var toolErr error
+		defer func() { tools.finish(agentToolEndStatus(ctx, toolErr)) }()
 		args := f.commandArgs(f.streamArgv, convID, text)
 		cmd := connectStreamCommandContext(ctx, f.streamArgv[0], args...)
+		cmd.WaitDelay = time.Second
 		f.configureCommand(cmd)
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -70,6 +77,7 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 
 		var acc strings.Builder // accumulated visible text ("cc" deltas / "qoder" turns)
 		finalText := ""
+		var resultErr error
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for scanner.Scan() {
@@ -77,30 +85,44 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 			if line == "" || !strings.HasPrefix(line, "{") {
 				continue
 			}
+			tools.handleJSON(line)
+			var result struct {
+				Type, Subtype string
+				IsError       bool `json:"is_error"`
+			}
+			if json.Unmarshal([]byte(line), &result) == nil && result.Type == "result" {
+				producedOutput = true
+				if result.IsError || strings.HasPrefix(result.Subtype, "error") {
+					resultErr = errors.New("agent_result_failed")
+				}
+			}
 			delta, final := parseStreamLine(f.parser, line)
 			if delta != "" {
+				producedOutput = true
 				acc.WriteString(delta)
 				onDelta(brandReply(f.name, acc.String()))
 			}
 			if final != "" {
+				producedOutput = true
 				finalText = final
 			}
 		}
+		scanErr := scanner.Err()
+		if scanErr != nil {
+			// 不完整的帧不能作为成功回复；关闭读取端，避免子进程继续写满管道后阻塞 Wait。
+			_ = stdout.Close()
+			_ = cmd.Process.Kill()
+		}
 		waitErr := cmd.Wait()
-
-		if finalText == "" {
-			finalText = strings.TrimSpace(acc.String())
+		toolErr = waitErr
+		if scanErr != nil {
+			toolErr = scanErr
+			return "", scanErr.Error(), scanErr
 		}
-		// A bare backend error (e.g. claude's "API Error: 4xx ...") must not be
-		// forwarded as the answer (issue #14): return an actionable hint instead.
-		if agentReplyIsError(finalText) {
-			if f.hasSession(convID) {
-				f.sessions.reset(convID)
-			}
-			return agentBackendErrorReply(finalText), "", nil
-		}
-		if finalText != "" {
-			return brandReply(f.name, finalText), "", nil
+		// stdout 已有正文不代表执行成功；超时和非零退出始终优先。
+		if ctx.Err() != nil {
+			toolErr = ctx.Err()
+			return "", toolErr.Error(), toolErr
 		}
 		if waitErr != nil {
 			msg := waitErr.Error()
@@ -109,6 +131,26 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 			}
 			return "", msg, waitErr
 		}
+		if resultErr != nil {
+			toolErr = resultErr
+			return "", resultErr.Error(), resultErr
+		}
+
+		if finalText == "" {
+			finalText = strings.TrimSpace(acc.String())
+		}
+		// A bare backend error (e.g. claude's "API Error: 4xx ...") must not be
+		// forwarded as the answer (issue #14): return an actionable hint instead.
+		if agentReplyIsError(finalText) {
+			tools.finish("failed")
+			if f.hasSession(convID) {
+				f.sessions.reset(convID)
+			}
+			return agentBackendErrorReply(finalText), "", nil
+		}
+		if finalText != "" {
+			return brandReply(f.name, finalText), "", nil
+		}
 		return "（本地 agent 无文本输出）", "", nil
 	}
 
@@ -116,7 +158,7 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	if err == nil {
 		return reply, nil
 	}
-	if f.hasSession(convID) && agentSessionMissingError(msg) {
+	if !producedOutput && ctx.Err() == nil && f.hasSession(convID) && agentSessionMissingError(msg) {
 		f.sessions.reset(convID)
 		reply, msg, err = run()
 		if err == nil {
@@ -126,7 +168,7 @@ func (f *execForwarder) forwardStream(ctx context.Context, convID, text string, 
 	if f.hasSession(convID) {
 		f.sessions.reset(convID)
 	}
-	return "", fmt.Errorf("本地 %s agent 调用失败：%s", f.name, truncateRunes(msg, 300))
+	return "", fmt.Errorf("本地 %s agent 调用失败：%s: %w", f.name, truncateRunes(msg, 300), err)
 }
 
 // parseStreamLine extracts (visible-text delta, final text) from one JSONL

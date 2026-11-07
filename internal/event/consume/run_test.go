@@ -420,6 +420,9 @@ func TestRun_ReadyMarkerContract(t *testing.T) {
 	if !strings.Contains(stderr.String(), "[event] ready event_key=im.message.receive_v1") {
 		t.Errorf("missing ready marker with event_key:\n%s", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), `[event] transport {"state":"unknown","source":"unknown","reconnect_count":0}`) {
+		t.Errorf("未观测的测试源必须明确报告 unknown:\n%s", stderr.String())
+	}
 	// T1b: ready is on stderr, the event is on stdout — the ready line is
 	// emitted before Deliver writes the first stdout line. Assert stdout
 	// got exactly the event and stderr got ready before exited.

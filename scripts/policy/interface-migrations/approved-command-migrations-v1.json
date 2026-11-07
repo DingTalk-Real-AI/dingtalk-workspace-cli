@@ -2,6 +2,27 @@
   "version": 1,
   "migrations": [
     {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat +active-conversations",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat +recent-conversations",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.shortcut_active_conversations",
+        "replacement_tool_id": "chat.shortcut_active_conversations",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Make recent-conversations the public time-window query entry while retaining active-conversations as a hidden executable compatibility command without deprecation warnings; preserve the stable Schema tool identity and do not rename parameters."
+    },
+    {
       "kind": "flag_extraction",
       "legacy": {
         "command": "dws chat group create",
@@ -9,7 +30,7 @@
         "after": {"present": true, "runnable": true}
       },
       "replacement": {
-        "command": "dws chat topic create",
+        "command": "dws chat thread create-group",
         "before": {"present": false},
         "after": {"present": true, "runnable": true}
       },
@@ -21,7 +42,7 @@
       "schema": {
         "product_id": "chat",
         "source_tool_id": "chat.create_group_conversation",
-        "replacement_tool_id": "chat.create_topic_conversation",
+        "replacement_tool_id": "chat.create_thread_group",
         "parameters": [
           {"from": "name", "to": "name"},
           {"from": "type", "to": "type"},
@@ -35,8 +56,8 @@
           }
         ]
       },
-      "state": "pending",
-      "reason": "Move topic-conversation creation to the dedicated chat topic command while retaining the legacy --thread execution path."
+      "state": "consumed",
+      "reason": "Move Thread-group creation to the dedicated chat thread command while retaining the legacy --thread execution path."
     },
     {
       "kind": "command_move",
@@ -46,7 +67,7 @@
         "after": {"present": true, "runnable": true, "hidden": true}
       },
       "replacement": {
-        "command": "dws chat topic list-replies",
+        "command": "dws chat thread list-replies",
         "before": {"present": false},
         "after": {"present": true, "runnable": true}
       },
@@ -54,13 +75,10 @@
         "product_id": "chat",
         "source_tool_id": "chat.list_topic_replies",
         "replacement_tool_id": "chat.list_topic_replies",
-        "parameters": [
-          {"from": "conversation-id", "to": "open-topic-id"},
-          {"from": "topic-id", "to": "open-conv-thread-id"}
-        ]
+        "parameters": []
       },
-      "state": "pending",
-      "reason": "Move topic reply listing from chat message to the dedicated chat topic command while preserving the legacy executable command."
+      "state": "consumed",
+      "reason": "Move Thread reply listing from chat message to the dedicated chat thread command while preserving the legacy executable command."
     },
     {
       "kind": "command_move",
@@ -70,7 +88,7 @@
         "after": {"present": true, "runnable": true, "hidden": true}
       },
       "replacement": {
-        "command": "dws chat topic forward",
+        "command": "dws chat thread forward",
         "before": {"present": false},
         "after": {"present": true, "runnable": true}
       },
@@ -78,14 +96,217 @@
         "product_id": "chat",
         "source_tool_id": "chat.forward_topic",
         "replacement_tool_id": "chat.forward_topic",
-        "parameters": [
-          {"from": "src-conversation-id", "to": "src-open-topic-id"},
-          {"from": "src-thread-id", "to": "src-open-conv-thread-id"},
-          {"from": "dest-conversation-id", "to": "dest-open-conversation-id"}
-        ]
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Move Thread forwarding from chat message to the dedicated chat thread command while preserving the legacy executable command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws chat thread promote",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.promote_message_to_thread",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire chat thread promote from Agent Schema and public help while preserving a hidden historical argv command that fails closed with send/reply alternatives."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +event-list",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_event_list",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
       },
       "state": "pending",
-      "reason": "Move topic forwarding from chat message to the dedicated chat topic command while preserving the legacy executable command."
+      "reason": "Fail closed until event-list proves authoritative terminal pagination for both non-empty and zero-result live fixtures."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-add",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_add",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact role readback and rollback for member addition."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-remove",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_remove",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact removal readback and restoration."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review benefit",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_benefit",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review benefit from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_create",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review create from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review analysis",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_analysis",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review analysis from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review result",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_result",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "consumed",
+      "reason": "Retire legacy contract review result from Agent Schema and public help while keeping a hidden historical argv compatibility command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contact user get-by-dingtalk-id",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "contact",
+        "source_tool_id": "contact.get_user_id_by_dingtalk_id",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Retire legacy contact user get-by-dingtalk-id from Agent Schema and public help while keeping a hidden historical argv compatibility command that fails closed with aisearch person / search-mobile / get-by-open-dingtalk-id alternatives."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key create",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.create_sql_sheet_api_key",
+        "replacement_tool_id": "aitable.create_sql_sheet_api_key",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key creation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key list",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key list",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.list_sql_sheet_api_keys",
+        "replacement_tool_id": "aitable.list_sql_sheet_api_keys",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key listing to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws aitable api-key revoke",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws aitable supabase api-key revoke",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "aitable",
+        "source_tool_id": "aitable.revoke_sql_sheet_api_key",
+        "replacement_tool_id": "aitable.revoke_sql_sheet_api_key",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Scope SQL Sheet API Key revocation to the Supabase-compatible interface while retaining the legacy executable command without deprecation warnings; preserve the stable Schema tool identity and parameters."
     }
   ]
 }

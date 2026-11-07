@@ -14,6 +14,12 @@ func newDevdocCommand() *cobra.Command {
 	// products.devdoc). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "devdoc",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("开放平台文档搜索指南", "dingtalk-misc", "references/devdoc.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "搜索钉钉开放平台开发文档与错误排查资料",
 			UseWhen: []string{
@@ -24,14 +30,14 @@ func newDevdocCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "devdoc",
 		Short: "开放平台文档搜索",
 		Long:  `搜索钉钉开放平台开发文档。默认以表格格式输出（标题、URL），使用 -f json 获取原始 JSON。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	articleCmd := &cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE}
+	articleCmd := newGroupCommand(&cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE})
 	articleCmd.AddCommand(newDevdocArticleSearchCommand())
 	root.AddCommand(articleCmd)
 	root.AddCommand(hintSubCmd("search", "use: dws devdoc article search --query <关键词>"))

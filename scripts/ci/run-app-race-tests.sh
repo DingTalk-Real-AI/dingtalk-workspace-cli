@@ -7,23 +7,89 @@ usage() {
 	printf '%s\n' \
 		"usage: $0 verify <app-package>" \
 		"       $0 run <app-package> [partition]" \
-		"       $0 list-partitions" >&2
+		"       $0 run-lane <app-package> <lane>" \
+		"       $0 coverage <app-package> <output-profile> [partition]" \
+		"       $0 list-partitions" \
+		"       $0 list-lanes" \
+		"       $0 list-lane-partitions <lane>" >&2
 	exit 2
 }
 
-# Single source of truth for the partition set. CI runs one job per partition and
-# pins its shard names to this list, so a name that appears here without a
-# dispatch entry below fails closed rather than silently skipping tests.
-APP_PARTITIONS='schema a-b c-a-l c-m-r c-s-z c-other d-r s-z-example-fuzz'
+# Single source of truth for the logical partition set. CI keeps each partition
+# in a fresh Go test process, but balances them across three physical jobs so a
+# full-suite PR does not reserve nine hosted-runner slots for internal/app.
+APP_PARTITIONS='schema a-b c-a-l c-m-o c-p-r c-s-z c-other d-r s-z-example-fuzz'
+APP_LANES='lane-1 lane-2 lane-3'
+
+app_lane_partitions() {
+	case "$1" in
+		lane-1) printf '%s\n' 'c-a-l schema' ;;
+		lane-2) printf '%s\n' 'c-p-r c-m-o c-s-z' ;;
+		lane-3) printf '%s\n' 'd-r a-b c-other s-z-example-fuzz' ;;
+		*)
+			printf 'unknown app race lane: %s\n' "$1" >&2
+			return 1
+			;;
+	esac
+}
+
+# Fail closed if the lane map drops, duplicates, or invents a logical
+# partition. The Go workflow contract independently pins both matrices to the
+# same lane list.
+assigned_lane_partitions=''
+for lane_name in $APP_LANES; do
+	for lane_partition in $(app_lane_partitions "$lane_name"); do
+		case " $APP_PARTITIONS " in
+			*" $lane_partition "*) ;;
+			*)
+				printf 'app race lane %s references unknown partition %s\n' \
+					"$lane_name" "$lane_partition" >&2
+				exit 1
+				;;
+		esac
+		case " $assigned_lane_partitions " in
+			*" $lane_partition "*)
+				printf 'app race partition %s is assigned to more than one lane\n' \
+					"$lane_partition" >&2
+				exit 1
+				;;
+		esac
+		assigned_lane_partitions="$assigned_lane_partitions $lane_partition"
+	done
+done
+for lane_partition in $APP_PARTITIONS; do
+	case " $assigned_lane_partitions " in
+		*" $lane_partition "*) ;;
+		*)
+			printf 'app race partition %s is not assigned to a lane\n' \
+				"$lane_partition" >&2
+			exit 1
+			;;
+	esac
+done
 
 mode="${1:-}"
 partition=""
+lane=""
+coverage_output=""
 case "$mode" in
 	list-partitions)
 		[ "$#" -eq 1 ] || usage
 		for name in $APP_PARTITIONS; do
 			printf '%s\n' "$name"
 		done
+		exit 0
+		;;
+	list-lanes)
+		[ "$#" -eq 1 ] || usage
+		for name in $APP_LANES; do
+			printf '%s\n' "$name"
+		done
+		exit 0
+		;;
+	list-lane-partitions)
+		[ "$#" -eq 2 ] || usage
+		app_lane_partitions "$2"
 		exit 0
 		;;
 	verify)
@@ -35,6 +101,20 @@ case "$mode" in
 		app_package="$2"
 		partition="${3:-}"
 		;;
+	run-lane)
+		[ "$#" -eq 3 ] || usage
+		app_package="$2"
+		lane="$3"
+		;;
+	coverage)
+		[ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
+		app_package="$2"
+		case "$3" in
+			/*) coverage_output="$3" ;;
+			*) coverage_output="$(pwd)/$3" ;;
+		esac
+		partition="${4:-}"
+		;;
 	*) usage ;;
 esac
 
@@ -45,6 +125,7 @@ tests="$workdir/tests"
 duplicates="$workdir/duplicates"
 list_output="$workdir/list-output"
 
+ROOT="${DWS_APP_TEST_ROOT:-$ROOT}"
 cd "$ROOT"
 if ! go test "$app_package" -list '^(Test|Example|Fuzz)' > "$list_output"; then
 	printf 'app race partition discovery failed for %s\n' "$app_package" >&2
@@ -67,7 +148,8 @@ fi
 schema_count=0
 ab_count=0
 cal_count=0
-cmr_count=0
+cmo_count=0
+cpr_count=0
 csz_count=0
 cother_count=0
 dr_count=0
@@ -79,7 +161,8 @@ while IFS= read -r test_name; do
 		Test*Schema*) schema_count=$((schema_count + 1)) ;;
 		Test[A-B]*) ab_count=$((ab_count + 1)) ;;
 		TestCrossPlatformCoverage[A-L]*) cal_count=$((cal_count + 1)) ;;
-		TestCrossPlatformCoverage[M-R]*) cmr_count=$((cmr_count + 1)) ;;
+		TestCrossPlatformCoverage[M-O]*) cmo_count=$((cmo_count + 1)) ;;
+		TestCrossPlatformCoverage[P-R]*) cpr_count=$((cpr_count + 1)) ;;
 		TestCrossPlatformCoverage[S-Z]*) csz_count=$((csz_count + 1)) ;;
 		TestC*) cother_count=$((cother_count + 1)) ;;
 		Test[D-R]*) dr_count=$((dr_count + 1)) ;;
@@ -103,7 +186,8 @@ for spec in \
 	"schema:$schema_count" \
 	"a-b:$ab_count" \
 	"c-a-l:$cal_count" \
-	"c-m-r:$cmr_count" \
+	"c-m-o:$cmo_count" \
+	"c-p-r:$cpr_count" \
 	"c-s-z:$csz_count" \
 	"c-other:$cother_count" \
 	"d-r:$dr_count" \
@@ -142,14 +226,14 @@ for name in $classified; do
 done
 
 total_count="$(wc -l < "$tests" | tr -d ' ')"
-assigned_count=$((schema_count + ab_count + cal_count + cmr_count + csz_count + cother_count + dr_count + sz_count))
+assigned_count=$((schema_count + ab_count + cal_count + cmo_count + cpr_count + csz_count + cother_count + dr_count + sz_count))
 if [ "$assigned_count" -ne "$total_count" ]; then
 	printf 'app race partitions assigned %s tests, want %s\n' "$assigned_count" "$total_count" >&2
 	exit 1
 fi
 
-printf 'app race partitions cover %s top-level tests exactly once: schema=%s a-b=%s c-a-l=%s c-m-r=%s c-s-z=%s c-other=%s d-r=%s s-z-example-fuzz=%s\n' \
-	"$total_count" "$schema_count" "$ab_count" "$cal_count" "$cmr_count" "$csz_count" "$cother_count" "$dr_count" "$sz_count"
+printf 'app race partitions cover %s top-level tests exactly once: schema=%s a-b=%s c-a-l=%s c-m-o=%s c-p-r=%s c-s-z=%s c-other=%s d-r=%s s-z-example-fuzz=%s\n' \
+	"$total_count" "$schema_count" "$ab_count" "$cal_count" "$cmo_count" "$cpr_count" "$csz_count" "$cother_count" "$dr_count" "$sz_count"
 
 if [ "$mode" = "verify" ]; then
 	exit 0
@@ -172,6 +256,12 @@ run_partition() {
 			;;
 	esac
 
+	coverage_profile=""
+	if [ "$mode" = coverage ]; then
+		instrumentation=no-race
+		coverage_profile="$workdir/coverage-app-$name.txt"
+	fi
+
 	printf 'running internal/app %s partition %s\n' "$instrumentation" "$name"
 	set -- -v -count=1 -timeout=15m -run "$run_pattern"
 	if [ -n "$skip_pattern" ]; then
@@ -179,6 +269,9 @@ run_partition() {
 	fi
 	if [ "$instrumentation" = race ]; then
 		set -- -race "$@"
+	fi
+	if [ -n "$coverage_profile" ]; then
+		set -- "$@" -coverprofile="$coverage_profile" -covermode=atomic
 	fi
 	go test "$@" "$app_package"
 }
@@ -199,16 +292,18 @@ run_partition() {
 # (26s -> 291s locally, 357s in CI) without being able to report anything.
 schema_pattern='^Test.*Schema'
 
-# Dispatch table for the partition set declared in APP_PARTITIONS. CI passes one
-# partition per job so they run concurrently; running without a partition keeps
-# the original end-to-end behaviour for local use and for any caller that wants
-# the whole package in one invocation.
+# Dispatch table for the partition set declared in APP_PARTITIONS. Every call
+# starts a fresh Go test process. CI runs several calls sequentially inside one
+# balanced lane, preserving process isolation while bounding physical fan-out.
+# Running without a partition keeps the original end-to-end behaviour for local
+# use and for any caller that wants the whole package in one invocation.
 run_named_partition() {
 	case "$1" in
 		schema) run_partition schema no-race "$schema_pattern" ;;
 		a-b) run_partition a-b race '^Test[A-B]' "$schema_pattern" ;;
 		c-a-l) run_partition c-a-l race '^TestCrossPlatformCoverage[A-L]' "$schema_pattern" ;;
-		c-m-r) run_partition c-m-r race '^TestCrossPlatformCoverage[M-R]' "$schema_pattern" ;;
+		c-m-o) run_partition c-m-o race '^TestCrossPlatformCoverage[M-O]' "$schema_pattern" ;;
+		c-p-r) run_partition c-p-r race '^TestCrossPlatformCoverage[P-R]' "$schema_pattern" ;;
 		c-s-z) run_partition c-s-z race '^TestCrossPlatformCoverage[S-Z]' "$schema_pattern" ;;
 		c-other) run_partition c-other race '^TestC' '^Test.*Schema|^TestCrossPlatformCoverage' ;;
 		d-r) run_partition d-r race '^Test[D-R]' "$schema_pattern" ;;
@@ -224,6 +319,27 @@ run_named_partition() {
 
 if [ -n "$partition" ]; then
 	run_named_partition "$partition"
+	if [ "$mode" = coverage ]; then
+		"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/merge-coverage-profiles.sh" \
+			"$coverage_output" "$workdir/coverage-app-$partition.txt"
+	fi
+	exit 0
+fi
+
+if [ -n "$lane" ]; then
+	for name in $(app_lane_partitions "$lane"); do
+		run_named_partition "$name"
+	done
+	exit 0
+fi
+
+if [ "$mode" = coverage ]; then
+	for name in $APP_PARTITIONS; do
+		run_named_partition "$name"
+	done
+	# shellcheck disable=SC2086
+	"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/merge-coverage-profiles.sh" \
+		"$coverage_output" "$workdir"/coverage-app-*.txt
 	exit 0
 fi
 

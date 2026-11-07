@@ -59,6 +59,10 @@ type monoMultiQAContract struct {
 		Disposition string `yaml:"disposition"`
 		Reason      string `yaml:"reason"`
 	} `yaml:"orphan_scripts_allowlist"`
+	RetiredScripts []struct {
+		Path   string `yaml:"path"`
+		Reason string `yaml:"reason"`
+	} `yaml:"retired_scripts"`
 	SkillsWithoutReferencesAllowlist []string `yaml:"skills_without_references_allowlist"`
 }
 
@@ -96,6 +100,97 @@ func loadMonoMultiQAContract(t *testing.T) (string, monoMultiQAContract) {
 		t.Fatalf("unsupported schema_version %d", c.SchemaVersion)
 	}
 	return root, c
+}
+
+func TestMonoMultiSkillContentAITableHostDeliveryBoundary(t *testing.T) {
+	root := repoRoot(t)
+	for _, tt := range []struct {
+		path    string
+		heading string
+	}{
+		{"skills/mono/SKILL.md", "## 严格要求 (MUST DO)"},
+		{"skills/multi/dingtalk-aitable/SKILL.md", "## 过程展示建议"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(root, tt.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(data), tt.heading+"\n")
+			if !ok {
+				t.Fatalf("main Skill is missing %q", tt.heading)
+			}
+			section, _, _ = strings.Cut(section, "\n## ")
+			for _, required := range []string{
+				"业务核验与宿主交付分别判断",
+				"最终产物",
+				"普通链接不替代规定的登记",
+				"工具不可用或状态未确认",
+				"分别说明当前已知的业务核验、登记与展示状态",
+				"不因此重放业务写入",
+				"无需重复对象或链接清单",
+			} {
+				if !strings.Contains(section, required) {
+					t.Errorf("%s must publish %q in %s without loading references", tt.path, required, tt.heading)
+				}
+			}
+			if strings.Contains(section, "show_link") {
+				t.Error("main Skill must leave host tool names to the host")
+			}
+			if tt.path == "skills/mono/SKILL.md" {
+				for _, required := range []string{
+					"规定工具和成功条件",
+					"只读及明确不展示要求按宿主适用范围处理",
+					"不重复登记已成功交付的对象",
+				} {
+					if !strings.Contains(section, required) {
+						t.Errorf("Mono MUST DO is missing %q", required)
+					}
+				}
+				if !strings.Contains(string(data), "不预加载完整产品参考文件") {
+					t.Error("Mono must retain progressive reference loading")
+				}
+			}
+		})
+	}
+}
+
+func TestMonoMultiSkillContentAITableReceiptStatusBoundary(t *testing.T) {
+	root := repoRoot(t)
+	for _, tt := range []struct {
+		path    string
+		heading string
+	}{
+		{"skills/mono/SKILL.md", "## 严格要求 (MUST DO)"},
+		{"skills/multi/dingtalk-aitable/SKILL.md", "## 过程展示建议"},
+		{"skills/mono/references/products/aitable.md", "## 过程展示建议"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(root, tt.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(data), tt.heading+"\n")
+			if !ok {
+				t.Fatalf("missing %q", tt.heading)
+			}
+			section, _, _ = strings.Cut(section, "\n## ")
+			for _, required := range []string{
+				"明确的合成演练或回执转述",
+				"准备性 Schema 查询不将其转为契约评审",
+				"按给定回执的字段语义转述",
+				"不以本 Agent 是否亲自执行或独立读回改写该字段",
+				"纯 JSON 也保持指定字段语义",
+				"转述不等于真实实跑或独立核验",
+				"真实写入仍须按结果契约读回",
+				"缺失或 pending/unknown 的状态不得擅自提升为 verified",
+			} {
+				if !strings.Contains(section, required) {
+					t.Errorf("%s must publish receipt provenance boundary %q in %s", tt.path, required, tt.heading)
+				}
+			}
+		})
+	}
 }
 
 func TestMonoMultiSkillContentG1Shape(t *testing.T) {
@@ -361,6 +456,9 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 			}
 			relSlash := filepath.ToSlash(rel)
 			base := filepath.Base(path)
+			if (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) && strings.HasSuffix(base, ".py") {
+				return nil
+			}
 			if strings.Contains(blob, base) || strings.Contains(blob, relSlash) {
 				return nil
 			}
@@ -378,6 +476,27 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 		full := filepath.Join(multiRoot, filepath.FromSlash(path))
 		if _, err := os.Stat(full); err != nil {
 			t.Errorf("G4: orphan allowlist path missing on disk: %s", path)
+		}
+	}
+
+	retired := map[string]bool{}
+	for _, row := range c.RetiredScripts {
+		path := filepath.ToSlash(filepath.Clean(row.Path))
+		if row.Path == "" || strings.TrimSpace(row.Reason) == "" {
+			t.Fatalf("G4: retired_scripts requires path and reason: %+v", row)
+		}
+		if filepath.IsAbs(row.Path) || path == "." || path == ".." || strings.HasPrefix(path, "../") {
+			t.Fatalf("G4: invalid retired script path %q", row.Path)
+		}
+		if retired[path] {
+			t.Fatalf("G4: duplicate retired script path %q", path)
+		}
+		retired[path] = true
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if _, err := os.Stat(full); err == nil {
+			t.Errorf("G4: retired script was republished: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Errorf("G4: inspect retired script %s: %v", path, err)
 		}
 	}
 }

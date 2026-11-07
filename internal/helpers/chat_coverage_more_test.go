@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -453,7 +454,11 @@ func TestCrossPlatformCoverageChatBotRichMediaCoverage(t *testing.T) {
 
 	t.Run("group Markdown reference reply", func(t *testing.T) {
 		const senderOpenDingTalkID = "DAAAAAAAAAAAiE"
-		caller := &scriptedToolCaller{}
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"openMessageId":"message-id","openConversationId":"group"}]}`},
+			{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"group","convThreadEnabled":false}}}`},
+			{text: `{}`},
+		}}
 		if err := runChatCoverageCommand(t, caller,
 			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
 			"--reply", "message-id", "--ref-sender", senderOpenDingTalkID,
@@ -471,6 +476,8 @@ func TestCrossPlatformCoverageChatBotRichMediaCoverage(t *testing.T) {
 
 	t.Run("group reference reply resolves sender user ID", func(t *testing.T) {
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"openMessageId":"message-id","openConversationId":"group"}]}`},
+			{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"group","convThreadEnabled":false}}}`},
 			{text: `{"result":[{"userId":"sender-user","openDingTalkId":"D-sender"}]}`},
 			{text: `{}`},
 		}}
@@ -619,8 +626,8 @@ func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {
 		remove []string
 		steps  []scriptedToolStep
 	}{
-		{"owner-open", []string{"D-owner"}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`}}},
-		{"other-open", []string{"D-other"}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`}}},
+		{"owner-open", []string{helperCurrentDOpenID}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`}}},
+		{"other-open", []string{helperCurrentDOpenID2}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`}}},
 		{"owner-user", []string{"u1"}, []scriptedToolStep{
 			{text: `{"result":{"hasMore":true,"nextCursor":"next","list":[]}}`},
 			{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`},
@@ -640,4 +647,64 @@ func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {
 	if owner, err := groupOwnerOpenDingTalkID(context.Background(), "group"); err != nil || owner != "" {
 		t.Fatalf("missing owner = %q, %v", owner, err)
 	}
+}
+
+func TestCrossPlatformCoverageChatCommandFinalBranches(t *testing.T) {
+	t.Run("chmod requires explicit confirmation", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		installScriptedCaller(t, caller)
+		root := newChatCommand()
+		installExampleGlobalFlags(root)
+		root.SilenceErrors = true
+		root.SilenceUsage = true
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"chmod", "chat.message:send", "--conversation-id", "cid"})
+		if err := corecmd.ExecuteContextForTest(root, context.Background()); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+			t.Fatalf("chmod without yes error = %v", err)
+		}
+	})
+
+	t.Run("cross org data auth validates target", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		installScriptedCaller(t, caller)
+		cmd := newChatFlagTestCommand()
+		if err := runChatCrossOrgDataAuth(cmd); err == nil {
+			t.Fatal("cross-org RunE without target should fail")
+		}
+	})
+
+	t.Run("remove members stops owner removal", func(t *testing.T) {
+		oldArgs := os.Args
+		os.Args = []string{"dws", "chat"}
+		t.Cleanup(func() { os.Args = oldArgs })
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`},
+		}}
+		installScriptedCaller(t, caller)
+		root := newChatCommand()
+		cmd, _, err := root.Find([]string{"group", "members", "remove"})
+		if err != nil || cmd == nil || cmd.RunE == nil {
+			t.Fatalf("find remove command = %#v, %v", cmd, err)
+		}
+		if err := cmd.Flags().Set("id", "group"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Flags().Set("users", helperCurrentDOpenID); err != nil {
+			t.Fatal(err)
+		}
+		// 该用例验证的是群主删除保护，而非确认门禁；先显式越过 user_required
+		// 确认门禁（#1097），才能到达 owner guard 分支。RunE 为直接调用，
+		// persistent flag 需在 root 上注册并置位（BoolFlag 跨 flagset 取值）。
+		if root.PersistentFlags().Lookup("yes") == nil {
+			root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
+		}
+		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
+			t.Fatal(err)
+		}
+		err = cmd.RunE(cmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "refusing to remove the group owner") {
+			t.Fatalf("remove owner error = %v", err)
+		}
+	})
 }

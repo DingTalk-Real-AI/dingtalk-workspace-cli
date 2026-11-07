@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package corecmd is the shared, dispatch-agnostic base for building leaf
-// commands. It concentrates flag registration, the alias/env/default effective
-// value fallback chain, required validation, cross-flag constraint declaration
-// checks + runtime enforcement, SafetySpec-driven confirmation, toolArgs
-// assembly, and Agent Runtime Schema projection.
+// Package corecmd is the shared, dispatch-agnostic base for building commands.
+// It concentrates typed group policy, flag registration, the alias/env/default
+// effective value fallback chain, required validation, cross-flag constraint
+// declaration checks + runtime enforcement, SafetySpec-driven confirmation,
+// toolArgs assembly, and Agent Runtime Schema projection.
 //
 // Declaration vs execution (framework rule):
 //
@@ -49,12 +49,18 @@ package corecmd
 
 import (
 	"bufio"
+	"bytes"
+	"context"
+	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -64,6 +70,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/wait"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
@@ -130,7 +137,9 @@ type FlagSpec struct {
 	// toolArgs still needs a fallback. For KindString it is used when the
 	// effective value is empty. For KindInt it is also the floor: when the
 	// resolved integer is < 1, ArgDefault is emitted instead (cursor page-size
-	// semantics).
+	// semantics). For KindBool it is emitted only when no declared flag name
+	// was provided; explicit true/false still wins, and presence constraints
+	// continue to count only Changed rather than this payload default.
 	ArgDefault string
 	// Bind is the toolArgs key; empty uses Name.
 	Bind string
@@ -189,8 +198,122 @@ const (
 type Constraint struct {
 	Kind  ConstraintKind
 	Flags []string
+	// PresenceOnly counts explicitly supplied flags, including empty strings
+	// used to clear values in a partial update. Defaults remain unchanged.
+	PresenceOnly bool
 	// Description, when non-empty, replaces the constraint's default help text.
 	Description string
+}
+
+// PositionalSpec declares one positional argument (declaration surface). The
+// framework validates arity and value, binds the parsed value into toolArgs,
+// and annotates the Runtime Schema positional (name/type/description/required).
+type PositionalSpec struct {
+	// Name is the Runtime Schema positional name (e.g. "app_id").
+	Name string
+	// Usage is the --help / Runtime Schema description.
+	Usage string
+	// Kind restricts the value type: empty/KindString keeps the raw string,
+	// KindInt requires a positive integer and binds int64.
+	Kind FlagKind
+	// Required rejects an empty effective value (after Trim).
+	Required bool
+	// Trim Space-trims the raw token before checks and binding.
+	Trim bool
+	// Bind is the toolArgs key; empty falls back to Name.
+	Bind string
+}
+
+// positionalBindKey is the toolArgs key for a positional.
+func positionalBindKey(p PositionalSpec) string {
+	if p.Bind != "" {
+		return p.Bind
+	}
+	return p.Name
+}
+
+// validatePositionalDecls rejects malformed positional declarations at build
+// time: unknown kinds, empty names, and bind-key collisions with flags or
+// ConstParams are programming errors.
+func validatePositionalDecls(spec Spec) {
+	if len(spec.Positionals) == 0 {
+		return
+	}
+	taken := map[string]bool{}
+	for _, flag := range spec.Flags {
+		taken[bindKey(flag)] = true
+	}
+	for key := range spec.ConstParams {
+		taken[key] = true
+	}
+	optionalSeen := false
+	for _, p := range spec.Positionals {
+		if strings.TrimSpace(p.Name) == "" {
+			panic(fmt.Sprintf("command %q declares a positional with an empty Name", spec.Use))
+		}
+		switch p.Kind {
+		case KindString, KindInt:
+		default:
+			panic(fmt.Sprintf("command %q positional %q: only KindString/KindInt are supported", spec.Use, p.Name))
+		}
+		// 可选位置参数只允许出现在尾部：省略参数时 Cobra 按 RangeArgs 校验，
+		// 前置可选会让必填/可选边界无法从 arity 推断。
+		if p.Required && optionalSeen {
+			panic(fmt.Sprintf("command %q positional %q: required positional cannot follow an optional one (only trailing positionals may be optional)", spec.Use, p.Name))
+		}
+		if !p.Required {
+			optionalSeen = true
+		}
+		key := positionalBindKey(p)
+		if taken[key] {
+			panic(fmt.Sprintf("command %q positional %q bind key %q conflicts with a flag/ConstParams key", spec.Use, p.Name, key))
+		}
+		taken[key] = true
+	}
+}
+
+// buildPositionalArgs validates and binds positional tokens into toolArgs.
+// KindInt requires a positive integer (>= 1) and binds int64 so large IDs keep
+// their JSON representation; Required string positionals reject empty values.
+// An optional positional explicitly passed as an empty token (after Trim) is
+// treated the same as omitted and stays unbound: omission is keyed on the
+// effective empty value, not on the argument count.
+func buildPositionalArgs(args []string, positionals []PositionalSpec) (map[string]any, error) {
+	if len(positionals) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(positionals))
+	for i, p := range positionals {
+		// 省略尾部可选位置参数时按空值走必填/跳过逻辑（调用方用
+		// RangeArgs 保证 args 长度落在 [必填数, 声明数] 区间）。
+		raw := ""
+		if i < len(args) {
+			raw = args[i]
+		}
+		if p.Trim {
+			raw = strings.TrimSpace(raw)
+		}
+		switch p.Kind {
+		case KindInt:
+			if raw == "" && !p.Required {
+				continue
+			}
+			v, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || v < 1 {
+				return nil, apperrors.NewValidation(fmt.Sprintf("参数 %s 必须是正整数", p.Name))
+			}
+			out[positionalBindKey(p)] = v
+		default:
+			if p.Required && raw == "" {
+				return nil, apperrors.NewValidation(fmt.Sprintf("缺少必填参数 %s", p.Name))
+			}
+			if raw == "" {
+				continue
+			}
+			out[positionalBindKey(p)] = raw
+		}
+	}
+	return out, nil
 }
 
 // ParameterProjectionMode selects how declared flags are embedded into Runtime
@@ -231,7 +354,9 @@ const (
 //     or assemble business params that belong in Flags/ConstParams.
 //
 // Exactly one of RunE / Invoke / ResultInvoke / Orchestrate must be set; New
-// validates this at construction time. corecmd stays dispatch-agnostic and
+// validates this at construction time. Non-leaf commands are declared
+// separately through ApplyGroupPolicy so leaf execution fields can never be
+// configured and then silently ignored. corecmd stays dispatch-agnostic and
 // never calls a backend: the adapters (FromLeafSpec / FromShortcut) supply the
 // body.
 type Spec struct {
@@ -244,6 +369,13 @@ type Spec struct {
 
 	Flags       []FlagSpec
 	Constraints []Constraint
+	// Positionals declares positional arguments. When non-empty the command's
+	// Args validator becomes cobra.RangeArgs(required, len(Positionals)) so
+	// trailing optional positionals may be omitted; values are validated and
+	// bound once in the declared preflight and reused as toolArgs before the
+	// Safety confirmation gate. The Runtime Schema positional is annotated
+	// from the declaration.
+	Positionals []PositionalSpec
 	// ParameterProjection controls whether parameter facts are final
 	// declaration annotations or Cobra-backed compatibility facts.
 	ParameterProjection ParameterProjectionMode
@@ -284,6 +416,21 @@ type Spec struct {
 	// Orchestrate executes a multi-step command; it assembles whatever payloads
 	// it needs from the Ctx.
 	Orchestrate func(c *Ctx) error
+	// WaitPoll executes one poll of the declared Contract.Wait capability.
+	// Exactly one poll is one call; cadence, status extraction, and outcome
+	// mapping belong to the framework wait phase. Required for poll/auto
+	// declarations — a declared capability without a runtime implementation
+	// can never honor --wait, so New rejects the pairing at construction.
+	// ctx is the wait-phase deadline (--wait-timeout); leaf I/O must honor
+	// it so a blocked poll cannot outlive the declared timeout.
+	WaitPoll func(ctx context.Context, c *Ctx) (wait.PollDoc, error)
+	// WaitEvents opens the push subscription of the declared Contract.Wait
+	// capability (event/auto modes). The framework owns correlation and
+	// status mapping; the leaf owns the transport. Auto mode falls back to
+	// WaitPoll when the stream ends before a terminal status. ctx is the
+	// same wait-phase deadline as WaitPoll; subscription setup must honor
+	// it so --wait-timeout can cancel a blocked subscribe.
+	WaitEvents func(ctx context.Context, c *Ctx) (wait.EventStream, error)
 }
 
 // Ctx is the framework-neutral execution context handed to Invoke/Orchestrate.
@@ -357,6 +504,15 @@ func (c *Ctx) Changed(name string) bool { return c.cmd.Flags().Changed(name) }
 // DryRun reports the effective global --dry-run.
 func (c *Ctx) DryRun() bool { return BoolFlag(c.cmd, "dry-run") }
 
+// Wait reports the effective --wait flag. It is false on commands that did
+// not declare the capability: the flag is not registered there, so passing it
+// is an unknown-flag error rather than a silently ignored value.
+func (c *Ctx) Wait() bool { return BoolFlag(c.cmd, waitFlagName) }
+
+// WaitTimeoutSecs reports the effective --wait-timeout in seconds (flag
+// value, then the declared default, then the framework default).
+func (c *Ctx) WaitTimeoutSecs() int { return waitTimeoutSecs(c.cmd) }
+
 // Yes reports the effective global --yes.
 func (c *Ctx) Yes() bool { return BoolFlag(c.cmd, "yes") }
 
@@ -378,6 +534,9 @@ func New(spec Spec) *cobra.Command {
 	validateConstParamsDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	validatePositionalDecls(spec)
+	normalizeWaitDecl(&spec)
+	validateWaitDecl(spec)
 	validateInputSpecs(spec.Use, spec.Flags)
 	// Help prose inherits the declaration when not authored separately:
 	// Selection.Examples (already contract-validated against the real flags)
@@ -394,7 +553,31 @@ func New(spec Spec) *cobra.Command {
 		Hidden:  spec.Hidden,
 	}
 	RegisterFlags(cmd, spec.Flags)
+	registerWaitFlags(cmd, spec)
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
+	if len(spec.Positionals) > 0 {
+		requiredPositionals := 0
+		for _, p := range spec.Positionals {
+			if p.Required {
+				requiredPositionals++
+			}
+		}
+		// 声明了可选（尾部）位置参数时必须允许省略：arity 校验取
+		// [必填数, 声明数] 区间，与 Schema 发布的 required 语义一致。
+		cmd.Args = cobra.RangeArgs(requiredPositionals, len(spec.Positionals))
+		annos := make([]contract.RuntimeSchemaPositional, 0, len(spec.Positionals))
+		for i, p := range spec.Positionals {
+			positionalType := "string"
+			if p.Kind == KindInt {
+				positionalType = "integer"
+			}
+			annos = append(annos, contract.RuntimeSchemaPositional{
+				Name: p.Name, Type: positionalType, Description: p.Usage,
+				Required: p.Required, Index: i,
+			})
+		}
+		runtimeannotate.AnnotateRuntimePositionals(cmd, annos...)
+	}
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
 	if help := ConstraintHelp(spec.Constraints); help != "" {
@@ -413,11 +596,57 @@ func New(spec Spec) *cobra.Command {
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
+	installExecution(cmd, executionSpec{
+		Flags:        spec.Flags,
+		Constraints:  spec.Constraints,
+		Positionals:  spec.Positionals,
+		Safety:       spec.Safety,
+		ConfirmFirst: spec.ConfirmFirst,
+		ConstParams:  spec.ConstParams,
+		Validate:     spec.Validate,
+		RunE:         spec.RunE,
+		Invoke:       spec.Invoke,
+		ResultInvoke: spec.ResultInvoke,
+		Orchestrate:  spec.Orchestrate,
+		Wait:         spec.Contract.Wait,
+		WaitPoll:     spec.WaitPoll,
+		WaitEvents:   spec.WaitEvents,
+	})
+	return cmd
+}
+
+// executionSpec is private retained state for the existing RunE pipeline, not
+// another authoring surface. Build-only fields stay on Cobra/ContractFinal.
+// Keeping this separate from Spec also avoids allocating space for zeroed help
+// and Contract fields in every command's execution closure.
+type executionSpec struct {
+	Flags        []FlagSpec
+	Constraints  []Constraint
+	Positionals  []PositionalSpec
+	Safety       contract.SafetySpec
+	ConfirmFirst bool
+	ConstParams  map[string]any
+	Validate     func(*cobra.Command, []string) error
+	RunE         func(*cobra.Command, []string) error
+	Invoke       func(*Ctx, map[string]any) error
+	ResultInvoke func(*Ctx, map[string]any) (output.CommandResult, error)
+	Orchestrate  func(*Ctx) error
+	// Wait capability inputs, paired with Contract.Wait at construction.
+	// They are carried here because the wait phase runs inside the dispatch
+	// closure, which only sees the retained execution state.
+	Wait       *contract.WaitSpec
+	WaitPoll   func(ctx context.Context, c *Ctx) (wait.PollDoc, error)
+	WaitEvents func(ctx context.Context, c *Ctx) (wait.EventStream, error)
+}
+
+func installExecution(cmd *cobra.Command, spec executionSpec) {
+	// positionalArgs 由 runDeclaredPreflight 在同一次执行内校验并产出，
+	// dispatch 直接复用：位置参数只解析一次，避免第二次解析靠忽略错误
+	// 依赖 preflight 调用顺序这一隐式约定。
+	var positionalArgs map[string]any
+	var dispatch func(*cobra.Command, []string) error
 	if spec.RunE != nil {
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
-				return err
-			}
+		dispatch = func(cmd *cobra.Command, args []string) error {
 			if !spec.ConfirmFirst {
 				if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 					return err
@@ -425,48 +654,63 @@ func New(spec Spec) *cobra.Command {
 			}
 			return spec.RunE(cmd, args)
 		}
-		return cmd
-	}
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := runDeclaredPreflight(cmd, args, spec); err != nil {
-			return err
-		}
-		ctx := newCtx(cmd, args, spec.Flags)
-		if spec.Orchestrate != nil {
+	} else {
+		dispatch = func(cmd *cobra.Command, args []string) error {
+			ctx := newCtx(cmd, args, spec.Flags)
+			if spec.Orchestrate != nil {
+				if !spec.ConfirmFirst {
+					if err := ConfirmSafety(cmd, spec.Safety); err != nil {
+						return err
+					}
+				}
+				return spec.Orchestrate(ctx)
+			}
+			toolArgs, err := BuildArgs(cmd, spec.Flags)
+			if err != nil {
+				return err
+			}
+			for key, value := range positionalArgs {
+				toolArgs[key] = value
+			}
+			for key, value := range spec.ConstParams {
+				toolArgs[key] = value
+			}
 			if !spec.ConfirmFirst {
 				if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 					return err
 				}
 			}
-			return spec.Orchestrate(ctx)
+			if spec.ResultInvoke != nil {
+				if !output.UsesUnifiedResult(cmd) {
+					return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
+				}
+				waitTimeout, err := resolveWaitTimeout(cmd)
+				if err != nil {
+					return err
+				}
+				result, err := spec.ResultInvoke(ctx, toolArgs)
+				if err != nil {
+					return err
+				}
+				result, err = runDeclaredWaitPhase(cmd, args, spec, result, waitTimeout)
+				if err != nil {
+					return err
+				}
+				return output.StoreResult(cmd.Context(), result)
+			}
+			return spec.Invoke(ctx, toolArgs)
 		}
-		toolArgs, err := BuildArgs(cmd, spec.Flags)
+	}
+	validated := WithValidation(spec.Validate, dispatch)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		bound, err := runDeclaredPreflight(cmd, args, &spec)
 		if err != nil {
 			return err
 		}
-		for key, value := range spec.ConstParams {
-			toolArgs[key] = value
-		}
-		if !spec.ConfirmFirst {
-			if err := ConfirmSafety(cmd, spec.Safety); err != nil {
-				return err
-			}
-		}
-		if spec.ResultInvoke != nil {
-			if !output.UsesUnifiedResult(cmd) {
-				return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
-			}
-			result, err := spec.ResultInvoke(ctx, toolArgs)
-			if err != nil {
-				return err
-			}
-			return output.StoreResult(cmd.Context(), result)
-		}
-		return spec.Invoke(ctx, toolArgs)
+		positionalArgs = bound
+		return validated(cmd, args)
 	}
-	return cmd
 }
-
 func cloneConstParams(params map[string]any) map[string]any {
 	if params == nil {
 		return nil
@@ -490,36 +734,395 @@ func HasDeclaredConfirmFirst(cmd *cobra.Command) bool {
 	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[ConfirmFirstAnnotation] == "true"
 }
 
-// runDeclaredPreflight runs the checks the Spec itself declares, in the one
+// runDeclaredPreflight resolves inputs and runs structural checks before the
+// shared WithValidation boundary executes Spec.Validate. It preserves the one
 // order both dispatch paths share. ConfirmFirst is the declared opt-out for
 // legacy guard-first commands: those confirm before parameter completeness is
 // known. Keeping this in one function is deliberate — when the RunE escape
 // hatch carried its own copy it silently dropped every declared check, so a
-// spec could publish Required flags that nothing enforced.
-func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
+// spec could publish Required flags that nothing enforced. The returned map is
+// the validated positional binding; installExecution threads it into toolArgs
+// so positionals are parsed exactly once per execution.
+func runDeclaredPreflight(cmd *cobra.Command, args []string, spec *executionSpec) (map[string]any, error) {
 	if spec.ConfirmFirst {
 		if err := ConfirmSafety(cmd, spec.Safety); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// Input resolution rewrites explicit @file / stdin values in place so the
 	// required/enum/constraint/Validate stages below check the payload content.
 	if err := resolveInputFlags(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ValidateRequired(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ValidateEnums(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ValidateConstraints(cmd, spec.Flags, spec.Constraints); err != nil {
-		return err
+		return nil, err
 	}
-	if spec.Validate != nil {
-		return spec.Validate(cmd, args)
+	positionalArgs, err := buildPositionalArgs(args, spec.Positionals)
+	if err != nil {
+		return nil, err
+	}
+	return positionalArgs, nil
+}
+
+// Wait-phase framework flags. They are registered natively on the leaf (never
+// as FlagSpec) so they cannot leak into toolArgs / MCP payloads: --wait is a
+// client-side execution modifier, not a backend parameter. On commands that
+// did not declare Contract.Wait the flags do not exist, so passing --wait
+// fails as an unknown flag instead of being silently ignored.
+const (
+	waitFlagName        = "wait"
+	waitTimeoutFlagName = "wait-timeout"
+	defaultWaitTimeoutS = 300
+)
+
+// DefaultWaitTimeoutSecs is the framework default for --wait-timeout when the
+// declaration carries no reviewed default.
+const DefaultWaitTimeoutSecs = defaultWaitTimeoutS
+
+// normalizeWaitDecl rewrites the spec's declared Wait in place with its
+// canonical form (contract.NormalizeWaitSpec): trimmed status values,
+// duplicate/conflict rejection, defensive copy. The runtime wait phase and
+// AttachContract both read spec.Contract.Wait, so normalizing once at
+// construction guarantees the wait engine, the Schema wire, and the
+// registered ContractFinal payload all see identical status tables — a
+// padded declaration can no longer publish a Schema its own runtime treats
+// as unknown statuses. An invalid declaration panics here, next to the
+// authoring mistake, with the same message Validate reports.
+func normalizeWaitDecl(spec *Spec) {
+	decl := spec.Contract.Wait
+	if decl == nil || strings.TrimSpace(decl.Mode) == "" {
+		return
+	}
+	normalized, err := contract.NormalizeWaitSpec(decl, spec.Contract.Identity.CanonicalPath)
+	if err != nil {
+		panic(fmt.Sprintf("command %q has invalid Contract.Wait: %v", spec.Use, err))
+	}
+	spec.Contract.Wait = normalized
+}
+
+// validateWaitDecl enforces the declaration ⇄ implementation pairing at build
+// time: a declared Contract.Wait without a WaitPoll hook is a capability the
+// command can never honor, and a WaitPoll hook without the declaration has no
+// flags or Schema capability to serve. The declaration also requires the
+// ResultInvoke dispatcher: only the unified-result envelope can be closed
+// into the terminal outcome (error.type "wait", exit code 8) and the timed-out
+// pending form — legacy Invoke/Orchestrate/RunE paths emit their own output
+// and would observe a failure terminal while still exiting 0. All three
+// mismatches are programming errors.
+func validateWaitDecl(spec Spec) {
+	decl := spec.Contract.Wait
+	declared := decl != nil && strings.TrimSpace(decl.Mode) != ""
+	if !declared {
+		if spec.WaitPoll != nil || spec.WaitEvents != nil {
+			panic(fmt.Sprintf(
+				"command %q sets a wait hook without declaring Contract.Wait: the wait flags and Schema capability come from the declaration",
+				spec.Use))
+		}
+		return
+	}
+	if spec.ResultInvoke == nil {
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait without ResultInvoke: wait closes the unified-result envelope, which legacy Invoke/Orchestrate/RunE paths cannot rewrite",
+			spec.Use))
+	}
+	switch spec.OutputRollout {
+	case output.RolloutUnifiedActive, output.RolloutUnifiedStable, output.RolloutUnifiedOnly:
+	default:
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait with output rollout %q: the wait phase closes the unified-result envelope, so the declaration requires a unified rollout (unified_active/stable/only); legacy_only and dual_validate would publish a capability that fails at dispatch",
+			spec.Use, spec.OutputRollout))
+	}
+	mode := strings.TrimSpace(decl.Mode)
+	needsPoll := mode == contract.WaitModePoll || mode == contract.WaitModeAuto
+	needsEvent := mode == contract.WaitModeEvent || mode == contract.WaitModeAuto
+	if needsPoll && spec.WaitPoll == nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets no WaitPoll: a declared wait capability must carry its runtime poll implementation",
+			spec.Use, mode))
+	}
+	if needsEvent && spec.WaitEvents == nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets no WaitEvents: a declared event wait must carry its runtime subscription",
+			spec.Use, mode))
+	}
+	if !needsPoll && spec.WaitPoll != nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets WaitPoll: the declaration decides which hooks run",
+			spec.Use, mode))
+	}
+	if !needsEvent && spec.WaitEvents != nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets WaitEvents: the declaration decides which hooks run",
+			spec.Use, mode))
+	}
+}
+
+// registerWaitFlags adds --wait / --wait-timeout to a leaf that declared
+// Contract.Wait. The timeout default is the reviewed declaration, falling
+// back to DefaultWaitTimeoutSecs.
+func registerWaitFlags(cmd *cobra.Command, spec Spec) {
+	decl := spec.Contract.Wait
+	if decl == nil || strings.TrimSpace(decl.Mode) == "" {
+		return
+	}
+	cmd.Flags().Bool(waitFlagName, false,
+		"等待到达命令声明的终态（如审批完成、导出结束）后再返回；未声明该能力的命令不接受此 flag")
+	timeoutDefault := decl.DefaultTimeoutSecs
+	if timeoutDefault <= 0 {
+		timeoutDefault = DefaultWaitTimeoutSecs
+	}
+	cmd.Flags().Int(waitTimeoutFlagName, timeoutDefault,
+		"等待超时秒数；超时以 pending 结束（异步受理不是失败）")
+}
+
+// validateWaitFlagCombination rejects --wait-timeout without --wait.
+// Silently ignoring the timeout would let callers believe the command waited
+// for a terminal state when it actually returned immediately. The check runs
+// inside the dispatch closure, which sits below the WithValidation boundary,
+// so the error must carry its own validation classification: a plain
+// fmt.Errorf would be root-adapted to internal (exit 5) instead of the
+// parameter-error contract (validation, exit 3).
+func validateWaitFlagCombination(cmd *cobra.Command) error {
+	if cmd.Flags().Changed(waitTimeoutFlagName) && !BoolFlag(cmd, waitFlagName) {
+		return apperrors.NewValidation(fmt.Sprintf("--%s requires --%s: timeout without wait is silently ignored",
+			waitTimeoutFlagName, waitFlagName), apperrors.WithReason("invalid_parameters"))
 	}
 	return nil
+}
+
+func resolveWaitTimeout(cmd *cobra.Command) (time.Duration, error) {
+	if err := validateWaitFlagCombination(cmd); err != nil {
+		return 0, err
+	}
+	if !BoolFlag(cmd, waitFlagName) {
+		return 0, nil
+	}
+	secs := int64(waitTimeoutSecs(cmd))
+	if secs <= 0 {
+		return 0, apperrors.NewValidation(fmt.Sprintf(
+			"参数 --%s 必须为正数", waitTimeoutFlagName), apperrors.WithReason("invalid_parameters"))
+	}
+	return waitTimeoutDuration(secs)
+}
+
+// runDeclaredWaitPhase runs the declared wait loop after a successful
+// ResultInvoke dispatch and closes the accepted unified envelope into the
+// wait outcome (validateWaitDecl guarantees the ResultInvoke pairing).
+// Only a pending accepted result is waitable: success / failure / partial
+// are already terminal and must be returned unchanged. Waiting on a
+// business failure would let WithOutcome(..., success) overwrite it into
+// an illegal success-with-error envelope.
+func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec executionSpec, result output.CommandResult, timeout time.Duration) (output.CommandResult, error) {
+	if !BoolFlag(cmd, waitFlagName) {
+		return result, nil
+	}
+	if result == nil || result.Outcome() != output.OutcomePending {
+		return result, nil
+	}
+	decl := spec.Wait
+	ctx := newCtx(cmd, args, spec.Flags)
+	outcome, err := runWaitLoop(cmd.Context(), decl, timeout, spec, ctx, result)
+	if err != nil {
+		return result, err
+	}
+	if outcome.TimedOut {
+		cmd.PrintErrf("等待超时（%s）：当前状态 %q，未到达终态，以 pending 结束\n", timeout, outcome.Status)
+		return output.WithOutcome(result, output.OutcomePending,
+			output.WithOperationTimedOut(outcome.Status)), nil
+	}
+	if outcome.Outcome == contract.ResultOutcomeFailure {
+		return output.WithOutcome(result, output.OutcomeFailure,
+			output.WithOperationTerminalState(outcome.Status),
+			output.WithErrorInfo(&output.ErrorInfo{
+				Type:    "wait",
+				Subtype: "terminal_failure",
+				Message: fmt.Sprintf("等待到达失败终态：%s", outcome.Status),
+			})), nil
+	}
+	return output.WithOutcome(result, output.OutcomeSuccess,
+		output.WithOperationTerminalState(outcome.Status)), nil
+}
+
+// runWaitLoop executes the declared wait mode. One deadline spans the event
+// phase and an auto-mode poll fallback (the inner loops run without their
+// own timeouts and inherit this context's deadline). The deadline is
+// forwarded to WaitPoll / WaitEvents and bound onto the cobra command so
+// leaf I/O that reads either the hook ctx or Command().Context() is
+// cancelled when --wait-timeout expires.
+func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.Duration, spec executionSpec, ctx *Ctx, result output.CommandResult) (wait.Outcome, error) {
+	loopCtx := parent
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		loopCtx, cancel = context.WithTimeout(parent, timeout)
+		defer cancel()
+	}
+	if ctx != nil && ctx.cmd != nil {
+		prev := ctx.cmd.Context()
+		ctx.cmd.SetContext(loopCtx)
+		defer ctx.cmd.SetContext(prev)
+	}
+	mode := strings.TrimSpace(decl.Mode)
+	if mode == contract.WaitModePoll {
+		return wait.Run(loopCtx, wait.LoopSpec{
+			StatusQuery: decl.StatusQuery,
+			Terminal:    decl.Terminal,
+			Pending:     decl.PendingValues,
+		}, func(pollCtx context.Context) (wait.PollDoc, error) {
+			return spec.WaitPoll(pollCtx, ctx)
+		})
+	}
+	resource, err := waitResource(decl, result)
+	if err != nil {
+		return wait.Outcome{}, err
+	}
+	stream, err := spec.WaitEvents(loopCtx, ctx)
+	if err == nil && stream == nil {
+		// (nil, nil) from the leaf or a subscription adapter is a broken
+		// subscription, not an event source: strict event mode fails
+		// through the unified envelope instead of panicking inside
+		// RunEvent's first Recv; auto mode falls back to polling like any
+		// other subscription failure. A deadline that already expired
+		// during subscribe still closes as timed-out pending via the
+		// err != nil branch below (no poll fallback on an exhausted
+		// shared deadline).
+		if mode == contract.WaitModeAuto && loopCtx.Err() == nil {
+			return pollWithSpec(loopCtx, decl, spec, ctx, "")
+		}
+		err = errors.New("subscription returned no stream")
+	}
+	if err != nil {
+		if loopCtxErr := loopCtx.Err(); loopCtxErr != nil {
+			if errors.Is(loopCtxErr, context.DeadlineExceeded) {
+				// Subscribe blocked until the wait deadline: same contract as a
+				// cancelled poll — close as timed-out pending, do not surface
+				// ctx.Err() as a subscription failure (and do not poll-fallback
+				// in auto mode; the shared deadline is already exhausted).
+				return wait.Outcome{Outcome: contract.ResultOutcomePending, TimedOut: true}, nil
+			}
+			// Parent context was cancelled (e.g. Ctrl-C): propagate the
+			// cancellation so the interruption exit semantics are preserved.
+			return wait.Outcome{}, loopCtxErr
+		}
+		if mode == contract.WaitModeAuto {
+			// Subscription failed before any event: fall back to polling
+			// with no carried status (nothing was observed).
+			return pollWithSpec(loopCtx, decl, spec, ctx, "")
+		}
+		return wait.Outcome{}, fmt.Errorf("wait: event subscription failed: %w", err)
+	}
+	eventSpec := wait.EventLoopSpec{
+		StatusQuery: decl.StatusQuery,
+		MatchField:  decl.MatchField,
+		Terminal:    decl.Terminal,
+		Pending:     decl.PendingValues,
+	}
+	outcome, err := wait.RunEvent(loopCtx, eventSpec, resource, stream)
+	if err == nil {
+		return outcome, nil
+	}
+	if mode == contract.WaitModeAuto && errors.Is(err, wait.ErrEventStreamEnded) {
+		// Stream ended before a terminal status: fall back to polling under
+		// the same deadline, carrying the event phase's last observed status.
+		// A blocked fallback poll can consume the whole deadline without
+		// ever returning a document; without the carried status the
+		// timed-out envelope would regress meta.operation.state to the
+		// accepted result's original state instead of the state the events
+		// already proved.
+		return pollWithSpec(loopCtx, decl, spec, ctx, outcome.Status)
+	}
+	return outcome, err
+}
+
+// pollWithSpec runs the poll loop for an auto-mode fallback. eventStatus is
+// the last status the event phase observed before falling back ("" when the
+// subscription itself failed, before any event). When the poll loop ends
+// without observing a status of its own — a first poll that blocks until the
+// shared deadline — the carried event status is adopted so the timed-out
+// envelope keeps reporting the real last known state.
+func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec executionSpec, ctx *Ctx, eventStatus string) (wait.Outcome, error) {
+	outcome, err := wait.Run(loopCtx, wait.LoopSpec{
+		StatusQuery: decl.StatusQuery,
+		Terminal:    decl.Terminal,
+		Pending:     decl.PendingValues,
+	}, func(pollCtx context.Context) (wait.PollDoc, error) {
+		return spec.WaitPoll(pollCtx, ctx)
+	})
+	if eventStatus != "" && outcome.Status == "" {
+		outcome.Status = eventStatus
+	}
+	return outcome, err
+}
+
+// waitResource resolves the resource identifier an event stream correlates
+// against, from the accepted result data via the declared ResourceQuery.
+// result.Data() returns any deep-copied business payload, which may be a
+// map[string]any, struct, or struct pointer. We normalize via JSON round-trip
+// to support all valid result types uniformly.
+func waitResource(decl *contract.WaitSpec, result output.CommandResult) (string, error) {
+	raw := result.Data()
+	if raw == nil {
+		return "", fmt.Errorf("wait: accepted result data is nil; cannot resolve resource %q", decl.ResourceQuery)
+	}
+	// Fast path: already a map.
+	if data, ok := raw.(map[string]any); ok {
+		resource, ok := wait.ExtractStatus(wait.PollDoc(data), decl.ResourceQuery)
+		if !ok || strings.TrimSpace(resource) == "" {
+			return "", fmt.Errorf("wait: resource query %q not found in accepted result data", decl.ResourceQuery)
+		}
+		return resource, nil
+	}
+	// Slow path: struct or struct pointer. Normalize via JSON round-trip.
+	jsonBytes, err := json.Marshal(raw)
+	if err != nil {
+		return "", fmt.Errorf("wait: accepted result data cannot be serialized to JSON: %w", err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return "", fmt.Errorf("wait: accepted result data is not an object; cannot resolve resource %q", decl.ResourceQuery)
+	}
+	resource, ok := wait.ExtractStatus(wait.PollDoc(data), decl.ResourceQuery)
+	if !ok || strings.TrimSpace(resource) == "" {
+		return "", fmt.Errorf("wait: resource query %q not found in accepted result data", decl.ResourceQuery)
+	}
+	return resource, nil
+}
+
+// waitTimeoutSecs resolves the effective timeout. The flag is registered
+// with the reviewed declaration default (or the framework default).
+func waitTimeoutSecs(cmd *cobra.Command) int {
+	if value, err := cmd.Flags().GetInt(waitTimeoutFlagName); err == nil {
+		if value > 0 || cmd.Flags().Changed(waitTimeoutFlagName) {
+			return value
+		}
+	}
+	return DefaultWaitTimeoutSecs
+}
+
+// maxWaitTimeoutSecs is the largest second count that still fits in a
+// time.Duration. Multiplying a larger int by time.Second overflows to a
+// non-positive duration, which would skip the deadline and wait forever.
+const maxWaitTimeoutSecs = math.MaxInt64 / int64(time.Second)
+
+// waitTimeoutDuration converts a resolved second count into the wait-phase
+// deadline. Values that cannot be represented as a positive time.Duration
+// are rejected as validation errors instead of silently disabling timeout.
+func waitTimeoutDuration(secs int64) (time.Duration, error) {
+	if secs <= 0 {
+		return 0, apperrors.NewValidation(fmt.Sprintf(
+			"参数 --%s 必须为正数", waitTimeoutFlagName), apperrors.WithReason("invalid_parameters"))
+	}
+	if secs > maxWaitTimeoutSecs {
+		return 0, apperrors.NewValidation(fmt.Sprintf(
+			"参数 --%s 取值 %d 超出可表示范围（最大 %d 秒）",
+			waitTimeoutFlagName, secs, maxWaitTimeoutSecs))
+	}
+	return time.Duration(secs) * time.Second, nil
 }
 
 // validateDispatchDecl enforces "exactly one dispatcher" at build time. Like
@@ -697,10 +1300,69 @@ func registerFlagP(cmd *cobra.Command, kind FlagKind, name, shorthand, def, usag
 		if value := strings.TrimSpace(def); value != "" {
 			defaults = strings.Split(value, ",")
 		}
-		cmd.Flags().StringSliceP(name, shorthand, defaults, usage)
+		value := &commandStringSliceValue{values: defaults}
+		cmd.Flags().VarP(value, name, shorthand, usage)
 	default:
 		cmd.Flags().StringP(name, shorthand, def, usage)
 	}
+}
+
+// commandStringSliceValue preserves pflag's StringSlice contract while
+// avoiding encoding/csv's 4 KiB writer allocation for the overwhelmingly
+// common empty default. pflag calls String during every flag registration to
+// capture DefValue, so the stock implementation otherwise pays that buffer for
+// every complete-tree build before any command executes.
+type commandStringSliceValue struct {
+	values  []string
+	changed bool
+}
+
+func (s *commandStringSliceValue) Set(raw string) error {
+	values, err := readCommandStringSlice(raw)
+	if err != nil {
+		return err
+	}
+	if !s.changed {
+		s.values = values
+	} else {
+		s.values = append(s.values, values...)
+	}
+	s.changed = true
+	return nil
+}
+
+func (*commandStringSliceValue) Type() string { return "stringSlice" }
+
+func (s *commandStringSliceValue) String() string {
+	if s == nil || len(s.values) == 0 {
+		return "[]"
+	}
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+	_ = writer.Write(s.values)
+	writer.Flush()
+	return "[" + strings.TrimSuffix(buffer.String(), "\n") + "]"
+}
+
+func (s *commandStringSliceValue) Append(value string) error {
+	s.values = append(s.values, value)
+	return nil
+}
+
+func (s *commandStringSliceValue) Replace(values []string) error {
+	s.values = values
+	return nil
+}
+
+func (s *commandStringSliceValue) GetSlice() []string {
+	return s.values
+}
+
+func readCommandStringSlice(raw string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	return csv.NewReader(strings.NewReader(raw)).Read()
 }
 
 // ValidateRequired reproduces the handwritten required semantics: plain Required
@@ -748,7 +1410,10 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 		}
 	}
 	if err := cmdutil.MissingRequiredFlagsError(cmd, plain...); err != nil {
-		return err
+		return apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("missing_required_flags"),
+		)
 	}
 	for _, flag := range flags {
 		if !flag.Required || flag.ValidationMode == ValidationShortcut ||
@@ -930,7 +1595,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Kind == KindInt {
 			v, err := integerValue(cmd, flag)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// ArgDefault floors values < 1 (cursor page-size: 0/-1 → default).
 			if v < 1 && flag.ArgDefault != "" {
@@ -947,8 +1615,9 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 			continue
 		}
 		if flag.Kind == KindBool {
-			// Enter on Changed only (main OR alias): explicit false is still
-			// sent (matching the handwritten "transmit on Changed" semantics).
+			// Existing booleans remain Changed-only. A declared ArgDefault opts
+			// this parameter into a required wire value without opting the user
+			// into a different boolean choice or altering flag presence.
 			if flagNameProvided(cmd, flag) {
 				v, _ := cmd.Flags().GetBool(flag.Name)
 				if !cmd.Flags().Changed(flag.Name) {
@@ -958,6 +1627,12 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 							break
 						}
 					}
+				}
+				toolArgs[bind] = v
+			} else if flag.ArgDefault != "" {
+				v, err := strconv.ParseBool(flag.ArgDefault)
+				if err != nil {
+					return nil, fmt.Errorf("flag --%s: invalid boolean ArgDefault %q", flag.Name, flag.ArgDefault)
 				}
 				toolArgs[bind] = v
 			}
@@ -979,7 +1654,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Transform != nil {
 			value, err := flag.Transform(effective)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// Required is checked on the pre-transform string. A transform that
 			// collapses separator-only input ("," / ";") to nil/empty must still
@@ -1175,7 +1853,11 @@ func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Con
 	for _, constraint := range constraints {
 		var set []string
 		for _, name := range constraint.Flags {
-			if constraintProvided(cmd, flagsByName[name]) {
+			provided := constraintProvided(cmd, flagsByName[name])
+			if constraint.PresenceOnly {
+				provided = flagNameProvided(cmd, flagsByName[name])
+			}
+			if provided {
 				set = append(set, name)
 			}
 		}
@@ -1397,7 +2079,7 @@ func embedContractDecl(cmd *cobra.Command, spec Spec) {
 	if spec.Contract.empty() {
 		return
 	}
-	AttachContract(cmd, spec.Safety, spec.Contract, spec.Short, spec.Long)
+	attachContractPayload(cmd, spec.Safety, spec.Contract, spec.Short, spec.Long)
 }
 
 // AttachContract registers a ContractFinal overlay on an existing leaf without
@@ -1413,7 +2095,32 @@ func embedContractDecl(cmd *cobra.Command, spec Spec) {
 // only. Catalog assembly may prefer Cobra Long for delivered description
 // (Short never enters description) and must stamp provenance to the real
 // winner (cobra_help vs contract_final). Declared Title still wins over Short.
+//
+// Contract.Wait is rejected here: this overlay path has no Spec, so there is
+// nowhere to pair the WaitPoll / WaitEvents hooks, register --wait /
+// --wait-timeout, or run the wait phase — publishing the declaration would
+// advertise a capability the CLI rejects at flag parse (declaration ⇄ runtime
+// drift). Commands that declare wait must be built through the managed New
+// construction, which validates the pairing and owns the wait phase.
 func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl ContractDecl, short, long string) {
+	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
+		name := "<nil>"
+		if cmd != nil {
+			name = cmd.Name()
+		}
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait on AttachContract: the overlay path cannot run it (no WaitPoll/WaitEvents pairing, no --wait/--wait-timeout registration, no wait phase); declare wait through the managed corecmd.New construction instead",
+			name))
+	}
+	attachContractPayload(cmd, safety, decl, short, long)
+}
+
+// attachContractPayload is the managed registration behind AttachContract.
+// Only New's construction (via embedContractDecl) may carry Contract.Wait:
+// by the time it reaches here, validateWaitDecl has proved the declaration ⇄
+// hook pairing, registerWaitFlags has bound --wait/--wait-timeout, and the
+// dispatch pipeline owns the wait phase.
+func attachContractPayload(cmd *cobra.Command, safety contract.SafetySpec, decl ContractDecl, short, long string) {
 	if cmd == nil || decl.empty() {
 		return
 	}
@@ -1438,6 +2145,14 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		d := *decl.DryRun
 		d.PreviewKind = strings.TrimSpace(d.PreviewKind)
 		payload.DryRun = &d
+	}
+	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
+		// Wait reaches this store only through New's construction:
+		// normalizeWaitDecl already canonicalized and validated the
+		// declaration in place (invalid wait panics there), and
+		// AttachContract rejects wait declarations outright. The store
+		// deep-copies the terminal map on registration.
+		payload.Wait = decl.Wait
 	}
 	if decl.Result != nil {
 		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)
@@ -1515,8 +2230,16 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	}
 	if len(decl.Parameters) > 0 {
 		payload.Parameters = append([]contract.ParamDecl(nil), decl.Parameters...)
+		for index := range payload.Parameters {
+			payload.Parameters[index].Enum = append([]string(nil), decl.Parameters[index].Enum...)
+			payload.Parameters[index].AnyOf = append([]contract.FormatAlternative(nil), decl.Parameters[index].AnyOf...)
+			if decl.Parameters[index].Required != nil {
+				required := *decl.Parameters[index].Required
+				payload.Parameters[index].Required = &required
+			}
+		}
 	}
-	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
+	contractfinal.RegisterOwnedRuntimeContractFinal(cmd, payload)
 }
 
 // schemaSafetyFromDecl copies the single command SafetySpec into the final
@@ -1556,14 +2279,16 @@ func flagKindSchemaType(kind FlagKind) string {
 	}
 }
 
-// AnnotateConstraints projects the relationship constraints into the Agent
-// Runtime Schema: exactly_one decomposes into require_one_of + mutually_exclusive
+// AnnotateConstraints records executable relationship constraints for Schema
+// assembly: exactly_one decomposes into require_one_of + mutually_exclusive
 // (matching the handwritten commands' use of AnnotateRuntimeConstraints).
 //
 // When a group still has hidden siblings, the full declared flag list is
-// projected (not collapsed to a single visible "required"). ValidateConstraints
-// accepts any member of the declared group — including hidden — so marking the
-// sole visible flag required would falsely claim declare ≡ execute.
+// retained here (not collapsed to a single visible "required").
+// ValidateConstraints accepts any member of the declared group — including
+// hidden — so marking the sole visible flag required would falsely claim
+// declare ≡ execute. Final Schema assembly separately canonicalizes reviewed
+// aliases and projects this executable contract onto published inputs.
 func AnnotateConstraints(cmd *cobra.Command, constraints []Constraint) {
 	var projected runtimeannotate.RuntimeSchemaConstraints
 	var required []string

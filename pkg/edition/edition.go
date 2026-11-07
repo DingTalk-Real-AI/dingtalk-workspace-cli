@@ -60,6 +60,12 @@ type ToolCaller interface {
 	JQ() string
 }
 
+// AccessTokenCaller is an optional capability for narrow OpenAPI operations
+// that cannot use MCP JSON-RPC, such as streaming multipart file upload.
+type AccessTokenCaller interface {
+	AccessToken(ctx context.Context) (string, error)
+}
+
 // ReadToolCaller is an optional capability for a narrowly classified read
 // lookup that must still execute while the outer command is rendering a
 // dry-run plan. Implementations must fail closed unless they can bypass the
@@ -71,6 +77,13 @@ type ToolCaller interface {
 // by the default "dry-run executes nothing" contract.
 type ReadToolCaller interface {
 	CallReadTool(ctx context.Context, productID, toolName string, args map[string]any) (*ToolResult, error)
+}
+
+// WhiteboardTemplatePreviewCaller performs only the reviewed template service
+// preflight with boolean dryRun=true. It must never fall back to an ordinary
+// write call when the capability or a required guard is missing.
+type WhiteboardTemplatePreviewCaller interface {
+	CallWhiteboardTemplatePreview(ctx context.Context, toolName string, args map[string]any) (*ToolResult, error)
 }
 
 // RuntimeDefaultFn resolves a single runtimeDefault placeholder (e.g.
@@ -125,6 +138,12 @@ type Hooks struct {
 	AuthClientFromMCP bool   // true → fetch client ID from MCP at runtime
 	OnAuthError       func(configDir string, err error) error
 	TokenProvider     func(ctx context.Context, fallback func() (string, error)) (string, error)
+
+	// OIDCProviders registers the SDK authorizers available to auth provider-login.
+	// Return declarations only: enumeration must not initialize SDKs or perform
+	// I/O. Names must be unique and Authorize must be non-nil. Nil/empty means
+	// no SDK integration; the core does not install a provider-specific fallback.
+	OIDCProviders func() []OIDCProvider
 
 	// --- token persistence (overlay-managed keychain / encrypted storage) ---
 	SaveToken   func(configDir string, data []byte) error // persist token blob

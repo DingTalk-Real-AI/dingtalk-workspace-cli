@@ -15,6 +15,7 @@ package contract
 
 import (
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -37,11 +38,41 @@ type ProductSelectionDecl struct {
 	AvoidWhen    []string
 }
 
+// HelpDocumentation is one stable, human-readable documentation link shown
+// in service and leaf Help. It is deliberately not part of SelectionSpec or
+// the public Schema wire: Help references guide further reading without
+// changing the executable command contract.
+type HelpDocumentation struct {
+	Label string
+	URL   string
+}
+
+// HelpReferences declares the embedded Skills and deeper documentation that
+// are relevant to a product. Leaf Help inherits the declaration by ProductID.
+type HelpReferences struct {
+	RelatedSkills []string
+	Documentation []HelpDocumentation
+}
+
+const embeddedSkillDocumentationBaseURL = "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/skills/multi"
+
+// SkillDocumentation builds a stable GitHub link to a file in an embedded
+// multi-Skill. Product declarations use this helper so URLs cannot drift from
+// the repository layout while retaining an explicit label and path.
+func SkillDocumentation(label, skill, relativePath string) HelpDocumentation {
+	return HelpDocumentation{
+		Label: strings.TrimSpace(label),
+		URL:   embeddedSkillDocumentationBaseURL + "/" + path.Join(strings.TrimSpace(skill), strings.TrimSpace(relativePath)),
+	}
+}
+
 // ProductDecl is the product-level Schema routing declaration. Assembly writes
-// ProductSpec.Selection with provenance contract_final.
+// ProductSpec.Selection with provenance contract_final. HelpReferences remains
+// internal-only and is consumed exclusively by Help rendering.
 type ProductDecl struct {
-	ID        string
-	Selection ProductSelectionDecl
+	ID             string
+	Selection      ProductSelectionDecl
+	HelpReferences HelpReferences
 }
 
 var productDecls sync.Map // productID → ProductDecl
@@ -71,7 +102,44 @@ func RegisterProductDecl(decl ProductDecl) {
 			productID, strings.Join(missing, ", ")))
 	}
 	decl.ID = productID
+	decl.HelpReferences = normalizeHelpReferences(productID, decl.HelpReferences)
 	productDecls.Store(productID, decl)
+}
+
+func normalizeHelpReferences(productID string, refs HelpReferences) HelpReferences {
+	out := HelpReferences{}
+	seenSkills := make(map[string]bool, len(refs.RelatedSkills))
+	for _, skill := range refs.RelatedSkills {
+		skill = strings.TrimSpace(skill)
+		if skill == "" || seenSkills[skill] {
+			continue
+		}
+		seenSkills[skill] = true
+		out.RelatedSkills = append(out.RelatedSkills, skill)
+	}
+	seenDocs := make(map[string]bool, len(refs.Documentation))
+	for _, document := range refs.Documentation {
+		document.Label = strings.TrimSpace(document.Label)
+		document.URL = strings.TrimSpace(document.URL)
+		if document.Label == "" || document.URL == "" {
+			panic(fmt.Sprintf("product %q HelpReferences documentation requires both Label and URL", productID))
+		}
+		if !strings.HasPrefix(document.URL, "https://") {
+			panic(fmt.Sprintf("product %q HelpReferences documentation URL must use HTTPS: %q", productID, document.URL))
+		}
+		if seenDocs[document.URL] {
+			continue
+		}
+		seenDocs[document.URL] = true
+		out.Documentation = append(out.Documentation, document)
+	}
+	if len(out.RelatedSkills) == 0 {
+		out.RelatedSkills = nil
+	}
+	if len(out.Documentation) == 0 {
+		out.Documentation = nil
+	}
+	return out
 }
 
 // LookupProductDecl returns the registered product declaration, if any.
@@ -88,6 +156,10 @@ func LookupProductDecl(productID string) (ProductDecl, bool) {
 	if !ok {
 		return ProductDecl{}, false
 	}
+	decl.Selection.UseWhen = append([]string(nil), decl.Selection.UseWhen...)
+	decl.Selection.AvoidWhen = append([]string(nil), decl.Selection.AvoidWhen...)
+	decl.HelpReferences.RelatedSkills = append([]string(nil), decl.HelpReferences.RelatedSkills...)
+	decl.HelpReferences.Documentation = append([]HelpDocumentation(nil), decl.HelpReferences.Documentation...)
 	return decl, true
 }
 

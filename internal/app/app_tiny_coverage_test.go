@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
-	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
@@ -20,33 +19,27 @@ import (
 
 func TestCrossPlatformCoverageAPIAndTimingRemainingCoverage(t *testing.T) {
 	oldProvider := newAppTokenProvider
-	oldClientID, oldClientSecret := apiClientID, apiClientSecret
+	oldResolver := resolveRawAPICredentials
 	oldMarshal, oldMkdir := timingMarshalIndent, timingMkdirAll
 	oldWrite, oldRemove, oldRename := timingWriteFile, timingRemove, timingRename
 	oldRead, oldHome := timingReadFile, timingUserHomeDir
 	t.Cleanup(func() {
 		newAppTokenProvider = oldProvider
-		apiClientID, apiClientSecret = oldClientID, oldClientSecret
+		resolveRawAPICredentials = oldResolver
 		timingMarshalIndent, timingMkdirAll = oldMarshal, oldMkdir
 		timingWriteFile, timingRemove, timingRename = oldWrite, oldRemove, oldRename
 		timingReadFile, timingUserHomeDir = oldRead, oldHome
-		authpkg.SetClientID("")
-		authpkg.SetClientSecret("")
 	})
 	fail := errors.New("failure")
-	apiClientID = func() string { return "" }
-	apiClientSecret = func() string { return "" }
-	if _, err := resolveRawAPIToken(context.Background(), ""); err == nil {
+	resolveRawAPICredentials = func(string, string, string) (rawAPICredentials, error) {
+		return rawAPICredentials{}, fail
+	}
+	if _, err := resolveRawAPIToken(context.Background(), "", "", ""); err == nil {
 		t.Fatal("missing raw API credentials succeeded")
 	}
-	apiClientID = func() string { return "<placeholder>" }
-	apiClientSecret = func() string { return "secret" }
-	if _, err := resolveRawAPIToken(context.Background(), ""); err == nil {
-		t.Fatal("placeholder raw API credentials succeeded")
+	resolveRawAPICredentials = func(string, string, string) (rawAPICredentials, error) {
+		return rawAPICredentials{ClientID: "app-key", ClientSecret: "app-secret", Source: "flag"}, nil
 	}
-	apiClientID, apiClientSecret = authpkg.ClientID, authpkg.ClientSecret
-	authpkg.SetClientID("app-key")
-	authpkg.SetClientSecret("app-secret")
 	for _, tc := range []struct {
 		getter fakeAppTokenGetter
 		want   string
@@ -56,7 +49,7 @@ func TestCrossPlatformCoverageAPIAndTimingRemainingCoverage(t *testing.T) {
 		{getter: fakeAppTokenGetter{token: " token "}},
 	} {
 		newAppTokenProvider = func(string, string, string) appTokenGetter { return tc.getter }
-		got, err := resolveRawAPIToken(context.Background(), "")
+		got, err := resolveRawAPIToken(context.Background(), "", "", "")
 		if tc.want != "" && (err == nil || !containsText(err.Error(), tc.want)) {
 			t.Fatalf("raw token error = %v, want %q", err, tc.want)
 		}

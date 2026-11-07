@@ -15,6 +15,7 @@ package errors
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -58,6 +59,8 @@ const (
 //	5  internal       （CategoryInternal 与兜底：非结构化错误、panic 收敛均归 5）
 //	6  discovery      （CategoryDiscovery）
 //	7  partial_failure（部分成功专用码，见 ExitCodePartial）
+//	8  wait           （--wait 观察到失败终态的专用码，见 internal/output
+//	                   的 exitCodeWait；不设 Category，仅经统一信封产出）
 //
 // ExitCodePartial is the partial-result exit code shared with internal/output.
 // It is not returned for CategoryPartial errors because they lack the typed
@@ -149,6 +152,24 @@ func WithOperation(operation string) Option {
 	return func(err *Error) {
 		err.Operation = operation
 	}
+}
+
+// IsConfirmationRequired reports whether err (or any wrapped cause) is a
+// typed framework confirmation-gate failure carrying reason
+// confirmation_required. Downstream classifiers must pass such errors through
+// verbatim: the "re-run with --yes" semantics can only be carried by the
+// machine-readable reason, while message-text classification actively
+// misroutes them (a command path containing "permission" would be reported as
+// an auth failure, and any other wording degrades to an unclassified error).
+func IsConfirmationRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	var typed *Error
+	if stderrors.As(err, &typed) {
+		return strings.TrimSpace(typed.Reason) == "confirmation_required"
+	}
+	return false
 }
 
 // WithServerKey records the server identifier associated with the failure.
@@ -335,6 +356,56 @@ func NewValidation(message string, opts ...Option) error {
 	return newError(CategoryValidation, message, opts...)
 }
 
+// DeclaresClassification reports whether err already carries an explicit error
+// contract of its own: a repository *Error with a stable category, reason and
+// actions, or an ExitCoder that states its own exit code. It follows wrapped
+// errors; nil is false.
+//
+// Sentinel cancellation and deadline errors do not qualify. They declare no
+// category, so a classification boundary that owns them must still classify
+// them; only a validation boundary needs their identity preserved, which is
+// what PreserveClassification adds.
+func DeclaresClassification(err error) bool {
+	if err == nil {
+		return false
+	}
+	var typed *Error
+	var exitCoder ExitCoder
+	return stderrors.As(err, &typed) || stderrors.As(err, &exitCoder)
+}
+
+// PreserveClassification reports whether adapting err must preserve its original
+// identity, category and exit code. It follows wrapped errors; nil is false.
+//
+// Beyond DeclaresClassification this also covers cancellation and deadline
+// errors, whose identity a validation boundary must not rewrite into a
+// parameter failure. Business classification boundaries should use
+// DeclaresClassification instead: a bare context.DeadlineExceeded carries no
+// category of its own, and passing it through there forfeits the caller's own
+// network-timeout classification.
+func PreserveClassification(err error) bool {
+	if err == nil {
+		return false
+	}
+	return DeclaresClassification(err) ||
+		stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded)
+}
+
+// NormalizeValidation converts an untyped error produced by an authoritative
+// parameter-validation phase into the repository's validation error contract.
+// Errors that already carry an explicit category or exit code pass through
+// unchanged, as do cancellation and deadline errors. Callers must use this at
+// the validation boundary rather than infer categories from error messages.
+func NormalizeValidation(err error, opts ...Option) error {
+	if err == nil || PreserveClassification(err) {
+		return err
+	}
+	options := make([]Option, 0, len(opts)+1)
+	options = append(options, WithCause(err))
+	options = append(options, opts...)
+	return NewValidation(err.Error(), options...)
+}
+
 // NewDiscovery returns a discovery-category error.
 func NewDiscovery(message string, opts ...Option) error {
 	return newError(CategoryDiscovery, message, opts...)
@@ -379,6 +450,11 @@ func ExitCode(err error) int {
 // byte-compatible for commands whose rollout is legacy_only or dual_validate.
 // Unified commands publish outcome/type/subtype through internal/output only.
 func PrintJSON(w io.Writer, err error) error {
+	return PrintJSONWithNotice(w, err, nil)
+}
+
+// PrintJSONWithNotice preserves the legacy error shape while adding a system notice.
+func PrintJSONWithNotice(w io.Writer, err error, notice any) error {
 	errorPayload := map[string]any{
 		"code":     ExitCode(err),
 		"category": category(err),
@@ -416,8 +492,8 @@ func PrintJSON(w io.Writer, err error) error {
 		if typed.Hint != "" {
 			errorPayload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			errorPayload["actions"] = typed.Actions
+		if actions := RecoveryActions(err); len(actions) > 0 {
+			errorPayload["actions"] = actions
 		}
 		if len(typed.AvailableFlags) > 0 {
 			errorPayload["available_flags"] = typed.AvailableFlags
@@ -460,6 +536,9 @@ func PrintJSON(w io.Writer, err error) error {
 		}
 	}
 	payload := map[string]any{"error": errorPayload}
+	if notice != nil {
+		payload["_notice"] = notice
+	}
 
 	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {
@@ -519,8 +598,8 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 		}
 	}
 
-	if len(typed.Actions) > 0 {
-		for _, action := range typed.Actions {
+	if actions := HumanRecoveryActions(err); len(actions) > 0 {
+		for _, action := range actions {
 			if strings.TrimSpace(action) == "" {
 				continue
 			}

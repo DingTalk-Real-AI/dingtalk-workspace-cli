@@ -186,6 +186,7 @@ func TestCrossPlatformCoverageCommandMigrationValidationEdges(t *testing.T) {
 		want   string
 	}{
 		{"identifier", CommandMigrationMove, func(s *CommandMigrationSchema) { s.ProductID = "bad/id" }, "exact identifier"},
+		{"replacement identifier", CommandMigrationMove, func(s *CommandMigrationSchema) { s.ReplacementToolID = "bad/id" }, "replacement_tool_id"},
 		{"nil parameters", CommandMigrationMove, func(s *CommandMigrationSchema) { s.Parameters = nil }, "must be an array"},
 		{"bad from", CommandMigrationMove, func(s *CommandMigrationSchema) { s.Parameters[0].From = "bad name" }, "exact parameter"},
 		{"duplicate from", CommandMigrationMove, func(s *CommandMigrationSchema) { s.Parameters = append(s.Parameters, s.Parameters[0]) }, "duplicates from"},
@@ -238,6 +239,222 @@ func TestCrossPlatformCoverageCommandMigrationValidationEdges(t *testing.T) {
 				t.Fatalf("schema validate error=%v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaAvailabilityMigrationLifecycle(t *testing.T) {
+	pending := availabilityCommandMigrationManifest(CommandMigrationPending)
+	consumed := availabilityCommandMigrationManifest(CommandMigrationConsumed)
+	empty := CommandMigrationManifest{Version: CommandMigrationManifestVersion, Migrations: []CommandMigration{}}
+	before := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		testCommand("dws devapp +event-list"),
+	)
+	after := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		Command{Path: "dws devapp +event-list", Runnable: true, Hidden: true},
+	)
+
+	got, err := AuthorizeCommandMigrations(
+		after,
+		map[string]Snapshot{"merge-base": before, "stable": before},
+		pending,
+		consumed,
+	)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("availability lifecycle authorizations=%#v error=%v", got, err)
+	}
+	report, err := CompareAllWithInterfaceMigrations(
+		after,
+		map[string]Snapshot{"merge-base": before, "stable": before},
+		FlagMigrationManifest{Version: FlagMigrationManifestVersion, Migrations: []FlagMigration{}},
+		FlagMigrationManifest{Version: FlagMigrationManifestVersion, Migrations: []FlagMigration{}},
+		pending,
+		consumed,
+	)
+	if err != nil || !report.Compatible {
+		t.Fatalf("availability interface report compatible=%v error=%v report=%#v", report.Compatible, err, report)
+	}
+	if got, err := AuthorizeCommandMigrations(
+		before,
+		map[string]Snapshot{"merge-base": before, "stable": before},
+		empty,
+		pending,
+	); err != nil || len(got) != 0 {
+		t.Fatalf("candidate-added pending migration must remain inert: %#v, %v", got, err)
+	}
+
+	valid := pending.Migrations[0]
+	compatibilityVisible := cloneCommandMigration(valid)
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if err := compatibilityVisible.validate(); err != nil {
+		t.Fatalf("compatibility-visible availability migration must validate: %v", err)
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*CommandMigration)
+		want   string
+	}{
+		{"legacy path", func(m *CommandMigration) { m.Legacy.Command = "dws devapp *" }, "legacy must be an exact"},
+		{"replacement", func(m *CommandMigration) { m.Replacement.Command = "dws devapp other" }, "must not declare replacement"},
+		{"absent after", func(m *CommandMigration) { m.Legacy.After = CommandMigrationState{} }, "visible to hidden or remain compatibility-visible"},
+		{"legacy flag", func(m *CommandMigration) { m.LegacyFlag.Name = "legacy" }, "must not declare legacy_flag"},
+		{"missing availability", func(m *CommandMigration) { m.Schema.Availability = nil }, "requires availability"},
+		{"wrong availability", func(m *CommandMigration) { m.Schema.Availability.After = "available" }, "requires availability"},
+		{"parameter mapping", func(m *CommandMigration) {
+			m.Schema.Parameters = []CommandParameterMigration{{From: "cursor", To: "next-token"}}
+		}, "must not declare"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			migration := cloneCommandMigration(valid)
+			if valid.Schema.Availability != nil {
+				change := *valid.Schema.Availability
+				migration.Schema.Availability = &change
+			}
+			test.mutate(&migration)
+			if err := migration.validate(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("availability migration validation error=%v, want %q", err, test.want)
+			}
+		})
+	}
+	if got := valid.displayKey(); !strings.Contains(got, CommandMigrationAvailability) {
+		t.Fatalf("availability display key = %q", got)
+	}
+	if got := matchCommandMigrationPhase(testSnapshot(testCommand("dws")), valid); got != commandMigrationPartial {
+		t.Fatalf("missing availability command phase = %q", got)
+	}
+	parent := before
+	parent.Commands = append(append([]Command(nil), before.Commands...), testCommand("dws devapp +event-list detail"))
+	if err := validateCommandMoveLegacyLeaves(parent, pending); err == nil || !strings.Contains(err.Error(), "must be a leaf") {
+		t.Fatalf("availability parent command error = %v", err)
+	}
+	moveSchema := commandMigrationManifest(CommandMigrationPending).Migrations[0].Schema
+	moveSchema.Availability = &CommandAvailabilityChange{Before: "available", After: "unavailable"}
+	if err := moveSchema.validate(CommandMigrationMove); err == nil || !strings.Contains(err.Error(), "must not declare schema availability") {
+		t.Fatalf("ordinary move availability error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageCompatibilityVisibleAvailabilityMigrationLifecycle(t *testing.T) {
+	classicPending := availabilityCommandMigrationManifest(CommandMigrationPending)
+	steadyPending := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationPending)
+	steadyConsumed := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationConsumed)
+	empty := CommandMigrationManifest{Version: CommandMigrationManifestVersion, Migrations: []CommandMigration{}}
+	visible := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		testCommand("dws devapp +event-list"),
+	)
+	hidden := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		Command{Path: "dws devapp +event-list", Runnable: true, Hidden: true},
+	)
+	references := map[string]Snapshot{"merge-base": visible, "stable": visible}
+
+	if got, err := AuthorizeCommandMigrations(visible, references, classicPending, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("pending compatibility refinement authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyPending, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("pending compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyPending, steadyConsumed); err != nil || len(got) != 1 {
+		t.Fatalf("consumed compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, steadyConsumed); err != nil || len(got) != 1 {
+		t.Fatalf("retained consumed compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, empty, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("candidate-added compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+
+	modified := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationPending)
+	modified.Migrations[0].Reason = "Changed reason."
+	if _, err := AuthorizeCommandMigrations(visible, references, classicPending, modified); err == nil || !strings.Contains(err.Error(), "modified base-owned") {
+		t.Fatalf("modified compatibility refinement error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, classicPending, steadyConsumed); err == nil || !strings.Contains(err.Error(), "modified base-owned") {
+		t.Fatalf("refinement and consumption in one change error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(hidden, references, steadyPending, steadyPending); err == nil || !strings.Contains(err.Error(), "drifted from compatibility-visible") {
+		t.Fatalf("hidden compatibility command error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, empty); err == nil || !strings.Contains(err.Error(), "must retain compatibility-visible") {
+		t.Fatalf("removed consumed compatibility receipt error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, steadyPending); err == nil || !strings.Contains(err.Error(), "back to pending") {
+		t.Fatalf("consumed compatibility receipt reverted error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoveragePendingCommandMigrationRetargetLifecycle(t *testing.T) {
+	approved := commandMigrationManifest(CommandMigrationPending)
+	retargeted := retargetedCommandMigrationManifest(CommandMigrationPending)
+	before := commandMigrationSnapshot(false, false)
+	after := retargetedCommandMigrationSnapshot()
+	references := map[string]Snapshot{"merge-base": before, "stable": before}
+
+	got, err := AuthorizeCommandMigrations(before, references, approved, retargeted)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("pending retarget authorizations=%#v error=%v", got, err)
+	}
+	consumed := retargetedCommandMigrationManifest(CommandMigrationConsumed)
+	got, err = AuthorizeCommandMigrations(after, references, retargeted, consumed)
+	if err != nil || len(got) != len(retargeted.Migrations) {
+		t.Fatalf("retargeted migrations were not consumable: authorizations=%#v error=%v", got, err)
+	}
+
+	forked := CommandMigrationManifest{
+		Version:    CommandMigrationManifestVersion,
+		Migrations: append(append([]CommandMigration(nil), approved.Migrations...), retargeted.Migrations...),
+	}
+	if err := forked.Validate(); err == nil || !strings.Contains(err.Error(), "forks pending migration lineage") {
+		t.Fatalf("parallel pending targets error=%v", err)
+	}
+
+	selfAuthorized := retargetedCommandMigrationSnapshot()
+	if _, err := AuthorizeCommandMigrations(selfAuthorized, references, approved, retargeted); err == nil || !strings.Contains(err.Error(), "not in the exact before state") {
+		t.Fatalf("retarget plus surface change error=%v", err)
+	}
+	stableAfter := map[string]Snapshot{"merge-base": before, "stable": after}
+	if _, err := AuthorizeCommandMigrations(before, stableAfter, approved, retargeted); err == nil || !strings.Contains(err.Error(), "not in the exact before state") {
+		t.Fatalf("retarget after stable rollout error=%v", err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*CommandMigration)
+	}{
+		{"consumed target", func(m *CommandMigration) { m.State = CommandMigrationConsumed }},
+		{"legacy command", func(m *CommandMigration) { m.Legacy.Command = "dws chat message other" }},
+		{"legacy state", func(m *CommandMigration) { m.Legacy.After.Hidden = false }},
+		{"replacement state", func(m *CommandMigration) { m.Replacement.After.Hidden = true }},
+		{"product", func(m *CommandMigration) { m.Schema.ProductID = "other" }},
+		{"source tool", func(m *CommandMigration) {
+			m.Schema.SourceToolID = "chat.other"
+			m.Schema.ReplacementToolID = "chat.other"
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := retargetedCommandMigrationManifest(CommandMigrationPending)
+			test.mutate(&candidate.Migrations[0])
+			if _, err := AuthorizeCommandMigrations(before, references, approved, candidate); err == nil {
+				t.Fatal("invalid pending retarget accepted")
+			}
+		})
+	}
+
+	differentLegacy := cloneCommandMigration(approved.Migrations[0])
+	differentLegacy.Legacy.Command = "dws chat message another"
+	differentLegacy.Replacement.Command = "dws chat thread another"
+	moveFork := CommandMigrationManifest{
+		Version:    CommandMigrationManifestVersion,
+		Migrations: []CommandMigration{approved.Migrations[0], differentLegacy},
+	}
+	if err := moveFork.Validate(); err == nil || !strings.Contains(err.Error(), "forks pending migration lineage") {
+		t.Fatalf("Schema source tool fork error=%v", err)
 	}
 }
 
@@ -684,9 +901,30 @@ func flagExtractionCommandMigrationManifest(state string) CommandMigrationManife
 	return manifest
 }
 
+func retargetedCommandMigrationManifest(state string) CommandMigrationManifest {
+	manifest := commandMigrationManifest(state)
+	manifest.Migrations[0].Replacement.Command = "dws chat thread new"
+	manifest.Migrations[0].Schema.Parameters = []CommandParameterMigration{}
+	manifest.Migrations[0].Reason = "Retarget the unstarted move to the thread command."
+	manifest.Migrations[1].Replacement.Command = "dws chat thread create-group"
+	manifest.Migrations[1].Schema.ReplacementToolID = "chat.create_thread_group"
+	manifest.Migrations[1].Schema.Parameters = []CommandParameterMigration{{
+		From: "thread",
+		ReplacementConstant: &CommandReplacementConstant{
+			Property: "convThreadEnabled",
+			Value:    true,
+		},
+	}}
+	manifest.Migrations[1].Reason = "Retarget the unstarted extraction to the thread command."
+	return manifest
+}
+
 func cloneCommandMigration(source CommandMigration) CommandMigration {
 	cloned := source
-	cloned.Schema.Parameters = append([]CommandParameterMigration(nil), source.Schema.Parameters...)
+	if source.Schema.Parameters != nil {
+		cloned.Schema.Parameters = make([]CommandParameterMigration, len(source.Schema.Parameters))
+		copy(cloned.Schema.Parameters, source.Schema.Parameters)
+	}
 	for index, parameter := range source.Schema.Parameters {
 		if parameter.ReplacementConstant == nil {
 			continue
@@ -700,6 +938,34 @@ func cloneCommandMigration(source CommandMigration) CommandMigration {
 func singleCommandMigrationManifest(state string) CommandMigrationManifest {
 	manifest := commandMigrationManifest(state)
 	manifest.Migrations = manifest.Migrations[:1]
+	return manifest
+}
+
+func availabilityCommandMigrationManifest(state string) CommandMigrationManifest {
+	return CommandMigrationManifest{
+		Version: CommandMigrationManifestVersion,
+		Migrations: []CommandMigration{{
+			Kind: CommandMigrationAvailability,
+			Legacy: CommandMigrationSide{
+				Command: "dws devapp +event-list",
+				Before:  CommandMigrationState{Present: true, Runnable: true},
+				After:   CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+			},
+			Schema: CommandMigrationSchema{
+				ProductID:    "devapp",
+				SourceToolID: "devapp.shortcut_event_list",
+				Parameters:   []CommandParameterMigration{},
+				Availability: &CommandAvailabilityChange{Before: "available", After: "unavailable"},
+			},
+			State:  state,
+			Reason: "Fail closed until terminal pagination evidence is available.",
+		}},
+	}
+}
+
+func compatibilityVisibleAvailabilityCommandMigrationManifest(state string) CommandMigrationManifest {
+	manifest := availabilityCommandMigrationManifest(state)
+	manifest.Migrations[0].Legacy.After = manifest.Migrations[0].Legacy.Before
 	return manifest
 }
 
@@ -732,6 +998,19 @@ func commandMigrationSnapshot(after, removeUnrelated bool) Snapshot {
 		)
 	}
 	return testSnapshot(commands...)
+}
+
+func retargetedCommandMigrationSnapshot() Snapshot {
+	snapshot := commandMigrationSnapshot(false, false)
+	snapshot.Commands[1].LocalFlags[0].Hidden = true
+	snapshot.Commands[2].Hidden = true
+	threadCreate := testCommand("dws chat thread create-group")
+	threadCreate.BoolConstParams = map[string]bool{"convThreadEnabled": true}
+	snapshot.Commands = append(snapshot.Commands,
+		threadCreate,
+		testCommand("dws chat thread new"),
+	)
+	return snapshot
 }
 
 func withCommandBoolConstParams(snapshot Snapshot, path string, values map[string]bool) Snapshot {

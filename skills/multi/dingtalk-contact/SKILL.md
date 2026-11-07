@@ -20,16 +20,21 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "contact +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws contact <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service contact --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "contact +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service contact --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
 | `dws contact +by-mobile` | read | 按手机号查询某人的完整资料（自动解析 userId 后取详情） |
 | `dws contact +dept-members` | read | 按部门名列出部门成员（自动解析 deptId） |
+| `dws contact +friend-list` | read | 查询当前用户的好友列表 |
+| `dws contact +friend-remove` | high-risk-write | 删除指定好友 |
+| `dws contact +friend-request-accept` | write | 同意指定用户发来的好友申请 |
+| `dws contact +friend-request-list` | read | 查询当前用户收到的好友申请列表 |
+| `dws contact +friend-request-reject` | write | 删除（忽略）指定用户发来的好友申请 |
+| `dws contact +friend-request-send` | write | 向指定用户发起好友申请 |
 | `dws contact +list-dept-members` | read | 查看部门成员（仅本部门，不含下级） |
 | `dws contact +list-followings` | read | 获取当前用户的特别关注列表 |
 | `dws contact +list-role-members` | read | 查询角色下的成员列表 |
-| `dws contact +list-roles` | read | 获取企业所有角色（标签）列表 |
 | `dws contact +list-sub-depts` | read | 查看指定部门的子部门 |
 | `dws contact +lookup` | read | 按姓名查询某人的完整资料（自动解析 userId 后取详情） |
 | `dws contact +me` | read | 查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影） |
@@ -47,6 +52,14 @@ metadata:
 | "查我自己的信息" | `dws contact user get-self` |
 | "按 userId 查详情" | `dws contact user get --ids <userId1>,<userId2>,...`（多个并行） |
 | "完整手机号反查用户" | `dws contact user search-mobile --mobile <手机号>` |
+| "按开放钉钉号ID（openDingTalkId）取 userId" | `dws contact user get-by-open-dingtalk-id --id <openDingTalkId>` |
+| "按手机号或钉钉号查 openDingTalkId" | `dws contact user get-open-dingtalk-id --keyword <手机号|钉钉号>`（企业需在能力灰度名单内） |
+| "我的好友 / 好友列表 / 有哪些好友" | `dws contact +friend-list` |
+| "好友申请 / 谁加我 /  pending 好友请求" | `dws contact +friend-request-list` |
+| "加好友 / 发送好友申请 / 添加某人为好友" | `dws contact +friend-request-send --to <openDingTalkId>` |
+| "同意好友申请 / 接受加好友" | `dws contact +friend-request-accept --from <openDingTalkId>` |
+| "拒绝好友申请 / 忽略好友申请" | `dws contact +friend-request-reject --from <openDingTalkId>` |
+| "删除好友 / 移除好友" | `dws contact +friend-remove --friend <openDingTalkId>`（高风险，需用户确认） |
 | "按部门名拉成员" | `python scripts/contact_dept_members.py --query "<部门名>"` |
 | "搜部门" | `dws contact dept search --query "<关键词>"` |
 | "部门成员列表" | `dws contact dept list-members --ids <deptId>` |
@@ -103,6 +116,16 @@ metadata:
 
 **禁止**：使用不存在的 `contact dept list`（已废弃/歧义）、编造 deptId/labelId、跳过 aisearch 维度直接猜上下级。
 
+### SOP-5 好友关系（friend）
+
+**触发**：好友列表、好友申请、加好友、同意/拒绝申请、删除好友。
+
+1. **获取 openDingTalkId（必须）**：好友命令全部以 **开放钉钉号ID（openDingTalkId）** 为身份键。openDingTalkId 的来源：①好友域自身数据——`dws contact +friend-list --format json` / `dws contact +friend-request-list --format json` 返回项的 `openDingTalkId` 字段，或好友事件消息体（`user_contact_friend_request_received` 的 `src/dest_open_dingtalk_id`、`user_contact_friend_added` 的 `friend_open_dingtalk_id`）；②按姓名等关键词搜人——`dws contact user search --query "<姓名>" --format json`（search_contact_by_key_word）结果同时返回 `userId` 与 `openDingTalkId`；③按手机号或钉钉号反查——`dws contact user get-open-dingtalk-id --keyword <手机号|钉钉号> --format json`（11 位数字自动按手机号匹配，其他按钉钉号；仅灰度名单内企业可用，未开通时返回 ability_not_full_open）。注意：`aisearch person` 只返回 userId、**取不到 openDingTalkId**；拿到 `openDingTalkId` 后如需 userId 再调 `dws contact user get-by-open-dingtalk-id --id <openDingTalkId> --format json`。
+2. **查好友（必须）**：`dws contact +friend-list --format json` 返回当前登录用户的好友名单（含昵称 nick、备注名 alias）、好友状态与分页信息；`dws contact +friend-request-list --format json` 返回收到的好友申请（含申请人昵称 nick、申请留言、状态）与 pending 数量。向用户展示列表时优先用 nick / alias 标识好友，openDingTalkId 非必要不展示；汇报申请 status 时必须翻译为中文状态（1=待接受、3=已成为好友），不要直接显示数字。
+3. **写操作（必须）**：发送申请 `dws contact +friend-request-send --to <openDingTalkId> --remark "<验证留言>" --format json`；同意 `dws contact +friend-request-accept --from <openDingTalkId> --format json`；拒绝 `dws contact +friend-request-reject --from <openDingTalkId> --format json`；删除好友 `dws contact +friend-remove --friend <openDingTalkId> --format json`（最后一条为不可逆高风险写操作，**必须先取得用户明确确认**）。
+
+**禁止**：把钉钉号（dingtalkId）与开放钉钉号ID（openDingTalkId）混用；在缺少 openDingTalkId 时直接执行写操作；删除好友不确认。
+
 ## 高频硬约束
 
 - 通讯录问题必须调用 `dws contact` 或 `dws aisearch` 获取实时结果；严禁只读 `USER.md`、环境身份或静态上下文后直接回答。
@@ -111,6 +134,8 @@ metadata:
 - 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --query "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
 - 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
+- 好友命令（`+friend-*`）全部以 **openDingTalkId** 为身份键，不是 userId 也不是钉钉号；openDingTalkId 可从 `+friend-list` / `+friend-request-list` 响应、好友事件消息体，或 `contact user search`（按关键词搜人，同时返回 userId 与 openDingTalkId）取得；`aisearch person` 只返回 userId、取不到 openDingTalkId。
+- `+friend-remove` 为不可逆高风险写操作，执行前**必须**向用户展示目标 openDingTalkId 并获取明确确认；确认后才可加 `--yes`。
 
 ## 跨产品协作
 

@@ -4,6 +4,16 @@
 
 `dws pat` 管理 Agent 的行为授权。它不管理开放平台应用权限；应用权限使用 `dws dev app permission`（见 [devapp.md](./devapp.md)）。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "pat +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service pat --format json` 发现。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws pat +browser-policy` | write | 安全配置 PAT 授权时是否允许打开本地浏览器 |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 命令总览
 
 ### 配置浏览器策略

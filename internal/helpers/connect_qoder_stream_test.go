@@ -53,15 +53,34 @@ if "--input-format" in sys.argv:
             }), flush=True)
             continue
         if msg.get("type") == "user":
-            content = msg.get("message", {}).get("content", "")
+            content = msg.get("message", {}).get("content", [])
+            if not isinstance(content, list):
+                print(json.dumps({
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "errors": ["message.content must be an array"],
+                }), flush=True)
+                continue
+            text = "".join(
+                part.get("text", "")
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+            if text == "trigger backend failure":
+                print(json.dumps({
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "errors": ["API Error: rejected request"],
+                }), flush=True)
+                continue
             print(json.dumps({
                 "type": "assistant",
-                "message": {"content": [{"type": "text", "text": "seen " + content}]},
+                "message": {"content": [{"type": "text", "text": "seen " + text}]},
             }), flush=True)
             print(json.dumps({
                 "type": "result",
                 "subtype": "success",
-                "message": {"content": [{"type": "text", "text": "done " + content}]},
+                "message": {"content": [{"type": "text", "text": "done " + text}]},
             }), flush=True)
 else:
     prompt = sys.argv[-1] if len(sys.argv) > 1 else ""
@@ -155,6 +174,33 @@ func TestQoderForwarderKeepsStreamJSONProcessAlive(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], "--input-format") || !strings.Contains(lines[0], "stream-json") {
 		t.Fatalf("qodercli should start in stream-json input mode, log:\n%s", raw)
+	}
+}
+
+func TestQoderForwarderSurfacesResultErrors(t *testing.T) {
+	t.Setenv("DWS_CONNECT_NO_INSTALL", "1")
+	t.Setenv("DWS_AGENT_CMD", "")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DWS_AGENT_TIMEOUT_MS", "3000")
+	stubDir := t.TempDir()
+	_, logPath := writeQoderStreamStub(t, stubDir)
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DWS_QODER_STUB_LOG", logPath)
+
+	fwd, err := forwarderForChannel("qoder", "qoder-client", connectAgentOptions{Memory: true})
+	if err != nil {
+		t.Fatalf("forwarderForChannel(qoder): %v", err)
+	}
+	if closer, ok := fwd.(forwarderCloser); ok {
+		defer closer.close()
+	}
+
+	reply, err := fwd.forward(context.Background(), "conv", "trigger backend failure")
+	if err != nil {
+		t.Fatalf("forward returned error: %v", err)
+	}
+	if !strings.Contains(reply, "AI 后端调用失败") || !strings.Contains(reply, "rejected request") {
+		t.Fatalf("reply = %q, want actionable Qoder backend error", reply)
 	}
 }
 

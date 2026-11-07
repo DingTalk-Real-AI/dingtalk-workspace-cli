@@ -143,6 +143,58 @@ func TestCrossPlatformCoverageTableBootstrapRejectsDuplicateFieldsBeforeMCP(t *t
 	}
 }
 
+func TestCrossPlatformCoverageTableBootstrapRejectsUnknownFieldPropertiesBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields string
+		want   string
+	}{
+		{
+			name:   "unknown property",
+			fields: `[{"fieldName":"标题","type":"text","property":{"foo":"bar"}}]`,
+			want:   `未知属性 "property"`,
+		},
+		{
+			name:   "undeclared name alias",
+			fields: `[{"name":"标题","type":"text"}]`,
+			want:   `未知属性 "name"`,
+		},
+		{
+			name:   "description type mismatch",
+			fields: `[{"fieldName":"标题","type":"text","description":1}]`,
+			want:   `.description 必须是字符串`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{}
+			out, err := runAITableCompositeCLI(t, caller, "+table-bootstrap",
+				"--base-id", "base", "--name", "任务", "--fields", tc.fields, "--yes")
+			if out != "" || err == nil || !strings.Contains(err.Error(), tc.want) || len(caller.calls) != 0 {
+				t.Fatalf("strict field validation = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageTableBootstrapAcceptsAndVerifiesFieldDescription(t *testing.T) {
+	fields := `[{"fieldName":"标题","type":"text","description":"任务标题"}]`
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"tableId":"table-new"}`},
+		{text: `{"tables":[{"tableId":"table-new"}]}`},
+		{text: `{"fields":[{"fieldId":"field-1","fieldName":"标题","fieldType":"text","description":"任务标题"}]}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+table-bootstrap",
+		"--base-id", "base", "--name", "任务", "--fields", fields, "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) {
+		t.Fatalf("field description = output:%q err:%v", out, err)
+	}
+	createdFields := caller.calls[0].args["fields"].([]any)
+	if got := createdFields[0].(map[string]any)["description"]; got != "任务标题" {
+		t.Fatalf("create_table description = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageTableBootstrapVerifiesTypeAndDeclaredConfig(t *testing.T) {
 	fields := []any{map[string]any{
 		"fieldName": "状态",

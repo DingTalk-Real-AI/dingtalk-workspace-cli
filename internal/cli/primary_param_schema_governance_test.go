@@ -122,8 +122,8 @@ func TestPrimaryParamMigrationUpdatesReviewedFixturesAndMappingKeys(t *testing.T
 		{"chat.reply_personal_message --text", "chat.reply_personal_message --content", "serialized into the aggregate content JSON string"},
 		{"chat.send_personal_message --file-path", "chat.send_personal_message --file", "local upload/preprocessing input"},
 		{"chat.send_personal_message --text", "chat.send_personal_message --content", "serialized into the aggregate content payload"},
-		{"doc.insert_document_block --text", "doc.insert_document_block --content", "aggregate convenience input used to build element"},
-		{"doc.update_document_block --text", "doc.update_document_block --content", "aggregate convenience input used to build element"},
+		{"doc.insert_document_block --text", "doc.insert_document_block --content", "conditional content input: builds element by default; sends markdown with --content-format markdown"},
+		{"doc.update_document_block --text", "doc.update_document_block --content", "conditional content input: builds element by default; sends markdown with --content-format markdown"},
 		{"todo.add_todo_attachment --file-path", "todo.add_todo_attachment --file", "local upload input used to construct attachmentList"},
 	}
 	for _, test := range tests {
@@ -161,7 +161,7 @@ func TestPrimaryParamMigrationPreservesDeliverySchemaSignatures(t *testing.T) {
 		{path: "chat +messages-batch-send-by-bot", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "chat +messages-send-by-webhook", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "chat +messages-reply", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
-		{path: "chat +messages-reply", primary: "group", legacy: "conversation-id", required: true, property: "conversationId", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
+		{path: "chat +messages-reply", primary: "group", legacy: "conversation-id", required: false, property: "conversationId", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "doc +doc-append", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "doc block insert", primary: "content", legacy: "text", propertyFrom: "reviewed_mapping_exclusion", requiredWhenFrom: "default"},
 		{path: "doc block update", primary: "content", legacy: "text", propertyFrom: "reviewed_mapping_exclusion", requiredWhenFrom: "default"},

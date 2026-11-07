@@ -17,9 +17,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
-func TestIsSensitiveKey(t *testing.T) {
+func TestCrossPlatformCoverageIsSensitiveKey(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -34,13 +36,24 @@ func TestIsSensitiveKey(t *testing.T) {
 		{"dws_agent_ext", true},
 		{"x-dws-agent-ext", true},
 		{"X-Dws-Agent-Ext", true},
+		{"x-dingtalk-ext", true},
+		{"X-DingTalk-Ext", true},
+		{"umid", true},
+		{"UMID", true},
 		{"DWS_AGENT_VER", false},
 		{"x-dws-agent-ver", false},
 		{"client_secret", true},
 		{"client-secret", true},
 		{"token", true},
+		{"dwsAuthCode", true},
+		{"dws_auth_code", true},
 		{"password", true},
 		{"cookie", true},
+		{"api_key", true},
+		{"api-key", true},
+		{"apiKey", true},
+		{"ApiKey", true},
+		{"APIKEY", true},
 		{"Content-Type", false},
 		{"X-Cli-Source", false},
 		{"method", false},
@@ -106,10 +119,12 @@ func TestTruncateBody_Empty(t *testing.T) {
 func TestSanitizeArguments(t *testing.T) {
 	t.Parallel()
 	args := map[string]any{
-		"name":     "test",
-		"password": "secret123",
+		"name":        "test",
+		"password":    "secret123",
+		"dwsAuthCode": "test-dws-auth-code-should-never-appear",
 		"nested": map[string]any{
 			"api_key": "key-value",
+			"apiKey":  "camel-case-key-value",
 			"safe":    "ok",
 		},
 	}
@@ -120,8 +135,48 @@ func TestSanitizeArguments(t *testing.T) {
 	if strings.Contains(got, "key-value") {
 		t.Fatalf("api_key should be redacted: %s", got)
 	}
+	if strings.Contains(got, "test-dws-auth-code-should-never-appear") {
+		t.Fatalf("dwsAuthCode should be redacted: %s", got)
+	}
 	if !strings.Contains(got, "test") {
 		t.Fatalf("non-sensitive value should remain: %s", got)
+	}
+}
+
+func TestSanitizeArgumentsRedactsSensitiveValuesInsideArrays(t *testing.T) {
+	got := SanitizeArguments(map[string]any{
+		"fileUrl": "https://signed.example/temp?token=upload-secret",
+		"skills": []any{
+			map[string]any{"skillId": "skill-1", "token": "array-secret"},
+		},
+		"mcps": []map[string]any{
+			{"mcpId": "mcp-1", "config": map[string]any{"configString": `{"token":"nested-secret"}`, "envs": map[string]any{"FOO": "env-secret"}, "headers": map[string]any{"X-Custom-Key": "header-secret"}}},
+		},
+	}, 4096)
+	for _, secret := range []string{"upload-secret", "signed.example", "array-secret", "nested-secret", "env-secret", "header-secret"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("SanitizeArguments leaked %q inside array: %s", secret, got)
+		}
+	}
+	for _, safe := range []string{"skill-1", "mcp-1"} {
+		if !strings.Contains(got, safe) {
+			t.Fatalf("SanitizeArguments removed safe scalar %q: %s", safe, got)
+		}
+	}
+}
+
+func TestSanitizeArgumentsRedactsMessageBodies(t *testing.T) {
+	body := "数字员工审批正文不得进入日志"
+	got := SanitizeArguments(map[string]any{
+		"content": body,
+		"nested":  map[string]any{"text": body},
+		"uuid":    "safe-idempotency-key",
+	}, 4096)
+	if strings.Contains(got, body) {
+		t.Fatalf("message body leaked from sanitized arguments: %s", got)
+	}
+	if !strings.Contains(got, `"uuid":"safe-idempotency-key"`) {
+		t.Fatalf("non-sensitive metadata was unexpectedly removed: %s", got)
 	}
 }
 
@@ -132,20 +187,21 @@ func TestSanitizeArguments_Empty(t *testing.T) {
 	}
 }
 
-func TestRedactHeaders(t *testing.T) {
+func TestCrossPlatformCoverageRedactHeaders(t *testing.T) {
 	t.Parallel()
 	headers := make(http.Header)
 	headers.Set("Authorization", "Bearer test-credential-value")
 	headers.Set("Content-Type", "application/json")
 	headers.Set("DWS_AGENT_EXT", `{"umt":"test-umt-value"}`)
 	headers.Set("x-dws-agent-ext", `{"ua":"test-agent-value"}`)
+	headers.Set(requestmeta.DingTalkExtHeader, `{"umid":"test-runtime-value"}`)
 	attrs := RedactHeaders(headers)
-	if len(attrs) != 4 {
-		t.Fatalf("expected 4 attrs, got %d", len(attrs))
+	if len(attrs) != 5 {
+		t.Fatalf("expected 5 attrs, got %d", len(attrs))
 	}
 	for _, attr := range attrs {
 		switch attr.Key {
-		case "header.authorization", "header.dws_agent_ext", "header.x-dws-agent-ext":
+		case "header.authorization", "header.dws_agent_ext", "header.x-dws-agent-ext", "header.x-dingtalk-ext":
 			if !strings.Contains(attr.Value.String(), "***") {
 				t.Fatalf("%s should be redacted: %s", attr.Key, attr.Value.String())
 			}

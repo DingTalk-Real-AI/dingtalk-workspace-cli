@@ -169,6 +169,8 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 		fmt.Fprintf(cfg.Stderr, "[event] ready event_count=%d bus_pid=%d\n", len(sessions), sessions[0].ack.BusPID)
 		fmt.Fprintf(cfg.Stderr, "[event] bus source=%s state=%s idle_timeout=%ds\n",
 			sessions[0].ack.StateSource, sessions[0].ack.SourceState, sessions[0].ack.IdleTimeoutSecs)
+		ack := sessions[len(sessions)-1].ack
+		writeTransportState(cfg.Stderr, ack.SourceState, ack.StateSource, ack.SourceObserved, 0)
 	}
 
 	if cfg.Stdin != nil {
@@ -262,6 +264,7 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 					var state transport.SourceState
 					_ = json.Unmarshal(frame.raw, &state)
 					fmt.Fprintf(cfg.Stderr, "source state: %s (source=%s, attempt=%d)\n", state.State, state.StateSource, state.Attempt)
+					writeTransportState(cfg.Stderr, state.State, state.StateSource, state.Observed, state.Attempt)
 				}
 			case transport.FrameTypeHeartbeat:
 				// silent

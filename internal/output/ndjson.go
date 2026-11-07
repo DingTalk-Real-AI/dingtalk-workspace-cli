@@ -82,7 +82,7 @@ func roundTripJSON(payload any) (any, error) {
 		return nil, err
 	}
 	var out any
-	if err := unmarshalJSON(raw, &out); err != nil {
+	if err := unmarshalJSONUseNumber(raw, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

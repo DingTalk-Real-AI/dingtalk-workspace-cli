@@ -19,9 +19,9 @@ func TestCrossPlatformCoverageEventAgentSelectionBoundaries(t *testing.T) {
 		t.Fatal("event ProductDecl is not registered")
 	}
 	assertSelectionContains(t, "event product", eventProduct.Selection.AgentSummary,
-		[]string{"IM", "OA"})
+		[]string{"IM", "OA", "互动卡片"})
 	assertSelectionContains(t, "event product use_when", strings.Join(eventProduct.Selection.UseWhen, "\n"),
-		[]string{"消息", "群生命周期", "OA"})
+		[]string{"消息", "群生命周期", "OA", "user_card_action_triggered"})
 	assertSelectionContains(t, "event product avoid_when", strings.Join(eventProduct.Selection.AvoidWhen, "\n"),
 		[]string{"chat", "oa", "dev app event"})
 
@@ -38,9 +38,12 @@ func TestCrossPlatformCoverageEventAgentSelectionBoundaries(t *testing.T) {
 	if !ok {
 		t.Fatal("event consume metadata is not registered")
 	}
+	assertSelectionContains(t, "event.consume agent_summary", consumeMeta.Selection.AgentSummary,
+		[]string{"听记"})
 	consumeUse := strings.Join(consumeMeta.Selection.UseWhen, "\n")
 	assertSelectionContains(t, "event.consume use_when", consumeUse,
-		[]string{"OA", "群", "EventKey", "Filter DSL", "subscribe_id", "transport envelope", "高级多事件"})
+		[]string{"OA", "群", "听记", "user_minutes_task_created", "user_minutes_summary_generated",
+			"EventKey", "Filter DSL", "subscribe_id", "transport envelope", "高级多事件"})
 	consumeAvoid := strings.Join(consumeMeta.Selection.AvoidWhen, "\n")
 	assertSelectionContains(t, "event.consume avoid_when", consumeAvoid,
 		[]string{"event +listen-im", "历史聊天", "oa", "dev app event"})
@@ -50,7 +53,7 @@ func TestCrossPlatformCoverageEventAgentSelectionBoundaries(t *testing.T) {
 		t.Fatal("event schema metadata is not registered")
 	}
 	assertSelectionContains(t, "event.schema use_when", strings.Join(schemaMeta.Selection.UseWhen, "\n"),
-		[]string{"IM", "OA", "--flatten"})
+		[]string{"IM", "OA", "听记", "--flatten"})
 
 	for productID, want := range map[string]string{
 		"chat": "event +listen-im",

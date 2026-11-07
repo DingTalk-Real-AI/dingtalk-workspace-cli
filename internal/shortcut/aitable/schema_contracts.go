@@ -76,15 +76,13 @@ var reviewedAITableShortcutContractCommands = map[string]struct{}{
 func withReviewedAITableShortcutContracts(values ...shortcut.Shortcut) []shortcut.Shortcut {
 	out := make([]shortcut.Shortcut, len(values))
 	for index, value := range values {
-		out[index] = value
-		if !value.Contract.Empty() {
-			continue
+		if value.Contract.Empty() {
+			if _, reviewed := reviewedAITableShortcutContractCommands[value.Command]; reviewed {
+				value.Safety = reviewedAITableShortcutSafety(value.Risk)
+				value.Contract = reviewedAITableShortcutContract(value)
+			}
 		}
-		if _, reviewed := reviewedAITableShortcutContractCommands[value.Command]; !reviewed {
-			continue
-		}
-		out[index].Safety = reviewedAITableShortcutSafety(value.Risk)
-		out[index].Contract = reviewedAITableShortcutContract(value)
+		out[index] = withAITableParityAliases(value)
 	}
 	return out
 }

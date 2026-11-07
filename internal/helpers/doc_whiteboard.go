@@ -207,12 +207,12 @@ func runWhiteboardInsert(cmd *cobra.Command, _ []string) error {
 }
 
 func newDocWhiteboardCommand() *cobra.Command {
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "whiteboard",
 		Short: "白板卡片管理",
 		Long:  `管理钉钉文档中的白板卡片：插入空白板并获取白板资源 ID。删除白板卡片请使用 dws doc block delete。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	insertCmd := &cobra.Command{
 		Use:   "insert",

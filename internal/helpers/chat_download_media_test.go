@@ -22,16 +22,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
+func TestCrossPlatformCoverageChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
-	previousHTTPGetFile := httpGetFile
 	os.Args = []string{"dws", "chat"}
 	t.Cleanup(func() {
 		deps = previousDeps
 		os.Args = previousArgs
-		httpGetFile = previousHTTPGetFile
 	})
 
 	const downloadURL = "https://download.example.test/photo.jpg?token=one&part=two"
@@ -47,7 +48,7 @@ func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
 
 	outputDir := t.TempDir()
 	wantOutput := filepath.Join(outputDir, "photo.jpg")
-	httpGetFile = func(_ context.Context, gotURL string, _ map[string]string, gotOutput string) error {
+	testseam.Swap(t, &httpGetFile, func(_ context.Context, gotURL string, _ map[string]string, gotOutput string) error {
 		if gotURL != downloadURL {
 			t.Fatalf("download URL = %q, want %q", gotURL, downloadURL)
 		}
@@ -55,7 +56,7 @@ func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
 			t.Fatalf("download output = %q, want %q", gotOutput, wantOutput)
 		}
 		return nil
-	}
+	})
 
 	root := newChatCommand()
 	installExampleGlobalFlags(root)
@@ -71,7 +72,7 @@ func TestChatDownloadMediaJSONPreservesLegacyResult(t *testing.T) {
 		"--open-conversation-id=conversation",
 		"--output=" + outputDir,
 	})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

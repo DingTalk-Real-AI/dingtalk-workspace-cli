@@ -8,6 +8,7 @@ import (
 	stderrors "errors"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
@@ -51,7 +52,7 @@ func TestCrossPlatformCoverageMessagesSendResolvesNaturalUserAndChatTargets(t *t
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != 2 {
@@ -78,7 +79,7 @@ func TestCrossPlatformCoverageMessagesSendNaturalTargetAmbiguityHasNoWrite(t *te
 		"chat", "+messages-send", "--as", "user",
 		"--user-query", "张三", "--text", "你好", "--yes",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil {
 		t.Fatal("ambiguous user unexpectedly sent")
 	}
@@ -107,7 +108,7 @@ func TestCrossPlatformCoverageMessagesSendChatQueryResolvesAllPagesBeforeWrite(t
 		"chat", "+messages-send", "--as", "user",
 		"--chat-query", "项目群", "--text", "你好", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 || fake.calls[0].tool != "search_groups" ||
@@ -129,7 +130,7 @@ func TestCrossPlatformCoverageMessagesSendIncompleteChatResolutionHasNoWrite(t *
 		"chat", "+messages-send", "--as", "user",
 		"--chat-query", "项目群", "--text", "你好", "--yes",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Reason != "resolution_incomplete" {
 		t.Fatalf("error = %#v", err)
@@ -149,7 +150,7 @@ func TestCrossPlatformCoverageMessagesSendDryRunUsesRealNaturalTargetResolution(
 		"chat", "+messages-send", "--as", "user",
 		"--chat-query", "项目群", "--text", "你好", "--dry-run", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 {
@@ -168,7 +169,7 @@ func TestCrossPlatformCoverageMessagesSendRejectsNaturalTargetForUnsupportedIden
 		"chat", "+messages-send", "--as", "bot", "--robot-code", "r",
 		"--chat-query", "项目群", "--text", "你好", "--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("bot natural target unexpectedly accepted")
 	}
 	if len(fake.calls) != 0 {

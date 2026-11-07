@@ -13,6 +13,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
@@ -42,7 +43,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusRejectsIncompleteIdentity(t *testin
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(tc.args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
 			}
@@ -173,7 +174,7 @@ func TestCrossPlatformCoverageRuntimeTokenIdentityFallbackEdges(t *testing.T) {
 	oldLoadTokenData := personalLoadTokenData
 	oldLoadProfiles := personalLoadProfiles
 	oldRuntimeClientID := personalRuntimeEventClientID
-	oldClientID := personalClientID
+	oldClientID := personalClientIDMetadata
 	oldResolveCredentials := personalResolveAppCredentialsStrict
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
@@ -183,12 +184,14 @@ func TestCrossPlatformCoverageRuntimeTokenIdentityFallbackEdges(t *testing.T) {
 		personalLoadTokenData = oldLoadTokenData
 		personalLoadProfiles = oldLoadProfiles
 		personalRuntimeEventClientID = oldRuntimeClientID
-		personalClientID = oldClientID
+		personalClientIDMetadata = oldClientID
 		personalResolveAppCredentialsStrict = oldResolveCredentials
 	})
 
 	legacy := personal.Identity{ClientID: "legacy-client", SourceID: "legacy-source"}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) { return legacy, nil }
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
+		return legacy, nil
+	}
 	identity, err := resolvePersonalEventIdentityForToken(context.Background(), configDir, "", "  ")
 	if err != nil || identity.ClientID != legacy.ClientID {
 		t.Fatalf("wrapper empty-token fallback = %#v, %v", identity, err)
@@ -208,7 +211,7 @@ func TestCrossPlatformCoverageRuntimeTokenIdentityFallbackEdges(t *testing.T) {
 
 	edition.Override(&edition.Hooks{})
 	personalRuntimeEventClientID = func() string { return "" }
-	personalClientID = func() string { return "" }
+	personalClientIDMetadata = func(string) string { return "" }
 	wantMetadataErr := errors.New("profiles unreadable")
 	personalLoadProfiles = func(string) (*authpkg.ProfilesConfig, error) { return nil, wantMetadataErr }
 	authpkg.SetRuntimeProfile("corp:user")
@@ -221,6 +224,7 @@ func TestCrossPlatformCoverageRuntimeTokenIdentityFallbackEdges(t *testing.T) {
 	personalResolveAppCredentialsStrict = func(string) (string, string, authpkg.CredentialSource, authpkg.CredentialSource, error) {
 		return "app-client", "", "", "", nil
 	}
+	personalClientIDMetadata = func(string) string { return "app-client" }
 	identity, err = resolvePersonalEventIdentityWithToken(context.Background(), configDir, "", "runtime-token")
 	if err != nil || identity.ClientID != "app-client" || !strings.HasPrefix(identity.LocalSubject, "access:") {
 		t.Fatalf("app-credential fallback identity = %#v, %v", identity, err)
@@ -229,6 +233,8 @@ func TestCrossPlatformCoverageRuntimeTokenIdentityFallbackEdges(t *testing.T) {
 	personalResolveAppCredentialsStrict = func(string) (string, string, authpkg.CredentialSource, authpkg.CredentialSource, error) {
 		return "", "", "", "", errors.New("missing app credentials")
 	}
+	personalClientIDMetadata = func(string) string { return "" }
+	edition.Override(&edition.Hooks{Name: "test"})
 	if _, err := resolvePersonalEventIdentityWithToken(context.Background(), configDir, "", "runtime-token"); err == nil || !strings.Contains(err.Error(), "cannot resolve OAuth client_id") {
 		t.Fatalf("missing client ID error = %v", err)
 	}

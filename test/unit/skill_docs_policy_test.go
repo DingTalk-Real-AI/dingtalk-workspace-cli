@@ -76,6 +76,53 @@ func TestSkillDocsDoNotRecommendRetiredCommands(t *testing.T) {
 	}
 }
 
+func TestDevScopeSkillDocumentsExposeScopeCommands(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	scopeDoc := filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "scope.md")
+	content, err := os.ReadFile(scopeDoc)
+	if err != nil {
+		t.Fatalf("read %s: %v", scopeDoc, err)
+	}
+	text := string(content)
+	for _, required := range []string{
+		"dev app scope get",
+		"dev app scope set",
+		"全量替换",
+		"--precheck-only --yes",
+		"--precheck-only=false --yes",
+		"本地调用预览",
+		"服务端预检",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("scope skill doc missing contract %q", required)
+		}
+	}
+	// --dry-run is a local invocation preview (RemoteReads=false); the doc
+	// must not sell it as the server-side precheck of the full-replace write.
+	dryRunIndex := strings.Index(text, "--dry-run")
+	if dryRunIndex >= 0 && dryRunIndex < strings.Index(text, "服务端预检") &&
+		!strings.Contains(text[max(0, dryRunIndex-120):dryRunIndex], "本地") {
+		t.Errorf("scope skill doc must label --dry-run as local preview, not server precheck")
+	}
+	for _, path := range []string{
+		filepath.Join(root, "skills", "mono", "references", "products", "dev.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "dev-index.md"),
+	} {
+		navContent, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		navText := string(navContent)
+		if !strings.Contains(navText, "dev app scope get") || !strings.Contains(navText, "dev app scope set") {
+			t.Errorf("%s missing scope get/set route", path)
+		}
+	}
+}
+
 func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -118,14 +165,93 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 				t.Errorf("%s missing event contract %q", path, required)
 			}
 		}
+		retiredEventText := strings.ReplaceAll(text, "payload.body.actionData.context", "")
 		for _, retired := range []string{
 			"payload.body.",
 			"尚无稳定业务样本",
 			"暂无稳定 payload schema",
 		} {
-			if strings.Contains(text, retired) {
+			if strings.Contains(retiredEventText, retired) {
 				t.Errorf("%s still documents retired event path %q", path, retired)
 			}
+		}
+	}
+}
+
+func TestEventSkillDocumentsReviewedCardCallbackContract(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-card.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"user_card_action_triggered",
+			"payload.body.actionData.context",
+			"questions[].id",
+			"answers[question_id]",
+			"selected",
+			"operatorDTO.uid",
+			"triggerTimestamp",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing interactive-card contract %q", path, required)
+			}
+		}
+	}
+}
+
+func TestChatCardCallbackRoutesPersonalEventsToEventSkill(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "callback.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "schema.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "contracts.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"dingtalk-event",
+			"dws event consume user_card_action_triggered --flatten -f ndjson",
+			"callback URL",
+			"验签",
+			"回复",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing card callback boundary %q", path, required)
+			}
+		}
+	}
+
+	callbackPath := paths[0]
+	content, err := os.ReadFile(callbackPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", callbackPath, err)
+	}
+	for _, forbidden := range []string{
+		"不把 `dws event consume` 当作卡片 callback 的替代",
+		"用户必须使用按钮交互时，停止并说明当前不支持",
+	} {
+		if strings.Contains(string(content), forbidden) {
+			t.Errorf("%s still rejects the supported personal-event route %q", callbackPath, forbidden)
 		}
 	}
 }
@@ -281,6 +407,9 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 			"群成员退出",
 			"审批任务创建/完成/转交",
 			"审批实例发起/抄送/终止/完成",
+			"VoIP 通话邀请",
+			"待办创建/更新/删除",
+			"互动卡片回调",
 		} {
 			if !strings.Contains(frontmatter, required) {
 				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
@@ -305,8 +434,13 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"../dingtalk-shared/SKILL.md",
 		"<!-- dws-intent: event.listen.im -->",
 		"<!-- dws-intent: event.listen.oa -->",
+		"<!-- dws-intent: event.listen.todo -->",
+		"<!-- dws-intent: event.listen.card -->",
+		"<!-- dws-intent: event.listen.contact -->",
+		"<!-- dws-intent: event.listen.minutes -->",
+		"<!-- dws-intent: event.listen.calendar -->",
 		"16 个 EventKey",
-		"23 个公开个人 EventKey",
+		"33 个公开个人 EventKey",
 	} {
 		if !strings.Contains(string(skillContent), required) {
 			t.Errorf("%s missing standalone event contract %q", skillPath, required)
@@ -314,12 +448,19 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 	}
 
 	wantReferences := []string{
+		"event-app.md",
 		"event-im-keys.md",
 		"event-im-lifecycle.md",
 		"event-im-operations.md",
 		"event-im-output.md",
 		"event-im.md",
 		"event-oa.md",
+		"event-voip.md",
+		"event-todo.md",
+		"event-card.md",
+		"event-contact.md",
+		"event-minutes.md",
+		"event-calendar.md",
 	}
 	var combined strings.Builder
 	combined.Write(skillContent)
@@ -363,6 +504,16 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"user_oa_approval_instance_cc",
 		"user_oa_approval_instance_terminated",
 		"user_oa_approval_instance_finished",
+		"user_voip_call_receive_invite",
+		"user_todo_task_create",
+		"user_todo_task_update",
+		"user_todo_task_delete",
+		"user_card_action_triggered",
+		"user_contact_friend_request_received",
+		"user_contact_friend_added",
+		"user_minutes_task_created",
+		"user_minutes_summary_generated",
+		"user_calendar_event_changed",
 	}
 	for _, eventKey := range allEventKeys {
 		if !strings.Contains(combined.String(), eventKey) {
@@ -417,6 +568,7 @@ func TestMiscSkillDoesNotOwnPersonalEvent(t *testing.T) {
 		"event-im-operations.md",
 		"event-im-output.md",
 		"event-oa.md",
+		"event-voip.md",
 	}
 	for _, name := range retiredNames {
 		path := filepath.Join(miscRoot, "references", name)
@@ -465,7 +617,7 @@ func TestCrossPlatformCoverageDocSkillPinsExactVersionRoutesAndHelpBudget(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"Help 不参与选路", "unknown flag", "只查一次 shortcut 清单", "禁止试探后缀"} {
+	for _, required := range []string{"Help 不参与选路", "unknown flag", "统一恢复路径", "禁止试探后缀"} {
 		if !strings.Contains(string(rootSkill), required) {
 			t.Errorf("Doc root Skill missing Help budget rule %q", required)
 		}
@@ -567,6 +719,32 @@ func TestMinutesPermissionAddRequiresExplicitPolicy(t *testing.T) {
 		}
 		if strings.Contains(text, "`permission add` 默认使用 `--policy 4`") {
 			t.Errorf("%s still documents a nonexistent permission add policy default", path)
+		}
+	}
+}
+
+func TestAITablePsqlSkillDocumentsReadOnlyDiscoveryFlow(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "references", "aitable.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "references", "aitable", "aitable-psql.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "aitable.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{"psql", "PostgreSQL", "只读"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing PostgreSQL query contract %q", path, required)
+			}
 		}
 	}
 }

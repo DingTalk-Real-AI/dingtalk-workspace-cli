@@ -66,7 +66,7 @@
 - 参数缺失 / 无效请求 — 还在用旧参数 `dentryUuid` / `--doc` / `--sheet` → 改用 `--base-id` / `--table-id` / `--field-id` / `--record-ids`
 - 参数传了但服务端没收到 — flag 用了 camelCase（如 `--baseId`）→ flag 用 kebab-case: `--base-id <ID>`
 - `record query --filters` 无结果 — 单选/多选过滤用了 option name 而非 id → 先 `field get` 读取 options，用 option id 过滤
-- record create/update 失败 — `cells` key 用了字段名（应为 fieldId）；特殊字段格式错误 → 先 `field get` 拿字段目录；url 传 `{"text":"..","link":".."}`
+- record create/update 失败 — `cells` key 使用了不存在、重名或未精确匹配的字段名（支持 fieldId 或当前表内唯一字段名，推荐真实 fieldId）；特殊字段格式错误 → 先 `field get` 拿字段目录；url 传 `{"text":"..","link":".."}`
 - 更新选项后历史数据异常 — 更新 options 没传完整列表 / 没保留原 id → 先 `field get` 取完整配置，保留已有 option 的 id
 - `cannot delete the last table` — 该表是 Base 最后一张表 → 先新建表再删旧表，或用 `base delete`
 - `formula` 类型 `not supported yet` — 部分字段类型暂不支持 API 创建 → 复杂字段拆开单独创建，先建基础结构
@@ -83,7 +83,7 @@
 - 无下载权限 — 文档分享设置不允许 → 报告用户，建议联系文档所有者
 - `update --mode overwrite` 意外清空 — overwrite 会清空原内容后重写 → 默认用 `--mode append`，overwrite 前必须跟用户确认
 - 块编辑 blockId 无效 — blockId 过期或文档结构已变 → 先 `block list` 刷新获取最新 blockId
-- `CONTENT_TRUNCATED` — 分片写入持续超时，分片大小已减半至最小阈值（5000 字符）仍无法成功 → 后端服务可能过载或网络异常。已写入部分内容可通过 `doc read --node <ID>` 查看，待后端恢复后从断点处用 `doc update --mode append` 继续追加
+- `doc_write_commit_unknown` — 某个分片写入超时，服务端是否已提交无法判断 → 不会自动重试（重放会重复追加）。`details` 给出 `chunksWritten` / `chunksTotal` / `failedStage`；先用 `doc read --node <ID>` 回读确认实际写到哪一片，只有确认未提交才重新执行，再从断点处用 `doc update --mode append` 继续追加
 
 ---
 

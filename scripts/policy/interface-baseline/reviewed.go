@@ -39,9 +39,9 @@ type flagTypeChange struct {
 //
 // Entries are direction-sensitive by construction: "string" → "int" is a
 // separate key from "int" → "string" and only the reviewed direction is
-// accepted. The reverse is not a candidate for this table — widening an int
-// flag back to string lets values the parser used to reject reach RunE, which
-// is a genuine loosening of validation rather than a type migration.
+// accepted. An int → string migration is not automatically safe: it must keep
+// accepting every historically successful numeric spelling and constrain any
+// newly accepted strings in RunE.
 //
 // The table alone does not admit a change: reviewedFlagTypeChange is consulted
 // only when nothing else about the flag moved. See the callers in
@@ -72,6 +72,14 @@ var reviewedFlagTypeChanges = map[flagTypeChange]struct{}{
 	// not reachable by a caller here because RunE requires the flag to be
 	// explicitly set, so this is not a contract change.
 	{CommandPath: "dws minutes permission apply", Flag: "policy", From: "string", To: "int"}: {},
+
+	// "dws chat message update-card --flow-status" moves from a native Int flag
+	// to String so the new A2UI engine can accept its reviewed status names. The
+	// default streaming path still parses with base 0 and enforces [1,5], which
+	// preserves every numeric spelling accepted by the historical pflag Int.
+	// A2UI additionally accepts the decimal compatibility values 1-9 and maps
+	// them to the corresponding enum names before transport.
+	{CommandPath: "dws chat message update-card", Flag: "flow-status", From: "int", To: "string"}: {},
 }
 
 // reviewedFlagTypeChange reports whether this exact command, flag and direction

@@ -1,5 +1,14 @@
 __pycache__/
 dist/
+.dws-runtime/
+# Resources materialized beside the development binary.
+/.dws-runtime-manifest.json
+/.dws-runtime.lock
+/.dws-runtime-stage-*/
+/x7k2m9p4q1w8.dylib
+/libx7k2m9p4q1w8.so
+/x7k2m9p4q1w864.dll
+/ps/
 .tmp-bin/
 .worktrees/
 .pytest_cache/
@@ -7,12 +16,14 @@ dist/
 var/
 .DS_Store
 .agents/
+.app_assistant/
 /.idea/
 /CLAUDE.md
 /.claude/
 /.idea/vcs.xml
 /.idea/.gitignore
 dws
+artifacts/screenshots/
 test/cli/testdata/
 tmp/
 test/cli_compat/testdata/
@@ -24,6 +35,8 @@ _logs/
 _docs/
 _output/
 vendor/
+# Local DWS runtime state may contain MCP overrides and authentication data.
+/.dws/
 
 # Secrets & credentials
 .env

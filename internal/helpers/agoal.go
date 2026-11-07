@@ -15,7 +15,7 @@ var agoalLoadLocation = time.LoadLocation
 // ──────────────────────────────────────────────────────────
 
 func newAgoalCommand() *cobra.Command {
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "agoal",
 		Short: "Agoal 管理",
 		Long: `管理钉钉 Agoal：战略解码、经营合约、计分卡、用户目标、周月报。
@@ -39,11 +39,11 @@ func newAgoalCommand() *cobra.Command {
   dws agoal obj-template list             获取目标模板列表
   dws agoal obj-template create-or-update 新增或更新目标模板`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── strategy: 战略解码管理 ──────────────────────────────────
 
-	strategyCmd := &cobra.Command{Use: "strategy", Short: "战略解码管理", RunE: groupRunE}
+	strategyCmd := newGroupCommand(&cobra.Command{Use: "strategy", Short: "战略解码管理", RunE: groupRunE})
 
 	strategyListCmd := &cobra.Command{
 		Use:   "list",
@@ -139,7 +139,7 @@ scopeType 支持:
 
 	// ── contract: 经营合约管理 ──────────────────────────────────
 
-	contractCmd := &cobra.Command{Use: "contract", Short: "经营合约管理", RunE: groupRunE}
+	contractCmd := newGroupCommand(&cobra.Command{Use: "contract", Short: "经营合约管理", RunE: groupRunE})
 
 	contractListCmd := &cobra.Command{
 		Use:   "list",
@@ -258,7 +258,7 @@ scopeType 支持:
 
 	// ── scorecard: 计分卡管理 ───────────────────────────────────
 
-	scorecardCmd := &cobra.Command{Use: "scorecard", Short: "计分卡管理", RunE: groupRunE}
+	scorecardCmd := newGroupCommand(&cobra.Command{Use: "scorecard", Short: "计分卡管理", RunE: groupRunE})
 
 	scorecardDetailCmd := &cobra.Command{
 		Use:   "detail",
@@ -394,7 +394,7 @@ scopeType 支持:
 
 	// ── user: 用户目标管理 ──────────────────────────────────────
 
-	userCmd := &cobra.Command{Use: "user", Short: "用户目标管理", RunE: groupRunE}
+	userCmd := newGroupCommand(&cobra.Command{Use: "user", Short: "用户目标管理", RunE: groupRunE})
 
 	userRulesCmd := &cobra.Command{
 		Use:   "rules",
@@ -445,7 +445,7 @@ scopeType 支持:
 
 	// ── report: 周月报管理 ──────────────────────────────────────
 
-	reportCmd := &cobra.Command{Use: "report", Short: "周月报管理", RunE: groupRunE}
+	reportCmd := newGroupCommand(&cobra.Command{Use: "report", Short: "周月报管理", RunE: groupRunE})
 
 	reportListStatisticsCmd := &cobra.Command{
 		Use:   "list-statistics",
@@ -520,7 +520,7 @@ scopeType 支持:
 
 	// ── template: 目标模板管理 ──────────────────────────────────
 
-	objTemplateCmd := &cobra.Command{Use: "obj-template", Short: "目标模板管理", RunE: groupRunE}
+	objTemplateCmd := newGroupCommand(&cobra.Command{Use: "obj-template", Short: "目标模板管理", RunE: groupRunE})
 
 	objTemplateListCmd := &cobra.Command{
 		Use:   "list",

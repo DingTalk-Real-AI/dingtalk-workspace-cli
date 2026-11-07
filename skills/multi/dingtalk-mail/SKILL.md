@@ -20,7 +20,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "mail +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws mail <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service mail --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "mail +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service mail --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -92,6 +92,17 @@ metadata:
 - 附件链路固定三步：`message search` → `attachment list --email <邮箱> --id <messageId>` → `attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>`；不存在批量下载命令。
 - 写入类操作（发送、回复、转发、删除、批量移动）按安全策略确认；只读查看、搜索、附件列表、下载不需要确认。
 - 所有 `dws mail` 命令加 `--format json`，并复用同一封邮件的 `messageId`，不要重新搜索导致目标漂移。
+
+## 轨迹高频直达规则
+
+- 已被本页或 `09-mail.md` 精确覆盖的命令，直接执行；不要先探测 `contact`、`api`、`auth`、`profile`、Help 或 Schema。仅在命令真实报参数错误后，读取该命令的 leaf Help 一次。
+- 多条件 KQL 必须用显式 `AND`，例如收件箱附件邮件：`hasAttachments:true AND folderId:2`；不要把相邻条件当作隐式 AND。
+- 用户只要首个或任一单附件时，初始搜索后按相关性最多检查 3 个候选的 `attachment list`，下载命中附件并做一次本地存在性/大小检查后停止；若均未命中，只能说明已检查范围并询问是否继续翻页，不能断言不存在。用户要求全部/批量附件时，遍历全部匹配页和邮件，再逐个下载每个附件。
+- “创建邮箱联系人”属于邮箱个人通讯录，固定走 `dws mail contact create/list`，不要切到 `dingtalk-contact`。只有“按人名解析邮件收件地址”才走下方跨产品协作。
+- 用户要求用当前时间生成唯一标题且未指定显示格式时，使用紧凑格式 `date +%H%M%S`；只有用户明确要求 `HH:mm:ss` 等格式时才原样保留。
+- 批量删除邮件或将整会话移入已删除前，先展示精确目标和不含确认参数的命令预览并停止；用户明确确认后，执行流程仅对同一组参数追加 `--yes`。操作成功后只做一次针对原 ID 或唯一主题的回读，结果符合预期即停止。
+- 创建类返回了 `messageId`、`contactId` 或 `internetMessageId` 时，后续直接复用返回 ID；不要为了重新定位目标而做宽泛 list/search。
+- 一次精确回读已经证明目标状态后结束任务；若回读冲突，报告冲突和已执行命令，不扩大到低层 API 或其他产品继续试探。
 
 ## 跨产品协作
 

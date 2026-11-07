@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clisignal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -31,12 +33,16 @@ func signalSelf(t *testing.T, sig syscall.Signal) {
 	}
 }
 
-func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
-	originalFind, originalExit := rootFindProcess, rootExitProcess
-	t.Cleanup(func() { rootFindProcess, rootExitProcess = originalFind, originalExit })
-	rootFindProcess = func(int) (*os.Process, error) { return nil, errors.New("find failed") }
+func TestCrossPlatformCoverageInterruptionExitCodeDelegates(t *testing.T) {
+	if interruptionExitCode(os.Interrupt) != 130 || interruptionExitCode(syscall.SIGTERM) != 143 {
+		t.Fatal("interruptionExitCode diverged from clisignal.ExitCode")
+	}
+}
+
+func TestCrossPlatformCoverageFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
+	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return nil, errors.New("find failed") })
 	exitCode := 0
-	rootExitProcess = func(code int) { exitCode = code }
+	testseam.Swap(t, &rootExitProcess, func(code int) { exitCode = code })
 	rootEscalateSignal(syscall.SIGTERM)
 	if exitCode != 143 {
 		t.Fatalf("escalation exit=%d", exitCode)
@@ -46,27 +52,48 @@ func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	if exitCode != 143 {
 		t.Fatalf("fallback exit=%d", exitCode)
 	}
-	rootFindProcess = func(int) (*os.Process, error) { return os.FindProcess(99999999) }
+	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return os.FindProcess(99999999) })
 	exitCode = 0
 	redeliverProcessSignal(syscall.SIGINT)
 	if exitCode != 130 {
 		t.Fatalf("signal fallback exit=%d", exitCode)
 	}
-	interrupted := &processInterruption{signal: syscall.SIGINT}
+	interrupted := clisignal.NewInterruption(syscall.SIGINT)
 	if !errors.Is(interrupted, context.Canceled) || interrupted.ExitCode() != 130 || interrupted.Subtype() != "cancelled_by_user" || !strings.Contains(interrupted.Error(), "interrupt") {
 		t.Fatalf("interruption=%v", interrupted)
 	}
-	terminated := &processInterruption{signal: syscall.SIGTERM}
+	detailed := interrupted.WithCancellationDetail(fmt.Errorf("resume with dws doc import get: %w", context.Canceled))
+	if detailed == interrupted || !errors.Is(detailed, context.Canceled) || !strings.Contains(detailed.Error(), "dws doc import get") {
+		t.Fatalf("detailed interruption=%v", detailed)
+	}
+	typedDetail := interrupted.WithCancellationDetail(apperrors.NewInternal("resume import", apperrors.WithCause(context.Canceled)))
+	if code := apperrors.ExitCode(typedDetail); code != 130 {
+		t.Fatalf("typed cancellation detail changed interruption exit code to %d", code)
+	}
+	if got := interrupted.WithCancellationDetail(context.Canceled); got != interrupted {
+		t.Fatalf("plain cancellation changed interruption: %v", got)
+	}
+	if got := interrupted.WithCancellationDetail(errors.New("unrelated failure")); got != interrupted {
+		t.Fatalf("unrelated failure changed interruption: %v", got)
+	}
+	terminated := clisignal.NewInterruption(syscall.SIGTERM)
 	if terminated.ExitCode() != 143 || terminated.Subtype() != "terminated" {
 		t.Fatalf("termination=%v", terminated)
 	}
 	state := &processSignalState{}
-	if !state.record(syscall.SIGINT, nil) || state.record(syscall.SIGTERM, nil) {
+	if !state.Record(syscall.SIGINT, nil) || state.Record(syscall.SIGTERM, nil) {
 		t.Fatal("signal state did not reject a second interruption")
 	}
 }
 
-func TestFrameworkManageProcessSignalsNilAndEscalation(t *testing.T) {
+func TestCrossPlatformCoverageProcessInterruptionRejectsNestedDetail(t *testing.T) {
+	interrupted := clisignal.NewInterruption(syscall.SIGINT)
+	if got := interrupted.WithCancellationDetail(clisignal.NewInterruption(syscall.SIGTERM)); got != interrupted {
+		t.Fatalf("nested interruption changed the primary signal error: %v", got)
+	}
+}
+
+func TestCrossPlatformCoverageFrameworkManageProcessSignalsNilAndEscalation(t *testing.T) {
 	signals := make(chan os.Signal, 3)
 	stopped, escalated := false, make(chan os.Signal, 1)
 	ctx, _, stop := manageProcessSignals(context.Background(), nil, signals, func() { stopped = true }, func(sig os.Signal) { escalated <- sig })
@@ -139,7 +166,77 @@ func TestCrossPlatformCoverageExecuteSignalEmitsOneTypedUnifiedFailure(t *testin
 	}
 }
 
-func TestExecuteSignalLegacyExitCodes(t *testing.T) {
+func TestCrossPlatformCoverageExecuteSignalPreservesCancellationRecoveryCommand(t *testing.T) {
+	const recoveryCommand = "dws doc import get --task-id task-1 --workspace my-space"
+	if mode := os.Getenv("DWS_SIGNAL_RECOVERY_HELPER"); mode != "" {
+		installSignalExecuteSeams(t, mode == "json", os.Stdout, os.Stderr)
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
+			_, _ = fmt.Fprintln(os.Stderr, "READY")
+			<-cmd.Context().Done()
+			return cmd, fmt.Errorf("导入轮询被取消: %w；任务已经提交，可使用 %s 继续查询", cmd.Context().Err(), recoveryCommand)
+		})
+		os.Exit(Execute())
+	}
+
+	for _, tc := range []struct {
+		mode string
+	}{
+		{mode: "human"},
+		{mode: "json"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoverageExecuteSignalPreservesCancellationRecoveryCommand$")
+			cmd.Env = append(os.Environ(), "DWS_SIGNAL_RECOVERY_HELPER="+tc.mode)
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			stderrReader := bufio.NewReader(stderr)
+			ready, err := stderrReader.ReadString('\n')
+			if err != nil || strings.TrimSpace(ready) != "READY" {
+				t.Fatalf("helper readiness failed: %q, err=%v", ready, err)
+			}
+			if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+				t.Skipf("current platform does not support subprocess signal delivery: %v", err)
+			}
+			stdoutPayload, stdoutErr := io.ReadAll(stdout)
+			stderrPayload, stderrErr := io.ReadAll(stderrReader)
+			if stdoutErr != nil || stderrErr != nil {
+				t.Fatalf("read helper output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+			}
+			waitErr := cmd.Wait()
+			var exitErr *exec.ExitError
+			if !errors.As(waitErr, &exitErr) || exitErr.ExitCode() != 130 {
+				t.Fatalf("wait error=%v, want exit 130", waitErr)
+			}
+
+			if tc.mode == "json" {
+				var env output.Envelope
+				if err := json.Unmarshal(stdoutPayload, &env); err != nil {
+					t.Fatalf("decode envelope: %v; output=%q", err, stdoutPayload)
+				}
+				if env.Error == nil || env.Error.Type != "internal" || env.Error.Subtype != "cancelled_by_user" || env.Error.ExitCode != 130 || !strings.Contains(env.Error.Message, "process interrupted by interrupt") || !strings.Contains(env.Error.Message, recoveryCommand) {
+					t.Fatalf("error=%+v, want cancellation with recovery command", env.Error)
+				}
+				return
+			}
+			if !strings.Contains(string(stderrPayload), "process interrupted by interrupt") || !strings.Contains(string(stderrPayload), recoveryCommand) {
+				t.Fatalf("stderr=%q, want recovery command", stderrPayload)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageExecuteSignalLegacyExitCodes(t *testing.T) {
 	for _, tc := range []struct {
 		signal syscall.Signal
 		code   int
@@ -158,7 +255,7 @@ func TestExecuteSignalLegacyExitCodes(t *testing.T) {
 	}
 }
 
-func TestExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
+func TestCrossPlatformCoverageExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -176,7 +273,7 @@ func TestExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
 	}
 }
 
-func TestSignalAfterFailedEmissionAttemptPreservesPublicationExitCode(t *testing.T) {
+func TestCrossPlatformCoverageSignalAfterFailedEmissionAttemptPreservesPublicationExitCode(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -251,7 +348,7 @@ func TestCrossPlatformCoverageSignalAfterCompletedPrimaryPreservesEstablishedOut
 	}
 }
 
-func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
+func TestCrossPlatformCoverageExecuteSignalSubprocessExitStatus(t *testing.T) {
 	if os.Getenv("DWS_SIGNAL_HELPER") == "1" {
 		installSignalExecuteSeams(t, true, os.Stdout, os.Stderr)
 		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -272,7 +369,7 @@ func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
 		{name: "SIGTERM", signal: syscall.SIGTERM, code: 143, subtype: "terminated"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=^TestExecuteSignalSubprocessExitStatus$")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoverageExecuteSignalSubprocessExitStatus$")
 			cmd.Env = append(os.Environ(), "DWS_SIGNAL_HELPER=1")
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
@@ -313,7 +410,7 @@ func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
 	}
 }
 
-func TestSecondSignalUsesEscalationSeam(t *testing.T) {
+func TestCrossPlatformCoverageSecondSignalUsesEscalationSeam(t *testing.T) {
 	signals := make(chan os.Signal, 2)
 	escalated := make(chan os.Signal, 1)
 	ctx, _, stop := manageProcessSignals(context.Background(), nil, signals, func() {}, func(sig os.Signal) {

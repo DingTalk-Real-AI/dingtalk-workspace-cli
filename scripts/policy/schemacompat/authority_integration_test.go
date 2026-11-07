@@ -412,6 +412,34 @@ func main() {
 }
 `
 
+const parameterDeclarationCheckerSource = `package main
+import (
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+)
+func main() {
+	check := flag.String("check", "", "base schema")
+	current := flag.String("current", "", "candidate schema")
+	approved := flag.String("approved-schema-parameter-migrations", "", "empty approval")
+	candidate := flag.String("candidate-schema-parameter-migrations", "", "committed declarations")
+	base := flag.String("parameter-migration-base-schema", "", "base schema")
+	stable := flag.String("parameter-migration-stable-schema", "", "stable schema")
+	flag.Parse()
+	for _, fixture := range []struct {path, want string}{
+		{*check, "BASE_AUTHORITY"}, {*current, "COMMITTED_CANDIDATE"},
+		{*approved, "{\"version\":1,\"migrations\":[]}"}, {*candidate, "COMMITTED_PARAMETER"},
+		{*base, "BASE_AUTHORITY"}, {*stable, "STABLE_RELEASE"},
+	} {
+		data, err := os.ReadFile(fixture.path)
+		if err != nil || !strings.Contains(string(data), fixture.want) { panic("wrong declaration input") }
+	}
+	fmt.Fprintln(os.Stderr, "BOOTSTRAP_PARAMETER_DECLARATION_VALIDATED")
+	os.Exit(23)
+}
+`
+
 func schemaBinarySource(marker string) string {
 	return fmt.Sprintf(`package main
 
@@ -427,6 +455,7 @@ type authorityScenario struct {
 	name                   string
 	baseGovernance         string
 	commandGovernance      string
+	parameterGovernance    string
 	commandManifestChanged bool
 	candidateMutation      string
 	checkerMode            string
@@ -436,6 +465,16 @@ type authorityScenario struct {
 
 func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testing.T) {
 	tests := []authorityScenario{
+		{name: "parameter ledger uses base authority", baseGovernance: "complete", parameterGovernance: "complete", authorityMarker: "BASE_SCHEMA_CHECKER_ENFORCED"},
+		{name: "parameter flag name is not command lineage capability", baseGovernance: "complete", commandGovernance: "complete", parameterGovernance: "complete", authorityMarker: "BASE_SCHEMA_CHECKER_ENFORCED"},
+		{name: "parameter empty bootstrap grants no approval", baseGovernance: "complete", parameterGovernance: "bootstrap", authorityMarker: "BASE_SCHEMA_CHECKER_ENFORCED"},
+		{name: "parameter pending bootstrap cannot bypass base authority", baseGovernance: "complete", parameterGovernance: "bootstrap-nonempty", authorityMarker: "BASE_SCHEMA_CHECKER_ENFORCED"},
+		{name: "parameter pending bootstrap cannot bypass stable authority", baseGovernance: "none", parameterGovernance: "bootstrap-nonempty", authorityMarker: "OLD_BASE_STABLE_SCHEMA_CHECKER_ENFORCED"},
+		{name: "parameter bootstrap validates declarations after both base checks", baseGovernance: "none", parameterGovernance: "bootstrap-validation", authorityMarker: "BOOTSTRAP_PARAMETER_DECLARATION_VALIDATED"},
+		{name: "parameter incomplete bootstrap fails closed", baseGovernance: "complete", parameterGovernance: "bootstrap", candidateMutation: "delete-parameter-ledger", want: "incomplete candidate Schema parameter migration bootstrap"},
+		{name: "parameter partial base fails closed", baseGovernance: "complete", parameterGovernance: "partial", want: "incomplete base-owned Schema parameter migration governance"},
+		{name: "parameter candidate cannot remove ledger", baseGovernance: "complete", parameterGovernance: "complete", candidateMutation: "delete-parameter-ledger", want: "preserve complete base/candidate Schema parameter migration governance"},
+		{name: "parameter candidate cannot symlink ledger", baseGovernance: "complete", parameterGovernance: "complete", candidateMutation: "symlink-parameter-ledger", want: "preserve complete base/candidate Schema parameter migration governance"},
 		{
 			name:            "governed base rejects candidate checker and live workspace",
 			baseGovernance:  "complete",
@@ -677,6 +716,36 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	default:
 		t.Fatalf("unknown command governance state %q", test.commandGovernance)
 	}
+	parameterLedger := filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-schema-parameter-migrations-v1.json")
+	if test.parameterGovernance == "bootstrap-validation" {
+		// Both old comparisons pass, then the supplemental checker must run with
+		// empty approval data. Its failure must not be swallowed by the wrapper.
+		source := strings.Replace(bootstrapSchemaCheckerSource, "os.Exit(23)", "return", 1)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go"), source, 0o644)
+	}
+	if test.parameterGovernance == "complete" {
+		checker := strings.Replace(governedSchemaCheckerSource, "flag.Parse()", `
+	approvedParameter := flag.String("approved-schema-parameter-migrations", "", "base parameter ledger")
+	candidateParameter := flag.String("candidate-schema-parameter-migrations", "", "candidate receipt")
+	parameterBase := flag.String("parameter-migration-base-schema", "", "base Schema")
+	parameterStable := flag.String("parameter-migration-stable-schema", "", "stable Schema")
+	flag.Parse()`, 1)
+		checker = strings.Replace(checker, `paths := []string`, `
+	for _, fixture := range []struct { path, want string }{
+		{*approvedParameter, "BASE_PARAMETER"}, {*candidateParameter, "COMMITTED_PARAMETER"},
+		{*parameterBase, "BASE_AUTHORITY"}, {*parameterStable, "STABLE_RELEASE"},
+	} {
+		data, err := os.ReadFile(fixture.path)
+		if err != nil || !strings.Contains(string(data), fixture.want) { panic("wrong parameter migration authority") }
+	}
+	paths := []string`, 1)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go"), checker, 0o644)
+		schemaWriteFile(t, parameterLedger, "BASE_PARAMETER\n", 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "schema_parameter_migrations.go"), "package interfacesnapshot\n", 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "parameter_migrations.go"), "package main\n", 0o644)
+	} else if test.parameterGovernance == "partial" {
+		schemaWriteFile(t, parameterLedger, "{}\n", 0o644)
+	}
 	schemaRun(t, fixtureRoot, "git", "add", ".")
 	schemaRun(t, fixtureRoot, "git", "commit", "-m", "base authority")
 	baseRef := strings.TrimSpace(schemaRun(t, fixtureRoot, "git", "rev-parse", "HEAD"))
@@ -698,6 +767,18 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "cmd", "main.go"), schemaBinarySource("COMMITTED_CANDIDATE"), 0o644)
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "cmd", "interface-snapshot", "main.go"), candidateNoopSource, 0o644)
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go"), candidateNoopSource, 0o644)
+	if test.parameterGovernance == "bootstrap-validation" {
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go"), parameterDeclarationCheckerSource, 0o644)
+	}
+	if strings.HasPrefix(test.parameterGovernance, "bootstrap") || test.parameterGovernance == "complete" {
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "schema_parameter_migrations.go"), "package interfacesnapshot\n", 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "parameter_migrations.go"), "package main\n", 0o644)
+		contents := "{\"version\":1,\"migrations\":[]}\n"
+		if test.parameterGovernance == "complete" || strings.HasPrefix(test.parameterGovernance, "bootstrap-") {
+			contents = "COMMITTED_PARAMETER\n"
+		}
+		schemaWriteFile(t, parameterLedger, contents, 0o644)
+	}
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "snapshot.go"), schemaCandidateSnapshotSource, 0o644)
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "migrations.go"), "package interfacesnapshot\n", 0o644)
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "runtimeannotate", "interface_alias.go"), "package runtimeannotate\n", 0o644)
@@ -720,6 +801,15 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "SNAPSHOT_MARKER"), "COMMITTED_CANDIDATE\n", 0o644)
 	switch test.candidateMutation {
 	case "":
+	case "delete-parameter-ledger", "symlink-parameter-ledger":
+		if err := os.Remove(parameterLedger); err != nil {
+			t.Fatal(err)
+		}
+		if test.candidateMutation == "symlink-parameter-ledger" {
+			if err := os.Symlink("../../../MISSING_LEDGER", parameterLedger); err != nil {
+				t.Fatal(err)
+			}
+		}
 	case "delete-checker":
 		if err := os.Remove(filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go")); err != nil {
 			t.Fatalf("remove candidate schema checker: %v", err)
@@ -821,6 +911,10 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	if test.authorityMarker != "" {
 		if !strings.Contains(got, test.authorityMarker) {
 			t.Fatalf("Schema compatibility script did not use base authority %q; output:\n%s", test.authorityMarker, got)
+		}
+		if test.parameterGovernance == "bootstrap-validation" &&
+			(!strings.Contains(got, "OLD_BASE_SCHEMA_CONTRACT_CHECKED") || !strings.Contains(got, "OLD_BASE_STABLE_SCHEMA_CHECKER_ENFORCED")) {
+			t.Fatalf("supplemental validation ran without both old authority comparisons: %s", got)
 		}
 		if test.baseGovernance == "complete" && strings.Count(got, "BASE_INTERFACE_HELPER_GENERATE=BASE") != 3 {
 			t.Fatalf("governed Schema check did not generate three base-owned interface snapshots; output:\n%s", got)

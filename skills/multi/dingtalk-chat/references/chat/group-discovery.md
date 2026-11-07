@@ -64,7 +64,7 @@ dws chat +chat-list-mine --role ADMIN --exclude-muted --format json
 dws chat +chat-search --query "项目冲刺" --page-all --format json
 ```
 
-只有数字群号时，使用 `chat group get-by-group-id --group-id <数字>` 转换为
+只有数字群号时，使用 `+chat-get-by-id --group-id <数字>` 转换为
 `openConversationId`。需要搜索共同群时使用原子 `chat search-common`；`AND` 表示所有人
 都在群里，`OR` 表示任一人在群里。自然人员必须先解析为当前 profile 的真实身份。
 
@@ -106,7 +106,7 @@ dws chat +chat-members-get --id <openConversationId> \
 | 原子命令 | 仅用于 |
 |---|---|
 | `chat search` / `search-common` | Shortcut 未发布的搜索字段或共同群 |
-| `chat group get-by-group-id` | 数字群号转换 |
+| `chat group get-by-group-id` | Shortcut 未公开字段或原始响应 |
 | `chat group members` | 需要原始成员分页响应 |
 | `chat group members list-by-ids` | 需要原始批量成员详情 |
 | `chat group list-all` / `list-my-groups` | 需要 Shortcut 未投影的真实底层字段 |

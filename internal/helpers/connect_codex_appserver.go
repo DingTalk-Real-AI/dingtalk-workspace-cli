@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +31,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
+// 机器人仍拒绝无正文回合；数字员工可将协议已确认完成的空正文转换为“收到”。
+var errCodexCompletedWithoutReply = errors.New("turn completed without agent message")
+var errCodexEmployeeResumeFailed = errors.New("employee codex thread resume failed")
+
 const codexRobotDeveloperInstructions = "你是钉钉群聊里的智能助手，请用简洁、自然的中文直接回答用户问题；不要提及系统提示、内部协议或运行时细节；不要主动读写文件或执行命令。仅当用户消息明确附带了本地附件路径时，可以只读该附件或运行分析该附件所必需的只读命令，不得访问其它文件。"
 
 var (
@@ -41,13 +46,16 @@ var (
 // codexAppServerForwarder uses Codex's official app-server JSON-RPC protocol to
 // keep one Codex thread per DingTalk conversation.
 type codexAppServerForwarder struct {
-	bin      string
-	env      []string
-	timeout  time.Duration
-	workDir  string
-	model    string
-	yolo     bool
-	sessions *codexThreadSessions
+	privateDiagnostics    bool
+	bin                   string
+	env                   []string
+	timeout               time.Duration
+	workDir               string
+	model                 string
+	yolo                  bool
+	initialPermissionMode string
+	developerInstructions string
+	sessions              *codexThreadSessions
 }
 
 func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration, opts connectAgentOptions, clientID string) forwarder {
@@ -59,13 +67,14 @@ func newCodexAppServerForwarder(bin string, env []string, timeout time.Duration,
 		sessions = newCodexThreadSessions(codexThreadStorePath(clientID))
 	}
 	return &codexAppServerForwarder{
-		bin:      bin,
-		env:      env,
-		timeout:  timeout,
-		workDir:  opts.WorkDir,
-		model:    opts.Model,
-		yolo:     opts.Yolo,
-		sessions: sessions,
+		privateDiagnostics: opts.PrivateDiagnostics,
+		bin:                bin,
+		env:                env,
+		timeout:            timeout,
+		workDir:            opts.WorkDir,
+		model:              opts.Model,
+		yolo:               opts.Yolo,
+		sessions:           sessions,
 	}
 }
 
@@ -89,6 +98,7 @@ func codexThreadStorePath(clientID string) string {
 func (f *codexAppServerForwarder) resetSession(convID string) {
 	if f.sessions != nil {
 		f.sessions.reset(convID)
+		f.sessions.reset(codexManagedConversationKey(convID))
 	}
 }
 
@@ -140,32 +150,74 @@ func (f *codexAppServerForwarder) forwardAppServer(ctx context.Context, convID, 
 	}
 
 	_ = state // held only for its per-conversation turn lock (see above)
+	managed := agentProgressSink(ctx) != nil
+	sessionKey := convID
+	if managed {
+		sessionKey = codexManagedConversationKey(convID)
+	}
+	params := func(threadID string) map[string]any {
+		p := f.threadParams(threadID)
+		if managed {
+			if threadID == "" {
+				p["developerInstructions"] = p["developerInstructions"].(string) + "\n\n" + codexManagedReplyContext
+			} else {
+				// 沿用托管会话初始化说明；本轮员工策略继续由应用上下文维护。
+				delete(p, "developerInstructions")
+			}
+		}
+		return p
+	}
 	threadID := ""
 	if f.sessions != nil {
-		threadID = f.sessions.threadID(convID)
+		threadID = f.sessions.threadID(sessionKey)
 	}
 	if threadID != "" {
-		resumed, err := cli.resumeThread(ctx, f.threadParams(threadID))
+		resumeParams := params(threadID)
+		if f.developerInstructions != "" {
+			resumeParams, err = cli.employeeResumeParams(ctx, threadID)
+		}
+		var resumed string
+		if err == nil {
+			resumed, err = cli.resumeThread(ctx, resumeParams)
+		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
+			if f.developerInstructions != "" {
+				if codexThreadHasActiveWriter(err) || errors.Is(err, errCodexSavedPermissions) {
+					reply, sharedErr := codexForwardDesktopTurn(ctx, threadID, text, attachments, onDelta, f.developerInstructions)
+					if sharedErr != nil {
+						return "", fmt.Errorf("%w: %w", errCodexEmployeeResumeFailed, sharedErr)
+					}
+					return reply, nil
+				}
+				// 员工恢复失败不能悄悄丢掉上下文，保留映射，等待恢复或显式 /new。
+				return "", fmt.Errorf("%w: %w", errCodexEmployeeResumeFailed, err)
+			}
+			if !f.privateDiagnostics {
+				fmt.Fprintf(os.Stderr, "[connect][codex] resume thread %s 失败，重建会话: %v\n", threadID, err)
+			}
 			threadID = ""
-			f.sessions.setThreadID(convID, "")
+			f.sessions.setThreadID(sessionKey, "")
 		} else {
 			threadID = resumed
 		}
 	}
 	if threadID == "" {
-		started, err := cli.startThread(ctx, f.threadParams(""))
+		started, err := cli.startThread(ctx, params(""))
 		if err != nil {
 			return "", err
 		}
 		threadID = started
 		if f.sessions != nil {
-			f.sessions.setThreadID(convID, threadID)
+			f.sessions.setThreadID(sessionKey, threadID)
 		}
 	}
 
-	reply, err := cli.runTurn(ctx, threadID, text, attachments, onDelta)
+	instructions := f.developerInstructions
+	if managed && instructions != "" {
+		// 保留公共员工策略更新，同时明确当前回合由运行时独占卡片投递。
+		instructions += "\n\n" + codexManagedReplyContext
+	}
+	reply, err := cli.runTurnWithContext(ctx, threadID, text, attachments, onDelta, instructions)
 	if err != nil {
 		return "", err
 	}
@@ -183,14 +235,39 @@ func (f *codexAppServerForwarder) cwd() string {
 }
 
 func (f *codexAppServerForwarder) threadParams(threadID string) map[string]any {
+	if f.developerInstructions != "" {
+		// 恢复参数随后从 Codex 持久化设置补齐，不使用连接默认值覆盖人工设置。
+		if threadID != "" {
+			return map[string]any{"threadId": threadID}
+		}
+		params := map[string]any{"cwd": f.cwd(), "developerInstructions": f.developerInstructions, "sandbox": "workspace-write", "approvalPolicy": "on-request", "approvalsReviewer": "auto_review"}
+		if f.initialPermissionMode == "legacy-ask" {
+			// 升级旧 ask 保留只读初始边界；后续越界仍由主管逐条决定。
+			params["sandbox"], params["approvalsReviewer"] = "read-only", "user"
+		} else if f.initialPermissionMode == "ask" {
+			params["approvalsReviewer"] = "user"
+		} else if f.initialPermissionMode == "bypass" {
+			// 兼容显式旧模式；不把旧的 workspace-write 自动升级为完全访问。
+			params["approvalPolicy"] = "never"
+			params["approvalsReviewer"] = "user"
+		}
+		if f.model != "" {
+			params["model"] = f.model
+		}
+		return params
+	}
 	sandbox := "read-only"
 	if f.yolo {
 		sandbox = "workspace-write"
 	}
+	instructions := f.developerInstructions
+	if instructions == "" {
+		instructions = codexRobotDeveloperInstructions
+	}
 	params := map[string]any{
 		"approvalPolicy":        "never",
 		"cwd":                   f.cwd(),
-		"developerInstructions": codexRobotDeveloperInstructions,
+		"developerInstructions": instructions,
 		"sandbox":               sandbox,
 	}
 	if f.model != "" {
@@ -294,14 +371,17 @@ func (s *codexThreadSessions) reset(convID string) {
 }
 
 type codexAppServerClient struct {
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	msgs      chan codexRPCMessage
-	readErr   chan error
-	done      chan struct{}
-	closeOnce sync.Once
-	stderr    *lockedBuffer
-	nextID    int
+	cmd             *exec.Cmd
+	stdin           io.WriteCloser
+	msgs            chan codexRPCMessage
+	readErr         chan error
+	done            chan struct{}
+	closeOnce       sync.Once
+	stderr          *lockedBuffer
+	nextID          int
+	approvalWG      sync.WaitGroup
+	approvalReplies chan map[string]any
+	approvalCancels map[int]context.CancelFunc
 }
 
 type lockedBuffer struct {
@@ -334,8 +414,16 @@ type codexRPCError struct {
 	Message string `json:"message"`
 }
 
+func (e *codexRPCError) Error() string { return e.Message }
+
+func codexThreadHasActiveWriter(err error) bool {
+	var rpc *codexRPCError
+	return errors.As(err, &rpc) && rpc.Code == -32600 && strings.Contains(rpc.Message, "already has an active writer")
+}
+
 func newCodexAppServerClient(ctx context.Context, bin string, env []string, cwd string) (*codexAppServerClient, error) {
-	cmd := codexExecCommandContext(ctx, bin, "app-server", "--stdio")
+	// 连接路径会显式选择新建/恢复权限。协议不兼容时默认只读，避免配置回退造成扩权。
+	cmd := codexExecCommandContext(ctx, bin, "app-server", "--stdio", "-c", `sandbox_mode="read-only"`)
 	cmd.Dir = cwd
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
@@ -447,10 +535,18 @@ func (c *codexAppServerClient) resumeThread(ctx context.Context, params map[stri
 	if err := c.send(map[string]any{"id": id, "method": "thread/resume", "params": params}); err != nil {
 		return "", err
 	}
-	return codexThreadIDFromResult(c.waitResponse(ctx, id))
+	result, err := c.waitResponse(ctx, id)
+	if err == nil && params["approvalsReviewer"] != nil {
+		err = verifyCodexResumedPermissions(result, params)
+	}
+	return codexThreadIDFromResult(result, err)
 }
 
 func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text string, attachments []connectMediaAttachment, onDelta func(string)) (string, error) {
+	return c.runTurnWithContext(ctx, threadID, text, attachments, onDelta, "")
+}
+
+func (c *codexAppServerClient) runTurnWithContext(ctx context.Context, threadID, text string, attachments []connectMediaAttachment, onDelta func(string), instructions string) (string, error) {
 	id := c.requestID()
 	input := []map[string]string{{"type": "text", "text": text}}
 	for _, attachment := range attachments {
@@ -458,31 +554,92 @@ func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text strin
 			input = append(input, map[string]string{"type": "localImage", "path": attachment.LocalPath})
 		}
 	}
+	params := map[string]any{"input": input, "threadId": threadID}
+	if instructions != "" {
+		// resume 不会重写已存历史中的开发者指令；通过本轮应用上下文更新员工策略，保留 thread。
+		params["additionalContext"] = map[string]any{
+			"dws.digital_employee_policy": map[string]string{"kind": "application", "value": instructions},
+		}
+	}
 	if err := c.send(map[string]any{
 		"id":     id,
 		"method": "turn/start",
-		"params": map[string]any{
-			"input":    input,
-			"threadId": threadID,
-		},
+		"params": params,
 	}); err != nil {
 		return "", err
 	}
 
+	if codexApprovalSink(ctx) != nil {
+		c.approvalReplies = make(chan map[string]any, 16)
+		c.approvalCancels = map[int]context.CancelFunc{}
+		defer func() {
+			for _, cancel := range c.approvalCancels {
+				cancel()
+			}
+			c.approvalWG.Wait()
+		}()
+	}
+	activeTurn := ""
+	fileChanges := map[string]json.RawMessage{}
 	var acc strings.Builder
+	progress := codexPublicProgress{emit: agentProgressSink(ctx)}
 	for {
 		msg, err := c.next(ctx)
 		if err != nil {
 			return "", c.withStderr("app-server stream ended before turn/completed", err)
 		}
 		if msg.ID != nil && msg.Method != "" {
-			c.rejectServerRequest(*msg.ID, msg.Method)
+			if msg.Method == "item/fileChange/requestApproval" {
+				var p struct {
+					ItemID string `json:"itemId"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				msg.Params = codexApprovalWithChanges(msg.Params, fileChanges[p.ItemID])
+			}
+			if !c.startApproval(ctx, msg, threadID, activeTurn) {
+				c.rejectServerRequest(*msg.ID, msg.Method)
+			}
 			continue
 		}
 		if msg.ID != nil && *msg.ID == id && msg.Error != nil {
 			return "", fmt.Errorf("turn/start: %s", msg.Error.Message)
 		}
+		if msg.ID != nil && *msg.ID == id && msg.Method == "" && msg.Error == nil {
+			var result struct {
+				Turn struct {
+					ID string `json:"id"`
+				} `json:"turn"`
+			}
+			if json.Unmarshal(msg.Result, &result) == nil {
+				activeTurn = result.Turn.ID
+			}
+		}
+		if msg.Method == "item/started" {
+			var p struct {
+				ThreadID string `json:"threadId"`
+				Item     struct {
+					ID      string          `json:"id"`
+					Type    string          `json:"type"`
+					Changes json.RawMessage `json:"changes"`
+				} `json:"item"`
+			}
+			if json.Unmarshal(msg.Params, &p) == nil && p.ThreadID == threadID && p.Item.Type == "fileChange" {
+				fileChanges[p.Item.ID] = p.Item.Changes
+			}
+		}
+		progress.handle(msg.Method, msg.Params, threadID)
 		switch msg.Method {
+		case "serverRequest/resolved":
+			var p struct {
+				RequestID int    `json:"requestId"`
+				ThreadID  string `json:"threadId"`
+			}
+			if json.Unmarshal(msg.Params, &p) == nil && p.ThreadID == threadID {
+				if cancel := c.approvalCancels[p.RequestID]; cancel != nil {
+					cancel()
+					delete(c.approvalCancels, p.RequestID)
+				}
+			}
 		case "item/agentMessage/delta":
 			var p struct {
 				Delta    string `json:"delta"`
@@ -499,17 +656,26 @@ func (c *codexAppServerClient) runTurn(ctx context.Context, threadID, text strin
 			if !ok {
 				continue
 			}
-			if status == "failed" {
+			if status == "interrupted" {
+				return "", context.Canceled
+			}
+			if status == "failed" || errMsg != "" {
 				if errMsg == "" {
 					errMsg = "turn failed"
 				}
 				return "", fmt.Errorf("%s", errMsg)
 			}
+			if progress.emit != nil && status != "completed" {
+				return "", fmt.Errorf("agent turn did not complete")
+			}
 			if final == "" {
 				final = strings.TrimSpace(acc.String())
 			}
 			if final == "" {
-				return "", fmt.Errorf("turn completed without agent message")
+				if status == "completed" {
+					return "", errCodexCompletedWithoutReply
+				}
+				return "", fmt.Errorf("turn completion not confirmed")
 			}
 			return final, nil
 		case "error":
@@ -547,13 +713,16 @@ func (c *codexAppServerClient) waitResponse(ctx context.Context, id int) (json.R
 			continue
 		}
 		if msg.Error != nil {
-			return nil, fmt.Errorf("%s", msg.Error.Message)
+			return nil, msg.Error
 		}
 		return msg.Result, nil
 	}
 }
 
 func (c *codexAppServerClient) next(ctx context.Context) (codexRPCMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return codexRPCMessage{}, err
+	}
 	// The read loop reports EOF before closing msgs, so when the process
 	// exits right after its last frame both channels are ready and select
 	// would pick one at random — drain buffered frames (e.g. the final
@@ -572,6 +741,16 @@ func (c *codexAppServerClient) next(ctx context.Context) (codexRPCMessage, error
 			return codexRPCMessage{}, io.EOF
 		}
 		return msg, nil
+	case reply := <-c.approvalReplies:
+		id := reply["id"].(int)
+		if cancel := c.approvalCancels[id]; cancel != nil {
+			cancel()
+			delete(c.approvalCancels, id)
+			if err := c.send(reply); err != nil {
+				return codexRPCMessage{}, err
+			}
+		}
+		return c.next(ctx)
 	case err := <-c.readErr:
 		return codexRPCMessage{}, err
 	case <-c.done:
@@ -648,4 +827,28 @@ func codexTurnCompletedText(params json.RawMessage, wantThreadID string) (final,
 		}
 	}
 	return final, p.Turn.Status, errMsg, true
+}
+
+func (c *codexAppServerClient) startApproval(ctx context.Context, msg codexRPCMessage, thread, turn string) bool {
+	h := codexApprovalSink(ctx)
+	if h == nil || !codexApprovalMethod(msg.Method) || turn == "" || !codexApprovalMatches(msg.Params, thread, turn) {
+		return false
+	}
+	id := *msg.ID
+	if c.approvalCancels[id] != nil {
+		return true
+	}
+	wait, cancel := context.WithCancel(ctx)
+	c.approvalCancels[id] = cancel
+	c.approvalWG.Add(1)
+	go func() {
+		defer c.approvalWG.Done()
+		allow := h(wait, msg.Method, msg.Params) && wait.Err() == nil
+		reply := map[string]any{"id": id, "result": codexApprovalResult(msg.Method, msg.Params, allow)}
+		select {
+		case c.approvalReplies <- reply:
+		case <-wait.Done():
+		}
+	}()
+	return true
 }

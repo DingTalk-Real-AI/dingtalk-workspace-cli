@@ -1,0 +1,155 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "open-report",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json"
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "open-report",
+      "path": "/",
+      "value": {
+        "rows": [
+          {
+            "name": "Engineering",
+            "count": 8
+          },
+          {
+            "name": "Design",
+            "count": 3
+          },
+          {
+            "name": "Testing",
+            "count": 2
+          }
+        ],
+        "table": {
+          "meta": [
+            {
+              "colKey": "name",
+              "colName": "Department",
+              "type": "text"
+            },
+            {
+              "colKey": "count",
+              "colName": "Completed",
+              "type": "text"
+            }
+          ],
+          "data": [
+            {
+              "name": "Engineering",
+              "count": 8
+            },
+            {
+              "name": "Design",
+              "count": 3
+            },
+            {
+              "name": "Testing",
+              "count": 2
+            }
+          ]
+        },
+        "chart": {
+          "type": "histogram",
+          "data": [
+            {
+              "x": "Engineering",
+              "y": 8
+            },
+            {
+              "x": "Design",
+              "y": 3
+            },
+            {
+              "x": "Testing",
+              "y": 2
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-report",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "tabs",
+            "summary"
+          ]
+        },
+        {
+          "id": "tabs",
+          "component": "Tabs",
+          "tabs": [
+            {
+              "title": "Data details",
+              "child": "table"
+            },
+            {
+              "title": "Chart",
+              "child": "chart-stack"
+            }
+          ]
+        },
+        {
+          "id": "table",
+          "component": "Table",
+          "data": {
+            "path": "/table"
+          },
+          "pagination": true,
+          "pageSize": 2
+        },
+        {
+          "id": "chart-stack",
+          "component": "Stack",
+          "child": "chart",
+          "overlays": [
+            {
+              "child": "badge",
+              "position": "topEnd"
+            }
+          ]
+        },
+        {
+          "id": "chart",
+          "component": "Chart",
+          "data": {
+            "path": "/chart"
+          }
+        },
+        {
+          "id": "badge",
+          "component": "Text",
+          "text": "This week"
+        },
+        {
+          "id": "summary",
+          "component": "Loop",
+          "children": {
+            "componentId": "row",
+            "path": "/rows"
+          }
+        },
+        {
+          "id": "row",
+          "component": "Text",
+          "text": {
+            "path": "name"
+          },
+          "maxLine": 1
+        }
+      ]
+    }
+  }
+]

@@ -1,14 +1,61 @@
 # dev — 开放平台开发者命令
 
-`dws dev` 是面向**开发者**的命令组，分三个子树：
+`dws dev` 是面向**开发者**的命令组，分四个子树：
 
 | 子命令 | 职责 |
 |--------|------|
 | `dev app` | 应用生命周期（创建/查询/更新/删除/凭证/权限/成员/安全/网页/机器人/**建号**/版本/事件订阅） |
 | `dev connect` | **建联**：把现成机器人接到当前本地 agent（起 Stream，不建号） |
 | `dev doc` | 开放平台开发文档搜索入口（当前网关未注册该工具键，`dev doc search` 会报「未找到指定工具」不可用；文档搜索一律走 `dws devdoc article search --query <关键词>`） |
+| `dev mcp` | MCP 服务、工具、鉴权、凭证、协作者与 HSF 方法的开发管理 |
 
 > ⚠️ **关键区分**：`dws chat bot search/find` 只查询已有机器人（IM 视角）；**创建/建号**机器人走 `dws dev app robot submit`；**建联**走 `dws dev connect`。"创建机器人"/"建联"一律走 `dev`，禁止走 `chat`。
+
+---
+
+## dev mcp — MCP 开发与发布
+
+`dev mcp` 是固定、可审计的开发命令树，不会把远端 `serverName` 或工具名注入为新的 Cobra 命令。只知道名称时先用 `dws mcp market search --keyword <关键词>` 从市场拿 `mcpId`，已发布工具统一通过 `dws mcp published tools/invoke` 消费。
+
+用户提供 OpenAPI/Swagger、Postman、curl 或接口文档并要求“做成 MCP / 给 Agent 用”时，也路由到本节。先完成接口拆分、三段式字段树、映射和鉴权设计，再执行 dry-run。当前不会创建动态命令缓存，也不得持久化 endpoint、工具名与含 `?key=` 的 URL。
+
+```bash
+# 服务与工具
+dws dev mcp service list --format json
+dws dev mcp service create --name 示例服务 --description "示例" --server-name example-service --dry-run --format json
+dws dev mcp tool list --mcp-id <mcpId> --format json
+dws dev mcp tool publish --mcp-id <mcpId> --tool-id <toolId> --dry-run --format json
+
+# 市场搜索：只知道名称时先拿 mcpId（只读）
+dws mcp market search --keyword <关键词> --format json
+
+# 已发布工具：先查 Schema，再 dry-run，最后显式确认
+dws mcp published tools <mcpId> --format json
+dws mcp published invoke <mcpId> <toolName> --params '{}' --dry-run --format json
+```
+
+Skill 元数据继续兼容 `cli_version >=1.0.61`，但 stock 1.0.61 不代表一定包含新的调用门禁。依赖该门禁前必须做能力检测，而不是猜版本：
+
+```bash
+dws mcp published invoke --help
+```
+
+确认帮助中包含 `inputSchemaDigest (fresh_core_subset_snapshot)`；检测不到时先执行 `dws upgrade` 升级到最新**稳定版**，再次检测。不要安装或建议 beta，也不要在检测失败时继续真实调用。
+
+`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。
+
+| 命令路径 | endpoint 解析 | `tools/list` | `tools/call` |
+|---|---:|---:|---:|
+| `published tools` | 1 次 | 全部分页 | 0 |
+| `invoke --dry-run` | 0 | 0 | 0 |
+| 未确认的真实 invoke | 0 | 0 | 0 |
+| 已确认的真实 invoke | 1 次 | 紧邻调用前刷新全部分页 | 同一 endpoint 上 1 次 |
+
+已确认操作在一个根 `--timeout` 总时限内完成 endpoint 解析、鉴权/客户端构造、全部分页、校验和调用。刷新结果必须对工具名精确且唯一匹配，要求非空 `inputSchema`，再按受限核心子集失败关闭校验；最多 100 页、累计 20 MiB 完整 JSON-RPC 响应、64 KiB cursor、10000 个工具。发现和调用都拒绝 HTTP 重定向，避免跨 endpoint 校验/执行；`tools/list` 可重试，`tools/call` 不自动重试。调用传输失败时结果可能已在服务端发生，必须按“结果未知”处理，不能盲目重放。
+
+成功结果中的 `inputSchemaValidation=fresh_core_subset_snapshot` 和 `inputSchemaDigest` 只证明参数通过了紧邻调用前所取快照的核心子集校验。发现与调用复用同一 endpoint，但 Schema 快照没有被服务端原子锁定；彻底关闭 TOCTOU 需要服务端提供 revision/etag 和调用 precondition。支持的 `$schema` URI 只标识解析方言，不表示支持该方言全部词汇；当前只接受 `required/type/enum/properties/items/additionalProperties` 及明确列出的基础元数据，其他 assertion 或 annotation 一律失败关闭。
+
+完整生命周期和按阶段加载的 API 转换、Mapping、鉴权、82 个表达式函数、故障定位参考见 multi skill 的 `references/dev/mcp.md`。
 
 ---
 
@@ -16,6 +63,7 @@
 
 ```bash
 # Step 1：创建开放平台应用，拿 unifiedAppId
+# --desc 服务端必填（缺省返回 67010 DESC_INVALID）；名称仅限中英文/数字/指定标点
 dws dev app create --name "我的 AI 机器人" --desc "接 opencode" --dry-run --format json
 dws dev app create --name "我的 AI 机器人" --desc "接 opencode" --yes --format json
 # → 返回 unifiedAppId
@@ -125,6 +173,27 @@ dws dev app credentials get --unified-app-id <unifiedAppId> --format json
 
 ---
 
+## dev app scope — 可见范围
+
+```bash
+# 查询应用可见人员范围（只读）
+dws dev app scope get --unified-app-id <unifiedAppId> --format json
+
+# 设置可见范围（全量替换语义）
+# 1) 服务端预检：真实调用只生成计划不写入；确认仅预检后执行
+dws dev app scope set --unified-app-id <unifiedAppId> \
+  --user-visible-scopes <scopeValue1,scopeValue2> \
+  --precheck-only --yes --format json
+# 2) 核对计划（含将被移除的范围）并确认后正式执行
+dws dev app scope set --unified-app-id <unifiedAppId> \
+  --user-visible-scopes <scopeValue1,scopeValue2> \
+  --precheck-only=false --yes --format json
+# --dry-run 只是本地调用预览（不访问服务端），不能替代服务端预检；
+# 未传入的既有范围会被移除，增量添加前先 scope get 并带上完整集合
+```
+
+---
+
 ## dev connect — 建联
 
 ```bash
@@ -132,7 +201,7 @@ dws dev app credentials get --unified-app-id <unifiedAppId> --format json
 dws dev connect \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
-# 明确指定渠道（opencode/claudecode/qoder/qoderwork/workbuddy/codex/gemini/hermes/openclaw/custom）
+# 明确指定渠道（opencode/claudecode/qoder/qoderwork/workbuddy/codex/gemini/pi/hermes/openclaw/custom）
 dws dev connect --channel opencode \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
@@ -164,6 +233,8 @@ dws dev connect stop
 | `--owner-user-id` | 数字分身：执行类请求先发给主人审批 |
 
 **预检 cli.installed**：`--dry-run` 出参的 `cli` 字段含 `installed/autoInstall/installHint`。`installed:false, autoInstall:false`（桌面 App 渠道）时先引导用户安装对应 App，不要直接起连接。
+
+Pi 使用 `--channel pi`，复用 Pi 自身的登录和模型配置；`--agent-model` 可指定 `provider/model`。按会话隔离记忆，`/new`、`/clear` 重置会话映射；需要禁用工具时显式使用 `--agent-permission-mode ask`，或在未配置权限模式及其环境变量时使用 `--agent-approval-mode ask`。不存在 `--ask` 参数，`--yolo=false` 也不会关闭默认高权限模式。原生 Pi 通道不要同时设置 `--agent-cmd`，也不要用 `DWS_AGENT_CMD` 覆盖命令。
 
 `dev connect` 是本地调试步骤。dry-run JSON 的 `invocation` 会包含 `scope=local_debug_only`、`doesNotPublish=true`、`completionState=LOCAL_DEBUG_ONLY`、`terminal=false`；真实前台/daemon 启动也会提示“本地调试，不代表线上发布完成”。这些信号不能抵消版本发布/审批闭环。
 

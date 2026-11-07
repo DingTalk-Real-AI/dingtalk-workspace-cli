@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // cardAPIRecorder fakes the DingTalk card endpoints and records every call.
@@ -235,7 +237,7 @@ func TestRobotConnectReplyCardFlag(t *testing.T) {
 				"--channel", "claudecode",
 				"--robot-client-id", "a", "--robot-client-secret", "b", "--dry-run"}, tc.args...)
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute: %v\n%s", err, out.String())
 			}
 			if !strings.Contains(out.String(), tc.want) {

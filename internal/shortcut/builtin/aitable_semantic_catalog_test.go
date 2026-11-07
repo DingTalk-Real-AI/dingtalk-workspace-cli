@@ -36,8 +36,10 @@ func TestCrossPlatformCoverageAITableSemanticCatalogExactlyCoversRegisteredSurfa
 		}
 		registered[item.Command] = item
 	}
-	if len(registered) != 93 || len(source.Shortcuts) != 93 {
-		t.Fatalf("registered/catalog = %d/%d, want 93/93", len(registered), len(source.Shortcuts))
+	// Nine reviewed optimization shortcuts extend main's 131-command surface,
+	// including its four advanced-permission role/member commands.
+	if len(registered) != 140 || len(source.Shortcuts) != 140 {
+		t.Fatalf("registered/catalog = %d/%d, want 140/140", len(registered), len(source.Shortcuts))
 	}
 
 	var missing, stale []string

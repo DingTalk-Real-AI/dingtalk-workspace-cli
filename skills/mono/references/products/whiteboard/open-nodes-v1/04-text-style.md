@@ -82,6 +82,12 @@ interface OpenText extends OpenTextWrite {
 
 约束：
 
+- 垂直对齐只写在 `text.verticalAlign`（frame 标题为 `title.text.verticalAlign`），
+  不得写进 `text.blocks[i]`；block 的对齐字段是 `horizontalAlign`。
+  DWS 在 render、创建、diff 和更新前拒绝 block 内的 `verticalAlign`，返回节点 ID、
+  字段路径与正确位置（validation / 退出码 3）。修正 source 后重新预览和确认，
+  不直接重试旧的 sourceDigest。此本地检查不替代服务端完整 Schema 校验。
+
 - `blocks.length >= 1`，每个 block 的 `type` 必须是 `paragraph`、
   `bulletList` 或 `orderedList`。
 - 每个 block 都必须满足 `runs.length >= 1`。

@@ -24,7 +24,7 @@
 - `dws report outbox list` = 列出**我发出**的日报（我创建或提交的）。
 - `dws report entry get --report-id <reportId>` = 读取单份日报正文 + 钉钉跳转链接。
 - `dws report entry stats --report-id <reportId>` = 读取单份日报的已读统计。
-- `dws report entry submit --template-id ... --contents-file ...` = 按模版提交一份新日报。
+- `dws report entry submit --template-id ... --contents-file ... --to-user-ids ...` = 按模版提交一份新日报（--to-user-ids 必填：无接收人的日志对任何人都不可见）。
 - `dws report template list` = 列出可用日报模版。
 - `dws report template get --name "<模版名>"` = 读取单个模版的字段定义（contents 拼装来源）。
 
@@ -32,6 +32,7 @@
 |----------|----------------|----------|
 | 查我发过的日志 / 我创建的日志 | `dws report outbox list --cursor 0 --size 20 --format json` | 从返回里取 `reportId`，再执行 `dws report entry get --report-id <reportId> --format json` |
 | 查我收到的日志 / 别人发给我的日志 | `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json` | 必须先按用户时间词补齐完整 ISO 起止时间；取 `reportId` 后调用 `entry get` |
+| 按发件人查我收到的日志 | 先 `dws aisearch person --query "<姓名>" --dimension name --format json`，再 `dws report +inbox-list --start "<ISO>" --end "<ISO>" --sender-user-ids <USER_ID> --cursor 0 --size 20 --format json` | 只过滤当前 profile 的收件箱；人员零命中或多候选时停止并消歧，禁止默认选择第一项或改查他人的发件箱 |
 | 查看某条日志正文 / 日志详情 | `dws report entry get --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 查某条日志统计 / 已读统计 | `dws report entry stats --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 查日志模版 / 有哪些周报模板 | `dws report template list --format json` | 需要字段定义时继续 `dws report template get --name "<模版名>" --format json` |
@@ -127,7 +128,7 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 
 1. `dws report template list --format json` — 取 `report_template_id` 与可见模版名
 2. `dws report template get --name "<模版名>" --format json` — 取 `result.report_template_fields[]`，每项含 `field_name` / `field_sort` / `field_type`
-3. `dws report entry submit --template-id <id> --contents-file <tmp.json> --format json` — contents 数组按上面「字段映射」严格对齐第 2 步：`field_name → key`，`field_sort → sort`，`field_type → type`，再填 `content` 与 `contentType`；CLI 提交成功后会自动反查详情并追加钉钉打开链接字段，返回中直接取 `reportId` 与 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl`
+3. `dws report entry submit --template-id <id> --contents-file <tmp.json> --to-user-ids <userId1>,<userId2> --format json` — contents 数组按上面「字段映射」严格对齐第 2 步：`field_name → key`，`field_sort → sort`，`field_type → type`，再填 `content` 与 `contentType`；`--to-user-ids` 必填：无接收人的提交服务端仍返回成功但日志对任何人都不可见；CLI 提交成功后会自动反查详情并追加钉钉打开链接字段，返回中直接取 `reportId` 与 `dingtalkOpenMarkdownLink` / `dingtalkOpenUrl`
 4. 仅当第 3 步返回中缺少 `dingtalkOpenUrl` 时，执行 `dws report entry get --report-id <reportId> --format json` 补取 `result.url`（`dingtalk://...` 协议深链接）。final reply 中优先使用 `dingtalkOpenMarkdownLink`，否则用 `[在钉钉中查看日志](dingtalkOpenUrl)`。**禁止把 raw `dingtalk://...` URL 原样写进回复**，必须包成 markdown link 让用户可点击跳转钉钉客户端
 
 跳步风险（已实证）：
@@ -136,6 +137,7 @@ CLI 列表命令只返回 JSON-first 数据，不把 Markdown 表作为裸文本
 - 跳过第 2 步用 LLM 经验编 `key` 名 → 服务端返回 `PARAM_ERROR`，且**不告诉你哪个字段错**；服务端 PARAM_ERROR 信号弱，事后无法定位，**只能靠前置 schema 同步避免**；
 - 未取到 `dingtalkOpenUrl` 且不补查 `entry get` → 用户拿不到跳转链接，无法在钉钉客户端打开刚提交的日志查看 / 修改；
 - 用 `--contents` 直传长 JSON → shell 引号转义破坏 JSON → `INPUT_INVALID_JSON`。**长内容务必走 `--contents-file <path>` 或 `--contents -` (stdin)**。
+- 不传 `--to-user-ids` → 服务端仍返回成功但日志对任何接收人都不可见；CLI 已强制必填，缺 flag 或传空值都会被拒绝
 - contents JSON 大小限制为 10MB，**不支持分批次提交**。超过限制需精简内容或拆分为多个独立日志提交。
 
 推荐：Agent 在多轮场景中应在内存里持久化第 1/2 步的结果，避免每轮重新跑。
@@ -167,22 +169,22 @@ Usage:
   dws report entry submit [flags]
 Example:
   # 推荐：长内容走文件，避免 shell 引号问题
-  dws report entry submit --template-id <templateId> --contents-file ./report.json --format json
+  dws report entry submit --template-id <templateId> --contents-file ./report.json --to-user-ids <userId1>,<userId2> --format json
 
   # stdin 输入
-  cat report.json | dws report entry submit --template-id <templateId> --contents - --format json
+  cat report.json | dws report entry submit --template-id <templateId> --contents - --to-user-ids <userId1> --format json
 
   # 内联（短内容）
   dws report entry submit --template-id <templateId> \
     --contents '[{"key":"今日完成","sort":"0","content":"完成了需求评审","contentType":"markdown","type":"1"}]' \
-    --format json
+    --to-user-ids <userId1> --format json
 Flags:
       --template-id string    日志模版 ID (必填)，从 template list 返回中取
       --contents string       日志内容 JSON 数组 (必填，或用 --contents-file)；传 `-` 表示从 stdin 读取
       --contents-file string  从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容）
       --dd-from string        创建来源标识 (默认 dws)
       --to-chat               是否发送到日志接收人单聊 (默认 false，传本 flag 则为 true)
-      --to-user-ids string    接收人 userId，逗号分隔 (可选)
+      --to-user-ids string    接收人 userId，逗号分隔 (必填)；无接收人的日志提交后对任何人都不可见
 ```
 
 
@@ -316,8 +318,8 @@ dws report template list --format json
 # 2. 按名称读取模版字段定义
 dws report template get --name "日报" --format json
 
-# 2b. 提交日志（从步骤 1/2 取 templateId 与 contents 字段）— 推荐 --contents-file 传入避免 shell 引号
-dws report entry submit --template-id <templateId> --contents-file ./report.json --format json
+# 2b. 提交日志（从步骤 1/2 取 templateId 与 contents 字段）— 推荐 --contents-file 传入避免 shell 引号；--to-user-ids 必填
+dws report entry submit --template-id <templateId> --contents-file ./report.json --to-user-ids <userId1>,<userId2> --format json
 # submit 成功会自动反查详情并追加 dingtalkOpenMarkdownLink / dingtalkOpenUrl；
 # final reply 直接使用 dingtalkOpenMarkdownLink: [在钉钉中查看日志](dingtalk://...)
 
@@ -404,6 +406,9 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
+| [report_received_today.py](../../scripts/report_received_today.py) | 有界分页列出今天或最近几天收到的日志摘要；失败和不完整结果返回非零状态，不逐篇读取正文 | `python3 scripts/report_received_today.py --days <N>` |
+
+该脚本与 Multi 版本保持完全一致，使用 `dws report +inbox-list`，最多扫描 10 页、200 条并受总超时约束。需要正文时，从摘要中选择明确的 `reportId` 后只调用一次 `entry get`；不得恢复解析 `_internalDetailCommands`、逐条 N+1 读取或把命令失败伪装成空结果的旧流程。
 
 
 

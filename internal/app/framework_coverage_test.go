@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestFrameworkErrorProjectionPreservesRecoveryMetadata(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkErrorProjectionPreservesRecoveryMetadata(t *testing.T) {
 	next := time.Date(2026, 8, 10, 1, 2, 3, 0, time.FixedZone("test", 8*60*60))
 	retry := int64(4)
 	started := true
@@ -42,8 +42,18 @@ func TestFrameworkErrorProjectionPreservesRecoveryMetadata(t *testing.T) {
 	if info.Type != "api" || info.Subtype != "upstream_failed" || info.HTTPStatus != 503 || info.RPCCode != 92 || info.RequestID != "call-trace" || info.TraceID != "typed-trace" {
 		t.Fatalf("projection=%+v", info)
 	}
-	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause == "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
+	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause != "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
 		t.Fatalf("recovery metadata=%+v", info)
+	}
+
+	comment := &helpers.CLIError{
+		Code:       helpers.CodeMCPToolError,
+		ServerCode: "COMMENT_RECORD_UNAVAILABLE",
+		Details:    map[string]any{"operation_executed": false},
+	}
+	commentInfo := errorInfoFromExecutionError(comment)
+	if commentInfo.UpstreamCode != "COMMENT_RECORD_UNAVAILABLE" || commentInfo.Details["operation_executed"] != false {
+		t.Fatalf("comment recovery metadata=%+v", commentInfo)
 	}
 
 	innerOperation := &helpers.CLIError{Operation: "create"}
@@ -107,10 +117,10 @@ func TestFrameworkExecutePreparseUnifiedErrorAndEmissionFallback(t *testing.T) {
 }
 
 func TestFrameworkPublicRootRequiresResultFromActiveCommand(t *testing.T) {
-	root := NewRootCommand(context.Background())
 	leaf := &cobra.Command{Use: "active-no-result", RunE: func(*cobra.Command, []string) error { return nil }}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"active-no-result"})
 	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "without a CommandResult") {
 		t.Fatalf("ExecuteC error=%v", err)
@@ -490,10 +500,22 @@ func TestCrossPlatformCoverageExecuteDeterministicInterruptionBranches(t *testin
 		})
 	}
 	interrupted := func(primaryCompleted bool) *processSignalState {
-		return &processSignalState{
-			interruption:             &processInterruption{signal: os.Interrupt},
-			primaryCompletedAtSignal: primaryCompleted,
+		state := &processSignalState{}
+		ctx, store := output.WithResultStore(context.Background())
+		if primaryCompleted {
+			cmd := &cobra.Command{Use: "dws"}
+			cmd.SetContext(ctx)
+			cmd.SetOut(io.Discard)
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+			if err := output.StoreResult(ctx, output.Success(nil)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
 		}
+		state.Record(os.Interrupt, processResultCompleted(store))
+		return state
 	}
 
 	t.Run("preparse interruption emits unified failure", func(t *testing.T) {
@@ -588,12 +610,12 @@ func (frameworkPanicWriter) Write([]byte) (int, error) { panic("writer panic") }
 
 func TestCrossPlatformCoverageFrameworkRootHookErrors(t *testing.T) {
 	t.Run("flag group validation", func(t *testing.T) {
-		root := NewRootCommand(context.Background())
 		leaf := &cobra.Command{Use: "exclusive", RunE: func(*cobra.Command, []string) error { return nil }}
 		leaf.Flags().Bool("left", false, "")
 		leaf.Flags().Bool("right", false, "")
 		leaf.MarkFlagsMutuallyExclusive("left", "right")
-		root.AddCommand(leaf)
+		root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs([]string{"exclusive", "--left", "--right"})

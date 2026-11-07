@@ -96,7 +96,14 @@ func init() {
 	registerRequireOneOf("sheet.update_cond_format", "ranges", "condition", "cell-style", "data-bar-style")
 	registerRequireOneOf("sheet.update_dimension", "hidden", "pixel-size")
 	registerRequireOneOf("sheet.update_filter_view", "name", "range", "criteria")
-	registerRequireOneOf("sheet.update_float_image", "src", "range", "width", "height", "offset-x", "offset-y")
+	RegisterRuntimeSchemaConstraints("sheet.create_float_image", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"file", "src"}},
+		RequireOneOf:      [][]string{{"file", "src"}},
+	})
+	RegisterRuntimeSchemaConstraints("sheet.update_float_image", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"file", "src"}},
+		RequireOneOf:      [][]string{{"file", "src", "range", "width", "height", "offset-x", "offset-y"}},
+	})
 	registerRequireOneOf("sheet.update_sheet", "name", "index", "hidden", "frozen-row-count", "frozen-column-count", "tab-color")
 	registerRequireOneOf("sheet.import", "folder-token", "workspace")
 	registerRequireOneOf("wiki.search_wikiSpaces", "query", "type")

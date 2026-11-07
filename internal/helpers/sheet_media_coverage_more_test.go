@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeSheetMediaEdge(t *testing.T, index int, caller *scriptedToolCaller, args ...string) error {
@@ -26,7 +28,7 @@ func executeSheetMediaEdge(t *testing.T, index int, caller *scriptedToolCaller, 
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageSheetMediaUploadRemainingCoverage(t *testing.T) {

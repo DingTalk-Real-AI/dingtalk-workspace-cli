@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -28,12 +29,14 @@ import (
 	"strings"
 	"time"
 
+	dwserrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/google/uuid"
 )
 
 var (
-	oauthSaveClientSecret = SaveClientSecret
+	oauthSaveClientSecret = saveClientSecretTransactional
 	oauthSaveTokenLocked  = saveTokenDataLocked
 	oauthRetryAfter       = time.After
 	oauthNewRequest       = http.NewRequestWithContext
@@ -45,8 +48,20 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 		return p.exchangeCodeViaMCP(ctx, code)
 	}
 	// Direct mode with client secret
-	clientID := ClientID()
-	clientSecret := ClientSecret()
+	pair, err := p.directCredentialPair()
+	if err != nil {
+		return nil, err
+	}
+	data, err := p.exchangeCodeWithClient(ctx, code, pair.ClientID, pair.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	data.Source = pair.Source
+	return data, nil
+}
+
+// exchangeCodeWithClient does not persist credentials before identity validation.
+func (p *OAuthProvider) exchangeCodeWithClient(ctx context.Context, code, clientID, clientSecret string) (*TokenData, error) {
 	body := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -63,14 +78,33 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	}
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
-	data.Source = resolveCredentialSource()
 	p.applyLoginRegionToToken(data)
-	// Save clientSecret for future refresh (even if env changes)
-	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
-		// Log warning but don't fail login
-		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
-	}
+	// The caller supplies the resolved provenance; explicit arguments alone do not
+	// imply credentials originated from command-line flags.
 	return data, nil
+}
+
+func (p *OAuthProvider) directCredentialPair() (AppCredentialPair, error) {
+	if p != nil && p.credentials != nil {
+		return *p.credentials, nil
+	}
+	configDir := getDefaultConfigDir()
+	if p != nil && strings.TrimSpace(p.configDir) != "" {
+		configDir = p.configDir
+	}
+	pair, err := resolveOAuthCredentialPair(configDir)
+	if err != nil {
+		return AppCredentialPair{}, fmt.Errorf("invalid application credentials: %w", err)
+	}
+	if pair == nil {
+		return AppCredentialPair{}, errors.New("missing complete Client ID/Client Secret pair")
+	}
+	if p != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	}
+	return *pair, nil
 }
 
 // ExchangeCodeForToken exchanges an authorization code for token data using
@@ -80,16 +114,13 @@ func ExchangeCodeForToken(ctx context.Context, configDir, code string) (*TokenDa
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return nil, fmt.Errorf("local login state cannot be safely updated before token exchange: %w", err)
 	}
-	p := &OAuthProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		Output:     io.Discard,
-		httpClient: oauthHTTPClient,
-	}
+	p := NewOAuthProvider(configDir, nil)
+	p.Output = io.Discard
 	data, err := p.exchangeCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
+	p.persistAppConfigIfNeeded()
 	data.FreshAuthorization = true
 	return data, nil
 }
@@ -122,7 +153,14 @@ func (p *OAuthProvider) applyLoginRegionToToken(data *TokenData) {
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {
-	clientID := ClientID()
+	return p.exchangeCodeViaMCPClientID(ctx, code, strings.TrimSpace(p.clientID))
+}
+
+// exchangeCodeViaMCPClientID exchanges a managed identity authorization code
+// with the caller-provided application ID. It deliberately avoids process-wide
+// ClientID state so employee login cannot mutate the supervisor login context.
+func (p *OAuthProvider) exchangeCodeViaMCPClientID(ctx context.Context, code, clientID string) (*TokenData, error) {
+	clientID = strings.TrimSpace(clientID)
 	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPOAuthTokenPath
 	body := map[string]string{
 		"clientId":  clientID,
@@ -146,6 +184,14 @@ func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*T
 }
 
 func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *TokenData) (*TokenData, error) {
+	if data.isOIDCSession() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := validateOIDCRefreshBinding(data); err != nil {
+			return nil, err
+		}
+	}
 	// Use stored Source to determine refresh path (not current runtime state)
 	// This ensures refresh works even if environment variables changed since login
 	if data.Source == "mcp" {
@@ -160,10 +206,25 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 		// Fallback for legacy tokens without stored clientId
 		clientID = ClientID()
 	}
-	clientSecret := LoadClientSecret(clientID)
+	clientSecret, secretErr := LoadClientSecretStrict(clientID)
+	if secretErr != nil {
+		return nil, fmt.Errorf("无法刷新 token: Client Secret 存储冲突或不可读，请重新登录: %w", secretErr)
+	}
 	if clientSecret == "" {
-		// Fallback: try current environment
-		clientSecret = ClientSecret()
+		pair, pairErr := resolveAppCredentialPairWithoutMigration(p.configDir, "", "")
+		if pairErr == nil && (clientID == "" || pair.ClientID == clientID) {
+			clientID = pair.ClientID
+			clientSecret = pair.ClientSecret
+		}
+	}
+	if clientSecret != "" {
+		// Complete an app.json-aware historical-slot migration when this token's
+		// client ID is also the active custom application. Never replace the
+		// credential already selected for this token with stale app.json data.
+		if pair, pairErr := resolveAppConfigCredentialPair(p.configDir, false); pairErr == nil &&
+			pair.ClientID == clientID && pair.ClientSecret == clientSecret {
+			_, _ = ResolveAppConfigCredentialPair(p.configDir)
+		}
 	}
 
 	if clientID == "" || clientSecret == "" || strings.HasPrefix(clientSecret, "<") {
@@ -207,9 +268,10 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 
 // refreshViaMCP refreshes token via MCP proxy.
 func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*TokenData, error) {
+	oidcSession := data.isOIDCSession()
 	// Use stored clientId from token data
 	clientID := data.ClientID
-	if clientID == "" {
+	if clientID == "" && !oidcSession {
 		// Fallback for legacy tokens
 		clientID = ClientID()
 	}
@@ -218,23 +280,61 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId，请重新登录")
 	}
 
-	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPRefreshTokenPath
+	baseURL := MCPBaseURLForLoginRegion(p.loginRegion())
+	if oidcSession {
+		// refreshWithRefreshToken validated the original application and Portal.
+		baseURL = data.MCPBaseURL
+	}
+	url := baseURL + MCPRefreshTokenPath
 	body := map[string]string{
 		"clientId":     clientID,
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
-	resp, err := p.postJSON(ctx, url, body)
+	if oidcSession && data.MCPClientSecretRequired {
+		secret, err := LoadClientSecretStrict(clientID)
+		if err != nil || strings.TrimSpace(secret) == "" {
+			return nil, fmt.Errorf("cannot load the saved OIDC application secret; log in again")
+		}
+		body["clientSecret"] = secret
+	}
+	var resp []byte
+	var err error
+	if oidcSession {
+		// A redirect must never forward the saved application secret. Preserve
+		// HTTP status for refresh retry classification without exposing bodies.
+		var status int
+		status, resp, err = oidcJSONRequest(ctx, p.httpClient, url, body, "")
+		if status != 0 && status != http.StatusOK {
+			err = &HTTPStatusError{StatusCode: status}
+		}
+	} else {
+		resp, err = p.postJSON(ctx, url, body)
+	}
 	if err != nil {
 		return nil, err
 	}
 	updated, err := p.parseMCPTokenResponse(resp)
 	if err != nil {
+		if oidcSession {
+			var exchangeErr *MCPTokenExchangeError
+			if ctx.Err() == nil && errors.As(err, &exchangeErr) && exchangeErr.requiresReauthorization() {
+				// Retain only the reviewed rejection code for error classification.
+				// Never keep the server's message or original error in the chain.
+				return nil, dwserrors.NewAuth("DWS refresh token was rejected", dwserrors.WithCause(&MCPTokenExchangeError{
+					Code: legacyMCPRefreshRejectedCode, Message: "refresh credential rejected",
+				}))
+			}
+			return nil, oidcSafeError(ctx, err, "DWS refresh returned an invalid token response")
+		}
 		return nil, err
 	}
 	// Preserve original credentials info
 	updated.ClientID = data.ClientID
 	updated.Source = data.Source
+	updated.MCPBaseURL = data.MCPBaseURL
+	updated.MCPClientSecretRequired = data.MCPClientSecretRequired
+	updated.OIDCProvider = data.OIDCProvider
 	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
@@ -423,10 +523,102 @@ func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region Lo
 	return AuthorizeURLForLoginRegion(region) + "?" + params.Encode()
 }
 
-const successHTML = `<!doctype html>
-<html>
+const successHTMLTemplate = `<!doctype html>
+<html lang="__LANG__">
   <head>
     <meta charset="utf-8" />
+    <title>__TITLE__</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .lock-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        object-fit: contain;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img
+        class="lock-icon"
+        src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
+        alt="lock icon"
+      />
+      <h1>__HEADING__</h1>
+      <p>__MESSAGE__</p>
+    </div>
+  </body>
+</html>`
+
+const applyPendingHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>钉钉 CLI</title>
     <style>
       body {
@@ -508,11 +700,50 @@ const successHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>授权成功</h1>
-      <p>请返回终端继续操作。此页面可以关闭。</p>
+      <h1>访问权限申请中</h1>
+      <p>
+        已向管理员发送权限申请，正在等待审核<br />
+        审核通过后，将在工作通知中提示
+      </p>
     </div>
+    <script>
+      const POLL_MAX_MS = 10 * 60 * 1000; // 10 minutes, aligned with server-side oauthApprovalTimeout
+      const pollStart = Date.now();
+      let pollTimer = null;
+
+      async function checkAuthStatus() {
+        try {
+          const res = await fetch("/api/cliAuthEnabled");
+          const data = await res.json();
+          if (data.success && data.result && data.result.cliAuthEnabled) {
+            if (pollTimer) clearInterval(pollTimer);
+            location.href = "/success";
+            return;
+          }
+        } catch (e) {
+          console.error("Poll error", e);
+        }
+        if (Date.now() - pollStart >= POLL_MAX_MS) {
+          if (pollTimer) clearInterval(pollTimer);
+          document.querySelector(".card p").innerHTML =
+            "审核超时，请关闭页面后重新登录";
+        }
+      }
+
+      pollTimer = setInterval(checkAuthStatus, 5000);
+      checkAuthStatus();
+    </script>
   </body>
 </html>`
+
+func renderSuccessHTML() string {
+	return strings.NewReplacer(
+		"__LANG__", html.EscapeString(i18n.Lang()),
+		"__TITLE__", html.EscapeString(i18n.T("钉钉 CLI")),
+		"__HEADING__", html.EscapeString(i18n.T("授权成功")),
+		"__MESSAGE__", html.EscapeString(i18n.T("请返回终端继续操作。此页面可以关闭。")),
+	).Replace(successHTMLTemplate)
+}
 
 const notEnabledHTML = `<!doctype html>
 <html lang="zh-CN">
@@ -717,29 +948,6 @@ const notEnabledHTML = `<!doctype html>
         margin-top: 16px;
         display: inline-block;
       }
-      .success-msg {
-        display: none;
-        width: 100%;
-        height: 60px;
-        gap: 12px;
-        padding: 16px 20px;
-        margin-top: 50px;
-        margin-bottom: 16px;
-        background: #eaf1ff;
-        border-radius: 12px;
-        align-items: center;
-      }
-      .success-msg-icon {
-        width: 24px;
-        height: 24px;
-        flex-shrink: 0;
-      }
-      .success-msg-text {
-        flex: 1;
-        font-size: 14px;
-        line-height: 22px;
-        color: #181c1f;
-      }
       .error-msg {
         color: #ff4d4f;
         font-size: 14px;
@@ -771,14 +979,13 @@ const notEnabledHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>该组织尚未开启 CLI 数据访问权限</h1>
+      <h1>您暂无 CLI 数据访问权限</h1>
       <p>
-        你所选择的组织管理员尚未开启<br />「允许成员通过 CLI
-        访问其个人数据」的权限。
+        当前组织未授权您通过 CLI 访问个人数据。<br />如需使用，请提交开通申请。
       </p>
 
       <div class="form-group">
-        <label class="form-label">选择一位主管理员发送开通申请</label>
+        <label class="form-label">选择审批人</label>
         <div class="select-wrapper">
           <div class="custom-select" id="adminSelect">
             <button
@@ -797,23 +1004,6 @@ const notEnabledHTML = `<!doctype html>
         <div id="errorMsg" class="error-msg"></div>
       </div>
 
-      <div id="successMsg" class="success-msg">
-        <svg
-          class="success-msg-icon"
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M8 1.33333C4.32 1.33333 1.33333 4.32 1.33333 8C1.33333 11.68 4.32 14.6667 8 14.6667C11.68 14.6667 14.6667 11.68 14.6667 8C14.6667 4.32 11.68 1.33333 8 1.33333ZM8 13.3333C5.05333 13.3333 2.66667 10.9467 2.66667 8C2.66667 5.05333 5.05333 2.66667 8 2.66667C10.9467 2.66667 13.3333 5.05333 13.3333 8C13.3333 10.9467 10.9467 13.3333 8 13.3333ZM7.33333 9.33333H8.66667V10.6667H7.33333V9.33333ZM7.33333 5.33333H8.66667V8H7.33333V5.33333Z"
-            fill="#0066FF"
-          />
-        </svg>
-        <span class="success-msg-text"
-          >已向管理员发送权限申请，正在等待审核<br />审核通过后，请返回终端继续操作</span
-        >
-      </div>
-
       <button id="applyBtn" class="btn" disabled>立即申请</button>
       <a id="backLink" class="link" href="#">返回选择其他组织</a>
     </div>
@@ -825,7 +1015,6 @@ const notEnabledHTML = `<!doctype html>
       const menu = document.getElementById("adminMenu");
       const hiddenInput = adminSelect.querySelector('input[name="adminStaffId"]');
       const btn = document.getElementById("applyBtn");
-      const successMsg = document.getElementById("successMsg");
       const errorMsg = document.getElementById("errorMsg");
       const backLink = document.getElementById("backLink");
 
@@ -833,7 +1022,7 @@ const notEnabledHTML = `<!doctype html>
       let clientId = "";
       let applySent = false;
       let selectedAdminId = "";
-      let pollTimer = null;
+      let applying = false;
 
       function closeMenu() {
         adminSelect.classList.remove("open");
@@ -862,7 +1051,7 @@ const notEnabledHTML = `<!doctype html>
         } else {
           adminSelect.classList.remove("has-value");
         }
-        btn.disabled = applySent || !staffId;
+        btn.disabled = !staffId;
       }
 
       function renderAdminOptions(list) {
@@ -894,47 +1083,6 @@ const notEnabledHTML = `<!doctype html>
           li.appendChild(option);
           menu.appendChild(li);
         });
-      }
-
-      function setAppliedState() {
-        btn.disabled = true;
-        btn.textContent = "立即申请";
-        trigger.disabled = true;
-        adminSelect.classList.remove("open");
-        successMsg.style.display = "flex";
-        backLink.style.pointerEvents = "none";
-        backLink.style.color = "#999";
-        backLink.onclick = function (e) {
-          e.preventDefault();
-          return false;
-        };
-        startPolling();
-      }
-
-      function startPolling() {
-        if (pollTimer) return;
-        pollTimer = setInterval(checkAuthStatus, 5000);
-        checkAuthStatus();
-      }
-
-      function stopPolling() {
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-      }
-
-      async function checkAuthStatus() {
-        try {
-          const res = await fetch("/api/cliAuthEnabled");
-          const data = await res.json();
-          if (data.success && data.result && data.result.cliAuthEnabled) {
-            stopPolling();
-            location.href = "/success";
-          }
-        } catch (e) {
-          console.error("Poll error", e);
-        }
       }
 
       async function loadAdmins() {
@@ -978,21 +1126,16 @@ const notEnabledHTML = `<!doctype html>
           selectedAdminId = status.selectedAdminId || "";
           const authorizeUrl = status.authorizeUrl || "";
 
-          if (clientId && authorizeUrl) {
-            const port = location.port;
-            const redirectUri = encodeURIComponent(
-              "http://127.0.0.1:" + port + "/callback"
-            );
-            backLink.href =
-              authorizeUrl + "?client_id=" +
-              clientId +
-              "&prompt=consent&redirect_uri=" +
-              redirectUri +
-              "&response_type=code&scope=openid+corpid";
+          if (authorizeUrl) {
+            backLink.href = authorizeUrl;
           }
 
-          if (applySent) {
-            setAppliedState();
+          // The apply request is either already sent or the server knows
+          // about one (hasDwsApply); both cases land on the dedicated
+          // approval-pending page.
+          if (applySent || status.hasDwsApply) {
+            location.href = "/applyPending";
+            return;
           }
         } catch (e) {
           console.error("Failed to load status", e);
@@ -1018,8 +1161,9 @@ const notEnabledHTML = `<!doctype html>
 
       btn.onclick = async function () {
         const value = hiddenInput.value;
-        if (!value) return;
+        if (!value || applying) return;
 
+        applying = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="loading"></span>申请中...';
         hideError();
@@ -1029,14 +1173,26 @@ const notEnabledHTML = `<!doctype html>
           );
           const data = await res.json();
           if (data.success && data.result) {
-            setAppliedState();
+            applying = false;
+            location.href = "/applyPending";
+          } else if (
+            data.errorCode && data.errorCode === "DWS_USE_APPLY_DUPLICATE"
+          ) {
+            // The server reports an existing application (e.g. a retried
+            // request landed after the client already gave up). That is
+            // the goal state: land on the pending page instead of
+            // treating it as a retryable failure.
+            applying = false;
+            location.href = "/applyPending";
           } else {
             showError(data.errorMsg || "申请失败，请重试");
+            applying = false;
             btn.disabled = false;
             btn.textContent = "立即申请";
           }
         } catch (e) {
           showError("网络错误，请重试");
+          applying = false;
           btn.disabled = false;
           btn.textContent = "立即申请";
         }
@@ -1133,8 +1289,8 @@ const accessDeniedHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>无权限访问</h1>
-      <p>您不在该组织的 CLI 授权人员范围内。请联系组织管理员将您加入授权名单。此页面可以关闭。</p>
+      <h1>该组织尚未开启CLI数据访问权限</h1>
+      <p>你所在组织的管理员尚未开启<br />「允许成员通过CLI访问其个人数据」的权限。此页面可以关闭。</p>
     </div>
   </body>
 </html>`
@@ -1355,6 +1511,7 @@ type CLIAuthResult struct {
 	ChannelScope         string   `json:"channelScope,omitempty"`         // "all" | "specified"
 	AllowedChannels      []string `json:"allowedChannels,omitempty"`      // channelCode list when channelScope="specified"
 	ChannelConfigEnabled bool     `json:"channelConfigEnabled,omitempty"` // whether org has any channel restriction configured
+	HasDwsApply          bool     `json:"hasDwsApply,omitempty"`          // whether the user has already submitted an apply request on DWS
 }
 
 // classifyDenialReason inspects a CLIAuthStatus response and returns a machine-readable
@@ -1428,6 +1585,18 @@ type SendApplyResponse struct {
 	Result    bool   `json:"result"`
 }
 
+// isAlreadyAppliedError reports whether a failed send-apply response is
+// actually the idempotent "already applied" business result. The retry
+// layer resends a request whose first attempt already landed on the
+// backend; the follow-up response reports the existing application, which
+// is the goal state rather than a retryable failure.
+func isAlreadyAppliedError(result *SendApplyResponse) bool {
+	if result == nil || result.Success {
+		return false
+	}
+	return strings.ToUpper(strings.TrimSpace(result.ErrorCode)) == "DWS_USE_APPLY_DUPLICATE"
+}
+
 // mcpRequestMaxRetries is the maximum number of attempts for MCP API calls
 // (e.g. /cli/cliAuthEnabled, /cli/clientId, /cli/superAdmin, /cli/sendCliAuthApply)
 // to tolerate transient network errors before propagating the failure.
@@ -1471,6 +1640,7 @@ func (p *OAuthProvider) doCheckCLIAuthEnabledAttempt(ctx context.Context, access
 	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
 		req.Header.Set("x-dws-channel", ch)
 	}
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 	slog.Debug("auth.cli_auth_enabled.request",
 		"attempt", attempt,
@@ -1530,6 +1700,21 @@ func applyCLIAuthTraceHeaders(req *http.Request, traceID string) {
 	req.Header.Set("X-Dingtalk-Trace-Id", traceID)
 }
 
+// applyCLIAuthAgentCodeHeader sets x-dingtalk-dws-agent-code when a driving
+// agent host is detected, so CLI auth management endpoints can attribute the
+// request to the agent. Only detected values are sent — never synthesized
+// (same contract as resolveIdentityHeaders).
+//
+// Intentionally omits x-dws-agent-instance-id: these endpoints authenticate
+// via x-user-access-token and do not participate in PAT grant checks, so the
+// per-(machine × agent_code) instance id is not required here.
+func applyCLIAuthAgentCodeHeader(req *http.Request) {
+	agentCode, _ := DetectAgentCode()
+	if agentCode != "" {
+		req.Header.Set("x-dingtalk-dws-agent-code", agentCode)
+	}
+}
+
 func cliAuthResponseTraceID(headers http.Header) string {
 	for _, key := range []string{
 		"EagleEye-TraceId",
@@ -1580,6 +1765,7 @@ func doGetSuperAdminsForLoginRegion(ctx context.Context, accessToken string, reg
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)
@@ -1636,6 +1822,7 @@ func doSendCliAuthApplyForLoginRegion(ctx context.Context, accessToken, adminSta
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
 	resp, err := oauthHTTPClient.Do(req)

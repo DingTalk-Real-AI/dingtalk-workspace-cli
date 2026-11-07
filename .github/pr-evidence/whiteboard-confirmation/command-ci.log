@@ -1,0 +1,681 @@
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/create/start
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/create/end
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/update/start
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/update/end
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/required
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/enum
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/missing_union
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/narrow_union
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/top_format
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/type
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/cli_required
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/interface_type
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/required_when
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/extra_branch
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/property
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/default
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/missing_selector
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/required_selector
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/default_selector
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/existing_selector
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/other_tool
+=== RUN   TestCrossPlatformCoverageCalendarTimeFormatMigration/other_parameter
+--- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/create/start (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/create/end (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/update/start (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/update/end (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/required (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/enum (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/missing_union (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/narrow_union (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/top_format (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/type (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/cli_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/interface_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/required_when (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/extra_branch (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/property (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/default (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/missing_selector (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/required_selector (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/default_selector (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/existing_selector (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/other_tool (0.00s)
+    --- PASS: TestCrossPlatformCoverageCalendarTimeFormatMigration/other_parameter (0.00s)
+=== RUN   TestCrossPlatformCoverageNormalizeParameterPreservesAnyOf
+--- PASS: TestCrossPlatformCoverageNormalizeParameterPreservesAnyOf (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailability
+--- PASS: TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailability (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaConsumedFlagExtractionAfterBaseline
+--- PASS: TestCrossPlatformCoverageSchemaConsumedFlagExtractionAfterBaseline (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationsFailClosedOnDrift
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationsFailClosedOnDrift (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/required
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/cli_required
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/required_when
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/cli_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationRejectsUnregisteredRequiredParameters/required_when (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationRejectsParameterTargetCollision
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationRejectsParameterTargetCollision (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationNormalizationEdges
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationNormalizationEdges (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/missing_historical_mapping
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/duplicate_historical_mapping
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/legacy_mapping_has_two_targets
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/shared_mapping_has_no_target
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/duplicate_replacement_target
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/replacement_removes_historical_dry_run
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/replacement_adds_dry_run
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/missing_shared_parameter
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/shared_parameter_field_drift
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/extra_replacement_parameter
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/constraints_drift
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/positionals_drift
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/positionals_length_drift
+--- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/missing_historical_mapping (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/duplicate_historical_mapping (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/legacy_mapping_has_two_targets (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/shared_mapping_has_no_target (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/duplicate_replacement_target (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/replacement_removes_historical_dry_run (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/replacement_adds_dry_run (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/missing_shared_parameter (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/shared_parameter_field_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/extra_replacement_parameter (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/constraints_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/positionals_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection/positionals_length_drift (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/constant_property_mismatch
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/constant_false
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_type
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_required
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_cli_required
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_required_when
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_default_true
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_interface_default_true
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_interface_type
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_enum_excludes_true
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_format
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/replacement_publishes_constant_property
+=== RUN   TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/source_renames_constant_property
+--- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/constant_property_mismatch (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/constant_false (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_cli_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_required_when (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_default_true (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_interface_default_true (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_interface_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_enum_excludes_true (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/legacy_format (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/replacement_publishes_constant_property (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagExtractionValidatesBooleanConstant/source_renames_constant_property (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun (0.01s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationComposesHistoricalFlagLineage
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationComposesHistoricalFlagLineage (0.01s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_missing_intermediate
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_missing_source_tool
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_parameter_drift
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_wrong_path
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_already_publishes_final
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_flag_receipt
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/flag_receipt_belongs_to_another_command
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/current_retains_predecessor
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_current_constraints_retain_predecessor
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_current_constraints_retain_predecessor
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/current_retains_intermediate
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_final_drift
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_wrong_path
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_missing_final
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_retains_intermediate
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_constraints_drift
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_current_keeps_intermediate_constraints
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_retains_predecessor
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/historical_constraints_malformed
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_constraints_malformed
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_constraints_drift
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/target_collision
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/lineage_cycle
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/unsupported_command_receipt_state
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/duplicate_historical_path
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/source_tool_fork
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_missing_intermediate (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_missing_source_tool (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_parameter_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_wrong_path (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_merge-base_already_publishes_final (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_flag_receipt (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/flag_receipt_belongs_to_another_command (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/current_retains_predecessor (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_current_constraints_retain_predecessor (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_current_constraints_retain_predecessor (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/current_retains_intermediate (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_final_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_wrong_path (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_missing_final (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_merge-base_retains_intermediate (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_constraints_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/pending_current_keeps_intermediate_constraints (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_retains_predecessor (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/historical_constraints_malformed (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/merge-base_constraints_malformed (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/consumed_constraints_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/target_collision (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/lineage_cycle (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/unsupported_command_receipt_state (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/duplicate_historical_path (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed/source_tool_fork (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineagePreservesOrdinaryChecks
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineagePreservesOrdinaryChecks (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCommandMigrationLineageDefensiveEdges
+--- PASS: TestCrossPlatformCoverageSchemaCommandMigrationLineageDefensiveEdges (0.00s)
+=== RUN   TestRunSchemaModes
+--- PASS: TestRunSchemaModes (0.00s)
+=== RUN   TestNormalizeRawFileValidation
+=== RUN   TestNormalizeRawFileValidation/invalid_json
+=== RUN   TestNormalizeRawFileValidation/wrong_kind
+=== RUN   TestNormalizeRawFileValidation/missing_products
+=== RUN   TestNormalizeRawFileValidation/empty_products
+=== RUN   TestNormalizeRawFileValidation/empty_tools
+=== RUN   TestNormalizeRawFileValidation/missing_product_id
+=== RUN   TestNormalizeRawFileValidation/duplicate_product
+=== RUN   TestNormalizeRawFileValidation/compact_tool_rejected
+=== RUN   TestNormalizeRawFileValidation/invalid_required
+=== RUN   TestNormalizeRawFileValidation/incomplete_parameter
+--- PASS: TestNormalizeRawFileValidation (0.01s)
+    --- PASS: TestNormalizeRawFileValidation/invalid_json (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/wrong_kind (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/missing_products (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/empty_products (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/empty_tools (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/missing_product_id (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/duplicate_product (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/compact_tool_rejected (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/invalid_required (0.00s)
+    --- PASS: TestNormalizeRawFileValidation/incomplete_parameter (0.00s)
+=== RUN   TestNormalizeCompleteSchemaPayload
+--- PASS: TestNormalizeCompleteSchemaPayload (0.00s)
+=== RUN   TestSchemaCompatibilityIgnoresPositionalDescription
+--- PASS: TestSchemaCompatibilityIgnoresPositionalDescription (0.00s)
+=== RUN   TestSchemaTypeAndHelpers
+--- PASS: TestSchemaTypeAndHelpers (0.00s)
+=== RUN   TestSchemaCompatibilityAllowsAdditionsAndLooserInputs
+--- PASS: TestSchemaCompatibilityAllowsAdditionsAndLooserInputs (0.00s)
+=== RUN   TestSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals
+--- PASS: TestSchemaCompatibilityAllowsLooserAndAppendedOptionalPositionals (0.00s)
+=== RUN   TestCompatiblePositionals
+=== RUN   TestCompatiblePositionals/unchanged
+=== RUN   TestCompatiblePositionals/required_becomes_optional
+=== RUN   TestCompatiblePositionals/append_optional
+=== RUN   TestCompatiblePositionals/last_positional_becomes_variadic
+=== RUN   TestCompatiblePositionals/removed
+=== RUN   TestCompatiblePositionals/renamed
+=== RUN   TestCompatiblePositionals/reindexed
+=== RUN   TestCompatiblePositionals/retyped
+=== RUN   TestCompatiblePositionals/optional_becomes_required
+=== RUN   TestCompatiblePositionals/append_required
+=== RUN   TestCompatiblePositionals/variadic_becomes_fixed
+=== RUN   TestCompatiblePositionals/append_after_variadic
+--- PASS: TestCompatiblePositionals (0.00s)
+    --- PASS: TestCompatiblePositionals/unchanged (0.00s)
+    --- PASS: TestCompatiblePositionals/required_becomes_optional (0.00s)
+    --- PASS: TestCompatiblePositionals/append_optional (0.00s)
+    --- PASS: TestCompatiblePositionals/last_positional_becomes_variadic (0.00s)
+    --- PASS: TestCompatiblePositionals/removed (0.00s)
+    --- PASS: TestCompatiblePositionals/renamed (0.00s)
+    --- PASS: TestCompatiblePositionals/reindexed (0.00s)
+    --- PASS: TestCompatiblePositionals/retyped (0.00s)
+    --- PASS: TestCompatiblePositionals/optional_becomes_required (0.00s)
+    --- PASS: TestCompatiblePositionals/append_required (0.00s)
+    --- PASS: TestCompatiblePositionals/variadic_becomes_fixed (0.00s)
+    --- PASS: TestCompatiblePositionals/append_after_variadic (0.00s)
+=== RUN   TestSchemaCompatibilityRejectsContractDrift
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/removed_product
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/removed_tool
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/removed_parameter
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_type
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/new_required
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/new_cli_required
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_required_when
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_property
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/cleared_property_without_a_reviewed_exclusion
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/redirected_property_despite_a_reviewed_exclusion
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_interface_type
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_default
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_interface_default
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_format
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/narrowed_enum
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_primary_cli_path
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_interface_mode
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/new_mandatory_group
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_positionals
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_interface_mapping
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_availability
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_confirmation
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_risk
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_effect
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/changed_idempotency
+=== RUN   TestSchemaCompatibilityRejectsContractDrift/removed_dry_run
+--- PASS: TestSchemaCompatibilityRejectsContractDrift (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/removed_product (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/removed_tool (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/removed_parameter (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_type (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/new_required (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/new_cli_required (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_required_when (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_property (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/cleared_property_without_a_reviewed_exclusion (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/redirected_property_despite_a_reviewed_exclusion (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_interface_type (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_default (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_interface_default (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_format (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/narrowed_enum (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_primary_cli_path (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_interface_mode (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/new_mandatory_group (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_positionals (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_interface_mapping (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_availability (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_confirmation (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_risk (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_effect (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/changed_idempotency (0.00s)
+    --- PASS: TestSchemaCompatibilityRejectsContractDrift/removed_dry_run (0.00s)
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.publish_get
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.publish_set
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.shortcut_publish_set
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.upload
+=== RUN   TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/wiki/wiki.shortcut_member_remove
+--- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections (0.00s)
+    --- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.publish_get (0.00s)
+    --- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.publish_set (0.00s)
+    --- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.shortcut_publish_set (0.00s)
+    --- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/drive/drive.upload (0.00s)
+    --- PASS: TestCrossPlatformCoverageDriveWikiReviewedContractCorrections/wiki/wiki.shortcut_member_remove (0.00s)
+=== RUN   TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening
+--- PASS: TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening (0.00s)
+=== RUN   TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening
+--- PASS: TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening (0.00s)
+=== RUN   TestSchemaCompatibilityRejectsPartialMultiFieldMigration
+--- PASS: TestSchemaCompatibilityRejectsPartialMultiFieldMigration (0.00s)
+=== RUN   TestSchemaCompatibilityAcceptsReviewedAITableIdempotencyCorrections
+--- PASS: TestSchemaCompatibilityAcceptsReviewedAITableIdempotencyCorrections (0.00s)
+=== RUN   TestMergeContracts
+--- PASS: TestMergeContracts (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChange
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChange (0.00s)
+=== RUN   TestCrossPlatformCoverageChatUpdateCardFlowStatusTypeReviewIsExact
+--- PASS: TestCrossPlatformCoverageChatUpdateCardFlowStatusTypeReviewIsExact (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeIsDirectionSensitive
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeIsDirectionSensitive (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsOtherToolsAndParameters
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsOtherToolsAndParameters (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_default
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_interface_default
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_format
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/redirected_property
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/redirected_interface_type
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/newly_required
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/newly_cli_required
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_required_when
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/narrowed_enum
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_default (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_interface_default (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_format (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/redirected_property (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/redirected_interface_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/newly_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/newly_cli_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/changed_required_when (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression/narrowed_enum (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/relaxed_required
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/relaxed_cli_required
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_required_when
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/widened_enum
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_interface_type
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_property_through_reviewed_mapping_exclusion
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/relaxed_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/relaxed_cli_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_required_when (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/widened_enum (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_interface_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift/cleared_property_through_reviewed_mapping_exclusion (0.00s)
+=== RUN   TestCrossPlatformCoverageReviewedParameterTypeChangeKeysAreCanonical
+--- PASS: TestCrossPlatformCoverageReviewedParameterTypeChangeKeysAreCanonical (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatMCPRetirementAndConstraintExpansion
+--- PASS: TestCrossPlatformCoverageSchemaCompatMCPRetirementAndConstraintExpansion (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatAdditiveConstraintEvolution
+--- PASS: TestCrossPlatformCoverageSchemaCompatAdditiveConstraintEvolution (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_tool
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_source
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_target
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_tool
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_source
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_target
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_tool (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_source (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/unlisted_target (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_tool (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_source (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition/float_image_unlisted_target (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions/todo/todo.shortcut_update
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions/todo/todo.shortcut_reminder
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions/todo/todo.shortcut_update (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions/todo/todo.shortcut_reminder (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions/minutes/minutes.add_member_permission
+=== RUN   TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions/minutes/minutes.shortcut_share
+--- PASS: TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions/minutes/minutes.add_member_permission (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions/minutes/minutes.shortcut_share (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion
+=== RUN   TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_by_inference
+=== RUN   TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_by_a_native_annotation
+=== RUN   TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_with_no_recorded_source
+=== RUN   TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/redirected_to_another_non-empty_value
+--- PASS: TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_by_inference (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_by_a_native_annotation (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/cleared_with_no_recorded_source (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatPropertyClearingExclusion/redirected_to_another_non-empty_value (0.00s)
+=== RUN   TestCrossPlatformCoverageReviewedRedirectKeysAreCanonicalJSON
+--- PASS: TestCrossPlatformCoverageReviewedRedirectKeysAreCanonicalJSON (0.00s)
+=== RUN   TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical
+--- PASS: TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/same_tuple_on_an_unlisted_tool
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unreviewed_target_mode
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unrelated_safety_drift
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unrelated_parameter_removal
+--- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/same_tuple_on_an_unlisted_tool (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unreviewed_target_mode (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unrelated_safety_drift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition/unrelated_parameter_removal (0.00s)
+=== RUN   TestCrossPlatformCoverageAITableGovernanceScopeIsExact
+--- PASS: TestCrossPlatformCoverageAITableGovernanceScopeIsExact (0.00s)
+=== RUN   TestCrossPlatformCoverageAITableCombinedGovernanceTransitions
+--- PASS: TestCrossPlatformCoverageAITableCombinedGovernanceTransitions (0.00s)
+=== RUN   TestCrossPlatformCoverageOAPendingApprovalRedirectIsReviewed
+--- PASS: TestCrossPlatformCoverageOAPendingApprovalRedirectIsReviewed (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/ref_removed_rather_than_redirected
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/mode_moved_to_composite
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/mode_moved_away_from_mcp_while_the_ref_is_redirected
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_became_required
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_type_moved
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_property_was_cleared_without_a_reviewed_exclusion
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_confirmation_gate_moved
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_was_dropped
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/redirect_to_a_ref_that_is_not_the_reviewed_target
+=== RUN   TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/redirect_on_a_tool_absent_from_the_reviewed_allowlist
+--- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/ref_removed_rather_than_redirected (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/mode_moved_to_composite (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/mode_moved_away_from_mcp_while_the_ref_is_redirected (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_became_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_type_moved (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_property_was_cleared_without_a_reviewed_exclusion (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_confirmation_gate_moved (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/a_parameter_was_dropped (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/redirect_to_a_ref_that_is_not_the_reviewed_target (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect/redirect_on_a_tool_absent_from_the_reviewed_allowlist (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename
+--- PASS: TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/non-requiredness_drift_remains_blocked
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/partial_Schema_projection_fails_closed
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/CLI-only_migration_does_not_manufacture_Schema
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/duplicate_historical_path_fails_closed
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_historical_parameter_is_not_authority
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_current_tool_stays_visible_to_ordinary_checker
+=== RUN   TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_current_parameter_stays_visible_to_ordinary_checker
+--- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/non-requiredness_drift_remains_blocked (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/partial_Schema_projection_fails_closed (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/CLI-only_migration_does_not_manufacture_Schema (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/duplicate_historical_path_fails_closed (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_historical_parameter_is_not_authority (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_current_tool_stays_visible_to_ordinary_checker (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagRequirednessMigration/missing_current_parameter_stays_visible_to_ordinary_checker (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/required_decline
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/cli_required_decline
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/type
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/property
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/interface_type
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/required_when
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/default
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/interface_default
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/format
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/enum
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/enum_same_length
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/optional_required_promotion
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/optional_cli_required_promotion
+--- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/required_decline (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/cli_required_decline (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/property (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/interface_type (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/required_when (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/default (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/interface_default (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/format (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/enum (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/enum_same_length (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/optional_required_promotion (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift/optional_cli_required_promotion (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches
+--- PASS: TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationRejectsPartialAndUnrelatedChanges
+--- PASS: TestCrossPlatformCoverageSchemaFlagMigrationRejectsPartialAndUnrelatedChanges (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaFlagMigrationConstraintsFailClosed
+--- PASS: TestCrossPlatformCoverageSchemaFlagMigrationConstraintsFailClosed (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs
+--- PASS: TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaMigrationLifecycleAndRun
+--- PASS: TestCrossPlatformCoverageSchemaMigrationLifecycleAndRun (0.01s)
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors/read_approved_flag_migrations
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors/read_candidate_flag_migrations
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_current_snapshot
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_base_snapshot
+=== RUN   TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_stable_snapshot
+--- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors/read_approved_flag_migrations (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors/read_candidate_flag_migrations (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_current_snapshot (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_base_snapshot (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaMigrationFileErrors/read_migration_stable_snapshot (0.00s)
+=== RUN   TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline
+--- PASS: TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline (0.01s)
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/remove_only_required_group
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/keep_mutual_exclusion
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/remove_one_required_group
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/retain_and_expand
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/replace_with_unrelated_requirement
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/narrow_remaining_group
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/new_requirement
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/remove_mutual_exclusion
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/remove_require_together
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/add_mutual_exclusion_on_old_inputs
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/malformed_new_constraint
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/unknown_new_constraint
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/parameter_missing
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/type
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/format
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/required
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/primary_path
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/effect
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/confirmation
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxation/identity_mode
+--- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/remove_only_required_group (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/keep_mutual_exclusion (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/remove_one_required_group (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/retain_and_expand (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/replace_with_unrelated_requirement (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/narrow_remaining_group (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/new_requirement (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/remove_mutual_exclusion (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/remove_require_together (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/add_mutual_exclusion_on_old_inputs (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/malformed_new_constraint (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/unknown_new_constraint (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/parameter_missing (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/type (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/format (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/required (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/primary_path (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/effect (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/confirmation (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredGroupRelaxation/identity_mode (0.00s)
+=== RUN   TestCrossPlatformCoverageRequiredGroupRelaxationPreservesInvocations
+    required_group_relaxation_test.go:124: checked 16384 transitions; 4385 accepted transitions preserve every historical presence assignment
+--- PASS: TestCrossPlatformCoverageRequiredGroupRelaxationPreservesInvocations (0.13s)
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/required_becomes_an_alternative
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/required_remains_required
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/historically_optional
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/conditional_requirement
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/default_does_not_prove_presence
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/required_member_outside_group
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/each_new_group_must_be_implied
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/removed_old_parameter_still_fails
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/parameter_type_drift_still_fails
+=== RUN   TestCrossPlatformCoverageRequiredParameterToOneOf/interface_type_drift_still_fails
+--- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/required_becomes_an_alternative (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/required_remains_required (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/historically_optional (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/conditional_requirement (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/default_does_not_prove_presence (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/required_member_outside_group (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/each_new_group_must_be_implied (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/removed_old_parameter_still_fails (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/parameter_type_drift_still_fails (0.00s)
+    --- PASS: TestCrossPlatformCoverageRequiredParameterToOneOf/interface_type_drift_still_fails (0.00s)
+=== RUN   TestCrossPlatformCoverageWhiteboardCreateConfirmationHardening
+--- PASS: TestCrossPlatformCoverageWhiteboardCreateConfirmationHardening (0.00s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schema-compat	1.109s
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_base_rejects_candidate_checker_and_live_workspace
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_base_rejects_candidate_checker_and_live_workspace
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_checker_protects_stable_Schema_contract
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_checker_protects_stable_Schema_contract
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/lineage_capable_checker_omits_command_lineage_for_flag-only_governance
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/lineage_capable_checker_omits_command_lineage_for_flag-only_governance
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/bootstrap_uses_old_base_checker_and_committed_canonical_empty_ledger
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/bootstrap_uses_old_base_checker_and_committed_canonical_empty_ledger
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_base_owns_bool_ConstParams_contract
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_base_owns_bool_ConstParams_contract
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governance_bootstrap_preserves_candidate_bool_ConstParams_contract
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governance_bootstrap_preserves_candidate_bool_ConstParams_contract
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_candidate_cannot_delete_bool_ConstParams_contract
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_candidate_cannot_delete_bool_ConstParams_contract
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_call_private_ConstParams_writer
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_call_private_ConstParams_writer
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_reopen_private_ConstParams_reader
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_reopen_private_ConstParams_reader
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_store_directly_in_ConstParams_registry
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_store_directly_in_ConstParams_registry
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_forged_corecmd_bool_ConstParams_bridge
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_forged_corecmd_bool_ConstParams_bridge
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_ConstParams_protocol
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_ConstParams_protocol
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_leaf_adapter
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_leaf_adapter
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_allows_base_identical_bridges
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_allows_base_identical_bridges
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/unchanged_command_manifest_allows_independent_corecmd_change
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/unchanged_command_manifest_allows_independent_corecmd_change
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/partial_base_fails_closed
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/partial_base_fails_closed
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/base_ledger_ancestor_symlink_fails_closed
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/base_ledger_ancestor_symlink_fails_closed
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_schema_checker
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_schema_checker
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_migrations_implementation
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_migrations_implementation
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_ledger_must_be_a_regular_file
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_ledger_must_be_a_regular_file
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_helper_parent_must_be_a_Git_tree
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_helper_parent_must_be_a_Git_tree
+=== RUN   TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_forge_alias_evidence_token
+=== PAUSE TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_forge_alias_evidence_token
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_base_rejects_candidate_checker_and_live_workspace
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_ConstParams_protocol
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_schema_checker
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_candidate_cannot_delete_bool_ConstParams_contract
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/lineage_capable_checker_omits_command_lineage_for_flag-only_governance
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/bootstrap_uses_old_base_checker_and_committed_canonical_empty_ledger
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_allows_base_identical_bridges
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/unchanged_command_manifest_allows_independent_corecmd_change
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_store_directly_in_ConstParams_registry
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_forged_corecmd_bool_ConstParams_bridge
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_forge_alias_evidence_token
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_helper_parent_must_be_a_Git_tree
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_ledger_must_be_a_regular_file
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_migrations_implementation
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/partial_base_fails_closed
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governance_bootstrap_preserves_candidate_bool_ConstParams_contract
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_base_owns_bool_ConstParams_contract
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_checker_protects_stable_Schema_contract
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_leaf_adapter
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_reopen_private_ConstParams_reader
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_call_private_ConstParams_writer
+=== CONT  TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/base_ledger_ancestor_symlink_fails_closed
+--- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority (0.00s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_store_directly_in_ConstParams_registry (4.18s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_schema_checker (4.80s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_candidate_cannot_delete_bool_ConstParams_contract (7.11s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_ConstParams_protocol (8.17s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_forged_corecmd_bool_ConstParams_bridge (8.34s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_forge_alias_evidence_token (5.09s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_helper_parent_must_be_a_Git_tree (4.49s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_ledger_must_be_a_regular_file (3.97s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_candidate_must_preserve_migrations_implementation (3.36s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/partial_base_fails_closed (4.05s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/candidate_cannot_reopen_private_ConstParams_reader (3.72s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_rejects_tampered_leaf_adapter (5.25s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/same_package_candidate_cannot_call_private_ConstParams_writer (2.68s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/base_ledger_ancestor_symlink_fails_closed (2.61s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/bootstrap_uses_old_base_checker_and_committed_canonical_empty_ledger (85.71s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/changed_command_manifest_allows_base_identical_bridges (93.66s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governance_bootstrap_preserves_candidate_bool_ConstParams_contract (84.75s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/unchanged_command_manifest_allows_independent_corecmd_change (94.41s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_base_rejects_candidate_checker_and_live_workspace (96.49s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/command_governed_base_owns_bool_ConstParams_contract (87.58s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/lineage_capable_checker_omits_command_lineage_for_flag-only_governance (97.28s)
+    --- PASS: TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority/governed_checker_protects_stable_Schema_contract (86.60s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schemacompat	98.132s

@@ -13,25 +13,45 @@
 
 package errors
 
-import "strings"
+import (
+	stderrors "errors"
+	"strings"
+)
 
 // ServerDiagnostics holds server-side diagnostic fields extracted from
 // MCP response bodies or HTTP response headers. Fields are populated
 // on a best-effort basis during error construction.
 type ServerDiagnostics struct {
-	TraceID         string `json:"trace_id,omitempty"`
-	ServerErrorCode string `json:"server_error_code,omitempty"`
-	TechnicalDetail string `json:"technical_detail,omitempty"`
-	FriendlyHint    string `json:"friendly_hint,omitempty"`
-	ActionURL       string `json:"action_url,omitempty"`
-	ServerRetryable *bool  `json:"server_retryable,omitempty"`
+	TraceID          string         `json:"trace_id,omitempty"`
+	ErrorStage       string         `json:"error_stage,omitempty"`
+	ErrorCategory    string         `json:"error_category,omitempty"`
+	ServerErrorCode  string         `json:"server_error_code,omitempty"`
+	TechnicalDetail  string         `json:"technical_detail,omitempty"`
+	ErrorType        string         `json:"error_type,omitempty"`
+	FriendlyHint     string         `json:"friendly_hint,omitempty"`
+	ActionURL        string         `json:"action_url,omitempty"`
+	ServerRetryable  *bool          `json:"server_retryable,omitempty"`
+	Reason           string         `json:"reason,omitempty"`
+	Operation        string         `json:"operation,omitempty"`
+	Origin           string         `json:"origin,omitempty"`
+	FailureStage     string         `json:"failure_stage,omitempty"`
+	NextCommand      string         `json:"next_command,omitempty"`
+	Outcome          string         `json:"outcome,omitempty"`
+	ContractVersion  string         `json:"contract_version,omitempty"`
+	Unknown          *bool          `json:"unknown,omitempty"`
+	ExecutionStarted *bool          `json:"execution_started,omitempty"`
+	Actions          []string       `json:"actions,omitempty"`
+	Details          map[string]any `json:"details,omitempty"`
 }
 
 // IsEmpty returns true when no diagnostic field has been populated.
 func (d ServerDiagnostics) IsEmpty() bool {
-	return d.TraceID == "" && d.ServerErrorCode == "" &&
-		d.TechnicalDetail == "" && d.FriendlyHint == "" &&
-		d.ActionURL == "" && d.ServerRetryable == nil
+	return d.TraceID == "" && d.ServerErrorCode == "" && d.ErrorStage == "" && d.ErrorCategory == "" &&
+		d.TechnicalDetail == "" && d.ErrorType == "" && d.FriendlyHint == "" &&
+		d.ActionURL == "" && d.ServerRetryable == nil && d.Reason == "" &&
+		d.Operation == "" && d.Origin == "" && d.FailureStage == "" &&
+		d.NextCommand == "" && d.Outcome == "" && d.ContractVersion == "" &&
+		d.Unknown == nil && d.ExecutionStarted == nil && len(d.Actions) == 0 && len(d.Details) == 0
 }
 
 // WithServerDiag attaches server diagnostics to the error.
@@ -41,6 +61,17 @@ func WithServerDiag(diag ServerDiagnostics) Option {
 	}
 	return func(e *Error) {
 		e.ServerDiag = diag
+		if e.FailureStage == "" {
+			e.FailureStage = diag.ErrorStage
+		}
+		if diag.ErrorCategory != "" {
+			details := make(map[string]any, len(e.Details)+1)
+			for k, v := range e.Details {
+				details[k] = v
+			}
+			details["error_category"] = diag.ErrorCategory
+			e.Details = details
+		}
 		// Override retryable if server explicitly specified.
 		if diag.ServerRetryable != nil {
 			e.Retryable = *diag.ServerRetryable
@@ -60,4 +91,42 @@ func WithTraceID(id string) Option {
 	return func(e *Error) {
 		e.ServerDiag.TraceID = id
 	}
+}
+
+// IsMCPToolNotFound reports whether an MCP call failed because the selected
+// server does not expose that tool name. Callers may use it to fall back
+// between reviewed read-only aliases, never to replay a write.
+func IsMCPToolNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	parts := []string{err.Error()}
+	var typed *Error
+	if stderrors.As(err, &typed) && typed != nil {
+		parts = append(parts,
+			typed.Reason,
+			typed.ServerDiag.ServerErrorCode,
+			typed.ServerDiag.TechnicalDetail,
+			typed.Hint,
+		)
+	}
+	message := strings.ToLower(strings.Join(parts, " "))
+	for _, marker := range []string{
+		"tool_not_found",
+		"mcp_tool_not_found",
+		"tool not found",
+		"tool not registered",
+		"tool not exist",
+		"tool does not exist",
+		"unknown tool",
+		"no such tool",
+		"未找到指定工具",
+		"未找到工具",
+		"工具不存在",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }

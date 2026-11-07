@@ -14,7 +14,10 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/google/uuid"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -58,18 +61,19 @@ func withDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool) corecm
 }
 
 func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, error) {
-	raw := rt.Str(flag)
-	if raw == "-" {
+	raw, _ := rt.Command().Flags().GetString(flag)
+	input := strings.TrimSpace(raw)
+	if input == "-" {
 		data, err := io.ReadAll(rt.Command().InOrStdin())
 		if err != nil {
 			return "", apperrors.NewValidation(fmt.Sprintf("--%s: 读取 stdin 失败: %v", flag, err))
 		}
-		return string(data), nil
+		return normalizeDocInputLineEndings(string(data)), nil
 	}
-	if !strings.HasPrefix(raw, "@") {
-		return raw, nil
+	if !strings.HasPrefix(input, "@") {
+		return normalizeDocInputLineEndings(raw), nil
 	}
-	path := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
+	path := strings.TrimSpace(strings.TrimPrefix(input, "@"))
 	if path == "" || filepath.IsAbs(path) {
 		return "", apperrors.NewValidation(fmt.Sprintf("--%s 的 @file 只接受工作目录内的相对路径；请先暂存到工作目录后传 @相对路径，或改用 --%s - 从 stdin 读取", flag, flag))
 	}
@@ -93,7 +97,11 @@ func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, erro
 	if err != nil {
 		return "", apperrors.NewValidation(fmt.Sprintf("--%s: 读取文件 %q 失败: %v", flag, path, err))
 	}
-	return string(data), nil
+	return normalizeDocInputLineEndings(string(data)), nil
+}
+
+func normalizeDocInputLineEndings(content string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\r", "\n")
 }
 
 func validateWorkspaceInputPath(flag, raw string) error {
@@ -120,7 +128,23 @@ func validateWorkspaceInputPath(flag, raw string) error {
 	return nil
 }
 
-func validateJSONML(raw string) (string, error) {
+func validateJSONMLBody(cmd *cobra.Command, raw string) (string, error) {
+	normalized, err := helpers.PrepareDocJSONMLBody(cmd, raw)
+	if err != nil {
+		return "", shortcutJSONMLValidationError(err)
+	}
+	return validateJSONMLElement(normalized)
+}
+
+func validateJSONMLNode(cmd *cobra.Command, raw string) (string, error) {
+	normalized, err := helpers.PrepareDocJSONMLNode(cmd, raw)
+	if err != nil {
+		return "", shortcutJSONMLValidationError(err)
+	}
+	return validateJSONMLElement(normalized)
+}
+
+func validateJSONMLElement(raw string) (string, error) {
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return "", apperrors.NewValidation(fmt.Sprintf("JSONML 解析失败: %v", err))
@@ -138,8 +162,13 @@ func validateJSONML(raw string) (string, error) {
 	if tag, ok := root[0].(string); !ok || strings.TrimSpace(tag) == "" {
 		return "", apperrors.NewValidation("JSONML 第一个元素必须是非空标签名")
 	}
-	normalized, _ := json.Marshal(value) // decoded JSON trees are always marshalable
-	return string(normalized), nil
+	return raw, nil
+}
+
+func shortcutJSONMLValidationError(err error) error {
+	message := strings.ReplaceAll(err.Error(), "--content-format", "--doc-format")
+	message = strings.ReplaceAll(message, "--element", "--content")
+	return apperrors.NewValidation(message)
 }
 
 func docEnvelope(operation string, data any, steps ...map[string]any) map[string]any {
@@ -154,6 +183,16 @@ func docEnvelope(operation string, data any, steps ...map[string]any) map[string
 		"warnings":        []string{},
 		"compensation":    map[string]any{"available": false, "reason": ""},
 	}
+}
+
+// withDocWarnings fills the envelope's warnings slot, which docEnvelope has
+// always emitted empty. Written as a wrapper rather than another docEnvelope
+// parameter so its ~20 existing call sites stay untouched.
+func withDocWarnings(envelope map[string]any, warnings []string) map[string]any {
+	if len(warnings) > 0 {
+		envelope["warnings"] = warnings
+	}
+	return envelope
 }
 
 type docFailureState string
@@ -185,6 +224,14 @@ func classifyDocWriteFailure(cause error) docFailureTransition {
 	var typed *apperrors.Error
 	if !errors.As(cause, &typed) {
 		return transition
+	}
+	switch strings.ToUpper(strings.TrimSpace(typed.Reason)) {
+	case "DOC_BLOCK_SEQUENCE_RECEIPT_UNCONFIRMED":
+		return docFailureTransition{state: docFailureUnknown, reason: "doc_block_sequence_receipt_unconfirmed", retryable: false, executionStarted: true, message: typed.Message, actions: typed.Actions}
+	case "PENDING_SUGGESTIONS_EXIST":
+		return docFailureTransition{state: docFailureFailed, reason: "PENDING_SUGGESTIONS_EXIST", retryable: false, executionStarted: false, message: typed.Message, actions: []string{"先审阅本人待处理建议；明确同意后以 --force 重新发起覆盖，--yes 不代表 --force"}}
+	case "PENDING_SUGGESTIONS_UNAVAILABLE":
+		return docFailureTransition{state: docFailureFailed, reason: "PENDING_SUGGESTIONS_UNAVAILABLE", retryable: false, executionStarted: false, message: typed.Message, actions: []string{"摘要不可用，覆盖尚未开始；稍后检查服务端状态"}}
 	}
 	reason := strings.ToLower(strings.TrimSpace(typed.Reason))
 	message := strings.ToLower(typed.Message)
@@ -353,4 +400,15 @@ func blockIdentity(values map[string]any, inherited string) string {
 		}
 	}
 	return inherited
+}
+
+// validateDocResourceID rejects resource IDs that are not UUIDs before any
+// network call, so fabricated values (OSS signature fragments, URL path
+// segments) fail locally with an actionable hint instead of an opaque
+// backend error that invites blind retries.
+func validateDocResourceID(raw string) error {
+	if _, err := uuid.Parse(strings.TrimSpace(raw)); err != nil {
+		return apperrors.NewValidation("--resource-id 应为 UUID 格式（来自 +media-list 返回的 resourceId 字段），不要从 OSS/URL 链接中提取；请先执行 dws doc +media-list --node <DOC_ID> --format json 获取")
+	}
+	return nil
 }

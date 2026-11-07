@@ -1622,44 +1622,17 @@ def _embed_images_in_columns(
     # openpyxl 的 Image 类内部依赖 Pillow（模块加载时检测），
     # 如果 Pillow 不可用，OpenpyxlImage() 会抛出：
     #   ImportError: You must install Pillow to fetch image objects
-    # 这里提前检测，不可用时尝试自动安装，避免逐张图片重复报错。
+    # 这里提前检测；缺失依赖时保留超链接，不在脚本内联网安装依赖。
     from openpyxl.drawing.image import PILImage as _openpyxl_pil_check
     if not _openpyxl_pil_check:
         warn(
-            "[image] openpyxl 检测到 Pillow 未安装，尝试自动安装..."
+            "[image] 缺少 Pillow，图片将显示为可点击链接。"
+            "请手动执行: pip install Pillow"
         )
-        import subprocess, sys
-        try:
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "Pillow"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=60,
-            )
-            log("[image] Pillow 安装成功，重新加载 openpyxl.drawing.image...")
-            # 安装后需要重新加载模块，让 openpyxl 重新检测 Pillow
-            import importlib
-            import openpyxl.drawing.image as _img_mod
-            importlib.reload(_img_mod)
-            from openpyxl.drawing.image import Image as OpenpyxlImage  # noqa: F811
-            from openpyxl.drawing.image import PILImage as _recheck
-            if not _recheck:
-                warn(
-                    "[image] Pillow 安装后 openpyxl 仍无法检测到，"
-                    "图片将显示为可点击链接。请手动执行: pip install Pillow"
-                )
-                _replace_all_image_urls_with_hyperlinks(
-                    ws, headers, rows, image_column_names, first_data_row,
-                )
-                return
-        except Exception as install_err:
-            warn(
-                f"[image] Pillow 自动安装失败: {install_err}\n"
-                "图片将显示为可点击链接。请手动执行: pip install Pillow"
-            )
-            _replace_all_image_urls_with_hyperlinks(
-                ws, headers, rows, image_column_names, first_data_row,
-            )
-            return
+        _replace_all_image_urls_with_hyperlinks(
+            ws, headers, rows, image_column_names, first_data_row,
+        )
+        return
 
     # 找到目标列索引（1-based）
     name_to_col_idx: dict[str, int] = {}

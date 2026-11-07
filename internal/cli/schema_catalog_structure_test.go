@@ -102,6 +102,16 @@ func TestValidateCatalogStructureAcceptsValidEntry(t *testing.T) {
 	}
 }
 
+func TestValidateCatalogStructureAcceptsUnavailableMCPWithoutRef(t *testing.T) {
+	entry := validCatalogToolEntry()
+	entry["availability"] = contract.InterfaceUnavailable
+	entry["interface_reason"] = "后端能力已下线"
+	delete(entry, "interface_ref")
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err != nil {
+		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+}
+
 func TestValidateCatalogStructureAcceptsOptionalResultObject(t *testing.T) {
 	entry := validCatalogToolEntry()
 	entry["result"] = map[string]any{
@@ -217,6 +227,22 @@ func TestCrossPlatformCoverageValidateCatalogStructureRejectsViolations(t *testi
 			name:   "mcp without interface_ref",
 			mutate: func(e map[string]any) { delete(e, "interface_ref") },
 			want:   "interface_mode=mcp requires interface_ref",
+		},
+		{
+			name: "unavailable must not keep interface_ref",
+			mutate: func(e map[string]any) {
+				e["availability"] = contract.InterfaceUnavailable
+				e["interface_reason"] = "后端能力已下线"
+			},
+			want: "availability=unavailable must not set interface_ref",
+		},
+		{
+			name: "unavailable requires interface_reason",
+			mutate: func(e map[string]any) {
+				e["availability"] = contract.InterfaceUnavailable
+				delete(e, "interface_ref")
+			},
+			want: "availability=unavailable requires a non-empty interface_reason",
 		},
 		{
 			name: "composite without interface_reason",

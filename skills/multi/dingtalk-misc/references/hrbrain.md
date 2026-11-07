@@ -17,6 +17,8 @@ Hrbrain 是钉钉组织大脑，提供人才池管理、员工档案查询、人
 | `talent-pool list` | 查询人才池列表 | - | 可选 `--keyword`、`--pool-type`、`--creator`、`--labels`（逗号分隔）、`--page`、`--page-size` |
 | `talent-pool detail` | 获取人才池详情 | `--pool-code` | - |
 | `talent-pool employees` | 查询人才池内人员列表 | `--pool-code` | 可选 `--page`、`--page-size` |
+| `talent-pool save` | 创建或更新人才池 | `--pool-name` | 写操作，需 `--yes`。无 `--pool-code` 新建，有 `--pool-code` 更新；可选 `--pool-desc`、`--rule-json`（JSON 对象）、`--pool-tags`（JSON 数组） |
+| `talent-pool move-members` | 人才池人员出入池 | `--pool-code` `--opt-type` `--staff-ids` | 写操作，需 `--yes`。`--opt-type`=`ENTERING`/`LEAVING`；`--staff-ids` 逗号分隔；可选 `--remark` |
 
 ### profile (员工档案管理)
 
@@ -39,6 +41,7 @@ Hrbrain 是钉钉组织大脑，提供人才池管理、员工档案查询、人
 ## 意图判断
 
 - "人才池/储备干部池" → `talent-pool list/detail/employees`
+- "新建/修改人才池" → `talent-pool save`（写，需 `--yes`）；"人员入池/出池" → `talent-pool move-members`（写，需 `--yes`）
 - "员工档案/档案数据" → `profile metadata/query`
 - "员工标签" → `profile labels`
 - "职业历程/内部履历" → `profile career`
@@ -51,6 +54,8 @@ Hrbrain 是钉钉组织大脑，提供人才池管理、员工档案查询、人
 dws hrbrain talent-pool list --page 1 --page-size 20 --format json
 dws hrbrain talent-pool detail --pool-code POOL_CODE --format json
 dws hrbrain talent-pool employees --pool-code POOL_CODE --format json
+dws hrbrain talent-pool save --pool-name "储备干部池" --yes --format json
+dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type ENTERING --staff-ids WORK_NO1,WORK_NO2 --yes --format json
 dws hrbrain profile metadata --work-no WORK_NO --format json
 dws hrbrain profile query --work-no WORK_NO --data-queries '[{"modelCode":"basic","fields":["name","dept"]}]' --format json
 dws hrbrain profile labels --staff-ids WORK_NO1,WORK_NO2 --format json
@@ -64,4 +69,5 @@ dws hrbrain search employees-structured --origin-json '{"rules":[{"field":"name"
 ## 安全规则
 
 - `--data-queries`、`--fields`、`--origin-json` 必须是合法 JSON；`--staff-ids`、`--labels`、`--order-by` 是逗号分隔字符串。
+- `talent-pool save` / `talent-pool move-members` 为写操作，`confirmation=user_required`，非交互环境须在用户明确授权后追加 `--yes`；`save --rule-json` 为 JSON 对象字符串，`save --pool-tags` 为非空 JSON 数组，`move-members --opt-type` 仅 `ENTERING`/`LEAVING`。
 - `talent-pool list` 需要账号单独开通人才池查看权限（`errorCode=2002` 时提示用户联系管理员开通）。

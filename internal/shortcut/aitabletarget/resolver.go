@@ -33,6 +33,12 @@ type Target struct {
 	TableID       string `json:"tableId,omitempty"`
 	ViewID        string `json:"viewId,omitempty"`
 	RecordID      string `json:"recordId,omitempty"`
+	Entrance      string `json:"entrance,omitempty"`
+	FieldID       string `json:"fieldId,omitempty"`
+	AppID         string `json:"appId,omitempty"`
+	PageID        string `json:"pageId,omitempty"`
+	ApplicationID string `json:"applicationId,omitempty"`
+	FlowID        string `json:"flowId,omitempty"`
 }
 
 // Candidate is a stable ID/name pair returned by name resolution.
@@ -50,78 +56,42 @@ type Resolution struct {
 	Selected   Candidate `json:"selected"`
 }
 
-// ParseURL parses the documented DingTalk AI Table URL forms:
-//
-//	https://alidocs.dingtalk.com/i/nodes/{baseId}
-//	https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}
+// ParseURL resolves node and standalone-record navigation without calling MCP.
+// Inner/outer IDs must agree. No object is
+// downgraded to Base when its parent IDs or object family are inconsistent.
 func ParseURL(raw string) (Target, error) {
 	raw = strings.TrimSpace(raw)
 	parsed, err := url.ParseRequestURI(raw)
 	if err != nil {
 		return Target{}, invalidURL(raw, fmt.Sprintf("URL 解析失败: %v", err))
 	}
-	if !strings.EqualFold(parsed.Scheme, "https") || !strings.EqualFold(parsed.Hostname(), aliDocsHost) || parsed.User != nil {
-		return Target{}, invalidURL(raw, "仅接受 https://alidocs.dingtalk.com 的无凭据 URL")
+	if !strings.EqualFold(parsed.Scheme, "https") || (!strings.EqualFold(parsed.Hostname(), aliDocsHost) && !strings.EqualFold(parsed.Hostname(), "docs.dingtalk.com")) || parsed.User != nil {
+		return Target{}, invalidURL(raw, "仅接受 https://alidocs.dingtalk.com 或 https://docs.dingtalk.com 的无凭据 URL")
 	}
-
-	segments := strings.Split(strings.Trim(parsed.EscapedPath(), "/"), "/")
-	if len(segments) != 3 || segments[0] != "i" || segments[1] != "nodes" {
-		return Target{}, invalidURL(raw, "路径必须是 /i/nodes/{baseId}")
+	values, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return Target{}, invalidURL(raw, "URL 查询串编码无效")
 	}
-	baseID, err := url.PathUnescape(segments[2])
-	if err != nil || !validID(baseID) {
-		return Target{}, invalidURL(raw, "URL 路径中的 baseId 无效")
+	if len(values["iframeQuery"]) > 1 {
+		return Target{}, invalidURL(raw, "iframeQuery 不可重复")
 	}
-
-	values := parsed.Query()
 	nested, err := parseIframeQuery(values.Get("iframeQuery"))
 	if err != nil {
 		return Target{}, invalidURL(raw, err.Error())
 	}
-	for key, nestedValues := range nested {
-		for _, value := range nestedValues {
+	if nested.Has("iframeQuery") {
+		return Target{}, invalidURL(raw, "iframeQuery 不可递归嵌套")
+	}
+	for key, entries := range nested {
+		for _, value := range entries {
 			values.Add(key, value)
 		}
 	}
-
-	tableID, err := uniqueQueryID(values, "sheetId", "tableId")
+	target, err := parseNavigationURL(parsed, values)
 	if err != nil {
 		return Target{}, invalidURL(raw, err.Error())
 	}
-	viewID, err := uniqueQueryID(values, "viewId")
-	if err != nil {
-		return Target{}, invalidURL(raw, err.Error())
-	}
-	recordID, err := uniqueQueryID(values, "recordId")
-	if err != nil {
-		return Target{}, invalidURL(raw, err.Error())
-	}
-	if viewID != "" && tableID == "" {
-		return Target{}, invalidURL(raw, "viewId 缺少所属 sheetId/tableId")
-	}
-	if recordID != "" && tableID == "" {
-		return Target{}, invalidURL(raw, "recordId 缺少所属 sheetId/tableId")
-	}
-
-	kind := "base"
-	if tableID != "" {
-		kind = "table"
-	}
-	if viewID != "" {
-		kind = "view"
-	}
-	if recordID != "" {
-		kind = "record"
-	}
-	return Target{
-		SchemaVersion: "aitable.target.v1",
-		Source:        "url",
-		Kind:          kind,
-		BaseID:        strings.TrimSpace(baseID),
-		TableID:       tableID,
-		ViewID:        viewID,
-		RecordID:      recordID,
-	}, nil
+	return target, nil
 }
 
 func parseIframeQuery(raw string) (url.Values, error) {
@@ -218,7 +188,7 @@ func ResolveBaseName(reader Reader, name string, allowFuzzy bool) (Resolution, e
 			}
 			all = append(all, Candidate{ID: id, Name: candidateName})
 		}
-		next, hasMore, hasMoreKnown := pagination(data)
+		next, hasMore, hasMoreKnown := Pagination(data)
 		if hasMoreKnown && !hasMore {
 			return selectCandidate("base", query, dedupe(all), allowFuzzy)
 		}
@@ -298,6 +268,12 @@ func selectCandidate(entityType, query string, candidates []Candidate, allowFuzz
 	}, nil
 }
 
+// FindObjectList applies the resolver's deterministic collection and envelope
+// precedence. It never searches arbitrary objects such as audit metadata.
+func FindObjectList(data map[string]any, keys ...string) ([]map[string]any, bool, error) {
+	return findObjectList(data, keys...)
+}
+
 func findObjectList(data map[string]any, keys ...string) ([]map[string]any, bool, error) {
 	if data == nil {
 		return nil, false, nil
@@ -349,7 +325,11 @@ func firstString(values map[string]any, keys ...string) string {
 	return ""
 }
 
-func pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown bool) {
+// Pagination returns the paging facts published by an MCP response. Callers
+// must prefer an explicit hasMore=false over a stale cursor echoed by the
+// service: a completed page is terminal even when the payload retains the
+// request cursor.
+func Pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown bool) {
 	if data == nil {
 		return "", false, false
 	}
@@ -364,7 +344,7 @@ func pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown 
 	}
 	for _, key := range []string{"data", "result", "page", "pagination", "meta"} {
 		if nested, ok := data[key].(map[string]any); ok {
-			next, more, known := pagination(nested)
+			next, more, known := Pagination(nested)
 			if cursor == "" {
 				cursor = next
 			}
@@ -438,4 +418,42 @@ func invalidResponse(entityType, query, cause string) error {
 		apperrors.WithHint(cause),
 		apperrors.WithDetails(map[string]any{"entityType": entityType, "query": query}),
 	)
+}
+
+// ResolveChildName uses complete field/view directories and refuses malformed,
+// duplicate, or ambiguous candidates before returning an ID.
+func ResolveChildName(reader Reader, baseID, tableID, kind, name string) (Resolution, error) {
+	query := strings.TrimSpace(name)
+	if !validID(baseID) || !validID(tableID) || query == "" {
+		return Resolution{}, apperrors.NewValidation("需要有效 Base/Table ID 和非空名称")
+	}
+	tool, collection, idKey, nameKey := "get_fields", "fields", "fieldId", "fieldName"
+	if kind == "view" {
+		tool, collection, idKey, nameKey = "get_views", "views", "viewId", "viewName"
+	} else if kind != "field" {
+		return Resolution{}, apperrors.NewValidation("仅支持 field/view 名称解析")
+	}
+	data, err := reader.CallMCPData("aitable", tool, map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return Resolution{}, err
+	}
+	items, found, err := findObjectList(data, collection)
+	if err != nil || !found {
+		return Resolution{}, invalidResponse(kind, query, "缺少有效完整目录")
+	}
+	next, more, known := Pagination(data)
+	if next != "" && (!known || more) || known && more {
+		return Resolution{}, incomplete(kind, query, nil, "目录仍有续页，不能证明名称唯一")
+	}
+	candidates := make([]Candidate, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		id, n := firstString(item, idKey, "id"), firstString(item, nameKey, "name")
+		if id == "" || n == "" || seen[id] {
+			return Resolution{}, invalidResponse(kind, query, "目录缺少 ID/名称或重复 ID")
+		}
+		seen[id] = true
+		candidates = append(candidates, Candidate{ID: id, Name: n})
+	}
+	return selectCandidate(kind, query, candidates, false)
 }

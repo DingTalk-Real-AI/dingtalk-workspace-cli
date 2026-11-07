@@ -87,10 +87,11 @@ func (e *PatScopeError) Error() string {
 }
 
 // patScopeRegex matches PAT-protocol scope error patterns from the API.
-// Only matches explicit scope-related keywords; generic "permission denied" or
-// "forbidden" are intentionally excluded to avoid false positives on business
-// authorization errors (e.g. mailbox access denied, 403 Forbidden).
-var patScopeRegex = regexp.MustCompile(`(?i)(missing_scope|insufficient_scope|scope.*required)`)
+// Only matches explicit PAT protocol markers. Generic "permission denied",
+// "forbidden", and business prose like "scope approval required" are
+// intentionally excluded: they also appear on business authorization errors,
+// and rerouting those into PAT re-auth would replay the original call.
+var patScopeRegex = regexp.MustCompile(`(?i)(missing_scope|insufficient_scope)`)
 
 // scopeValueRegex extracts a scope identifier (e.g. "calendar:read",
 // "mail:user_mailbox.message:send") from an error message.
@@ -115,16 +116,21 @@ func isPatScopeError(err error) bool {
 
 	var typed *apperrors.Error
 	if stderrors.As(err, &typed) {
-		// Check message, reason, and hint for scope-related patterns
+		// Explicit PAT protocol markers are strong evidence anywhere they appear.
 		fullText := strings.ToLower(typed.Message + " " + typed.Reason + " " + typed.Hint)
-		if typed.Category == apperrors.CategoryAuth {
-			if strings.Contains(fullText, "missing_scope") || strings.Contains(fullText, "insufficient_scope") ||
-				(strings.Contains(fullText, "scope") && strings.Contains(fullText, "required")) {
-				return true
-			}
-		}
-		// Any category with scope/permission hints
 		if strings.Contains(fullText, "missing_scope") || strings.Contains(fullText, "insufficient_scope") {
+			return true
+		}
+		// The looser "scope ... required" shape is only PAT evidence when the
+		// error's own message/reason carries it AND names a scope value
+		// (e.g. "calendar:read"). Business prose like "application scope
+		// approval required" — whether in a server hint or the message —
+		// must not reroute a business authorization denial into the PAT
+		// re-auth (and replay) path.
+		protocolText := strings.ToLower(typed.Message + " " + typed.Reason)
+		if typed.Category == apperrors.CategoryAuth &&
+			strings.Contains(protocolText, "scope") && strings.Contains(protocolText, "required") &&
+			scopeValueRegex.MatchString(protocolText) {
 			return true
 		}
 	}
@@ -550,8 +556,7 @@ func handlePatAuthCheck(
 			// When both clientId and clientSecret are provided, use direct mode
 			// (DingTalk API) rather than MCP proxy — the MCP proxy does not hold
 			// the secret for this particular app.
-			authpkg.SetClientID(patData.Data.ClientID)
-			authpkg.SetClientSecret(patData.Data.ClientSecret)
+			authpkg.SetClientCredentials(patData.Data.ClientID, patData.Data.ClientSecret)
 		} else {
 			// No clientSecret — rely on MCP proxy to manage the secret server-side.
 			authpkg.SetClientIDFromMCP(patData.Data.ClientID)
@@ -904,5 +909,15 @@ func tryOpenBrowser(rawURL string) error {
 	if cmd == nil {
 		return nil
 	}
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Wait for process to prevent resource leak
+	// Run in goroutine to avoid blocking browser launch
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
 }

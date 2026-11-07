@@ -8,8 +8,11 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -41,18 +44,20 @@ var BaseBootstrap = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+base-bootstrap",
 	Product:     serverMain,
-	Description: "一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用",
-	Intent:      "当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。",
+	Description: "一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用。" + helpers.AitableNavigationGuidance,
+	Intent:      "当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。" + helpers.AitableNavigationGuidance,
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent",
 	},
-	Contract: aitableCompositeContract(
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: aitableCompositeContractWithResult(
 		"+base-bootstrap",
-		"一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用",
-		"当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。",
+		"一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用。"+helpers.AitableNavigationGuidance,
+		"当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。"+helpers.AitableNavigationGuidance,
 		"已有 Base 只需新增一张表时用 +table-bootstrap；复制现有 Base 用 +base-copy；不要对失败请求盲目重试",
 		`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[]}]'`,
+		aitableBaseCompositeResultSpec("base_bootstrap"),
 	),
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "新 Base 名称", Required: true},
@@ -105,20 +110,17 @@ func parseBootstrapTables(raw string) ([]bootstrapTable, error) {
 		}
 		fieldNames := map[string]bool{}
 		for fieldIndex, field := range fields {
-			object, ok := field.(map[string]any)
-			fieldName := strings.TrimSpace(stringValue(object, "fieldName", "name"))
-			if !ok || fieldName == "" || strings.TrimSpace(stringValue(object, "type")) == "" {
-				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d] 必须包含 fieldName 和 type", index, fieldIndex))
+			fieldName, err := validateBootstrapField(field, fmt.Sprintf("--tables[%d].fields[%d]", index, fieldIndex))
+			if err != nil {
+				return nil, baseBootstrapValidation(err.Error())
 			}
 			if fieldNames[fieldName] {
 				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].fieldName %q 不能重复", index, fieldIndex, fieldName))
 			}
 			fieldNames[fieldName] = true
-			if config, exists := object["config"]; exists {
-				if _, ok := config.(map[string]any); !ok {
-					return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].config 必须是 JSON 对象", index, fieldIndex))
-				}
-			}
+		}
+		if err := validateCreateTableCapabilities(fields, fmt.Sprintf("--tables[%d].fields", index)); err != nil {
+			return nil, baseBootstrapValidation(err.Error())
 		}
 		out = append(out, bootstrapTable{Name: name, Fields: fields})
 	}
@@ -222,17 +224,20 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 	baseID := findStringByKeys(baseData, "baseId")
 	if baseID == "" {
 		result.Status = "unknown"
-		result.Result = baseData
-		result.Checkpoint = map[string]any{"nextStep": "locate the created Base by exact name before retrying", "name": rt.Str("name")}
+		// Keep the accepted receipt for recovery without publishing unconfirmed entity navigation.
+		result.Checkpoint = map[string]any{"nextStep": "locate the created Base by exact name before retrying", "name": rt.Str("name"), "createReceipt": baseData}
 		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-search", "--query", rt.Str("name"), "--format", "json")
 		return compositeError(result, fmt.Errorf("create_base response is missing baseId"), false)
 	}
 	result.Resolved = map[string]any{"baseId": baseID}
+	createdTables := make([]any, 0, len(tables))
+	result.Result = map[string]any{"baseId": baseID, "tables": createdTables}
+	aitablenavigation.Preserve(result.Result, baseNavigation(baseData, baseID))
 	result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-get", "--base-id", baseID, "--format", "json")
 	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_base", "baseId": baseID})
 	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 1, Name: "create base", Tool: "create_base", Status: "completed", Result: baseData})
 	baseRead, err := rt.CallMCPData(serverMain, "get_base", map[string]any{"baseId": baseID})
-	if err != nil || !deepContainsString(baseRead, baseID) {
+	if err != nil || stringValue(parityResponseObject(baseRead), "baseId") != baseID {
 		if err == nil {
 			err = fmt.Errorf("get_base does not identify created baseId %s", baseID)
 		}
@@ -241,7 +246,12 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 		return compositeError(result, err, false)
 	}
 
-	createdTables := make([]any, 0, len(tables))
+	baseNav := map[string]any{}
+	aitablenavigation.Preserve(baseNav, baseNavigation(baseRead, baseID))
+	aitablenavigation.Preserve(baseNav, result.Result)
+	for key, value := range baseNav {
+		result.Result[key] = value
+	}
 	for index, spec := range tables {
 		initialEnd := minInt(15, len(spec.Fields))
 		initialFields := spec.Fields[:initialEnd]
@@ -259,7 +269,9 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 			result.Checkpoint = map[string]any{"nextTableIndex": index, "baseId": baseID}
 			return compositeError(result, createErr, false)
 		}
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_table", "baseId": baseID, "tableId": tableID, "name": spec.Name})
+		tableEffect := map[string]any{"tool": "create_table", "baseId": baseID, "tableId": tableID, "name": spec.Name}
+		aitablenavigation.Preserve(tableEffect, parityResponseObject(createData))
+		result.KnownEffects = append(result.KnownEffects, tableEffect)
 		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+table-get", "--base-id", baseID, "--table-id", tableID, "--format", "json")
 		for offset := initialEnd; offset < len(spec.Fields); offset += 15 {
 			end := minInt(offset+15, len(spec.Fields))
@@ -270,16 +282,20 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("create_fields offset %d returned an error; checking final field state: %v", offset, fieldErr))
 			}
 		}
-		detail, verifyErr := rt.CallMCPData(serverMain, "get_tables", map[string]any{"baseId": baseID, "tableIds": []string{tableID}})
-		if verifyErr != nil || !deepContainsString(detail, tableID) {
-			if verifyErr == nil {
-				verifyErr = fmt.Errorf("get_tables does not identify created tableId %s", tableID)
-			}
+		tableRead, verifyErr := verifyCreatedTableEventually(rt, baseID, tableID)
+		if verifyErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = index
 			result.FailedCount = len(tables) - index
 			result.Checkpoint = map[string]any{"nextTableIndex": index, "baseId": baseID, "tableId": tableID, "step": "verify table and fields"}
 			return compositeError(result, verifyErr, false)
+		}
+		// The table identity is confirmed even if field verification later fails.
+		tableNav := map[string]any{}
+		aitablenavigation.Preserve(tableNav, tableRead)
+		aitablenavigation.Preserve(tableNav, tableEffect)
+		for key, value := range tableNav {
+			tableEffect[key] = value
 		}
 		fieldsData, verifyErr := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
 		fields, found := findNamedObjectList(fieldsData, "fields", "fieldList")
@@ -297,11 +313,14 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 			return compositeError(result, verifyErr, false)
 		}
 		result.CompletedCount = index + 1
-		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: index + 2, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(spec.Fields), Result: map[string]any{"tableId": tableID, "fieldCount": len(fields)}})
-		createdTables = append(createdTables, map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields)})
+		tableResult := map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields)}
+		aitablenavigation.Preserve(tableResult, tableRead)
+		aitablenavigation.Preserve(tableResult, parityResponseObject(createData))
+		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: index + 2, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(spec.Fields), Result: tableResult})
+		createdTables = append(createdTables, tableResult)
+		result.Result["tables"] = createdTables
 	}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableCount": len(createdTables)}
-	result.Result = map[string]any{"baseId": baseID, "tables": createdTables}
 	result.NextCommand = ""
 	return rt.Output(result)
 }
@@ -433,13 +452,13 @@ func verifyDeclaredFieldStructures(actual []map[string]any, expected []any) erro
 		if actualType != expectedType {
 			return fmt.Errorf("field %q type mismatch: got %q, want %q", name, actualType, expectedType)
 		}
-		for _, key := range []string{"config", "aiConfig"} {
-			expectedConfig, declared := field[key]
+		for _, key := range []string{"config", "aiConfig", "description"} {
+			expectedValue, declared := field[key]
 			if !declared {
 				continue
 			}
-			actualConfig, found := actualField[key]
-			if !found || !declaredValueMatches(actualConfig, expectedConfig) {
+			actualValue, found := actualField[key]
+			if !found || !declaredValueMatches(actualValue, expectedValue) {
 				return fmt.Errorf("field %q %s mismatch", name, key)
 			}
 		}

@@ -51,7 +51,11 @@ scripts/policy/interface-migrations/approved-command-migrations-v1.json
 
 清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。历史未声明 `kind` 的记录按 `flag_rename` 解释；新增同名 requiredness 迁移必须显式写 `kind: requiredness_change` 和单一 `flag` before/after。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
 
-首次引入一个旧 merge-base 不认识的新 `kind` 时，机制 PR 不得同时写入该 kind 的 pending 记录，因为旧的 base-owned 严格解析器会拒绝未知字段。必须先合入 parser、lifecycle、CLI/Schema adapter 与 hostile tests；待这些实现成为新的 merge-base authority 后，再用独立治理审批 PR 新增 pending，最后才由产品 PR 消费。
+首次向旧 merge-base 已读取的清单引入未知 `kind` 时，机制 PR 不得同时向该清单写入新 kind，
+因为旧 base-owned 严格解析器会拒绝未知字段。若扩展使用独立的新清单，且旧 checker 不读取它，
+可以在同一个前置 MR 提交机制和 pending 计划：旧 base checker 仍不带新豁免完整比较实际产品，
+新增检查仅以空审批清单验证 pending、三方 before 及无非 enum 漂移。机制和计划均须真人审阅；
+不能在该 MR 同时修改产品或登记 consumed，合入后才成为下一业务 MR 的 base-owned authority。
 
 ## 跨命令迁移原语
 
@@ -103,6 +107,32 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 历史未声明时允许 replacement 新增 dry-run。这与普通 Schema 兼容规则保持同一单调边界。
 
 两种迁移都要求旧 argv 继续可执行。删除旧命令、删除旧 flag、把 legacy 改成 non-runnable、改变未登记的历史参数、改变 interface / safety，或只完成部分 before → after 转换都会 fail closed。命令别名会先规范到 reference 的 canonical path，但清单本身仍只能记录精确 canonical 命令，不能用 alias 或前缀扩大授权。
+
+### 已完成的招聘产品退役回执
+
+[PR #1485](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1485)
+经管理员明确批准，将整个开源招聘产品退役，合并提交为
+`9a2d37268c62ba0790e83c48da5119d6afa67ea5`。管理员 bypass 只完成合并，
+不会推进稳定版基线；因此 `v1.0.63` 仍包含招聘产品，后续无关 PR 曾持续失败。
+
+`internal/interfacesnapshot/retired_products.go` 保存此次已完成退役的精确回执：
+
+- CLI 历史子树必须恰好为 `dws recruit`、`dws recruit job`、`list/get/create`
+  五个可见且可运行的节点，且没有别名；候选快照必须完全不存在招聘路径，包括别名。
+  只有 `command_removed: dws recruit` 被接受，报告在 `reviewed` 中记录 `PR #1485`。
+- Schema 历史产品必须恰好包含 `recruit.list_jobs`、`recruit.get_job_detail`、
+  `recruit.create_job`，分别绑定 `recruit job list/get/create`；候选必须移除整个
+  `recruit` 产品，且其他产品不能保留招聘工具身份或招聘 CLI 路径。
+- 其他产品、额外招聘节点、部分退役、参数及安全元数据变化继续执行原兼容检查。
+  这不是可供候选 PR 申请任意产品删除的通用审批入口，也没有改变 migration ledger。
+
+CLI 和 Schema 的 authoritative wrapper 继续使用 **merge-base 拥有的代码**；
+候选修改回执或检查器不能自行放行。首次将此治理修复合入 main 时，旧检查器仍会
+报告已批准的招聘删除，需受控管理员 bootstrap，不能称为原检查通过。合入后，
+后续 PR 必须基于含修复的 main 更新分支并生成新的 CI 结果，重跑旧基线不足以修复。
+
+稳定版 tag 和历史基线不改写，beta 不替代稳定版基线。CLI/Schema 两条入口均使用
+回执，发布仍需通过现行独立门禁；当后续稳定版也不含招聘产品时，回执自然不再命中。
 
 跨命令清单复用下文同一套 `pending → consumed → inert/cleanup` 生命周期。治理 PR 只能新增 `pending` 且产品 surface 必须仍是 before；后续产品 PR 才能一次性切到 after 并改为 `consumed`。candidate 新增的 pending 记录不能批准自己的改动。
 
@@ -252,6 +282,27 @@ format、enum、`required_when`、constraints、positionals 与 safety 等全部
 任何不相干漂移继续阻塞。
 
 ## 本地验证
+
+### Schema 参数枚举变更
+
+`scripts/policy/interface-migrations/approved-schema-parameter-migrations-v1.json`
+独立治理 `schema_enum_change`，不将 enum 替换伪装成 flag 改名或 requiredness 变更。
+其严格格式见同目录 [README](../scripts/policy/interface-migrations/README.md)。
+
+枚举不在 CLI Flag Snapshot 中，因此授权使用原始完整 Schema 的 merge-base、最高可达
+未撤回 GA 和 candidate 三份参数契约；命令路径还必须精确对应。只有 enum 可改变，
+目标参数的类型、property、required、默认值等所有其他已检查字段必须完全相同。
+其他参数、命令和 safety 仍由普通兼容规则检查。
+
+生命周期与上述流程一致。新机制 bootstrap 可以使用空清单，也可以在同一个前置 MR
+登记 pending；老 base checker 不接收未知参数，不读取新清单，仍完整检查 main 与 GA，
+不会批准同次业务变化。两次基线检查均成功后，新 checker 以空审批清单补查声明，要求
+全部记录 pending、三份契约均精确保持 before；新机制及计划正确性仍须真人审阅。
+该前置 MR 合入后，下一业务 MR
+一次性切到 after 并改为 consumed。consumed 不得改写或退回 pending；GA 仍为 before
+时必须保留回执，base 和 GA 都达到 after 后才允许清理。候选新增记录不能自行授权。
+当前机制不支持目标工具/参数在历史 GA 中缺失、参数并行改名、非 string 参数或迁移链叠加，
+这些情况失败关闭，须另行设计评审。
 
 先确保 merge-base 和 stable tag 已在本地，然后运行与 CI 相同的权威门禁：
 

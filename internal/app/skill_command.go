@@ -709,7 +709,7 @@ func parseLegacySkillAPIError(resp *http.Response) error {
 
 // downloadSkillFile downloads the skill zip file to a temporary location.
 func downloadSkillFile(ctx context.Context, downloadURL, fileName string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	req, err := skillNewRequest(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return "", apperrors.NewInternal(fmt.Sprintf("failed to create download request: %v", err))
 	}

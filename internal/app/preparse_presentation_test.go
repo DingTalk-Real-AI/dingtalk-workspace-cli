@@ -15,14 +15,49 @@ package app
 
 import (
 	"bytes"
+	"context"
 	stderrors "errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 )
+
+type preParseExitCoderError struct{}
+
+func (*preParseExitCoderError) Error() string { return "explicit exit" }
+func (*preParseExitCoderError) ExitCode() int { return 42 }
+
+func TestCrossPlatformCoverageNewPreParseValidationErrorPreservesAuthoritativeErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "typed", err: apperrors.NewAPI("API failed")},
+		{name: "typed outside handler", err: apperrors.NewAPI("API failed", apperrors.WithCause(&pipeline.HandlerError{Phase: pipeline.PreParse, Handler: "nested", Cause: stderrors.New("raw failure")}))},
+		{name: "exit coder", err: &preParseExitCoderError{}},
+		{name: "canceled", err: context.Canceled},
+		{name: "deadline", err: context.DeadlineExceeded},
+	} {
+		for _, wrapped := range []bool{false, true} {
+			name := tc.name + "/direct"
+			input := tc.err
+			if wrapped {
+				name = tc.name + "/handler"
+				input = &pipeline.HandlerError{Phase: pipeline.PreParse, Handler: "test", Cause: tc.err}
+			}
+			t.Run(name, func(t *testing.T) {
+				got := newPreParseValidationError(input)
+				if got != tc.err || !stderrors.Is(got, tc.err) {
+					t.Fatalf("newPreParseValidationError() = %v, want %v", got, tc.err)
+				}
+			})
+		}
+	}
+}
 
 func TestCrossPlatformCoverageLeadingPersistentFlagVariantsReachTheRealCommand(t *testing.T) {
 	tests := []struct {
@@ -52,6 +87,44 @@ func TestCrossPlatformCoverageLeadingPersistentFlagVariantsReachTheRealCommand(t
 				t.Fatalf("corrected leading persistent flag failed: %v", err)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageFuzzyRootBooleanBetweenGroupAndLeafKeepsLeafPreParse(t *testing.T) {
+	root := NewSchemaSourceRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	args := []string{
+		"aisearch", "--query", "Alice", "--yess", "enterprise",
+		"--queries", "fixture", "--content-types", "document", "--time_range", "本周", "--help",
+	}
+	ctx, err := pipeline.RunPreParseArgs(root, newPipelineEngine(), args)
+	if err != nil {
+		t.Fatalf("RunPreParseArgs(%v) error = %v", args, err)
+	}
+	if ctx == nil || ctx.Command != "dws aisearch enterprise" ||
+		!slices.Contains(ctx.Args, "--yes") || !slices.Contains(ctx.Args, "--types") || !slices.Contains(ctx.Args, "--time-range") {
+		t.Fatalf("group-middle fuzzy flag skipped leaf PreParse: context=%#v", ctx)
+	}
+	if err := root.Execute(); err != nil {
+		t.Fatalf("corrected group-middle persistent flag failed: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageProtectedFlagChildNameValueStaysOnOwningCommand(t *testing.T) {
+	for _, args := range [][]string{
+		{"aisearch", "--types", "enterprise"},
+		{"aisearch", "--types", "false", "enterprise"},
+		{"aisearch", "--types=false", "enterprise"},
+	} {
+		root := NewSchemaSourceRootCommand()
+		ctx, err := pipeline.RunPreParseArgs(root, newPipelineEngine(), args)
+		if err != nil {
+			t.Fatalf("RunPreParseArgs(%v) error = %v", args, err)
+		}
+		if ctx == nil || ctx.Command != "dws aisearch" || !ctx.IsFlagProtected("types") || !slices.Equal(ctx.Args, args) {
+			t.Fatalf("protected child-name value selected wrong command: args=%v context=%#v", args, ctx)
+		}
 	}
 }
 
@@ -105,6 +178,7 @@ func TestCrossPlatformCoverageCommandResolutionPrecedesFlagErrorsOnProductionTre
 		args        []string
 		wantReason  string
 		wantCommand string
+		wantHint    string
 	}{
 		{
 			name:        "unknown shortcut",
@@ -117,6 +191,13 @@ func TestCrossPlatformCoverageCommandResolutionPrecedesFlagErrorsOnProductionTre
 			args:        []string{"dev", "app", "search", "--keyword", "x", "--format", "json"},
 			wantReason:  "unknown_subcommand",
 			wantCommand: "dws dev app",
+		},
+		{
+			name:        "unknown aisearch subcommand before protected flag",
+			args:        []string{"aisearch", "--query", "Alice", "enterprize", "--types", "enterprise", "--format", "json"},
+			wantReason:  "unknown_subcommand",
+			wantCommand: "dws aisearch",
+			wantHint:    "dws aisearch enterprise",
 		},
 	}
 
@@ -134,6 +215,9 @@ func TestCrossPlatformCoverageCommandResolutionPrecedesFlagErrorsOnProductionTre
 			}
 			if structured.Reason != test.wantReason || structured.ExitCode() != 3 {
 				t.Fatalf("structured error = %#v", structured)
+			}
+			if test.wantHint != "" && !strings.Contains(structured.Hint, test.wantHint) {
+				t.Fatalf("hint = %q, want %q", structured.Hint, test.wantHint)
 			}
 			if len(structured.AvailableFlags) != 0 || strings.Contains(structured.Message, "unknown flag") {
 				t.Fatalf("command error leaked flag classification: %#v", structured)

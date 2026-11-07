@@ -18,6 +18,10 @@
 | 单条/合并/话题转发 | `+messages-forward` / `+messages-combine-forward` / `+messages-forward-topic` | 复制正文重新发送 |
 | 流式卡片创建或更新 | `+messages-send-card` / `+messages-update-card` | 普通 text/Markdown 发送 |
 
+## Topic 选择
+
+话题与话题圈的创建、发布、已有消息升级、浏览、回复、互动和整条转发统一读取 [thread.md](chat/thread.md)，不从普通消息入口选路。
+
 ## 对象层级
 
 | 用户终点 | 对象 | Reference |
@@ -39,7 +43,7 @@ Favorite、消息 Pin、消息 Top 和会话 Top 不能互换，即使用户都�
 | 已有成员 IDs 创建群 | `+chat-create` |
 | 查群、查看成员、邀请链接 | [group-discovery.md](chat/group-discovery.md) |
 | 加人、踢人、管理员、群公告、群设置 | [group-admin.md](chat/group-admin.md) |
-| 找可用机器人并取得单聊 ID | `chat bot find`，不是只查自己创建机器人的 `bot search` |
+| 找可用机器人并取得单聊 ID | `+bot-find`，不是只查自己创建机器人的 `+bot-search` |
 | 已知 robotCode 发送 | `+messages-send --as bot` |
 | 机器人入群、移除、批量群发或撤回 | [chat-bot.md](chat/chat-bot.md) |
 

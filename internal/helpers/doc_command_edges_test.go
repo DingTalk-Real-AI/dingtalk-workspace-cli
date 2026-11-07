@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -32,7 +33,7 @@ func runDocCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...stri
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func TestCrossPlatformCoverageDocTransferAndDiffEdges(t *testing.T) {
@@ -116,6 +117,17 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 		_ = download.Flags().Set("output", filepath.Join(t.TempDir(), "out"))
 		if err := download.RunE(download, nil); err == nil {
 			t.Fatal("download failure returned nil")
+		}
+	})
+
+	t.Run("attachment download delegates a validated resource id", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"downloadUrl":"https://download.example.test/attachment"}`}}}
+		if err := runDocCoverageCommand(t, caller,
+			"media", "download",
+			"--node", "node",
+			"--resource-id", "123e4567-e89b-12d3-a456-426614174000",
+		); err != nil {
+			t.Fatalf("attachment download returned error: %v", err)
 		}
 	})
 
@@ -521,7 +533,7 @@ func TestCrossPlatformCoverageDocCreateUpdateAndBlockCommandEdges(t *testing.T) 
 	}
 
 	for _, value := range []string{"plain", "# Other\nbody", "# Name", "# **Name** ###\n\nbody"} {
-		_ = stripDuplicateTitle(value, "Name")
+		_ = StripDuplicateTitle(value, "Name")
 	}
 	for _, value := range []string{"", " Name ### ", "**Bold**", "__Under__ ~~Strike~~ `Code`"} {
 		_ = normalizeHeadingText(value)
@@ -683,7 +695,7 @@ func TestCrossPlatformCoverageDocExportImportCommandEdges(t *testing.T) {
 		{"failed empty", []scriptedToolStep{{text: `{"status":"failed"}`}}, false},
 	} {
 		t.Run("import get "+tc.name, func(t *testing.T) {
-			_ = run(t, tc.steps, tc.dry, "import", "get", "--task-id=task")
+			_ = run(t, tc.steps, tc.dry, "import", "get", "--task-id=task", "--workspace=workspace")
 		})
 	}
 }

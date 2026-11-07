@@ -1,0 +1,1309 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-task-delegation-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "title",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/title"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h1_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "subtitle",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/subtitle"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "coordination-title",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/coordinationTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h2_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "coordination-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/coordination"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/coordination/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/coordination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "coordination-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [
+            0
+          ],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "coordination-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/coordination/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "coordination-row",
+          "component": "Column",
+          "children": [
+            "coordination-input",
+            "coordination-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "coordination-items",
+          "component": "Column",
+          "children": [
+            "coordination-row"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "coordination-section",
+          "component": "Column",
+          "children": [
+            "coordination-title",
+            "coordination-items"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication-title",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/communicationTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h2_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "communication1-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/communication1"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/communication1/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/communication1"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "communication1-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "communication1-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication1/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication1-row",
+          "component": "Column",
+          "children": [
+            "communication1-input",
+            "communication1-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication2-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/communication2"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/communication2/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/communication2"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "communication2-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "communication2-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication2/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication2-row",
+          "component": "Column",
+          "children": [
+            "communication2-input",
+            "communication2-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication3-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/communication3"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/communication3/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/communication3"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "communication3-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [
+            0
+          ],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "communication3-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication3/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication3-row",
+          "component": "Column",
+          "children": [
+            "communication3-input",
+            "communication3-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication4-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/communication4"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/communication4/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/communication4"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "communication4-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "communication4-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication4/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication4-row",
+          "component": "Column",
+          "children": [
+            "communication4-input",
+            "communication4-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication5-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/communication5"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/communication5/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/communication5"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "communication5-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "communication5-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication5/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication5-row",
+          "component": "Column",
+          "children": [
+            "communication5-input",
+            "communication5-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication-items",
+          "component": "Column",
+          "children": [
+            "communication1-row",
+            "communication2-row",
+            "communication3-row",
+            "communication4-row",
+            "communication5-row"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "communication-section",
+          "component": "Column",
+          "children": [
+            "communication-title",
+            "communication-items"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-title",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/preparationTitle"
+          },
+          "maxLine": 100,
+          "bold": true,
+          "sizeToken": "common_h2_text_style__font_size",
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "preparation1-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/preparation1"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/preparation1/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/preparation1"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "preparation1-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [
+            0
+          ],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "preparation1-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/preparation1/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "preparation1-row",
+          "component": "Column",
+          "children": [
+            "preparation1-input",
+            "preparation1-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation2-input",
+          "component": "CheckboxListMulti",
+          "value": {
+            "path": "/form/preparation2"
+          },
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_select",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "taskId": {
+                  "path": "/delegation/tasks/preparation2/id"
+                },
+                "selected": {
+                  "call": "required",
+                  "args": {
+                    "value": {
+                      "path": "/form/preparation2"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "children": {
+            "componentId": "preparation2-option-label",
+            "path": "/ui/taskRow"
+          },
+          "selectedIndexes": [],
+          "contentCheckable": true,
+          "size": "middle"
+        },
+        {
+          "id": "preparation2-readonly",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/preparation2/label"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "preparation2-row",
+          "component": "Column",
+          "children": [
+            "preparation2-input",
+            "preparation2-readonly-row"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-items",
+          "component": "Column",
+          "children": [
+            "preparation1-row",
+            "preparation2-row"
+          ],
+          "gap": 8,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "preparation-section",
+          "component": "Column",
+          "children": [
+            "preparation-title",
+            "preparation-items"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "skip-label",
+          "component": "Text",
+          "text": "暂时不用",
+          "maxLine": 10,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "skip",
+          "component": "Button",
+          "child": "skip-label",
+          "variant": "default",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_skip",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "form": {
+                  "coordination": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/coordination"
+                      }
+                    }
+                  },
+                  "communication1": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication1"
+                      }
+                    }
+                  },
+                  "communication2": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication2"
+                      }
+                    }
+                  },
+                  "communication3": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication3"
+                      }
+                    }
+                  },
+                  "communication4": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication4"
+                      }
+                    }
+                  },
+                  "communication5": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication5"
+                      }
+                    }
+                  },
+                  "preparation1": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/preparation1"
+                      }
+                    }
+                  },
+                  "preparation2": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/preparation2"
+                      }
+                    }
+                  }
+                },
+                "delegation": {
+                  "path": "/delegation"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "submit-label",
+          "component": "Text",
+          "text": "交给你办",
+          "maxLine": 10,
+          "colorToken": "common_link_color"
+        },
+        {
+          "id": "submit",
+          "component": "Button",
+          "child": "submit-label",
+          "variant": "primary",
+          "weight": 1,
+          "visible": {
+            "path": "/ui/canOperate"
+          },
+          "action": {
+            "event": {
+              "name": "task_delegation_submit",
+              "context": {
+                "businessId": {
+                  "path": "/identity/businessId"
+                },
+                "requestId": {
+                  "path": "/delegation/requestId"
+                },
+                "form": {
+                  "coordination": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/coordination"
+                      }
+                    }
+                  },
+                  "communication1": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication1"
+                      }
+                    }
+                  },
+                  "communication2": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication2"
+                      }
+                    }
+                  },
+                  "communication3": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication3"
+                      }
+                    }
+                  },
+                  "communication4": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication4"
+                      }
+                    }
+                  },
+                  "communication5": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/communication5"
+                      }
+                    }
+                  },
+                  "preparation1": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/preparation1"
+                      }
+                    }
+                  },
+                  "preparation2": {
+                    "call": "required",
+                    "args": {
+                      "value": {
+                        "path": "/form/preparation2"
+                      }
+                    }
+                  }
+                },
+                "delegation": {
+                  "path": "/delegation"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "footer",
+          "component": "Row",
+          "children": [
+            "skip",
+            "submit"
+          ],
+          "gap": 10,
+          "align": "center",
+          "padding": 0,
+          "visible": {
+            "path": "/ui/canOperate"
+          }
+        },
+        {
+          "id": "status",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/message"
+          },
+          "maxLine": 100,
+          "bold": false,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level2_base_color",
+          "visible": {
+            "call": "ne",
+            "args": {
+              "a": {
+                "path": "/delegation/message"
+              },
+              "b": ""
+            }
+          }
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "title",
+            "subtitle",
+            "coordination-section",
+            "communication-section",
+            "preparation-section",
+            "footer",
+            "status"
+          ],
+          "gap": 16,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "coordination-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/coordination/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "coordination-readonly-row",
+          "children": [
+            "coordination-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication1-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication1/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "communication1-readonly-row",
+          "children": [
+            "communication1-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication2-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication2/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "communication2-readonly-row",
+          "children": [
+            "communication2-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication3-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication3/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "communication3-readonly-row",
+          "children": [
+            "communication3-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication4-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication4/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "communication4-readonly-row",
+          "children": [
+            "communication4-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "communication5-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/communication5/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "communication5-readonly-row",
+          "children": [
+            "communication5-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "preparation1-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/preparation1/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "preparation1-readonly-row",
+          "children": [
+            "preparation1-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        },
+        {
+          "id": "preparation2-option-label",
+          "component": "Text",
+          "text": {
+            "path": "/delegation/tasks/preparation2/label"
+          },
+          "maxLine": 100,
+          "sizeToken": "common_body_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "weight": 1
+        },
+        {
+          "component": "Column",
+          "gap": 0,
+          "align": "stretch",
+          "padding": 12,
+          "cornerRadius": 12,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color",
+          "borderWidth": 1,
+          "id": "preparation2-readonly-row",
+          "children": [
+            "preparation2-readonly"
+          ],
+          "visible": {
+            "call": "not",
+            "args": {
+              "value": {
+                "path": "/ui/canOperate"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-task-delegation-card-a2ui",
+      "path": "/",
+      "value": {
+        "identity": {
+          "businessId": "demo-delegation-20261014"
+        },
+        "delegation": {
+          "requestId": "demo-request-20261014",
+          "title": "哪些事交给我？",
+          "subtitle": "勾选需要的事项，我来一起准备",
+          "coordinationTitle": "会议协调",
+          "communicationTitle": "关键沟通",
+          "preparationTitle": "会前准备",
+          "tasks": {
+            "coordination": {
+              "id": "demo-task-coordination",
+              "label": "协调 15:00 的会议冲突"
+            },
+            "communication1": {
+              "id": "demo-task-communication1",
+              "label": "用户甲、用户乙：内容安全测试入口"
+            },
+            "communication2": {
+              "id": "demo-task-communication2",
+              "label": "用户丙、用户乙：任务能否中止"
+            },
+            "communication3": {
+              "id": "demo-task-communication3",
+              "label": "用户丁：专项汇报分工"
+            },
+            "communication4": {
+              "id": "demo-task-communication4",
+              "label": "用户丙：领用页素材"
+            },
+            "communication5": {
+              "id": "demo-task-communication5",
+              "label": "用户戊：资料页体验优化二期"
+            },
+            "preparation1": {
+              "id": "demo-task-preparation1",
+              "label": "准备与客户乙技术同学建群"
+            },
+            "preparation2": {
+              "id": "demo-task-preparation2",
+              "label": "客户甲会前确认审批问题修复日期"
+            }
+          },
+          "status": "pending",
+          "message": ""
+        },
+        "form": {
+          "coordination": [
+            0
+          ],
+          "communication1": [],
+          "communication2": [],
+          "communication3": [
+            0
+          ],
+          "communication4": [],
+          "communication5": [],
+          "preparation1": [
+            0
+          ],
+          "preparation2": []
+        },
+        "ui": {
+          "canOperate": true,
+          "taskRow": [
+            {}
+          ]
+        }
+      }
+    }
+  }
+]

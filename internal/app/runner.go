@@ -28,11 +28,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -65,7 +68,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
+		Description: "业务 Agent 名称；用于 x-dingtalk-agent 请求头和四个文档编辑工具的 extraInfo.agentName（trim 后缺省 unknown），与 claw-type/host-owned PAT 判定无关",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -123,15 +126,6 @@ func logHostOwnedPATDecisionOnce() {
 }
 
 func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
-	// Ensure DWS_CLIENT_ID env is populated from persisted config before
-	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
-	// where no env var has been inherited from a parent process.
-	if os.Getenv("DWS_CLIENT_ID") == "" {
-		if cid := authpkg.ClientID(); cid != "" {
-			_ = os.Setenv("DWS_CLIENT_ID", cid)
-		}
-	}
-
 	var httpClient *http.Client
 	if flags != nil && flags.Timeout > 0 {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
@@ -158,11 +152,165 @@ type runtimeRunner struct {
 	agentMetadata      *agentMetadataSnapshot
 }
 
+type scopedAuthTokenKeyType struct{}
+
+var scopedAuthTokenKey = scopedAuthTokenKeyType{}
+
+func scopedAuthToken(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	token, ok := ctx.Value(scopedAuthTokenKey).(string)
+	token = strings.TrimSpace(token)
+	return token, ok && token != ""
+}
+
+// RunWithToken executes one helper invocation with an in-memory access token.
+// It bypasses process-wide Profile selection and never persists the token.
+func (r *runtimeRunner) RunWithToken(ctx context.Context, invocation executor.Invocation, token string) (executor.Result, error) {
+	if r == nil || strings.TrimSpace(token) == "" {
+		return executor.Result{}, fmt.Errorf("request-scoped token runner is not configured")
+	}
+	if invocation.DryRun || (r.globalFlags != nil && r.globalFlags.DryRun) {
+		invocation.DryRun = true
+		return (executor.EchoRunner{}).Run(ctx, invocation)
+	}
+	if r.transport == nil {
+		return executor.Result{}, fmt.Errorf("request-scoped token transport is not configured")
+	}
+	clone := *r
+	clone.transport = r.transport.WithAuth(r.transport.AuthToken, r.transport.ExtraHeaders)
+	// 设备绑定写请求的结果可能在响应丢失时已提交；由 connect 的持久回执
+	// 决定是否恢复，不能让 HTTP 层在一次调用内自动重放。
+	if invocation.CanonicalProduct == "deap-dev" {
+		switch invocation.Tool {
+		case "bind_local_agent", "unbind_local_agent", "rebind_local_agent":
+			clone.transport = clone.transport.WithMaxRetries(0).WithRedirectsDisabled()
+		}
+	}
+	ctx = context.WithValue(ctx, scopedAuthTokenKey, strings.TrimSpace(token))
+	return clone.runSingle(ctx, invocation, false)
+}
+
+var runnerListProductTools = (*runtimeRunner).listProductTools
+
+// ResolveToolProduct discovers the exact tool before dispatch and returns the
+// first compatible product in caller-supplied preference order. Discovery is
+// read-only; callers must execute the subsequent tools/call only once.
+func (r *runtimeRunner) ResolveToolProduct(ctx context.Context, productIDs []string, toolName string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return "", apperrors.NewValidation("MCP tool name is required for capability routing")
+	}
+	if r != nil && r.globalFlags != nil && r.globalFlags.Mock {
+		if len(productIDs) == 0 {
+			return "", apperrors.NewDiscovery(fmt.Sprintf("no MCP product candidates for tool %q", toolName))
+		}
+		return productIDs[0], nil
+	}
+	// Tool capabilities are server-scoped, not account-scoped. For a
+	// multi-profile invocation, discover once with the first resolved profile;
+	// the subsequent runner still executes exactly once per selected profile.
+	rawProfile := authpkg.RuntimeProfile()
+	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), rawProfile)
+	if err != nil {
+		return "", apperrors.NewValidation(err.Error())
+	}
+	discoveryProfile := rawProfile
+	if multi {
+		if len(selections) == 0 {
+			return "", apperrors.NewValidation("multi-profile capability routing has no resolved profile")
+		}
+		discoveryProfile = profileRuntimeSelector(selections[0].Profile, selections[0].Selector)
+	}
+	checked := make([]string, 0, len(productIDs))
+	discoveryFailures := make([]string, 0, len(productIDs))
+	for _, productID := range productIDs {
+		productID = strings.TrimSpace(productID)
+		if productID == "" {
+			continue
+		}
+		checked = append(checked, productID)
+		tools, err := runnerListProductTools(r, ctx, productID, toolName, discoveryProfile)
+		if err != nil {
+			var typed *apperrors.Error
+			if errors.As(err, &typed) && typed.Reason == "endpoint_not_resolved" {
+				continue
+			}
+			discoveryFailures = append(discoveryFailures, fmt.Sprintf("%s: %v", productID, err))
+			continue
+		}
+		for _, tool := range tools {
+			if tool.Name == toolName {
+				return productID, nil
+			}
+		}
+	}
+	if len(discoveryFailures) > 0 {
+		return "", apperrors.NewDiscovery(
+			fmt.Sprintf("cannot establish a compatible route for tool %q after tools/list failures: %s", toolName, strings.Join(discoveryFailures, "; ")),
+			apperrors.WithOperation("tools/list"),
+			apperrors.WithReason("mcp_tool_discovery_failed"),
+		)
+	}
+	return "", apperrors.NewDiscovery(
+		fmt.Sprintf("tool %q is not exposed by compatible MCP products %v", toolName, checked),
+		apperrors.WithOperation("tools/list"),
+		apperrors.WithReason("mcp_tool_not_found"),
+	)
+}
+
+// SupportsMCPTool distinguishes a confirmed missing tool from failed discovery.
+// It reuses authenticated, paginated tools/list routing and never submits a write.
+func (r *runtimeRunner) SupportsMCPTool(ctx context.Context, product, tool string) (bool, error) {
+	_, err := r.ResolveToolProduct(ctx, []string{product}, tool)
+	if err == nil {
+		return true, nil
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) && typed.Reason == "mcp_tool_not_found" {
+		return false, nil
+	}
+	return false, err
+}
+
+func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
+	if r == nil || r.transport == nil {
+		return nil, fmt.Errorf("runtime transport is not configured")
+	}
+	// Resolve by product only. Tool-level fallback would make a missing helper
+	// product appear to own a tool merely because another product registered it.
+	endpoint, ok := directRuntimeEndpoint(productID, "")
+	if !ok {
+		return nil, endpointNotResolvedError(productID, toolName, "capability discovery endpoint is unavailable")
+	}
+	snapshot, err := runnerResolveAuthSnapshotForProfile(r, ctx, profile)
+	if err != nil {
+		return nil, tokenResolutionError(err)
+	}
+	if !hasDirectRuntimeEndpointOverride(productID) && isDingTalkMCPGatewayEndpoint(endpoint) &&
+		(snapshot.LoginRegionKnown || authpkg.MCPBaseURLOverride() != "") {
+		endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, snapshot.LoginRegion)
+	}
+	invocation := executor.NewHelperInvocation("overlay."+productID+".tools-list", productID, toolName, nil)
+	headers := resolveMCPRequestHeadersForInvocation(invocation)
+	client := publishedmcp.New(r.transport, snapshot.AccessToken, headers)
+	tools, err := client.Tools(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return tools.Tools, nil
+}
+
 var (
 	runnerResolveMultiProfileSelections = resolveMultiProfileSelections
 	runnerResolveProfile                = authpkg.ResolveProfile
 	runnerGetCachedRuntimeToken         = getCachedRuntimeToken
 	runnerResolveAuthSnapshot           = (*runtimeRunner).resolveAuthSnapshot
+	runnerResolveAuthSnapshotForProfile = (*runtimeRunner).resolveAuthSnapshotForProfile
 	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
 	runnerCallTool                      = (*transport.Client).CallTool
 	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
@@ -186,6 +334,7 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	if r == nil {
 		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
 	}
+	ctx = r.withDelegatorContext(ctx)
 	// Emit the one-shot host-owned PAT decision log. Placed here (not in
 	// the constructor) so it fires AFTER PersistentPreRunE has configured
 	// slog level per --debug / --verbose. The Once guard makes repeat
@@ -198,6 +347,10 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		return executor.Result{}, apperrors.NewValidation(err.Error())
 	}
 	if multi {
+		// Credential commands bind one Base to one authenticated identity.
+		if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+			return executor.Result{}, aitableprotocol.SQLSheetKeyProfileError()
+		}
 		return r.runMultiProfile(ctx, invocation, selections)
 	}
 	if strings.TrimSpace(rawProfile) != "" {
@@ -428,8 +581,8 @@ func multiProfileErrorPayload(err error) map[string]any {
 		if typed.Hint != "" {
 			payload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			payload["actions"] = append([]string(nil), typed.Actions...)
+		if actions := apperrors.RecoveryActions(err); len(actions) > 0 {
+			payload["actions"] = actions
 		}
 		if len(typed.Details) > 0 {
 			payload["details"] = typed.Details
@@ -498,6 +651,7 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	ctx = r.withDelegatorContext(ctx)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
 		return r.executeStdioInvocationAtEndpoint(ctx, endpoint, invocation)
@@ -515,15 +669,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	invokeStart := time.Now()
 	execID := generateExecutionID()
-	r.transport.ExecutionId = execID
+	// Each invocation owns tracing/logging state. Independent reads may share
+	// the HTTP connection pool, but must never race on the runner's base client.
+	invocationTransport := r.transport.WithExecutionId(execID)
 
 	// Lazy bind FileLogger: it may be nil at construction time because
 	// configureLogLevel runs later in PersistentPreRunE.
-	if r.transport.FileLogger == nil {
-		r.transport.FileLogger = FileLoggerInstance()
+	if invocationTransport.FileLogger == nil {
+		invocationTransport.FileLogger = FileLoggerInstance()
 	}
 
-	fl := r.transport.FileLogger
+	fl := invocationTransport.FileLogger
 
 	defer func() {
 		var errCat, errReason string
@@ -540,16 +696,26 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(ctx, auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
 	// Check whether this product belongs to an HTTP plugin. Every accepted
 	// plugin has an ownership record; credentials within that record are
 	// optional. Plugin requests never fall back to the default DingTalk OAuth.
 	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
+	requestToken, hasRequestToken := scopedAuthToken(ctx)
+	nonRefreshableAuth := hasPluginAuth || hasRequestToken
 
 	authToken := ""
-	if hasPluginAuth {
+	if hasRequestToken {
+		authToken = requestToken
+		// Login enriches identity before the new profile and MCP URL are saved.
+		// Apply its temporary endpoint without resolving the previous profile.
+		if !hasPluginAuth && !hasDirectRuntimeEndpointOverride(invocation.CanonicalProduct) &&
+			isDingTalkMCPGatewayEndpoint(endpoint) && authpkg.MCPBaseURLOverride() != "" {
+			endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, authpkg.LoginRegionDefault)
+		}
+	} else if hasPluginAuth {
 		authToken = pluginAuth.Token
 	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
 		snapshot, tokenErr := runnerResolveAuthSnapshot(r, ctx)
@@ -611,7 +777,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	// Preserve a final execution-boundary guard even though the built-in token
 	// resolver normally returns either a non-empty token or an error. HTTP
 	// plugins are ownership-scoped separately and may intentionally be anonymous.
-	if !hasPluginAuth && strings.TrimSpace(authToken) == "" {
+	if !nonRefreshableAuth && strings.TrimSpace(authToken) == "" {
 		return executor.Result{}, apperrors.NewAuth(
 			"未登录，请先执行 dws auth login",
 			apperrors.WithReason("not_authenticated"),
@@ -621,22 +787,24 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	}
 
 	var tc *transport.Client
-	if hasPluginAuth {
+	if hasPluginAuth && !hasRequestToken {
 		// Plugin ownership is authoritative even when the plugin is anonymous.
 		// Copy and sanitize manifest headers so plugins cannot opt themselves into
 		// DWS-owned Agent metadata by declaring the reserved names directly.
-		tc = r.transport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
+		tc = invocationTransport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
 		// Default path: use DingTalk OAuth token with identity headers. Agent
 		// metadata is resolved exactly once per invocation and is excluded from
 		// helper-only service-discovery requests.
 		if r.agentMetadata != nil {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
 		} else {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
 		}
 	}
+
+	tc.ExtraHeaders = applyDelegatorHeaders(ctx, tc.ExtraHeaders, endpoint, invocation, hasPluginAuth || hasRequestToken)
 
 	callCtx := ctx
 	if r.globalFlags != nil && r.globalFlags.Timeout > 0 {
@@ -647,12 +815,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	if err := runnerPreflightDocDownload(r, callCtx, tc, endpoint, invocation); err != nil {
 		if patCheck := apperrors.AsPatAuthCheckError(err); patCheck != nil {
+			if hasRequestToken {
+				return executor.Result{}, patCheck
+			}
 			if IsPatRetrying(ctx) {
 				return executor.Result{}, patCheck
 			}
 			return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 		}
-		if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, err, hasPluginAuth); handled {
+		if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, err, nonRefreshableAuth); handled {
 			if retryErr != nil {
 				runnerCaptureRuntimeFailure(invocation, err, retryErr)
 			}
@@ -662,14 +833,33 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return executor.Result{}, err
 	}
 
+	// Do not persist credential response bodies in transport diagnostics.
+	if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+		tc.FileLogger = nil
+		tc.SnapshotRecorder = nil
+	}
 	callStart := time.Now()
-	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
-	RecordTiming(ctx, "mcp_call", time.Since(callStart))
+	// tools/call can mutate remote state even when the gateway returns an error.
+	// Only callers with a reviewed read/reconciliation policy may replay it;
+	// keep discovery and the shared transport's retry budget unchanged.
+	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
+	traceWhiteboardTransportResponse(invocation, callResult, err)
+	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
+	// A sent credential request must not enter authentication replay paths.
+	if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+		if err != nil {
+			return executor.Result{}, aitableprotocol.SQLSheetKeyFailure(invocation.Tool, "")
+		}
+		if responseErr := sqlSheetKeyToolResultError(invocation.Tool, callResult); responseErr != nil {
+			return executor.Result{}, responseErr
+		}
+		return r.sqlSheetKeyResult(endpoint, invocation, callResult.Content)
+	}
 	if err != nil {
-		if isRefreshableTransportAuthError(err) {
+		if !hasRequestToken && isRefreshableTransportAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
 				if overrideErr := fn(defaultConfigDir(), err); overrideErr != nil {
-					if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, overrideErr, hasPluginAuth); handled {
+					if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, overrideErr, nonRefreshableAuth); handled {
 						if retryErr != nil {
 							runnerCaptureRuntimeFailure(invocation, err, retryErr)
 						}
@@ -682,6 +872,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}
 		// PAT scope error: offer human-readable output and retry after authorization
 		if isPatScopeError(err) {
+			if hasRequestToken {
+				return executor.Result{}, err
+			}
 			scopeErr := extractPatScopeError(err)
 			runnerCaptureRuntimeFailure(invocation, err, err)
 			return runnerRetryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
@@ -694,12 +887,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if fn := edition.Get().ClassifyToolResult; fn != nil {
 		if editionErr := fn(callResult.Content); editionErr != nil {
 			if patCheck := apperrors.AsPatAuthCheckError(editionErr); patCheck != nil {
+				if hasRequestToken {
+					return executor.Result{}, patCheck
+				}
 				if IsPatRetrying(ctx) {
 					return executor.Result{}, patCheck // already retried once, don't loop
 				}
 				return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 			}
-			if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, editionErr, hasPluginAuth); handled {
+			if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, editionErr, nonRefreshableAuth); handled {
 				if retryErr != nil {
 					runnerCaptureRuntimeFailure(invocation, editionErr, retryErr)
 				}
@@ -711,10 +907,33 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	// ---- Structured PAT auth check (open-source fallback) ----
 	if patCheck := apperrors.ClassifyPatAuthCheck(callResult.Content); patCheck != nil {
+		if hasRequestToken {
+			return executor.Result{}, patCheck
+		}
 		if IsPatRetrying(ctx) {
 			return executor.Result{}, patCheck // already retried once, don't loop
 		}
 		return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
+	}
+
+	// Keep the two field-capability read contracts before generic isError handling
+	// discards nested error.code/retryable. Gateway and PAT classifiers stay first.
+	if readErr := aitableprotocol.FieldCapabilityReadError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); readErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(readErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(readErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, readErr, readErr)
+		if isPatScopeError(readErr) && !hasRequestToken {
+			return runnerRetryWithPatAuthRetry(ctx, r, invocation, extractPatScopeError(readErr), defaultConfigDir(), os.Stderr)
+		}
+		return executor.Result{}, readErr
+	}
+	if mutationErr := aitableprotocol.FieldGroupMutationError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); mutationErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(mutationErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(mutationErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, mutationErr, mutationErr)
+		return executor.Result{}, mutationErr
 	}
 
 	if callResult.IsError {
@@ -724,7 +943,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// patterns (PAT permission, gateway-auth) before generic handling.
 		if classify := edition.Get().ClassifyToolResult; classify != nil {
 			if hookErr := classify(callResult.Content); hookErr != nil {
-				if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, hookErr, hasPluginAuth); handled {
+				if result, retryErr, handled := r.retryAuthRefreshRequired(ctx, endpoint, invocation, authToken, hookErr, nonRefreshableAuth); handled {
 					if retryErr != nil {
 						runnerCaptureRuntimeFailure(invocation, hookErr, retryErr)
 					}
@@ -740,11 +959,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"mcp_tool_error",
 			"MCP tool returned a business error; check tool parameters and refer to skill documentation.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
 		// PAT scope error in business response: offer human-readable output and retry
 		if isPatScopeError(mcpErr) {
+			if hasRequestToken {
+				return executor.Result{}, mcpErr
+			}
 			scopeErr := extractPatScopeError(mcpErr)
 			runnerCaptureRuntimeFailure(invocation, mcpErr, mcpErr)
 			return runnerRetryWithPatAuthRetry(ctx, r, invocation, scopeErr, defaultConfigDir(), os.Stderr)
@@ -765,9 +989,11 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"business_error",
 			"The API returned a business-level error. Check required parameters and values.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
 		return executor.Result{}, classifiedErr
 	}
 
@@ -854,6 +1080,7 @@ func (r *runtimeRunner) executeStdioInvocationAtEndpoint(
 	invocation.Params = normalizedParams
 
 	callResult, err := runnerStdioCallTool(client, callCtx, invocation.Tool, invocation.Params)
+	traceWhiteboardTransportResponse(invocation, callResult, err)
 	if err != nil {
 		return executor.Result{}, apperrors.NewAPI(
 			fmt.Sprintf("stdio call failed: %v", err),
@@ -890,11 +1117,15 @@ func (r *runtimeRunner) resolveAuthToken(ctx context.Context) (string, error) {
 }
 
 func (r *runtimeRunner) resolveAuthSnapshot(ctx context.Context) (AccessTokenSnapshot, error) {
+	return r.resolveAuthSnapshotForProfile(ctx, authpkg.RuntimeProfile())
+}
+
+func (r *runtimeRunner) resolveAuthSnapshotForProfile(ctx context.Context, profile string) (AccessTokenSnapshot, error) {
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token
 	}
-	return resolveRuntimeAuthSnapshot(ctx, explicitToken)
+	return runtimeTokenManager.GetForProfile(ctx, defaultConfigDir(), explicitToken, profile)
 }
 
 func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
@@ -913,7 +1144,7 @@ func resolveRuntimeAuthSnapshot(ctx context.Context, explicitToken string) (Acce
 // cache itself lives exclusively in TokenManager.
 func getCachedRuntimeToken(ctx context.Context) (string, error) {
 	loadStart := time.Now()
-	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	defer func() { RecordNestedTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
 	return resolveRuntimeAuthToken(ctx, "")
 }
 
@@ -957,7 +1188,24 @@ func newRuntimeContentScanner() safety.Scanner {
 	if !runtimeFlagEnabled(os.Getenv(runtimeContentScanEnv), true) {
 		return nil
 	}
-	return safety.NewContentScanner()
+	return &lazyRuntimeContentScanner{}
+}
+
+// lazyRuntimeContentScanner keeps regex compilation out of command-tree
+// assembly. Help, version, dry-run and local utilities never scan a backend
+// response; the first real response initializes the same safety scanner before
+// inspecting any content.
+type lazyRuntimeContentScanner struct {
+	once    sync.Once
+	scanner *safety.ContentScanner
+}
+
+func (s *lazyRuntimeContentScanner) ScanPayload(payload any) safety.Report {
+	if s == nil {
+		return safety.Report{Scanned: false}
+	}
+	s.once.Do(func() { s.scanner = safety.NewContentScanner() })
+	return s.scanner.ScanPayload(payload)
 }
 
 func (r *runtimeRunner) scanContent(content map[string]any) (safety.Report, error) {
@@ -993,8 +1241,12 @@ func isAuthError(err error) bool {
 }
 
 func productEndpointOverride(productID string) (string, bool) {
-	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(productID), "-", "_")) + "_MCP_URL"
+	productID = strings.TrimSpace(productID)
+	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(productID, "-", "_")) + "_MCP_URL"
 	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" && productID == "doc" {
+		value = strings.TrimSpace(buildDocMCPEndpoint)
+	}
 	if value == "" {
 		return "", false
 	}
@@ -1099,6 +1351,7 @@ func resolveIdentityHeaders() map[string]string {
 	// every case variant potentially supplied by an edition or credential hook
 	// so shared consumers such as A2A cannot inherit them.
 	removeAgentMetadataHeaders(headers)
+	requestmeta.RemoveDelegatorHeaders(headers)
 	return headers
 }
 

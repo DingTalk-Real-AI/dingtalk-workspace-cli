@@ -97,6 +97,41 @@ func TestCallToolRequestFailureUsesAPIClassification(t *testing.T) {
 	if strings.Contains(actions, "internal/syncdata") || strings.Contains(actions, "sync-oss") {
 		t.Fatalf("runtime network failure contains discovery-only actions: %q", actions)
 	}
+	if !strings.Contains(actions, apperrors.DoctorCommand) {
+		t.Fatalf("runtime network failure has no doctor action: %q", actions)
+	}
+}
+
+func TestHTTPAndRPCRecoveryGuidanceRoutesDoctorSelectively(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantDoctor bool
+	}{
+		{name: "HTTP unauthorized", err: httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusUnauthorized, "", ""), wantDoctor: true},
+		{name: "HTTP forbidden", err: httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusForbidden, "", "")},
+		{name: "HTTP bad request", err: httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusBadRequest, "", "")},
+		{name: "HTTP upstream failure", err: httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusServiceUnavailable, "", "")},
+		{name: "RPC unauthorized", err: jsonrpcEnvelopeError("tools/call", &RPCError{Code: http.StatusUnauthorized, Message: "unauthorized"}, "", ""), wantDoctor: true},
+		{name: "RPC forbidden", err: jsonrpcEnvelopeError("tools/call", &RPCError{Code: http.StatusForbidden, Message: "forbidden"}, "", "")},
+		{name: "RPC invalid params", err: jsonrpcEnvelopeError("tools/call", &RPCError{Code: -32602, Message: "invalid params"}, "", "")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actions := strings.Join(apperrors.RecoveryActions(tt.err), "\n")
+			if got := strings.Contains(actions, apperrors.DoctorCommand); got != tt.wantDoctor {
+				t.Fatalf("doctor action present = %t, want %t; actions=%q", got, tt.wantDoctor, actions)
+			}
+		})
+	}
+
+	var forbidden *apperrors.Error
+	if err := jsonrpcEnvelopeError("tools/call", &RPCError{Code: http.StatusForbidden, Message: "forbidden"}, "", ""); !errors.As(err, &forbidden) || forbidden.Reason != "rpc_forbidden" {
+		t.Fatalf("RPC forbidden classification = %#v, want stable rpc_forbidden reason", forbidden)
+	}
 }
 
 func TestCallToolRetryCancellationUsesAPIClassification(t *testing.T) {

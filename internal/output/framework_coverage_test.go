@@ -19,6 +19,7 @@ type forgedResult struct {
 
 func (r forgedResult) Outcome() Outcome    { return r.env.Outcome }
 func (r forgedResult) ExitCode() int       { return r.exit }
+func (r forgedResult) Data() any           { return r.env.Data }
 func (r forgedResult) envelope() *Envelope { copy := r.env; return &copy }
 
 type cloneNode struct {
@@ -417,6 +418,20 @@ func TestFrameworkEmitterAndRolloutEdges(t *testing.T) {
 		}
 	}()
 	SetCommandRollout(&cobra.Command{Use: "bad"}, "bad")
+}
+
+func TestCrossPlatformCoverageFailureDiagnostics(t *testing.T) {
+	diag := &cobra.Command{Use: "diag"}
+	diag.Flags().String("format", "table", "")
+	var stderr bytes.Buffer
+	diag.SetErr(&stderr)
+	if _, _, err := emitResult(diag, Failure(&ErrorInfo{Type: "api", Message: "boom", TraceID: "trace-42", UpstreamCode: 456})); err != nil {
+		t.Fatalf("diagnostic failure write err=%v", err)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "Trace ID: trace-42") || !strings.Contains(out, "Server Code: 456") {
+		t.Fatalf("failure diagnostics missing: %q", out)
+	}
 }
 
 func TestFrameworkMCPAdapterErrors(t *testing.T) {

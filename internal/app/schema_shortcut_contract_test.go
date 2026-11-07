@@ -12,17 +12,229 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const (
-	publicShortcutCount = 417
+	// CLI acceleration adds nine public shortcuts beyond main's role/member
+	// commands; the deferred layout write is not part of the delivered surface.
+	publicShortcutCount = 496
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 455
+	schemaPublishedShortcutCount = 553
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 417
+	publiclyDeliveredShortcutCount = 496
 )
+
+func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
+	const path = "aitable +record-write-result"
+	full := executeShortcutSchemaQuery(t, "--cli-path", path)
+	compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+	result, ok := full["result"].(map[string]any)
+	if !ok || !schemaContractJSONEqual(result, compact["result"]) {
+		t.Fatalf("Result must reach both projections: full=%#v compact=%#v", full, compact)
+	}
+	if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) {
+		t.Fatalf("outcomes=%#v", result["outcomes"])
+	}
+	schema := result["data_schema"].(map[string]any)
+	branches := schema["oneOf"].([]any)
+	if len(branches) != 2 {
+		t.Fatalf("missing actual/preview branches: %#v", schema)
+	}
+	actual := branches[0].(map[string]any)
+	preview := branches[1].(map[string]any)
+	if !schemaContractJSONEqual(actual["required"], []string{"baseId", "tableId", "clientToken", "state", "recordIds"}) || !schemaContractJSONEqual(preview["required"], []string{"executed", "tool", "arguments"}) {
+		t.Fatalf("required fields=%#v", branches)
+	}
+	params := schemaContractMap(full["parameters"])
+	for name, property := range map[string]string{"base-id": "baseId", "table-id": "tableId", "client-token": "clientToken"} {
+		if params[name]["property"] != property || params[name]["required"] != true {
+			t.Fatalf("parameter %s=%#v", name, params[name])
+		}
+	}
+	root := NewRootCommand()
+	cmd, _, err := root.Find(strings.Fields(path))
+	if err != nil || !output.UsesUnifiedResult(cmd) {
+		t.Fatalf("Result published without unified runtime: %v", err)
+	}
+	if full["effect"] != "read" || full["confirmation"] != "not_required" || full["dry_run"].(map[string]any)["preview_kind"] != "request" {
+		t.Fatalf("unsafe contract: %#v", full)
+	}
+}
+
+func TestCrossPlatformCoverageAITableAdvancedPermissionResultReachesBothSchemaProjections(t *testing.T) {
+	for _, path := range []string{
+		"aitable advperm role-members-add",
+		"aitable advperm role-members-update",
+		"aitable advperm role-copy",
+		"aitable advperm role-query-user",
+		"aitable +role-members-add",
+		"aitable +role-members-update",
+		"aitable +role-copy",
+		"aitable +role-query-user",
+	} {
+		t.Run(path, func(t *testing.T) {
+			full := executeShortcutSchemaQuery(t, "--cli-path", path)
+			compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+			result, ok := full["result"].(map[string]any)
+			if !ok || !schemaContractJSONEqual(result, compact["result"]) {
+				t.Fatalf("Result must reach both projections: full=%#v compact=%#v", full, compact)
+			}
+			if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) || result["data_schema"] == nil {
+				t.Fatalf("incomplete unified Result: %#v", result)
+			}
+			if strings.Contains(path, " advperm ") {
+				wantRPC := map[string]string{
+					"role-members-add": "add_role_members", "role-members-update": "update_role_members",
+					"role-copy": "copy_role", "role-query-user": "query_user_roles",
+				}[strings.TrimPrefix(path, "aitable advperm ")]
+				ref := schemaInterfaceObject(full["interface_ref"])
+				if full["interface_mode"] != "mcp" || ref["product_id"] != "aitable" || ref["rpc_name"] != wantRPC {
+					t.Fatalf("atomic interface route = %v/%v, want aitable/%s", full["interface_mode"], ref, wantRPC)
+				}
+			} else if full["interface_mode"] != "composite" || full["interface_ref"] != nil {
+				t.Fatalf("shortcut composite interface changed: %#v", full["interface_ref"])
+			}
+			root := NewRootCommand()
+			cmd, _, err := root.Find(strings.Fields(path))
+			if err != nil || !output.UsesUnifiedResult(cmd) {
+				t.Fatalf("Result published without unified runtime: %v", err)
+			}
+			for projection, leaf := range map[string]map[string]any{"full": full, "compact": compact} {
+				t.Run(projection, func(t *testing.T) {
+					assertContains := func(text string, phrases ...string) {
+						t.Helper()
+						for _, phrase := range phrases {
+							if !strings.Contains(text, phrase) {
+								t.Errorf("missing %q in %s", phrase, text)
+							}
+						}
+					}
+					params := schemaContractMap(leaf["parameters"])
+					for _, name := range []string{"base-id", "role-id", "source-role-id", "default-role-id", "target-uid"} {
+						if param := params[name]; param != nil {
+							desc := schemaContractString(param["description"])
+							assertContains(desc, "String")
+							assertContains(cmd.Flags().Lookup(name).Usage, "String")
+							if name != "base-id" {
+								assertContains(desc, "long")
+							}
+							// The wire omits interface_type when it equals the CLI type.
+							if param["type"] != "string" || (param["interface_type"] != nil && param["interface_type"] != "string") {
+								t.Errorf("%s must remain a String parameter: %#v", name, param)
+							}
+						}
+					}
+					description := schemaContractString(leaf["description"])
+					switch {
+					case strings.Contains(path, "role-members-"):
+						assertContains(description, "管理员", "写后最新成员列表")
+						for _, text := range []string{schemaContractString(params["members"]["description"]), cmd.Flags().Lookup("members").Usage} {
+							assertContains(text, "JSON array", "200", "id 和 memberType 必须是非空 String", "uid（不是 userId）", "群填群 id", "部门填部门 id", "组织填 orgid", `"1"=群`, `"2"=用户`, `"3"=组织`, `"4"=部门`, `"5"=虚拟组`, `"6"=角色组`, `"8"=动态组`, "不能用 user/conv 或数字 2", "memberIdBelongOrgId", "JSON number", "Java Long 整数", "不加引号", "同文档组织可省略", "docOrgId", "跨组织")
+						}
+						if params["members"]["required"] != true {
+							t.Fatal("DWS members must remain required")
+						}
+						if projection == "full" && strings.Contains(path, "advperm") && params["members"]["interface_type"] != "array" {
+							t.Fatal("atomic members must declare the array interface type")
+						}
+						if strings.HasSuffix(path, "update") {
+							assertContains(schemaContractString(params["members"]["description"]), "非空全替换", "[]", "不接受 null")
+							if params["default-role-mode"]["required"] != true || params["default-role-id"]["required_when"] != "default-role-mode=1" {
+								t.Fatal("DWS default-role requirements were relaxed")
+							}
+						}
+						populated := false
+						for _, example := range schemaContractStringSlice(leaf["examples"]) {
+							argv, err := cli.ParseAgentExampleArgv(example)
+							if err != nil {
+								t.Fatal(err)
+							}
+							var members []map[string]any
+							if err := json.Unmarshal([]byte(schemaExampleFlagValue(argv, "members")), &members); err != nil {
+								t.Fatal(err)
+							}
+							for _, member := range members {
+								populated = true
+								if member["memberType"] != "2" || member["id"] != "<UID>" {
+									t.Errorf("example must use uid and String code: %#v", member)
+								}
+								if org, exists := member["memberIdBelongOrgId"]; exists && org != float64(123456) {
+									t.Errorf("example org must be a JSON number: %#v", org)
+								}
+							}
+						}
+						if !populated {
+							t.Fatal("member example must demonstrate the String code")
+						}
+					case strings.HasSuffix(path, "role-copy"):
+						assertContains(description, "roleType", "flowType", "subRoles", "不复制成员", "系统角色不可复制", "新角色完整配置")
+						assertContains(schemaContractString(params["name"]["description"]), "省略或空字符串", "源角色名 副本")
+						if strings.Contains(strings.Join(schemaContractStringSlice(leaf["avoid_when"]), " "), "成员 ID") {
+							t.Fatal("copy must not require member IDs")
+						}
+					case strings.HasSuffix(path, "role-query-user"):
+						assertContains(description, "enabled", "roles", "不含成员", "高级权限关闭时 roles 通常为空", "不替换调用身份")
+						assertContains(schemaContractString(params["target-uid"]["description"]), "可选", "省略或空字符串查询当前调用人", "不是 userId")
+						if params["target-uid"]["required"] == true {
+							t.Fatal("target uid must remain optional")
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAITableUpsertHelpForbidsWriteReplay(t *testing.T) {
+	root := NewRootCommand()
+	for _, path := range []string{"aitable record upsert", "aitable +record-upsert"} {
+		cmd, _, err := root.Find(strings.Fields(path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, phrase := range []string{"禁止重放整个 upsert", "即使使用同一 token", "创建分组", "独立读回更新分组"} {
+			if !strings.Contains(cmd.Long, phrase) {
+				t.Fatalf("%s help missing %q: %s", path, phrase, cmd.Long)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
+	for _, name := range []string{"+media-download", "+media-preview", "+resource-download", "+download-overwrite"} {
+		t.Run(name, func(t *testing.T) {
+			tool := executeShortcutSchemaQuery(t, "--cli-path", "doc "+name)
+			wantSafety := map[string]string{"effect": "read", "risk": "low", "confirmation": "not_required"}
+			if name == "+download-overwrite" {
+				wantSafety = map[string]string{"effect": "write", "risk": "medium", "confirmation": "user_required"}
+			}
+			for field, want := range wantSafety {
+				if got := schemaContractString(tool[field]); got != want {
+					t.Fatalf("%s final %s = %q, want %q", name, field, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocCreateMediaSafetyIsSeparateFromPlainCreate(t *testing.T) {
+	plain := executeShortcutSchemaQuery(t, "--cli-path", "doc +create")
+	if plain["confirmation"] != "not_required" || schemaContractMap(plain["parameters"])["media-files"] != nil {
+		t.Fatalf("plain create must keep its published contract without media upload: %#v", plain)
+	}
+	media := executeShortcutSchemaQuery(t, "--cli-path", "doc +create-with-media")
+	if media["confirmation"] != "user_required" || media["effect"] != "write" || media["result"] == nil {
+		t.Fatalf("media creation safety/result missing: %#v", media)
+	}
+	if schemaContractMap(media["parameters"])["media-files"]["required"] != true {
+		t.Fatal("media selection must be required")
+	}
+}
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
@@ -84,6 +296,24 @@ func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *tes
 	}
 }
 
+func TestDeliveryTodoReminderPreservesHistoricalConstraintBoundary(t *testing.T) {
+	tool := executeShortcutSchemaQuery(t, "--cli-path", "todo +reminder")
+	want := map[string][][]string{
+		"require_one_of":     {{"clear", "base-time"}},
+		"mutually_exclusive": {{"clear", "base-time"}},
+	}
+	if got := tool["constraints"]; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("todo +reminder constraints = %s, want %s", mustShortcutJSON(got), mustShortcutJSON(want))
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	for _, name := range []string{"base-time", "due-date-offset", "at"} {
+		description := schemaContractString(parameters[name]["description"])
+		if !strings.Contains(description, "无关时间参数兼容忽略") {
+			t.Fatalf("todo +reminder --%s compatibility boundary missing from final Schema: %q", name, description)
+		}
+	}
+}
+
 func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "chat +messages-read-status")
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
@@ -97,7 +327,6 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
 	}
 	wantMessagesConstraints := map[string]any{
-		"require_one_of":     [][]string{{"conversation-id", "group", "id"}},
 		"mutually_exclusive": [][]string{{"conversation-id", "group", "id"}},
 	}
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
@@ -114,7 +343,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 220; got != want {
+	if got, want := int(product["count"].(float64)), 243; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -126,8 +355,8 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 			shortcutCount++
 		}
 	}
-	if shortcutCount != 98 {
-		t.Fatalf("schema chat shortcut summaries = %d, want 98", shortcutCount)
+	if shortcutCount != 102 {
+		t.Fatalf("schema chat shortcut summaries = %d, want 102", shortcutCount)
 	}
 	for _, cliPath := range missingChatCatalogCoveragePaths() {
 		if summaryByCLIPath[cliPath] == nil {
@@ -162,6 +391,7 @@ func TestChatPersonalEmotionSchemaDeclaresUnpinnedIMAdapter(t *testing.T) {
 			cliPath: "chat emotion favorite",
 			params: map[string]string{
 				"media-id":               "mediaId",
+				"file-path":              "",
 				"name":                   "name",
 				"source-conversation-id": "sourceConversationId",
 				"source-message-id":      "sourceMessageId",
@@ -233,6 +463,24 @@ func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
+	}
+}
+
 func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
 	checked := 0
@@ -271,6 +519,60 @@ func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
 	}
 }
 
+func TestAllShortcutsAITableDatasourceExamplesSourceConfigHasRequiredMembers(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	requiredSourceConfigMembers := []string{"processCode", "name", "iconUrl", "url"}
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "aitable" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		if !strings.HasPrefix(declared.Command, "+datasource-") {
+			continue
+		}
+		if declared.Command != "+datasource-create" && declared.Command != "+datasource-update" && declared.Command != "+datasource-get-fields" {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			if !strings.Contains(example, "--source-config") {
+				continue
+			}
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			sourceConfig := schemaExampleFlagValue(argv, "source-config")
+			if sourceConfig == "" {
+				t.Errorf("%s example %q contains --source-config but has no value", canonical, example)
+				continue
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal([]byte(sourceConfig), &cfg); err != nil {
+				t.Errorf("%s example %q has invalid source-config JSON: %v", canonical, example, err)
+				continue
+			}
+			for _, member := range requiredSourceConfigMembers {
+				if _, ok := cfg[member]; !ok {
+					t.Errorf("%s example %q source-config is missing required member %q", canonical, example, member)
+				}
+			}
+		}
+	}
+	if checked != 3 {
+		t.Fatalf("checked aitable datasource source-config examples = %d, want 3", checked)
+	}
+}
+
 func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 	for _, argument := range argv {
 		for _, name := range names {
@@ -280,6 +582,25 @@ func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func schemaExampleFlagValue(argv []string, name string) string {
+	prefix := "--" + name + "="
+	for _, argument := range argv {
+		if argument == "--"+name {
+			continue
+		}
+		if strings.HasPrefix(argument, prefix) {
+			return strings.TrimPrefix(argument, prefix)
+		}
+	}
+	// Value may be in the next argv entry: `--flag value` form.
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "--"+name {
+			return argv[i+1]
+		}
+	}
+	return ""
 }
 
 func assertSchemaSummarySafety(
@@ -412,7 +733,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 11; got != want {
+	if got, want := len(parameters), 17; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -423,15 +744,15 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	}
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
-		"block-id": "blockId", "after-block-id": "afterBlockId", "old": "old", "new": "new",
-		"expected-revision": "expectedRevision",
+		"block-id": "blockId", "after-block-id": "afterBlockId", "before-block-id": "beforeBlockId", "heading-level": "headingLevel", "old": "old", "new": "new",
+		"force": "force", "expected-revision": "expectedRevision", "start-block-id": "startBlockId", "end-block-id": "endBlockId", "src-block-ids": "srcBlockIds",
 	}
 	for name, want := range wantProperties {
 		if got := schemaContractString(parameters[name]["property"]); got != want {
 			t.Errorf("--%s property = %q, want %q", name, got, want)
 		}
 	}
-	for _, name := range []string{"content", "block-id", "after-block-id", "old", "new"} {
+	for _, name := range []string{"content", "block-id", "after-block-id", "before-block-id", "heading-level", "old", "new"} {
 		parameter := parameters[name]
 		if required, _ := parameter["required"].(bool); required {
 			t.Errorf("--%s required = true, want runtime custom validation", name)
@@ -439,6 +760,9 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		if got := schemaContractString(parameter["required_when"]); got != "" {
 			t.Errorf("--%s required_when = %q, want compatibility-safe custom validation", name, got)
 		}
+	}
+	if got, want := schemaContractStringSlice(parameters["command"]["enum"]), []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}; !schemaContractJSONEqual(got, want) {
+		t.Errorf("--command enum = %#v, want %#v", got, want)
 	}
 	if constraints, exists := leaf["constraints"]; exists && constraints != nil {
 		t.Fatalf("enum-discriminated requirements must not be mispublished as relationship constraints: %#v", constraints)
@@ -493,8 +817,34 @@ func executeShortcutSchemaQuery(t testing.TB, args ...string) map[string]any {
 }
 
 func shortcutSchemaCanonical(declared shortcut.Shortcut) string {
-	name := strings.ReplaceAll(strings.TrimPrefix(declared.Command, "+"), "-", "_")
-	return declared.Service + ".shortcut_" + name
+	// A CLI rename need not change the stable Schema identity. Read the
+	// declaration, not the command spelling or the delivery under test.
+	return declared.Contract.Identity.CanonicalPath
+}
+
+func TestCrossPlatformCoverageShortcutSchemaCanonicalUsesDeclaredIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		command   string
+		canonical string
+	}{
+		{"unchanged", "+active-conversations", "chat.shortcut_active_conversations"},
+		{"renamed", "+recent-conversations", "chat.shortcut_active_conversations"},
+		{"missing_identity_is_not_inferred", "+recent-conversations", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			declared := shortcut.Shortcut{
+				Service: "chat",
+				Command: tc.command,
+				Contract: corecmd.ContractDecl{
+					Identity: contract.ToolIdentitySpec{CanonicalPath: tc.canonical},
+				},
+			}
+			if got := shortcutSchemaCanonical(declared); got != tc.canonical {
+				t.Fatalf("canonical = %q, want declared identity %q", got, tc.canonical)
+			}
+		})
+	}
 }
 
 func assertDeliveryShortcutIdentityAndSelection(
@@ -510,11 +860,19 @@ func assertDeliveryShortcutIdentityAndSelection(
 	if got, want := schemaContractString(tool["primary_cli_path"]), declared.Service+" "+declared.Command; got != want {
 		t.Errorf("%s primary_cli_path = %q, want %q", canonical, got, want)
 	}
-	if got, want := schemaContractString(tool["agent_summary"]), declared.Description; got != want {
-		t.Errorf("%s agent_summary = %q, want %q", canonical, got, want)
+	wantSummary := strings.TrimSpace(declared.Contract.Selection.AgentSummary)
+	if wantSummary == "" {
+		wantSummary = declared.Description
 	}
-	if got, want := schemaContractStringSlice(tool["use_when"]), []string{declared.Intent}; !schemaContractJSONEqual(got, want) {
-		t.Errorf("%s use_when = %#v, want %#v", canonical, got, want)
+	if got := schemaContractString(tool["agent_summary"]); got != wantSummary {
+		t.Errorf("%s agent_summary = %q, want %q", canonical, got, wantSummary)
+	}
+	wantUseWhen := declared.Contract.Selection.UseWhen
+	if len(wantUseWhen) == 0 && strings.TrimSpace(declared.Intent) != "" {
+		wantUseWhen = []string{declared.Intent}
+	}
+	if got := schemaContractStringSlice(tool["use_when"]); !schemaContractJSONEqual(got, wantUseWhen) {
+		t.Errorf("%s use_when = %#v, want %#v", canonical, got, wantUseWhen)
 	}
 	if len(schemaContractStringSlice(tool["avoid_when"])) == 0 {
 		t.Errorf("%s has no reviewed avoid_when", canonical)
@@ -782,4 +1140,32 @@ func mustShortcutJSON(value any) string {
 		return fmt.Sprintf("%#v", value)
 	}
 	return string(encoded)
+}
+
+func TestCrossPlatformCoverageDocProductBoundariesReachFinalSchema(t *testing.T) {
+	cases := []struct {
+		path               string
+		positive, negative []string
+	}{
+		{"doc +search", []string{"搜索候选", "目录两组分页"}, []string{"doc +list", "drive +list", "drive +search"}},
+		{"doc +list", []string{"nodeId", "workspaceId"}, []string{"doc +search --folder", "drive +list"}},
+		{"doc +script", []string{"doc +create/+update", "parse", "只读"}, []string{"本地文件工具", "远端原生.md", "markdown create"}},
+		{"doc +download-overwrite", []string{"正文媒体", "封面"}, []string{"drive +download", "不支持覆盖", "doc +export"}},
+		{"doc +media-upload", []string{"文字文档", "不插入正文"}, []string{"sheet media-upload", "drive +upload"}},
+		{"drive +list", []string{"钉盘"}, []string{"doc +list", "两类容器ID"}},
+		{"drive +download", []string{"钉盘"}, []string{"doc +download-overwrite", "不覆盖"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			tool := executeShortcutSchemaQuery(t, "--cli-path", tc.path)
+			for field, wants := range map[string][]string{"use_when": tc.positive, "avoid_when": tc.negative} {
+				prose := strings.Join(schemaContractStringSlice(tool[field]), " ")
+				for _, want := range wants {
+					if !strings.Contains(prose, want) {
+						t.Errorf("%s %s missing boundary %q", tc.path, field, want)
+					}
+				}
+			}
+		})
+	}
 }

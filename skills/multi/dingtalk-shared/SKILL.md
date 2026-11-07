@@ -16,16 +16,18 @@ metadata:
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 
-- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
-- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
-- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
-- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
-- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
-- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
-- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+- 只用 `dws`；结构化读取加 `--format json`，按真实返回判断。
+- 已知命令直调；参数/约束/安全不明查 leaf 窄 Schema。Schema 不可用才读已知 leaf Help 一次；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 不查 Help：优先错误中的明确 suggestion，其次已加载 Skill/reference 中的明确兼容入口；均无则报漂移并停，禁全 Catalog。低频 reference 不默认 Help，禁 root/parent/product Help。发现后必须执行或说明阻塞。
+- 不猜命令/flag/字段/ID/账号/业务事实；ID 来自真实返回。目标零命中/多候选/类型不明先消歧；仅可选时间/展示范围用契约默认，缺必需信息即停。
+- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出/记录 token、refresh token、appSecret、webhook token；已注入认证时不索要。
+- 写须符合明确意图；确认以最终 Runtime gate/Schema 为准，确认后才加 `--yes`。
+- 写后验证结果，不凭退出码宣称成功。退出须最终答复，区分完成、部分、阻塞、待确认、失败；保留已有数据及 `complete/hasMore/stopReason/failures`。
+- 时间戳按会话时区展示，必要时保留原值。
+- 认证/权限/profile/confirmation/未知错误只读 `dingtalk-shared` 对应 reference，禁连续猜替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
+
+国际版、海外版或 `.io` 区域登录必须执行 `dws auth login --intl`（无头环境再加 `--device`）；`--intl` 只用于登录，后续业务命令按所选 profile 自动路由。
 
 产品或跨产品规则在最小契约之上增量加载。用户已明确产品内容意图时，意图优先于 URL 形态；多账号选择与跨组织规则读取 [`../dingtalk-misc/references/profile.md`](../dingtalk-misc/references/profile.md)。本地文件、产品边界和跨产品传递规则只在对应任务中加载，避免把全局手册放入每个单产品请求。
 
@@ -38,7 +40,8 @@ metadata:
 | 已明确单一产品 | 对应 `../dingtalk-*/SKILL.md`；不读路由 reference |
 | 泛称 DWS、需要选择产品 | [routing.md](references/routing.md) |
 | 跨产品、多步骤、汇总或报告 | [workflow-routing.md](references/workflow-routing.md) |
-| 输入含 alidocs、shanji 等钉钉 URL 且类型不明 | [url-patterns.md](references/url-patterns.md) |
+| 输入含用户直接提供的 alidocs `/i/nodes/` URL 或来源未验证的 nodeId（即使产品意图明确） | [url-patterns.md](references/url-patterns.md)；先规范化 dlink 再进入目标产品 |
+| 输入含其他 alidocs、shanji 等钉钉 URL 且类型不明 | [url-patterns.md](references/url-patterns.md) |
 | 产品边界仍然难以判断 | [intent-guide.md](references/intent-guide.md) 的相关章节 |
 | 认证、全局 flag 或输出格式问题 | [global-reference.md](references/global-reference.md) |
 | 命令已经返回错误 | [error-codes.md](references/error-codes.md)；只查错误对应章节 |
@@ -52,8 +55,11 @@ metadata:
 
 ## 本 skill 作为入口时的路由顺序
 
-1. 先识别明确的产品内容意图；明确意图直接进入对应产品。仅当输入包含钉钉 URL
-   且类型不明确或意图与链接类型可能冲突时，读取 `url-patterns.md` 识别节点类型。
+1. 先识别明确的产品内容意图；明确意图直接选择对应产品。用户直接提供的 alidocs
+   `/i/nodes/` URL 或来源未验证的 nodeId 仍须读取 `url-patterns.md`：先执行节点类型
+   探测，`extension=dlink` 时将 `drive info` 的 `result.fileId` 保存为入口 ID 并传给
+   `dws doc info`，再按 `linkSourceInfo.nodeId` 逐跳解析目标，把最终目标 ID 交给候选
+   产品。当前调用链已返回真实类型的稳定 ID 可直接复用。
 2. 请求包含多个时序步骤、跨产品数据传递或汇总报告：即使 URL 已识别，也要读取
    `workflow-routing.md`，按行动指南组合需要的产品 skill；当前发布包不包含独立
    scenario skill。

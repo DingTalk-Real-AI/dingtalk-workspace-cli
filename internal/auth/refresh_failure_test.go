@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -189,6 +190,195 @@ func TestCrossPlatformCoverageGetTokenSnapshotOnlyExpiresProfileForNonTransientR
 	}
 }
 
+func TestCrossPlatformCoverageLegacyGlobalSlotRecoversRejectedIdentityRefresh(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039",
+		UserID:       "user-v1039",
+		UserName:     "V1039 User",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		Source:       "mcp",
+	}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) {
+		return nil, &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+	})
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion, Profiles: []Profile{{
+			Name:     "V1039 User",
+			CorpID:   selected.CorpID,
+			UserID:   selected.UserID,
+			UserName: selected.UserName,
+		}}}, nil
+	})
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	var saved *TokenData
+	testseam.Swap(t, &oauthSaveTokenLocked, func(_ string, data *TokenData) error {
+		copy := *data
+		saved = &copy
+		return nil
+	})
+
+	recovered, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("lockedRefresh() error = %v", err)
+	}
+	if recovered.AccessToken != legacy.AccessToken || recovered.RefreshToken != legacy.RefreshToken {
+		t.Fatalf("recovered token = %#v, want legacy credential material %#v", recovered, legacy)
+	}
+	if recovered.UserID != selected.UserID || recovered.UserName != selected.UserName {
+		t.Fatalf("recovered identity = %q/%q, want selected identity %q/%q", recovered.UserID, recovered.UserName, selected.UserID, selected.UserName)
+	}
+	if saved == nil || saved.AccessToken != recovered.AccessToken || saved.UserID != selected.UserID {
+		t.Fatalf("saved recovery token = %#v, want recovered identity token %#v", saved, recovered)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsBlankUserIDForMultiAccountCorp(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-multi",
+		UserID:       "user-v1039-a",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion, Profiles: []Profile{
+			{Name: "User A", CorpID: selected.CorpID, UserID: selected.UserID},
+			{Name: "User B", CorpID: selected.CorpID, UserID: "user-v1039-b"},
+		}}, nil
+	})
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a blank-user token for a multi-account organization")
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsBlankSelectedUserIDForMultiAccountCorp(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-blank-selected",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion, Profiles: []Profile{
+			{Name: "Blank A", CorpID: selected.CorpID, UserID: ""},
+			{Name: "Blank B", CorpID: selected.CorpID, UserID: ""},
+		}}, nil
+	})
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a blank-selected token for a multi-account organization")
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsDifferentUserID(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-user-mismatch",
+		UserID:       "user-v1039-selected",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		UserID:       "user-v1039-other",
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a token owned by a different user")
+	}
+}
+
 func TestCrossPlatformCoverageLegacyRefreshFailureKeepsBlankCurrentSelectorIsolated(t *testing.T) {
 	fixture := seedBlankProfileSelectorFixture(t, "Fixture Organization", "Fixture Organization", true)
 	expired := *fixture.blankToken
@@ -251,5 +441,332 @@ func TestCrossPlatformCoverageLegacyRefreshFailureKeepsBlankCurrentSelectorIsola
 				t.Fatalf("exact profile status = %q, want active", profile.Status)
 			}
 		}
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsSingleProfileIdentityMismatch(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-single-mismatch",
+		UserID:       "user-v1039-selected",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion, Profiles: []Profile{{
+			Name:   "Other User",
+			CorpID: selected.CorpID,
+			UserID: "user-v1039-other",
+		}}}, nil
+	})
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a blank-user token whose single profile identity does not match")
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRefreshesExpiredLegacyCredential(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-legacy-refresh",
+		UserID:       "user-v1039",
+		UserName:     "V1039 User",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "expired-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		UserID:       selected.UserID,
+		Source:       "mcp",
+	}
+	refreshed := &TokenData{
+		AccessToken:  "refreshed-legacy-access",
+		RefreshToken: "rotated-legacy-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		UserID:       selected.UserID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	refreshCalls := 0
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) {
+		refreshCalls++
+		if refreshCalls == 1 {
+			return nil, rejection
+		}
+		return refreshed, nil
+	})
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+
+	recovered, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("lockedRefresh() error = %v", err)
+	}
+	if refreshCalls != 2 {
+		t.Fatalf("oauthRefreshToken called %d times, want 2 (identity rejection + legacy refresh)", refreshCalls)
+	}
+	if recovered.AccessToken != refreshed.AccessToken {
+		t.Fatalf("recovered access token = %q, want refreshed legacy credential %q", recovered.AccessToken, refreshed.AccessToken)
+	}
+	if recovered.RefreshToken != refreshed.RefreshToken {
+		t.Fatalf("recovered refresh token = %q, want rotated credential %q", recovered.RefreshToken, refreshed.RefreshToken)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsProfilesLoadError(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "rejected-identity-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-profiles-error",
+		UserID:       "user-v1039",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "valid-legacy-global-access",
+		RefreshToken: "valid-legacy-global-refresh",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) { return nil, errors.New("profiles read failed") })
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a blank-user token when profiles could not be loaded")
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsSameRefreshToken(t *testing.T) {
+	selected := &TokenData{
+		AccessToken:  "expired-identity-access",
+		RefreshToken: "shared-rejected-refresh",
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(time.Hour),
+		CorpID:       "corp-v1039-same-refresh",
+		UserID:       "user-v1039",
+		Source:       "mcp",
+	}
+	legacy := &TokenData{
+		AccessToken:  "expired-legacy-global-access",
+		RefreshToken: selected.RefreshToken,
+		ExpiresAt:    time.Now().Add(-time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       selected.CorpID,
+		UserID:       selected.UserID,
+		Source:       "mcp",
+	}
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+
+	testseam.Swap(t, &oauthAcquireLock, func(context.Context, string) (*DualLock, error) { return &DualLock{}, nil })
+	testseam.Swap(t, &oauthLoadTokenLocked, func(string, string) (*TokenData, error) { return selected, nil })
+	testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) { return nil, rejection })
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+	testseam.Swap(t, &tokenLoadKeychainForCorpID, func(string) (*TokenData, error) { return nil, ErrTokenDataNotFound })
+	saved := false
+	testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error {
+		saved = true
+		return nil
+	})
+
+	_, err := NewOAuthProvider(t.TempDir(), nil).lockedRefresh(context.Background())
+	if !errors.Is(err, rejection) {
+		t.Fatalf("lockedRefresh() error = %v, want original rejection", err)
+	}
+	if saved {
+		t.Fatal("legacy global recovery saved a token holding the same rejected refresh_token")
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalSlotRejectsNilSelectedAndEmptyLegacy(t *testing.T) {
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+	provider := NewOAuthProvider(t.TempDir(), nil)
+
+	// nil selected must be rejected before any dereference.
+	if _, err := provider.recoverRefreshFromLegacyGlobalSlot(context.Background(), nil, rejection); !errors.Is(err, rejection) {
+		t.Fatalf("nil selected error = %v, want original rejection", err)
+	}
+
+	// A keychain load that returns (nil, nil) must be rejected before any dereference.
+	testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return nil, nil })
+	selected := &TokenData{
+		CorpID: "corp-v1039-nil-legacy",
+		UserID: "user-v1039",
+		Source: "mcp",
+	}
+	if _, err := provider.recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, rejection); !errors.Is(err, rejection) {
+		t.Fatalf("nil legacy error = %v, want original rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalRecoveryRejectsNonReauthorizationErrors(t *testing.T) {
+	provider := NewOAuthProvider(t.TempDir(), nil)
+	selected := &TokenData{CorpID: "corp-v1039-plain", UserID: "user-v1039", Source: "mcp"}
+
+	plainErr := errors.New("plain refresh failure")
+	if _, err := provider.recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, plainErr); !errors.Is(err, plainErr) {
+		t.Fatalf("plain error = %v, want original plain failure", err)
+	}
+}
+
+func TestCrossPlatformCoverageLegacyGlobalRecoveryRejectsSaveAndRefreshFailures(t *testing.T) {
+	rejection := &MCPTokenExchangeError{Code: legacyMCPRefreshRejectedCode, Message: "authCode not found"}
+	selected := &TokenData{
+		CorpID: "corp-v1039-recovery-steps",
+		UserID: "user-v1039",
+		Source: "mcp",
+	}
+
+	t.Run("save_failure", func(t *testing.T) {
+		legacy := &TokenData{
+			AccessToken:  "valid-legacy-access",
+			RefreshToken: "valid-legacy-refresh",
+			ExpiresAt:    time.Now().Add(time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+			CorpID:       selected.CorpID,
+			UserID:       selected.UserID,
+			Source:       "mcp",
+		}
+		testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+		testseam.Swap(t, &oauthSaveTokenLocked, func(string, *TokenData) error { return errors.New("save failed") })
+		if _, err := NewOAuthProvider(t.TempDir(), nil).recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, rejection); !errors.Is(err, rejection) {
+			t.Fatalf("save failure error = %v, want original rejection", err)
+		}
+	})
+
+	t.Run("refresh_expired", func(t *testing.T) {
+		legacy := &TokenData{
+			AccessToken:  "expired-legacy-access",
+			RefreshToken: "expired-legacy-refresh",
+			ExpiresAt:    time.Now().Add(-time.Hour),
+			RefreshExpAt: time.Now().Add(-time.Hour),
+			CorpID:       selected.CorpID,
+			UserID:       selected.UserID,
+			Source:       "mcp",
+		}
+		testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+		if _, err := NewOAuthProvider(t.TempDir(), nil).recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, rejection); !errors.Is(err, rejection) {
+			t.Fatalf("expired refresh error = %v, want original rejection", err)
+		}
+	})
+
+	t.Run("refresh_error", func(t *testing.T) {
+		legacy := &TokenData{
+			AccessToken:  "expired-legacy-access",
+			RefreshToken: "valid-legacy-refresh",
+			ExpiresAt:    time.Now().Add(-time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+			CorpID:       selected.CorpID,
+			UserID:       selected.UserID,
+			Source:       "mcp",
+		}
+		testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+		testseam.Swap(t, &oauthRefreshToken, func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error) {
+			return nil, errors.New("legacy refresh failed")
+		})
+		if _, err := NewOAuthProvider(t.TempDir(), nil).recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, rejection); !errors.Is(err, rejection) {
+			t.Fatalf("legacy refresh error = %v, want original rejection", err)
+		}
+	})
+
+	t.Run("preflight_error", func(t *testing.T) {
+		legacy := &TokenData{
+			AccessToken:  "expired-legacy-access",
+			RefreshToken: "valid-legacy-refresh",
+			ExpiresAt:    time.Now().Add(-time.Hour),
+			RefreshExpAt: time.Now().Add(24 * time.Hour),
+			CorpID:       selected.CorpID,
+			UserID:       selected.UserID,
+			Source:       "mcp",
+		}
+		testseam.Swap(t, &tokenLoadKeychain, func() (*TokenData, error) { return legacy, nil })
+		testseam.Swap(t, &profilesReadFile, func(string) ([]byte, error) { return nil, errors.New("read failed") })
+		if _, err := NewOAuthProvider(t.TempDir(), nil).recoverRefreshFromLegacyGlobalSlot(context.Background(), selected, rejection); !errors.Is(err, rejection) {
+			t.Fatalf("preflight error = %v, want original rejection", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageLegacyGlobalCandidateMatchingBoundaries(t *testing.T) {
+	configDir := t.TempDir()
+	selected := &TokenData{CorpID: "corp-v1039-candidate", UserID: "user-v1039"}
+
+	if legacyGlobalRefreshCandidateMatches(configDir, selected, nil) {
+		t.Fatal("nil legacy accepted")
+	}
+	if legacyGlobalRefreshCandidateMatches(configDir, selected, &TokenData{CorpID: "corp-other", UserID: selected.UserID}) {
+		t.Fatal("different corp accepted")
+	}
+	if legacyGlobalRefreshCandidateMatches(configDir, &TokenData{UserID: "user-v1039"}, &TokenData{UserID: "user-v1039"}) {
+		t.Fatal("blank selected corp accepted")
+	}
+
+	blankSelected := &TokenData{CorpID: selected.CorpID}
+	testseam.Swap(t, &tokenLoadProfiles, func(string) (*ProfilesConfig, error) {
+		return &ProfilesConfig{Version: profilesVersion, Profiles: []Profile{{Name: "Blank User", CorpID: selected.CorpID}}}, nil
+	})
+	if !legacyGlobalRefreshCandidateMatches(configDir, blankSelected, &TokenData{CorpID: selected.CorpID}) {
+		t.Fatal("both blank user IDs should match only through the single-profile guard")
+	}
+	if legacyGlobalRefreshCandidateMatches(configDir, blankSelected, &TokenData{CorpID: selected.CorpID, UserID: "user-other"}) {
+		t.Fatal("blank selected with non-blank legacy accepted")
+	}
+
+	if legacyGlobalBlankUserIDMatchesSingleProfile(configDir, "", selected.UserID) {
+		t.Fatal("blank corp accepted by single-profile check")
 	}
 }

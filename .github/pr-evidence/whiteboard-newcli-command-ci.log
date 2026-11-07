@@ -1,0 +1,13 @@
+Source: 938f0004f15fe4d00213c7cbac10552da82eda3f + working tree (2026-09-16)
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/app ./internal/helpers ./internal/shortcut/whiteboard ./internal/whiteboard/... -run 'TestCrossPlatformCoverage.*(Whiteboard|AgentTemplate)|TestWhiteboard|TestToolCallerAdapter|TestRuntimeRunner.*DryRun|Test.*TextRun|Test.*Render' -count=1
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	5.584s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	1.282s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/whiteboard	2.136s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard	0.461s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes	2.488s [no tests to run]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/render	2.889s [no tests to run]
+
+$ DWS_PACKAGE_VERSION=0.0.0-test go test ./internal/whiteboard/... -count=1
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard	0.280s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes	0.449s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/render	0.618s

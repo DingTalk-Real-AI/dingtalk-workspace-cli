@@ -38,6 +38,9 @@ func TestMaterializeEmbeddedSkillSourceMono(t *testing.T) {
 	for _, rel := range []string{
 		"SKILL.md",
 		filepath.Join("references", "global-reference.md"),
+		filepath.Join("references", "products", "contract.md"),
+		filepath.Join("references", "products", "mind.md"),
+		filepath.Join("references", "products", "mind", "open-nodes-v1.md"),
 		filepath.Join("references", "best_practices", "_common"),
 	} {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
@@ -59,8 +62,9 @@ func TestMaterializeEmbeddedSkillSourceMono(t *testing.T) {
 
 // TestMaterializeEmbeddedSkillSourceMulti verifies that the peer multi bundle
 // contains the standalone Event skill, shared routing skill, and clean misc
-// (including PAT docs). Structured Schema hints are build inputs and must not
-// become a third installable mode.
+// (including PAT docs and the Contract product reference, which is a misc
+// product rather than a first-level Skill). Structured Schema hints are build
+// inputs and must not become a third installable mode.
 func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 	dir, cleanup, err := materializeEmbeddedSkillSource(skillSetupModeMulti)
 	if err != nil {
@@ -75,17 +79,32 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		filepath.Join("dingtalk-event", "SKILL.md"),
 		filepath.Join("dingtalk-event", "references", "event-oa.md"),
 		filepath.Join("dingtalk-shared", "SKILL.md"),
+		filepath.Join("dingtalk-tag", "SKILL.md"),
+		filepath.Join("dingtalk-tag", "references", "manage-and-connect.md"),
 		filepath.Join("dingtalk-misc", "SKILL.md"),
 		filepath.Join("dingtalk-misc", "references", "pat.md"),
+		filepath.Join("dingtalk-misc", "references", "contract.md"),
+		filepath.Join("dingtalk-misc", "references", "mind.md"),
+		filepath.Join("dingtalk-misc", "references", "mind", "open-nodes-v1.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
 			t.Errorf("expected embedded multi skill to contain %s: %v", rel, err)
 		}
 	}
+	if _, err := os.Stat(filepath.Join(dir, "dingtalk-contract")); err == nil {
+		t.Fatal("smart contract is a misc product; it must not ship as a standalone multi skill")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat embedded standalone contract skill: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(dir, "dingtalk-misc", "references", "event.md")); err == nil {
 		t.Fatal("embedded misc must not retain the folded personal Event reference")
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("stat embedded misc event reference: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dingtalk-misc", "references", "deap", "manage.md")); err == nil {
+		t.Fatal("embedded misc must not retain duplicated digital employee references")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat embedded misc digital employee reference: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "schema-hints")); err == nil {
 		t.Fatal("embedded multi skill must not contain build-only schema-hints")

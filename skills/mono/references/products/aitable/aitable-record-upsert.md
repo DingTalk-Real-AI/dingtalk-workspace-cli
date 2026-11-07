@@ -24,14 +24,14 @@ dws aitable record upsert \
 ```jsonc
 {
   "recordId": "rec1",                  // 可选；带 → update，缺省 → create
-  "cells": {                            // 必填；key 是 fieldId，value 按字段类型
+  "cells": {                            // 必填；key 支持 fieldId 或当前表内唯一字段名，value 按字段类型
     "fldTitleId": "新标题",
     "fldNumberId": 42
   }
 }
 ```
 
-`cells` 写入格式与 `record create` / `record update` **完全一致**（key 必须是 fieldId 不是字段名；按字段类型见 [aitable-cell-value.md](./aitable-cell-value.md)）。
+`cells` 写入格式与 `record create` / `record update` **完全一致**（key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId，字段名须精确匹配；按字段类型见 [aitable-cell-value.md](./aitable-cell-value.md)）。
 
 ## 返回结构
 
@@ -85,5 +85,5 @@ dws aitable record upsert --base-id BASE --table-id TBL --records-file ./batch.j
 ## 注意事项
 
 - **单次最多 100 条**（创建 + 更新合计），超出请客户端拆批。
-- `cells` 的 key 必须是 fieldId 不是字段名（先用 `record query` 或 `field get` 拿 fieldId）。
+- `cells` 的 key 支持 fieldId 或当前表内唯一字段名；推荐从 `field get` 获取真实 fieldId，字段名须精确匹配。
 - 只读字段（formula / lookup / 系统字段）不能写入 — upsert 链路与 update 链路同样限制。

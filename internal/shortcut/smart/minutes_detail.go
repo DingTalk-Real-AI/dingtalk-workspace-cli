@@ -86,6 +86,7 @@ var MinutesDetail = shortcut.Shortcut{
 				"dws minutes +detail --ids <uuid1,uuid2> --artifacts summary,transcript --transcript-output file",
 			},
 		},
+		Result: minutesDetailResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "单个听记 taskUuid"},
@@ -214,6 +215,22 @@ func readMinutesDetail(rt *shortcut.RuntimeContext, taskUUID string, want []stri
 			continue
 		}
 		data, err := rt.CallMCPData("minutes", tool, map[string]any{"taskUuid": taskUUID})
+		if name == "todos" {
+			fact := minutesdata.FailedTodos(taskUUID, err)
+			if err == nil {
+				fact = minutesdata.InspectTodos(taskUUID, data)
+			}
+			if fact.Successful() {
+				// Preserve the historical +detail envelope while enriching its
+				// result object with typed truth fields.
+				data["result"] = fact.Payload()
+				bundle[name] = data
+			} else {
+				bundle[name] = fact.Payload()
+				failures = append(failures, fact.Ledger())
+			}
+			continue
+		}
 		if err != nil {
 			bundle[name] = map[string]any{"error": err.Error()}
 			failures = append(failures, map[string]any{"artifact": name, "error": err.Error()})

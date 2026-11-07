@@ -65,7 +65,11 @@ var Inspect = shortcut.Shortcut{
 			}
 			value, callErr := rt.CallMCPReadData("drive", read.tool, read.params)
 			if callErr == nil {
-				value, callErr = requireDriveObject(value, "drive/"+read.tool)
+				if read.tool == "get_node_stats" {
+					value, callErr = requireDriveStats(value, "drive/"+read.tool)
+				} else {
+					value, callErr = requireDriveObject(value, "drive/"+read.tool)
+				}
 			}
 			if callErr != nil {
 				steps = append(steps, map[string]any{"tool": read.tool, "status": "failed"})
@@ -138,7 +142,22 @@ var CreateFolder = shortcut.Shortcut{
 			return err
 		}
 		if name := firstString(verified, "name", "fileName"); name != rt.Str("name") {
-			return driveResponseError("drive/create_folder", "readback_mismatch", fmt.Sprintf("创建后读回名称 %q 与请求 %q 不一致", name, rt.Str("name")))
+			return driveCommittedWriteMismatch(
+				"drive/create_folder",
+				"readback_mismatch",
+				fmt.Sprintf("创建后读回名称 %q 与请求 %q 不一致", name, rt.Str("name")),
+				nodeID,
+				rt.Str("name"),
+				name,
+				map[string]any{
+					"resourceType":  "folder",
+					"nodeId":        nodeID,
+					"requestedName": rt.Str("name"),
+					"observedName":  name,
+					"ownership":     "owned",
+					"readback":      verified,
+				},
+			)
 		}
 		return rt.Output(map[string]any{"success": true, "nodeId": nodeID, "folder": verified})
 	},
@@ -235,15 +254,25 @@ var Rename = shortcut.Shortcut{
 		if _, err := requireDriveWrite(written, "doc/rename_document"); err != nil {
 			return err
 		}
-		verified, err := rt.CallMCPData("drive", "get_file_info", map[string]any{"fileId": rt.Str("node")})
+		verifiedService := "drive"
+		verifiedTool := "get_file_info"
+		verifiedParams := map[string]any{"fileId": rt.Str("node")}
+		verifiedOperation := "drive/get_file_info"
+		if isOnlineDriveObject(preflight) {
+			verifiedService = "doc"
+			verifiedTool = "get_document_info"
+			verifiedParams = map[string]any{"nodeId": rt.Str("node")}
+			verifiedOperation = "doc/get_document_info"
+		}
+		verified, err := rt.CallMCPData(verifiedService, verifiedTool, verifiedParams)
 		if err != nil {
 			return err
 		}
-		verified, err = requireDriveObject(verified, "drive/get_file_info")
+		verified, err = requireDriveObject(verified, verifiedOperation)
 		if err != nil {
 			return err
 		}
-		name := firstString(verified, "name", "fileName")
+		name := firstString(verified, "name", "fileName", "title", "documentName")
 		if name == "" || !expectedNames[name] {
 			return driveResponseError("doc/rename_document", "readback_mismatch", fmt.Sprintf("重命名读回名称 %q 与请求 %q 不一致", name, rt.Str("name")))
 		}

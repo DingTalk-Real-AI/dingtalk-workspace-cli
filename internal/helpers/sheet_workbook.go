@@ -195,10 +195,12 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 		Example: `  dws sheet new --node NODE_ID --name "Sheet2"
   dws sheet new --node NODE_ID --name "数据汇总"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("create_sheet", map[string]any{
-				"nodeId": mustGetFlag(cmd, "node"),
-				"name":   mustGetFlag(cmd, "name"),
-			})
+			toolArgs, err := BuildBatchCreateSheetArgs(map[string]any{"name": mustGetFlag(cmd, "name")})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("create_sheet", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(newCmd, LeafSpec{
@@ -281,44 +283,48 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				return fmt.Errorf("--name、--index、--hidden、--frozen-row-count、--frozen-column-count、--tab-color 至少必须提供一个")
 			}
 
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
 			}
 
 			if nameChanged {
-				toolArgs["title"] = resolveSheetName(cmd)
+				input["title"] = resolveSheetName(cmd)
 			}
 			if indexChanged {
 				index, _ := cmd.Flags().GetInt("index")
 				if index < 0 {
 					return fmt.Errorf("--index 不能为负数，当前值: %d", index)
 				}
-				toolArgs["index"] = index
+				input["index"] = index
 			}
 			if hiddenChanged {
 				hidden, _ := cmd.Flags().GetBool("hidden")
-				toolArgs["hidden"] = hidden
+				input["hidden"] = hidden
 			}
 			if frozenRowChanged {
 				frozenRowCount, _ := cmd.Flags().GetInt("frozen-row-count")
 				if frozenRowCount < 0 {
 					return fmt.Errorf("--frozen-row-count 不能为负数，当前值: %d", frozenRowCount)
 				}
-				toolArgs["frozenRowCount"] = frozenRowCount
+				input["frozen-row-count"] = frozenRowCount
 			}
 			if frozenColChanged {
 				frozenColumnCount, _ := cmd.Flags().GetInt("frozen-column-count")
 				if frozenColumnCount < 0 {
 					return fmt.Errorf("--frozen-column-count 不能为负数，当前值: %d", frozenColumnCount)
 				}
-				toolArgs["frozenColumnCount"] = frozenColumnCount
+				input["frozen-column-count"] = frozenColumnCount
 			}
 			if tabColorChanged {
 				tabColor, _ := cmd.Flags().GetString("tab-color")
-				toolArgs["tabColor"] = tabColor
+				input["tab-color"] = tabColor
 			}
 
+			toolArgs, err := BuildUpdateSheetArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("update_sheet", toolArgs)
 		},
 	}
@@ -450,10 +456,12 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
   - 不能删除最后一个可见工作表（至少保留一个可见工作表）`,
 		Example: `  dws sheet delete-sheet --node NODE_ID --sheet-id SHEET_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("delete_sheet", map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-			})
+			toolArgs, err := BuildBatchDeleteSheetArgs(map[string]any{"sheet-id": mustGetFlag(cmd, "sheet-id")})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_sheet", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(deleteSheetCmd, LeafSpec{
@@ -501,11 +509,12 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
 			if err := validateRequiredFlags(cmd, "sheet-id"); err != nil {
 				return err
 			}
-			return callMCPTool("set_gridline_visibility", map[string]any{
-				"nodeId":     nodeID,
-				"sheetId":    mustGetFlag(cmd, "sheet-id"),
-				"visibility": "visible",
-			})
+			toolArgs, err := buildBatchGridlineArgs("visible")(map[string]any{"sheet-id": mustGetFlag(cmd, "sheet-id")})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = nodeID
+			return callMCPTool("set_gridline_visibility", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(showGridlineCmd, LeafSpec{
@@ -553,11 +562,12 @@ name 不能包含 / \ ? * [ ] : 等特殊字符，最长 100 字符。`,
 			if err := validateRequiredFlags(cmd, "sheet-id"); err != nil {
 				return err
 			}
-			return callMCPTool("set_gridline_visibility", map[string]any{
-				"nodeId":     nodeID,
-				"sheetId":    mustGetFlag(cmd, "sheet-id"),
-				"visibility": "hidden",
-			})
+			toolArgs, err := buildBatchGridlineArgs("hidden")(map[string]any{"sheet-id": mustGetFlag(cmd, "sheet-id")})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = nodeID
+			return callMCPTool("set_gridline_visibility", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(hideGridlineCmd, LeafSpec{

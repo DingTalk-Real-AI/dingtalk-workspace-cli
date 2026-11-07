@@ -12,11 +12,38 @@ import (
 )
 
 type docPageOptions struct {
-	PageAll  bool
-	PageSize int
-	MaxPages int
-	MaxItems int
-	Cursor   string
+	Product       string
+	PageAll       bool
+	PageSize      int
+	MaxPages      int
+	MaxItems      int
+	Cursor        string
+	PageSizeParam string
+	CursorParam   string
+}
+
+func validateDocAutoPagination(rt *shortcut.RuntimeContext) error {
+	if !rt.Bool("page-all") {
+		if rt.Changed("max-pages") || rt.Changed("max-items") {
+			return fmt.Errorf("--max-pages/--max-items 仅与 --page-all 一起使用")
+		}
+		return nil
+	}
+	if rt.Int("max-pages") <= 0 {
+		return fmt.Errorf("--max-pages 必须大于 0")
+	}
+	if rt.Int("max-items") <= 0 {
+		return fmt.Errorf("--max-items 必须大于 0")
+	}
+	return nil
+}
+
+func docAutoPaginationConstraints() []shortcut.Constraint {
+	return []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"page-all", "max-pages", "max-items"},
+		Description: "--max-pages/--max-items 仅与 --page-all 一起使用，且必须大于 0",
+	}}
 }
 
 func collectDocPages(
@@ -26,6 +53,9 @@ func collectDocPages(
 	project func(map[string]any) []map[string]any,
 	options docPageOptions,
 ) (map[string]any, error) {
+	if options.Product == "" {
+		options.Product = productDoc
+	}
 	if options.PageSize <= 0 {
 		options.PageSize = 30
 	}
@@ -34,6 +64,12 @@ func collectDocPages(
 	}
 	if options.MaxItems <= 0 {
 		options.MaxItems = 500
+	}
+	if strings.TrimSpace(options.PageSizeParam) == "" {
+		options.PageSizeParam = "pageSize"
+	}
+	if strings.TrimSpace(options.CursorParam) == "" {
+		options.CursorParam = "pageToken"
 	}
 	pageLimit := 1
 	if options.PageAll {
@@ -61,11 +97,11 @@ func collectDocPages(
 			requestPageSize = remaining
 		}
 		params := cloneMap(base)
-		params["pageSize"] = requestPageSize
+		params[options.PageSizeParam] = requestPageSize
 		if cursor != "" {
-			params["pageToken"] = cursor
+			params[options.CursorParam] = cursor
 		}
-		data, err := rt.CallMCPData(productDoc, tool, params)
+		data, err := rt.CallMCPData(options.Product, tool, params)
 		if err != nil {
 			return nil, docPaginationError(tool, "page_read_failed", err, page, items, cursor)
 		}
@@ -106,6 +142,9 @@ func collectDocPages(
 			hasMore = true
 			stopReason = "pagination_unproven"
 		}
+		if complete {
+			stopReason = "source_complete"
+		}
 		if len(items) >= options.MaxItems && hasMore {
 			truncated = true
 			stopReason = "max_items"
@@ -115,6 +154,9 @@ func collectDocPages(
 			hasMore = true
 		}
 
+		if !options.PageAll && !complete && stopReason == "" {
+			stopReason = "single_page"
+		}
 		if truncated || complete || !options.PageAll {
 			break
 		}
@@ -132,6 +174,9 @@ func collectDocPages(
 		if page == pageLimit {
 			truncated = true
 			stopReason = "max_pages"
+			complete = false
+			hasMore = true
+			break
 		}
 	}
 
@@ -165,11 +210,17 @@ func docPaginationError(tool, reason string, cause error, page int, items []map[
 			"contractVersion": "doc.list.v1",
 			"status":          "partial_success",
 			"complete":        false,
+			"truncated":       true,
+			"hasMore":         true,
 			"reason":          reason,
+			"stopReason":      reason,
 			"page":            page,
 			"nextCursor":      cursor,
 			"count":           len(items),
 			"items":           items,
+			"failures": []map[string]any{{
+				"page": page, "cursor": cursor, "reason": reason,
+			}},
 		}),
 		apperrors.WithCause(cause),
 	)
@@ -184,7 +235,7 @@ func cloneMap(source map[string]any) map[string]any {
 }
 
 func pageItemKey(item map[string]any) string {
-	for _, key := range []string{"nodeId", "id", "url"} {
+	for _, key := range []string{"commentKey", "nodeId", "templateId", "id", "url"} {
 		if value, ok := item[key].(string); ok && strings.TrimSpace(value) != "" {
 			return key + ":" + strings.TrimSpace(value)
 		}
@@ -207,7 +258,7 @@ func docPageState(data map[string]any) (bool, bool, string) {
 			}
 		}
 		if next == "" {
-			if value, ok := docFirst(value, "nextPageToken", "nextCursor", "next_page_token"); ok {
+			if value, ok := docFirst(value, "nextPageToken", "nextCursor", "next_page_token", "nextToken"); ok {
 				next, _ = value.(string)
 			}
 		}

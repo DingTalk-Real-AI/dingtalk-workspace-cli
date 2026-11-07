@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -33,7 +34,7 @@ func TestUpgradeCommand_BlockedWhenEmbedded(t *testing.T) {
 			cmd.SetErr(&errBuf)
 			cmd.SetArgs(tc.args)
 
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil {
 				t.Fatalf("upgrade %v in embedded mode must return error, got nil", tc.args)
 			}
@@ -62,7 +63,7 @@ func TestUpgradeCommand_NotBlockedInOpenSourceMode(t *testing.T) {
 	cmd.SetErr(&errBuf)
 	cmd.SetArgs([]string{"--check"})
 
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err != nil && strings.Contains(err.Error(), "嵌入模式") {
 		t.Errorf("open-source mode must not be blocked by embedded guard, got: %v", err)
 	}

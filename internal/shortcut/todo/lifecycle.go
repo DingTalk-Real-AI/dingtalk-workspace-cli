@@ -40,6 +40,11 @@ func todoContract(command, description, useWhen string, result *contract.ResultS
 	}
 }
 
+func withTodoDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool) corecmd.ContractDecl {
+	decl.DryRun = &contract.DryRunSpec{PreviewKind: kind, RemoteReads: remoteReads}
+	return decl
+}
+
 func todoWriteSafety(idempotency string) contract.SafetySpec {
 	return contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: idempotency}
 }
@@ -77,10 +82,11 @@ func createTodo(rt *shortcut.RuntimeContext) error {
 		}
 		vo["priority"] = priority
 	}
+	params := map[string]any{"PersonalTodoCreateVO": vo}
 	if rt.DryRun() {
-		return rt.Output(map[string]any{"dryRun": true, "executed": false, "operation": "create", "subject": title})
+		return todoWriteRequestPreview(rt, "create", "create_personal_todo", params)
 	}
-	data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", map[string]any{"PersonalTodoCreateVO": vo})
+	data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", params)
 	if err != nil {
 		return err
 	}
@@ -89,14 +95,14 @@ func createTodo(rt *shortcut.RuntimeContext) error {
 	}
 	taskID := todoCreatedTaskID(data)
 	if taskID == "" {
-		return todoResponseError("todo/create_personal_todo", "missing_stable_id", "创建响应缺少稳定 taskId；远端效果未知")
+		return todoWriteResponseError("todo/create_personal_todo", "missing_stable_id", "创建响应缺少稳定 taskId；远端效果未知")
 	}
 	detail, err := readTodoDetail(rt, taskID)
 	if err != nil {
-		return err
+		return todoWriteVerificationError("todo/create_personal_todo", err)
 	}
 	if subject, _ := detail["subject"].(string); subject != title {
-		return todoResponseError("todo/create_personal_todo", "verification_mismatch", "创建后读回的标题不一致")
+		return todoWriteResponseError("todo/create_personal_todo", "verification_mismatch", "创建后读回的标题不一致")
 	}
 	return rt.Output(map[string]any{"taskId": taskID, "verified": true, "todo": detail})
 }
@@ -106,12 +112,12 @@ var Create = shortcut.Shortcut{
 	Service:       "todo", Command: "+create", Product: "todo",
 	Description: "创建待办并读回验证", Intent: "创建一条个人待办；只有取得稳定 taskId 且详情读回一致才报告成功。",
 	Risk: shortcut.RiskWrite, Safety: todoWriteSafety("non_idempotent"),
-	Contract: todoContract("+create", "创建待办并读回验证", "标题和执行人已确定，需要创建待办时使用", todoObjectResult("已验证的新建待办"), `dws todo +create --title "提交报告" --executors <USER_ID>`),
+	Contract: withTodoDryRun(todoContract("+create", "创建待办并读回验证", "标题和执行人已确定，需要创建待办时使用", todoObjectResult("已验证的新建待办"), `dws todo +create --title "提交报告" --executors <USER_ID>`), contract.DryRunPreviewRequest, false),
 	Flags: []shortcut.Flag{
 		{Name: "title", Type: shortcut.FlagString, Desc: "待办标题", Required: true},
 		{Name: "executors", Type: shortcut.FlagStringSlice, Desc: "执行人 userId", Required: true},
 		{Name: "due", Type: shortcut.FlagString, Desc: "截止时间（ISO8601）"},
-		{Name: "priority", Type: shortcut.FlagInt, Desc: "优先级 10/20/30/40"},
+		{Name: "priority", Type: shortcut.FlagInt, Desc: "优先级；--priority 仅接受 10/20/30/40"},
 	},
 	Execute: createTodo,
 }
@@ -142,10 +148,11 @@ func updateTodo(rt *shortcut.RuntimeContext) error {
 		}
 		request["priority"] = priority
 	}
+	params := map[string]any{"TodoUpdateRequest": request}
 	if rt.DryRun() {
-		return rt.Output(map[string]any{"dryRun": true, "executed": false, "operation": "update", "taskId": taskID})
+		return todoWriteRequestPreview(rt, "update", "update_todo_task", params)
 	}
-	data, err := rt.CallMCPWriteDataStrict("todo", "update_todo_task", map[string]any{"TodoUpdateRequest": request})
+	data, err := rt.CallMCPWriteDataStrict("todo", "update_todo_task", params)
 	if err != nil {
 		return err
 	}
@@ -154,14 +161,14 @@ func updateTodo(rt *shortcut.RuntimeContext) error {
 	}
 	detail, err := readTodoDetail(rt, taskID)
 	if err != nil {
-		return err
+		return todoWriteVerificationError("todo/update_todo_task", err)
 	}
 	for key, expected := range request {
 		if key == "taskId" {
 			continue
 		}
 		if !todoUpdateFieldMatches(key, detail[key], expected) {
-			return todoResponseError("todo/update_todo_task", "verification_mismatch", "更新后读回字段 "+key+" 不一致")
+			return todoWriteResponseError("todo/update_todo_task", "verification_mismatch", "更新后读回字段 "+key+" 不一致")
 		}
 	}
 	return rt.Output(map[string]any{"taskId": taskID, "verified": true, "todo": detail})
@@ -214,20 +221,22 @@ var Update = shortcut.Shortcut{
 	Service:       "todo", Command: "+update", Product: "todo",
 	Description: "更新待办并读回验证", Intent: "按 taskId 修改标题、截止时间或优先级，并严格读回核验。",
 	Risk: shortcut.RiskWrite, Safety: todoWriteSafety("idempotent"),
-	Contract: todoContract("+update", "更新待办并读回验证", "已知 taskId 且需要修改待办字段时使用", todoObjectResult("已验证的更新结果"), `dws todo +update --task-id <TASK_ID> --title "新标题"`),
+	Contract: withTodoDryRun(todoContract("+update", "更新待办并读回验证", "已知 taskId 且需要修改待办字段时使用", todoObjectResult("已验证的更新结果"), `dws todo +update --task-id <TASK_ID> --title "新标题"`), contract.DryRunPreviewRequest, false),
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办 taskId", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "新标题"},
 		{Name: "due", Type: shortcut.FlagString, Desc: "新截止时间（ISO8601）"},
-		{Name: "priority", Type: shortcut.FlagInt, Desc: "新优先级 10/20/30/40"},
+		{Name: "priority", Type: shortcut.FlagInt, Desc: "新优先级；--priority 仅接受 10/20/30/40"},
 	},
-	Execute: updateTodo,
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"title", "due", "priority"}}},
+	Execute:     updateTodo,
 }
 
 func setTodoDone(rt *shortcut.RuntimeContext, target bool) error {
 	taskID := rt.Str("task-id")
+	params := map[string]any{"taskId": taskID, "isDone": strconv.FormatBool(target)}
 	if rt.DryRun() {
-		return rt.Output(map[string]any{"dryRun": true, "executed": false, "taskId": taskID, "isDone": target})
+		return todoWriteRequestPreview(rt, "set-done", "update_todo_done_status", params)
 	}
 	before, err := readTodoDetail(rt, taskID)
 	if err != nil {
@@ -240,7 +249,7 @@ func setTodoDone(rt *shortcut.RuntimeContext, target bool) error {
 	if current == target {
 		return rt.Output(map[string]any{"taskId": taskID, "isDone": target, "verified": true, "alreadyInTargetState": true})
 	}
-	data, err := rt.CallMCPWriteDataStrict("todo", "update_todo_done_status", map[string]any{"taskId": taskID, "isDone": strconv.FormatBool(target)})
+	data, err := rt.CallMCPWriteDataStrict("todo", "update_todo_done_status", params)
 	if err != nil {
 		return err
 	}
@@ -249,11 +258,11 @@ func setTodoDone(rt *shortcut.RuntimeContext, target bool) error {
 	}
 	detail, err := readTodoDetail(rt, taskID)
 	if err != nil {
-		return err
+		return todoWriteVerificationError("todo/update_todo_done_status", err)
 	}
 	done, ok := detail["isDone"].(bool)
 	if !ok || done != target {
-		return todoResponseError("todo/update_todo_done_status", "verification_mismatch", "完成状态读回不一致或缺失")
+		return todoWriteResponseError("todo/update_todo_done_status", "verification_mismatch", "完成状态读回不一致或缺失")
 	}
 	return rt.Output(map[string]any{"taskId": taskID, "isDone": target, "verified": true, "alreadyInTargetState": false})
 }
@@ -267,7 +276,7 @@ func doneShortcut(command string, target bool) shortcut.Shortcut {
 		OutputRollout: output.RolloutUnifiedActive,
 		Service:       "todo", Command: command, Product: "todo", Description: description, Intent: description,
 		Risk: shortcut.RiskWrite, Safety: todoWriteSafety("idempotent"),
-		Contract: todoContract(command, description, "已知 taskId 且需要改变完成状态时使用", todoObjectResult("已验证的待办状态"), "dws todo "+command+" --task-id <TASK_ID>"),
+		Contract: withTodoDryRun(todoContract(command, description, "已知 taskId 且需要改变完成状态时使用", todoObjectResult("已验证的待办状态"), "dws todo "+command+" --task-id <TASK_ID>"), contract.DryRunPreviewRequest, false),
 		Flags:    []shortcut.Flag{{Name: "task-id", Type: shortcut.FlagString, Desc: "待办 taskId", Required: true}},
 		Execute:  func(rt *shortcut.RuntimeContext) error { return setTodoDone(rt, target) },
 	}
@@ -323,7 +332,7 @@ var Comment = shortcut.Shortcut{
 	Service:       "todo", Command: "+comment", Product: "todo",
 	Description: "添加待办评论并读回验证", Intent: "向指定待办添加评论；取得稳定 commentId 并从评论列表读回才报告成功。",
 	Risk: shortcut.RiskWrite, Safety: todoWriteSafety("non_idempotent"),
-	Contract: todoContract("+comment", "添加待办评论并读回验证", "已知 taskId 且需要发表明确评论时使用", todoObjectResult("已验证的新评论"), `dws todo +comment --task-id <TASK_ID> --content "已处理"`),
+	Contract: withTodoDryRun(todoContract("+comment", "添加待办评论并读回验证", "已知 taskId 且需要发表明确评论时使用", todoObjectResult("已验证的新评论"), `dws todo +comment --task-id <TASK_ID> --content "已处理"`), contract.DryRunPreviewRequest, false),
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办 taskId", Required: true},
 		{Name: "content", Type: shortcut.FlagString, Desc: "评论内容", Required: true},
@@ -333,8 +342,9 @@ var Comment = shortcut.Shortcut{
 		if content == "" {
 			return apperrors.NewValidation("--content 不能为空")
 		}
+		params := map[string]any{"taskId": taskID, "content": content}
 		if rt.DryRun() {
-			return rt.Output(map[string]any{"dryRun": true, "executed": false, "taskId": taskID})
+			return todoWriteRequestPreview(rt, "comment", "add_todo_comment", params)
 		}
 		before, err := listAllTodoComments(rt, taskID)
 		if err != nil {
@@ -344,7 +354,7 @@ var Comment = shortcut.Shortcut{
 		for _, comment := range before {
 			beforeIDs[todoStableString(comment, "commentId", "id")] = true
 		}
-		data, err := rt.CallMCPWriteDataStrict("todo", "add_todo_comment", map[string]any{"taskId": taskID, "content": content})
+		data, err := rt.CallMCPWriteDataStrict("todo", "add_todo_comment", params)
 		if err != nil {
 			return err
 		}
@@ -353,7 +363,7 @@ var Comment = shortcut.Shortcut{
 		}
 		after, err := listAllTodoComments(rt, taskID)
 		if err != nil {
-			return err
+			return todoWriteVerificationError("todo/add_todo_comment", err)
 		}
 		matches := make([]map[string]any, 0, 1)
 		for _, comment := range after {
@@ -364,7 +374,7 @@ var Comment = shortcut.Shortcut{
 			}
 		}
 		if len(matches) != 1 {
-			return todoResponseError("todo/add_todo_comment", "verification_ambiguous", "评论写入后无法在完整列表中唯一识别新增评论")
+			return todoWriteResponseError("todo/add_todo_comment", "verification_ambiguous", "评论写入后无法在完整列表中唯一识别新增评论")
 		}
 		commentID := todoStableString(matches[0], "commentId", "id")
 		return rt.Output(map[string]any{"taskId": taskID, "commentId": commentID, "content": content, "verified": true})
@@ -396,43 +406,44 @@ func listAllTodoComments(rt *shortcut.RuntimeContext, taskID string) ([]map[stri
 	return nil, todoResponseError("todo/list_todo_comment", "pagination_limit_reached", "评论列表达到 40 页仍未耗尽，拒绝把不完整列表用于写后验证")
 }
 
+const todoReminderDependencyConstraint = "dueTime 要求 --due-date-offset；customTime 要求 --at；无关时间参数兼容忽略"
+
 var Reminder = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "todo", Command: "+reminder", Product: "todo",
 	Description: "设置或清除待办提醒（仅终端回执）", Intent: "设置或清除提醒；上游无提醒读接口，结果固定 verified=false。",
 	Risk: shortcut.RiskWrite, Safety: todoWriteSafety("unknown"),
-	Contract: todoContract("+reminder", "设置或清除待办提醒（仅终端回执）", "接受无法读回核验且需要设置/清除提醒时使用", &contract.ResultSpec{
+	Contract: withTodoDryRun(todoContract("+reminder", "设置或清除待办提醒（仅终端回执）", "接受无法读回核验且需要设置/清除提醒时使用", &contract.ResultSpec{
 		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
 		DataSchema: json.RawMessage(`{"type":"object","description":"提醒写入终端回执","properties":{"taskId":{"type":"string","description":"待办 taskId"},"action":{"type":"string","description":"set 或 clear"},"terminalReceipt":{"type":"boolean","description":"是否取得终端成功回执"},"verified":{"type":"boolean","description":"固定 false；上游无法读回提醒规则"}},"required":["taskId","action","terminalReceipt","verified"],"additionalProperties":false}`),
-	}, `dws todo +reminder --task-id <TASK_ID> --base-time dueTime --due-date-offset -30`),
+	}, `dws todo +reminder --task-id <TASK_ID> --base-time dueTime --due-date-offset -30`), contract.DryRunPreviewRequest, false),
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办 taskId", Required: true},
 		{Name: "clear", Type: shortcut.FlagBool, Desc: "清除全部提醒规则"},
-		{Name: "base-time", Type: shortcut.FlagString, Enum: []string{"dueTime", "customTime"}, Desc: "提醒基准"},
-		{Name: "due-date-offset", Type: shortcut.FlagInt, Desc: "相对截止时间的分钟偏移"},
-		{Name: "at", Type: shortcut.FlagString, Desc: "customTime 的 ISO8601 时间"},
+		{Name: "base-time", Type: shortcut.FlagString, Enum: []string{"dueTime", "customTime"}, Desc: "提醒基准；" + todoReminderDependencyConstraint},
+		{Name: "due-date-offset", Type: shortcut.FlagInt, Desc: "相对截止时间的分钟偏移；" + todoReminderDependencyConstraint},
+		{Name: "at", Type: shortcut.FlagString, Desc: "customTime 的 ISO8601 时间；" + todoReminderDependencyConstraint},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"clear", "base-time"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"base-time", "due-date-offset", "at"}, Description: todoReminderDependencyConstraint},
+	},
+	Validate: validateTodoReminder,
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateTodoReminder(rt); err != nil {
+			return err
+		}
 		taskID := rt.Str("task-id")
 		clear := rt.Bool("clear")
 		baseTime := rt.Str("base-time")
-		if clear == (baseTime != "") {
-			return apperrors.NewValidation("必须且只能选择 --clear 或 --base-time")
-		}
 		tool := "reset_todo_reminder"
 		params := map[string]any{"todoReminderUpdateRequest": map[string]any{"taskId": taskID, "reminderRules": []any{}}}
 		action := "clear"
 		if !clear {
 			request := map[string]any{"taskId": taskID, "baseTime": baseTime}
 			if baseTime == "dueTime" {
-				if !rt.Changed("due-date-offset") {
-					return apperrors.NewValidation("--base-time=dueTime 要求 --due-date-offset")
-				}
 				request["dueDateOffset"] = strconv.Itoa(rt.Int("due-date-offset"))
 			} else {
-				if !rt.Changed("at") {
-					return apperrors.NewValidation("--base-time=customTime 要求 --at")
-				}
 				millis, err := parseTodoMillis("at", rt.Str("at"))
 				if err != nil {
 					return err
@@ -444,7 +455,7 @@ var Reminder = shortcut.Shortcut{
 			action = "set"
 		}
 		if rt.DryRun() {
-			return rt.Output(map[string]any{"taskId": taskID, "action": action, "terminalReceipt": false, "verified": false, "dryRun": true})
+			return todoWriteRequestPreview(rt, action+"-reminder", tool, params)
 		}
 		data, err := rt.CallMCPWriteDataStrict("todo", tool, params)
 		if err != nil {
@@ -455,6 +466,32 @@ var Reminder = shortcut.Shortcut{
 		}
 		return rt.Output(map[string]any{"taskId": taskID, "action": action, "terminalReceipt": true, "verified": false})
 	},
+}
+
+func validateTodoReminder(rt *shortcut.RuntimeContext) error {
+	clear := rt.Bool("clear")
+	baseTime := rt.Str("base-time")
+	if clear == (baseTime != "") {
+		return apperrors.NewValidation("必须且只能选择 --clear 或 --base-time")
+	}
+	if baseTime == "dueTime" {
+		if !rt.Changed("due-date-offset") {
+			return apperrors.NewValidation("--base-time=dueTime 要求 --due-date-offset")
+		}
+	}
+	if baseTime == "customTime" {
+		if !rt.Changed("at") {
+			return apperrors.NewValidation("--base-time=customTime 要求 --at")
+		}
+	}
+	return nil
+}
+
+func todoWriteRequestPreview(rt *shortcut.RuntimeContext, operation, tool string, params map[string]any) error {
+	return rt.Output(map[string]any{
+		"dryRun": true, "executed": false, "operation": operation,
+		"tool": tool, "params": params,
+	})
 }
 
 var UploadAttachment = shortcut.Shortcut{

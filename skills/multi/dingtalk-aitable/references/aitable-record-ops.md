@@ -1,6 +1,8 @@
 # AI 表格记录操作
 
-仅在根 Skill 的记录 Golden Route 参数不足，或需要字段值格式、删除、历史、分享、附件细节时读取。本文件不负责 Base/Table 选路。
+仅在任务涉及记录历史、分享、删除恢复、空行或特殊字段值时读取。普通 query/create/update/upsert 走根 Skill；复杂 filter/sort、附件上传和主键文档由根 Skill 分别选择对应终点 Reference。
+
+本文不负责 Base/Table/Field 选路；读取后不要继续加载其他 AITable Reference。
 
 ## 查询
 
@@ -14,10 +16,11 @@ dws aitable record query --base-id <B> --table-id <T> --filters '<JSON>' --all -
 
 - `record-ids` 用于稳定 ID 精确读取；`query` 用于全文搜索；复杂条件用 `filters`。
 - 用户要求“只返回/仅查看”指定列时，查询必须在工具层传 `--field-ids <ID1,ID2>`。不要先拉取全部字段再只在最终答复中删列；字段投影既是结果契约，也是降低响应 token 的手段。
-- filters 使用 `{"operator":"and|or","operands":[...]}`，字段引用使用 fieldId。若 Case 明确需要复杂操作符，应一开始把 [filter-sort](aitable/aitable-filter-sort.md) 选为唯一 Reference，而不是先读本文件后继续加载。
+- filters 使用 `{"operator":"and|or","operands":[...]}`，字段引用使用 fieldId。明确出现 AND/OR、日期或比较操作符时，应由根 Skill 直接选中记录筛选 reference；不要先读本文件再跳到第二个 reference。
 - `+record-query` 必须传真实 `base-id` 和 `table-id`。URL 先用 `+url-resolve`；名称先用 `+resolve-base` / `+resolve-table` 唯一解析，禁止自动选第一项。
 - 单页 `limit` 为 1-100。返回 `data.records`、`data.hasMore`，存在后续页时还会返回 `data.nextCursor`；把该值原样传给下一次 `--cursor`。
-- `+record-query` 不提供 `--all`；明确要求全量时改用原子 `record query --all --page-limit <N>`。达到页上限后仍有 `hasMore=true` 代表截断，应从返回 cursor 续跑；只有 `hasMore=false`，或按 `record-ids` 查询且所有请求 ID 均已返回时，才能声称结果完整。
+- `+record-query --all --max-records <N>` 支持有界全量读取，`max-records` 默认 10000、范围 1–10000，超限返回错误；`--all` 与 `--cursor` 互斥。原子 `record query --all --page-limit <N>` 按页数限界，达到页上限且仍有更多页时也返回非零错误。只有已确认遍历结束，或按 `record-ids` 查询且所有请求 ID 均已返回时，才能声称结果完整。
+- 出现 `pagination_cursor_cycle`、相同 cursor 或重复页时，保留已取记录并立即停止；不要用相同参数重跑，也不要更换查询命令把不完整结果误报为完整。
 
 ## 新增
 
@@ -28,9 +31,11 @@ dws aitable record create --base-id <B> --table-id <T> \
   --records '[{"cells":{"fldText":"内容"}}]' --format json
 ```
 
-长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.newRecordIds[]` 取 recordId，再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。
+长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.createdRecordIds[]` 取 recordId（兼容保留 `data.newRecordIds[]`），再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。需要回收丢失回执时，调用前持久化 UUID v4 并传 `--client-token`；遇到超时只用原 Base/Table/token 调用 `+record-write-result`，不得自动重放创建。
 
 ## 更新、同步与批量修改
+
+记录复合写入沿用服务端的 fieldId/唯一字段名寻址，CLI 不在写前读取字段目录或改写 cells。回读先直接比较；仅缺少对应字段键或需要类型投影时，才读取 `get_fields`，将校验期望中的字段名精确映射为 fieldId，同一轮校验复用目录。字段目录读取失败、不完整或映射存在歧义时，保留写入回执和已知 recordId，返回非零退出码、unknown 与 verification.status=pending，不代表写入失败，也不自动重发写入；`+record-upsert`、`+record-batch-create` 与按键创建复用有界只读回读重试（500ms、1500ms）；预算耗尽仍报告未确认，不重发写入。目录是写后观测，不能证明与写入时的 schema 原子一致。`+record-upsert-by-key` 的 `--key-field-id` 仍只接受字段 ID，原有唯一键预检不变。dry-run 不新增字段请求；`+record-bulk-patch` 仍查询匹配记录，按键 upsert 仍查询唯一键以生成计划。
 
 已知 recordId：
 
@@ -40,6 +45,8 @@ dws aitable +record-update --base-id <B> --table-id <T> \
 ```
 
 `+record-update` 自动按 100 条分片并逐批回读；该 shortcut 只接受 `--records`。超长文件输入需要改用原子 `record update --records-file`，不要给 shortcut 猜造 flag。
+
+批量 shortcut 必须检查 `completed/failed`、`verification` 和 `checkpoint`；`partial_success` 不是完成。存在失败项时保留已完成批次和续跑位置；写入效果未知时只按真实 recordId 回读，不重放成功批次。
 
 单选、多选等字段的写入值可能是名称字符串，读回则是 `{id,name}` 或对象数组。若 shortcut 因原始类型不同返回 commit-unknown/read-back mismatch，禁止重放更新；只按返回的 recordId 做一次 `+record-query`，把单选按 `name`、多选按名称集合归一化比较。归一化后与目标一致时，按“独立读回已确认写入”报告，并保留 shortcut 的误报信息供排障。
 
@@ -61,18 +68,17 @@ dws aitable +record-delete --base-id <B> --table-id <T> --record-ids <R1,R2>
 | 多选 | 选项名称数组 |
 | 数字、评分 | JSON number |
 | 复选框 | boolean |
-| 日期 | 按字段配置要求的时间值；不凭展示文本猜格式 |
+| 日期 | 日期字符串（如 `"2026-03-15"`、`"2026-03-15 09:00"`）、含时区的 RFC3339 字符串或整数毫秒时间戳（允许 `0` 和负值） |
 | URL | 按当前字段 Schema 要求的对象或字符串 |
 | 人员、关联记录 | 使用真实 userId/recordId，不用姓名代替 |
-| 附件 | 先用 `+attachment-put` 获得 AITable 附件 token，再写字段 |
+| 附件 | 本地文件用 `+attachment-put` 完成上传和记录写入；在线 URL 通过原子 `record create/update` 传 `[{"url":"https://..."}]`，独立回读验证异步转存结果 |
+
+日期的含时区字符串和毫秒时间戳按固定 UTC+8 转为分钟精度写入，秒和毫秒不保留，转换后的年份须在 0001–9999。合法日期读出统一为东八区 RFC3339 字符串，不保留原始输入类型。写入后查询读回示例：`1788883200000` → `"2026-09-09T00:00:00+08:00"`；`0` → `"1970-01-01T08:00:00+08:00"`；`-60000` → `"1970-01-01T07:59:00+08:00"`。
 
 公式、查找引用、创建人/时间、修改人/时间等只读字段不得写入。字段类型不明时只读取目标字段配置一次。
 
-## 历史、分享与主键文档
+## 历史与分享
 
 - 记录历史：`dws aitable +record-history-list --base-id <B> --table-id <T> --record-id <R>`。已有真实 recordId 直接执行，不扫描 Help 或产品 Catalog。
 - 批量记录分享：`dws aitable +record-share-links --base <B> --table <T> --record-ids <R1,R2>`；单条也可用 `+record-share-url`。
-- 用户要求把分享链接“发给”联系人时，AITable 的职责在链接生成后结束；随后加载 `dingtalk-chat`，用 `dws chat +dm --to <姓名> --text <包含全部链接的文本>` 对每位收件人分别发送并检查真实回执。只解析联系人或只生成 URL 都不算完成。
-- 主键文档：`+record-primary-doc-get` / `+record-primary-doc-create`
-
-创建主键文档必须显式传 primaryDoc 类型的 `--field-id`；字段类型不明时先读取目标字段。正文读写切到 Doc；这里仅管理记录与文档关联。
+- 用户要求把分享链接“发给”联系人时，AITable 的职责在链接生成后结束；随后加载 `dingtalk-chat`，用 `dws chat +dm --to <姓名> --content <包含全部链接的文本>` 对每位收件人分别发送并检查真实回执。只解析联系人或只生成 URL 都不算完成。

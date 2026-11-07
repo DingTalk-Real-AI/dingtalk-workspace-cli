@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "baseId": "REPLACE_WITH_REAL_BASE_ID",
+  "templates": {
+    "analysis": {"chartType": "AI_ANALYZE", "name": "分析说明", "prompt": "", "analyzeChartIds": []}
+  },
+  "steps": [
+    {
+      "id": "sales", "tool": "create_table",
+      "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableName": "销售明细", "fields": [
+        {"fieldName": "标题", "type": "text"}, {"fieldName": "金额", "type": "number"}
+      ]},
+      "verify": {"tool": "get_tables", "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableIds": [{"$ref": "sales.tableId"}]},
+        "expected": {"data": {"tables": [{"tableId": {"$ref": "sales.tableId"}, "tableName": "销售明细"}]}}}
+    },
+    {
+      "id": "view", "dependsOn": ["sales"], "tool": "create_view",
+      "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableId": {"$ref": "sales.tableId"}, "viewType": "Grid", "viewName": "按标题分组",
+        "config": {"group": [{"fieldId": {"$ref": "sales.fieldsByName.标题"}}], "sort": [{"fieldId": {"$ref": "sales.fieldsByName.金额"}, "desc": true}]}},
+      "verify": {"tool": "get_views", "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableId": {"$ref": "sales.tableId"}, "viewIds": [{"$ref": "view.viewId"}]},
+        "expected": {"data": {"views": [{"viewId": {"$ref": "view.viewId"}, "viewName": "按标题分组", "viewType": "Grid",
+          "group": [{"fieldId": {"$ref": "sales.fieldsByName.标题"}}], "sort": [{"fieldId": {"$ref": "sales.fieldsByName.金额"}, "desc": true}]}]}}}
+    },
+    {
+      "id": "rows", "dependsOn": ["sales"], "tool": "create_records",
+      "fieldBindings": {"title": {"$ref": "sales.fieldsByName.标题"}, "amount": {"$ref": "sales.fieldsByName.金额"}},
+      "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableId": {"$ref": "sales.tableId"}, "records": [{"cells": {"title": "示例交易", "amount": 100}}]},
+      "verify": {"tool": "query_records", "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "tableId": {"$ref": "sales.tableId"}, "recordIds": {"$ref": "rows.newRecordIds"}},
+        "expected": {"data": {"records": [{"cells": {"title": "示例交易", "amount": 100}}]}}}
+    },
+    {
+      "id": "board", "tool": "create_dashboard",
+      "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "config": {"name": "销售看板"}},
+      "verify": {"tool": "get_dashboard", "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "dashboardId": {"$ref": "board.dashboardId"}},
+        "expected": {"data": {"dashboardId": {"$ref": "board.dashboardId"}, "dashboardName": "销售看板"}}}
+    },
+    {
+      "id": "analysis", "dependsOn": ["board"], "tool": "create_chart", "template": "analysis",
+      "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "dashboardId": {"$ref": "board.dashboardId"}, "config": {"name": "销售分析说明", "prompt": "这是看板分析卡片的配置示例"}, "layout": {"x": 0, "y": 0, "w": 12, "h": 4}},
+      "verify": {"tool": "get_chart", "arguments": {"baseId": "REPLACE_WITH_REAL_BASE_ID", "dashboardId": {"$ref": "board.dashboardId"}, "chartId": {"$ref": "analysis.chartId"}},
+        "expected": {"data": {"chartId": {"$ref": "analysis.chartId"}, "config": {"chartType": "AI_ANALYZE", "prompt": "这是看板分析卡片的配置示例"}, "layout": {"x": 0, "y": 0, "w": 12, "h": 4}}}}
+    }
+  ]
+}

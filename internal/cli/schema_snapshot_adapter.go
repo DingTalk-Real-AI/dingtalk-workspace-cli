@@ -65,6 +65,7 @@ type schemaToolWire struct {
 	Constraints         RuntimeSchemaConstraints            `json:"constraints"`
 	Positionals         []contract.RuntimeSchemaPositional  `json:"positionals"`
 	DryRun              *contract.DryRunSpec                `json:"dry_run"`
+	Wait                *contract.WaitSpec                  `json:"wait"`
 	Result              *contract.ResultSpec                `json:"result"`
 	Pagination          *contract.PaginationSpec            `json:"pagination"`
 	Effect              string                              `json:"effect"`
@@ -100,6 +101,7 @@ type schemaParamWire struct {
 	Default              json.RawMessage                     `json:"default"`
 	InterfaceDefault     json.RawMessage                     `json:"interface_default"`
 	Example              json.RawMessage                     `json:"example"`
+	AnyOf                []contract.FormatAlternative        `json:"anyOf"`
 	Format               string                              `json:"format"`
 	Enum                 []string                            `json:"enum"`
 	InterfaceDescription string                              `json:"interface_description"`
@@ -239,6 +241,7 @@ func schemaToolSpecFromWire(wire schemaToolWire) (ToolSpec, error) {
 			Default:              parameter.Default,
 			InterfaceDefault:     parameter.InterfaceDefault,
 			Example:              parameter.Example,
+			AnyOf:                parameter.AnyOf,
 			Format:               parameter.Format,
 			Enum:                 parameter.Enum,
 			InterfaceDescription: parameter.InterfaceDescription,
@@ -269,6 +272,7 @@ func schemaToolSpecFromWire(wire schemaToolWire) (ToolSpec, error) {
 		Constraints:    wire.Constraints,
 		Positionals:    wire.Positionals,
 		DryRun:         wire.DryRun,
+		Wait:           wire.Wait,
 		Result:         wire.Result,
 		Pagination:     wire.Pagination,
 		Safety: contract.SafetySpec{
