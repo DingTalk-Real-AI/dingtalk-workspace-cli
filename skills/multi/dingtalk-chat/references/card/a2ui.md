@@ -70,7 +70,7 @@ dws chat message send-a2ui-card \
   --conversation-id '<群openConversationId>' \
   --at-open-dingtalk-ids '<成员openDingTalkId>' \
   --at-all \
-  --content '["{\"version\":\"v1.0\",\"updateComponents\":{\"surfaceId\":\"example-card\",\"components\":[{\"id\":\"answer\",\"component\":\"Markdown\",\"content\":\"<a atId=\\\"<成员openDingTalkId>\\\">张三</a> <a atId=\\\"all\\\">everyone</a> 请查看任务进度。\"}]}}"]' \
+  --content '["{\"version\":\"v1.0\",\"createSurface\":{\"surfaceId\":\"example-card\",\"catalogId\":\"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json\",\"dataModel\":{}}}","{\"version\":\"v1.0\",\"updateComponents\":{\"surfaceId\":\"example-card\",\"components\":[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"answer\"]},{\"id\":\"answer\",\"component\":\"Markdown\",\"content\":\"<a atId=\\\"<成员openDingTalkId>\\\">张三</a> <a atId=\\\"all\\\">everyone</a> 请查看任务进度。\"}]}}"]' \
   -f json
 ```
 
