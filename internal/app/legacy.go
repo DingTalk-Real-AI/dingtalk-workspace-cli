@@ -24,6 +24,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/products/sport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
@@ -54,6 +55,9 @@ var resolveProfileMetadata = authpkg.ResolveProfileMetadataReadOnly
 // runtime's InitDeps caller or plugin endpoints.
 func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) []*cobra.Command {
 	commands := helpers.NewPublicCommands(runner)
+	// sport（企业运动健康）是 misc 长尾产品：命令树住在独立扩展包，
+	// 不进 helpers 产品注册表；端点登记在 edition supplement servers。
+	commands = append(commands, sport.NewCommand())
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
 	// built-ins. Conflicts with built-ins are skipped inside Load.

@@ -1,4 +1,4 @@
-package helpers
+package sport
 
 import (
 	"strings"
@@ -58,7 +58,7 @@ func sportCollectLeafPaths(cmd *cobra.Command) map[string]bool {
 }
 
 func TestSportCommandTreeCoversAllPublishedTools(t *testing.T) {
-	root := newSportCommand()
+	root := NewCommand()
 	paths := sportCollectLeafPaths(root)
 	if len(paths) != len(sportAllTools) {
 		t.Fatalf("sport 命令树叶子数 = %d，期望 %d：%v", len(paths), len(sportAllTools), paths)
@@ -71,7 +71,7 @@ func TestSportCommandTreeCoversAllPublishedTools(t *testing.T) {
 }
 
 func TestSportCreateFlagsBindFlatToolArgsKeys(t *testing.T) {
-	root := newSportCommand()
+	root := NewCommand()
 	create := findSportSubcommand(t, root, "competition", "create")
 	for _, flagName := range []string{"name", "sport-type", "competition-type", "start-date", "end-date", "goal-value", "target-day-value", "group-id", "need-signup", "allow-free-join", "cover-image-url"} {
 		if create.Flags().Lookup(flagName) == nil {
@@ -129,7 +129,7 @@ func TestSportValidateCreateArgsBlocksRecurringAndBadDates(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := findSportSubcommand(t, newSportCommand(), "competition", "create")
+			cmd := findSportSubcommand(t, NewCommand(), "competition", "create")
 			for key, value := range base {
 				if err := cmd.Flags().Set(key, value); err != nil {
 					t.Fatalf("设置 --%s: %v", key, err)
@@ -150,7 +150,7 @@ func TestSportValidateCreateArgsBlocksRecurringAndBadDates(t *testing.T) {
 		})
 	}
 
-	valid := findSportSubcommand(t, newSportCommand(), "competition", "create")
+	valid := findSportSubcommand(t, NewCommand(), "competition", "create")
 	for key, value := range base {
 		if err := valid.Flags().Set(key, value); err != nil {
 			t.Fatalf("设置 --%s: %v", key, err)
