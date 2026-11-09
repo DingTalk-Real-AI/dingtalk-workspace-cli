@@ -83,7 +83,7 @@ func openSupplementServers() []ServerInfo {
 		{
 			ID:       "sport",
 			Name:     "企业运动健康",
-			Endpoint: "https://mcp-gw.dingtalk.com/oauth/server/8dfdd41a0171a9e8b6575b0dee9b69960412c36675f2a891e63ddac63be08157",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/8dfdd41a0171a9e8b6575b0dee9b69960412c36675f2a891e63ddac63be08157",
 			Prefixes: []string{"sport"},
 		},
 	}
