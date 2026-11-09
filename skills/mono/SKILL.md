@@ -105,6 +105,7 @@ metadata:
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
+| `sport`           | 企业运动健康（钉钉运动）：步数榜开通状态/企业步数概况与总量/员工部门排行与多日明细/比赛创建（FIXED，需确认）/比赛配置规则期次/开赛群播报（需确认）/报名参与达标趋势统计 | [sport.md](./references/products/sport.md)                     |
 | `mail`            | 邮箱：邮箱地址查询/邮件搜索(KQL)/邮件详情/发送邮件                        | [mail.md](./references/products/mail.md)                       |
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
