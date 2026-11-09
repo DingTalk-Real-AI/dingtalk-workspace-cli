@@ -20,8 +20,8 @@ import (
 // ──────────────────────────────────────────────────────────
 // dws sport — 企业运动健康（钉钉运动）
 //
-// MCP 工具清单（22 个，与已上架服务一致）：
-//   get_user_org_list, get_org_step_participate_status,
+// MCP 工具清单（21 个，与已上架服务一致；get_user_org_list 已按服务端
+// 计划下线，不接入）：
 //   list_emp_step_ranking, list_dept_step_ranking, list_emp_ranking_in_dept,
 //   get_emp_step_ext_info, get_emp_step_infos, get_dept_step_infos_by_dept_id,
 //   get_org_health_step_info, get_org_total_step_count,
@@ -66,7 +66,6 @@ func NewCommand() *cobra.Command {
 
 命令结构:
   dws sport org status                企业是否开通步数榜
-  dws sport org orgs                  当前用户所属企业列表
   dws sport step org-info             企业单日步数概况
   dws sport step org-total            企业区间总步数
   dws sport step emp-ranking          全企业员工步数排行
@@ -144,7 +143,6 @@ func sportRequiredParam(name, property, description string) contract.ParamDecl {
 
 func newSportOrgGroup() *cobra.Command {
 	orgCmd := sportGroupCommand(&cobra.Command{Use: "org", Short: "企业开通状态", RunE: helpers.GroupRunE})
-
 	statusCmd := helpers.NewLeafCommand(helpers.LeafSpec{
 		Use:           "status",
 		Short:         "查询企业是否开通步数榜",
@@ -169,31 +167,7 @@ func newSportOrgGroup() *cobra.Command {
 		},
 	})
 
-	orgsCmd := helpers.NewLeafCommand(helpers.LeafSpec{
-		Use:           "orgs",
-		Short:         "查询当前用户所属企业列表",
-		Long:          "获取当前调用用户所属企业列表，返回企业 corpId、企业名称与是否主企业。注意排行等数据工具查询的是平台按当前登录身份注入的企业，不随本列表选择。",
-		Example:       "  dws sport org orgs --format json",
-		OutputRollout: output.RolloutUnifiedActive,
-		Server:        sportServerID,
-		ResultCall:    sportCallResult,
-		Tool:          "get_user_org_list",
-		Safety:        sportReadLeaf(),
-		Contract: corecmd.ContractDecl{
-			Identity:    sportIdentity("get_user_org_list", "sport org orgs", "org"),
-			Description: "获取当前用户所属企业列表",
-			Result:      sportResult("当前用户所属企业列表，含 corpId、企业名称与是否主企业"),
-			Interface:   sportInterface("get_user_org_list"),
-			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前调用用户所属的企业列表",
-				UseWhen:      []string{"多组织场景下确认当前用户所属企业时"},
-				AvoidWhen:    []string{"查询企业步数或比赛数据不要使用本命令"},
-				Examples:     []string{"dws sport org orgs --format json"},
-			},
-		},
-	})
-
-	orgCmd.AddCommand(statusCmd, orgsCmd)
+	orgCmd.AddCommand(statusCmd)
 	return orgCmd
 }
 

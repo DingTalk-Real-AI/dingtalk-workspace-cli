@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// sportAllTools 是已上架 MCP 服务的 22 个工具名及其 CLI 路径；产品命令树必须一一覆盖。
+// sportAllTools 是已上架 MCP 服务的工具名及其 CLI 路径；产品命令树必须一一覆盖。
+// get_user_org_list 按服务端计划下线，不接入。
 var sportAllTools = map[string]string{
-	"get_user_org_list":                "sport org orgs",
 	"get_org_step_participate_status":  "sport org status",
 	"list_emp_step_ranking":            "sport step emp-ranking",
 	"list_dept_step_ranking":           "sport step dept-ranking",

@@ -21,7 +21,7 @@ Avoid when：
 
 | 用户意图 | 命令族 |
 |---|---|
-| 查步数榜是否开通、当前用户所属企业列表 | `dws sport org status` / `dws sport org orgs` |
+| 查步数榜是否开通 | `dws sport org status` |
 | 企业步数概况、区间总步数 | `dws sport step org-info` / `dws sport step org-total` |
 | 员工/部门/部门内员工步数排行 | `dws sport step emp-ranking` / `dept-ranking` / `dept-emp-ranking` |
 | 某员工/某部门多日步数明细 | `dws sport step emp-info` / `emp-infos` / `dept-infos` |
@@ -75,7 +75,6 @@ Avoid when：
 | 命令 | 必填参数 | 用途 |
 |---|---|---|
 | `dws sport org status` | 无 | 查询当前企业是否开通步数榜 |
-| `dws sport org orgs` | 无 | 查询当前用户所属且开通运动的企业列表 |
 | `dws sport step org-info` | `--stat-date` | 企业当日步数概况（人数、总步数） |
 | `dws sport step org-total` | `--begin-date`, `--end-date` | 企业区间总步数 |
 | `dws sport step emp-ranking` | `--stat-date`, `--stat-type` | 员工步数排行（D/W/M），cursor 分页 |
@@ -111,7 +110,7 @@ Avoid when：
 
 | CLI 命令 | MCP 工具 |
 |---|---|
-| `org orgs` / `org status` | `get_user_org_list` / `get_org_step_participate_status` |
+| `org status` | `get_org_step_participate_status` |
 | `step org-info` / `step org-total` | `get_org_health_step_info` / `get_org_total_step_count` |
 | `step emp-ranking` / `dept-ranking` / `dept-emp-ranking` | `list_emp_step_ranking` / `list_dept_step_ranking` / `list_emp_ranking_in_dept` |
 | `step emp-info` / `emp-infos` / `dept-infos` | `get_emp_step_ext_info` / `get_emp_step_infos` / `get_dept_step_infos_by_dept_id` |
