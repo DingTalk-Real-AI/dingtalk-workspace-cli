@@ -130,6 +130,14 @@ dws chat +search-msg --group "项目群" --has-reactions --page-all --format jso
 
 ## 其他查询
 
+### 单聊分页结果
+
+`+messages-list-direct --page-all` 的 `complete` 表示分页是否完成；即使分页完成，
+解密失败仍会返回 `partial=true`、原始密文和 `decryptFailures`。
+任一已读取页缺少可靠的 `hasMore` 时，命令停止并返回分页错误，
+`paginationKnown=false`，同时保留已读取的消息。请求失败或游标错误不会单独将
+已知的 `hasMore` 证据变为未知；仍需检查 `complete`、`stopReason` 和 `failures`。
+
 ### 已知消息、@我与话题回复
 
 - `+messages-mget --msg-ids <id...>`：最多 50 条；结果可直接用于回复、转发、撤回和资源下载。
