@@ -149,6 +149,38 @@ base/head 与 PR 身份；当前 base 必须是当前 head 的祖先。治理工
 这些记录才成为业务运行的 base-owned authority。业务 PR 保留
 `ai-generated` 标记，其他八项必需检查与独立评审仍须完成。
 
+### PR #1607 的精确公开同步补丁准入
+
+本记录仅针对 `DingTalk-Real-AI/dingtalk-workspace-cli` 的 PR #1607，
+作者 `haofeng0705`、源分支 `codex/fix-dwsh-6572-sync-1.0.68`、同仓
+`main` 目标及开放状态。通用 30 文件限制和所有保护路径规则保持不变。
+
+初始候选 `5e04e166cf57a58341a7c2052ef8b602ccddeeb4` 包含 114 个文件。
+其 A2UI 原子发送 `support-forward` 默认值由 false 改为 true；候选自身的
+Schema 比较器不能为同一业务 PR 授权。治理前置 G0
+`34cbe5c5fd6e2f08bd74f889fcdf367b88426a0f` 仅将精确兼容规则及回归测试
+放入 `scripts/policy/schema-compat/main.go` 和
+`scripts/policy/schema-compat/a2ui_forward_default_test.go`，不改变生产行为。
+它只接受既定 tool/参数的显式 boolean false→true，或原生注解从缺省 false
+到字符串 true 的发布形式；其他参数事实、邻近工具及反向变化仍须拒绝。
+
+将 G0 整合进业务候选形成 C1
+`f350e5ca0a412884cfaf99fa48bb7ea3ea9d84df`；C1 的业务树与初始候选相同。
+G0→C1 恰为 112 个公共文件，已不包含任何受保护路径。
+固定路径及增改状态另存于
+`test/scripts/testdata/public-sync-1607-approved-delta.json`，回归测试直接
+执行主分支工作流脚本，覆盖补丁漂移、额外保护路径、身份/基线变化及自授权拒绝。
+
+本精确记录复用四个完整 Git tree 与 Files API 的交叉核对，严格比较全部路径、
+状态、前后 blob、模式与类型；Ready/Draft、PR 身份、当前 base 为 head 的祖先
+及读取前后新鲜度检查继续生效。治理合入后可整合新 main，但业务差异必须仍
+等于 G0→C1；任何路径或内容变化均须重新审查，不从可变 PR 正文读取批准。
+
+本治理改动须维护者独立评审并合入 main 后才成为 base-owned authority。
+治理 PR 自身仍受旧主分支规则检查，不能使用 #1607 的精确记录自授权；如需
+bootstrap 合并权限，须另行明确授权并由维护者处理。业务 PR 保留 `ai-generated`
+标签，其余八项必需检查和独立同行审批仍须完成，不自动合并或发布。
+
 ## Draft pull-request feedback
 
 A Draft pull request runs the independent `Draft CI` workflow. Its single
