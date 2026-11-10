@@ -582,8 +582,24 @@ related but distinct contracts:
 - Existing `dev` / `devapp` pilot coverage is gradual. Active reviewed
   `devapp` shortcuts are gated on a non-empty Result declaration, while `dev`
   currently has representative Result coverage. Do not describe that as
-  repository-wide coverage. The remaining pilot gaps should shrink, not
-  expand.
+  repository-wide coverage. Any newly activated Agent-visible command must add
+  and test a non-empty `Contract.Result` / `contract.ResultSpec` before it is
+  exposed to Agents; this requirement also applies to commands delegating to a
+  published MCP or other composite interface. A command must not be activated
+  by inferring its return shape from examples, MCP samples, legacy output, or
+  documentation. The remaining pilot gaps may be migrated incrementally, but
+  no new gap may be introduced.
+- `ResultSpec` is part of the command's reviewed Agent contract, not optional
+  documentation. Its `data_schema` must describe only the business value under
+  runtime `data`, its `outcomes` must be reviewed and normalized, and any
+  credentials or other sensitive business fields must be listed in
+  `sensitive_paths`. The full leaf, compact leaf, and runtime delivery must be
+  covered by tests through the final embedded Schema path. The six
+  `dws dev liteapp` leaves (`create`, `update`, `delete`, `list`, `detail`,
+  and `credential`) are the baseline example: each must retain a reviewed
+  `ResultSpec`, write leaves must publish their actual dry-run capability, and
+  the result schema must never include MCP invocation-wrapper fields such as
+  `mcpId`, `tool`, `ok`, or `meta`.
 
 The compact/full leaf `result` object has one stable shape:
 

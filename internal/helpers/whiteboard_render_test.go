@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	outputpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
@@ -37,7 +38,7 @@ func TestCrossPlatformCoverageWhiteboardInvalidRunStopsRenderAndCreate(t *testin
 				args = append(args, "--name", "日历", "--request-id", "invalid-run", "--yes")
 			}
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "/source/nodes/0/text/blocks/0/runs/0/text") || !strings.Contains(err.Error(), "day0-slot0") {
 				t.Fatalf("missing actionable error: %v", err)
 			}
@@ -53,7 +54,7 @@ func TestCrossPlatformCoverageWhiteboardInvalidRunStopsRenderAndCreate(t *testin
 
 func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *testing.T) {
 	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[
-		{"id":"card","type":"shape","x":40,"y":30,"width":200,"height":100,"geometry":"dml:roundRect","text":"<确认预览>"},
+		{"id":"card","type":"shape","x":40,"y":30,"width":200,"height":100,"geometry":"dml:roundRect","text":{"blocks":[{"type":"paragraph","runs":[{"text":"<确认预览>"}]}]}},
 		{"id":"media","type":"image","x":280,"y":30,"width":120,"height":100,"url":"https://secret.example/image.png"}
 	]}`
 	sourcePath := writeWhiteboardFixture(t, source)
@@ -66,7 +67,7 @@ func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *test
 	cmd.SetOut(buffer)
 	cmd.PersistentFlags().Bool("yes", false, "")
 	cmd.SetArgs([]string{"render", "--source", "@" + sourcePath, "--output", artifactPath, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	leaf, _, err := cmd.Find([]string{"render"})
@@ -155,7 +156,7 @@ func TestCrossPlatformCoverageWhiteboardRenderWriteConfirmation(t *testing.T) {
 				args = append(args, "--dry-run")
 			}
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if (err == nil) != tc.wantWrite {
 				t.Fatalf("write=%v, err=%v", tc.wantWrite, err)
 			}
@@ -287,7 +288,7 @@ func TestCrossPlatformCoverageWhiteboardCreateDigestGuardStopsBeforeRPC(t *testi
 
 // A matching render digest proves content identity, never human approval.
 func TestCrossPlatformCoverageWhiteboardCreateRequiresUserConfirmation(t *testing.T) {
-	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"title","type":"text","text":"课表"}]}`
+	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"title","type":"text","text":{"blocks":[{"type":"paragraph","runs":[{"text":"课表"}]}]}}]}`
 	parsed, err := opennodes.Parse([]byte(source))
 	if err != nil {
 		t.Fatal(err)
@@ -338,7 +339,7 @@ func TestCrossPlatformCoverageWhiteboardCreateRequiresUserConfirmation(t *testin
 				args = append(args, "--dry-run")
 			}
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error=%v wantError=%v", err, tc.wantError)
 			}

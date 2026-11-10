@@ -1,6 +1,6 @@
 # 应用事件订阅
 
-事件配置走 `dws dev app event`；它不等于个人 IM/OA 实时监听。
+本文件配置应用接收哪些钉钉回调，走 `dws dev app event`。应用产生什么事件走 [event-definition.md](./event-definition.md)（`dws dev event`）；个人与应用事件的实时消费走 [dingtalk-event](../../../dingtalk-event/SKILL.md)（`dws event`）。三条命令面不互相替代。
 
 ## 最短命令路径
 

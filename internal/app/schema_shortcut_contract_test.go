@@ -733,7 +733,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 16; got != want {
+	if got, want := len(parameters), 17; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -745,7 +745,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
 		"block-id": "blockId", "after-block-id": "afterBlockId", "before-block-id": "beforeBlockId", "heading-level": "headingLevel", "old": "old", "new": "new",
-		"expected-revision": "expectedRevision", "start-block-id": "startBlockId", "end-block-id": "endBlockId", "src-block-ids": "srcBlockIds",
+		"force": "force", "expected-revision": "expectedRevision", "start-block-id": "startBlockId", "end-block-id": "endBlockId", "src-block-ids": "srcBlockIds",
 	}
 	for name, want := range wantProperties {
 		if got := schemaContractString(parameters[name]["property"]); got != want {

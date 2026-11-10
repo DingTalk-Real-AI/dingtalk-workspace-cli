@@ -6,6 +6,50 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.68-beta.1] - 2026-11-06
+
+### Added
+
+- **应用事件** (#1597) — 新增应用事件目录发现、Schema 查询和消费输出，支持业务 Schema 版本；新增 `dws dev event list/get/create/update/validate/lint/debug/publish/offline`，用于配置事件定义、校验及受控调试。真实 debug、草稿体验投递和发布后的消费闭环仍需在目标服务环境验收。
+
+### Changed
+
+- **Runtime payload** (#1594) — 升级内嵌资源至 `20261104`，同步六平台资源、配置和完整性校验，继续使用单文件交付。
+- **轻应用创建** (#1597，前置迁移 #1598) — `dws dev liteapp create --desc` 从可选改为必填且去除首尾空白后非空；已有脚本需要显式提供描述。
+
+### Known limitations
+
+- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+
+## [1.0.67] - 2026-11-04
+
+本版本将已交付的 `v1.0.67-beta.1` 晋级正式版，并纳入下方列出的 beta 后变更。
+
+### Changed
+
+- **Runtime payload** — 升级至 20261028，纳入最新平台配置，同步六平台资源、完整性校验、运行时集成及安装打包兼容性。
+
+### Changes since `v1.0.67-beta.1`
+
+### Added
+
+- Extend interactive cards with template rendering, summaries, forwarding, mentions and extension metadata.
+- Support final A2UI replies across local Agent channels, preserving image attachments and interrupted-turn recovery boundaries.
+- Add personal minutes and calendar event schemas and consumer support; service availability requires separate validation.
+- Add reviewed LiteApp commands and improve AI table navigation, named links and field verification.
+- Add document suggestions, atomic range operations and scoped whiteboard recovery.
+
+- Bound upload PUT operations with the requested timeout and avoid nil-content next-step panics.
+- Replace the staged executable inode after macOS signing during upgrade.
+
+Credential rotation commands are outside this change because this public baseline does not expose them.
+
+### Fixed
+
+- **Gitee 代码镜像** — 将 main 同步步骤的超时预算从 15 分钟延长至 60 分钟，为低速链路上的二进制增量上传留出时间。
+
+- Gitee/OSS 渠道补同步使用目标封存版本的制品格式校验器，避免运行时载荷格式升级后误拒绝历史正式版；发布来源准入及镜像上传继续使用受保护主分支工具。
+
 ## [1.0.67-beta.1] - 2026-11-02
 
 ### Changed

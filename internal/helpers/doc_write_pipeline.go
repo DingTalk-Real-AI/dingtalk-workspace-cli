@@ -166,6 +166,9 @@ func singleWrite(ctx context.Context, toolName string, toolArgs map[string]any) 
 func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 	markdown string, operation string, chunkSize int) (chunkedWriteOutcome, error) {
 
+	// Freeze the source before the first request, including create followed by
+	// update calls. Rebuilt chunk arguments must retain this same object.
+	extraInfo := docEditExtraInfo(toolArgs)
 	plan := SplitMarkdownForAppend(markdown, chunkSize)
 	chunks := plan.Chunks
 	out := chunkedWriteOutcome{degradations: plan.Degradations}
@@ -204,9 +207,13 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 			firstMode = m
 		}
 		updateArgs := map[string]any{
-			"nodeId":   out.nodeID,
-			"markdown": chunks[0],
-			"mode":     firstMode,
+			"nodeId":    out.nodeID,
+			"markdown":  chunks[0],
+			"mode":      firstMode,
+			"extraInfo": extraInfo,
+		}
+		if force, present := toolArgs["force"]; present {
+			updateArgs["force"] = force
 		}
 		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 写入分片 (1/%d)，%d 字符 (%s)...",
 			len(chunks), utf8.RuneCountInString(chunks[0]), firstMode))
@@ -232,9 +239,10 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 			i+1, len(chunks), utf8.RuneCountInString(chunk), previewRunes(chunk, 80)))
 
 		updateArgs := map[string]any{
-			"nodeId":   out.nodeID,
-			"markdown": chunk,
-			"mode":     "append",
+			"nodeId":    out.nodeID,
+			"markdown":  chunk,
+			"mode":      "append",
+			"extraInfo": extraInfo,
 		}
 		resultText, err := callMCPToolReturnText(ctx, "update_document", updateArgs)
 		out.lastResponse = resultText

@@ -424,12 +424,21 @@ var BaseDelete = shortcut.Shortcut{
 
 // BaseCopy 复制 AI 表格（copy_base）。
 var BaseCopy = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+base-copy",
-	Product:     serverMain,
-	Description: "复制 AI 表格（可选目标目录，可仅复制结构）",
-	Intent:      "当你想基于现有表格快速复刻一份（如做模板或备份）时使用；未指定目标时复制到源 Base 所在工作区根目录。",
-	Risk:        shortcut.RiskWrite,
+	Service:       "aitable",
+	Command:       "+base-copy",
+	Product:       serverMain,
+	Description:   "复制 AI 表格（可选目标目录，可仅复制结构）。" + helpers.AitableNavigationGuidance,
+	Intent:        "当你想基于现有表格快速复刻一份（如做模板或备份）时使用；未指定目标时复制到源 Base 所在工作区根目录。" + helpers.AitableNavigationGuidance,
+	Risk:          shortcut.RiskWrite,
+	Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: aitableCompositeContractWithResult(
+		"+base-copy", "复制 Base，可选重命名，并读回验证新 Base。"+helpers.AitableNavigationGuidance,
+		"需要复刻已有 Base 并验证副本时使用。"+helpers.AitableNavigationGuidance,
+		"只需原子复制用 base copy；创建空白 Base 用 base create",
+		`dws aitable +base-copy --base-id BASE_ID --new-name "副本名称"`,
+		aitableBaseCompositeResultSpec("base_copy"),
+	),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "源 Base ID 或标准 Base 节点 URL", Required: true},
 		{Name: "target-folder-id", Type: shortcut.FlagString, Desc: "可选目标文件夹 dentryUuid、标准节点 URL 或 Drive 文件夹 URL；不传时使用源 Base 工作区根目录"},
@@ -475,6 +484,7 @@ var TableGet = shortcut.Shortcut{
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
+		Result: helpers.AitableTablesNavigationResultSpec(),
 		Selection: contract.SelectionSpec{
 			AgentSummary: "批量获取指定数据表的表级信息、字段目录与视图目录",
 			UseWhen:      []string{"当你已进入某个 Base、需要了解其中某些数据表有哪些字段（拿 fieldId）、有哪些视图（拿 viewId）以便读写数据时使用；批量返回表信息、字段目录和视图目录。"},
@@ -502,12 +512,35 @@ var TableGet = shortcut.Shortcut{
 // TableCreate 创建数据表（create_table）。
 // TableUpdate 更新数据表（update_table）。
 var TableUpdate = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+table-update",
-	Product:     serverMain,
-	Description: "更新数据表名称 / 备注 / 行命名规则",
-	Intent:      "当你要给数据表改名、改备注，或调整行的命名规则（如按 task/project 命名）时使用；会实际更新表级属性。",
-	Risk:        shortcut.RiskWrite,
+	Service:       "aitable",
+	Command:       "+table-update",
+	Product:       serverMain,
+	Description:   "更新数据表名称 / 备注 / 行命名规则。" + helpers.AitableNavigationGuidance,
+	Intent:        "当你要给数据表改名、改备注，或调整行的命名规则（如按 task/project 命名）时使用；会实际更新表级属性。" + helpers.AitableNavigationGuidance,
+	Risk:          shortcut.RiskWrite,
+	Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "aitable", Name: "shortcut_table_update", CanonicalPath: "aitable.shortcut_table_update",
+			CLIPath: "aitable +table-update", PrimaryCLIPath: "aitable +table-update",
+		},
+		Description: "更新数据表属性并返回服务端核验状态。" + helpers.AitableNavigationGuidance,
+		Interface: &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable,
+			Reason: reviewedAITableShortcutInterfaceReason},
+		Parameters: []contract.ParamDecl{
+			{Name: "base-id", Property: "baseId"}, {Name: "table-id", Property: "tableId"},
+			{Name: "name", Property: "name"}, {Name: "description", Property: "description"},
+			{Name: "record-name-key", Property: "recordNameKey"},
+		},
+		Result: helpers.AitableNavigationBusinessResultSpec(),
+		Selection: contract.SelectionSpec{
+			AgentSummary: "更新数据表属性并返回服务端核验状态。" + helpers.AitableNavigationGuidance,
+			UseWhen:      []string{"需要更新数据表名称、备注或行命名规则时使用"},
+			AvoidWhen:    []string{"修改 Base 名称用 base update；修改字段用 field update"},
+			Examples:     []string{`dws aitable +table-update --base-id B --table-id T --name "新表名"`},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -530,7 +563,7 @@ var TableUpdate = shortcut.Shortcut{
 		if rt.Changed("record-name-key") {
 			params["recordNameKey"] = rt.Str("record-name-key")
 		}
-		return rt.CallMCP("update_table", params)
+		return helpers.ExecuteAitableNavigationResult(rt.Command(), "update_table", params)
 	},
 }
 
@@ -623,8 +656,10 @@ var FieldUpdate = shortcut.Shortcut{
 	Command:     "+field-update",
 	Product:     serverMain,
 	Description: "更新字段名称 / 说明 / 配置 / AI 配置（类型不可改）",
-	Intent:      "当你要改字段名，或调整字段配置/AI 配置（注意字段类型本身不可改）时使用；会实际更新指定字段。",
+	Intent:      "当你要改字段名，或调整字段配置/AI 配置（注意字段类型本身不可改）时使用；会实际更新指定字段。返回携带Web 对象定位参数的 url/links；实际定位由 Web 页面处理。",
 	Risk:        shortcut.RiskWrite,
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Contract:    aitableCompositeContractWithResult("+field-update", "更新字段并返回访问链接；实际定位由 Web 页面处理", "已有字段需修改名称、说明或配置时", "新建字段使用 +field-create", `dws aitable +field-update --base-id B --table-id T --field-id F --name 新名称`, helpers.AitableObjectNavigationResultSpec()),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1349,8 +1384,10 @@ var ViewUpdate = shortcut.Shortcut{
 	Command:     "+view-update",
 	Product:     serverMain,
 	Description: "更新视图名称 / 描述 / 配置（含类型校验后的筛选）",
-	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；config.filter 复用原子入口的字段类型校验、日期/人员协议归一化并读回核对。",
+	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；config.filter 复用原子入口的字段类型校验、日期/人员协议归一化并读回核对。返回携带Web 对象定位参数的 url/links；实际定位由 Web 页面处理。",
 	Risk:        shortcut.RiskWrite,
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Contract:    aitableCompositeContractWithResult("+view-update", "更新视图并返回携带目标标识的 url/links；实际定位由 Web 页面处理", "需要修改已有视图时", "创建对象使用对应 create 入口", `dws aitable +view-update --base-id B --table-id T --view-id V --name 新视图名`, helpers.AitableObjectNavigationResultSpec()),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1833,8 +1870,10 @@ var FormUpdate = shortcut.Shortcut{
 	Command:     "+form-update",
 	Product:     serverHelper,
 	Description: "更新表单标题 / 描述",
-	Intent:      "当你要修改表单对外展示的标题或说明文案时使用；会实际更新表单的标题/描述。",
+	Intent:      "当你要修改表单对外展示的标题或说明文案时使用；会实际更新表单的标题/描述。返回携带Web 对象定位参数的 url/links；实际定位由 Web 页面处理。",
 	Risk:        shortcut.RiskWrite,
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Contract:    aitableCompositeContractWithResult("+form-update", "更新表单并返回携带目标标识的管理 url/links；实际定位由 Web 页面处理", "需要修改已有表单时", "创建对象使用对应 create 入口", `dws aitable +form-update --base-id B --table-id T --view-id V --title 新表单名`, helpers.AitableObjectNavigationResultSpec()),
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},

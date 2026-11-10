@@ -182,6 +182,19 @@ type FriendAddedOutput struct {
 	Direction            string `json:"direction" description:"当前用户视角：active 为主动添加对方，passive 为对方添加当前用户"`
 }
 
+// AppEventOutput is the generic projection for event keys outside the
+// built-in registry, such as application events. The business payload passes
+// through verbatim under the payload key, matching the jq_root_path
+// ".payload" that the event schema document publishes for these events.
+type AppEventOutput struct {
+	Type                 string          `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID              string          `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp            int64           `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID          string          `json:"subscribe_id" description:"订阅 ID"`
+	PayloadSchemaVersion string          `json:"payload_schema_version,omitempty" description:"业务 Schema 版本，对应信封 payloadSchemaVersion"`
+	Payload              json.RawMessage `json:"payload" description:"业务 payload，结构由应用事件已发布 Schema 定义"`
+}
+
 // GroupLifecycleEventOutput is intentionally conservative until stable group
 // event payload samples are available. Payload keeps unknown business fields
 // while transport identity and routing metadata remain available only in raw
@@ -542,11 +555,12 @@ type GroupMemberEventMember struct {
 }
 
 type personalEventData struct {
-	EventID      string          `json:"eventId"`
-	EventKey     string          `json:"eventKey"`
-	OccurredAtMS int64           `json:"occurredAtMs"`
-	SubID        string          `json:"subId"`
-	Payload      json.RawMessage `json:"payload"`
+	EventID              string          `json:"eventId"`
+	EventKey             string          `json:"eventKey"`
+	OccurredAtMS         int64           `json:"occurredAtMs"`
+	SubID                string          `json:"subId"`
+	PayloadSchemaVersion string          `json:"payloadSchemaVersion"`
+	Payload              json.RawMessage `json:"payload"`
 }
 
 var marshalPersonalTransportData = json.Marshal
@@ -873,13 +887,13 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed VoIP or card data it returns a safe typed output
+// event output. On malformed VoIP, calendar or card data it returns a safe typed output
 // so sensitive transport fields cannot leak through the projection fallback;
 // legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
-		if isVoIPEvent(ev.EventType) {
+		if isVoIPEvent(ev.EventType) || ev.EventType == EventCalendarEventChanged {
 			return baseEventOutput{
 				Type:        ev.EventType,
 				EventID:     ev.EventID,
@@ -948,6 +962,10 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		SubscribeID: subscribeID,
 	}
 	switch {
+	case eventType == EventCalendarEventChanged:
+		return projectCalendarEvent(base, data.Payload)
+	case isMinutesEvent(eventType):
+		return projectMinutesEvent(ev, base, data.Payload)
 	case isReadEvent(eventType):
 		return projectReadEvent(ev, base, data.Payload)
 	case isRecallEvent(eventType):
@@ -997,6 +1015,20 @@ func ProjectOutput(ev transport.Event) (any, error) {
 	case isFriendAddedEvent(eventType):
 		return projectFriendAddedEvent(ev, base, data.Payload)
 	default:
+		if _, ok := Lookup(eventType); !ok {
+			// Registry-unknown keys are application events (or future official
+			// events): project them generically and keep the business payload
+			// verbatim under the payload key, matching the jq_root_path
+			// ".payload" published by the event schema document.
+			return AppEventOutput{
+				Type:                 eventType,
+				EventID:              eventID,
+				Timestamp:            timestamp,
+				SubscribeID:          subscribeID,
+				PayloadSchemaVersion: strings.TrimSpace(data.PayloadSchemaVersion),
+				Payload:              data.Payload,
+			}, nil
+		}
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
 }
@@ -1616,6 +1648,10 @@ func transportEnvelopeSchema(eventKey string) map[string]any {
 
 func outputTypeForEvent(eventKey string) reflect.Type {
 	switch {
+	case eventKey == EventCalendarEventChanged:
+		return reflect.TypeOf(CalendarEventOutput{})
+	case isMinutesEvent(eventKey):
+		return reflect.TypeOf(MinutesEventOutput{})
 	case isMessageReceiveEvent(eventKey):
 		return reflect.TypeOf(MessageEventOutput{})
 	case isReadEvent(eventKey):

@@ -6,8 +6,8 @@
 
 ## 顶层规则
 
-- cells 的 key **必须是 fieldId**（如 `fldXXX`），不是字段名称
-- fieldId 必须从 `field get` 返回中获取
+- cells 的 key 支持 **fieldId 或当前表内唯一字段名**；推荐 fieldId（如 `fldXXX`），字段名须精确匹配
+- 使用 fieldId 时，从 `field get` 返回中获取真实 ID
 - 不同字段类型的 value 格式不同，混用会报错
 - 系统只读字段（creator/lastModifier/createdTime/lastModifiedTime/formula）不可写入
 
@@ -337,7 +337,7 @@
 
 | 错误 | 正确做法 |
 |------|----------|
-| cells key 用字段名称 `"课程名称"` | 用 fieldId `"fldXXX"` |
+| cells key 使用不存在、重名或未精确匹配的字段名 | 优先用真实 fieldId；字段名须在当前表内唯一且精确匹配 |
 | progress 写入 `75` | 写入 `0.75`（范围 0~1） |
 | attachment 直接传本地文件路径 | 本地文件先上传获得 fileToken；在线 URL 使用 `[{"url":"https://..."}]`，写后验证异步转存结果 |
 | user 字段传用户名字符串 | 传对象数组 `[{"userId":"...", "corpId":"..."}]` |

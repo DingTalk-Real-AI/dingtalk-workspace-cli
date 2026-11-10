@@ -1,21 +1,20 @@
 # 开放平台应用管理（dev / devapp）
 
-> **渐进式文档**：本文件为路由层（MUST DO / 概念地图 / 产品索引）；各命令组的详细参数与流程在 [dev/](./dev/) 目录下按需加载。命令前缀：`dws dev`（原子）与 `dws devapp +create` 等 `+` shortcut。
+> **渐进式文档**：本文件为路由层（MUST DO / 概念地图 / 产品索引）；各命令组的详细参数与流程在 [dev/](./dev/) 目录下按需加载。默认命令前缀是 `dws dev` 原子路径；`dws devapp +...` 仅作兼容或用户明确指定的 shortcut。
 
 ## MUST DO
 
-每次执行 dev 命令前，先查清楚再敲，别凭记忆或猜：
+已知 leaf 直接执行，避免用 help 探路；只有当前参数确有不确定性时才查一次该 leaf 的 compact Schema，Schema 不可用才查一次精确 leaf `--help`：
 
-1. `--help` 看命令树（一个组下有哪些子命令、flag），例 `dws dev app --help`
-2. `--help` 看叶子命令参数（flag、默认值、示例），按当前二进制输出构造；不要再依赖已下线的动态 schema
-3. 全部命令带 `--format json`
-4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](./dev/connect.md)；MCP 见 [mcp.md](./dev/mcp.md)）
-5. 写完回读确认（`get` / `robot get` / `version status`）
-6. `clientSecret/appSecret` 不写进回答（脱敏）
-7. `robot result` 只要出现 `completionState=BLOCKED_BY_VERSION_PUBLISH` 或 `mustContinue=true`，必须继续执行 blocking `nextSteps`，不得停在 `dev connect`
-8. `dev connect` 的 `completionState=LOCAL_DEBUG_ONLY` / `doesNotPublish=true` 只代表本地调试，不能作为最终完成态
-9. `version check-approval` 若返回 `completionState=WAITING_FOR_APPROVER_SELECTION`，选择题原样展示 `approvalPromptText`（或 `approvalOptions[].label`），不得把姓名丢成泛化“候选审批人”
-10. `robot result` 若缺 `unifiedAppId` 或返回 `completionState=BLOCKED_BY_MISSING_UNIFIED_APP_ID`，必须停下要求明确的 `unifiedAppId`；禁止用 `clientId/appKey` 自动反查后继续执行版本写操作
+1. 不用组 help 或父命令 help 探路发现命令；当前 reference 已明确命令时按原子路径执行
+2. 全部命令带 `--format json`
+3. 写操作：先用 `--dry-run` 查看调用预览（本地校验，不触网），展示准确对象、动作和参数并取得明确确认，再把同一命令改为 `--yes`；`dev connect` 例外见 [connect.md](./dev/connect.md)，MCP 见 [mcp.md](./dev/mcp.md)
+4. 写完回读确认（`get` / `robot get` / `version status`）
+5. `clientSecret/appSecret` 不写进回答（脱敏）
+6. `robot result` 只要出现 `completionState=BLOCKED_BY_VERSION_PUBLISH` 或 `mustContinue=true`，必须继续执行 blocking `nextSteps`，不得停在 `dev connect`
+7. `dev connect` 的 `completionState=LOCAL_DEBUG_ONLY` / `doesNotPublish=true` 只代表本地调试，不能作为最终完成态
+8. `version check-approval` 若返回 `completionState=WAITING_FOR_APPROVER_SELECTION`，选择题原样展示 `approvalPromptText`（或 `approvalOptions[].label`），不得把姓名丢成泛化“候选审批人”
+9. `robot result` 若缺 `unifiedAppId` 或返回 `completionState=BLOCKED_BY_MISSING_UNIFIED_APP_ID`，必须停下要求明确的 `unifiedAppId`；禁止用 `clientId/appKey` 自动反查后继续执行版本写操作
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）

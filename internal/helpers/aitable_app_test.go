@@ -263,9 +263,19 @@ func TestCrossPlatformCoverageAitableAppModeContracts(t *testing.T) {
 		}
 		var schema struct {
 			Properties map[string]json.RawMessage `json:"properties"`
+			OneOf      []json.RawMessage          `json:"oneOf"`
 		}
 		if err := json.Unmarshal(payload.Result.DataSchema, &schema); err != nil {
 			t.Fatalf("path %q result schema: %v", tc.path, err)
+		}
+		if tc.path == "aitable app widget create" || tc.path == "aitable app widget update" {
+			// Mutation previews have no Widget facts; require the original business fields in the first branch.
+			if len(schema.OneOf) != 2 {
+				t.Fatalf("path %q must declare business and preview branches", tc.path)
+			}
+			if err := json.Unmarshal(schema.OneOf[0], &schema); err != nil {
+				t.Fatalf("path %q business result schema: %v", tc.path, err)
+			}
 		}
 		for _, key := range tc.resultKeys {
 			if _, ok := schema.Properties[key]; !ok {

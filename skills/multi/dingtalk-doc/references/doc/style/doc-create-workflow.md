@@ -365,7 +365,7 @@ dws doc +create --name "<文档名>" --content "短内容" --doc-format markdown
 - 回读文本顺序和临时 Markdown 一致。
 - 没有把字面量 `\n` 渲染成一整行。
 - 如果返回 `chunksWritten > 1`，看 `degradations`：为空即表示分片没有改变渲染结构，无需人工核对边界；非空时按其中的 `kind` 与 `line` 定点检查（如 `table_split` 表示该表被拆成多张、每张带重发的表头）。
-- 最终回复必须给用户 `docUrl`；如果只拿到 `nodeId`，说明链接字段未返回，并报告已尝试 `doc info`。
+- 最终回复必须给用户 `docUrl`，交付顺序与展示步骤按 [contracts.md](../../contracts.md)「收尾交付」执行；如果只拿到 `nodeId`，说明链接字段未返回，并报告已尝试 `doc info`。
 
 ## 缺失补救
 

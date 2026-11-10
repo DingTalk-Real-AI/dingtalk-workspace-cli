@@ -177,6 +177,8 @@ type forwarderCloser interface {
 // channel's built-in model, per-conversation memory on (where the CLI supports
 // it), empty scratch workdir.
 type connectAgentOptions struct {
+	// CodexInitialPermissionMode 仅初始化数字员工新会话；空值使用自动审核，恢复时不覆盖权限。
+	CodexInitialPermissionMode string `json:",omitempty"`
 	// Command 是显式 custom argv；数字员工无需修改进程级环境变量。
 	Command string
 	// PrivateDiagnostics 禁止原始 Agent 错误进入数字员工运行日志。
@@ -448,11 +450,17 @@ func (f *execForwarder) forwardWithAttachments(ctx context.Context, convID, text
 		return f.forward(ctx, convID, text)
 	}
 	clone := *f
-	clone.argv = append([]string{f.argv[0]}, "--allowedTools", "Read")
+	attachmentArgs := []string{"--allowedTools", "Read"}
 	for _, dir := range dirs {
-		clone.argv = append(clone.argv, "--add-dir", dir)
+		attachmentArgs = append(attachmentArgs, "--add-dir", dir)
 	}
+	clone.argv = append([]string{f.argv[0]}, attachmentArgs...)
 	clone.argv = append(clone.argv, f.argv[1:]...)
+	if emit := agentProgressSink(ctx); emit != nil && f.canStream() {
+		clone.streamArgv = append([]string{f.streamArgv[0]}, attachmentArgs...)
+		clone.streamArgv = append(clone.streamArgv, f.streamArgv[1:]...)
+		return clone.forwardProgress(ctx, convID, text, emit)
+	}
 	return clone.forward(ctx, convID, text)
 }
 

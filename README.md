@@ -577,7 +577,7 @@ Env vars: `DWS_NO_SKILLS=1` (npm, `install.sh`, and `install.ps1`; skips the com
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The 28-event public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, one VoIP invitation event, three Todo task lifecycle events, and the interactive-card callback event.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The 33-event public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, one VoIP invitation event, three Todo task lifecycle events, the interactive-card callback event, two contact friend events, two Minutes events (task created and summary generated), and one personal-calendar event covering primary-calendar creation/participation, updates, and cancellations. Calendar delivery requires event registration and calendar routing on the platform; a visible CLI catalog entry does not prove availability in the current environment. Production readiness and pre-release update/cancellation delivery remain unverified.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -600,8 +600,15 @@ dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
 dws event list --category card
 dws event schema user_card_action_triggered --flatten
+dws event list --category minutes
+dws event schema user_minutes_summary_generated --flatten
 dws event list --category todo
 dws event schema user_todo_task_create --flatten
+dws event list --category calendar
+dws event schema user_calendar_event_changed --flatten
+
+# Listen for primary-calendar creation, updates, and cancellations
+dws event consume user_calendar_event_changed --calendar-ids primary --change-types eventCreated,eventUpdated,eventCancelled --flatten --duration 10m -f ndjson
 
 # Listen for messages that mention the current user
 dws event +listen-im --kind at-me -f ndjson
@@ -650,6 +657,10 @@ dws event consume \
 
 # Listen for interactive-card callbacks; the schema documents reviewed fields while preserving extensions
 dws event consume user_card_action_triggered --flatten -f ndjson
+
+# Listen for generated Minutes summaries; events carry task_uuid only, read content with dws minutes
+dws event consume user_minutes_summary_generated --flatten --duration 10m -f ndjson
+dws minutes get summary --id <task_uuid>
 
 # Inspect local consumers and cancel a subscription
 dws event status

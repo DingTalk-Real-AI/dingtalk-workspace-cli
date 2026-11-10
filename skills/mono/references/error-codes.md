@@ -30,7 +30,7 @@
 - 参数缺失 / 无效请求 — 还在用旧参数 `dentryUuid` / `--doc` / `--sheet` → 改用 `--base-id` / `--table-id` / `--field-id` / `--record-ids`
 - 参数传了但服务端没收到 — flag 用了 camelCase（如 `--baseId`）→ flag 用 kebab-case: `--base-id <ID>`
 - `record query --filters` 无结果 — 单选/多选过滤用了 option name 而非 id → 先 `field get` 读取 options，用 option id 过滤
-- record create/update 失败 — `cells` key 用了字段名（应为 fieldId）；特殊字段格式错误 → 先 `table get` 拿字段目录；url 传 `{"text":"..","link":".."}`
+- record create/update 失败 — `cells` key 使用了不存在、重名或未精确匹配的字段名（支持 fieldId 或当前表内唯一字段名，推荐真实 fieldId）；特殊字段格式错误 → 先 `table get` 拿字段目录；url 传 `{"text":"..","link":".."}`
 - 更新选项后历史数据异常 — 更新 options 没传完整列表 / 没保留原 id → 先 `field get` 取完整配置，保留已有 option 的 id
 - `cannot delete the last table` — 该表是 Base 最后一张表 → 先新建表再删旧表，或用 `base delete`
 - `formula` 类型 `not supported yet` — 部分字段类型暂不支持 API 创建 → 复杂字段拆开单独创建，先建基础结构

@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
+description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办、互动卡片回调、听记或日历变化事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，互动卡片回调，以及听记创建/纪要生成、主日历创建/修改/取消时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
 metadata:
   internal: true
@@ -19,13 +19,16 @@ metadata:
 - 不要猜测字段名/参数值，操作前必须先查询确认
 
 ## 严格要求 (MUST DO)
+- **AI 表格交付边界：**业务核验与宿主交付分别判断。对宿主当前声明适用的最终产物，按其规定工具和成功条件完成交付／登记，普通链接不替代规定的登记；只读及明确不展示要求按宿主适用范围处理。失败、工具不可用或状态未确认时，简短分别说明当前已知的业务核验、登记与展示状态，不因此重放业务写入；无需重复对象或链接清单，不重复登记已成功交付的对象。
+- **AI 表格回执转述：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
+- **AI 表格定向入口：**业务操作中新建独立空白 Base、仅补确认标记或处理 partial/unknown 写入恢复时，先按需读取并应用 [意图判断](./references/products/aitable.md#意图判断) 中的相关规则；多目标收尾或用户要求预发交付时，按需读取并应用 [交付边界](./references/products/aitable.md#过程展示建议)。只读相关段落，不预加载全篇；合成演练或回执转述仍按上一条处理。
 - 所有命令必须加 `--format json` 以获取可解析输出
 - 用户明确要登录钉钉国际版、海外版或 `.io` 区域时，必须执行 `dws auth login --intl`（无头环境再加 `--device`），不得回退到国内 `.com`；`--intl` 只用于登录，后续业务命令按所选 profile 自动路由
 - 危险操作必须先向用户确认，用户同意后才加 `--yes` 执行
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本只用于明确覆盖的复合任务**：[scripts/](./scripts/) 下的脚本可封装 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等流程；当公开 `+` Shortcut 已提供目标唯一解析、分页/部分失败 ledger 和确认语义时，优先 Shortcut。Chat 历史导出与机器人广播已完全下沉 Runtime，不再发布兼容脚本
-- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、VoIP 通话邀请、Todo、互动卡片回调、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表
+- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、VoIP 通话邀请、Todo、互动卡片回调、听记创建/纪要生成、主日历创建/修改/取消、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表、通话记录、待办列表、听记列表或日程列表
 
 ## Shortcut 与原子命令的使用原则
 
@@ -107,7 +110,7 @@ metadata:
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询 + 空间分享范围(permission set-share-scope) | [wiki.md](./references/products/wiki.md)                       |
 | `whiteboard`      | 独立白板（白板文件）的内容操作；或在已有承载文档 nodeId 和 partId 后读写文档内嵌白板 part 的图形内容，两类目标互不转换 | [whiteboard.md](./references/products/whiteboard.md)           |
-| `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人 IM/OA/VoIP/Todo/互动卡片/听记/日历事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化、卡片回调、听记创建/纪要生成与主日历创建/修改/取消，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
@@ -129,7 +132,7 @@ metadata:
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
 用户提到"原生 HTML 文件/.html 文件/新建 HTML 页面/创建 HTML 文件/读取 HTML 原文/覆盖 HTML/局部替换 HTML" → `html`
 用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown/Markdown 评论" → `markdown`
-用户提到"听记/AI听记/会议纪要/转写/摘要/听记内置思维导图/发言人/热词" → `minutes`
+用户提到"听记/AI听记/会议纪要/转写/摘要/听记内置思维导图/发言人/热词" → `minutes`（实时监听听记创建或纪要生成走 `event consume`）
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
 用户提到"PAT 授权/行为权限/scope 授权/批量授权/一次性授权/会话授权/永久授权/授权浏览器策略" → `pat`
@@ -144,6 +147,8 @@ metadata:
 用户提到"收到语音通话邀请时通知我/监听 VoIP 来电/订阅 user_voip_call_receive_invite" → `event consume`
 用户提到"监听待办创建/更新/删除/监听指派给我的待办/订阅 Todo 事件/event consume user_todo_task_*" → `event consume`，按角色使用 `--role-types`
 用户提到"互动卡片回调/监听卡片操作/订阅 user_card_action_triggered" → `event consume user_card_action_triggered --flatten -f ndjson`
+用户提到"新建听记时通知我/纪要生成后通知我/监听听记事件/订阅 user_minutes_*" → `event consume`；读取听记或纪要内容仍走 `minutes`
+用户提到"主日历新建、修改或取消日程时通知我/监听日程变化/订阅日历事件" → `event consume user_calendar_event_changed --calendar-ids primary --change-types eventCreated,eventUpdated,eventCancelled --flatten -f ndjson`；查询或操作日程仍走 `calendar`
 
 普通消息、reaction、已读、撤回监听优先由一个 `dws event +listen-im` 进程表达目标；不同用户、不同群或不同过滤条件拆成独立进程。只有高级事件控制才生成 `dws event consume <event_key> [event_key...] --flatten`。
 
@@ -155,6 +160,7 @@ metadata:
 关键区分: oa tasks(审批 taskId，审批/拒绝用) vs oa list-pending(收件箱 processInstanceId，查看用)
 关键区分: oa(查询或操作审批) vs event user_oa_approval_*(当前用户审批事件长连接监听)
 关键区分: todo(查询或操作待办) vs event user_todo_task_*(当前用户待办事件长连接监听)
+关键区分: calendar(查询或操作日程) vs event user_calendar_event_changed(当前用户主日历变化长连接监听；平台投递须在当前环境开通)
 
 
 > 更多易混淆场景见 [intent-guide.md](./references/intent-guide.md)
@@ -309,7 +315,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 ### Helper-only 与本地 Cobra 命令
 
-`dev.*` 包含 helper-only 执行面，其中远端 helper 未进入 pinned metadata 时标记为 `composite`，不能伪装成 `local`。`event list` / `event schema` 读取内置目录和 payload 定义，属于 `local`；`event consume` / `event status` / `event stop` 同时编排远端个人订阅控制面与本地 bus/consume，属于 `composite`。实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令须由 leaf `ContractFinal.Identity` 声明收集，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
+`dev.*` 包含 helper-only 执行面，其中远端 helper 未进入 pinned metadata 时标记为 `composite`，不能伪装成 `local`。`event list` 登录后读取组织事件目录（官方+应用事件）并与内置定义合并，`event schema` 对内置目录外的 eventKey 查询远端应用事件业务 Schema，`event consume` / `event status` / `event stop` 同时编排远端个人订阅控制面与本地 bus/consume，均属于 `composite`。实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令须由 leaf `ContractFinal.Identity` 声明收集，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
 
 事件需要区分两种 Schema：`dws event schema <event_key> --flatten` 查询 Agent 要消费的顶层业务字段；`dws schema "event consume" --compact` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
 

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -255,6 +256,20 @@ func TestCrossPlatformCoverageDelegatorHTTPExecution(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Cleanup(CloseFileLogger)
 	t.Setenv("DINGTALK_DOC_MCP_URL", "https://mcp-gw.dingtalk.com/v1/mcp")
+	prefetchDone := make(chan struct{})
+	testseam.Swap(t, &runnerGetCachedRuntimeToken, func(context.Context) (string, error) {
+		defer close(prefetchDone)
+		return "actor-token", nil
+	})
+	// RunReadOnly starts an asynchronous prefetch. Join it before restoring
+	// its seam or removing the config directory; real auth may write profiles.
+	t.Cleanup(func() {
+		select {
+		case <-prefetchDone:
+		case <-time.After(5 * time.Second):
+			t.Error("token prefetch did not finish before fixture cleanup")
+		}
+	})
 	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 		return AccessTokenSnapshot{AccessToken: "actor-token"}, nil
 	})

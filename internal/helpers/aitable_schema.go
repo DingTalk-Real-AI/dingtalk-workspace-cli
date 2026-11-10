@@ -89,6 +89,8 @@ func aitableDashboardGetResultSpec() *contract.ResultSpec {
       "type":"object",
       "description":"Dashboard 详情",
       "properties":{
+        "url":{"type":["string","null"],"description":"MCP 返回的仪表盘访问链接，携带 applicationId；显式 null 保留，不代表写后核验完成"},
+        "links":{"type":["array","null"],"description":"仪表盘目标和父级 Base 的访问上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}},
         "meta":{
           "description":"决定根布局协议的只读 Dashboard 元信息",
           "oneOf":[
@@ -301,7 +303,9 @@ func aitableCreateFormResultSpec() *contract.ResultSpec {
   "properties":{"data":{"type":"object","description":"新建表单视图的标识","properties":{
     "baseId":{"type":"string","description":"Base ID 回显"},
     "tableId":{"type":"string","description":"Table ID 回显"},
-    "viewId":{"type":"string","description":"新建的表单视图 ID"}
+    "viewId":{"type":"string","description":"新建的表单视图 ID"},
+    "url":{"type":["string","null"],"description":"表单管理访问链接，携带 sheetId/viewId；显式 null 保留，实际定位由 Web 页面处理"},
+    "links":{"type":["array","null"],"description":"表单对象与父级上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}}
   },"required":["baseId","tableId","viewId"],"additionalProperties":true}},
   "required":["data"],"additionalProperties":true
 }`),

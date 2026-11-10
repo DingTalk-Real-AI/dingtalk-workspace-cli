@@ -37,8 +37,8 @@ var recordReadbackWait = func(ctx context.Context, delay time.Duration) error {
 }
 
 // recordReadbackPendingError marks a verification difference that can be
-// explained by eventual consistency. It allows +record-upsert to retry only
-// the read side while keeping permanent write-response contract failures fast.
+// explained by eventual consistency. It allows record creation and upsert to
+// retry only reads while keeping permanent write-response contract failures fast.
 type recordReadbackPendingError struct {
 	cause error
 }
@@ -516,7 +516,7 @@ func verifyRecordBatchEventually(
 	verify recordBatchVerifier,
 ) (map[string]any, error) {
 	verification, err := verify(rt, baseID, tableID, batch, writeData)
-	if tool != "record_upsert" || !isPendingRecordReadback(err) {
+	if (tool != "record_upsert" && tool != "create_records") || !isPendingRecordReadback(err) {
 		return verification, err
 	}
 	ctx := context.Background()
@@ -525,7 +525,7 @@ func verifyRecordBatchEventually(
 	}
 	for _, delay := range recordUpsertReadbackDelays {
 		if waitErr := recordReadbackWait(ctx, delay); waitErr != nil {
-			return nil, pendingRecordReadback(waitErr)
+			return verification, pendingRecordReadback(waitErr)
 		}
 		verification, err = verify(rt, baseID, tableID, batch, writeData)
 		if err == nil || !isPendingRecordReadback(err) {
@@ -725,6 +725,7 @@ func matchCreatedCells(expected, actual []map[string]any, resolver *recordFieldT
 	for _, wantRecord := range expected {
 		wantCells := wantRecord["cells"].(map[string]any)
 		matched := false
+		var pendingErr error
 		for index, gotRecord := range actual {
 			if used[index] {
 				continue
@@ -736,6 +737,9 @@ func matchCreatedCells(expected, actual []map[string]any, resolver *recordFieldT
 				verifyErr = resolver.verify(gotRecord, wantCells)
 			}
 			if verifyErr != nil {
+				if isPendingRecordReadback(verifyErr) {
+					pendingErr = verifyErr
+				}
 				continue
 			}
 			used[index] = true
@@ -743,6 +747,9 @@ func matchCreatedCells(expected, actual []map[string]any, resolver *recordFieldT
 			break
 		}
 		if !matched {
+			if pendingErr != nil {
+				return pendingErr
+			}
 			return fmt.Errorf("no created read-back record matches cells %#v", wantCells)
 		}
 	}

@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	EventMinutesTaskCreated           = "user_minutes_task_created"
+	EventMinutesSummaryGenerated      = "user_minutes_summary_generated"
 	EventMention                      = "user_im_message_receive_at"
 	EventSingleChat                   = "user_im_message_receive_o2o"
 	EventInChat                       = "user_im_message_receive_group"
@@ -53,24 +55,29 @@ const (
 	EventCardAction                   = "user_card_action_triggered"
 	EventFriendRequestReceived        = "user_contact_friend_request_received"
 	EventFriendAdded                  = "user_contact_friend_added"
+	EventCalendarEventChanged         = "user_calendar_event_changed"
 )
 
 const (
 	StatusEnabled = "enabled"
 	StatusPending = "pending"
+	StatusRemote  = "remote"
 )
 
 type Definition struct {
-	EventKey       string                `json:"event_key"`
-	DisplayName    string                `json:"display_name"`
-	Description    string                `json:"description"`
-	Category       string                `json:"category"`
-	RuleType       string                `json:"rule_type"`
-	Status         string                `json:"status"`
-	RequiredParams []string              `json:"required_params"`
-	Constraints    *ParameterConstraints `json:"constraints,omitempty"`
-	Auth           map[string]any        `json:"auth,omitempty"`
-	Public         bool                  `json:"-"`
+	EventKey             string                `json:"event_key"`
+	DisplayName          string                `json:"display_name"`
+	Description          string                `json:"description"`
+	Category             string                `json:"category"`
+	RuleType             string                `json:"rule_type"`
+	Status               string                `json:"status"`
+	EventSource          string                `json:"event_source,omitempty"`
+	ProducerUnifiedAppID string                `json:"producer_unified_app_id,omitempty"`
+	Scope                string                `json:"scope,omitempty"`
+	RequiredParams       []string              `json:"required_params"`
+	Constraints          *ParameterConstraints `json:"constraints,omitempty"`
+	Auth                 map[string]any        `json:"auth,omitempty"`
+	Public               bool                  `json:"-"`
 }
 
 type ParameterConstraints struct {
@@ -96,6 +103,8 @@ type RuleOptions struct {
 	OpenDingTalkID string
 	GroupID        string
 	RoleTypes      []string
+	CalendarIDs    []string
+	ChangeTypes    []string
 }
 
 type SchemaPendingError struct {
@@ -442,6 +451,36 @@ var definitions = []Definition{
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
+	{
+		EventKey:    EventMinutesTaskCreated,
+		DisplayName: "创建听记",
+		Description: "听记对象、必要关联和默认权限初始化成功后通知符合订阅和读取权限条件的接收人；不含复用已有听记",
+		Category:    "minutes",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
+	{
+		EventKey:    EventMinutesSummaryGenerated,
+		DisplayName: "纪要生成",
+		Description: "默认纪要首次生成成功、保存完成且可读取后通知符合订阅和读取权限条件的接收人；失败后首次成功计入，成功后重新生成、切换模板和人工修改不通知",
+		Category:    "minutes",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
+	{
+		EventKey:    EventCalendarEventChanged,
+		DisplayName: "日程变化",
+		Description: "当前用户的主日历日程变化：创建及新增参与 eventCreated、修改 eventUpdated、取消 eventCancelled；需平台完成事件登记与日历路由配置，CLI 目录可见不代表当前环境已开通",
+		Category:    "calendar",
+		RuleType:    "all",
+		Status:      StatusEnabled,
+		Auth:        map[string]any{"identity": "user"},
+		Public:      true,
+	},
 }
 
 func targetUIDConstraints() *ParameterConstraints {
@@ -561,13 +600,22 @@ func cloneMap(in map[string]any) map[string]any {
 func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, ruleParam map[string]any, err error) {
 	def, ok := Lookup(eventKey)
 	if !ok {
-		return "", nil, fmt.Errorf("unknown personal event key %q", eventKey)
+		if strings.TrimSpace(eventKey) == "" {
+			return "", nil, fmt.Errorf("unknown personal event key %q", eventKey)
+		}
+		return buildAppEventRuleParam(eventKey, opts)
 	}
 	if opts.RuleType != "" && opts.RuleType != def.RuleType {
 		return "", nil, fmt.Errorf("--rule %q does not match %s rule %q", opts.RuleType, eventKey, def.RuleType)
 	}
 	if def.Status == StatusPending {
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
+	}
+	if eventKey == EventCalendarEventChanged {
+		return buildCalendarRuleParam(opts)
+	}
+	if opts.CalendarIDs != nil || opts.ChangeTypes != nil {
+		return "", nil, fmt.Errorf("--calendar-ids/--change-types are only supported for %s", EventCalendarEventChanged)
 	}
 	userID := strings.TrimSpace(opts.UserID)
 	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
@@ -623,6 +671,33 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
+}
+
+// buildAppEventRuleParam handles application events (event keys outside the
+// built-in catalog). The server pins their subscription to rule type "all"
+// with a blank filterRule and rejects any target or filter argument, so the
+// CLI mirrors that contract locally; a nil ruleParam keeps filterRule empty
+// on the wire ("{}" would trip the server's FILTER_RULE_NOT_SUPPORTED guard).
+func buildAppEventRuleParam(eventKey string, opts RuleOptions) (string, map[string]any, error) {
+	if opts.RuleType != "" && opts.RuleType != "all" {
+		return "", nil, fmt.Errorf("--rule %q does not match application event rule \"all\"", opts.RuleType)
+	}
+	userID := strings.TrimSpace(opts.UserID)
+	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
+	groupID := strings.TrimSpace(opts.GroupID)
+	if userID != "" {
+		return "", nil, fmt.Errorf("--user is not supported for application event %s", eventKey)
+	}
+	if openDingTalkID != "" {
+		return "", nil, fmt.Errorf("--open-dingtalk-id is not supported for application event %s", eventKey)
+	}
+	if groupID != "" {
+		return "", nil, fmt.Errorf("--group is not supported for application event %s", eventKey)
+	}
+	if len(opts.RoleTypes) > 0 {
+		return "", nil, fmt.Errorf("--role-types is not supported for application event %s", eventKey)
+	}
+	return "all", nil, nil
 }
 
 func normalizeTodoRoleTypes(values []string) ([]string, error) {

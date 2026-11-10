@@ -83,12 +83,16 @@ func TestCrossPlatformCoverageDocRangeReplaceDeleteAndPartialRecovery(t *testing
 				end = "b"
 			}
 			c := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {parityFullJSONML([]string{"a", "b", "keep"}, []string{"old", "old2", "outside"})}, "list_document_blocks": {parityBlockRead([]string{"a", "b", "keep"}, []string{"new", "old2", "outside"}), parityBlockRead([]string{"a", "keep"}, []string{"new", "outside"})}}}
+			c.responses["update_document_block"] = []map[string]any{{"newBlockIds": []any{"actual-new"}}}
 			if err := runDocCoverage(t, Update, c, "--node", "n", "--command", "block_replace", "--start-block-id", "a", "--end-block-id", end, "--doc-format", format, "--content", content, "--yes"); err != nil {
 				t.Fatal(format, count, err)
 			}
+			if c.calls != 1 || c.history[0].tool != "update_document_block" {
+				t.Fatalf("range must use one server mutation: %#v", c.history)
+			}
 		}
 	}
-	for _, failure := range []int{1, 2, 4} {
+	for _, failure := range []int{1} {
 		c := &docCoverageCaller{failAt: failure, responses: map[string][]map[string]any{"get_document_content": {parityFullJSONML([]string{"a", "b"}, []string{"old", "old2"})}, "list_document_blocks": {parityBlockRead([]string{"a", "b"}, []string{"new", "old2"})}}}
 		if err := runDocCoverage(t, Update, c, "--node", "n", "--command", "block_replace", "--start-block-id", "a", "--end-block-id", "b", "--content", "new", "--yes"); err == nil {
 			t.Fatal("partial write reported success")
@@ -99,11 +103,12 @@ func TestCrossPlatformCoverageDocRangeReplaceDeleteAndPartialRecovery(t *testing
 		if err := runDocCoverage(t, Update, &docCoverageCaller{dryRun: true}, append(args, "--dry-run")...); err != nil {
 			t.Fatal(err)
 		}
-		c := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {parityFullJSONML([]string{"a"}, []string{"old"})}}}
+		c := &docCoverageCaller{failAt: 1}
 		if err := runDocCoverage(t, Update, c, append(args, "--yes")...); err == nil || c.calls != 1 {
-			t.Fatal("missing range must stop before write", err, c.calls)
+			t.Fatal("range rejection must stop before a second call", err, c.calls)
 		}
 	}
+
 	c := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {parityFullJSONML([]string{"a", "b", "keep"}, []string{"old", "old2", "outside"})}, "list_document_blocks": {parityBlockRead([]string{"a", "keep"}, []string{"old", "outside"}), parityBlockRead([]string{"keep"}, []string{"outside"})}}}
 	if err := runDocCoverage(t, Update, c, "--node", "n", "--command", "block_delete", "--start-block-id", "a", "--end-block-id", "b", "--yes"); err != nil {
 		t.Fatal(err)
@@ -257,13 +262,17 @@ func TestCrossPlatformCoverageDocCreateWithMediaAndPartialProgress(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageDocRangeReplaceWaitsForWholeSelectedEffect(t *testing.T) {
+func TestCrossPlatformCoverageDocRangeReplaceRequiresServerReceiptWithoutClientSimulation(t *testing.T) {
 	c := &docCoverageCaller{responses: map[string][]map[string]any{
-		"get_document_content": {parityFullJSONML([]string{"a", "b"}, []string{"old", "old2"})},
-		"list_document_blocks": {parityBlockRead([]string{"a", "b"}, []string{"new", "old2"}), parityBlockRead([]string{"a", "b"}, []string{"wrong", "old2"}), parityBlockRead([]string{"a", "b"}, []string{"new", "old2"}), parityBlockRead([]string{"a"}, []string{"new"})},
+		"update_document_block": {{"newBlockIds": []any{"actual-new"}}},
+		"get_document_content":  {parityFullJSONML([]string{"a", "b"}, []string{"old", "old2"})},
+		"list_document_blocks":  {parityBlockRead([]string{"a", "b"}, []string{"new", "old2"}), parityBlockRead([]string{"a", "b"}, []string{"wrong", "old2"}), parityBlockRead([]string{"a", "b"}, []string{"new", "old2"}), parityBlockRead([]string{"a"}, []string{"new"})},
 	}}
 	if err := runDocCoverage(t, Update, c, "--node", "n", "--command", "block_replace", "--start-block-id", "a", "--end-block-id", "b", "--content", "new", "--yes"); err != nil {
 		t.Fatal(err)
+	}
+	if c.calls != 1 || c.history[0].tool != "update_document_block" {
+		t.Fatalf("do not simulate or claim range from partial readbacks: %#v", c.history)
 	}
 	c = &docCoverageCaller{responses: map[string][]map[string]any{
 		"get_document_content":  {parityFullJSONML([]string{"a", "b", "ref"}, []string{"A", "B", "R"})},

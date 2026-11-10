@@ -327,7 +327,7 @@ func runOAAttachmentUpload(cmd *cobra.Command, _ []string) error {
 		}, output.WithDryRun()))
 	}
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 	defer cancel()
 
 	// Step 1: 初始化上传，拿到 OSS 上传地址、签名头与 uploadKey。

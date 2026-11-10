@@ -85,15 +85,16 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 			Documentation: []contract.HelpDocumentation{
 				contract.SkillDocumentation("事件订阅深度指南", "dingtalk-event", "references/event-im.md"),
 				contract.SkillDocumentation("互动卡片回调事件", "dingtalk-event", "references/event-card.md"),
+				contract.SkillDocumentation("日历个人事件", "dingtalk-event", "references/event-calendar.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办与互动卡片回调事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办、日历、互动卡片回调与听记事件，并管理订阅生命周期",
 			UseWhen: []string{
-				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例、VoIP 通话邀请、待办创建/更新/删除或 user_card_action_triggered 互动卡片回调事件，或管理个人事件订阅生命周期",
+				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、user_card_action_triggered 互动卡片回调或听记创建/纪要生成事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
-				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；配置开放平台应用事件回调用 dev app event",
+				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；查询或操作日程用 calendar；读取听记或纪要内容用 minutes；配置开放平台应用事件回调用 dev app event",
 			},
 		},
 	})
@@ -109,8 +110,8 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	cmd.AddCommand(
 		newEventListenIMCommand(globalFlags...),
 		newEventConsumeCommand(globalFlags...),
-		newEventListCommand(),
-		newEventSchemaCommand(),
+		newEventListCommand(globalFlags...),
+		newEventSchemaCommand(globalFlags...),
 		newEventStatusCommandWithFlags(globalFlags...),
 		newEventStopCommandWithFlags(globalFlags...),
 		newEventBusCommand(),
@@ -171,9 +172,18 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 --event-types/--filter 只影响本地 bus → consume 这一段投递；普通个人事件消费
 通常不需要设置。
 
+内置目录外的 event_key 为应用事件，同样可订阅；不支持 --user/--group/--query
+等目标与过滤参数。--flatten 输出中业务字段位于 payload，业务结构先用
+event schema 查看。
+
 互动卡片操作使用 event_key user_card_action_triggered 和 --flatten。回答、问题、
 操作者、业务与会话上下文位于 payload.body；优先读取结构化的
-payload.body.actionData.context，完整字段先用 event schema 查看。`,
+payload.body.actionData.context，完整字段先用 event schema 查看。
+
+日历使用 user_calendar_event_changed；--calendar-ids primary 订阅主日历，
+--change-types 接受 eventCreated、eventUpdated、eventCancelled（逗号分隔）。
+省略任一维度表示通配；显式空值表示空数组（不匹配）；* 不可与具体值混用。
+主日历支持创建及新增参与、修改和取消；取消日程不会取消订阅。`,
 		Example: `  dws event consume user_card_action_triggered --flatten -f ndjson
   dws event consume user_im_group_member_added --group cid-example --flatten --max-events 1 -f ndjson`,
 		Args:              cobra.ArbitraryArgs,
@@ -232,6 +242,8 @@ payload.body.actionData.context，完整字段先用 event schema 查看。`,
 				"open-dingtalk-id",
 				"group",
 				"role-types",
+				"calendar-ids",
+				"change-types",
 				"personal-event-base-url",
 			); err != nil {
 				return fmt.Errorf("event consume: %w", err)
@@ -378,6 +390,10 @@ payload.body.actionData.context，完整字段先用 event schema 查看。`,
 		"group 规则：openConversationId")
 	f.StringSliceVar(&personalOpts.RoleTypes, "role-types", nil,
 		"待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色")
+	f.StringSliceVar(&personalOpts.CalendarIDs, "calendar-ids", nil,
+		"日历事件的 OpenAPI 日历本 ID（逗号分隔）；primary 为主日历；省略通配，显式空值不匹配")
+	f.StringSliceVar(&personalOpts.ChangeTypes, "change-types", nil,
+		"日历变化类型：eventCreated,eventUpdated,eventCancelled 或 *（不可混用）；省略通配，显式空值不匹配")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；默认由 MCP base 派生 /dws")
 	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
@@ -417,12 +433,14 @@ payload.body.actionData.context，完整字段先用 event schema 查看。`,
 				Reason:       "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "消费 OA、待办、互动卡片、群生命周期或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
+				AgentSummary: "消费 OA、待办、日历、互动卡片、群生命周期、听记或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
 				UseWhen: []string{
 					"需要监听七个公开 OA 审批任务/实例 EventKey 中的一个或多个事件",
 					"需要按 creator、executor 或 participant 角色监听待办创建、更新或删除事件",
+					"需要监听主日历日程创建/新增参与、修改或取消事件，用 user_calendar_event_changed 和 calendar-ids/change-types 指定范围",
 					"需要监听互动卡片提交或操作回调，并读取回答、问题、操作者及业务上下文",
 					"需要监听指定群的标题变更、成员进退群或群解散事件",
+					"需要监听听记创建（user_minutes_task_created）或纪要首次生成（user_minutes_summary_generated）事件",
 					"用户显式给出原始 EventKey、Filter DSL、subscribe_id，要求原始 transport envelope，或需要普通 IM facade 不提供的高级多事件控制",
 				},
 				AvoidWhen: []string{
@@ -437,6 +455,15 @@ payload.body.actionData.context，完整字段先用 event schema 查看。`,
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{
+					Name: "calendar-ids", Property: "calendarIds",
+					Description: "日历事件的 OpenAPI 日历本 ID 数组；primary 为当前用户主日历；省略通配，显式空数组不匹配；* 不可与具体值混用",
+				},
+				{
+					Name: "change-types", Property: "changeTypes",
+					Description: "日历变化类型数组：eventCreated 创建及新增参与、eventUpdated 修改、eventCancelled 取消；省略通配，显式空数组不匹配；* 不可与具体值混用",
+					Enum:        []string{"eventCreated", "eventUpdated", "eventCancelled", "*"},
+				},
 				{
 					Name:        "role-types",
 					Property:    "roleTypes",
@@ -785,7 +812,7 @@ type listEntry struct {
 	PerType map[string]transport.Counters `json:"per_event_type,omitempty"`
 }
 
-func newEventListCommand() *cobra.Command {
+func newEventListCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var (
 		all            bool
 		allEditions    bool
@@ -795,11 +822,13 @@ func newEventListCommand() *cobra.Command {
 		category       string
 		enabledOnly    bool
 		includePending bool
+		keyword        string
+		producerAppID  string
 	)
 	cmd := &cobra.Command{
 		Use:               "list",
 		Short:             "列出个人事件目录",
-		Long:              "列出当前支持的个人事件目录；使用 --category card 只查看互动卡片事件。",
+		Long:              "列出个人事件目录：官方事件来自 CLI 内置定义（离线可用），自建应用事件登录后从远端目录获取；--category card 只看互动卡片，--category appEvent 只看应用事件。",
 		Example:           "  dws event list --category card --format json",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
@@ -813,13 +842,17 @@ func newEventListCommand() *cobra.Command {
 					return fmt.Errorf("event list: %w", err)
 				}
 				return eventRunPersonalList(c, personalListOptions{
-					Category:       category,
-					EnabledOnly:    enabledOnly,
-					IncludePending: includePending,
-					Format:         formatRaw,
+					Category:         category,
+					EnabledOnly:      enabledOnly,
+					IncludePending:   includePending,
+					Format:           formatRaw,
+					Keyword:          keyword,
+					ProducerAppID:    producerAppID,
+					ExplicitToken:    eventExplicitToken(globalFlags),
+					ClientIDOverride: eventExplicitClientID(globalFlags),
 				})
 			}
-			if err := rejectChangedFlags(c, "user", "category", "enabled-only", "include-pending"); err != nil {
+			if err := rejectChangedFlags(c, "user", "category", "enabled-only", "include-pending", "keyword", "producer-app-id"); err != nil {
 				return fmt.Errorf("event list: %w", err)
 			}
 			entries, err := collectEntries(c, clientIDOver, all, allEditions)
@@ -838,7 +871,9 @@ func newEventListCommand() *cobra.Command {
 	cmd.Flags().StringVar(&clientIDOver, "client-id", "", "指定具体 ClientID（覆盖凭证解析）")
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "table", "输出格式: table|json")
 	cmd.Flags().StringVar(&asIdentity, "as", "user", "事件身份: user")
-	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card|contact")
+	cmd.Flags().StringVar(&category, "category", "", "个人事件目录分类：im|oa|voip|todo|card|contact|minutes|calendar|appEvent；远端目录可能返回其他分类")
+	cmd.Flags().StringVar(&keyword, "keyword", "", "按 eventKey 精确匹配（忽略大小写，登录后由远端目录执行）")
+	cmd.Flags().StringVar(&producerAppID, "producer-app-id", "", "按事件生产者应用 ID 筛选应用事件")
 	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "个人事件目录只显示 enabled")
 	cmd.Flags().BoolVar(&includePending, "include-pending", false, "个人事件目录包含 pending 项")
 	hideEventInternalFlags(cmd, "as", "all", "all-editions", "client-id")
@@ -857,9 +892,9 @@ func newEventListCommand() *cobra.Command {
 			},
 			Description: "列出支持的个人事件目录与状态说明",
 			Interface: &contract.InterfaceSpec{
-				Mode:         "local",
+				Mode:         "composite",
 				Availability: "available",
-				Reason:       "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
+				Reason:       "Reviewed composite workflow: official events come from the CLI built-in registry and organization app events are fetched only through the remote catalog interface; no single pinned RPC represents the result.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出支持的个人事件目录与状态说明",

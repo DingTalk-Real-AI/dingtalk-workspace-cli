@@ -5,10 +5,11 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"net/url"
-	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cardmentions"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -25,10 +26,24 @@ func validateSendExtensions(rt *shortcut.RuntimeContext, identity, kind string) 
 		if messagesSendIdempotencyKey(rt) != "" {
 			return apperrors.NewValidation("A2UI requestId 是链路追踪，不支持 --uuid/--idempotency-key")
 		}
-		if _, err := helpers.ParseChatA2UIMessages(rt.Str("a2ui-messages")); err != nil {
+		if len(rt.StrSlice("at-open-dingtalk-ids")) > cardmentions.MaxMentionDeclarations {
+			return apperrors.NewValidation(fmt.Sprintf("--at-open-dingtalk-ids 声明总数（含重复）不能超过 %d", cardmentions.MaxMentionDeclarations))
+		}
+		messages, err := helpers.ParseChatA2UIMessages(rt.Str("a2ui-messages"))
+		if err != nil {
 			return err
 		}
-	} else if rt.Str("card-summary") != "" || rt.Str("biz-card-id") != "" || rt.Str("request-id") != "" {
+		if _, err := helpers.NormalizeChatA2UISummary("card-summary", rt.Str("card-summary"), rt.Command().Flags().Changed("card-summary")); err != nil {
+			return err
+		}
+		if len(rt.StrSlice("at-open-dingtalk-ids")) > 0 || rt.Bool("at-all") {
+			if err := cardmentions.ValidateMentionConsistency(messages, uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")), rt.Bool("at-all")); err != nil {
+				return apperrors.NewValidation(err.Error())
+			}
+		}
+	} else if rt.Str("card-summary") != "" || rt.Str("biz-card-id") != "" || rt.Str("request-id") != "" ||
+		rt.Command().Flags().Changed("card-summary") || rt.Command().Flags().Changed("support-forward") ||
+		rt.Command().Flags().Changed("biz-card-id") || rt.Command().Flags().Changed("request-id") {
 		return apperrors.NewValidation("卡片参数仅用于 --a2ui-messages")
 	}
 	if rt.Str("image-url") != "" {
@@ -97,11 +112,20 @@ func executeMessagesSendUserShare(rt *shortcut.RuntimeContext, group, openID, ki
 		if cardID == "" {
 			cardID = uuid.NewString()
 		}
-		summary := rt.Str("card-summary")
-		if summary == "" {
-			summary = strings.Join(messages, "\n")
+		summary, err := helpers.NormalizeChatA2UISummary("card-summary", rt.Str("card-summary"), rt.Command().Flags().Changed("card-summary"))
+		if err != nil {
+			return err
 		}
-		args := map[string]any{"requestId": requestID, "bizCardId": cardID, "a2uiMessages": messages, "summary": summary, "protocolVersion": "1.0", "flowStatus": "PROCESSING"}
+		if rt.Bool("at-all") {
+			messages = cardmentions.RewriteMentionAllTags(messages)
+		}
+		args := map[string]any{"requestId": requestID, "bizCardId": cardID, "a2uiMessages": messages, "summary": summary, "supportForward": rt.Bool("support-forward"), "protocolVersion": "1.0", "flowStatus": "PROCESSING"}
+		if ids := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")); len(ids) > 0 {
+			args["atOpenDingTalkIds"] = ids
+		}
+		if rt.Bool("at-all") {
+			args["atAll"] = true
+		}
 		addMessagesSendUserTarget(args, group, openID)
 		return executeUnifiedMessageWrite(rt, "im", "create_and_send_a2ui_card", args)
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
@@ -250,7 +251,7 @@ var Query = shortcut.Shortcut{
 		}
 		data, err := rt.CallMCPData(serverWhiteboard, call.Tool, call.Args)
 		if err != nil {
-			return err
+			return helpers.WithWhiteboardRecovery(err)
 		}
 		var projected map[string]any
 		if call.Kind == whiteboardcore.KindEmbedded {
@@ -361,7 +362,7 @@ var Update = shortcut.Shortcut{
 
 		receiptData, err := rt.CallMCPWriteDataStrict(serverWhiteboard, call.Tool, call.Args)
 		if err != nil {
-			return err
+			return helpers.WithWhiteboardRecovery(err)
 		}
 		if call.Kind == whiteboardcore.KindEmbedded {
 			receipt, err := requireWhiteboardUpdateReceipt(receiptData, target, mode, parsed)
@@ -371,14 +372,14 @@ var Update = shortcut.Shortcut{
 			readTarget := map[string]any{"nodeId": target["nodeId"], "partId": target["partId"]}
 			readback, err := rt.CallMCPData(serverWhiteboard, toolQuery, readTarget)
 			if err != nil {
-				return whiteboardCommittedVerificationError(err, target, mode, receipt)
+				return whiteboardCommittedVerificationError(helpers.WithWhiteboardRecovery(err), target, mode, receipt)
 			}
 			projected, err := projectWhiteboardQuery(readback, rt.Str("node"), rt.Str("part-id"))
 			if err != nil {
-				return whiteboardCommittedVerificationError(err, target, mode, receipt)
+				return whiteboardCommittedVerificationError(helpers.WithWhiteboardRecovery(err), target, mode, receipt)
 			}
 			if err := verifyWhiteboardUpdate(parsed, projected, receipt.IDMap); err != nil {
-				return whiteboardCommittedVerificationError(err, target, mode, receipt)
+				return whiteboardCommittedVerificationError(helpers.WithWhiteboardRecovery(err), target, mode, receipt)
 			}
 			return rt.Output(projectWhiteboardUpdateSuccess(target, mode, parsed, projected, receipt))
 		}
@@ -461,14 +462,11 @@ func parseWhiteboardSource(raw string) (*parsedUpdate, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := whiteboardcore.ValidateOpenNodesPresentationOrder(nodes); err != nil {
-		return nil, err
-	}
-	if err := opennodes.ValidateText(nodes); err != nil {
-		return nil, apperrors.NewValidation(err.Error())
-	}
 	if err := validateWhiteboardConnectors(nodes); err != nil {
 		return nil, err
+	}
+	if err := opennodes.ValidateNodes(nodes); err != nil {
+		return nil, apperrors.NewValidation(err.Error(), apperrors.WithCause(err))
 	}
 	if !input.Overwrite && len(nodes) == 0 {
 		return nil, apperrors.NewValidation("append 模式至少需要一个 source.nodes 节点")

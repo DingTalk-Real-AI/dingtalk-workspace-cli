@@ -1,0 +1,955 @@
+[
+  {
+    "version": "v1.0",
+    "createSurface": {
+      "surfaceId": "demo-company-investigation-card-a2ui",
+      "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+      "dataModel": {},
+      "components": [
+        {
+          "id": "summary-title-icon",
+          "component": "Text",
+          "text": "📝",
+          "variant": "body",
+          "bold": false,
+          "maxLine": 1,
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "summary-title-label",
+          "component": "Text",
+          "text": "综合结论",
+          "maxLine": 30,
+          "bold": false,
+          "weight": 1,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "summary-title",
+          "component": "Row",
+          "children": [
+            "summary-title-icon",
+            "summary-title-label"
+          ],
+          "gap": 4,
+          "align": "center",
+          "weight": 1
+        },
+        {
+          "id": "risk-tag",
+          "component": "Tag",
+          "text": {
+            "path": "/report/risk"
+          },
+          "theme": "orange"
+        },
+        {
+          "id": "summary-heading",
+          "component": "Row",
+          "children": [
+            "summary-title",
+            "risk-tag"
+          ],
+          "gap": 8,
+          "align": "center"
+        },
+        {
+          "id": "summary",
+          "component": "Markdown",
+          "content": {
+            "path": "/report/summary"
+          }
+        },
+        {
+          "id": "summary-card-content",
+          "component": "Column",
+          "children": [
+            "summary-heading",
+            "summary"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "summary-card",
+          "component": "Card",
+          "child": "summary-card-content",
+          "padding": 10,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "backgroundColorToken": "extended_yellow0_color",
+          "borderColorToken": "common_line_light_color",
+          "backgroundColor": "#1FFF9200"
+        },
+        {
+          "id": "company-facts-0-label",
+          "component": "Text",
+          "text": "社会信用代码",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-0-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/registration"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-0",
+          "component": "Row",
+          "children": [
+            "company-facts-0-label",
+            "company-facts-0-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-1-label",
+          "component": "Text",
+          "text": "法定代表人",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-1-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/representative"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-1",
+          "component": "Row",
+          "children": [
+            "company-facts-1-label",
+            "company-facts-1-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-2-label",
+          "component": "Text",
+          "text": "成立日期",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-2-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/founded"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-2",
+          "component": "Row",
+          "children": [
+            "company-facts-2-label",
+            "company-facts-2-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-3-label",
+          "component": "Text",
+          "text": "经营状态",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-3-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/state"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_link_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-3",
+          "component": "Row",
+          "children": [
+            "company-facts-3-label",
+            "company-facts-3-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-4-label",
+          "component": "Text",
+          "text": "注册资本",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-4-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/capital"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-4",
+          "component": "Row",
+          "children": [
+            "company-facts-4-label",
+            "company-facts-4-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-5-label",
+          "component": "Text",
+          "text": "注册地址",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-5-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/address"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-5",
+          "component": "Row",
+          "children": [
+            "company-facts-5-label",
+            "company-facts-5-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-6-label",
+          "component": "Text",
+          "text": "所属行业",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-6-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/industry"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-6",
+          "component": "Row",
+          "children": [
+            "company-facts-6-label",
+            "company-facts-6-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts-7-label",
+          "component": "Text",
+          "text": "参保人数",
+          "maxLine": 30,
+          "weight": 7,
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-7-value",
+          "component": "Text",
+          "text": {
+            "path": "/company/employees"
+          },
+          "maxLine": 30,
+          "weight": 18,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "company-facts-7",
+          "component": "Row",
+          "children": [
+            "company-facts-7-label",
+            "company-facts-7-value"
+          ],
+          "gap": 6,
+          "align": "center"
+        },
+        {
+          "id": "company-facts",
+          "component": "Column",
+          "children": [
+            "company-facts-0",
+            "company-facts-1",
+            "company-facts-2",
+            "company-facts-3",
+            "company-facts-4",
+            "company-facts-5",
+            "company-facts-6",
+            "company-facts-7"
+          ],
+          "gap": 6,
+          "align": "stretch"
+        },
+        {
+          "id": "facts-title-icon",
+          "component": "Text",
+          "text": "🪪",
+          "variant": "body",
+          "bold": false,
+          "maxLine": 1,
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "facts-title-label",
+          "component": "Text",
+          "text": "工商信息",
+          "maxLine": 30,
+          "bold": true,
+          "weight": 1,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "facts-title",
+          "component": "Row",
+          "children": [
+            "facts-title-icon",
+            "facts-title-label"
+          ],
+          "gap": 4,
+          "align": "center"
+        },
+        {
+          "id": "company-card-content",
+          "component": "Column",
+          "children": [
+            "facts-title",
+            "company-facts"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "company-card",
+          "component": "Card",
+          "child": "company-card-content",
+          "padding": 12,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "risk-title-icon",
+          "component": "Text",
+          "text": "⚠️",
+          "variant": "body",
+          "bold": false,
+          "maxLine": 1,
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "risk-title-label",
+          "component": "Text",
+          "text": "企业风险",
+          "maxLine": 30,
+          "bold": true,
+          "weight": 1,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "risk-title",
+          "component": "Row",
+          "children": [
+            "risk-title-icon",
+            "risk-title-label"
+          ],
+          "gap": 4,
+          "align": "center"
+        },
+        {
+          "id": "risk-detail-icon",
+          "component": "Text",
+          "text": "❗",
+          "variant": "body",
+          "bold": false,
+          "maxLine": 1
+        },
+        {
+          "id": "risk-detail-label",
+          "component": "Text",
+          "text": {
+            "path": "/report/riskDetail"
+          },
+          "maxLine": 30,
+          "weight": 1,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "risk-detail",
+          "component": "Row",
+          "children": [
+            "risk-detail-icon",
+            "risk-detail-label"
+          ],
+          "gap": 4,
+          "align": "start"
+        },
+        {
+          "id": "risk-callout-content",
+          "component": "Column",
+          "children": [
+            "risk-detail"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "risk-callout",
+          "component": "Card",
+          "child": "risk-callout-content",
+          "padding": 10,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "backgroundColorToken": "extended_yellow0_color",
+          "borderColorToken": "common_line_light_color",
+          "backgroundColor": "#1FFF9200"
+        },
+        {
+          "id": "findings-title",
+          "component": "Text",
+          "text": "风险明细",
+          "maxLine": 30,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "findings",
+          "component": "Column",
+          "children": {
+            "componentId": "findings-item",
+            "path": "/report/findings"
+          },
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "background-title",
+          "component": "Text",
+          "text": "补充信息",
+          "maxLine": 30,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "background",
+          "component": "Column",
+          "children": {
+            "componentId": "background-item",
+            "path": "/report/background"
+          },
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "risk-card-content",
+          "component": "Column",
+          "children": [
+            "risk-title",
+            "risk-callout",
+            "risk-details-group"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "risk-card",
+          "component": "Card",
+          "child": "risk-card-content",
+          "padding": 12,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "transactions-section-icon",
+          "component": "Text",
+          "text": "🤝",
+          "variant": "body",
+          "bold": false,
+          "maxLine": 1,
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "transactions-section-label",
+          "component": "Text",
+          "text": "历史成交",
+          "maxLine": 30,
+          "bold": false,
+          "weight": 1,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_h4_text_style__font_size"
+        },
+        {
+          "id": "transactions-section",
+          "component": "Row",
+          "children": [
+            "transactions-section-icon",
+            "transactions-section-label"
+          ],
+          "gap": 4,
+          "align": "center"
+        },
+        {
+          "id": "transactions-title",
+          "component": "Text",
+          "text": {
+            "path": "/report/transactionsTitle"
+          },
+          "maxLine": 30,
+          "colorToken": "common_level1_base_color",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "transactions",
+          "component": "Table",
+          "data": {
+            "path": "/report/table"
+          }
+        },
+        {
+          "id": "transactions-card-content",
+          "component": "Column",
+          "children": [
+            "transactions-section",
+            "transactions-title",
+            "transactions"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "transactions-card",
+          "component": "Card",
+          "child": "transactions-card-content",
+          "padding": 12,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "backgroundColorToken": "common_fg_z1_color",
+          "borderColorToken": "common_line_light_color"
+        },
+        {
+          "id": "attachment-file-icon",
+          "component": "Image",
+          "url": "https://g.alicdn.com/dingding/card_a2ui/0.3.1/img/ding-file-icons/markdown_light.BlEB_2F.png",
+          "darkUrl": "https://g.alicdn.com/dingding/card_a2ui/0.3.1/img/ding-file-icons/markdown_dark.JXjoMuz.png",
+          "variant": "avatar",
+          "fit": "contain",
+          "cornerRadius": 0,
+          "previewEnabled": false
+        },
+        {
+          "id": "attachment-name",
+          "component": "Text",
+          "text": {
+            "path": "/attachment/fileName"
+          },
+          "maxLine": 1,
+          "bold": true,
+          "colorToken": "common_level1_base_color",
+          "variant": "body",
+          "sizeToken": "common_action_text_style__font_size"
+        },
+        {
+          "id": "attachment-description",
+          "component": "Text",
+          "text": {
+            "path": "/attachment/description"
+          },
+          "maxLine": 1,
+          "variant": "caption",
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_footnote_text_style__font_size"
+        },
+        {
+          "id": "attachment-details",
+          "component": "Column",
+          "children": [
+            "attachment-name",
+            "attachment-description"
+          ],
+          "gap": 2,
+          "align": "stretch",
+          "weight": 1
+        },
+        {
+          "id": "attachment-preview-icon",
+          "component": "Text",
+          "text": "",
+          "icon": {
+            "name": "Visibility_L_outlined"
+          },
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "attachment-preview",
+          "component": "Row",
+          "children": [
+            "attachment-preview-icon"
+          ],
+          "gap": 0,
+          "align": "center",
+          "action": {
+            "event": {
+              "name": "company_investigation_preview_attachment",
+              "context": {
+                "fileName": {
+                  "path": "/attachment/fileName"
+                },
+                "url": {
+                  "path": "/attachment/url"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "attachment-download-icon",
+          "component": "Icon",
+          "name": "DownloadAndSave_L_outlined",
+          "colorToken": "common_level2_base_color"
+        },
+        {
+          "id": "attachment-download",
+          "component": "Row",
+          "children": [
+            "attachment-download-icon"
+          ],
+          "gap": 0,
+          "align": "center",
+          "action": {
+            "event": {
+              "name": "company_investigation_download_attachment",
+              "context": {
+                "fileName": {
+                  "path": "/attachment/fileName"
+                },
+                "url": {
+                  "path": "/attachment/url"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "attachment",
+          "component": "Row",
+          "children": [
+            "attachment-file-icon",
+            "attachment-details",
+            "attachment-preview",
+            "attachment-download"
+          ],
+          "gap": 12,
+          "align": "center"
+        },
+        {
+          "id": "attachment-card",
+          "component": "Card",
+          "child": "attachment",
+          "padding": 12,
+          "cornerRadius": 10,
+          "borderWidth": 1,
+          "borderColorToken": "common_line_light_color",
+          "backgroundColor": "#00000000"
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "text": {
+            "path": "/company/name"
+          },
+          "maxLine": 30,
+          "sizeToken": "common_h2_text_style__font_size",
+          "bold": true,
+          "colorToken": "common_level1_base_color"
+        },
+        {
+          "id": "source",
+          "component": "Markdown",
+          "content": {
+            "call": "formatString",
+            "args": {
+              "value": "> 📊${/report/source}"
+            }
+          }
+        },
+        {
+          "id": "frame",
+          "component": "Column",
+          "children": [
+            "body"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0,
+          "cornerRadius": 12
+        },
+        {
+          "id": "root",
+          "component": "Column",
+          "children": [
+            "frame"
+          ],
+          "gap": 0,
+          "align": "stretch",
+          "padding": 0
+        },
+        {
+          "id": "findings-section",
+          "component": "Column",
+          "children": [
+            "findings-title",
+            "findings"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "background-section",
+          "component": "Column",
+          "children": [
+            "background-title",
+            "background"
+          ],
+          "gap": 8,
+          "align": "stretch"
+        },
+        {
+          "id": "risk-details-group",
+          "component": "Column",
+          "children": [
+            "findings-section",
+            "background-section"
+          ],
+          "gap": 16,
+          "align": "stretch"
+        },
+        {
+          "id": "body",
+          "component": "Column",
+          "children": [
+            "title",
+            "summary-card",
+            "company-card",
+            "risk-card",
+            "transactions-card",
+            "attachment-card",
+            "source"
+          ],
+          "gap": 10,
+          "align": "stretch",
+          "padding": 12
+        },
+        {
+          "id": "findings-bullet",
+          "component": "Text",
+          "text": "•",
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_link_color",
+          "maxLine": 1
+        },
+        {
+          "id": "findings-text",
+          "component": "Text",
+          "text": {
+            "path": "text"
+          },
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "maxLine": 30,
+          "weight": 1
+        },
+        {
+          "id": "findings-item",
+          "component": "Row",
+          "children": [
+            "findings-bullet",
+            "findings-text"
+          ],
+          "gap": 12,
+          "align": "start"
+        },
+        {
+          "id": "background-bullet",
+          "component": "Text",
+          "text": "•",
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_link_color",
+          "maxLine": 1
+        },
+        {
+          "id": "background-text",
+          "component": "Text",
+          "text": {
+            "path": "text"
+          },
+          "sizeToken": "common_action_text_style__font_size",
+          "colorToken": "common_level1_base_color",
+          "maxLine": 30,
+          "weight": 1
+        },
+        {
+          "id": "background-item",
+          "component": "Row",
+          "children": [
+            "background-bullet",
+            "background-text"
+          ],
+          "gap": 12,
+          "align": "start"
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateDataModel": {
+      "surfaceId": "demo-company-investigation-card-a2ui",
+      "path": "/",
+      "value": {
+        "company": {
+          "name": "示例企业甲",
+          "registration": "DEMO-COMPANY-001",
+          "representative": "用户甲",
+          "founded": "2020 年 1 月 1 日",
+          "state": "正常经营",
+          "capital": "500 万元",
+          "address": "示例地址（虚构，不用于联系）",
+          "industry": "企业软件服务",
+          "employees": "80 人"
+        },
+        "report": {
+          "risk": "低风险",
+          "summary": "以下为虚构企业的演示结论：存在待核实事项，**请完成核验后再决定是否合作。**",
+          "riskDetail": "演示风险：存在待核实的主体信息和合同材料。",
+          "findings": [
+            {
+              "text": "示例检查项一：合同材料待补齐。"
+            },
+            {
+              "text": "示例检查项二：主体信息待复核。"
+            },
+            {
+              "text": "所有内容均为合成数据，不代表真实企业。"
+            }
+          ],
+          "background": [
+            {
+              "text": "示例企业已提交基础材料。"
+            },
+            {
+              "text": "后续需要补充核验结果。"
+            }
+          ],
+          "transactionsTitle": "演示成交累计3单，共¥15,000元。",
+          "table": {
+            "meta": [
+              {
+                "colKey": "month",
+                "colName": "月份",
+                "type": "text"
+              },
+              {
+                "colKey": "product",
+                "colName": "产品",
+                "type": "text"
+              },
+              {
+                "colKey": "amount",
+                "colName": "金额",
+                "type": "text"
+              }
+            ],
+            "data": [
+              {
+                "month": "1月",
+                "product": "示例产品",
+                "amount": "4,000"
+              },
+              {
+                "month": "3月",
+                "product": "示例产品",
+                "amount": "5,000"
+              },
+              {
+                "month": "5月",
+                "product": "示例产品",
+                "amount": "6,000"
+              }
+            ]
+          },
+          "source": "数据来源：合成演示数据，非真实调查结果"
+        },
+        "attachment": {
+          "fileName": "历史报价文件.md",
+          "description": "Markdown文件",
+          "url": ""
+        }
+      }
+    }
+  }
+]

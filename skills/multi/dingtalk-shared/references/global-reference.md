@@ -58,7 +58,7 @@ dws auth status --format json
 | `--fields` | 逗号分隔的输出字段筛选 | 空 |
 | `--jq` | jq 表达式过滤输出 | 空 |
 | `--profile` | 一次性指定组织或账号；支持 CSV 多选的命令由运行时决定 | 当前 profile |
-| `--timeout` | HTTP 请求超时秒数 | `30` |
+| `--timeout` | HTTP 请求与文件直传超时秒数（文件直传最低保留 5 分钟） | `30` |
 | `--dry-run` | 请求预览 | 只有 leaf 明确支持时才代表可执行预览 |
 | `--yes`, `-y` | 通过 Runtime confirmation gate | 仅在用户确认且最终 Schema 要求时追加 |
 | `--verbose`, `-v` | 增加诊断信息 | `false` |

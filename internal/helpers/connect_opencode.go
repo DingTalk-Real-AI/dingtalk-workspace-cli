@@ -504,10 +504,14 @@ func (c *opencodeHTTPClient) sendMessageWithAttachments(ctx context.Context, ses
 	if m := opencodeModelRef(model); m != nil {
 		body["model"] = m
 	}
-	var out struct {
-		Parts []opencodePart `json:"parts"`
+	var out opencodeMessageResponse
+	var err error
+	if emit := agentProgressSink(ctx); emit != nil {
+		err = c.messageWithProgress(ctx, sessionID, body, &out, emit)
+	} else {
+		err = c.doJSON(ctx, http.MethodPost, "/session/"+sessionID+"/message", body, &out)
 	}
-	if err := c.doJSON(ctx, http.MethodPost, "/session/"+sessionID+"/message", body, &out); err != nil {
+	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(opencodePartsText(out.Parts)), nil
@@ -565,11 +569,22 @@ func (c *opencodeHTTPClient) doJSON(ctx context.Context, method, path string, in
 }
 
 type opencodePart struct {
+	ID        string `json:"id,omitempty"`
+	SessionID string `json:"sessionID,omitempty"`
+	MessageID string `json:"messageID,omitempty"`
+	Tool      string `json:"tool,omitempty"`
+	State     struct {
+		Status string `json:"status,omitempty"`
+	} `json:"state,omitempty"`
 	Type  string          `json:"type"`
 	Text  string          `json:"text"`
 	Delta string          `json:"delta"`
 	Parts []opencodePart  `json:"parts"`
 	Data  json.RawMessage `json:"data"`
+}
+
+type opencodeMessageResponse struct {
+	Parts []opencodePart `json:"parts"`
 }
 
 func opencodePartsText(parts []opencodePart) string {

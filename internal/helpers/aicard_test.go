@@ -104,7 +104,7 @@ const aicardTestSnapshot = `[{"version":"v1.0","createSurface":{"surfaceId":"s",
 
 func TestCrossPlatformCoverageAicardCommandSurface(t *testing.T) {
 	root := newAicardCommand()
-	want := map[string]int{"lint": 5, "explain": 1, "preview": 2}
+	want := map[string]int{"lint": 6, "explain": 1, "preview": 3, "template": 0}
 	for _, cmd := range root.Commands() {
 		n, ok := want[cmd.Name()]
 		if !ok {
@@ -348,7 +348,82 @@ func TestCrossPlatformCoverageAicardBatchAndExplicitPreflight(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageAicardPreviewBase64Warnings(t *testing.T) {
+func aicardMarkdownSnapshot(content string) string {
+	b, _ := json.Marshal([]any{
+		map[string]any{"version": "v1.0", "createSurface": map[string]any{"surfaceId": "s", "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json", "dataModel": map[string]any{}}},
+		map[string]any{"version": "v1.0", "updateComponents": map[string]any{"surfaceId": "s", "components": []any{map[string]any{"id": "root", "component": "Markdown", "content": content}}}},
+	})
+	return string(b)
+}
+
+func aicardDiagnosticCodes(details map[string]any) []string {
+	diagnostics, _ := details["preflight"].(map[string]any)["diagnostics"].([]any)
+	codes := make([]string, 0, len(diagnostics))
+	for _, d := range diagnostics {
+		codes = append(codes, d.(map[string]any)["code"].(string))
+	}
+	return codes
+}
+
+func TestCrossPlatformCoverageAicardLintMentions(t *testing.T) {
+	t.Run("im placeholder fails preflight without any flag", func(t *testing.T) {
+		caller := &aicardCaller{}
+		file := aicardTestFile(t, aicardMarkdownSnapshot(`hi <@123456>`))
+		result, code, err := executeAicard(t, caller, "lint", "--file", file, "--preflight", "new-card")
+		if err != nil || code == 0 {
+			t.Fatalf("%v code=%d err=%v", result, code, err)
+		}
+		details := result["error"].(map[string]any)["details"].(map[string]any)
+		codes := aicardDiagnosticCodes(details)
+		if len(codes) != 1 || codes[0] != "mention.im_placeholder" {
+			t.Fatalf("codes = %#v", codes)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatal("lint must stay offline", caller.calls)
+		}
+	})
+
+	t.Run("at flags require preflight", func(t *testing.T) {
+		caller := &aicardCaller{}
+		file := aicardTestFile(t, aicardMarkdownSnapshot("plain"))
+		result, code, err := executeAicard(t, caller, "lint", "--file", file, "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE")
+		if err != nil || code == 0 {
+			t.Fatalf("%v code=%d err=%v", result, code, err)
+		}
+		if !strings.Contains(result["error"].(map[string]any)["message"].(string), "--preflight") {
+			t.Fatal(result)
+		}
+	})
+
+	t.Run("consistent declaration passes", func(t *testing.T) {
+		caller := &aicardCaller{}
+		file := aicardTestFile(t, aicardMarkdownSnapshot(`hi <a atId="DAAAAAAAAAAAiE">nick</a> <a atId="all">everyone</a>`))
+		result, code, err := executeAicard(t, caller, "lint", "--file", file, "--preflight", "new-card", "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE")
+		if err != nil || code != 0 {
+			t.Fatalf("%v code=%d err=%v", result, code, err)
+		}
+		data := result["data"].(map[string]any)
+		if data["preflight"].(map[string]any)["valid"] != true {
+			t.Fatal(data)
+		}
+	})
+
+	t.Run("declared unused and undeclared body ids fail", func(t *testing.T) {
+		caller := &aicardCaller{}
+		file := aicardTestFile(t, aicardMarkdownSnapshot(`hi <a atId="DAAAAAAAAAAAiF">nick</a>`))
+		result, code, err := executeAicard(t, caller, "lint", "--file", file, "--preflight", "new-card", "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE")
+		if err != nil || code == 0 {
+			t.Fatalf("%v code=%d err=%v", result, code, err)
+		}
+		codes := aicardDiagnosticCodes(result["error"].(map[string]any)["details"].(map[string]any))
+		joined := strings.Join(codes, ",")
+		if !strings.Contains(joined, "mention.undeclared") || !strings.Contains(joined, "mention.declared_unused") {
+			t.Fatalf("codes = %#v", codes)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAicardPreviewRejectsInlineDataBeforeCallingService(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		caller := &aicardCaller{response: `{"success":true}`}
 		file := aicardTestFile(t, `[{"version":"v1.0","createSurface":{"surfaceId":"s","catalogId":"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json","dataModel":{},"components":[{"id":"root","component":"Image","url":"data:image/png;base64,YQ=="}]}}]`)
@@ -358,22 +433,134 @@ func TestCrossPlatformCoverageAicardPreviewBase64Warnings(t *testing.T) {
 			args = append(args, "--dry-run")
 		}
 		result, code, err := executeAicard(t, caller, args...)
-		if err != nil || code != 0 {
+		if err != nil || code == 0 {
 			t.Fatalf("%v code=%d err=%v", result, code, err)
 		}
-		data := result["data"].(map[string]any)
-		preflight := data["preflight"].(map[string]any)
+		preflight := result["error"].(map[string]any)["details"].(map[string]any)
 		diagnostics := preflight["diagnostics"].([]any)
-		if preflight["valid"] != true || len(diagnostics) != 1 || data["renderingVerified"] != false {
-			t.Fatal(data)
+		if preflight["valid"] != false || len(diagnostics) != 1 || preflight["renderingVerified"] != false {
+			t.Fatal(preflight)
 		}
-		warning := diagnostics[0].(map[string]any)
-		if warning["code"] != "resource.base64_image_unverified" || warning["severity"] != "warning" {
-			t.Fatal(warning)
+		failure := diagnostics[0].(map[string]any)
+		if failure["code"] != "resource.inline_data_unsupported" || failure["severity"] != "error" {
+			t.Fatal(failure)
 		}
 		after, _ := os.ReadFile(file)
-		if !bytes.Equal(before, after) || (dryRun && len(caller.calls) != 0) {
-			t.Fatal("preview changed the input or dry-run called the service")
+		if !bytes.Equal(before, after) || len(caller.calls) != 0 {
+			t.Fatal("rejected preview changed the input or called the service")
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAicardReportedOwnershipFailureBeforeService(t *testing.T) {
+	// Preserve the incident's localized content; business identifiers are synthetic.
+	raw, err := os.ReadFile("../card/a2ui/testdata/preflight-references.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name     string          `json:"name"`
+		Messages json.RawMessage `json:"messages"`
+	}
+	if err = json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	var payload json.RawMessage
+	for _, tc := range cases {
+		if tc.Name == "Reported selection card attaches submit_text to root and Button" {
+			payload = tc.Messages
+		}
+	}
+	if payload == nil {
+		t.Fatal("reported selection-card fixture is missing")
+	}
+	file := aicardTestFile(t, string(payload))
+	for _, args := range [][]string{
+		{"lint", "--file", file},
+		{"lint", "--file", file, "--preflight", "new-card"},
+		{"preview", "--file", file, "--dry-run"},
+		{"preview", "--file", file},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			caller := &aicardCaller{}
+			result, code, err := executeAicard(t, caller, args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if args[0] == "lint" && len(args) == 3 {
+				if code != 0 || result["data"].(map[string]any)["valid"] != true {
+					t.Fatal("general Schema lint changed", result, code)
+				}
+			} else {
+				if code == 0 {
+					t.Fatal("invalid ownership passed", result)
+				}
+				report := result["error"].(map[string]any)["details"].(map[string]any)
+				if args[0] == "lint" {
+					if report["valid"] != true {
+						t.Fatal("reference errors must not change Schema validity", report)
+					}
+					report = report["preflight"].(map[string]any)
+				}
+				ds := report["diagnostics"].([]any)
+				if report["valid"] != false || len(ds) != 1 {
+					t.Fatal(report)
+				}
+				d := ds[0].(map[string]any)
+				if d["code"] != "reference.multiple_parents" || d["pointer"] != "/1/updateComponents/components/0/children/9" {
+					t.Fatal(d)
+				}
+			}
+			after, err := os.ReadFile(file)
+			if err != nil || !bytes.Equal(payload, after) || len(caller.calls) != 0 {
+				t.Fatal("offline validation changed the input or called the service", err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestAicardPreviewMarkdownWarningsDoNotBlockService(t *testing.T) {
+	for _, field := range []string{"content", "fallbackMarkdown"} {
+		for _, dryRun := range []bool{true, false} {
+			caller := &aicardCaller{response: `{"success":true,"result":{"bizId":"review-card-id"}}`}
+			component := map[string]any{"id": "root", "component": "Markdown", "content": "Example"}
+			component[field] = "`![Example](data:image/png;base64,YQ==)`"
+			payload, err := json.Marshal([]any{map[string]any{"version": "v1.0", "createSurface": map[string]any{"surfaceId": "s", "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json", "dataModel": map[string]any{}, "components": []any{component}}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			file := aicardTestFile(t, string(payload))
+			args := []string{"preview", "--file", file}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			result, code, err := executeAicard(t, caller, args...)
+			if err != nil || code != 0 {
+				t.Fatalf("field=%s dryRun=%v result=%v code=%d err=%v", field, dryRun, result, code, err)
+			}
+			data := result["data"].(map[string]any)
+			preflight := data["preflight"].(map[string]any)
+			diagnostics := preflight["diagnostics"].([]any)
+			if preflight["valid"] != true || len(diagnostics) != 1 {
+				t.Fatal(preflight)
+			}
+			warning := diagnostics[0].(map[string]any)
+			if warning["code"] != "resource.markdown_data_unverified" || warning["severity"] != "warning" || !strings.HasSuffix(warning["pointer"].(string), "/"+field) {
+				t.Fatal(warning)
+			}
+			sendCount := 0
+			for _, call := range caller.calls {
+				if call == "im/create_and_send_a2ui_card" {
+					sendCount++
+				}
+			}
+			if dryRun && len(caller.calls) != 0 || !dryRun && (sendCount != 1 || data["requestAccepted"] != true) {
+				t.Fatalf("dryRun=%v calls=%v data=%v", dryRun, caller.calls, data)
+			}
+			after, err := os.ReadFile(file)
+			if err != nil || !bytes.Equal(after, payload) {
+				t.Fatal("preview changed the input file", err)
+			}
 		}
 	}
 }

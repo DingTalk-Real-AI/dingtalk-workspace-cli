@@ -68,7 +68,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
+		Description: "业务 Agent 名称；用于 x-dingtalk-agent 请求头和四个文档编辑工具的 extraInfo.agentName（trim 后缺省 unknown），与 claw-type/host-owned PAT 判定无关",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -961,6 +961,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.CanonicalProduct,
 			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
 		logBusinessError(fl, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
 		// PAT scope error in business response: offer human-readable output and retry
@@ -990,6 +991,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.CanonicalProduct,
 			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
 		logBusinessError(fl, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
 		return executor.Result{}, classifiedErr
@@ -1239,8 +1241,12 @@ func isAuthError(err error) bool {
 }
 
 func productEndpointOverride(productID string) (string, bool) {
-	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(productID), "-", "_")) + "_MCP_URL"
+	productID = strings.TrimSpace(productID)
+	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(productID, "-", "_")) + "_MCP_URL"
 	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" && productID == "doc" {
+		value = strings.TrimSpace(buildDocMCPEndpoint)
+	}
 	if value == "" {
 		return "", false
 	}
