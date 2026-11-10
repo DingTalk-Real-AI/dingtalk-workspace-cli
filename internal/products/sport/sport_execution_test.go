@@ -164,7 +164,7 @@ func TestSportCreateValidationErrorsShortCircuitBeforeCall(t *testing.T) {
 	for i, args := range cases {
 		fake := &sportFakeCaller{}
 		helpers.InitDeps(fake)
-		if err := runSportCommand(t, append(args)...); err == nil {
+		if err := runSportCommand(t, args...); err == nil {
 			t.Fatalf("case %d 期望校验报错", i)
 		}
 		if len(fake.calls) != 0 {
