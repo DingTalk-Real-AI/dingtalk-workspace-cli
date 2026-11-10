@@ -1788,6 +1788,31 @@ func compatibleReviewedParameterTypeChange(toolPath, name string, oldParameter, 
 	return reviewed && parameterContractUnchangedExceptType(oldParameter, newParameter)
 }
 
+// IMS-485: this policy-only change must be reviewed and merged before the
+// separate send-a2ui-card default change can use the base-owned checker.
+// Omitted flags will enable forwarding, including employee reply/approval
+// callers that omit the flag; callers requiring the old behavior must pass
+// --support-forward=false. The unified messages-send shortcut is not covered.
+// Only this boolean parameter's false -> true default transition is accepted;
+// every other published parameter field must remain identical.
+func compatibleReviewedA2UIForwardDefaultChange(toolPath, name string, oldParameter, newParameter parameterSchema) bool {
+	if toolPath != "chat/chat.create_and_send_a2ui_card" || name != "support-forward" ||
+		oldParameter.Type != `"boolean"` || oldParameter.Property != "supportForward" {
+		return false
+	}
+	// Cobra's published Schema omits the zero false default and encodes the
+	// nonzero true default as a JSON string. Keep this native-annotation form
+	// separate from the already reviewed explicit JSON boolean transition.
+	explicitBoolean := oldParameter.Default == "false" && newParameter.Default == "true"
+	publishedCobra := oldParameter.Default == "" && newParameter.Default == `"true"` &&
+		oldParameter.PropertySource == "native_annotation"
+	if !explicitBoolean && !publishedCobra {
+		return false
+	}
+	oldParameter.Default = newParameter.Default
+	return reflect.DeepEqual(oldParameter, newParameter)
+}
+
 func checkParameterCompatibility(toolPath, name string, oldParameter, newParameter parameterSchema) []string {
 	var failures []string
 	if oldParameter.Type != newParameter.Type &&
@@ -1805,6 +1830,9 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		{name: "anyOf", old: oldParameter.AnyOf, new: newParameter.AnyOf},
 	} {
 		if field.old != field.new {
+			if field.name == "default" && compatibleReviewedA2UIForwardDefaultChange(toolPath, name, oldParameter, newParameter) {
+				continue
+			}
 			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))
 		}
 	}
