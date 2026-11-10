@@ -56,16 +56,16 @@ var BaseBootstrap = shortcut.Shortcut{
 		"一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用。"+helpers.AitableNavigationGuidance,
 		"当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。"+helpers.AitableNavigationGuidance,
 		"已有 Base 只需新增一张表时用 +table-bootstrap；复制现有 Base 用 +base-copy；不要对失败请求盲目重试",
-		`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[]}]'`,
+		`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[{"fieldName":"标题","type":"text"}]}]'`,
 		aitableBaseCompositeResultSpec("base_bootstrap"),
 	),
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "新 Base 名称", Required: true},
 		{Name: "folder-id", Type: shortcut.FlagString, Desc: "目标知识库文件夹 ID（可选）"},
 		{Name: "template-id", Type: shortcut.FlagString, Desc: "模板 ID（可选）"},
-		{Name: "tables", Type: shortcut.FlagString, Desc: `表结构 JSON 数组：[{'name':'任务','fields':[...]}]`, Required: true},
+		{Name: "tables", Type: shortcut.FlagString, Desc: `表结构 JSON 数组：[{'name':'任务','fields':[...]}]；字段对象使用 fieldName/type/config，可选 description/aiConfig`, Required: true},
 	},
-	Tips: []string{`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[]}]'`},
+	Tips: []string{`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[{"fieldName":"标题","type":"text"}]}]'`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return executeBaseBootstrap(rt)
 	},
@@ -282,8 +282,8 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("create_fields offset %d returned an error; checking final field state: %v", offset, fieldErr))
 			}
 		}
-		tableRead, verifyErr := verifyCreatedTableEventually(rt, baseID, tableID)
-		if verifyErr != nil {
+		tableRead, fields, verifyErr := readCreatedTableEventually(rt, baseID, tableID)
+		if tableRead == nil {
 			result.Status = "partial_success"
 			result.CompletedCount = index
 			result.FailedCount = len(tables) - index
@@ -297,11 +297,6 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 		for key, value := range tableNav {
 			tableEffect[key] = value
 		}
-		fieldsData, verifyErr := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
-		fields, found := findNamedObjectList(fieldsData, "fields", "fieldList")
-		if verifyErr == nil && !found {
-			verifyErr = fmt.Errorf("field read-back for table %s is missing the fields collection", tableID)
-		}
 		if verifyErr == nil {
 			verifyErr = verifyDeclaredFieldStructures(fields, spec.Fields)
 		}
@@ -313,7 +308,9 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 			return compositeError(result, verifyErr, false)
 		}
 		result.CompletedCount = index + 1
-		tableResult := map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields)}
+		// Return the read-back fields like +table-bootstrap so callers get
+		// fieldIds without another schema read.
+		tableResult := map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields), "fields": fields}
 		aitablenavigation.Preserve(tableResult, tableRead)
 		aitablenavigation.Preserve(tableResult, parityResponseObject(createData))
 		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: index + 2, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(spec.Fields), Result: tableResult})

@@ -28,6 +28,15 @@ func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command str
 
 func runAITableCompositeCLIContext(t *testing.T, ctx context.Context, caller *upsertByKeyCaller, command string, args ...string) (string, error) {
 	t.Helper()
+	stdout, _, err := runAITableCompositeCLIWithDiagnostics(t, ctx, caller, command, args...)
+	return stdout, err
+}
+
+func runAITableCompositeCLIWithDiagnostics(t *testing.T, ctx context.Context, caller *upsertByKeyCaller, command string, args ...string) (string, string, error) {
+	t.Helper()
+	if command == "+record-upsert" {
+		setupRecordWriteTestProfile(t)
+	}
 	helpers.InitDepsForTest(t, caller)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -45,10 +54,10 @@ func runAITableCompositeCLIContext(t *testing.T, ctx context.Context, caller *up
 	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil && output.UsesUnifiedResult(executed) {
 		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
-			return stdout.String(), emitErr
+			return stdout.String(), stderr.String(), emitErr
 		}
 	}
-	return stdout.String(), err
+	return stdout.String(), stderr.String(), err
 }
 
 func TestCrossPlatformCoverageBaseSchemaSnapshotE2E(t *testing.T) {
@@ -317,19 +326,27 @@ func fieldReadBackJSON(t *testing.T, fields []any) string {
 
 func TestCrossPlatformCoverageBaseBootstrapCreatesChunksAndVerifiesE2E(t *testing.T) {
 	fields := bootstrapFields(16)
+	readBack := make([]any, 0, len(fields))
+	for index, field := range fields {
+		withID := map[string]any{"fieldId": fmt.Sprintf("fld%d", index)}
+		for key, value := range field.(map[string]any) {
+			withID[key] = value
+		}
+		readBack = append(readBack, withID)
+	}
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"data":{"baseId":"b-new"}}`},
 		{text: `{"baseId":"b-new","tables":[]}`},
 		{text: `{"data":{"tableId":"t-new"}}`},
 		{text: `{"createdFields":[{"fieldId":"f16"}]}`},
 		{text: `{"tables":[{"tableId":"t-new","name":"任务"}]}`},
-		{text: fieldReadBackJSON(t, fields)},
+		{text: fieldReadBackJSON(t, readBack)},
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap", "--name", "项目", "--tables", marshalBootstrapTables(t, fields), "--yes")
 	if err != nil {
 		t.Fatalf("bootstrap error = %v", err)
 	}
-	for _, want := range []string{`"baseId": "b-new"`, `"tableId": "t-new"`, `"status": "verified"`} {
+	for _, want := range []string{`"baseId": "b-new"`, `"tableId": "t-new"`, `"status": "verified"`, `"fieldId": "fld15"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("bootstrap output missing %s: %s", want, out)
 		}

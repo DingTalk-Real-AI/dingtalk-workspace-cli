@@ -368,7 +368,8 @@ func TestCrossPlatformCoverageA2UISupportForward(t *testing.T) {
 			want    bool
 			invalid bool
 		}{
-			{name: "default"},
+			{name: "default", want: true},
+			{name: "explicit true", flags: []string{"--support-forward=true"}, want: true},
 			{name: "enabled", flags: []string{"--support-forward"}, want: true},
 			{name: "disabled", flags: []string{"--support-forward=false"}},
 			{name: "invalid", flags: []string{"--support-forward=invalid"}, invalid: true},
@@ -430,7 +431,7 @@ func TestCrossPlatformCoverageA2UIExtension(t *testing.T) {
 				} else if !present || !reflect.DeepEqual(value, tc.want) {
 					t.Fatalf("extension = %#v, want %#v", value, tc.want)
 				}
-				if caller.args["flowStatus"] != "PROCESSING" || caller.args["supportForward"] != false || caller.args["summary"] != "互动卡片" {
+				if caller.args["flowStatus"] != "PROCESSING" || caller.args["supportForward"] != true || caller.args["summary"] != "互动卡片" {
 					t.Fatalf("existing defaults changed: %#v", caller.args)
 				}
 			})

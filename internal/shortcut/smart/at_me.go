@@ -246,6 +246,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
 	truncatedByResultLimit := false
+	paginationKnown := true
 
 	for pagesFetched < pageLimit {
 		if pagesFetched > 0 {
@@ -301,6 +302,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 				"page": pagesFetched, "stage": "pagination",
 				"error": "@我消息下层未返回可靠的 hasMore，无法证明结果完整",
 			})
+			paginationKnown = false
 			stopReason = "pagination_error"
 			break
 		}
@@ -346,7 +348,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, allItems)
 	payload := atMePayload(allItems, !rt.Bool("no-reactions"))
 	payload["pagesFetched"] = pagesFetched
-	payload["paginationKnown"] = true
+	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason

@@ -24,6 +24,9 @@ func TestCrossPlatformCoverageA2UIDeliveryOptionsReachFinalSchema(t *testing.T) 
 		if parameters["support-forward"]["type"] != "boolean" {
 			t.Errorf("%s forwarding parameter=%v", tc.canonical, parameters["support-forward"])
 		}
+		if tc.canonical == "chat.create_and_send_a2ui_card" && schemaContractString(parameters["support-forward"]["default"]) != "true" {
+			t.Errorf("%s forwarding default=%v, want true", tc.canonical, parameters["support-forward"]["default"])
+		}
 	}
 	atomic := schemaContractMap(payload.Tools["chat.create_and_send_a2ui_card"]["parameters"])
 	if atomic["summary"]["property"] != "summary" || atomic["support-forward"]["property"] != "supportForward" {

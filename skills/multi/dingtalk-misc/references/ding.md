@@ -141,8 +141,8 @@ dws ding +receiver-status --ding-id <OPEN_DING_ID> --format json
 
 - list 项已含 `content`、`openDingId` 和状态；读取这些字段不追加详情调用。
 - list 不传 `--type` 时按 `ALL` 查询；首次 `--cursor 0`，后续只用响应的 `nextCursor`。
-- 只有 `hasMore=true` 且 `nextCursor` 是严格前进的正整数时继续；达到用户上限、
-  `hasMore=false`、游标缺失、停滞或循环时立即停止并如实说明完整性。
+- 只有 `hasMore=true` 且 `nextCursor` 是不等于当前游标的正整数时继续；服务端按创建时间倒序
+  分页，递减游标合法；达到用户上限、`hasMore=false`、游标缺失、游标重复或循环时立即停止并如实说明完整性。
 - 跨页默认按 `openDingId` 去重。只有用户明确要求内容合并时才按规范化内容去重，
   并同时报告原始条数和合并后条数。
 

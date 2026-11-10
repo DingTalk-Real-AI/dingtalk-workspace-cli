@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -161,7 +162,7 @@ func TestCrossPlatformCoverageAttendanceConfirmedMutationEdges(t *testing.T) {
 	mutations := [][]string{
 		{"class", "create", "--name=shift", "--class-vo=" + validClass},
 		{"class", "update", "--class-id=1", "--name=shift"},
-		{"group", "update-members", "--group-id=1", "--add-users=u"},
+		{"group", "update-members", "--group-id=1", "--add-users=u", "--member-join-policy=SPECIFIC_USERS"},
 		{"group", "create", "--name=group", "--type=TURN", "--owner=u"},
 		{"group", "update", "--group-id=1", "--name=group", "--enable-outside-check=true", "--classIds=[1]"},
 		{"selfsetting", "save", "--setting-scene=checkResultNotify", "--user=u", "--check-result-msg=1"},
@@ -231,6 +232,30 @@ func TestCrossPlatformCoverageAttendanceConfirmedMutationSuccessCoverage(t *test
 			wantOutput: "created\n",
 		},
 		{
+			name:       "group members with specific users policy",
+			response:   `{}`,
+			args:       []string{"group", "update-members", "--group-id=1", "--add-users=u", "--member-join-policy=SPECIFIC_USERS", "--yes"},
+			wantTool:   "update_group_member",
+			wantArgs:   map[string]any{"groupId": int64(1), "updateParam": map[string]any{"addUsers": []string{"u"}, "memberJoinPolicy": "SPECIFIC_USERS"}},
+			wantOutput: "{}\n",
+		},
+		{
+			name:       "group members removal with explicit specific users policy",
+			response:   `{}`,
+			args:       []string{"group", "update-members", "--group-id=1", "--remove-users=u", "--member-join-policy=SPECIFIC_USERS", "--yes"},
+			wantTool:   "update_group_member",
+			wantArgs:   map[string]any{"groupId": int64(1), "updateParam": map[string]any{"removeUsers": []string{"u"}, "memberJoinPolicy": "SPECIFIC_USERS"}},
+			wantOutput: "{}\n",
+		},
+		{
+			name:       "group member changes preserved with fixed policy",
+			response:   `{}`,
+			args:       []string{"group", "update-members", "--group-id=1", "--add-users=u", "--remove-users=r", "--add-extra-users=e", "--remove-extra-users=x", "--add-depts=d", "--remove-depts=z", "--member-join-policy=SPECIFIC_USERS", "--yes"},
+			wantTool:   "update_group_member",
+			wantArgs:   map[string]any{"groupId": int64(1), "updateParam": map[string]any{"addUsers": []string{"u"}, "removeUsers": []string{"r"}, "addExtraUsers": []string{"e"}, "removeExtraUsers": []string{"x"}, "addDepts": []string{"d"}, "removeDepts": []string{"z"}, "memberJoinPolicy": "SPECIFIC_USERS"}},
+			wantOutput: "{}\n",
+		},
+		{
 			name:       "self setting save",
 			response:   `{}`,
 			args:       []string{"selfsetting", "save", "--setting-scene=checkResultNotify", "--user=u", "--check-result-msg=1", "--yes"},
@@ -293,6 +318,52 @@ func TestCrossPlatformCoverageAttendanceConfirmedMutationSuccessCoverage(t *test
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("tool calls = %d, want 0", len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceGroupMemberJoinPolicyRequiresMemberChange(t *testing.T) {
+	InitDepsForTest(t, nil)
+	caller := &attendanceRecordingCaller{}
+	_, err := runAttendanceRecordingCommand(t, caller, "group", "update-members", "--group-id=1", "--member-join-policy=SPECIFIC_USERS", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "至少需要指定一个变更项") {
+		t.Fatalf("empty member update error = %v, want missing member change", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("empty member update made %d tool calls, want 0", len(caller.calls))
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceGroupMemberJoinPolicyRejectsOtherValues(t *testing.T) {
+	InitDepsForTest(t, nil)
+	for _, policy := range []string{"SUB_DEPT_FIRST", "OTHER", ""} {
+		t.Run(policy, func(t *testing.T) {
+			caller := &attendanceRecordingCaller{}
+			_, err := runAttendanceRecordingCommand(t, caller, "group", "update-members", "--group-id=1", "--add-users=u", "--member-join-policy="+policy)
+			var typedErr *apperrors.Error
+			if !errors.As(err, &typedErr) || typedErr.Category != apperrors.CategoryValidation || apperrors.ExitCode(err) != 3 || !strings.Contains(err.Error(), "仅支持 SPECIFIC_USERS") {
+				t.Fatalf("policy %q error = %v, want validation/exit 3 before confirmation", policy, err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid policy made %d tool calls, want 0", len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceGroupMemberJoinPolicyRequired(t *testing.T) {
+	InitDepsForTest(t, nil)
+	for _, changeFlag := range []string{"add-users", "remove-users", "add-extra-users", "remove-extra-users", "add-depts", "remove-depts"} {
+		t.Run(changeFlag, func(t *testing.T) {
+			caller := &attendanceRecordingCaller{}
+			_, err := runAttendanceRecordingCommand(t, caller, "group", "update-members", "--group-id=1", "--"+changeFlag+"=synthetic-id", "--yes")
+			var typedErr *apperrors.Error
+			if !errors.As(err, &typedErr) || typedErr.Category != apperrors.CategoryValidation || apperrors.ExitCode(err) != 3 || !strings.Contains(err.Error(), "member-join-policy") {
+				t.Fatalf("missing policy error = %v, want validation/exit 3", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("missing policy made %d tool calls, want 0", len(caller.calls))
 			}
 		})
 	}

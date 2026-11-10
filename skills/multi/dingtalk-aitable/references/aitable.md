@@ -299,17 +299,11 @@ Flags:
 
 ## 复杂操作
 
-### 仪表盘 / 图表（建议顺序）
+### 仪表盘 / 图表（按需配置）
 
-```bash
-# 1) 先看配置模板（JSONC）
-dws aitable dashboard config-example --format json
-dws aitable chart widgets-example --format json
+新建/重构分析仪表盘、图表批建恢复决策、Chart config 或 Dashboard 完整 config/arrange，按需读取 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)；普通 Dashboard CRUD 直接使用命令，不进入复杂配置流程。
 
-# 2) 先拿 dashboard，再拿 chart 详情
-dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
-dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
-```
+已有合法 config 且指标/布局语义明确时不重复读模板；需要构造配置时仅获取所需类型模板，Dashboard 完整 config 结构缺失时才读取对应模板。具体读取路径以专项指南为准，不预读两份全量模板。
 
 要点：
 

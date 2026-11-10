@@ -4,10 +4,82 @@
 package aitable
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestCrossPlatformCoverageChartSizeDiagnosticsAreReadOnlyAndVersioned(t *testing.T) {
+	for _, tc := range []struct {
+		name, version, charts string
+		app                   bool
+		checked, issues       int
+		columns               int
+	}{
+		{name: "numeric V2", columns: 48, version: "2", charts: `[{"chartId":"C","chartType":"BAR"}]`, checked: 1, issues: 1},
+		{name: "string V1", columns: 12, version: `"2"`, charts: `[{"chartId":"C","chartType":"BAR"}]`, checked: 1},
+		{name: "confirmed App V2", columns: 48, version: "1", charts: `[{"chartId":"C","chartType":"BAR"}]`, app: true, checked: 1, issues: 1},
+		{name: "old response without types", columns: 48, version: "2", charts: `[]`},
+		{name: "unknown type", columns: 48, version: "2", charts: `[{"chartId":"C","chartType":"RADAR"}]`},
+		{name: "ambiguous identity", columns: 48, version: "2", charts: `[{"chartId":"C","chartType":"BAR"},{"chartId":"C","chartType":"LINE"}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipt := fmt.Sprintf(`{"data":{"baseId":"B","dashboardId":"D","meta":{"schemaVersion":%s,"schemaVersionTypeVerified":true},"layout":[{"i":"C","x":0,"y":0,"w":4,"h":8}],"charts":%s}}`, tc.version, tc.charts)
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: receipt}}}
+			args := []string{"--base-id", "B", "--dashboard-id", "D"}
+			if tc.app {
+				args = append(args, "--is-app-mode=true")
+			}
+			out, err := runAITableCompositeCLI(t, caller, "+dashboard-diagnose", args...)
+			if err != nil || len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+				t.Fatalf("diagnosis failed or wrote: %s %v %#v", out, err, caller.calls)
+			}
+			var envelope map[string]any
+			if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			data := envelope["data"].(map[string]any)
+			if data["totalColumns"] != float64(tc.columns) || data["geometryVerified"] != true || data["pageReadableVerified"] != false || len(data["sizeIssues"].([]any)) != tc.issues || len(data["sizeCheckedChartIds"].([]any)) != tc.checked {
+				t.Fatalf("geometry, type coverage or page semantics lost: %s", out)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageVOCSixSizeDiagnostics(t *testing.T) {
+	types := []string{"PIE", "BAR", "BAR", "PIE", "BAR", "LINE"}
+	for _, height := range []int{8, 15} {
+		layouts, charts := []map[string]any{}, []map[string]any{}
+		for i, kind := range types {
+			id := fmt.Sprintf("VOC-%d", i)
+			layouts = append(layouts, map[string]any{"i": id, "x": i % 3 * 16, "y": i / 3 * height, "w": 16, "h": height})
+			charts = append(charts, map[string]any{"chartId": id, "chartType": kind})
+		}
+		raw, err := json.Marshal(map[string]any{"data": map[string]any{"baseId": "B", "dashboardId": "D", "meta": map[string]any{"schemaVersion": 2, "schemaVersionTypeVerified": true}, "layout": layouts, "charts": charts}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: string(raw)}}}
+		out, err := runAITableCompositeCLI(t, caller, "+dashboard-diagnose", "--base-id", "B", "--dashboard-id", "D")
+		if err != nil || len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+			t.Fatalf("unexpected calls: %v %#v", err, caller.calls)
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		data := envelope["data"].(map[string]any)
+		want := 0
+		if height == 8 {
+			want = 6
+		}
+		if len(data["sizeIssues"].([]any)) != want || len(data["sizeCheckedChartIds"].([]any)) != 6 || data["geometryVerified"] != true || data["pageReadableVerified"] != false {
+			t.Fatalf("VOC height %d: %s", height, out)
+		}
+	}
+}
 
 func TestCrossPlatformCoverageLayoutReadBoundaries(t *testing.T) {
 	layout := `{"i":"C","x":0,"y":0,"w":12,"h":4}`
