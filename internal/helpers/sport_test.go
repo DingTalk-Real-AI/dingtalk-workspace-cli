@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -85,25 +86,30 @@ func TestSportCommandTreeCoversAllCLITools(t *testing.T) {
 		t.Fatalf("sport 命令树叶子数 = %d，期望 %d：%v", len(paths), len(sportAllTools), paths)
 	}
 	for tool, cliPath := range sportAllTools {
-		if !paths[cliPath] {
-			t.Fatalf("工具 %s 对应的命令 %s 不在命令树中", tool, cliPath)
-		}
-	}
-	for _, excluded := range []string{"sport org orgs", "sport competition update", "sport competition cancel", "sport competition delete"} {
-		if paths[excluded] {
-			t.Fatalf("CLI 不应公开未接入的命令 %s", excluded)
-		}
+		t.Run(cliPath, func(t *testing.T) {
+			if !paths[cliPath] {
+				t.Fatalf("工具 %s 对应的命令 %s 不在命令树中", tool, cliPath)
+			}
+			leaf := findSportSubcommand(t, root, strings.Fields(cliPath)[1:]...)
+			argv, err := splitExampleCommand(leaf.Example)
+			if err != nil || len(argv) < 4 || strings.Join(argv[1:4], " ") != cliPath {
+				t.Fatalf("%s 缺少对应的可执行示例：%q，%v", cliPath, leaf.Example, err)
+			}
+			fake := &sportFakeCaller{err: errors.New("预览不得调用 MCP")}
+			InitDepsForTest(t, fake)
+			envelope, err := runSportCommandOutput(t, append(argv[2:], "--dry-run")...)
+			if err != nil {
+				t.Fatalf("%s 预览失败：%v", cliPath, err)
+			}
+			data, ok := envelope["data"].(map[string]any)
+			if !ok || data["tool"] != tool || data["executed"] != false || envelope["dry_run"] != true || len(fake.calls) != 0 {
+				t.Fatalf("%s 未预览预期工具 %s：envelope=%v calls=%v", cliPath, tool, envelope, fake.calls)
+			}
+		})
 	}
 }
 
-func TestSportCreateFlagsBindFlatToolArgsKeys(t *testing.T) {
-	root := newSportCommand()
-	create := findSportSubcommand(t, root, "competition", "create")
-	for _, flagName := range []string{"name", "sport-type", "competition-type", "start-date", "end-date", "goal-value", "target-day-value", "group-id", "need-signup", "allow-free-join", "cover-image-url"} {
-		if create.Flags().Lookup(flagName) == nil {
-			t.Fatalf("create 缺少 flag --%s", flagName)
-		}
-	}
+func TestSportCreatePayloadExcludesUnlistedKeys(t *testing.T) {
 	// 平铺键经 Call 钩子重排为嵌套 CompetitionCreateMcpRequest。
 	payload := sportBuildCreatePayload(map[string]any{
 		"userId":          "0123456789",
@@ -144,7 +150,11 @@ func TestSportValidateCreateArgsBlocksRecurringAndBadDates(t *testing.T) {
 		{"结束早于开始", map[string]string{"end-date": "20261110"}, "不得早于"},
 		{"达标天数超期", map[string]string{"target-day-value": "25"}, "单期实际天数"},
 		{"目标非数字", map[string]string{"goal-value": "abc"}, "goal-value"},
+		{"零目标", map[string]string{"goal-value": "0"}, "goal-value"},
+		{"达标天数非整数", map[string]string{"target-day-value": "abc"}, "target-day-value"},
+		{"上限非法小数", map[string]string{"daily-limit": "1.2.3"}, "daily-limit"},
 		{"上限小于目标", map[string]string{"daily-limit": "7000"}, "大于等于"},
+		{"高精度上限小于目标", map[string]string{"goal-value": "2", "daily-limit": "1.0000001"}, "大于等于"},
 	}
 	base := map[string]string{
 		"user-id": "0123456789", "name": "走路挑战赛", "sport-type": "WALK",
@@ -203,21 +213,12 @@ func TestSportValidateDateHelpers(t *testing.T) {
 	if err := sportValidateDate("d", "20260132"); err == nil || !strings.Contains(err.Error(), "不是真实日期") {
 		t.Fatalf("日期超界应被拒: %v", err)
 	}
-	// 闰年 20260229 合法，20260229 平年（如 2027）非法。
+	// 闰年 20240229 合法，平年 20270229 非法。
 	if err := sportValidateDate("d", "20240229"); err != nil {
 		t.Fatalf("闰日被拒: %v", err)
 	}
 	if err := sportValidateDate("d", "20270229"); err == nil {
 		t.Fatalf("平年闰日应被拒")
-	}
-	if sportCompareNumbers("8000", "8000.000000") != 0 || sportCompareNumbers("9000", "8000") != 1 {
-		t.Fatalf("定点比较结果不符合预期")
-	}
-	if _, ok := sportParsePositiveInt("18"); !ok {
-		t.Fatalf("正整数解析失败")
-	}
-	if _, ok := sportParsePositiveInt("1.5"); ok {
-		t.Fatalf("小数不应通过整数解析")
 	}
 }
 
