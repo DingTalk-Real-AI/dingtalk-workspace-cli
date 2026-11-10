@@ -40,11 +40,14 @@ Windows installations that previously set this variable will now enter a new
 credential namespace and need a deliberate login or explicit credential import.
 Missing entries never fall back to the historical namespace, and normal reads,
 writes, validation and cleanup do not migrate or delete another namespace.
+Logout and reset delete only credential values; the emptied namespace key stays
+in the registry and holds no credentials.
 
 每个 Agent 进程都应设置不同的两个绝对路径，并让其后续命令继承相同环境。
 仅设置 `DWS_CONFIG_DIR` 不隔离凭据；仅设置 `DWS_KEYCHAIN_DIR` 不隔离配置和锁。
 Windows 仍使用 DPAPI 加密，不因目录隔离降级到文件密钥。启用新目录后不会自动读取
-旧默认凭据；原凭据保留，需主动登录或显式导入。这是避免误用、覆盖和清理其他实例
+旧默认凭据；原凭据保留，需主动登录或显式导入。logout/reset 只删除凭据值，清空后的
+命名空间键会保留在注册表中，但不含任何凭据。这是避免误用、覆盖和清理其他实例
 认证状态的运行隔离，不是同一 Windows 用户下的安全沙箱，也不承诺缓存、遥测等
 所有 CLI 状态均已隔离。
 

@@ -1,5 +1,15 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package keychain
 
@@ -18,19 +28,23 @@ func TestCrossPlatformCoverageRegistryNamespaceKeepsDefaultAndTestPaths(t *testi
 		t.Fatalf("default registry path = %q, want %q", got, base)
 	}
 
-	// Pin the pre-existing test namespace layout independently of the new
-	// storage-directory branch, so upgrades cannot strand test credentials.
+	// Pin the pre-existing test namespace layout independently of the
+	// implementation, so upgrades cannot strand test credentials.
 	testDir := t.TempDir()
 	absolute, err := filepath.Abs(filepath.Clean(testDir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(strings.ToLower(absolute)))
-	want := fmt.Sprintf(`%s\test-%x`, base, sum[:16])
-	for _, storageDir := range []string{"", t.TempDir()} {
-		if got := registryNamespacePath(base, storageDir, " "+testDir+" "); got != want {
-			t.Fatalf("test registry path = %q, want %q", got, want)
-		}
+	testPath := fmt.Sprintf(`%s\test-%x`, base, sum[:16])
+	if got := registryNamespacePath(base, "", " "+testDir+" "); got != testPath {
+		t.Fatalf("test registry path = %q, want %q", got, testPath)
+	}
+
+	// A storage directory nests below the test namespace instead of escaping it.
+	nested := regexp.MustCompile(`^` + regexp.QuoteMeta(testPath) + `\\dir-[0-9a-f]{32}$`)
+	if got := registryNamespacePath(base, t.TempDir(), testDir); !nested.MatchString(got) {
+		t.Fatalf("combined registry path = %q, want storage child of %q", got, testPath)
 	}
 }
 
@@ -52,6 +66,29 @@ func TestCrossPlatformCoverageRegistryNamespaceSeparatesStorageDirectories(t *te
 	}
 	if got := registryNamespacePath(base+"-other", firstDir, ""); got == first {
 		t.Fatal("different services share a registry path")
+	}
+	if got := registryNamespacePath(base, " \t", ""); got == base {
+		t.Fatal("whitespace-only storage directory collapsed into the shared default key")
+	}
+}
+
+func TestCrossPlatformCoverageRegistryNamespaceComposesTestAndStorageScopes(t *testing.T) {
+	const base = `Software\DwsCli\keychain\dws-cli`
+	root := t.TempDir()
+	testOnly := registryNamespacePath(base, "", root)
+	storageOnly := registryNamespacePath(base, root, "")
+	combined := registryNamespacePath(base, root, root)
+	if testOnly == storageOnly || combined == testOnly || combined == storageOnly {
+		t.Fatalf("namespaces collide: test %q, storage %q, combined %q", testOnly, storageOnly, combined)
+	}
+	if !strings.HasPrefix(combined, testOnly+`\dir-`) {
+		t.Fatalf("combined path = %q, want storage child of %q", combined, testOnly)
+	}
+	if got := registryNamespacePath(base, t.TempDir(), root); got == combined {
+		t.Fatalf("test namespace masked storage directory change at %q", got)
+	}
+	if got := registryNamespacePath(base, root, t.TempDir()); got == combined {
+		t.Fatalf("storage directory masked test namespace change at %q", got)
 	}
 }
 

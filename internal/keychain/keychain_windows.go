@@ -16,7 +16,6 @@
 package keychain
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -63,23 +62,8 @@ func StorageDir(service string) string {
 }
 
 func registryPathForService(service string) string {
-	path := regRootPath + `\` + safeRegistryComponent(service)
-	if namespace := strings.TrimSpace(os.Getenv(TestNamespaceEnv)); namespace != "" {
-		path += `\test-` + registryNamespaceHash(namespace)
-	}
-	if directory := os.Getenv(StorageDirEnv); directory != "" {
-		path += `\dir-` + registryNamespaceHash(directory)
-	}
-	return path
-}
-
-func registryNamespaceHash(namespace string) string {
-	namespace = filepath.Clean(namespace)
-	if absolute, err := filepath.Abs(namespace); err == nil {
-		namespace = absolute
-	}
-	sum := sha256.Sum256([]byte(strings.ToLower(namespace)))
-	return fmt.Sprintf("%x", sum[:16])
+	basePath := regRootPath + `\` + safeRegistryComponent(service)
+	return registryNamespacePath(basePath, os.Getenv(StorageDirEnv), os.Getenv(TestNamespaceEnv))
 }
 
 var safeRegRe = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
