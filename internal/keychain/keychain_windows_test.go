@@ -25,6 +25,7 @@ import (
 )
 
 func TestCrossPlatformCoverageRegistryPathForServiceHonorsTestNamespace(t *testing.T) {
+	t.Setenv(StorageDirEnv, "")
 	t.Setenv(TestNamespaceEnv, "")
 	defaultPath := registryPathForService("service")
 	if defaultPath != regRootPath+`\service` {
@@ -45,6 +46,159 @@ func TestCrossPlatformCoverageRegistryPathForServiceHonorsTestNamespace(t *testi
 	}
 	if !strings.HasPrefix(firstPath, defaultPath+`\test-`) {
 		t.Fatalf("isolated registry path = %q, want prefix %q", firstPath, defaultPath+`\test-`)
+	}
+}
+
+func TestCrossPlatformCoverageWindowsRegistryPathHonorsStorageDir(t *testing.T) {
+	t.Setenv(TestNamespaceEnv, "")
+	t.Setenv(StorageDirEnv, "")
+	defaultPath := registryPathForService(Service)
+
+	firstDir, secondDir := t.TempDir(), t.TempDir()
+	t.Setenv(StorageDirEnv, firstDir)
+	firstPath := registryPathForService(Service)
+	t.Setenv(StorageDirEnv, secondDir)
+	secondPath := registryPathForService(Service)
+	if firstPath == secondPath {
+		t.Fatalf("different storage directories share registry path %q", firstPath)
+	}
+	for _, path := range []string{firstPath, secondPath} {
+		if !strings.HasPrefix(path, defaultPath+`\dir-`) {
+			t.Fatalf("registry path = %q, want isolated child of %q", path, defaultPath)
+		}
+	}
+
+	t.Chdir(firstDir)
+	for _, variant := range []string{
+		firstDir,
+		strings.ToUpper(firstDir),
+		strings.ReplaceAll(firstDir, `\`, "/"),
+		firstDir + `\.\child\..`,
+		firstDir + `\`,
+		".",
+	} {
+		t.Setenv(StorageDirEnv, variant)
+		if got := registryPathForService(Service); got != firstPath {
+			t.Errorf("storage directory %q resolved to %q, want %q", variant, got, firstPath)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWindowsRegistryNamespacesCompose(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(StorageDirEnv, "")
+	t.Setenv(TestNamespaceEnv, root)
+	testPath := registryPathForService(Service)
+
+	t.Setenv(TestNamespaceEnv, "")
+	t.Setenv(StorageDirEnv, root)
+	storagePath := registryPathForService(Service)
+	if storagePath == testPath {
+		t.Fatalf("test and storage namespaces collide at %q", storagePath)
+	}
+
+	t.Setenv(TestNamespaceEnv, root)
+	combinedPath := registryPathForService(Service)
+	if !strings.HasPrefix(combinedPath, testPath+`\dir-`) {
+		t.Fatalf("combined path = %q, want storage child of %q", combinedPath, testPath)
+	}
+	t.Setenv(StorageDirEnv, t.TempDir())
+	if got := registryPathForService(Service); got == combinedPath {
+		t.Fatalf("test namespace masked storage directory change at %q", got)
+	}
+	t.Setenv(StorageDirEnv, root)
+	t.Setenv(TestNamespaceEnv, t.TempDir())
+	if got := registryPathForService(Service); got == combinedPath {
+		t.Fatalf("storage directory masked test namespace change at %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageWindowsRegistryStorageDirIsolatesCredentials(t *testing.T) {
+	t.Setenv(TestNamespaceEnv, t.TempDir())
+	t.Setenv(StorageDirEnv, "")
+	testKeyPath := registryPathForService(Service)
+	t.Cleanup(func() {
+		if err := registry.DeleteKey(registry.CURRENT_USER, testKeyPath); err != nil && !errors.Is(err, registry.ErrNotExist) {
+			t.Errorf("cleanup test registry namespace: %v", err)
+		}
+	})
+	dirs := []string{t.TempDir(), t.TempDir()}
+	accounts := []string{
+		AccountToken,
+		AccountToken + ":corp-a",
+		AccountToken + ":id:0123456789abcdef",
+		"appsecret:client-a",
+		"client-secret:client-a",
+		"app-token:client-a",
+	}
+	values := []string{"fixture-a", "fixture-b"}
+	for i, dir := range dirs {
+		t.Setenv(StorageDirEnv, dir)
+		keyPath := registryPathForService(Service)
+		t.Cleanup(func() {
+			if err := registry.DeleteKey(registry.CURRENT_USER, keyPath); err != nil && !errors.Is(err, registry.ErrNotExist) {
+				t.Errorf("cleanup registry key: %v", err)
+			}
+		})
+		for _, account := range accounts {
+			if got, err := Get(Service, account); err != nil || got != "" {
+				t.Fatalf("new directory account %q = %q, %v; want missing", account, got, err)
+			}
+			if err := Set(Service, account, values[i]); err != nil {
+				t.Fatalf("Set(%q): %v", account, err)
+			}
+		}
+	}
+
+	for i, dir := range dirs {
+		t.Setenv(StorageDirEnv, dir)
+		for _, account := range accounts {
+			if got, err := Get(Service, account); err != nil || got != values[i] {
+				t.Fatalf("directory %d account %q = %q, %v; want %q", i, account, got, err, values[i])
+			}
+		}
+	}
+
+	t.Setenv(StorageDirEnv, dirs[0])
+	if err := Set(Service, AccountToken, "fixture-updated"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Get(Service, AccountToken); err != nil || got != "fixture-updated" {
+		t.Fatalf("overwrite = %q, %v; want updated fixture", got, err)
+	}
+	if err := Remove(Service, accounts[2]); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Get(Service, accounts[2]); err != nil || got != "" {
+		t.Fatalf("removed identity token = %q, %v; want missing", got, err)
+	}
+	if err := RemoveAccountEntriesWithPrefixes(Service, "appsecret:", "client-secret:", "app-token:"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Get(Service, AccountToken); err != nil || got != "fixture-updated" {
+		t.Fatalf("token after application cleanup = %q, %v; want preserved", got, err)
+	}
+	if err := RemoveAuthTokenEntries(Service); err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range accounts {
+		if got, err := Get(Service, account); err != nil || got != "" {
+			t.Fatalf("cleaned account %q = %q, %v; want missing", account, got, err)
+		}
+	}
+
+	writeRawRegistryString(t, Service, AccountToken+":orphan", "%%%invalid-ciphertext%%")
+	if err := ValidateAuthTokenEntries(Service); err == nil {
+		t.Fatal("corrupt token inventory passed validation")
+	}
+	t.Setenv(StorageDirEnv, dirs[1])
+	if err := ValidateAuthTokenEntries(Service); err != nil {
+		t.Fatalf("other directory corruption affected validation: %v", err)
+	}
+	for _, account := range accounts {
+		if got, err := Get(Service, account); err != nil || got != values[1] {
+			t.Fatalf("other directory account %q = %q, %v; want preserved", account, got, err)
+		}
 	}
 }
 
