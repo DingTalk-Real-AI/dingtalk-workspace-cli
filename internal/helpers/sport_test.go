@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
 
@@ -91,6 +93,10 @@ func TestSportCommandTreeCoversAllCLITools(t *testing.T) {
 				t.Fatalf("工具 %s 对应的命令 %s 不在命令树中", tool, cliPath)
 			}
 			leaf := findSportSubcommand(t, root, strings.Fields(cliPath)[1:]...)
+			declared, ok := contractfinal.RuntimeContractFinal(leaf)
+			if !ok || declared.DryRun == nil || declared.DryRun.PreviewKind != contract.DryRunPreviewRequest || declared.DryRun.RemoteReads {
+				t.Fatalf("%s 必须声明无远端读取的 request 预览能力：%+v", cliPath, declared.DryRun)
+			}
 			argv, err := splitExampleCommand(leaf.Example)
 			if err != nil || len(argv) < 4 || strings.Join(argv[1:4], " ") != cliPath {
 				t.Fatalf("%s 缺少对应的可执行示例：%q，%v", cliPath, leaf.Example, err)
