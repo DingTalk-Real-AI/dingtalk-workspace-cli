@@ -3,6 +3,7 @@ package sport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -24,6 +25,11 @@ type sportFakeCaller struct {
 }
 
 func (f *sportFakeCaller) CallTool(_ context.Context, productID, toolName string, _ map[string]any) (*edition.ToolResult, error) {
+	if f.dryRun {
+		// 与 app 层 toolCallerAdapter 的 dry-run 行为对齐：返回 dry_run 信封
+		// JSON，不产生真实网络调用，也不计入业务调用记录。
+		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: fmt.Sprintf(`{"dry_run":true,"executed":false,"tool":%q}`, toolName)}}}, nil
+	}
 	f.calls = append(f.calls, productID+"/"+toolName)
 	if f.err != nil {
 		return nil, f.err
@@ -100,8 +106,22 @@ func TestSportCallResultRejectsNonJSONText(t *testing.T) {
 	fake := &sportFakeCaller{text: "不是 JSON", blocks: 1}
 	helpers.InitDeps(fake)
 	err := sportRunStatus(t)
-	if err == nil || !strings.Contains(err.Error(), "non-JSON") {
-		t.Fatalf("期望 non-JSON 错误，实际: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "解析") || !strings.Contains(err.Error(), "返回失败") {
+		t.Fatalf("期望统一通道的 JSON 解析错误，实际: %v", err)
+	}
+}
+
+// TestSportCallResultRejectsBusinessErrorBody 验证 isError=false 的业务错误
+// 体经统一分类后不会伪装成 success（评审阻塞项 1 的回归用例）。
+func TestSportCallResultRejectsBusinessErrorBody(t *testing.T) {
+	fake := &sportFakeCaller{text: `{"code":"K001","success":false,"message":"活动不存在"}`, blocks: 1}
+	helpers.InitDeps(fake)
+	err := sportRunStatus(t)
+	if err == nil {
+		t.Fatalf("业务错误体不应被当作 success")
+	}
+	if !strings.Contains(err.Error(), "活动不存在") {
+		t.Fatalf("错误信息应保留服务端语义，实际: %v", err)
 	}
 }
 
@@ -160,6 +180,11 @@ func TestSportCreateValidationErrorsShortCircuitBeforeCall(t *testing.T) {
 		append(append([]string{}, base...), "--competition-type", "FIXED", "--goal-value", "0"),
 		append(append([]string{}, base...), "--competition-type", "FIXED", "--target-day-value", "abc"),
 		append(append([]string{}, base...), "--competition-type", "FIXED", "--daily-limit", "1.2.3"),
+		// 评测 V4 复现：20260430→20260501 实际仅 2 天，target 3 必须被拒绝。
+		{"competition", "create", "--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK",
+			"--competition-type", "FIXED", "--start-date", "20260430", "--end-date", "20260501",
+			"--goal-value", "8000", "--target-day-value", "3", "--group-id", "123456",
+			"--need-signup", "false", "--allow-free-join", "false"},
 	}
 	for i, args := range cases {
 		fake := &sportFakeCaller{}
@@ -191,5 +216,25 @@ func TestSportNumericHelpersEdgeCases(t *testing.T) {
 	}
 	if n, ok := sportParsePositiveInt("1000000"); !ok || n != 1_000_000 {
 		t.Fatalf("sportParsePositiveInt 上限边界不符合预期: %d %v", n, ok)
+	}
+	// 评测次要项 4：超过 6 位小数不得截断失真。
+	if got := sportCompareNumbers("2", "1.0000001"); got != 1 {
+		t.Fatalf("sportCompareNumbers(2, 1.0000001) 应为 1，实际 %d", got)
+	}
+	if got := sportCompareNumbers("01.20", "1.2"); got != 0 {
+		t.Fatalf("sportCompareNumbers(01.20, 1.2) 应为 0，实际 %d", got)
+	}
+	if got := sportCompareNumbers("100", "99.999999999"); got != 1 {
+		t.Fatalf("sportCompareNumbers(100, 99.999999999) 应为 1，实际 %d", got)
+	}
+	for _, tc := range []struct {
+		a, b string
+		want int
+	}{
+		{"5", "10", -1}, {"1.2", "1.25", -1}, {"1.25", "1.2", 1}, {".5", ".50", 0},
+	} {
+		if got := sportCompareNumbers(tc.a, tc.b); got != tc.want {
+			t.Fatalf("sportCompareNumbers(%s, %s) 应为 %d，实际 %d", tc.a, tc.b, tc.want, got)
+		}
 	}
 }

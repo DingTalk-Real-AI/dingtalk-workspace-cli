@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -487,40 +488,20 @@ var sportCreateFlatKeys = []string{
 	"needSignup", "allowFreeJoin", "coverImageUrl",
 }
 
-// sportCallResult 是 sport 叶子命令的统一结果执行体：调用 sport server 的 MCP
-// 工具，把首个 text 内容解析为对象并作为 framework 2.0 CommandResult 返回。
-// RolloutUnifiedActive 命令必须经本路径把结果存入统一结果，不能直接打印。
+// sportCallResult 是 sport 叶子命令的统一结果执行体：经 helpers 的统一
+// MCP 调用通道（网关 token、未登录、PAT、业务错误体分类、多 JSON 值拒绝
+// 均在同一层处理），返回值保留服务端原始形状（含 null）。RolloutUnified
+// Active 命令必须经本路径把结果存入统一结果，不能直接打印。
+// dry-run 由 app 层 ToolCaller 拦截并返回 dry_run 信封 JSON，无需在此处理。
 func sportCallResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	caller := helpers.GetCaller()
-	if caller == nil {
+	if helpers.GetCaller() == nil {
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
 	}
-	if caller.DryRun() {
-		return output.Success(map[string]any{
-			"dry_run": true, "executed": false,
-			"tool": tool, "arguments": args,
-		}, output.WithDryRun()), nil
-	}
-	result, err := caller.CallTool(cmd.Context(), sportServerID, tool, args)
+	data, err := helpers.CallMCPToolDataOnServer(cmd.Context(), sportServerID, tool, args)
 	if err != nil {
-		// PAT 行为授权错误码重分类是 helpers 包内私有逻辑；sport 工具不
-		// 产生 PAT 授权错误，仅保留统一错误包装。
-		return nil, helpers.WrapErrorWithOperation(err, sportServerID+"/"+tool)
+		return nil, err
 	}
-	for _, block := range result.Content {
-		if block.Type != "text" || strings.TrimSpace(block.Text) == "" {
-			continue
-		}
-		var data map[string]any
-		if err := json.Unmarshal([]byte(block.Text), &data); err != nil {
-			return nil, fmt.Errorf("MCP tool %s returned non-JSON text: %w", tool, err)
-		}
-		if data == nil {
-			return output.Success(map[string]any{}), nil
-		}
-		return output.Success(data), nil
-	}
-	return output.Success(map[string]any{}), nil
+	return output.Success(data), nil
 }
 
 // sportCreateResult 把平铺 toolArgs 重组为 create_competition 的嵌套入参后委托。
@@ -575,13 +556,10 @@ func sportValidateDate(field, value string) error {
 	return nil
 }
 
-func sportDateToDayNumber(value string) int {
-	var y, m, d int
-	fmt.Sscanf(value[:4], "%d", &y)
-	fmt.Sscanf(value[4:6], "%d", &m)
-	fmt.Sscanf(value[6:], "%d", &d)
-	// 简化天数差计算：统一折算为近似天数（精度足够校验 targetDayValue 上限）。
-	return y*372 + m*31 + d
+// sportParseDate 把已通过 sportValidateDate 的 yyyyMMdd 解析为 UTC 零点时间。
+func sportParseDate(value string) time.Time {
+	t, _ := time.Parse("20060102", value)
+	return t
 }
 
 func newSportCompetitionCreateCmd() *cobra.Command {
@@ -596,7 +574,7 @@ func newSportCompetitionCreateCmd() *cobra.Command {
   --name              比赛名称（必填）
   --sport-type        WALK 走路（目标单位=步）/ RUN 跑步（=米）/ COMPREHENSIVE 综合运动（=千卡）（必填）
   --competition-type  仅 FIXED（必填）
-  --start-date        首期开始日期 yyyyMMdd；MONTH 周期场景日必须 ≤28（必填）
+  --start-date        首期开始日期 yyyyMMdd（必填）
   --end-date          首期结束日期 yyyyMMdd（必填）
   --goal-value        每日目标值 >0，单位随运动类型（必填）
   --target-day-value  周期内需达标天数 >0，不得超过单期实际天数（必填）
@@ -687,12 +665,12 @@ func sportValidateCreateArgs(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-	start := mustFlag("start-date")
-	end := mustFlag("end-date")
-	if sportDateToDayNumber(end) < sportDateToDayNumber(start) {
+	start := sportParseDate(mustFlag("start-date"))
+	end := sportParseDate(mustFlag("end-date"))
+	if end.Before(start) {
 		return apperrors.NewValidation("--end-date 不得早于 --start-date")
 	}
-	periodDays := sportDateToDayNumber(end) - sportDateToDayNumber(start) + 1
+	periodDays := int(end.Sub(start).Hours()/24) + 1
 
 	goalValue := mustFlag("goal-value")
 	if !sportIsPositiveNumber(goalValue) {
@@ -754,37 +732,40 @@ func sportParsePositiveInt(value string) (int, bool) {
 	return n, true
 }
 
-// sportCompareNumbers 以定点整数比较两个非负数字字符串（最多 6 位小数），
-// 返回 -1/0/1；任一非法返回 0 并由调用方先行校验兜底。
+// sportCompareNumbers 比较两个非负十进制数字字符串（任意小数位数），
+// 返回 -1/0/1；任一非数字返回 0 并由调用方先行校验兜底。实现为十进制
+// 串规范化后的逐段比较，避免定点缩放的高位截断。
 func sportCompareNumbers(a, b string) int {
-	scale := func(value string) int64 {
-		var out int64
-		dotSeen := false
-		digits := 0
-		for _, r := range value {
-			if r == '.' {
-				dotSeen = true
-				continue
-			}
-			out = out*10 + int64(r-'0')
-			if dotSeen {
-				digits++
-			}
+	intA, fracA := splitDecimalParts(a)
+	intB, fracB := splitDecimalParts(b)
+	if len(intA) != len(intB) {
+		if len(intA) < len(intB) {
+			return -1
 		}
-		for ; digits < 6; digits++ {
-			out *= 10
-		}
-		return out
-	}
-	av, bv := scale(a), scale(b)
-	switch {
-	case av < bv:
-		return -1
-	case av > bv:
 		return 1
-	default:
-		return 0
 	}
+	if cmp := strings.Compare(intA, intB); cmp != 0 {
+		return cmp
+	}
+	if len(fracA) < len(fracB) {
+		fracA += strings.Repeat("0", len(fracB)-len(fracA))
+	} else if len(fracB) < len(fracA) {
+		fracB += strings.Repeat("0", len(fracA)-len(fracB))
+	}
+	return strings.Compare(fracA, fracB)
+}
+
+// splitDecimalParts 返回去前导零的整数部分与去尾随零的小数部分。
+func splitDecimalParts(value string) (string, string) {
+	intPart, fracPart := value, ""
+	if idx := strings.IndexByte(value, '.'); idx >= 0 {
+		intPart, fracPart = value[:idx], value[idx+1:]
+	}
+	intPart = strings.TrimLeft(intPart, "0")
+	if intPart == "" {
+		intPart = "0"
+	}
+	return intPart, strings.TrimRight(fracPart, "0")
 }
 
 func newSportCompetitionConfigCmd() *cobra.Command {
