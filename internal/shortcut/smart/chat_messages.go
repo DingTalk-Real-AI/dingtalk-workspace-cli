@@ -376,7 +376,9 @@ func applyOptionalChatMessagesSenderFilter(
 		payload["failures"] = failures
 		payload["failedCount"] = len(failures)
 		payload["complete"] = false
-		payload["partial"] = false
+		// An already-recorded decrypt gap survives this reset (#1297).
+		decryptPartial, _ := payload["partial"].(bool)
+		payload["partial"] = decryptPartial
 		payload["messages"] = []map[string]any{}
 		payload["count"] = 0
 		payload["senderFilter"] = map[string]any{
@@ -435,7 +437,8 @@ func applyOptionalChatMessagesSenderFilter(
 		payload["failures"] = failures
 		payload["failedCount"] = len(failures)
 		payload["complete"] = false
-		payload["partial"] = len(filtered) > 0
+		decryptPartial, _ := payload["partial"].(bool)
+		payload["partial"] = decryptPartial || len(filtered) > 0
 	}
 	unverifiedSenderInputs := chatMessagesUnverifiedSenderInputs(filter.resolutions)
 	if len(unverifiedSenderInputs) > 0 {
@@ -781,7 +784,9 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 		payload["failures"] = failures
 		payload["failedCount"] = len(failures)
 		payload["complete"] = false
-		payload["partial"] = len(items) > 0
+		// MergeDecryptLedger ran above, so its partial flag must not be overwritten.
+		ledgerPartial, _ := payload["partial"].(bool)
+		payload["partial"] = ledgerPartial || len(items) > 0
 		payload["stopReason"] = "time_filter_error"
 		return payload, items, nil
 	}

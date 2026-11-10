@@ -32,7 +32,7 @@ var List = shortcut.Shortcut{
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标，首次不传或传 0"},
 		{Name: "type", Type: shortcut.FlagString, Default: "ALL", Desc: "DING 类型：ALL、UNREAD、SEND、NEW_COMMENT 或 DELETED"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 不能小于 0，续页响应必须返回严格前进的正整数 nextCursor"}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 不能小于 0，续页响应必须返回不等于当前游标的正整数 nextCursor（服务端按创建时间倒序分页，递减游标合法）"}},
 	Tips:        []string{"dws ding +list --type ALL", "dws ding +list --type DELETED"},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Int("cursor") < 0 {
@@ -56,8 +56,8 @@ var List = shortcut.Shortcut{
 		if page.HasMore {
 			current := int64(rt.Int("cursor"))
 			next, parseErr := strconv.ParseInt(page.Next, 10, 64)
-			if parseErr != nil || next <= current {
-				return dingResponseError("im/list_ding_messages", "stalled_cursor", "nextCursor 没有严格前进")
+			if parseErr != nil || next == current {
+				return dingResponseError("im/list_ding_messages", "stalled_cursor", "nextCursor 与当前游标相同，续页停滞")
 			}
 		}
 		return outputDingPage(rt, messages, page)

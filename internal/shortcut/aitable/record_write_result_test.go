@@ -10,8 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestCrossPlatformCoverageRecordWriteResultForwardsOriginalToken(t *testing.T) {
@@ -43,14 +45,47 @@ func TestCrossPlatformCoverageRecordWriteResultForwardsOriginalToken(t *testing.
 }
 
 func TestCrossPlatformCoverageRecordWriteResultUnknownAndDryRun(t *testing.T) {
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"status":"success","data":{"baseId":"b","tableId":"t","clientToken":"123e4567-e89b-42d3-a456-426614174000","state":"unknown","recordIds":[]}}`}}}
-	out, err := runAITableCompositeCLI(t, caller, "+record-write-result", "--base-id", "b", "--table-id", "t", "--client-token", "123e4567-e89b-42d3-a456-426614174000")
-	var typed *apperrors.Error
-	if out != "" || !errors.As(err, &typed) || typed.Reason != "invalid_record_write_result" || typed.Retryable || len(caller.calls) != 1 {
-		t.Fatalf("unknown read = %s, %v, %#v", out, err, caller.calls)
+	var resultSchema any
+	if err := json.Unmarshal(RecordWriteResult.Contract.Result.DataSchema, &resultSchema); err != nil {
+		t.Fatal(err)
 	}
-	caller = &upsertByKeyCaller{}
-	out, err = runAITableCompositeCLI(t, caller, "+record-write-result", "--base-id", "b", "--table-id", "t", "--client-token", "123e4567-e89b-42d3-a456-426614174000", "--dry-run")
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("https://dws.test/write-result.json", resultSchema); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compiler.Compile("https://dws.test/write-result.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, recordIDs := range []string{`,"recordIds":[]`, ``} {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"status":"success","data":{"baseId":"b","tableId":"t","clientToken":"123e4567-e89b-42d3-a456-426614174000","state":"unknown"` + recordIDs + `}}`}}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-write-result", "--base-id", "b", "--table-id", "t", "--client-token", "123e4567-e89b-42d3-a456-426614174000")
+		var envelope struct {
+			OK      bool           `json:"ok"`
+			Outcome string         `json:"outcome"`
+			Data    map[string]any `json:"data"`
+			Meta    struct {
+				Operation struct{ ID, State, NextCommand string } `json:"operation"`
+			} `json:"meta"`
+		}
+		if err != nil || json.Unmarshal([]byte(out), &envelope) != nil || !envelope.OK || envelope.Outcome != "pending" || envelope.Data["state"] != "unknown" || len(caller.calls) != 1 {
+			t.Fatalf("unknown must remain pending after one read: out=%s err=%v calls=%#v", out, err, caller.calls)
+		}
+		if err := compiled.Validate(envelope.Data); err != nil {
+			t.Fatalf("pending result violates declared schema: %v", err)
+		}
+		if envelope.Data["baseId"] != "b" || envelope.Data["tableId"] != "t" || envelope.Data["clientToken"] != "123e4567-e89b-42d3-a456-426614174000" {
+			t.Fatalf("original identity lost: %s", out)
+		}
+		var wire map[string]any
+		_ = json.Unmarshal([]byte(out), &wire)
+		operation := wire["meta"].(map[string]any)["operation"].(map[string]any)
+		if operation["id"] != "123e4567-e89b-42d3-a456-426614174000" || operation["state"] != "unknown" || operation["next_command"] != "dws aitable +record-write-result --base-id b --table-id t --client-token 123e4567-e89b-42d3-a456-426614174000" {
+			t.Fatalf("unsafe recovery operation: %#v", operation)
+		}
+	}
+	caller := &upsertByKeyCaller{}
+	out, err := runAITableCompositeCLI(t, caller, "+record-write-result", "--base-id", "b", "--table-id", "t", "--client-token", "123e4567-e89b-42d3-a456-426614174000", "--dry-run")
 	var envelope struct {
 		Data map[string]any `json:"data"`
 	}
@@ -185,12 +220,17 @@ func TestCrossPlatformCoverageRecordUpsertReconciliationPreservesGroups(t *testi
 	}
 }
 
-func TestCrossPlatformCoverageRecordUpsertReconciliationTokenFallback(t *testing.T) {
+func TestCrossPlatformCoverageRecordUpsertReconciliationKeepsOriginalToken(t *testing.T) {
 	const token = "123e4567-e89b-42d3-a456-426614174000"
-	for _, tc := range []struct{ original, echoed, want string }{
-		{"", token, token}, {token, "different", token}, {"", "", ""}, {"", "invalid", ""},
+	for _, tc := range []struct{ original, echoed string }{
+		{"", token}, {token, "different"}, {"", ""}, {"", "invalid"},
 	} {
-		raw := fmt.Sprintf(`{"status":"error","error":{"type":"USER_ERROR","code":"DUPLICATE_CLIENT_TOKEN","retryable":false,"details":{"clientToken":%q}}}`, tc.echoed)
+		details := map[string]any{"clientToken": tc.echoed}
+		if tc.echoed != "" {
+			details["createdRecordIds"], details["updatedRecordIds"] = []string{"untrusted-created"}, []string{"untrusted-updated"}
+		}
+		encodedDetails, _ := json.Marshal(details)
+		raw := fmt.Sprintf(`{"status":"error","error":{"type":"USER_ERROR","code":"DUPLICATE_CLIENT_TOKEN","retryable":false,"details":%s}}`, encodedDetails)
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: raw}}}
 		_, err := runAITableCompositeCLI(t, caller, "+record-upsert", "--base-id", "b", "--table-id", "t", "--records", `[{"cells":{"f":"v"}}]`, "--client-token", tc.original, "--yes")
 		var typed *apperrors.Error
@@ -201,12 +241,12 @@ func TestCrossPlatformCoverageRecordUpsertReconciliationTokenFallback(t *testing
 		if result.Status != "unknown" || result.FailedCount != 0 || len(result.KnownEffects) != 0 || result.Checkpoint["updateReadbackCommand"] != nil {
 			t.Fatalf("result=%#v", result)
 		}
-		if tc.want == "" {
-			if result.NextCommand != "" || result.Checkpoint["clientToken"] != nil {
-				t.Fatalf("invented token: %#v", result)
-			}
-		} else if result.Checkpoint["clientToken"] != tc.want || !strings.Contains(result.NextCommand, tc.want) {
-			t.Fatalf("wrong token: %#v", result)
+		sent, _ := caller.calls[0].args["clientToken"].(string)
+		if sent == "" || aitableprotocol.ValidateClientToken(sent) != nil || (tc.original != "" && sent != tc.original) {
+			t.Fatalf("write did not carry the original valid token: %#v", caller.calls[0])
+		}
+		if result.Checkpoint["clientToken"] != sent || !strings.Contains(result.NextCommand, sent) {
+			t.Fatalf("recovery replaced the sent token with an untrusted echo: %#v", result)
 		}
 	}
 	for _, raw := range []string{`not-json`, `{"status":"success"}`, `{"status":"error","error":{"type":"SYSTEM_ERROR"}}`} {
@@ -241,5 +281,32 @@ func TestCrossPlatformCoverageRecordUpsertReconciliationKeepsPriorBatch(t *testi
 	result := typed.Details["result"].(compositeResult)
 	if result.Status != "unknown" || result.CompletedCount != 100 || result.FailedCount != 0 || len(result.KnownEffects) != 1 || result.Checkpoint["nextOffset"] != 100 {
 		t.Fatalf("result=%#v", result)
+	}
+}
+
+// Invalid unknown receipts must fail before they can be interpreted as pending.
+func TestCrossPlatformCoverageRecordWriteResultUnknownRejectsMalformedIdentityAndIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name, key string
+		value     any
+	}{
+		{"base", "baseId", "other"}, {"table", "tableId", "other"}, {"token", "clientToken", "other"},
+		{"null IDs", "recordIds", nil}, {"string IDs", "recordIds", "r1"},
+		{"partial IDs", "recordIds", []string{"r1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{"baseId": "b", "tableId": "t", "clientToken": "123e4567-e89b-42d3-a456-426614174000", "state": "unknown"}
+			body[tc.key] = tc.value
+			raw, err := json.Marshal(map[string]any{"data": body})
+			if err != nil {
+				t.Fatal(err)
+			}
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: string(raw)}}}
+			out, err := runAITableCompositeCLI(t, caller, "+record-write-result", "--base-id", "b", "--table-id", "t", "--client-token", "123e4567-e89b-42d3-a456-426614174000")
+			var typed *apperrors.Error
+			if out != "" || !errors.As(err, &typed) || typed.Reason != "invalid_record_write_result" || typed.Retryable || len(caller.calls) != 1 {
+				t.Fatalf("invalid receipt accepted: out=%s err=%v calls=%#v", out, err, caller.calls)
+			}
+		})
 	}
 }

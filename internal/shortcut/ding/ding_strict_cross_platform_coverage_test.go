@@ -249,6 +249,46 @@ func TestCrossPlatformCoverageDINGListExecutionFailuresPaginationAndLegacy(t *te
 		}
 	})
 
+	t.Run("decreasing cursor continues paging", func(t *testing.T) {
+		// 服务端按 create_at 倒序分页并以末条时间作下页游标，递减 nextCursor 合法（IMS-582）。
+		caller := &dingCoverageCaller{responses: map[string][]string{
+			"list_ding_messages": {`{"success":true,"result":{"dingMessages":[{"openDingId":"ding-1"}],"hasMore":true,"nextCursor":1000}}`},
+		}}
+		cmd, err := runDingCoverage(t, List, caller, "--cursor", "2000")
+		if err != nil {
+			t.Fatalf("decreasing cursor page: %v", err)
+		}
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		if code, emitted, emitErr := output.EmitStoredResult(cmd); emitErr != nil || !emitted || code != 0 {
+			t.Fatalf("emit=(%d,%t,%v)", code, emitted, emitErr)
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		pagination := envelope["meta"].(map[string]any)["pagination"].(map[string]any)
+		if pagination["next_token"] != "1000" || pagination["endpoint_exhausted"] != false {
+			t.Fatalf("decreasing cursor pagination=%#v", pagination)
+		}
+		data := envelope["data"].(map[string]any)
+		if data["count"] != float64(1) || data["complete"] != false {
+			t.Fatalf("decreasing cursor data=%#v", data)
+		}
+		if len(caller.arguments) != 1 || caller.arguments[0]["cursor"] != 2000 {
+			t.Fatalf("decreasing cursor arguments=%#v", caller.arguments)
+		}
+	})
+
+	t.Run("repeated cursor stalls", func(t *testing.T) {
+		caller := &dingCoverageCaller{responses: map[string][]string{
+			"list_ding_messages": {`{"success":true,"result":{"dingMessages":[{"openDingId":"ding-1"}],"hasMore":true,"nextCursor":2000}}`},
+		}}
+		if _, err := runDingCoverage(t, List, caller, "--cursor", "2000"); err == nil || !strings.Contains(err.Error(), "nextCursor") {
+			t.Fatalf("repeated cursor error=%v", err)
+		}
+	})
+
 	t.Run("advancing cursor legacy output", func(t *testing.T) {
 		legacy := List
 		legacy.OutputRollout = output.RolloutLegacyOnly

@@ -16,6 +16,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/google/uuid"
 )
 
 const (
@@ -274,8 +275,14 @@ func isRecordWriteInputRejection(err error) bool {
 		body.Error.Retryable != nil && !*body.Error.Retryable
 }
 
-func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result compositeResult, step compositeStep, batch []map[string]any, offset int, cause error, failure recordWriteFailure) error {
+func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result compositeResult, step compositeStep, batch []map[string]any, offset int, sentToken string, cause error, failure recordWriteFailure) error {
 	details := failure.Error.Details
+	if sentToken != "" && details.ClientToken != "" && details.ClientToken != sentToken {
+		// A mismatched receipt cannot establish effects for this request. Keep
+		// the original recovery key, but do not promote its IDs to known facts.
+		details.CreatedRecordIDs, details.UpdatedRecordIDs = nil, nil
+		result.Warnings = append(result.Warnings, "写入回执 token 与原请求不匹配；回执 ID 未采信，只能按原 token 对账。")
+	}
 	step.Status = "unknown"
 	// Preserve acknowledgements separately from verification. In particular,
 	// none of these IDs proves that the entire creation group completed.
@@ -293,14 +300,20 @@ func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result composi
 		}
 	}
 	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
-	clientToken := strings.TrimSpace(rt.Str("client-token"))
+	clientToken := sentToken
 	if clientToken == "" {
 		clientToken = details.ClientToken
 	}
-	result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize, "baseId": baseID, "tableId": tableID}
+	result.Checkpoint["nextOffset"], result.Checkpoint["batchSize"] = offset, recordBatchSize
+	result.Checkpoint["baseId"], result.Checkpoint["tableId"] = baseID, tableID
 	if clientToken != "" && aitableprotocol.ValidateClientToken(clientToken) == nil {
 		result.Checkpoint["clientToken"] = clientToken
-		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", baseID, "--table-id", tableID, "--client-token", clientToken)
+		files, _ := result.Checkpoint["writeIntentFiles"].([]string)
+		var path string
+		if len(files) > 0 {
+			path = files[len(files)-1]
+		}
+		result.NextCommand = recordWriteRecoveryCommand(baseID, tableID, clientToken, path)
 	}
 	if ids := recordIDs(batch); len(ids) > 0 {
 		result.Checkpoint["updateReadbackCommand"] = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", strings.Join(ids, ","))
@@ -366,6 +379,17 @@ func parseRecordIDs(values []string) ([]string, error) {
 	return ids, nil
 }
 
+// recordBatchHasCreates reports whether an upsert batch has rows without a
+// recordId, which the service creates rather than updates.
+func recordBatchHasCreates(batch []map[string]any) bool {
+	for _, record := range batch {
+		if recordID(record) == "" {
+			return true
+		}
+	}
+	return false
+}
+
 type recordBatchVerifier func(*shortcut.RuntimeContext, string, string, []map[string]any, map[string]any) (map[string]any, error)
 
 func executeRecordBatches(
@@ -376,6 +400,7 @@ func executeRecordBatches(
 ) error {
 	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
 	result := newCompositeResult(operation)
+	result.Checkpoint = map[string]any{}
 	result.RequestedCount = len(records)
 	for offset := 0; offset < len(records); offset += recordBatchSize {
 		end := minInt(offset+recordBatchSize, len(records))
@@ -390,6 +415,22 @@ func executeRecordBatches(
 		return rt.Output(result)
 	}
 
+	// 创建分组的恢复身份在首笔写入前确认，仅在本次命令内复用。
+	var writeIdentity string
+	if tool == "record_upsert" && recordBatchHasCreates(records) {
+		var err error
+		writeIdentity, err = recordWriteIdentity(rt)
+		if err != nil {
+			if apperrors.DeclaresClassification(err) {
+				return err
+			}
+			result.Executed = false
+			result.Status = "failed"
+			result.FailedCount = len(records)
+			return compositeError(result, err, false)
+		}
+	}
+
 	for offset := 0; offset < len(records); offset += recordBatchSize {
 		end := minInt(offset+recordBatchSize, len(records))
 		batch := records[offset:end]
@@ -398,14 +439,35 @@ func executeRecordBatches(
 			wireRecords = append(wireRecords, record)
 		}
 		params := map[string]any{"baseId": baseID, "tableId": tableID, "records": wireRecords}
+		var clientToken string
 		if tool == "record_upsert" {
-			if clientToken := strings.TrimSpace(rt.Str("client-token")); clientToken != "" {
+			clientToken = strings.TrimSpace(rt.Str("client-token"))
+			// The token only covers the creation group. Without one sent before
+			// the write, a lost receipt leaves that group impossible to reconcile.
+			if clientToken == "" && recordBatchHasCreates(batch) {
+				clientToken = uuid.NewString()
+			}
+			if clientToken != "" {
 				params["clientToken"] = clientToken
 			}
 		}
+		if tool == "record_upsert" && recordBatchHasCreates(batch) {
+			path, err := persistRecordWriteIntent(rt, batch, offset, clientToken, writeIdentity)
+			if err != nil {
+				result.Executed = offset > 0
+				result.CompletedCount = offset
+				result.FailedCount = len(records) - offset
+				result.Status = "failed"
+				if offset > 0 {
+					result.Status = "partial_success"
+				}
+				return compositeError(result, err, false)
+			}
+			files, _ := result.Checkpoint["writeIntentFiles"].([]string)
+			result.Checkpoint["writeIntentFiles"] = append(files, path)
+		}
 		var writeData map[string]any
 		var writeErr error
-		var clientToken string
 		if tool == "create_records" {
 			writeData, clientToken, writeErr = createRecordsReconciled(rt, baseID, tableID, wireRecords)
 			if ids := createdRecordIDs(writeData); len(ids) > 0 {
@@ -423,7 +485,7 @@ func executeRecordBatches(
 			step.Error = writeErr.Error()
 		}
 		if failure := decodeRecordWriteFailure(writeErr); tool == "record_upsert" && failure.needsReconciliation() {
-			return recordUpsertReconciliationError(rt, result, step, batch, offset, writeErr, failure)
+			return recordUpsertReconciliationError(rt, result, step, batch, offset, clientToken, writeErr, failure)
 		}
 		// A structured input rejection proves this batch was not accepted. Do
 		// not replace it with an unrelated read-back mismatch or suggest retry.
@@ -436,7 +498,7 @@ func executeRecordBatches(
 			if offset > 0 {
 				result.Status = "partial_success"
 			}
-			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
+			result.Checkpoint["nextOffset"], result.Checkpoint["batchSize"] = offset, recordBatchSize
 			return compositeError(result, writeErr, false)
 		}
 		verification, verifyErr := verifyRecordBatchEventually(rt, tool, baseID, tableID, batch, writeData, verify)
@@ -473,7 +535,7 @@ func executeRecordBatches(
 				}
 			}
 			result.Verification = map[string]any{"status": verificationStatus, "error": verifyErr.Error(), "batchOffset": offset}
-			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
+			result.Checkpoint["nextOffset"], result.Checkpoint["batchSize"] = offset, recordBatchSize
 			if writeErr != nil {
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
@@ -484,13 +546,11 @@ func executeRecordBatches(
 				result.Checkpoint["createdRecordIds"] = createdRecordIDs(writeData)
 				result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-write-result", "--base-id", baseID, "--table-id", tableID, "--client-token", clientToken)
 			}
-			if tool == "record_upsert" {
-				for _, record := range batch {
-					if recordID(record) == "" {
-						retryable = false
-						break
-					}
-				}
+			if tool == "record_upsert" && recordBatchHasCreates(batch) {
+				retryable = false
+				result.Checkpoint["clientToken"] = clientToken
+				files := result.Checkpoint["writeIntentFiles"].([]string)
+				result.NextCommand = recordWriteRecoveryCommand(baseID, tableID, clientToken, files[len(files)-1])
 			}
 			return compositeError(result, verifyErr, retryable)
 		}

@@ -1160,7 +1160,7 @@ func TestCrossPlatformCoverageA2UILegacyMentionsAndSummary(t *testing.T) {
 			if err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", target, "--content="+fmt.Sprintf("[%q]", message)); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(caller.args["a2uiMessages"], []string{message}) || caller.args["summary"] != "互动卡片" || caller.args["supportForward"] != false || caller.args["atAll"] != nil {
+			if !reflect.DeepEqual(caller.args["a2uiMessages"], []string{message}) || caller.args["summary"] != "互动卡片" || caller.args["supportForward"] != true || caller.args["atAll"] != nil {
 				t.Fatalf("legacy body changed: %#v", caller.args)
 			}
 		})

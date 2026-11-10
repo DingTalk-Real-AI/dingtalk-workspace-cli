@@ -86,6 +86,89 @@ func TestCrossPlatformCoverageSFBootstrapRejectsBuiltinBeforeAnyMCP(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageBootstrapRejectsUnsupportedFormatterBeforeAnyMCP(t *testing.T) {
+	// The server rejects formatter on these types only after +base-bootstrap
+	// has created the Base, which used to leave an empty Base behind.
+	for _, raw := range []string{
+		`{"fieldName":"签到时间","type":"createdTime","config":{"formatter":"YYYY-MM-DD HH:mm"}}`,
+		`{"fieldName":"备注","type":"text","config":{"formatter":null}}`,
+	} {
+		fields := append(bootstrapFields(2), mustSFField(t, raw))
+		encoded := mustJSON(t, fields)
+		for _, command := range []string{"+table-bootstrap", "+base-bootstrap"} {
+			caller := &upsertByKeyCaller{}
+			args := []string{"--name", "签到", "--yes"}
+			if command == "+table-bootstrap" {
+				args = append(args, "--base-id", "base123", "--fields", encoded)
+			} else {
+				args = append(args, "--tables", `[{"name":"签到","fields":`+encoded+`}]`)
+			}
+			_, err := runAITableCompositeCLI(t, caller, command, args...)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.ExitCode() != 3 || !strings.Contains(err.Error(), "config.formatter 不适用于") || len(caller.calls) != 0 {
+				t.Fatalf("command=%s field=%s error=%v calls=%#v", command, raw, err, caller.calls)
+			}
+		}
+	}
+	for _, raw := range []string{
+		`{"fieldName":"签到时间","type":"createdTime"}`,
+		`{"fieldName":"日期","type":"date","config":{"formatter":"YYYY-MM-DD"}}`,
+	} {
+		fields := []any{mustSFField(t, raw)}
+		if err := validateCreateTableCapabilities(fields, "--fields"); err != nil {
+			t.Fatalf("field=%s unexpectedly rejected: %v", raw, err)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageTableCopyAppliesFormatterRuleAfterSkippingSystemFields(t *testing.T) {
+	// System fields are skipped before the create-table check, so a source
+	// createdTime never trips the formatter rule; a date formatter is kept.
+	source := []any{
+		map[string]any{"fieldId": "s1", "fieldName": "名称", "type": "text"},
+		map[string]any{"fieldId": "s2", "fieldName": "日期", "type": "date", "config": map[string]any{"formatter": "YYYY-MM-DD HH:mm"}},
+		map[string]any{"fieldId": "s3", "fieldName": "创建时间", "type": "createdTime", "config": map[string]any{"formatter": "YYYY-MM-DD"}},
+	}
+	target := []any{
+		map[string]any{"fieldId": "t1", "fieldName": "名称", "type": "text"},
+		map[string]any{"fieldId": "t2", "fieldName": "日期", "type": "date", "config": map[string]any{"formatter": "YYYY-MM-DD HH:mm"}},
+	}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": source})},
+		{text: `{"data":{"tableId":"target-table"}}`},
+		{text: mustJSONText(t, map[string]any{"fields": target})},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
+		"--source-base-id", "source-base", "--source-table-id", "source-table",
+		"--target-base-id", "target-base", "--new-name", "签到副本", "--yes")
+	if err != nil {
+		t.Fatalf("table copy error = %v", err)
+	}
+	if !strings.Contains(out, "创建时间") || !strings.Contains(out, "system field") {
+		t.Fatalf("table copy output should warn about the skipped system field: %s", out)
+	}
+	if len(caller.calls) < 2 || caller.calls[1].tool != "create_table" {
+		t.Fatalf("table copy calls = %#v", caller.calls)
+	}
+	created := caller.calls[1].args["fields"].([]any)
+	if len(created) != 2 || created[1].(map[string]any)["config"].(map[string]any)["formatter"] != "YYYY-MM-DD HH:mm" {
+		t.Fatalf("create_table fields = %#v", created)
+	}
+
+	rejected := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": []any{
+			map[string]any{"fieldId": "s1", "fieldName": "名称", "type": "text", "config": map[string]any{"formatter": "INT"}},
+		}})},
+	}}
+	_, err = runAITableCompositeCLI(t, rejected, "+table-copy",
+		"--source-base-id", "source-base", "--source-table-id", "source-table",
+		"--target-base-id", "target-base", "--new-name", "签到副本", "--yes")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.ExitCode() != 3 || !strings.Contains(err.Error(), "config.formatter 不适用于") || len(rejected.calls) != 1 {
+		t.Fatalf("formatter on text should be rejected before create_table: error=%v calls=%#v", err, rejected.calls)
+	}
+}
+
 func TestCrossPlatformCoverageSFBuildPlanKeepsBuiltinOnFieldCreationOnly(t *testing.T) {
 	field := mustSFField(t, `{"fieldName":"AI","type":"object","aiConfig":{"type":"builtin","pluginId":"KNOWN_PLUGIN","formData":{}}}`)
 	for _, tool := range []string{"create_table", "create_fields"} {

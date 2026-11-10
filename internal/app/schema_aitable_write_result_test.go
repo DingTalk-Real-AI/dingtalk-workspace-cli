@@ -43,8 +43,8 @@ func TestCrossPlatformCoverageAITableWriteResultPublishesReadContract(t *testing
 	}
 	dataSchema, _ := result["data_schema"].(map[string]any)
 	branches, _ := dataSchema["oneOf"].([]any)
-	if len(branches) != 2 {
-		t.Fatalf("expected verified result and dry-run branches: %#v", dataSchema)
+	if len(branches) != 3 {
+		t.Fatalf("expected applied, unknown and dry-run branches: %#v", dataSchema)
 	}
 	verified := branches[0].(map[string]any)
 	properties := schemaContractMap(verified["properties"])
@@ -110,6 +110,9 @@ func TestCrossPlatformCoverageAITableWriteResultSchemaAcceptsActualDryRun(t *tes
 		t.Fatalf("unexpected preview: %s", &stdout)
 	}
 	verified := map[string]any{"baseId": "b", "tableId": "t", "clientToken": args[7], "state": "applied", "recordIds": []any{"r"}}
+	pending := map[string]any{"baseId": "b", "tableId": "t", "clientToken": args[7], "state": "unknown"}
+	pendingWithEmptyIDs := maps.Clone(pending)
+	pendingWithEmptyIDs["recordIds"] = []any{}
 	for _, compact := range []bool{false, true} {
 		query := []string{"--cli-path", "aitable +record-write-result"}
 		if compact {
@@ -127,10 +130,22 @@ func TestCrossPlatformCoverageAITableWriteResultSchemaAcceptsActualDryRun(t *tes
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, valid := range []any{envelope["data"], verified} {
+		for _, valid := range []any{envelope["data"], verified, pending, pendingWithEmptyIDs} {
 			if err := schema.Validate(valid); err != nil {
 				t.Fatalf("compact=%t valid result rejected: %v", compact, err)
 			}
+		}
+		for _, field := range []string{"baseId", "tableId", "clientToken", "state"} {
+			invalid := maps.Clone(pending)
+			delete(invalid, field)
+			if err := schema.Validate(invalid); err == nil {
+				t.Fatalf("compact=%t pending result missing %s accepted", compact, field)
+			}
+		}
+		pendingWithIDs := maps.Clone(pending)
+		pendingWithIDs["recordIds"] = []any{"r"}
+		if err := schema.Validate(pendingWithIDs); err == nil {
+			t.Fatalf("compact=%t unknown state must not claim applied record IDs", compact)
 		}
 		for _, field := range []string{"baseId", "tableId", "clientToken", "state", "recordIds"} {
 			invalid := maps.Clone(verified)

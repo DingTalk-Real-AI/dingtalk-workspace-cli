@@ -82,40 +82,65 @@ func TestCrossPlatformCoverageImportFileRequiresConfirmationBeforeUpload(t *test
 }
 
 func TestCrossPlatformCoverageImportFileCompletesUploadAndImportE2E(t *testing.T) {
-	uploaded := ""
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			t.Errorf("method = %s, want PUT", r.Method)
-		}
-		if _, exists := r.Header["Content-Type"]; exists {
-			t.Errorf("Content-Type header must be absent: %#v", r.Header.Values("Content-Type"))
-		}
-		body, _ := io.ReadAll(r.Body)
-		uploaded = string(body)
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-	useImportUploadTestServer(t, server)
+	for _, attachment := range []struct {
+		name    string
+		content string
+	}{
+		{"data.csv", "name,value\nexample,3\n"},
+		{"data.xls", "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00opaque-xls"},
+		{"data.xlsx", "PK\x03\x04\x00opaque-xlsx"},
+	} {
+		t.Run(attachment.name, func(t *testing.T) {
+			// The mock service owns workbook parsing; the CLI must upload opaque bytes and preserve its structured receipt.
+			uploaded := ""
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("method = %s, want PUT", r.Method)
+				}
+				if _, exists := r.Header["Content-Type"]; exists {
+					t.Errorf("Content-Type header must be absent: %#v", r.Header.Values("Content-Type"))
+				}
+				body, _ := io.ReadAll(r.Body)
+				uploaded = string(body)
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(server.Close)
+			useImportUploadTestServer(t, server)
 
-	path := filepath.Join(t.TempDir(), "data.xlsx")
-	if err := os.WriteFile(path, []byte("workbook"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: mustJSONText(t, map[string]any{"uploadUrl": server.URL + "/put", "importId": "imp-1"})},
-		{text: `{"success":true,"data":{"importedCount":3}}`},
-	}}
-	out, err := runAITableCompositeCLI(t, caller, "+import-file", "--base-id", "base", "--file", path, "--table-id", "table", "--yes")
-	if err != nil || uploaded != "workbook" {
-		t.Fatalf("import file = output:%q err:%v uploaded:%q", out, err, uploaded)
-	}
-	for _, want := range []string{`"importId": "imp-1"`, `"status": "service_confirmed"`, `"importedCount": 3`} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("import output missing %s: %s", want, out)
-		}
-	}
-	if strings.Contains(out, "uploadUrl") || len(caller.calls) != 2 || caller.calls[0].tool != "prepare_import_upload" || caller.calls[1].tool != "import_data" {
-		t.Fatalf("import calls/output = calls:%#v output:%s", caller.calls, out)
+			path := filepath.Join(t.TempDir(), attachment.name)
+			if err := os.WriteFile(path, []byte(attachment.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			const targetURL = "https://alidocs.dingtalk.com/i/nodes/base?iframeQuery=entrance%3Ddata%26sheetId%3dtable"
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: mustJSONText(t, map[string]any{"uploadUrl": server.URL + "/put", "importId": "imp-1"})},
+				{text: mustJSONText(t, map[string]any{"success": true, "data": map[string]any{
+					"importedCount": 3, "url": targetURL,
+					"links": []any{map[string]any{"objectType": "table", "objectId": "table", "name": "导入数据", "url": targetURL}},
+				}})},
+			}}
+			out, err := runAITableCompositeCLI(t, caller, "+import-file", "--base-id", "base", "--file", path, "--table-id", "table", "--yes")
+			if err != nil || uploaded != attachment.content {
+				t.Fatalf("import file = output:%q err:%v uploaded:%q", out, err, uploaded)
+			}
+			for _, want := range []string{`"importId": "imp-1"`, `"status": "service_confirmed"`, `"importedCount": 3`} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("import output missing %s: %s", want, out)
+				}
+			}
+			if strings.Contains(out, "uploadUrl") || len(caller.calls) != 2 || caller.calls[0].tool != "prepare_import_upload" || caller.calls[1].tool != "import_data" {
+				t.Fatalf("import calls/output = calls:%#v output:%s", caller.calls, out)
+			}
+			final := navigationFinalResult(t, out)
+			links, ok := final["links"].([]any)
+			if !ok || len(links) == 0 {
+				t.Fatalf("import navigation requires a non-empty links array: %#v", final)
+			}
+			link, ok := links[0].(map[string]any)
+			if !ok || final["url"] != targetURL || link["url"] != targetURL {
+				t.Fatalf("non-JSON attachment lost its structured receipt navigation: %#v", final)
+			}
+		})
 	}
 }
 

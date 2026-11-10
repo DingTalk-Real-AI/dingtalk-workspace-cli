@@ -4,7 +4,7 @@
 
 ## 卡片摘要与转发
 
-创建时用 `--summary` 传一句简短可读的降级文案，客户端无法渲染卡片时展示；它不是完结后的会话摘要，后者见[组件注解](#组件注解)。不要传序列化消息、模板摘要或实例 ID；省略时为 `互动卡片`，显式空值或纯空白会被拒绝。`--support-forward` 默认 `false`，仅在用户或业务允许分享时开启；转发不授予业务操作权限。两者只能在创建时设置，`update-a2ui-card` 没有对应参数，`dataModel.summary`、`fallbackMarkdown` 也不能代替。统一入口 `chat +messages-send --a2ui-messages` 对应 `--card-summary` 和 `--support-forward`。
+创建时用 `--summary` 传一句简短可读的降级文案，客户端无法渲染卡片时展示；它不是完结后的会话摘要，后者见[组件注解](#组件注解)。不要传序列化消息、模板摘要或实例 ID；省略时为 `互动卡片`，显式空值或纯空白会被拒绝。`send-a2ui-card` 的 `--support-forward` 默认 `true`，创建的卡片允许转发；需要禁止转发时显式传 `--support-forward=false`；转发不授予业务操作权限。两者只能在创建时设置，`update-a2ui-card` 没有对应参数，`dataModel.summary`、`fallbackMarkdown` 也不能代替。统一入口 `chat +messages-send --a2ui-messages` 对应 `--card-summary` 和 `--support-forward`，其转发默认值仍为 `false`。
 
 下面以任务进度卡片为例。布局、组件 ID、数据路径和文案可按需求调整，保持引用一致；组件属性可按需查阅[钉钉公开 Catalog](https://dingtalk.com/card/a2ui/catalogs/public/catalog.json)。
 
@@ -22,7 +22,7 @@ dws chat message send-a2ui-card \
 
 群聊时将 `--open-dingtalk-id` 换成 `--conversation-id '<群openConversationId>'`，选择一个目标。创建状态默认 `PROCESSING`；发送成功后保存返回的 `bizId`，用于后续更新。
 
-示例未开启转发；允许分享时在创建命令中加上 `--support-forward`。
+示例默认允许转发；需要禁止转发时在创建命令中加上 `--support-forward=false`。显式 `--support-forward=true` 仍允许转发。
 
 ## 更新和完结
 

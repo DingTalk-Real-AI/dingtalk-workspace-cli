@@ -37,18 +37,24 @@ func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
 	if !ok || !schemaContractJSONEqual(result, compact["result"]) {
 		t.Fatalf("Result must reach both projections: full=%#v compact=%#v", full, compact)
 	}
-	if !schemaContractJSONEqual(result["outcomes"], []string{"success", "failure"}) {
+	if !schemaContractJSONEqual(result["outcomes"], []string{"success", "pending", "failure"}) {
 		t.Fatalf("outcomes=%#v", result["outcomes"])
 	}
 	schema := result["data_schema"].(map[string]any)
 	branches := schema["oneOf"].([]any)
-	if len(branches) != 2 {
-		t.Fatalf("missing actual/preview branches: %#v", schema)
+	if len(branches) != 3 {
+		t.Fatalf("missing applied/unknown/preview branches: %#v", schema)
 	}
 	actual := branches[0].(map[string]any)
-	preview := branches[1].(map[string]any)
-	if !schemaContractJSONEqual(actual["required"], []string{"baseId", "tableId", "clientToken", "state", "recordIds"}) || !schemaContractJSONEqual(preview["required"], []string{"executed", "tool", "arguments"}) {
+	pending := branches[1].(map[string]any)
+	preview := branches[2].(map[string]any)
+	if !schemaContractJSONEqual(actual["required"], []string{"baseId", "tableId", "clientToken", "state", "recordIds"}) ||
+		!schemaContractJSONEqual(pending["required"], []string{"baseId", "tableId", "clientToken", "state"}) ||
+		!schemaContractJSONEqual(preview["required"], []string{"executed", "tool", "arguments"}) {
 		t.Fatalf("required fields=%#v", branches)
+	}
+	if properties := schemaContractMap(pending["properties"]); properties["state"]["const"] != "unknown" || properties["recordIds"]["maxItems"] != float64(0) {
+		t.Fatalf("pending must retain unknown state without confirmed IDs: %#v", properties)
 	}
 	params := schemaContractMap(full["parameters"])
 	for name, property := range map[string]string{"base-id": "baseId", "table-id": "tableId", "client-token": "clientToken"} {
