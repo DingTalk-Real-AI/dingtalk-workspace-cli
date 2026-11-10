@@ -12,6 +12,6 @@
 | 删除字段 | `dws aitable +field-delete --base-id <B> --table-id <T> --field-id <F>`；主字段和最后一个字段不可删除 |
 | 调整列顺序 | 使用 `view update visible-fields`；没有 `field reorder` / `field move` |
 
-创建 Table 时第一个字段自动成为主字段，且必须是 text。singleSelect/multipleSelect 创建时在 `config.options` 中声明选项；记录写入使用已存在的选项名称。公式、引用、创建/修改人和创建/修改时间等只读字段不得写入。
+创建 Table 时第一个字段自动成为主字段，且必须是 text。singleSelect/multipleSelect 创建时在 `config.options` 中声明选项；记录写入使用已存在的选项名称。date 的 config 只用 `formatter`（`YYYY-MM-DD`、`YYYY-MM-DD HH:mm`、`YYYY-MM-DD HH:mm:ss`），不写 `dateFormat`/`includeTime`。公式、引用、创建/修改人和创建/修改时间等只读字段不得写入。
 
 本文件是终点：不读取 cell-value、field-properties 或 Help。只有 Runtime 实际返回 `unknown command` / `unknown flag` 时才读取精确 leaf Help，并最多修正一次。

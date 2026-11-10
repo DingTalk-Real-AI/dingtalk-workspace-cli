@@ -51,6 +51,10 @@ func TestAIBehaviorReviewedPublicSyncPatchExecution(t *testing.T) {
 	testAIBehaviorReviewedPatchExecution(t, "public_sync_1529")
 }
 
+func TestAIBehaviorReviewedPublicSync1607PatchExecution(t *testing.T) {
+	testAIBehaviorReviewedPatchExecution(t, "public_sync_1607")
+}
+
 func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -140,7 +144,15 @@ func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			input, err := json.Marshal(map[string]string{"script": script, "scenario": tc.name, "patch": patch})
+			parameters := map[string]string{"script": script, "scenario": tc.name, "patch": patch}
+			if patch == "public_sync_1607" {
+				fixture, err := os.ReadFile(filepath.Join("testdata", "public-sync-1607-approved-delta.json"))
+				if err != nil {
+					t.Fatalf("读取 #1607 固定补丁路径: %v", err)
+				}
+				parameters["fixture"] = string(fixture)
+			}
+			input, err := json.Marshal(parameters)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -194,6 +206,12 @@ func testAIBehaviorReviewedPatchExecution(t *testing.T, patch string) {
 							"4fdf11c739e22d348d3e2878c20a168540b92b1d",
 						}
 					}
+					if patch == "public_sync_1607" {
+						anchors = []string{
+							"34cbe5c5fd6e2f08bd74f889fcdf367b88426a0f",
+							"f350e5ca0a412884cfaf99fa48bb7ea3ea9d84df",
+						}
+					}
 					for _, sha := range anchors {
 						if !strings.Contains(strings.Join(result.CommitReads, "\n"), sha) {
 							t.Fatalf("未读取固定评审锚点 %s: %s", sha, output)
@@ -220,28 +238,30 @@ const clone = value => JSON.parse(JSON.stringify(value));
 // 固定业务审批输入独立于工作流中的授权列表，避免测试跟着错误授权一起改变。
 const chatThreadPromote = input.patch === 'chat_thread_promote';
 const publicSync = input.patch === 'public_sync_1529';
-const reviewedNumber = publicSync ? 1529 : chatThreadPromote ? 1502 : 1463;
-const reviewedBase = publicSync ? 'a391c42c7de6c7e86fc19f92aa1f18e630ed402e' : chatThreadPromote
+const publicSync1607 = input.patch === 'public_sync_1607';
+const fixture1607 = publicSync1607 ? JSON.parse(input.fixture) : null;
+const reviewedNumber = publicSync1607 ? 1607 : publicSync ? 1529 : chatThreadPromote ? 1502 : 1463;
+const reviewedBase = publicSync1607 ? '34cbe5c5fd6e2f08bd74f889fcdf367b88426a0f' : publicSync ? 'a391c42c7de6c7e86fc19f92aa1f18e630ed402e' : chatThreadPromote
   ? '59d1da576c6983582d5be11401e7efe07aaaa238'
   : '3f0fc94111b1f9cd34e47468980b1f1a723ca69a';
-const reviewedHead = publicSync ? '4fdf11c739e22d348d3e2878c20a168540b92b1d' : chatThreadPromote
+const reviewedHead = publicSync1607 ? 'f350e5ca0a412884cfaf99fa48bb7ea3ea9d84df' : publicSync ? '4fdf11c739e22d348d3e2878c20a168540b92b1d' : chatThreadPromote
   ? 'c70ede29e0860a88e309bb540f27d888e9d8a8ab'
   : '53de9d92c9b310798d7f42a385e162273330442b';
-const reviewedRef = publicSync ? 'codex/sync-qwenwork-1.0.65' : chatThreadPromote
+const reviewedRef = publicSync1607 ? 'codex/fix-dwsh-6572-sync-1.0.68' : publicSync ? 'codex/sync-qwenwork-1.0.65' : chatThreadPromote
   ? 'codex/fix-chat-thread-promote-retirement'
   : 'codex/sync-aitable-public-fixes';
 const rebased = scenario === 'reviewed_rebased';
 const base = rebased || scenario === 'changed_preimage' ? 'a'.repeat(40) : reviewedBase;
 const head = rebased ? 'b'.repeat(40) : reviewedHead;
 const blob = value => value.toString(16).padStart(40, '0');
-const protectedPaths = chatThreadPromote || publicSync ? [
+const protectedPaths = publicSync1607 ? [] : chatThreadPromote || publicSync ? [
   'scripts/policy/interface-migrations/approved-command-migrations-v1.json',
 ] : [
   'scripts/policy/skill-command-check/main.go',
   'scripts/policy/skill-command-check/main_test.go',
 ];
 // #1529 路径与增改状态固定取自 M→C1，不从被测工作流反读审批内容。
-const paths = publicSync ? [
+const paths = publicSync1607 ? fixture1607.map(({path}) => path) : publicSync ? [
   '.changes/1421-skill-setup-fail-closed-staging.md',
   '.changes/1425-windows-skill-setup-junction.md',
   '.changes/aitable-supabase-api-key.md',
@@ -359,11 +379,11 @@ const paths = publicSync ? [
   'skills/multi/dingtalk-shared/references/intent-guide.md',
   'test/unit/chat_thread_skill_routing_test.go',
 ] : ['.changes/aitable-public-reliability.md'];
-if (!chatThreadPromote && !publicSync) {
+if (!chatThreadPromote && !publicSync && !publicSync1607) {
   for (let i = 0; i < 41; i++) paths.push('internal/aitableprotocol/reviewed-fixture-' + i + '.go');
   paths.push(...protectedPaths);
 }
-const addedPaths = new Set(publicSync ? [
+const addedPaths = new Set(publicSync1607 ? fixture1607.filter(({status}) => status === 'added').map(({path}) => path) : publicSync ? [
   '.changes/1421-skill-setup-fail-closed-staging.md',
   '.changes/1425-windows-skill-setup-junction.md',
   '.changes/aitable-supabase-api-key.md',
@@ -443,11 +463,13 @@ switch (scenario) {
     break;
   case 'ordinary_protected':
     pull.number = context.issue.number = 1464;
-    files = files.filter(file => protectedPaths.includes(file.filename));
+    files = publicSync1607
+      ? [{ filename: 'scripts/policy/unreviewed.go', status: 'added', sha: blob(5000) }]
+      : files.filter(file => protectedPaths.includes(file.filename));
     break;
   case 'ordinary_protected_rename':
     pull.number = context.issue.number = 1464;
-    files = [{ filename: 'internal/cli/renamed-policy.go', previous_filename: protectedPaths[0], status: 'renamed', sha: blob(5000) }];
+    files = [{ filename: 'internal/cli/renamed-policy.go', previous_filename: protectedPaths[0] || 'scripts/policy/unreviewed.go', status: 'renamed', sha: blob(5000) }];
     break;
   case 'new_blob_same_path':
   case 'body_exception_injection':
@@ -466,6 +488,10 @@ switch (scenario) {
     currentHeadTree.push(entry('internal/cli/unreported.go', blob(5000)));
     break;
   case 'approved_protected_path_substitution':
+    if (publicSync1607) {
+      currentHeadTree[changedIndex].path = files[changedIndex].filename = 'scripts/policy/unapproved-path.go';
+      break;
+    }
     for (const tree of [reviewedBaseTree, reviewedHeadTree, currentBaseTree, currentHeadTree]) {
       tree.find(item => item.path === protectedPaths[0]).path = 'scripts/policy/unapproved-path.go';
     }
@@ -489,7 +515,7 @@ switch (scenario) {
   case 'closed': pull.state = 'closed'; break;
   case 'governance_pr_self_authorization':
     pull.number = context.issue.number = 1503;
-    pull.head.ref = publicSync ? 'codex/authorize-public-sync-1529' : 'codex/authorize-chat-thread-promote-1502';
+    pull.head.ref = publicSync1607 ? 'codex/dwsh-6572-ci-governance' : publicSync ? 'codex/authorize-public-sync-1529' : 'codex/authorize-chat-thread-promote-1502';
     files = [{ filename: '.github/workflows/ai-behavior-check.yml', status: 'modified', sha: blob(5000) }];
     break;
   case 'fork_head': pull.head.repo.full_name = 'other-owner/dingtalk-workspace-cli'; break;

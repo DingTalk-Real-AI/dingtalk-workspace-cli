@@ -76,6 +76,24 @@ type Policy struct {
 	StaffIDTransform    string
 	TTL                 time.Duration
 	Reason              string
+	FriendlyHint        string
+}
+
+// CryptoDisabledGuidance is the client-side fallback for a policy that resolved
+// to off without a server-provided friendlyHint (e.g. server rollback per the
+// delivery contract). It keeps the standard onboarding path visible to the
+// caller instead of a bare reason.
+const CryptoDisabledGuidance = "当前组织未开通消息解密功能，与登录授权无关。" +
+	"请企业管理员通过邮件联系安恒，提供企业名称和企业 ID，" +
+	"由安恒联系钉钉完成组织开通；开通后请重试。"
+
+// PolicyDisabledHint picks the hint recorded for a policy-off failure entry:
+// the server hint wins; without one the standard onboarding guidance applies.
+func PolicyDisabledHint(hint string) string {
+	if trimmed := strings.TrimSpace(hint); trimmed != "" {
+		return trimmed
+	}
+	return CryptoDisabledGuidance
 }
 
 type DecryptResult struct {
@@ -324,7 +342,7 @@ func parsePolicy(data map[string]any) (Policy, error) {
 		src = result
 	}
 	mode := strings.TrimSpace(stringField(src, "mode"))
-	if mode == "" && len(src) == 1 && src["success"] == true {
+	if mode == "" && isPlainPolicySuccessAck(src) {
 		mode = ModeOff
 	}
 	if mode != ModeOff && mode != ModeThirdParty && mode != ModeRequired && mode != ModeDegraded {
@@ -338,7 +356,28 @@ func parsePolicy(data map[string]any) (Policy, error) {
 		StaffIDTransform:    firstNonEmpty(stringField(src, "staffIdTransform"), "raw"),
 		TTL:                 time.Duration(intField(src, "ttlSeconds")) * time.Second,
 		Reason:              stringField(src, "reason"),
+		FriendlyHint:        stringField(src, "friendlyHint"),
 	}, nil
+}
+
+// isPlainPolicySuccessAck reports whether a policy response is a bare success
+// acknowledgement carrying no policy payload. Only that shape may be read as
+// mode=off for old servers; a response that omits mode but still carries a
+// reason, hint or error field is a contract violation and fails closed instead
+// of being silently downgraded to off.
+func isPlainPolicySuccessAck(src map[string]any) bool {
+	if src["success"] != true {
+		return false
+	}
+	for _, key := range []string{
+		"provider", "keyServer", "allowedRedirectHost", "staffIdTransform",
+		"ttlSeconds", "reason", "errorCode", "errorMsg", "friendlyHint",
+	} {
+		if value, ok := src[key]; ok && value != nil && strings.TrimSpace(fmt.Sprint(value)) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func policyRequiresEncryption(mode string) bool {

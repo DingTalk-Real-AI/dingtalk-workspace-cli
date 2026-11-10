@@ -1005,6 +1005,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
 	truncatedByResultLimit := false
+	paginationKnown := true
 	var nextCursor any
 
 	for pagesFetched < pageLimit {
@@ -1062,6 +1063,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 				"page": pagesFetched, "stage": "pagination",
 				"error": "已加入群列表下层未返回可靠的 hasMore，无法证明结果完整",
 			})
+			paginationKnown = false
 			stopReason = "pagination_error"
 			break
 		}
@@ -1108,7 +1110,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 
 	payload := map[string]any{
 		"count": len(allGroups), "groups": allGroups,
-		"pagesFetched": pagesFetched, "paginationKnown": true,
+		"pagesFetched": pagesFetched, "paginationKnown": paginationKnown,
 		"complete": complete && len(failures) == 0, "hasMore": hasMore,
 		"stopReason": stopReason, "truncatedByPageLimit": truncatedByPageLimit,
 		"truncatedByResultLimit": truncatedByResultLimit,

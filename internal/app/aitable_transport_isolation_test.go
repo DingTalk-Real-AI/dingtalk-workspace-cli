@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,44 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
+
+func TestCrossPlatformCoverageAitableUpsertOperationContext(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
+		return AccessTokenSnapshot{AccessToken: "test-placeholder"}, nil
+	})
+	const token = "123e4567-e89b-42d3-a456-426614174000"
+	params := map[string]any{"baseId": "b", "tableId": "t", "records": []any{}, "clientToken": token}
+	calls := 0
+	testseam.Swap(t, &runnerCallTool, func(client *transport.Client, _ context.Context, _, tool string, args map[string]any) (transport.ToolCallResult, error) {
+		calls++
+		if tool == "record_upsert" {
+			if len(args) != 3 || args["clientToken"] != nil || client.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] != token {
+				t.Fatalf("invalid wire args=%v headers=%v", args, client.ExtraHeaders)
+			}
+		} else if client.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] != "" {
+			t.Fatal("operation key leaked to next invocation")
+		}
+		return transport.ToolCallResult{Content: map[string]any{"status": "success", "data": map[string]any{}}}, nil
+	})
+	base := transport.NewClient(nil)
+	runner := &runtimeRunner{transport: base, auditSink: audit.NopSink{}, globalFlags: &GlobalFlags{Timeout: 1}}
+	for _, tool := range []string{"record_upsert", "get_base"} {
+		if _, err := runner.executeInvocation(context.Background(), "https://example.test", executor.Invocation{CanonicalProduct: "aitable-helper", Tool: tool, Params: params}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 2 || params["clientToken"] != token || base.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] != "" {
+		t.Fatal("mutated shared intent or client")
+	}
+	// 格式错误的恢复操作号必须在真实 runner 边界拒绝，不能发出写请求。
+	_, err := runner.executeInvocation(context.Background(), "https://example.test", executor.Invocation{
+		CanonicalProduct: "aitable-helper", Tool: "record_upsert", Params: map[string]any{"clientToken": "invalid"},
+	})
+	if err == nil || calls != 2 || base.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] != "" {
+		t.Fatal("invalid operation context reached transport or mutated shared headers")
+	}
+}
 
 func TestCrossPlatformCoverageAitableInvocationTransportIsolatesTracing(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())

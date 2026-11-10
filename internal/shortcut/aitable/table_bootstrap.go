@@ -137,6 +137,12 @@ func validateBootstrapField(raw any, path string) (string, error) {
 	return name, nil
 }
 
+// createTableFormatterTypes mirrors the MCP field-config check: formatter is
+// accepted only on these types. The server checks it inside create_table,
+// after +base-bootstrap has already created the Base, so rejecting it here
+// avoids leaving an empty Base behind.
+var createTableFormatterTypes = map[string]bool{"number": true, "currency": true, "date": true, "progress": true, "formula": true}
+
 // create_table does not accept builtin aiConfig or object output. Keep that
 // capability on create_fields/update_field, including the legacy config shape.
 func validateCreateTableCapabilities(fields []any, path string) error {
@@ -147,6 +153,11 @@ func validateCreateTableCapabilities(fields []any, path string) error {
 		decorator, _ := config["decoratorConfigs"].(map[string]any)
 		if field["type"] == "object" || aiConfig["type"] == "builtin" || decorator["type"] == "builtin" {
 			return fmt.Errorf("%s[%d] 的 builtin 配置或 object 字段不支持组合建表；请先创建普通表，再用 field create 或 field update 配置内置 AI 字段", path, index)
+		}
+		if fieldType, _ := field["type"].(string); config != nil && !createTableFormatterTypes[fieldType] {
+			if _, exists := config["formatter"]; exists {
+				return fmt.Errorf("%s[%d].config.formatter 不适用于 type=%s；只有 number、currency、date、progress、formula 支持 formatter，createdTime 等系统字段不传 config", path, index, fieldType)
+			}
 		}
 	}
 	return nil
@@ -258,8 +269,8 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 			created.Warnings = append(created.Warnings, fmt.Sprintf("create_fields offset %d returned an error; final read-back decides success: %v", offset, fieldErr))
 		}
 	}
-	table, err := verifyCreatedTableEventually(rt, baseID, created.TableID)
-	if err != nil {
+	table, readFields, err := readCreatedTableEventually(rt, baseID, created.TableID)
+	if table == nil {
 		return created, err
 	}
 	// Readback navigation wins per key. Older readers can omit it, in which
@@ -268,11 +279,7 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 	created.Navigation = map[string]any{}
 	aitablenavigation.Preserve(created.Navigation, table)
 	aitablenavigation.Preserve(created.Navigation, parityResponseObject(createData))
-	fieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": created.TableID})
-	created.Fields, _ = findNamedObjectList(fieldsData, "fields", "fieldList")
-	if err == nil && created.Fields == nil {
-		err = fmt.Errorf("field read-back for table %s is missing the fields collection", created.TableID)
-	}
+	created.Fields = readFields
 	if err == nil {
 		err = verifyDeclaredFieldStructures(created.Fields, fields)
 	}

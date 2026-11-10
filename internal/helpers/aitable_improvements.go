@@ -23,7 +23,7 @@ func newAitableImprovementLeaves(field, dashboard, chart *cobra.Command) {
 	dash := LeafFlag{Name: "dashboard-id", Bind: "dashboardId", Required: true, Trim: true, Usage: "目标仪表盘 ID"}
 	appMode := LeafFlag{Name: "is-app-mode", Bind: "isAppMode", Kind: corecmd.KindBool, Usage: "已确认的应用模式只读上下文"}
 	chart.AddCommand(NewLeafCommand(LeafSpec{
-		Use: "templates", Short: "按类型读取图表模板", Long: "按类型读取结构化图表模板；仅在新 MCP 入口已部署时使用，示例 ID 必须绑定真实资源。", Tool: "get_dashboard_widget_templates", Server: "aitable", Safety: aitableSafetyRead(),
+		Use: "templates", Short: "按类型读取图表模板", Long: "按类型读取结构化图表模板及可用的服务端增强说明；仅在 MCP 入口已部署时使用。documentation 缺失时依据随包指南与模板继续语义明确的配置，仅具体必需信息无法确认时停止；说明不得提交为 config，示例 ID 必须绑定真实资源。", Tool: "get_dashboard_widget_templates", Server: "aitable", Safety: aitableSafetyRead(),
 		Flags: []LeafFlag{{Name: "chart-types", Bind: "chartTypes", Required: true, Trim: true, Usage: "1～20 个不同的大写图表类型，逗号分隔", Transform: func(raw string) (any, error) {
 			values := strings.Split(raw, ",")
 			seen := map[string]bool{}
@@ -39,7 +39,7 @@ func newAitableImprovementLeaves(field, dashboard, chart *cobra.Command) {
 			}
 			return values, nil
 		}}}, OutputRollout: output.RolloutUnifiedActive, ResultCall: callAitableImprovementResult,
-		Contract: aitableImprovementContract("chart_templates", "aitable chart templates", "get_dashboard_widget_templates", "aitable", "按类型读取结构化图表模板；仅在新 MCP 入口已部署时使用，示例 ID 必须绑定真实资源。", "仅需指定类型的结构化模板且已确认新入口部署时", "旧 MCP 未部署此入口时用 +chart-templates 默认兼容路径；已有配置不必重复读模板", `dws aitable chart templates --chart-types LINE,PIE`, []contract.ParamDecl{aitableAppParam("chart-types", "chartTypes", "array", true)}, `{"type":"object","description":"指定类型的完整配置模板；内部示例 ID 不代表用户资源","properties":{"templates":{"type":"object","description":"按 chartType 键控的完整配置对象","additionalProperties":{"type":"object","additionalProperties":true}}},"required":["templates"]}`),
+		Contract: aitableImprovementContract("chart_templates", "aitable chart templates", "get_dashboard_widget_templates", "aitable", "按类型读取结构化图表模板及可用的服务端增强说明；仅在 MCP 入口已部署时使用。documentation 缺失时依据随包指南与模板继续语义明确的配置，仅具体必需信息无法确认时停止；说明不得提交为 config，示例 ID 必须绑定真实资源。", "仅需指定类型的配置模板及可用说明且已确认入口部署时", "旧 MCP 未部署此入口时用 +chart-templates 默认兼容路径；documentation 为增强说明，缺失时依据随包指南与模板继续语义明确的配置，仅具体必需信息无法确认时停止；异常或不完整说明整体丢弃，保留合法 templates，并向 stderr 写入非阻断诊断，不补发全量请求；已有配置不必重复读模板", `dws aitable chart templates --chart-types LINE,PIE`, []contract.ParamDecl{aitableAppParam("chart-types", "chartTypes", "array", true)}, aitableprotocol.ChartTemplateDataSchema),
 	}))
 	chart.AddCommand(NewLeafCommand(LeafSpec{
 		Use: "batch-create", Short: "批量提交图表，保留逐项状态", Long: "在同一仪表盘提交 1～20 张图表。保留逐项 chartId 和 failed/accepted/verified/unknown；accepted 不等于持久化，未知项先只读核验，禁止直接重放。入口须已部署；不自动重排。", Tool: "create_charts", Server: "aitable", Safety: aitableImprovementCreateSafety(),
@@ -104,11 +104,18 @@ func callAitableImprovementResult(cmd *cobra.Command, tool string, args map[stri
 	}
 	if tool == "get_dashboard_widget_templates" {
 		types, _ := args["chartTypes"].([]string)
-		templates, err := aitableprotocol.ProjectStructuredChartTemplates(data, types)
+		body, ok := data.(map[string]any)
+		if !ok {
+			return nil, apperrors.NewInternal("图表模板返回值必须是对象")
+		}
+		result, diagnostic, err := aitableprotocol.ProjectChartTemplateResponse(body, types)
 		if err != nil {
 			return nil, apperrors.NewInternal(err.Error())
 		}
-		return output.Success(map[string]any{"templates": templates}), nil
+		if diagnostic != "" {
+			cmd.PrintErrln("警告: 图表模板说明已整体丢弃，已保留合法 templates:", diagnostic)
+		}
+		return output.Success(result), nil
 	}
 	return output.Success(data), nil
 }

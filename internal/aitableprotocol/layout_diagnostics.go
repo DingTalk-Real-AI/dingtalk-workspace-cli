@@ -63,3 +63,59 @@ func DiagnoseRootLayout(items []map[string]any, columns int) []LayoutIssue {
 	}
 	return issues
 }
+
+// DiagnoseChartMinimumSizes reports only confirmed type/version rules; unknown types and child layouts remain unchecked.
+func DiagnoseChartMinimumSizes(items, charts []map[string]any, columns int) ([]LayoutIssue, []string) {
+	issues, checked := []LayoutIssue{}, []string{}
+	if columns != DashboardGridColumnsV1 && columns != DashboardGridColumnsV2 {
+		return issues, checked
+	}
+	types, seen := map[string]string{}, map[string]bool{}
+	for _, chart := range charts {
+		id, _ := chart["chartId"].(string)
+		kind, _ := chart["chartType"].(string)
+		if id == "" {
+			continue
+		}
+		if seen[id] {
+			delete(types, id)
+			continue
+		}
+		seen[id], types[id] = true, kind
+	}
+	layoutIDs := map[string]int{}
+	for _, item := range items {
+		id, _ := item["i"].(string)
+		layoutIDs[id]++
+	}
+	for _, item := range items {
+		id, _ := item["i"].(string)
+		if id == "" || layoutIDs[id] != 1 || ValidateRootChartLayout(item, columns) != nil {
+			continue
+		}
+		minW, minH := 0, 0
+		switch types[id] {
+		case "BAR", "LINE", "HISTOGRAM", "PIE":
+			minW, minH = 3, 4
+		case "SUMMARY":
+			minW, minH = 2, 4
+		default:
+			continue
+		}
+		if columns == DashboardGridColumnsV2 {
+			minW *= 4
+			if types[id] == "SUMMARY" {
+				minH = 8
+			} else {
+				minH *= 3
+			}
+		}
+		checked = append(checked, id)
+		w, _ := requiredLayoutInteger(item, "w")
+		h, _ := requiredLayoutInteger(item, "h")
+		if w < minW || h < minH {
+			issues = append(issues, LayoutIssue{ChartID: id, Code: "below_type_minimum", Message: fmt.Sprintf("%s 最小尺寸 %dx%d，实际 %dx%d；仅提示，不自动调整布局", types[id], minW, minH, w, h)})
+		}
+	}
+	return issues, checked
+}

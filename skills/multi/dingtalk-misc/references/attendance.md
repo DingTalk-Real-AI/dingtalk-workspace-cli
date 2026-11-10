@@ -104,10 +104,12 @@
 | 更新班次 | `attendance class update --class-id [--name/--owner/--class-vo]` | 先 `class get` 保存完整原值；只改目标字段；写后回读 |
 | 创建考勤组 | `attendance group create --name --type [--owner/--group-vo]` | 同名 search 防重复；FIXED 的 `group-vo` 必须含 `defaultClassId` 和 7 天 `workDayClassList` |
 | 更新考勤组 | `attendance group update --group-id [--name/--type/--owner/--enable-outside-check/--classIds/--group-vo]` | 先 `group get` 保存原值；复杂对象以当前配置为基线，禁止凭空全量覆盖 |
-| 更新成员 | `attendance group update-members --group-id` 加至少一个增删 flag | 每类最多 20 个 ID；写前 `filtered-get --member`，写后回查目标差异 |
+| 更新成员 | `attendance group update-members --group-id --member-join-policy SPECIFIC_USERS` 加至少一个增删 flag | 每类最多 20 个 ID；写前 `filtered-get --member`，写后回查目标差异 |
 | 更新本人个人设置 | `attendance selfsetting save --user <本人 userId> --setting-scene <scene> <scene字段>` | 仅当前登录用户本人；先同 scene `get`；禁止把不同 scene 字段混用 |
 | 更新全局设置 | `attendance globalsetting save --scope --setting-scene <scene> <scene字段>` | 仅管理员；先同 scope/scene `get`，写后回读 |
 | 管理员修正打卡 | `attendance boss-check --plan-id <id>` 或 `--result-id <id>` | 两种 ID 至少一个；先定位唯一记录并展示 `当前值 → 新值`，写后重新查询结果 |
+
+`--member-join-policy`：所有人员、部门增删操作均必须显式传 `SPECIFIC_USERS`（拉入指定员工）。
 
 临时修改并恢复时：写前保存完整原配置和稳定 ID；一次性展示“修改 + 验证 + 恢复”计划并获得明确确认；修改后回读，再用保存值恢复并再次回读。中途验证失败也要尝试恢复；恢复失败必须报告 partial/commit-unknown，不能宣称任务完成。
 

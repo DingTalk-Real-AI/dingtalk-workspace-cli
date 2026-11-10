@@ -109,7 +109,7 @@ func TestBatchStyleFileRespectsAggregateCellBudgetAndItemCap(t *testing.T) {
 		}
 	}
 
-	// 条数上限与 --ranges 对齐：101 条应在展开任何矩阵之前就被拒。
+	// 条数上限与 --ranges 对齐：21 条应在展开任何矩阵之前就被拒。
 	tooMany := make([]map[string]any, 0, maxBatchStyleRanges+1)
 	for i := 0; i < maxBatchStyleRanges+1; i++ {
 		tooMany = append(tooMany, map[string]any{
@@ -117,7 +117,7 @@ func TestBatchStyleFileRespectsAggregateCellBudgetAndItemCap(t *testing.T) {
 		})
 	}
 	_, err = buildBatchStyleOpsFromFile(writeBatch(t, tooMany))
-	if err == nil || !strings.Contains(err.Error(), "--batch 最多 100 条") {
+	if err == nil || !strings.Contains(err.Error(), "--batch 最多 20 条") {
 		t.Fatalf("error = %v, want --batch item cap", err)
 	}
 
@@ -223,7 +223,7 @@ func TestBatchStyleRangesRejectsInvalidInput(t *testing.T) {
 			name:   "over-range-cap",
 			ranges: "[" + strings.Join(tooMany, ",") + "]",
 			style:  true,
-			want:   "--ranges 最多 100 项",
+			want:   "--ranges 最多 20 项",
 		},
 		{
 			name:   "missing-sheet-prefix",

@@ -2548,7 +2548,7 @@ exists=false 时不要猜测 nodeId，可调用 record primary-doc-create 创建
 		Use:   "list",
 		Short: "获取 AI 表格列表",
 		Long: `列出当前用户可访问的 AI 表格 Base。默认返回最近访问结果，支持分页游标续取。返回 baseId 与 baseName，后续可直接用于 base get。
-AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/nodes/{baseId}
+` + AitableBaseListFallbackGuidance + `
 
 注意: base list 仅返回最近访问过的 Base，不是全部 Base。
 空 bases 不表示遍历结束；只要 nextCursor 非空（hasMore=true）就应继续翻页。returnedCount 仅统计当前页；不会从 summary 推测已过滤数量。
@@ -2577,10 +2577,10 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 				CLIPath:        "aitable base list",
 				PrimaryCLIPath: "aitable base list",
 			},
-			Description: "列出最近访问的 AI 表格 Base。",
+			Description: "列出最近访问的 AI 表格 Base。" + AitableBaseListFallbackGuidance,
 			Interface:   aitableMCPInterface("list_bases"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "列出最近访问的 AI 表格 Base。",
+				AgentSummary: "列出最近访问的 AI 表格 Base。" + AitableBaseListFallbackGuidance,
 				UseWhen:      []string{"只需浏览最近打开过的 Base 时"},
 				AvoidWhen:    []string{"按名称查找优先 base search；详情用 base get"},
 				Examples:     []string{"dws aitable base list"},
@@ -2592,7 +2592,7 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 		Use:   "search",
 		Short: "搜索 AI 表格",
 		Long: `按名称关键词搜索 AI 表格 Base。返回 baseId/baseName，结果按相关性排序。返回的 baseId 可直接用于 base get 等后续工具。
-AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/nodes/{baseId}
+` + AitableBaseListFallbackGuidance + `
 不传关键词时返回最近访问的 Base 列表。`,
 		Example: `  dws aitable base search --query "项目管理"
   dws aitable base search`,
@@ -2624,10 +2624,10 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 				CLIPath:        "aitable base search",
 				PrimaryCLIPath: "aitable base search",
 			},
-			Description: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+			Description: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。" + AitableBaseListFallbackGuidance,
 			Interface:   aitableMCPInterface("search_bases"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+				AgentSummary: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。" + AitableBaseListFallbackGuidance,
 				UseWhen:      []string{"用户要找某个 AI 表格/多维表，按名称检索时优先使用"},
 				AvoidWhen:    []string{"只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"},
 				Examples:     []string{"dws aitable base search --query \"项目\""},
@@ -8325,7 +8325,9 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
   x/y 表示横纵坐标，w/h 表示宽度/高度，单位是列数或行数。
   DWS 会在写入前自动调用 get_dashboard。已确认应用模式时传 --is-app-mode=true，强制使用 48 列；否则 schemaVersionTypeVerified=true 且 schemaVersion 是 JSON number 2 时为 48 列，其他已验证值为 12 列。类型证据缺失时命令停止，不执行 create_chart。
   parentId 省略、为空或 root-responsive-layout 时属于根布局；非根 parentId 属于组合容器或 Tab 的独立坐标系，不能套用全局 12/48 列，DWS 会停止创建。
-  同一根布局行的图表保持高度一致，每行图表宽度之和应正好填满对应的 12/48 列。schemaVersion 与 isAppMode 均为只读字段，不能写入或透传到 Dashboard config。`,
+  根据分析目标、图表类型已核实尺寸、内容和视口选择布局，允许大小卡混排和纵向叠放，不强制同行等高或每行铺满。默认尺寸不是固定占比，最小尺寸不保证页面可读。
+  保留用户已声明的布局，不默认追加 arrange。前端默认纵向压缩可能使卡片上移；创建后按原 chartId 独立回读 config/layout，并在固定视口验收实际位置、标题、数值和图例。
+  schemaVersion 与 isAppMode 均为只读字段，不能写入或透传到 Dashboard config。`,
 		Example: `  # CONFIG_JSON 从 +chart-widgets-example 中取目标类型的完整模板，保留 name/大写 chartType/真实 sheet
   dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID \
     --config "$CONFIG_JSON" \
@@ -10797,7 +10799,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		Use:   "search",
 		Short: "AI 表格搜索（dws aitable base search 的别名）",
 		Long: `按名称关键词搜索 AI 表格 Base。
-这是 dws aitable base search 的便捷别名,两个命令完全等价。`,
+这是 dws aitable base search 的便捷别名,两个命令完全等价。` + "\n" + AitableBaseListFallbackGuidance,
 		Example: `  dws aitable search --query "项目管理"
   dws aitable search --keyword "评测项目管理"`,
 		RunE: baseSearchCmd.RunE, // 直接复用 baseSearchCmd 的执行逻辑
@@ -10812,10 +10814,10 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				CLIPath:        "aitable search",
 				PrimaryCLIPath: "aitable search",
 			},
-			Description: "搜索 Base（search 别名）。",
+			Description: "搜索 Base（search 别名）。" + AitableBaseListFallbackGuidance,
 			Interface:   aitableMCPInterface("search_bases"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "搜索 Base（search 别名）。",
+				AgentSummary: "搜索 Base（search 别名）。" + AitableBaseListFallbackGuidance,
 				UseWhen:      []string{"使用 aitable search 别名按名称找 Base 时"},
 				AvoidWhen:    []string{"主路径推荐 base search"},
 				Examples:     []string{"dws aitable search --query \"项目\""},
@@ -10832,7 +10834,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		Use:   "list",
 		Short: "获取 AI 表格列表（dws aitable base list 的别名）",
 		Long: `列出当前用户可访问的 AI 表格 Base。
-这是 dws aitable base list 的便捷别名,两个命令完全等价。`,
+这是 dws aitable base list 的便捷别名,两个命令完全等价。` + "\n" + AitableBaseListFallbackGuidance,
 		Example: `  dws aitable list
   dws aitable list --limit 5`,
 		RunE: baseListCmd.RunE, // 复用 baseListCmd 的执行逻辑
@@ -10847,10 +10849,10 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				CLIPath:        "aitable list",
 				PrimaryCLIPath: "aitable list",
 			},
-			Description: "列出最近 Base（list 别名）。",
+			Description: "列出最近 Base（list 别名）。" + AitableBaseListFallbackGuidance,
 			Interface:   aitableMCPInterface("list_bases"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "列出最近 Base（list 别名）。",
+				AgentSummary: "列出最近 Base（list 别名）。" + AitableBaseListFallbackGuidance,
 				UseWhen:      []string{"使用 aitable list 别名浏览最近 Base 时"},
 				AvoidWhen:    []string{"主路径推荐 base list；按名搜索用 base search"},
 				Examples:     []string{"dws aitable list"},

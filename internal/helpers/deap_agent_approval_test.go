@@ -68,7 +68,7 @@ func TestCrossPlatformCoverageEmployeeApprovalCards(t *testing.T) {
 							t.Errorf("审批卡缺少事件来源 %s", value)
 						}
 					}
-					if strings.Join(args, " ") != "send-a2ui-card --open-dingtalk-id owner" {
+					if strings.Join(args, " ") != "send-a2ui-card --open-dingtalk-id owner --support-forward=false" {
 						t.Error("approval must go to supervisor")
 					}
 					var id string

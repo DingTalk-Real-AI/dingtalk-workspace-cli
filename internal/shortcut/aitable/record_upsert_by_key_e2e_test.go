@@ -352,6 +352,9 @@ func TestCrossPlatformCoverageRecordUpsertByKeyVerificationMismatchFailsE2E(t *t
 
 func runRecordBatchCLI(t *testing.T, caller *upsertByKeyCaller, command string, records []map[string]any, extra ...string) (string, error) {
 	t.Helper()
+	if command == "+record-upsert" {
+		setupRecordWriteTestProfile(t)
+	}
 	helpers.InitDepsForTest(t, caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")

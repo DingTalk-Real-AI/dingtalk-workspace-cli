@@ -431,7 +431,9 @@ func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string
 	result, err := chatCryptoClient.BatchDecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{}, batchItems)
 	if err != nil {
 		failures := append([]map[string]any{}, policyFailures...)
-		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
+		for _, item := range batchItems {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, chatmsg.ReasonBatchDecryptFailed))
+		}
 		ledger["decryptFailedCount"] = len(failures)
 		ledger["decryptFailures"] = failures
 		ledger["partial"] = true
@@ -488,11 +490,14 @@ func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecryp
 			OpenConversationID: item.ConversationID,
 		})
 		if err != nil {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, err)))
 			continue
 		}
 		if !decision.Enabled {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			failures = append(failures, chatDecryptFailureWithHint(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, nil),
+				messagecrypto.PolicyDisabledHint(decision.Policy.FriendlyHint)))
 			continue
 		}
 		filtered = append(filtered, item)
@@ -508,6 +513,14 @@ func chatDecryptFailure(messageID, conversationID, reason string) map[string]any
 	}
 	if strings.TrimSpace(conversationID) != "" {
 		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func chatDecryptFailureWithHint(messageID, conversationID, reason, hint string) map[string]any {
+	failure := chatDecryptFailure(messageID, conversationID, reason)
+	if trimmed := strings.TrimSpace(hint); trimmed != "" {
+		failure["hint"] = trimmed
 	}
 	return failure
 }
@@ -1814,7 +1827,13 @@ func projectChatMessageRangeAllPayload(payload, requestArgs map[string]any, omit
 		}
 		if value, ok := paging["hasMore"].(bool); ok {
 			hasMore = value
-			paginationKnown = true
+			// Only partial envelopes publish hasMoreReliable; a success path
+			// parsed its hasMore, so the absent key still means known.
+			if reliable, ok := paging["hasMoreReliable"].(bool); ok {
+				paginationKnown = reliable
+			} else {
+				paginationKnown = true
+			}
 		}
 		truncated, _ = paging["truncated"].(bool)
 		partial, _ = paging["partial"].(bool)
@@ -7654,7 +7673,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
 	chatMessageSendA2UICardCmd.Flags().String("extension", "", "AICard 消息扩展 JSON 对象，key 非空白且 value 必须为字符串；业务 key 由服务端白名单控制（可选，支持 {}）")
-	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", false, "允许转发 A2UI 卡片（默认不允许）")
+	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", true, "允许转发 A2UI 卡片（默认允许；--support-forward=false 禁止转发）")
 	chatMessageSendA2UICardCmd.Flags().StringSlice("at-open-dingtalk-ids", nil, "@ 的成员 openDingTalkId（仅群聊；检查静态 Markdown 与同批绑定值，合法绑定可延后填充；透传 atOpenDingTalkIds，声明总数含重复不超过 100）")
 	chatMessageSendA2UICardCmd.Flags().Bool("at-all", false, "@所有人（仅群聊；静态正文须含 <a atId=\"all\">，合法绑定可延后填充；线上传 atAll 并改写已知标签为高亮别名）")
 	chatMessageSendA2UICardCmd.Flags().String("summary", "", "卡片无法渲染时的降级文案；省略时为“互动卡片”，显式传入时不能为空")
