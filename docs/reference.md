@@ -4,7 +4,8 @@
 
 | Variable | Purpose / 用途 |
 |---------|---------|
-| `DWS_CONFIG_DIR` | Override default config directory / 覆盖默认配置目录 |
+| `DWS_CONFIG_DIR` | Override default config directory; does not independently isolate secure credentials / 覆盖默认配置目录，单独设置不隔离安全凭据 |
+| `DWS_KEYCHAIN_DIR` | Select an isolated credential storage root: a file directory on macOS/Linux/OpenHarmony, or a path-derived DPAPI/HKCU registry namespace on Windows. Unset preserves the platform default / 选择隔离的凭据存储根；macOS/Linux/OpenHarmony 使用文件目录，Windows 根据路径派生 DPAPI/HKCU 注册表命名空间；未设置时保留平台默认 |
 | `DWS_AGENT_PRODUCT` | Optional, caller-declared Agent product sent as `x-dws-agent-product` (for example `qwenwork`) for downstream logs/BI and used as the IM `clawType` display label when `--ai-tag` is enabled. `--ai-tag` defaults to `true`, so a configured Product changes the displayed label by default. With `--ai-tag=false`, native `chat message send` / `reply` calls send an empty `clawType`, while shortcut calls omit the argument. Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[A-Za-z0-9][A-Za-z0-9_-]*$`. Unset or empty values omit the Header and use the edition's IM display default. This client never uses Product to change the separate HTTP `claw-type` PAT/routing label. / 可选、由调用方声明的 Agent 产品标识，经校验后作为 `x-dws-agent-product` 发送，并用于 IM 小尾巴；`--ai-tag` 默认为 `true`，因此配置 Product 后默认会改变展示标签。使用 `--ai-tag=false` 时，原生 `chat message send` / `reply` 发送空的 `clawType`，shortcut 调用则省略该参数。未设置时省略请求头且 IM 使用发行版默认值；本客户端不会用 Product 修改独立的 HTTP `claw-type` |
 | `DWS_AGENT_HOST` | Optional, caller-declared Agent runtime form sent as `x-dws-agent-host` (for example `cloud` or `desktop`) for downstream logs/BI. Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[a-z0-9][a-z0-9_-]*$`; unset values are omitted. This client does not use Host for PAT, authentication, Discovery, or MCP endpoint selection. / 可选、由调用方声明的 Agent 运行形态，经校验后作为 `x-dws-agent-host` 发送给下游日志/BI；本客户端不使用该值进行 PAT、鉴权、Discovery 或 MCP 端点选择，未设置时省略 |
 | `DWS_AGENT_VER` | Optional caller-declared Agent version / 可选、由调用方声明的 Agent 版本。After trimming surrounding ASCII spaces/tabs, the value must be at most 64 bytes and match `^[A-Za-z0-9][A-Za-z0-9._+-]*$`; a non-empty valid value is sent as `x-dws-agent-ver`, while unset or empty values omit the Header. / 去除首尾 ASCII 空格和 Tab 后，值不得超过 64 字节且必须匹配上述格式；合法非空值通过 `x-dws-agent-ver` 发送，未设置或空值则省略请求头 |
@@ -15,6 +16,40 @@
 | `DWS_TRUSTED_DOMAINS` | Comma-separated trusted domains for bearer token (default: `*.dingtalk.com`). `*` for dev only / Bearer token 允许发送的域名白名单，默认 `*.dingtalk.com`，仅开发环境可设为 `*` |
 | `DWS_ALLOW_HTTP_ENDPOINTS` | Set `1` to allow HTTP for loopback during dev / 设为 `1` 允许回环地址 HTTP，仅用于开发调试 |
 | `DWS_DISABLE_KEYCHAIN` | macOS only. Set `1` to skip system Keychain for the encryption key and use file-based storage (same scheme as Linux). For sandboxed runtimes (e.g. Codex App) that block Keychain APIs. Weakens at-rest protection — DEK and ciphertext live in the same directory. / 仅 macOS。设为 `1` 时跳过系统 Keychain，密钥以文件形式存储（与 Linux 一致）。用于 Keychain API 被拦截的沙盒环境（如 Codex App）。代价是 DEK 与密文同目录，保护强度低于默认方案 |
+
+### Windows Agent Authentication Isolation / Windows Agent 认证隔离
+
+Set both variables to distinct, stable absolute paths for each Agent process:
+
+```powershell
+$env:DWS_CONFIG_DIR = Join-Path $env:LOCALAPPDATA 'DwsAgents\agent-a\config'
+$env:DWS_KEYCHAIN_DIR = Join-Path $env:LOCALAPPDATA 'DwsAgents\agent-a\keychain'
+```
+
+Launch Agent B in another process with `agent-b` paths for both variables.
+`DWS_CONFIG_DIR` separates configuration, profile metadata and authentication
+locks. On native Windows, `DWS_KEYCHAIN_DIR` separates all keychain accounts,
+including user tokens and application credentials, by appending a hash of the
+normalized path to `HKCU\Software\DwsCli\keychain\<service>`. Credentials remain
+DPAPI-encrypted registry values, not files in that directory. Relative paths
+resolve against the process working directory, so use absolute paths consistently.
+`DWS_KEYCHAIN_TEST_NAMESPACE` is reserved for tests; production does not need it.
+
+Without `DWS_KEYCHAIN_DIR`, the historical registry location remains unchanged.
+Windows installations that previously set this variable will now enter a new
+credential namespace and need a deliberate login or explicit credential import.
+Missing entries never fall back to the historical namespace, and normal reads,
+writes, validation and cleanup do not migrate or delete another namespace.
+Logout and reset delete only credential values; the emptied namespace key stays
+in the registry and holds no credentials.
+
+每个 Agent 进程都应设置不同的两个绝对路径，并让其后续命令继承相同环境。
+仅设置 `DWS_CONFIG_DIR` 不隔离凭据；仅设置 `DWS_KEYCHAIN_DIR` 不隔离配置和锁。
+Windows 仍使用 DPAPI 加密，不因目录隔离降级到文件密钥。启用新目录后不会自动读取
+旧默认凭据；原凭据保留，需主动登录或显式导入。logout/reset 只删除凭据值，清空后的
+命名空间键会保留在注册表中，但不含任何凭据。这是避免误用、覆盖和清理其他实例
+认证状态的运行隔离，不是同一 Windows 用户下的安全沙箱，也不承诺缓存、遥测等
+所有 CLI 状态均已隔离。
 
 ### Agent Version and Extended Context / Agent 版本与扩展上下文
 
