@@ -1,4 +1,4 @@
-package sport
+package helpers
 
 import (
 	"strings"
@@ -57,8 +57,29 @@ func sportCollectLeafPaths(cmd *cobra.Command) map[string]bool {
 	return out
 }
 
+// sportRegisteredCommand 只通过产品注册表获取 sport，防止 app 独立挂载掩盖漏注册。
+func sportRegisteredCommand(t *testing.T) *cobra.Command {
+	t.Helper()
+	var sport *cobra.Command
+	for _, command := range NewPublicCommands(&captureRunner{}) {
+		if command.Name() == "sport" {
+			if sport != nil {
+				t.Fatal("sport 在产品注册表中重复注册")
+			}
+			sport = command
+		}
+	}
+	if sport == nil {
+		t.Fatal("NewPublicCommands 未包含 sport")
+	}
+	return sport
+}
+
 func TestSportCommandTreeCoversAllCLITools(t *testing.T) {
-	root := NewCommand()
+	root := sportRegisteredCommand(t)
+	if !root.Hidden {
+		t.Fatal("sport 长尾入口不应展示在根帮助中")
+	}
 	paths := sportCollectLeafPaths(root)
 	if len(paths) != len(sportAllTools) {
 		t.Fatalf("sport 命令树叶子数 = %d，期望 %d：%v", len(paths), len(sportAllTools), paths)
@@ -76,7 +97,7 @@ func TestSportCommandTreeCoversAllCLITools(t *testing.T) {
 }
 
 func TestSportCreateFlagsBindFlatToolArgsKeys(t *testing.T) {
-	root := NewCommand()
+	root := newSportCommand()
 	create := findSportSubcommand(t, root, "competition", "create")
 	for _, flagName := range []string{"name", "sport-type", "competition-type", "start-date", "end-date", "goal-value", "target-day-value", "group-id", "need-signup", "allow-free-join", "cover-image-url"} {
 		if create.Flags().Lookup(flagName) == nil {
@@ -134,7 +155,7 @@ func TestSportValidateCreateArgsBlocksRecurringAndBadDates(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := findSportSubcommand(t, NewCommand(), "competition", "create")
+			cmd := findSportSubcommand(t, newSportCommand(), "competition", "create")
 			for key, value := range base {
 				if err := cmd.Flags().Set(key, value); err != nil {
 					t.Fatalf("设置 --%s: %v", key, err)
@@ -155,7 +176,7 @@ func TestSportValidateCreateArgsBlocksRecurringAndBadDates(t *testing.T) {
 		})
 	}
 
-	valid := findSportSubcommand(t, NewCommand(), "competition", "create")
+	valid := findSportSubcommand(t, newSportCommand(), "competition", "create")
 	for key, value := range base {
 		if err := valid.Flags().Set(key, value); err != nil {
 			t.Fatalf("设置 --%s: %v", key, err)

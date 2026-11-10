@@ -1,6 +1,6 @@
 # 企业运动健康（钉钉运动）命令参考
 
-命令前缀统一为 `dws sport`。所有调用追加 `--format json`。命令树已发布到 Agent Schema；参数、约束或确认语义不确定时，优先读取精确 compact leaf Schema（`dws schema "sport ..." --compact`），仅在 Schema 不可用或与 Cobra 实际行为发生漂移时读取同一叶子的 `--help`。不要直接调用 MCP、HTTP API 或自行猜测工具名。
+命令前缀统一为 `dws sport`，属于 dingtalk-misc 长尾能力，不在 `dws --help` 展示；仍可直接执行 `dws sport --help` 和各叶子命令。所有调用追加 `--format json`。命令树已发布到 Agent Schema；参数、约束或确认语义不确定时，优先读取精确 compact leaf Schema（`dws schema "sport ..." --compact`），仅在 Schema 不可用或与 Cobra 实际行为发生漂移时读取同一叶子的 `--help`。不要直接调用 MCP、HTTP API 或自行猜测工具名。
 
 ## 能力范围与前置条件
 

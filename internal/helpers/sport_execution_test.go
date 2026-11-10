@@ -1,4 +1,4 @@
-package sport
+package helpers
 
 import (
 	"bytes"
@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -62,7 +61,7 @@ func runSportCommandOutput(t *testing.T, args ...string) (map[string]any, error)
 	// 叶子经 RolloutUnifiedActive 把结果写入统一结果存储，必须在 root ctx
 	// 预装 ResultStore（与 app 层执行边界一致）。
 	ctx, _ := output.WithResultStore(context.Background())
-	root := NewCommand()
+	root := sportRegisteredCommand(t)
 	root.SetContext(ctx)
 	// --yes/--dry-run 是 app root 注入的全局 flag；子树独立执行时补注册等价
 	// 的 persistent flag，使确认门能被跳过。
@@ -91,6 +90,38 @@ func runSportCommandOutput(t *testing.T, args ...string) (map[string]any, error)
 	return envelope, nil
 }
 
+// TestSportRegisteredExamplesDryRun 通过既有产品示例枚举器验证全部 21 个叶子。
+func TestSportRegisteredExamplesDryRun(t *testing.T) {
+	root := sportRegisteredCommand(t)
+	invocations := commandExampleInvocations(root)
+	if len(invocations) != len(sportAllTools) {
+		t.Fatalf("注册表示例数量=%d，期望=%d", len(invocations), len(sportAllTools))
+	}
+	seen := map[string]bool{}
+	for _, args := range invocations {
+		t.Run(strings.Join(args[:2], "/"), func(t *testing.T) {
+			fake := &sportFakeCaller{err: errors.New("预览不得调用 MCP")}
+			InitDepsForTest(t, fake)
+			envelope, err := runSportCommandOutput(t, append(args, "--dry-run")...)
+			if err != nil {
+				t.Fatalf("注册表示例预览失败：%v", err)
+			}
+			data, ok := envelope["data"].(map[string]any)
+			if !ok || envelope["dry_run"] != true || data["executed"] != false || len(fake.calls) != 0 {
+				t.Fatalf("预览契约错误：envelope=%v calls=%v", envelope, fake.calls)
+			}
+			tool, _ := data["tool"].(string)
+			if _, ok := sportAllTools[tool]; !ok || seen[tool] {
+				t.Fatalf("预览工具未知或重复：%q", tool)
+			}
+			seen[tool] = true
+		})
+	}
+	if len(seen) != len(sportAllTools) {
+		t.Fatalf("注册表示例漏覆盖：%v", seen)
+	}
+}
+
 // sportRunStatus 执行 sport org status（最简单的只读叶子）。
 func sportRunStatus(t *testing.T) error {
 	t.Helper()
@@ -98,7 +129,7 @@ func sportRunStatus(t *testing.T) error {
 }
 
 func TestSportCallResultWithoutCallerFails(t *testing.T) {
-	helpers.InitDepsForTest(t, nil)
+	InitDepsForTest(t, nil)
 	err := sportRunStatus(t)
 	if err == nil || !strings.Contains(err.Error(), "caller is not initialized") {
 		t.Fatalf("期望 caller 未初始化错误，实际: %v", err)
@@ -117,7 +148,7 @@ func TestSportCallResultDryRunSkipsToolCall(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &sportFakeCaller{dryRun: tc.callerDry, err: errors.New("预览不得调用 MCP")}
-			helpers.InitDepsForTest(t, fake)
+			InitDepsForTest(t, fake)
 			envelope, err := runSportCommandOutput(t, tc.args...)
 			if err != nil {
 				t.Fatalf("dry-run 不应报错: %v", err)
@@ -138,7 +169,7 @@ func TestSportCallResultDryRunSkipsToolCall(t *testing.T) {
 
 func TestSportCallResultParsesJSONText(t *testing.T) {
 	fake := &sportFakeCaller{text: `{"participate":true}`, blocks: 1}
-	helpers.InitDepsForTest(t, fake)
+	InitDepsForTest(t, fake)
 	if err := sportRunStatus(t); err != nil {
 		t.Fatalf("JSON 结果不应报错: %v", err)
 	}
@@ -149,7 +180,7 @@ func TestSportCallResultParsesJSONText(t *testing.T) {
 
 func TestSportCallResultRejectsNonJSONText(t *testing.T) {
 	fake := &sportFakeCaller{text: "不是 JSON", blocks: 1}
-	helpers.InitDepsForTest(t, fake)
+	InitDepsForTest(t, fake)
 	err := sportRunStatus(t)
 	if err == nil || !strings.Contains(err.Error(), "解析") || !strings.Contains(err.Error(), "返回失败") {
 		t.Fatalf("期望统一通道的 JSON 解析错误，实际: %v", err)
@@ -160,7 +191,7 @@ func TestSportCallResultRejectsNonJSONText(t *testing.T) {
 // 体经统一分类后不会伪装成 success（评审阻塞项 1 的回归用例）。
 func TestSportCallResultRejectsBusinessErrorBody(t *testing.T) {
 	fake := &sportFakeCaller{text: `{"code":"K001","success":false,"message":"活动不存在"}`, blocks: 1}
-	helpers.InitDepsForTest(t, fake)
+	InitDepsForTest(t, fake)
 	err := sportRunStatus(t)
 	if err == nil {
 		t.Fatalf("业务错误体不应被当作 success")
@@ -176,7 +207,7 @@ func TestSportCallResultHandlesNullAndEmptyContent(t *testing.T) {
 		"空内容":    {},
 		"跳过空文本块": {text: `null`, blocks: 1, leadingEmpty: true},
 	} {
-		helpers.InitDepsForTest(t, fake)
+		InitDepsForTest(t, fake)
 		if err := sportRunStatus(t); err != nil {
 			t.Fatalf("%s 不应报错: %v", name, err)
 		}
@@ -185,7 +216,7 @@ func TestSportCallResultHandlesNullAndEmptyContent(t *testing.T) {
 
 func TestSportCallResultWrapsToolError(t *testing.T) {
 	fake := &sportFakeCaller{err: errors.New("SERVICE_NOT_FOUND")}
-	helpers.InitDepsForTest(t, fake)
+	InitDepsForTest(t, fake)
 	err := sportRunStatus(t)
 	if err == nil || !strings.Contains(err.Error(), "SERVICE_NOT_FOUND") {
 		t.Fatalf("期望包装后的工具错误，实际: %v", err)
@@ -194,7 +225,7 @@ func TestSportCallResultWrapsToolError(t *testing.T) {
 
 func TestSportCreateEndToEndUsesNestedPayload(t *testing.T) {
 	fake := &sportFakeCaller{text: `{"ruleCode":"R1","status":1}`, blocks: 1}
-	helpers.InitDepsForTest(t, fake)
+	InitDepsForTest(t, fake)
 	err := runSportCommand(t, "competition", "create",
 		"--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK",
 		"--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130",
@@ -246,7 +277,7 @@ func TestSportCreateValidationErrorsShortCircuitBeforeCall(t *testing.T) {
 	}
 	for i, args := range cases {
 		fake := &sportFakeCaller{}
-		helpers.InitDepsForTest(t, fake)
+		InitDepsForTest(t, fake)
 		if err := runSportCommand(t, args...); err == nil {
 			t.Fatalf("case %d 期望校验报错", i)
 		}

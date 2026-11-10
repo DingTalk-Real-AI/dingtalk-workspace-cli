@@ -1,7 +1,7 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
 
-package sport
+package helpers
 
 import (
 	"encoding/json"
@@ -15,7 +15,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
@@ -36,9 +35,9 @@ import (
 
 const sportServerID = "sport"
 
-// NewCommand 构建企业运动健康命令树。sport 属于 misc 长尾产品，
-// 不进入 internal/helpers 的产品注册表，由 internal/app 直接挂接。
-func NewCommand() *cobra.Command {
+// newSportCommand 构建企业运动健康命令树，由 register_sport.go 手写注册。
+// misc 长尾入口不展示在根帮助中，但叶子声明、直接调用与 Schema 查询保持可用。
+func newSportCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sport",
 		Selection: contract.ProductSelectionDecl{
@@ -62,8 +61,9 @@ func NewCommand() *cobra.Command {
 	})
 
 	root := sportGroupCommand(&cobra.Command{
-		Use:   "sport",
-		Short: "企业运动健康",
+		Use:    "sport",
+		Short:  "企业运动健康",
+		Hidden: true,
 		Long: `企业运动健康（钉钉运动）：步数榜单/明细、运动比赛、参与达标统计。
 
 命令结构:
@@ -88,7 +88,7 @@ func NewCommand() *cobra.Command {
   dws sport stats participants        参与人数
   dws sport stats reached             达标人数
   dws sport stats trend               逐日参与/达标趋势`,
-		RunE: helpers.GroupRunE,
+		RunE: GroupRunE,
 	})
 
 	root.AddCommand(newSportOrgGroup(), newSportStepGroup(), newSportCompetitionGroup(), newSportStatsGroup())
@@ -144,8 +144,8 @@ func sportRequiredParam(name, property, description string) contract.ParamDecl {
 // ── org：前置确认 ─────────────────────────────────────────
 
 func newSportOrgGroup() *cobra.Command {
-	orgCmd := sportGroupCommand(&cobra.Command{Use: "org", Short: "企业开通状态", RunE: helpers.GroupRunE})
-	statusCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	orgCmd := sportGroupCommand(&cobra.Command{Use: "org", Short: "企业开通状态", RunE: GroupRunE})
+	statusCmd := NewLeafCommand(LeafSpec{
 		Use:           "status",
 		Short:         "查询企业是否开通步数榜",
 		Long:          "查询当前企业是否已开通钉钉运动步数榜。返回 false 表示未开通，是正常业务状态而非链路故障：此时排行接口返回空列表，应提示用户在钉钉客户端开通，不要反复重试排行查询。",
@@ -181,10 +181,10 @@ func newSportStepGroup() *cobra.Command {
 		Use:   "step",
 		Short: "步数榜单与明细",
 		Long:  "企业步数概况、员工/部门排行与多日明细。日期一律 yyyyMMdd 8 位纯数字；周榜/月榜的 statDate 传周期内任意一天，服务端自动换算；排行翻页首页 cursor=0，翻页传上一页返回的 nextCursor。",
-		RunE:  helpers.GroupRunE,
+		RunE:  GroupRunE,
 	})
 
-	orgInfoCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	orgInfoCmd := NewLeafCommand(LeafSpec{
 		Use:           "org-info",
 		Short:         "查询企业单日步数概况",
 		Long:          "查询企业某天的总步数、累计总步数与参与人数。单日企业级查询首选本命令。",
@@ -215,7 +215,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	orgTotalCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	orgTotalCmd := NewLeafCommand(LeafSpec{
 		Use:           "org-total",
 		Short:         "查询企业区间总步数",
 		Long:          "查询企业一段时间区间内的总步数，含首尾两天。仅返回一个总步数，不含其他指标。",
@@ -248,7 +248,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	empRankingCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	empRankingCmd := NewLeafCommand(LeafSpec{
 		Use:           "emp-ranking",
 		Short:         "查询全企业员工步数排行",
 		Long:          "查询企业员工步数排行（日/周/月榜）。statType: D=日榜、W=周榜、M=月榜；周月榜的 statDate 传周期内任意一天。返回 userId、昵称、部门、当日与周期步数、点赞数。",
@@ -285,7 +285,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	deptRankingCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	deptRankingCmd := NewLeafCommand(LeafSpec{
 		Use:           "dept-ranking",
 		Short:         "查询部门人均步数排行",
 		Long:          "查询企业部门人均步数排行。仅支持周榜/月榜（部门榜没有日榜）。返回 deptId、部门名称与人均总步数，按人均降序；deptId 可用于 dept-emp-ranking 与 dept-infos。",
@@ -322,7 +322,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	deptEmpRankingCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	deptEmpRankingCmd := NewLeafCommand(LeafSpec{
 		Use:           "dept-emp-ranking",
 		Short:         "查询部门内员工步数排行",
 		Long:          "查询某个部门内员工的步数排行（日/周/月榜）。deptId 取自 dept-ranking 的返回结果。结果不按是否达标过滤。",
@@ -361,7 +361,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	empInfoCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	empInfoCmd := NewLeafCommand(LeafSpec{
 		Use:           "emp-info",
 		Short:         "查询员工单日步数详情",
 		Long:          "查询某员工单天的步数、名次与钉钉运动开关状态。仅支持单日：查多天明细必须改用 emp-infos。userId 为钉钉 staffId 纯数字，取自 emp-ranking 返回结果。",
@@ -394,7 +394,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	empInfosCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	empInfosCmd := NewLeafCommand(LeafSpec{
 		Use:           "emp-infos",
 		Short:         "查询员工多日步数明细",
 		Long:          "查询某员工最近多天的步数明细（1~30 天）。返回每行的日期、当日步数、部门与昵称，不含名次。stat-dates 为逗号分隔的 yyyyMMdd 日期串，如 20261030,20261031,20261101。",
@@ -427,7 +427,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	deptInfosCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	deptInfosCmd := NewLeafCommand(LeafSpec{
 		Use:           "dept-infos",
 		Short:         "查询部门多日步数汇总明细",
 		Long:          "查询某部门多天的步数汇总（1~30 天）。返回每行的日期、部门总步数与总人数。deptId 取自 dept-ranking 的返回结果。",
@@ -471,7 +471,7 @@ func newSportCompetitionGroup() *cobra.Command {
 		Use:   "competition",
 		Short: "运动比赛管理",
 		Long:  "创建与查询绑定钉钉群的企业运动比赛。create 与 announce 是真实写操作：create 无删除手段，参数必须先与用户确认；announce 无幂等，一次创建只调用一次。",
-		RunE:  helpers.GroupRunE,
+		RunE:  GroupRunE,
 	})
 
 	competitionCmd.AddCommand(
@@ -504,7 +504,7 @@ var sportCreateFlatKeys = []string{
 // dry-run 在本地返回请求预览，并由 output.WithDryRun 标记统一信封；
 // 不调用 ToolCaller，避免将 adapter 的 JSON-RPC 回显当作业务结果。
 func sportCallResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	caller := helpers.GetCaller()
+	caller := GetCaller()
 	if caller == nil {
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
 	}
@@ -513,7 +513,7 @@ func sportCallResult(cmd *cobra.Command, tool string, args map[string]any) (outp
 			"tool": tool, "arguments": args, "executed": false,
 		}, output.WithDryRun()), nil
 	}
-	data, err := helpers.CallMCPToolDataOnServer(cmd.Context(), sportServerID, tool, args)
+	data, err := CallMCPToolDataOnServer(cmd.Context(), sportServerID, tool, args)
 	if err != nil {
 		return nil, err
 	}
@@ -579,7 +579,7 @@ func sportParseDate(value string) time.Time {
 }
 
 func newSportCompetitionCreateCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:   "create",
 		Short: "创建企业运动比赛（写操作，不可删除）",
 		Long: `创建绑定钉钉群的运动比赛。真实写操作：创建后无法删除，参数错误需重建，务必先与用户逐项确认；禁止用试探性参数反复创建，查询已有比赛用 sport competition config。
@@ -665,7 +665,7 @@ func newSportCompetitionCreateCmd() *cobra.Command {
 // sportValidateCreateArgs 在确认之前完成本地可判定的参数校验：FIXED-only
 // 阻断、日期合法性与业务数值约束。真实业务约束仍以服务端权威校验为准。
 func sportValidateCreateArgs(cmd *cobra.Command, _ []string) error {
-	mustFlag := func(name string) string { return strings.TrimSpace(helpers.MustGetStringFlag(cmd, name)) }
+	mustFlag := func(name string) string { return strings.TrimSpace(MustGetStringFlag(cmd, name)) }
 
 	competitionType := mustFlag("competition-type")
 	if competitionType != "FIXED" {
@@ -786,7 +786,7 @@ func splitDecimalParts(value string) (string, string) {
 }
 
 func newSportCompetitionConfigCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:           "config",
 		Short:         "查询比赛配置详情",
 		Long:          "按 ruleCode 查询比赛整体配置：名称、运动项目、每日目标值、达标天数目标、周期配置、整体起止、是否需报名、累计报名人数与启用状态。返回 null 表示 corpId 无法解码或配置不存在。",
@@ -819,7 +819,7 @@ func newSportCompetitionConfigCmd() *cobra.Command {
 }
 
 func newSportCompetitionRuleDetailCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:           "rule-detail",
 		Short:         "查询比赛规则详情（仅创建人）",
 		Long:          "按 ruleCode 查询比赛规则明细（含头图、周期、每日上限、绑定群 cid 与群名、报名人数、规则状态与比赛状态）。仅比赛创建人可查，非创建人会被拒，此时改用 sport competition config。",
@@ -854,7 +854,7 @@ func newSportCompetitionRuleDetailCmd() *cobra.Command {
 }
 
 func newSportCompetitionInstancesCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:           "instances",
 		Short:         "查询比赛全部期实例",
 		Long:          "按 ruleCode 查询比赛的全部期实例，返回期号、标题、起止日期与状态，按 cycleNo 升序。",
@@ -887,7 +887,7 @@ func newSportCompetitionInstancesCmd() *cobra.Command {
 }
 
 func newSportCompetitionCurrentInstanceCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:           "current-instance",
 		Short:         "查询当前进行中的一期",
 		Long:          "按 ruleCode 查询当前进行中的比赛期实例，返回 competitionCode 与本期结束日期（回答「本期什么时候结束」）。返回 null 表示当前没有进行中的实例。",
@@ -920,7 +920,7 @@ func newSportCompetitionCurrentInstanceCmd() *cobra.Command {
 }
 
 func newSportCompetitionNextInstanceCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:           "next-instance",
 		Short:         "查询下一期未开始的实例",
 		Long:          "按 ruleCode 查询下一期未开始的比赛实例，返回开始日期（回答「下一期什么时候开始」）。",
@@ -953,7 +953,7 @@ func newSportCompetitionNextInstanceCmd() *cobra.Command {
 }
 
 func newSportCompetitionAnnounceCmd() *cobra.Command {
-	return helpers.NewLeafCommand(helpers.LeafSpec{
+	return NewLeafCommand(LeafSpec{
 		Use:   "announce",
 		Short: "发送比赛开赛播报（写操作，无幂等）",
 		Long: `按 ruleCode 向比赛绑定群发送播报：规则已生效（status=1）发送开赛广播（文字+活动卡片）；待群主审批（status=0）发送 at 群主的审批提醒（仅群主与发起人可见）。服务端按 ruleCode 自动定位绑定群，无需传群参数。
@@ -999,10 +999,10 @@ func newSportStatsGroup() *cobra.Command {
 		Use:   "stats",
 		Short: "比赛参与与达标统计",
 		Long:  "比赛报名、参与、达标与逐日趋势统计。competitionCode 可选时缺省为当前进行中的一期，可由 sport competition current-instance 获取。",
-		RunE:  helpers.GroupRunE,
+		RunE:  GroupRunE,
 	})
 
-	signupCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	signupCmd := NewLeafCommand(LeafSpec{
 		Use:           "signup",
 		Short:         "查询累计报名人数",
 		Long:          "按 ruleCode 查询比赛累计报名人数。任何报名路径首次成功时自增，只增不减。返回 null 表示配置不存在。",
@@ -1033,7 +1033,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 	})
 
-	participantsDailyCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	participantsDailyCmd := NewLeafCommand(LeafSpec{
 		Use:           "participants-daily",
 		Short:         "查询某天参与人数",
 		Long:          "查询当前进行中的一期比赛某天的参与人数（当天有运动数据的人数）。stat-date 缺省为今天。返回 null 表示参数非法或没有进行中的实例。",
@@ -1066,7 +1066,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 	})
 
-	participantsCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	participantsCmd := NewLeafCommand(LeafSpec{
 		Use:           "participants",
 		Short:         "查询参与人数",
 		Long:          "查询比赛的参与人数。competition-code 缺省为当前活动期。",
@@ -1099,7 +1099,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 	})
 
-	reachedCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	reachedCmd := NewLeafCommand(LeafSpec{
 		Use:           "reached",
 		Short:         "查询达标人数",
 		Long:          "查询达到每日目标值（goalValue）的人数。rank-type 仅支持 DAY/WEEK/MONTH，TOTAL 口径不支持。competition-code 为活动当前期，可由 sport competition current-instance 获取。返回 null 表示参数非法或当前没有进行中的比赛。",
@@ -1136,7 +1136,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 	})
 
-	trendCmd := helpers.NewLeafCommand(helpers.LeafSpec{
+	trendCmd := NewLeafCommand(LeafSpec{
 		Use:           "trend",
 		Short:         "查询逐日参与/达标趋势",
 		Long:          "查询比赛开期至今每天的参与人数与达标人数，日期升序，最多 90 天，可用于生成活动进展曲线。competition-code 缺省为当前进行中的一期。返回 null/空数组表示参数非法或实例尚未开始。",

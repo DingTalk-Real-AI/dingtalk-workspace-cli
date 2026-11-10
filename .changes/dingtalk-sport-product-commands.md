@@ -2,7 +2,8 @@
 category: Added
 ---
 
-- 新增顶层产品命令 `dws sport`（企业运动健康/钉钉运动），把已上架 MCP 市场「企业运动健康服务（钉钉运动）」的 21 个工具接入为原子 CLI 命令，命令树位于独立扩展包 `internal/products/sport`（`internal/helpers` 零改动），端点登记于 edition supplement servers（server ID `sport`）
+- 新增 misc 长尾能力 `dws sport`（企业运动健康/钉钉运动），接入选定的 21 个 MCP 工具。命令树位于 `internal/helpers/sport.go`，通过 `register_sport.go` 手写注册进入 `NewPublicCommands`，不修改生成式注册表或 app 装配逻辑；端点登记于 edition supplement servers（server ID `sport`）
+- sport 根命令不在 `dws --help` 展示；`dws sport --help`、21 个叶子的直接调用和 Agent Schema 查询仍可用，通过 dingtalk-misc Skill 发现能力
 - `sport org status`：查询企业是否开通钉钉运动步数榜（`get_org_step_participate_status`）
 - `sport step org-info|org-total`：企业单日步数概况、区间总步数（`get_org_health_step_info`、`get_org_total_step_count`）
 - `sport step emp-ranking|dept-ranking|dept-emp-ranking`：员工/部门/部门内员工步数排行，支持日/周/月维度与 cursor 分页（`list_emp_step_ranking`、`list_dept_step_ranking`、`list_emp_ranking_in_dept`）

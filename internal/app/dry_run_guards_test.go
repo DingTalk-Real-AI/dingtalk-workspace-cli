@@ -18,7 +18,29 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
+
+// TestSportLongTailHelpAndSchema 验证根隐藏只影响导航展示，不影响直接访问。
+func TestSportLongTailHelpAndSchema(t *testing.T) {
+	helpers.InitDepsForTest(t, helpers.GetCaller())
+	rootHelp := executeHelpOutput(t, "--help")
+	if strings.Contains(rootHelp, "sport") {
+		t.Fatalf("根帮助不应列出 sport 长尾入口：\n%s", rootHelp)
+	}
+	for _, path := range []string{"sport", "sport org status", "sport competition create"} {
+		help := executeHelpOutput(t, append(strings.Fields(path), "--help")...)
+		if !strings.Contains(help, "dws "+path) || help == rootHelp {
+			t.Fatalf("%s 应可直接访问专属帮助：\n%s", path, help)
+		}
+	}
+	for _, root := range []*cobra.Command{NewRootCommand(), NewSchemaSourceRootCommand()} {
+		command, _, err := root.Find([]string{"sport"})
+		if err != nil || command == root || command.Name() != "sport" || !command.Hidden {
+			t.Fatalf("执行树和声明树均应保留隐藏的 sport 根：command=%v err=%v", command, err)
+		}
+	}
+}
 
 // TestSportDryRunEnvelopeUsesRealRoot 覆盖实际 app root、adapter 与输出信封，
 // 防止只有 fake caller 返回预览而真实 CLI 输出 JSON-RPC 回显的假绿。
