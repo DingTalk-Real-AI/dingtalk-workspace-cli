@@ -168,6 +168,15 @@ func TestSportValidateDateHelpers(t *testing.T) {
 	if err := sportValidateDate("d", "20261109"); err != nil {
 		t.Fatalf("合法日期被拒: %v", err)
 	}
+	if err := sportValidateDate("d", "2026-111"); err == nil || !strings.Contains(err.Error(), "纯数字") {
+		t.Fatalf("含非数字应被拒: %v", err)
+	}
+	if err := sportValidateDate("d", "20261301"); err == nil || !strings.Contains(err.Error(), "月份非法") {
+		t.Fatalf("月份非法应被拒: %v", err)
+	}
+	if err := sportValidateDate("d", "20260132"); err == nil || !strings.Contains(err.Error(), "不是真实日期") {
+		t.Fatalf("日期超界应被拒: %v", err)
+	}
 	// 闰年 20260229 合法，20260229 平年（如 2027）非法。
 	if err := sportValidateDate("d", "20240229"); err != nil {
 		t.Fatalf("闰日被拒: %v", err)

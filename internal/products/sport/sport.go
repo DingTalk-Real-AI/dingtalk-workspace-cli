@@ -6,6 +6,7 @@ package sport
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -544,6 +545,7 @@ func sportBuildCreatePayload(args map[string]any) map[string]any {
 }
 
 // sportValidateDate 检查 yyyyMMdd 8 位纯数字且是真实日期。
+// 调用方已保证 8 位纯数字，因此分段 strconv.Atoi 不会失败，无需错误分支。
 func sportValidateDate(field, value string) error {
 	if len(value) != 8 {
 		return apperrors.NewValidation(fmt.Sprintf("--%s 必须是 yyyyMMdd 8 位纯数字，收到 %q", field, value))
@@ -553,16 +555,11 @@ func sportValidateDate(field, value string) error {
 			return apperrors.NewValidation(fmt.Sprintf("--%s 必须是 yyyyMMdd 8 位纯数字，收到 %q", field, value))
 		}
 	}
-	year, month, day := value[:4], value[4:6], value[6:]
-	var y, m, d int
-	if _, err := fmt.Sscanf(year, "%d", &y); err != nil {
-		return apperrors.NewValidation(fmt.Sprintf("--%s 日期非法：%q", field, value))
-	}
-	if _, err := fmt.Sscanf(month, "%d", &m); err != nil || m < 1 || m > 12 {
+	y, _ := strconv.Atoi(value[:4])
+	m, _ := strconv.Atoi(value[4:6])
+	d, _ := strconv.Atoi(value[6:])
+	if m < 1 || m > 12 {
 		return apperrors.NewValidation(fmt.Sprintf("--%s 月份非法：%q", field, value))
-	}
-	if _, err := fmt.Sscanf(day, "%d", &d); err != nil {
-		return apperrors.NewValidation(fmt.Sprintf("--%s 日期非法：%q", field, value))
 	}
 	daysInMonth := map[int]int{1: 31, 3: 31, 4: 30, 5: 31, 6: 30, 7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
 	maxDay := daysInMonth[m]
