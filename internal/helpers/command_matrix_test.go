@@ -93,7 +93,7 @@ func TestCrossPlatformCoverageProductCommandMatrixCoverage(t *testing.T) {
 		"calendar": true, "chat": true, "contact": true, "devdoc": true,
 		"ding": true, "doc": true, "drive": true, "live": true,
 		"mail": true, "minutes": true, "oa": true, "report": true,
-		"sheet": true, "todo": true, "wiki": true,
+		"sheet": true, "sport": true, "todo": true, "wiki": true,
 	}
 	invocations := 0
 	for _, root := range NewPublicCommands(&captureRunner{}) {
