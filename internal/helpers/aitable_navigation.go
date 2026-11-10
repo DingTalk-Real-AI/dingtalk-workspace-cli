@@ -14,13 +14,33 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// AitableNavigationGuidance keeps object delivery and URL preservation separate from business state.
-const AitableNavigationGuidance = "本段仅为展示约定，不代表业务状态。" +
-	"以实体名称展示返回的访问链接（如 url/links、shareFormUrl），名称缺失时使用对象类型标签。" +
-	"按用户目标逐对象交付已返回的最具体链接；仅有父级入口时明确说明，不冒充目标直达。" +
-	"完整保留 URL 及参数（含百分号编码和参数顺序），逐字符原样使用，不得删除、脱敏、解码、重编码或补全；已有真实链接时不按模板重建。" +
-	"正文通常无需罗列裸 ID，用户索要或排障时可展示，此例外不适用于 URL。" +
-	"链接有无不代表写入完成、定位成功、访问权限或分享状态。"
+// AitableNavigationGuidance publishes per-target closure checks, process links, and outcome boundaries independently of the MCP envelope.
+const AitableNavigationGuidance = "收尾：生成最终回复前，按用户请求、已确认的交付范围及当前状态清点最终目标，" +
+	"对有当前有效、身份与用途匹配入口的目标，按宿主规则逐目标完成登记与呈现，并核对正文链接，不以父级入口合并替代。" +
+	"成功回执、relation=target 或过程对象不自动成为最终产物；正文链接不替代规定的登记。" +
+	"过程已展示链接或宿主已呈现卡片，最终 Markdown 正文仍须保留最终目标的有效具名完整链接（`[对象名称](完整URL)`）；过程去重不免除此要求。缺少适用入口时说明缺口。" +
+	"业务核验与宿主交付分别判断。" +
+	"链接保真必经步骤：仅当存在明确识别为 JSON 格式的原始业务回执文件时，展示前必须先调用本地 JSON 解析器，从该回执文件提取每条实际待展示的业务 URL，并与实际链接严格比较；核对成功后才生成展示内容。CSV、XLS、XLSX 等非 JSON 导入附件不是业务回执，不作为 JSON 解析；没有上述 JSON 回执文件时，直接使用当前命令的结构化回执核对并展示链接，不因非 JSON 附件阻断成功结果展示。不手抄 JSON 充作源数据，不将聊天摘要当原文；源文件不可用时不伪造输入文件。只提取允许展示的业务 URL，凭据及失效入口不回显。此核对只读本地文件，不调用 DWS、网络或宿主；百分号编码中的字母大小写须原样保留，即使访问等价也不可互换。" +
+	"过程与链接：对用户本次要求处理且有当前有效、适用入口的对象，必须逐对象展示具名完整链接。" +
+	"不同对象不合并为单条 Base 入口，不以父级替代已有目标深链；过程内已展示的同对象同有效入口可去重。" +
+	"仅有父级入口时明确说明，不冒充目标直达。" +
+	"内部自动对象不自动纳入，用户要求的对象不因自动创建而排除。" +
+	"入口取实际返回的 url/links 或已确认可用的 shareFormUrl；target/parent 仅表调用关系。" +
+	"按链接的对象类型与对象 ID 判断入口身份，不按 relation 字面含义判断；身份匹配的 links 即使 relation=parent 仍是当前对象入口，只有链接身份确属父级时才称父级入口。" +
+	"links[].name 对应同项 URL 对象；缺名用类型或任务标签，仅在仍无法区分时附 ID，不编造名称。" +
+	"凭据按既有规则脱敏；其余业务对象 URL（含参数顺序及百分号编码）须逐字符完整原样保留，不重建。" +
+	"先逐对象提取本条回执的完整原始 URL，直接用于该对象的链接目标；不套用其他对象的 URL 替换 ID。" +
+	"直接从本条回执复制完整 URL，不重新键入、解码再编码或统一大小写；同一批链接各自保留编码，前一条的 %3d 不决定后一条的编码，如 %3D 不改为 %3d。" +
+	"发送前将实际待发送链接与本条回执逐字符比对，有一处不同就修正；只声称原样保留不算核对。" +
+	"缺链仅按本工具明确规则及真实标识回退，否则说明缺口、不臆造；表单管理页不得冒充填写页。" +
+	"交付给填写者且填写入口未就绪时，只说明缺口，不展示或登记管理页链接；即使注明非填写入口，也不将管理页列为可交付内容。" +
+	"只有用户明确要求管理操作或接收者为管理者时，才交付当前可用的管理页，并注明管理页，非填写入口。" +
+	"边界：登记或展示失败、能力不可用或结果未确认时，保留业务结果并说明缺口，不为补链接或交付重放业务写入。" +
+	"业务回执或展示请求提交不证明卡片已登记、已渲染或面板已打开；" +
+	"链接有无不证明写入完成、定位成功、访问权限或分享状态。"
+
+// AitableBaseListFallbackGuidance permits only the reviewed Base list/search fallback; it never rebuilds returned links.
+const AitableBaseListFallbackGuidance = "仅 Base 列表／搜索结果未返回目标 url/links 时，可用本次返回的真实 baseId 按 https://alidocs.dingtalk.com/i/nodes/{baseId} 拼接 Base 入口，baseId 按路径段编码一次；已有目标链接优先原样使用，不重建。该许可不适用于表单或其他对象，不证明定位、权限、分享或写入状态。"
 
 func aitableNavigationDryRunResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, bool) {
 	if corecmd.BoolFlag(cmd, "dry-run") {

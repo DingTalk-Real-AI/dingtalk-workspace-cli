@@ -147,8 +147,8 @@ var BaseList = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+base-list",
 	Product:     serverMain,
-	Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
-	Intent:      "当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。",
+	Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）。" + helpers.AitableBaseListFallbackGuidance,
+	Intent:      "当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。" + helpers.AitableBaseListFallbackGuidance,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -162,14 +162,14 @@ var BaseList = shortcut.Shortcut{
 			CLIPath:        "aitable +base-list",
 			PrimaryCLIPath: "aitable +base-list",
 		},
-		Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
+		Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）。" + helpers.AitableBaseListFallbackGuidance,
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
+			AgentSummary: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）。" + helpers.AitableBaseListFallbackGuidance,
 			UseWhen:      []string{"当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples: []string{
@@ -203,9 +203,9 @@ var BaseList = shortcut.Shortcut{
 	},
 }
 
-// baseListProject reshapes list_bases / search_bases responses into a clean
-// {baseId, baseName} list — clean output projection. Both the list
-// container and the per-item field names are probed defensively across
+// baseListProject normalizes list_bases / search_bases identities to baseId and
+// baseName while preserving each item's returned url/links unchanged. Both the
+// list container and the per-item identity field names are probed across
 // candidate keys. An explicitly returned empty array is a successful empty
 // result; a missing/malformed collection is a protocol error and must not be
 // reported as count=0.
@@ -226,6 +226,11 @@ func baseListProject(operation string, data map[string]any) ([]map[string]any, e
 		}
 		if v, ok := baseListFirst(m, "baseName", "base_name", "name", "title"); ok {
 			row["baseName"] = v
+		}
+		for _, key := range []string{"url", "links"} {
+			if value, exists := m[key]; exists {
+				row[key] = value
+			}
 		}
 		if _, ok := row["baseId"]; !ok {
 			return nil, fmt.Errorf("%s response item %d is missing baseId", operation, index)
@@ -258,8 +263,8 @@ var BaseSearch = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+base-search",
 	Product:     serverMain,
-	Description: "按名称关键词搜索 AI 表格 Base",
-	Intent:      "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。",
+	Description: "按名称关键词搜索 AI 表格 Base。" + helpers.AitableBaseListFallbackGuidance,
+	Intent:      "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。" + helpers.AitableBaseListFallbackGuidance,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -273,14 +278,14 @@ var BaseSearch = shortcut.Shortcut{
 			CLIPath:        "aitable +base-search",
 			PrimaryCLIPath: "aitable +base-search",
 		},
-		Description: "按名称关键词搜索 AI 表格 Base",
+		Description: "按名称关键词搜索 AI 表格 Base。" + helpers.AitableBaseListFallbackGuidance,
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按名称关键词搜索 AI 表格 Base",
+			AgentSummary: "按名称关键词搜索 AI 表格 Base。" + helpers.AitableBaseListFallbackGuidance,
 			UseWhen:      []string{"当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +base-search --query \"项目管理\""},
@@ -1044,7 +1049,7 @@ var RecordUpsert = shortcut.Shortcut{
 	Command:     "+record-upsert",
 	Product:     serverHelper,
 	Description: "按 recordId 自动拆分 create/update，按 100 条分片并读回验证",
-	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。clientToken 仅作用于创建分组；超时或回执丢失时禁止重放整个 upsert（即使使用同一 token），使用原 token 对账创建分组，并按输入 recordId 独立读回更新分组。",
+	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。包含创建的批次在发出前将原 token、身份和请求摘要原子保存到 DWS 配置目录 aitable/write-intents；保存失败时不发出该批写入。恢复文件仅证明准备过请求，不证明写入成功；通过原 token 只读对账创建分组，更新分组须独立核对。clientToken 仅作用于创建分组；超时或回执丢失时禁止重放整个 upsert（即使使用同一 token），使用原 token 对账创建分组，并按输入 recordId 独立读回更新分组。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},

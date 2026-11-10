@@ -169,7 +169,7 @@ func (r *employeeRuntime) requestApproval(parent context.Context, method string,
 	r.approvals[id] = pending
 	r.mu.Unlock()
 	defer func() { r.mu.Lock(); delete(r.approvals, id); r.mu.Unlock() }()
-	result, err := employeeA2UICall(ctx, r.cfg.Binding, messages, "send-a2ui-card", "--open-dingtalk-id", r.cfg.Binding.OperatorOpenDingTalkID)
+	result, err := employeeA2UICall(ctx, r.cfg.Binding, messages, "send-a2ui-card", "--open-dingtalk-id", r.cfg.Binding.OperatorOpenDingTalkID, "--support-forward=false")
 	if err != nil {
 		return false
 	}

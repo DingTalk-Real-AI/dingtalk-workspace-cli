@@ -30,7 +30,7 @@
 > **想"调整字段顺序"？请使用 `view update`**（视图层操作，不属于 `field` 子命令）：
 > - 通过 `--config '{"visibleFieldIds":["fld1","fld2",...]}'` 传入 fieldId 数组，数组顺序即视图中的字段显示顺序
 > - 仅影响**该视图**的列排列，同一 table 的其他视图与字段元数据原始顺序不变
-> - **首列字段（主字段）必须保留在数组第一位**，不能移动到非首位
+> - **首列字段（主字段）必须保留在数组第一位**，不能移动到非首位；首列以该视图当前读回的 `columns[0]` 为准（新建看板等视图的首列不一定是表主字段）。返回 `PRIMARY_FIELD_CANNOT_BE_MOVED`／`PRIMARY_FIELD_CANNOT_BE_HIDDEN`（不可重试）时保留原首列只调整后续列，不改用 `+view-preset-apply` 等其他入口重试同一排列
 > - **漏传的字段不会被隐藏**，而是会被 API 自动追加到列表末尾
 > - **读写命名不一致**：写入键名 `visibleFieldIds`，但读出（`view get`）时该字段在 view 里叫 `columns`——校验顺序时请看 `views[].columns`
 

@@ -101,6 +101,8 @@ func TestCrossPlatformCoverageEmployeeCardLifecycle(t *testing.T) {
 					}
 					if r.cfg.ReplyCardForward {
 						wantTarget += " --support-forward"
+					} else {
+						wantTarget += " --support-forward=false"
 					}
 					if strings.Join(args, " ") != "send-a2ui-card "+wantTarget || ledger.Status != "card_creating" || agentCalls != 0 {
 						t.Fatalf("placeholder must precede model and use trusted target: %v %v", args, ledger)

@@ -36,7 +36,7 @@ func TestCrossPlatformCoverageViewGetPreservesConfiguration(t *testing.T) {
 
 func TestCrossPlatformCoverageBootstrapWaitsForCreatedTableWithoutRewriting(t *testing.T) {
 	for _, command := range []string{"+base-bootstrap", "+table-bootstrap"} {
-		for _, scenario := range []string{"visible later", "always empty", "permission error", "wrong id", "malformed"} {
+		for _, scenario := range []string{"visible later", "always empty", "permission error", "wrong id", "malformed", "not found then visible", "always not found", "wrapped permission error", "fields permission error", "fields not found then visible"} {
 			t.Run(command+"/"+scenario, func(t *testing.T) {
 				testseam.Swap(t, &bootstrapReadbackWait, func(context.Context, time.Duration) error { return nil })
 				steps := []upsertByKeyStep{}
@@ -52,7 +52,7 @@ func TestCrossPlatformCoverageBootstrapWaitsForCreatedTableWithoutRewriting(t *t
 					reads = 2
 					steps = append(steps, upsertByKeyStep{text: `{"tables":[]}`}, upsertByKeyStep{text: `{"tables":[{"tableId":"t"}]}`}, upsertByKeyStep{text: `{"fields":[{"fieldId":"f","fieldName":"名称","name":"名称","type":"text"}]}`})
 				case "always empty":
-					reads = 4
+					reads = len(createdTableReadbackDelays) + 1
 					for i := 0; i < reads; i++ {
 						steps = append(steps, upsertByKeyStep{text: `{"tables":[]}`})
 					}
@@ -62,10 +62,25 @@ func TestCrossPlatformCoverageBootstrapWaitsForCreatedTableWithoutRewriting(t *t
 					steps = append(steps, upsertByKeyStep{text: `{"tables":[{"tableId":"other","description":"t"}]}`})
 				case "malformed":
 					steps = append(steps, upsertByKeyStep{text: `{"summary":"t"}`})
+				case "not found then visible":
+					reads = 2
+					steps = append(steps, upsertByKeyStep{text: notVisibleBody("GET_TABLES_ERROR", "Failed to get fields for table t: fail to find the resource Sheet identified by t")}, upsertByKeyStep{text: `{"tables":[{"tableId":"t"}]}`}, upsertByKeyStep{text: `{"fields":[{"fieldId":"f","fieldName":"名称","name":"名称","type":"text"}]}`})
+				case "always not found":
+					reads = len(createdTableReadbackDelays) + 1
+					for i := 0; i < reads; i++ {
+						steps = append(steps, upsertByKeyStep{text: notVisibleBody("GET_TABLES_ERROR", "Failed to get fields for table t: fail to find the resource Sheet identified by t")})
+					}
+				case "wrapped permission error":
+					steps = append(steps, upsertByKeyStep{text: notVisibleBody("GET_TABLES_ERROR", "Failed to get fields for table t: no permission to read")})
+				case "fields permission error":
+					steps = append(steps, upsertByKeyStep{text: `{"tables":[{"tableId":"t"}]}`}, upsertByKeyStep{text: notVisibleBody("InvalidRequest.Forbidden", "no permission")})
+				case "fields not found then visible":
+					steps = append(steps, upsertByKeyStep{text: `{"tables":[{"tableId":"t"}]}`}, upsertByKeyStep{text: notVisibleBody("InvalidRequest.ResourceNotFound", "Failed to read field schema")}, upsertByKeyStep{text: `{"fields":[{"fieldId":"f","fieldName":"名称","name":"名称","type":"text"}]}`})
 				}
 				caller := &upsertByKeyCaller{steps: steps}
 				_, err := runAITableCompositeCLI(t, caller, command, args...)
-				if (err == nil) != (scenario == "visible later") {
+				succeeds := scenario == "visible later" || scenario == "not found then visible" || scenario == "fields not found then visible"
+				if (err == nil) != succeeds {
 					t.Fatalf("err=%v calls=%v", err, caller.calls)
 				}
 				creates, actualReads := 0, 0
@@ -166,5 +181,19 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsIncompleteReadback(t *testi
 	err := runDatasourceShortcutCLI(t, caller, "+datasource-update", "--base-id", "b", "--table-id", "t", "--auto")
 	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.argLog) != 1 || caller.toolLog[0] != "get_datasource_config" {
 		t.Fatalf("err=%v calls=%v", err, caller.argLog)
+	}
+}
+
+// notVisibleBody is the MCP error envelope get_tables/get_fields return.
+func notVisibleBody(code, message string) string {
+	return `{"data":{},"error":{"code":"` + code + `","message":"` + message + `","retryable":true,"type":"SYSTEM_ERROR"},"meta":{},"status":"error","success":true,"summary":"Failed to read table t"}`
+}
+
+func TestCrossPlatformCoverageBootstrapReadbackKeepsServerErrorWhenWaitStops(t *testing.T) {
+	notFound := errors.New("not found")
+	testseam.Swap(t, &bootstrapReadbackWait, func(context.Context, time.Duration) error { return context.DeadlineExceeded })
+	err := retryCreatedTableRead(context.Background(), "t", func(error) bool { return true }, func() (bool, error) { return false, notFound })
+	if !errors.Is(err, notFound) {
+		t.Fatalf("err = %v, want the last not-found error", err)
 	}
 }

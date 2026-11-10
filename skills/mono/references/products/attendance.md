@@ -566,9 +566,9 @@ Flags:
 Usage:
   dws attendance group update-members [flags]
 Example:
-  dws attendance group update-members --group-id 123456 --add-users userId1,userId2
-  dws attendance group update-members --group-id 123456 --remove-users userId1
-  dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2
+  dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --member-join-policy SPECIFIC_USERS
+  dws attendance group update-members --group-id 123456 --remove-users userId1 --member-join-policy SPECIFIC_USERS
+  dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2 --member-join-policy SPECIFIC_USERS
 Flags:
       --group-id int              考勤组 ID (必填)
       --add-users string          添加考勤人员 userId 列表, 逗号分隔, 最多 20 个 (可选)
@@ -577,9 +577,10 @@ Flags:
       --remove-extra-users string 删除无需考勤的成员 userId 列表, 逗号分隔, 最多 20 个 (可选)
       --add-depts string          添加考勤部门 ID 列表, 逗号分隔, 最多 20 个 (可选)
       --remove-depts string       删除考勤部门 ID 列表, 逗号分隔, 最多 20 个 (可选)
+      --member-join-policy string 员工加入策略，仅支持 SPECIFIC_USERS（拉入指定员工）；所有人员、部门增删均须显式传入（必填）
 ```
 
-对指定考勤组的成员进行增删操作。--group-id 必填，其余参数均为可选，但至少需要传入一个变更项，否则命令拒绝执行。每次调用各参数最多传 20 个 ID。"无需考勤"人员指考勤组内豁免打卡的成员（如高管）。
+对指定考勤组的成员进行增删操作。--group-id 和 --member-join-policy 必填，其余参数均为可选，但至少需要传入一个变更项，否则命令拒绝执行。每次调用各参数最多传 20 个 ID。"无需考勤"人员指考勤组内豁免打卡的成员（如高管）。
 
 ### 更新考勤组配置 (写场景接口，必须走二次确认流程)
 **强制执行流程**：此命令为写操作，Agent 调用时必须遵守以下流程：
@@ -747,7 +748,7 @@ Flags:
 
 当使用 `--group-vo` 传入完整 JSON 时，`--name`、`--type`、`--owner` 仍可覆写 JSON 中的同名字段。由于保存考勤组耗时较久，建议加 `--timeout 10`。
 
-> **新建考勤组并同时添加成员的工作流**：`group create` 不支持在创建时直接传入成员列表。若用户需要在新建考勤组后立即添加成员，必须先执行 `group create` 创建考勤组，从返回结果中提取 `groupId`，再执行 `group update-members --group-id <GROUP_ID> --add-users ...` 完成成员添加。
+> **新建考勤组并同时添加成员的工作流**：`group create` 不支持在创建时直接传入成员列表。若用户需要在新建考勤组后立即添加成员，必须先执行 `group create` 创建考勤组，从返回结果中提取 `groupId`，再执行 `group update-members --group-id <GROUP_ID> --add-users ... --member-join-policy SPECIFIC_USERS` 完成成员添加。
 
 ### 查询某个人的考勤统计摘要
 ```
@@ -1288,9 +1289,9 @@ dws attendance group filtered-get --group-id 123456 --member --format json
 dws attendance group filtered-get --group-id 123456 --position --wifi --format json
 
 # 更新考勤组成员
-dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --timeout 10 --format json
-dws attendance group update-members --group-id 123456 --remove-users userId1 --timeout 10 --format json
-dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2 --timeout 10 --format json
+dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --member-join-policy SPECIFIC_USERS --timeout 10 --format json
+dws attendance group update-members --group-id 123456 --remove-users userId1 --member-join-policy SPECIFIC_USERS --timeout 10 --format json
+dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2 --member-join-policy SPECIFIC_USERS --timeout 10 --format json
 
 # 更新考勤组配置
 dws attendance group update --group-id 123456 --name "研发考勤组" --timeout 10 --format json
@@ -1416,7 +1417,7 @@ dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op
 - `adjustment search` / `overtime search` 分页字段为 `--page` 和 `--limit`，不传时自动使用默认值 1 / 20
 - `group search` 的分页字段为 `--page` 和 `--limit`，不传时自动使用默认值 1 / 20
 - `group get` 的 `--group-id` 必填，返回考勤组全量字段；如仅需成员/地址/蓝牙/Wifi，优先使用 `group filtered-get` 节省成本。**返回结果中如含成员 userId 列表，必须调用 `dws contact user get --ids <userId1>,<userId2>,...`（支持逗号分隔传多个 ID），将 userId 转换为员工姓名后再输出；不得直接输出裸 userId。**
-- `group update-members` 的 --group-id 必填，其余参数均可选，但至少需传一个变更项；各参数每次最多 20 个 ID；`--add-extra-users` 和 `--remove-extra-users` 操作的是"无需考勤"豁免名单，不影响考勤组主成员列表
+- `group update-members` 的 --group-id 和 --member-join-policy 必填，后者仅支持 SPECIFIC_USERS；其余参数均可选，但至少需传一个变更项；各参数每次最多 20 个 ID；`--add-extra-users` 和 `--remove-extra-users` 操作的是"无需考勤"豁免名单，不影响考勤组主成员列表
 - `group update` 的 --group-id 必填，其余均可选，至少需指定一个修改项；仅需对要修改的字段赋値，未传字段会从已有配置自动补充；修改打卡地址/wifi/蓝牙等复杂子对象时用 `--group-vo` 传入完整 JSON；`--group-vo` 与单字段 flag 同时传入时单字段 flag 优先级更高
 - `group create` 的 `--name` 和 `--type` 必填，`--type` 必须为 FIXED/TURN/NONE 之一；type=FIXED 时 `--group-vo` 必须包含 `workDayClassList`（非空）和 `defaultClassId`（非 null）；由于保存考勤组耗时较久，建议加 `--timeout 10`
 - `group filtered-get` 的 `--group-id` 必填，`--member/--position/--wifi/--bles` 均可选，默认 false。**返回结果中如含成员 userId 列表，必须调用 `dws contact user get --ids <userId1>,<userId2>,...`（支持逗号分隔传多个 ID），将 userId 转换为员工姓名后再输出；不得直接输出裸 userId。**

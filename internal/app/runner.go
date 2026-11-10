@@ -842,7 +842,23 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	// tools/call can mutate remote state even when the gateway returns an error.
 	// Only callers with a reviewed read/reconciliation policy may replay it;
 	// keep discovery and the shared transport's retry budget unchanged.
-	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
+	wireParams := invocation.Params
+	if !hasPluginAuth {
+		// record_upsert's published business inputs stay unchanged. The stable
+		// creation key belongs to this request only, never the shared client.
+		var token string
+		var wireErr error
+		wireParams, token, wireErr = aitableprotocol.RecordUpsertWireParams(invocation.CanonicalProduct, invocation.Tool, invocation.Params)
+		if wireErr != nil {
+			return executor.Result{}, apperrors.NewValidation(wireErr.Error())
+		}
+		if token != "" {
+			// 非插件路径已由 resolveIdentityHeaders 保证包含 claw-type，
+			// WithAuth 上面已复制该非空 map，无需另建兜底状态。
+			tc.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] = token
+		}
+	}
+	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, wireParams)
 	traceWhiteboardTransportResponse(invocation, callResult, err)
 	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
 	// A sent credential request must not enter authentication replay paths.

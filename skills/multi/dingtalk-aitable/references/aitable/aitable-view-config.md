@@ -68,7 +68,7 @@ dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --vie
 
 ### view update visible-fields（通用）
 
-整组替换可见字段列表与顺序。`field get` 返回的第一个字段是系统行索引/主字段；无论它显示为 text 还是 primaryDoc，都必须保留在数组第一位，且不能隐藏。不要仅凭字段类型猜主字段。
+整组替换可见字段列表与顺序。首列以**该视图当前读回的 `columns[0]`** 为准（服务端按它校验），必须保留在数组第一位且不能隐藏；新建的看板等视图首列不一定是 `field get` 的第一个字段，不要按字段类型或字段名猜。返回 `PRIMARY_FIELD_CANNOT_BE_MOVED`／`PRIMARY_FIELD_CANNOT_BE_HIDDEN`（不可重试）时，保留原首列只调整后续列，不改用 `+view-preset-apply` 等其他入口重试同一排列。
 
 > ⚠️ 注意：服务端**只接受 reorder，不接受真"隐藏字段"**——如果传入的列表比当前 columns 短，缺失的字段不会被隐藏。需要真正隐藏字段请到 AI 表格 Web UI。
 

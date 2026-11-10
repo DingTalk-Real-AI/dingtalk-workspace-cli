@@ -276,6 +276,8 @@ func (r *employeeRuntime) processCard(e employeeEvent, record *employeeTaskRecor
 	createArgs := append([]string{"send-a2ui-card"}, target...)
 	if r.cfg.ReplyCardForward {
 		createArgs = append(createArgs, "--support-forward")
+	} else {
+		createArgs = append(createArgs, "--support-forward=false")
 	}
 	result, err := employeeA2UICall(r.ctx, r.cfg.Binding, initial, createArgs...)
 	if err != nil {

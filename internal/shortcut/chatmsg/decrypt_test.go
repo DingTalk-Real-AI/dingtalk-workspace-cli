@@ -223,6 +223,7 @@ func TestDecryptChatMessageItemsShouldRecordPolicyDisabled(t *testing.T) {
 	rt := &decryptTestRuntime{read: map[string]any{"result": map[string]any{
 		"mode":       messagecrypto.ModeOff,
 		"ttlSeconds": int64(60),
+		"reason":     "org_crypto_disabled",
 	}}}
 	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
 
@@ -234,8 +235,11 @@ func TestDecryptChatMessageItemsShouldRecordPolicyDisabled(t *testing.T) {
 		t.Fatalf("ledger = %#v", got)
 	}
 	failures, ok := got["decryptFailures"].([]map[string]any)
-	if !ok || len(failures) != 1 || failures[0]["reason"] != "policy_disabled" || failures[0]["messageId"] != "m1" {
+	if !ok || len(failures) != 1 || failures[0]["reason"] != "org_crypto_disabled" || failures[0]["messageId"] != "m1" {
 		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+	if failures[0]["hint"] != messagecrypto.CryptoDisabledGuidance {
+		t.Fatalf("fallback hint = %#v", failures[0])
 	}
 	if item["contentDecrypted"] == true {
 		t.Fatalf("ciphertext must be kept when policy disabled: %#v", item)
@@ -258,8 +262,38 @@ func TestDecryptChatMessageItemsShouldRecordPolicyError(t *testing.T) {
 		t.Fatalf("ledger = %#v", got)
 	}
 	failures, ok := got["decryptFailures"].([]map[string]any)
-	if !ok || len(failures) != 1 || failures[0]["reason"] == "" || failures[0]["reason"] == "policy_disabled" {
+	if !ok || len(failures) != 1 || failures[0]["reason"] != ReasonPolicyQueryFailed {
 		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+	if _, has := failures[0]["hint"]; has {
+		t.Fatalf("policy query failure must not carry onboarding hint: %#v", failures[0])
+	}
+}
+
+func TestDecryptChatMessageItemsShouldFallbackWhenPolicyOffWithoutReason(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{read: map[string]any{"result": map[string]any{
+		"mode": messagecrypto.ModeOff,
+	}}}
+	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{item})
+	failures, _ := got["decryptFailures"].([]map[string]any)
+	if len(failures) != 1 || failures[0]["reason"] != ReasonPolicyDisabled {
+		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+}
+
+func TestDecryptPolicyFailureReasonShouldKeepServerReasonAndSplitQueryError(t *testing.T) {
+	if got := DecryptPolicyFailureReason(messagecrypto.PolicyDecision{}, context.DeadlineExceeded); got != ReasonPolicyQueryFailed {
+		t.Fatalf("query error reason = %q", got)
+	}
+	decision := messagecrypto.PolicyDecision{Policy: messagecrypto.Policy{Mode: messagecrypto.ModeOff, Reason: "crypto_disabled_by_switch"}}
+	if got := DecryptPolicyFailureReason(decision, nil); got != "crypto_disabled_by_switch" {
+		t.Fatalf("policy reason = %q", got)
+	}
+	if got := DecryptPolicyFailureReason(messagecrypto.PolicyDecision{}, nil); got != ReasonPolicyDisabled {
+		t.Fatalf("fallback reason = %q", got)
 	}
 }
 
@@ -279,11 +313,65 @@ func TestDecryptChatMessageItemsShouldRecordOverallBatchError(t *testing.T) {
 	if !ok || len(failures) != 1 {
 		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
 	}
-	if failures[0]["stage"] != "message-decrypt" || failures[0]["reason"] == "" {
+	if failures[0]["stage"] != "message-decrypt" || failures[0]["reason"] != ReasonBatchDecryptFailed {
 		t.Fatalf("failure = %#v", failures[0])
 	}
-	if _, ok := failures[0]["messageId"]; ok {
-		t.Fatalf("overall failure must not carry messageId: %#v", failures[0])
+	if failures[0]["messageId"] != "m1" || failures[0]["conversationId"] != "cid-1" {
+		t.Fatalf("batch failure must stay attributable to its message: %#v", failures[0])
+	}
+	if item["contentDecrypted"] == true {
+		t.Fatalf("ciphertext must be kept on batch error: %#v", item)
+	}
+}
+
+func TestCrossPlatformCoverageChatDecryptRecordsPolicyQueryFailure(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{readErr: context.DeadlineExceeded}
+	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{item})
+	if got == nil {
+		t.Fatal("ledger = nil")
+	}
+	if got["decryptAllowedCount"] != 0 || got["decryptFailedCount"] != 1 || got["partial"] != true {
+		t.Fatalf("ledger = %#v", got)
+	}
+	failures, ok := got["decryptFailures"].([]map[string]any)
+	if !ok || len(failures) != 1 || failures[0]["reason"] != ReasonPolicyQueryFailed {
+		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+	if _, has := failures[0]["hint"]; has {
+		t.Fatalf("policy query failure must not carry onboarding hint: %#v", failures[0])
+	}
+	if item["contentDecrypted"] == true {
+		t.Fatalf("ciphertext must be kept on policy query failure: %#v", item)
+	}
+	if len(rt.writes) != 0 {
+		t.Fatalf("batch decrypt must not run when policy query fails: %#v", rt.writes)
+	}
+}
+
+func TestCrossPlatformCoverageChatDecryptRecordsOverallBatchFailure(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{read: decryptTestPolicyRead, writeErr: context.Canceled}
+	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{item})
+	if got == nil {
+		t.Fatal("ledger = nil")
+	}
+	if got["decryptCandidateCount"] != 1 || got["decryptAllowedCount"] != 1 || got["decryptedCount"] != 0 || got["decryptFailedCount"] != 1 || got["partial"] != true {
+		t.Fatalf("ledger = %#v", got)
+	}
+	failures, ok := got["decryptFailures"].([]map[string]any)
+	if !ok || len(failures) != 1 {
+		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+	if failures[0]["stage"] != "message-decrypt" || failures[0]["reason"] != ReasonBatchDecryptFailed {
+		t.Fatalf("failure = %#v", failures[0])
+	}
+	if failures[0]["messageId"] != "m1" || failures[0]["conversationId"] != "cid-1" {
+		t.Fatalf("batch failure must stay attributable to its message: %#v", failures[0])
 	}
 	if item["contentDecrypted"] == true {
 		t.Fatalf("ciphertext must be kept on batch error: %#v", item)

@@ -31,7 +31,7 @@ style 使用 solid/medium/thick/dashed/dotted/double/hair/none 等当前枚举�
 
     dws sheet range batch-set-style       --node <NODE_ID>       --ranges '["Sheet1!A1:D1","Sheet2!A1:D1"]'       --font-weight bold --format json
 
---ranges 每项必须带工作表前缀，最多 100 项。不同区域不同样式用 --batch 配置文件。默认严格事务，任一失败整批回滚；只有用户明确接受部分成功才用 --continue-on-error，且必须逐项报告并验证，不能把 partial 称为成功。
+--ranges 每项必须带工作表前缀，最多 20 项。不同区域不同样式用 --batch 配置文件，同样最多 20 项；超限在本地拒绝，不下发请求。默认严格事务，任一失败整批回滚；只有用户明确接受部分成功才用 --continue-on-error，且必须逐项报告并验证，不能把 partial 称为成功。
 
 `--ranges` 与 `--batch` 必须二选一。ranges 模式用命令行样式应用到所有范围；batch 模式的样式只从本地 JSON 文件读取，不能同时传任何命令行样式参数。batch 文件是数组，每项必须含 sheetId、range，可带与命令行同语义的 camelCase 字段，例如：
 
@@ -40,7 +40,7 @@ style 使用 solid/medium/thick/dashed/dotted/double/hair/none 等当前枚举�
       {"sheetId":"Sheet2","range":"C1:C5","numberFormat":"¥#,##0.00"}
     ]
 
-每个区域必须满足 rows<=1000、cells<=30000；最多 100 个区域，所有区域累计不得超过 200000 单元格。超出时按独立批次拆分，不能把拆分后的多次调用描述为一次原子事务。
+每个区域必须满足 rows<=1000、cells<=30000；最多 20 个区域，所有区域累计不得超过 200000 单元格。超出时按独立批次拆分，不能把拆分后的多次调用描述为一次原子事务。
 
 ## 常用 number-format
 

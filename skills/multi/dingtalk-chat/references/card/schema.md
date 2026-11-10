@@ -40,7 +40,7 @@ A2UI 原子命令规则：
   `'["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]'`；
   CLI 解析为 `a2uiMessages`；`--summary` 写入顶层 `summary`，作为卡片无法渲染时的降级文案，
   省略时为 `互动卡片`，显式空白校验失败。不要传 `fallbackText`，也不要在 `createSurface` 中加 `summary`。
-- 创建时 `--support-forward` 写入顶层布尔值 `supportForward`，默认 `false`，不要包在 `cardProperty` 中。
+- 创建时 `--support-forward` 写入顶层布尔值 `supportForward`，默认 `true`；显式 `--support-forward=false` 保持禁止转发，不要包在 `cardProperty` 中。
 - `FINISH`/`CONFIRMING`/`CONFIRMED` 后，服务端按 `artifact` 注解异步生成会话摘要，无可提取产物时写入默认文案；
   `update-a2ui-card` 没有摘要参数，更新受理不代表摘要已生成。
 - 群聊目标写入顶层 `openConversationId`；单聊目标写入顶层 `receiverOpenDingTalkId`

@@ -188,6 +188,54 @@ func TestPolicyDecisionShouldRejectUnknownPolicyMode(t *testing.T) {
 	}
 }
 
+func TestPolicyDecisionShouldKeepOffReasonAndHint(t *testing.T) {
+	rt := &fakeRuntime{read: map[string]any{"result": map[string]any{
+		"success":      true,
+		"mode":         ModeOff,
+		"reason":       "org_crypto_disabled",
+		"friendlyHint": "当前组织未开通消息解密功能",
+	}}}
+	client, _ := newTestClient(t)
+
+	got, err := client.PolicyDecision(context.Background(), rt, testOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Enabled || got.Policy.Mode != ModeOff || got.Policy.Reason != "org_crypto_disabled" {
+		t.Fatalf("decision = %#v", got)
+	}
+	if got.Policy.FriendlyHint != "当前组织未开通消息解密功能" {
+		t.Fatalf("friendlyHint = %q", got.Policy.FriendlyHint)
+	}
+}
+
+func TestPolicyDisabledHintFallsBackToGuidance(t *testing.T) {
+	if got := PolicyDisabledHint("  服务端指引  "); got != "服务端指引" {
+		t.Fatalf("server hint = %q", got)
+	}
+	if got := PolicyDisabledHint(""); got != CryptoDisabledGuidance {
+		t.Fatalf("fallback hint = %q", got)
+	}
+	if got := PolicyDisabledHint("   "); got != CryptoDisabledGuidance {
+		t.Fatalf("blank hint = %q", got)
+	}
+}
+
+func TestPolicyDecisionShouldRejectMissingModeWithPolicyPayload(t *testing.T) {
+	client, _ := newTestClient(t)
+
+	for name, read := range map[string]map[string]any{
+		"reason_only": {"result": map[string]any{"success": true, "reason": "org_crypto_disabled"}},
+		"hint_only":   {"success": true, "friendlyHint": "当前组织未开通消息解密功能"},
+		"failure":     {"success": false, "errorCode": "CRYPTO_DISABLED"},
+	} {
+		_, err := client.PolicyDecision(context.Background(), &fakeRuntime{read: read}, testOptions())
+		if err == nil || !strings.Contains(err.Error(), "未知 mode") {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+}
+
 func TestDecryptInboundShouldDecryptSafeChatThenDing(t *testing.T) {
 	rt := &fakeRuntime{write: map[string]any{"result": map[string]any{"items": []any{
 		map[string]any{"messageId": "manual", "status": "success", "plaintextContent": "hello", "keyVersion": 9},
@@ -522,6 +570,7 @@ func TestCrossPlatformCoverageMessageCryptoPackage(t *testing.T) {
 		{"missing_identity_provider", TestPolicyDecisionShouldFailWithoutIdentityProvider},
 		{"policy_read_error", TestPolicyDecisionShouldReturnPolicyReadError},
 		{"unknown_policy_mode", TestPolicyDecisionShouldRejectUnknownPolicyMode},
+		{"plain_ack_fail_closed", TestPolicyDecisionShouldRejectMissingModeWithPolicyPayload},
 		{"decrypt_full", TestDecryptInboundShouldDecryptSafeChatThenDing},
 		{"decrypt_default_layer", TestDecryptInboundShouldDefaultToFullLayer},
 		{"decrypt_ding_layer", TestDecryptInboundShouldCallDingBatchDirectlyForDingLayer},

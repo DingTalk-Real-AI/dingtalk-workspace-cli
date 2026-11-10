@@ -184,6 +184,139 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 	}
 }
 
+func TestCrossPlatformCoverageMessagesMgetKeepsServerPolicyOffReason(t *testing.T) {
+	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messageReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids": `{"result":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"}]}`,
+		"im/get_message_crypto_policy": `{"result":{"mode":"off","reason":"org_crypto_disabled",` +
+			`"friendlyHint":"当前组织未开通消息解密功能"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
+	if err := corecmd.ExecuteForTest(root); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[1].tool != "get_message_crypto_policy" {
+		t.Fatalf("calls = %#v, want list + policy and no batch decrypt", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) ||
+		payload["partial"] != true {
+		t.Fatalf("policy-off ledger = %#v", payload)
+	}
+	failures, _ := payload["decryptFailures"].([]any)
+	first, _ := failures[0].(map[string]any)
+	if len(failures) != 1 || first["reason"] != "org_crypto_disabled" ||
+		first["messageId"] != "m1" || first["conversationId"] != "cid" {
+		t.Fatalf("policy-off failure = %#v", payload["decryptFailures"])
+	}
+	if first["hint"] != "当前组织未开通消息解密功能" {
+		t.Fatalf("server hint = %#v", first)
+	}
+	messages, _ := payload["messages"].([]any)
+	message, _ := messages[0].(map[string]any)
+	if message["text"] != testCipher || message["contentDecrypted"] == true {
+		t.Fatalf("policy-off message = %#v", message)
+	}
+}
+
+func TestCrossPlatformCoverageMessagesMgetFallsBackToGuidanceWithoutServerHint(t *testing.T) {
+	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messageReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids":      `{"result":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"}]}`,
+		"im/get_message_crypto_policy": `{"result":{"mode":"off"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
+	if err := corecmd.ExecuteForTest(root); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	failures, _ := payload["decryptFailures"].([]any)
+	first, _ := failures[0].(map[string]any)
+	if first["reason"] != "policy_disabled" || first["hint"] != messagecrypto.CryptoDisabledGuidance {
+		t.Fatalf("fallback failure = %#v", payload["decryptFailures"])
+	}
+}
+
+func TestCrossPlatformCoverageDirectMessagesPageAllKeepsDecryptPartialWhenPaginationSucceeds(t *testing.T) {
+	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messageReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"chat/list_individual_chat_message": `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"}],"hasMore":false}}`,
+		"im/get_message_crypto_policy":      `{"result":{"mode":"off","reason":"org_crypto_disabled"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+messages-list-direct", "--user", "u1", "--time", "2026-08-05 16:49:00", "--page-all", "--no-reactions",
+	})
+	if err := corecmd.ExecuteForTest(root); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	// Pagination is clean, so the unreadable body must be the only thing marking
+	// the result incomplete (#1297): partial may not be reset by the pagination
+	// diagnostics written after the decrypt ledger.
+	if payload["failedCount"] != float64(0) || payload["stopReason"] != "source_complete" {
+		t.Fatalf("pagination diagnostics = %#v", payload)
+	}
+	if payload["partial"] != true || payload["decryptFailedCount"] != float64(1) || payload["decryptedCount"] != float64(0) {
+		t.Fatalf("decrypt ledger = %#v", payload)
+	}
+	failures, _ := payload["decryptFailures"].([]any)
+	first, _ := failures[0].(map[string]any)
+	if len(failures) != 1 || first["reason"] != "org_crypto_disabled" || first["messageId"] != "m1" {
+		t.Fatalf("decryptFailures = %#v", payload["decryptFailures"])
+	}
+}
+
 func TestCrossPlatformCoverageMessagesMgetSkipsCryptoWhenBackendUnavailable(t *testing.T) {
 	swapMessageReadCryptoClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
