@@ -2078,6 +2078,11 @@ func normalizeJSONMLForVerification(raw string) string {
 				if declared, ok := typed[1].(map[string]any); ok {
 					attrs, _ = normalize(declared).(map[string]any)
 					attrs = removeGeneratedJSONMLDefaults(tag, attrs)
+					// The service fills in page setup for every document, so a root
+					// written without sectPr reads back with one.
+					if strings.EqualFold(tag, "root") {
+						delete(attrs, "sectpr")
+					}
 					start = 2
 				}
 			}
@@ -2089,6 +2094,11 @@ func normalizeJSONMLForVerification(raw string) string {
 				}
 			}
 			if strings.EqualFold(tag, "span") && isGeneratedTextSpan(attrs) {
+				// The service gives some blocks (code) an empty text run of their
+				// own; it carries no content.
+				if len(children) == 0 || (len(children) == 1 && children[0] == "") {
+					return nil
+				}
 				if len(children) == 1 {
 					return children[0]
 				}

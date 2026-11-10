@@ -202,6 +202,25 @@ func TestCrossPlatformCoverageDocVerificationPreservesMeaning(t *testing.T) {
 	if !verifyUpdatedDocumentContent(map[string]any{"jsonml": serverDefaulted}, defaultFree, "overwrite", "jsonml") {
 		t.Fatal("server-generated JSONML schema defaults should not fail readback verification")
 	}
+	// Readbacks below are the service's own output for these writes.
+	writtenRoot := `["root",{},["h1",{},"title"],["p",{},"body"]]`
+	readRoot := `["root",{"sectPr":{"pgSz":{"w":892,"h":1127},"pgMar":{"top":48,"bottom":48,"left":72,"right":72,"header":56.73,"footer":66.13,"gutter":0}}},["h1",{"uuid":"mwa1lhcg5jwo0nhwiq6"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"title"]]],["p",{"uuid":"mwa1lhcg3q7m02nszo5"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"body"]]]]`
+	if !verifyUpdatedDocumentContent(map[string]any{"jsonml": readRoot}, writtenRoot, "overwrite", "jsonml") {
+		t.Fatal("page setup the service adds to the root should not fail an overwrite readback")
+	}
+	writtenCode := `["code",{"syntax":"plaintext","theme":"default","fold":true,"code":"line 1\nline 2"}]`
+	readCode := `["code",{"code":"line 1\nline 2","fold":true,"syntax":"plaintext","theme":"default","uuid":"mwa1lhcgsmofrjgwj6c"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},""]]]`
+	if normalizeJSONMLForVerification(writtenCode) != normalizeJSONMLForVerification(readCode) {
+		t.Fatal("the empty text run the service adds to a code block should not fail a block readback")
+	}
+	foldedCode := `["code",{"code":"line 1\nline 2","fold":false,"uuid":"x"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},""]]]`
+	if normalizeJSONMLForVerification(writtenCode) == normalizeJSONMLForVerification(foldedCode) {
+		t.Fatal("a code block that lost its fold setting was accepted")
+	}
+	otherText := `["code",{"code":"line 1","fold":true},["span",{"data-type":"text"},["span",{"data-type":"leaf"},""]]]`
+	if normalizeJSONMLForVerification(writtenCode) == normalizeJSONMLForVerification(otherText) {
+		t.Fatal("a code block with different text was accepted")
+	}
 	linkA := "[\"a\",{\"href\":\"https://example.com/a\"},\"text\"]"
 	linkB := "[\"a\",{\"href\":\"https://example.com/b\"},\"text\"]"
 	if normalizeJSONMLForVerification(linkA) == normalizeJSONMLForVerification(linkB) {
