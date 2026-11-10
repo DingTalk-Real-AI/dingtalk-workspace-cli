@@ -107,8 +107,8 @@ func TestSportCallResultRejectsNonJSONText(t *testing.T) {
 
 func TestSportCallResultHandlesNullAndEmptyContent(t *testing.T) {
 	for name, fake := range map[string]*sportFakeCaller{
-		"null文本":      {text: "null", blocks: 1},
-		"空内容":        {},
+		"null文本": {text: "null", blocks: 1},
+		"空内容":    {},
 		"跳过空文本块": {text: `null`, blocks: 1, leadingEmpty: true},
 	} {
 		helpers.InitDeps(fake)
