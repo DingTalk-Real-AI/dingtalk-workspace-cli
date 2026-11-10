@@ -22,8 +22,8 @@ import (
 // ──────────────────────────────────────────────────────────
 // dws sport — 企业运动健康（钉钉运动）
 //
-// MCP 工具清单（21 个，与已上架服务一致；get_user_org_list 已按服务端
-// 计划下线，不接入）：
+// CLI 接入工具清单（21 个）；get_user_org_list 不接入 CLI，
+// MCP 平台上的下线由服务维护方单独处理：
 //   list_emp_step_ranking, list_dept_step_ranking, list_emp_ranking_in_dept,
 //   get_emp_step_ext_info, get_emp_step_infos, get_dept_step_infos_by_dept_id,
 //   get_org_health_step_info, get_org_total_step_count,
@@ -156,6 +156,7 @@ func newSportOrgGroup() *cobra.Command {
 		Tool:          "get_org_step_participate_status",
 		Safety:        sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_org_step_participate_status", "sport org status", "org"),
 			Description: "查询当前企业是否已开通步数榜",
 			Result:      sportResult("企业步数榜开通状态，true=已开通，false=未开通"),
@@ -197,6 +198,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_org_health_step_info", "sport step org-info", "step"),
 			Description: "查询企业单日步数概况（当日总步数、累计总步数、参与人数）",
 			Result:      sportResult("企业单日步数概况"),
@@ -228,6 +230,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_org_total_step_count", "sport step org-total", "step"),
 			Description: "查询企业区间总步数（含首尾两天）",
 			Result:      sportResult("企业区间总步数"),
@@ -262,6 +265,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("list_emp_step_ranking", "sport step emp-ranking", "step"),
 			Description: "查询企业员工步数排行（日/周/月榜）",
 			Result:      sportResult("企业员工步数排行列表与分页信息"),
@@ -298,6 +302,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("list_dept_step_ranking", "sport step dept-ranking", "step"),
 			Description: "查询企业部门人均步数排行（仅周榜/月榜）",
 			Result:      sportResult("部门人均步数排行列表与分页信息"),
@@ -335,6 +340,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("list_emp_ranking_in_dept", "sport step dept-emp-ranking", "step"),
 			Description: "查询指定部门内员工步数排行",
 			Result:      sportResult("部门内员工步数排行列表与分页信息"),
@@ -370,6 +376,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_emp_step_ext_info", "sport step emp-info", "step"),
 			Description: "查询员工单日步数、名次与运动开关状态",
 			Result:      sportResult("员工单日步数详情，含名次与钉钉运动开关状态"),
@@ -402,6 +409,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_emp_step_infos", "sport step emp-infos", "step"),
 			Description: "查询员工多日（1~30 天）步数明细，不含名次",
 			Result:      sportResult("员工多日步数明细列表"),
@@ -434,6 +442,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_dept_step_infos_by_dept_id", "sport step dept-infos", "step"),
 			Description: "查询部门多日（1~30 天）步数汇总明细",
 			Result:      sportResult("部门多日步数汇总明细列表"),
@@ -492,10 +501,17 @@ var sportCreateFlatKeys = []string{
 // MCP 调用通道（网关 token、未登录、PAT、业务错误体分类、多 JSON 值拒绝
 // 均在同一层处理），返回值保留服务端原始形状（含 null）。RolloutUnified
 // Active 命令必须经本路径把结果存入统一结果，不能直接打印。
-// dry-run 由 app 层 ToolCaller 拦截并返回 dry_run 信封 JSON，无需在此处理。
+// dry-run 在本地返回请求预览，并由 output.WithDryRun 标记统一信封；
+// 不调用 ToolCaller，避免将 adapter 的 JSON-RPC 回显当作业务结果。
 func sportCallResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	if helpers.GetCaller() == nil {
+	caller := helpers.GetCaller()
+	if caller == nil {
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
+	}
+	if corecmd.BoolFlag(cmd, "dry-run") || caller.DryRun() {
+		return output.Success(map[string]any{
+			"tool": tool, "arguments": args, "executed": false,
+		}, output.WithDryRun()), nil
 	}
 	data, err := helpers.CallMCPToolDataOnServer(cmd.Context(), sportServerID, tool, args)
 	if err != nil {
@@ -615,6 +631,7 @@ func newSportCompetitionCreateCmd() *cobra.Command {
 		Validate:   sportValidateCreateArgs,
 		ResultCall: sportCreateResult,
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("create_competition", "sport competition create", "competition"),
 			Description: "创建绑定钉钉群的固定（FIXED）运动比赛，返回 ruleCode 与审批状态",
 			Result:      sportResult("新比赛返回值：ruleCode 与 status（1=已生效，0=待群主审批）"),
@@ -783,6 +800,7 @@ func newSportCompetitionConfigCmd() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_competition_config", "sport competition config", "competition"),
 			Description: "查询比赛整体配置详情",
 			Result:      sportResult("比赛配置详情；null 表示配置不存在"),
@@ -816,6 +834,7 @@ func newSportCompetitionRuleDetailCmd() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_competition_rule_detail", "sport competition rule-detail", "competition"),
 			Description: "比赛创建人查询规则明细（含绑定群与状态）",
 			Result:      sportResult("比赛规则明细；非创建人会被拒绝"),
@@ -849,6 +868,7 @@ func newSportCompetitionInstancesCmd() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("list_competition_instances", "sport competition instances", "competition"),
 			Description: "查询比赛全部期实例（按期号升序）",
 			Result:      sportResult("比赛全部期实例列表"),
@@ -881,6 +901,7 @@ func newSportCompetitionCurrentInstanceCmd() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_current_competition_instance", "sport competition current-instance", "competition"),
 			Description: "查询当前进行中的一期实例（含 competitionCode）",
 			Result:      sportResult("当前期实例；null 表示没有进行中的实例"),
@@ -913,6 +934,7 @@ func newSportCompetitionNextInstanceCmd() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_next_competition_instance", "sport competition next-instance", "competition"),
 			Description: "查询下一期未开始的实例（含开始日期）",
 			Result:      sportResult("下一期实例；null 表示没有未开始的下一期"),
@@ -951,6 +973,7 @@ func newSportCompetitionAnnounceCmd() *cobra.Command {
 			Confirmation: "user_required", Idempotency: "non_idempotent",
 		},
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("send_competition_group_msg", "sport competition announce", "competition"),
 			Description: "向比赛绑定群发送开赛播报或审批提醒（无幂等）",
 			Result:      sportResult("发送结果；true 仅代表链路执行完成，不保证消息可见"),
@@ -993,6 +1016,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("get_signup_count", "sport stats signup", "stats"),
 			Description: "查询比赛累计报名人数",
 			Result:      sportResult("累计报名人数；null 表示配置不存在"),
@@ -1024,6 +1048,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("count_daily_participants", "sport stats participants-daily", "stats"),
 			Description: "查询比赛某天的参与人数",
 			Result:      sportResult("某天参与人数；null 表示参数非法或没有进行中的实例"),
@@ -1056,6 +1081,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("count_total_participants", "sport stats participants", "stats"),
 			Description: "查询比赛参与人数",
 			Result:      sportResult("参与人数"),
@@ -1090,6 +1116,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("count_reached_users", "sport stats reached", "stats"),
 			Description: "查询达到每日目标值的人数（按日/周/月口径）",
 			Result:      sportResult("达标人数；null 表示参数非法或没有进行中的比赛"),
@@ -1124,6 +1151,7 @@ func newSportStatsGroup() *cobra.Command {
 		},
 		Safety: sportReadLeaf(),
 		Contract: corecmd.ContractDecl{
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity:    sportIdentity("list_daily_participation_trend", "sport stats trend", "stats"),
 			Description: "查询比赛逐日参与/达标趋势（最多 90 天）",
 			Result:      sportResult("逐日参与与达标人数趋势列表"),

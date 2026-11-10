@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// sportAllTools 是已上架 MCP 服务的工具名及其 CLI 路径；产品命令树必须一一覆盖。
-// get_user_org_list 按服务端计划下线，不接入。
+// sportAllTools 是 CLI 选定接入的工具名及其路径；命令树必须一一覆盖。
+// get_user_org_list 不接入 CLI；不要求 MCP 平台工具目录与此清单完全相等。
 var sportAllTools = map[string]string{
 	"get_org_step_participate_status":  "sport org status",
 	"list_emp_step_ranking":            "sport step emp-ranking",
@@ -57,7 +57,7 @@ func sportCollectLeafPaths(cmd *cobra.Command) map[string]bool {
 	return out
 }
 
-func TestSportCommandTreeCoversAllPublishedTools(t *testing.T) {
+func TestSportCommandTreeCoversAllCLITools(t *testing.T) {
 	root := NewCommand()
 	paths := sportCollectLeafPaths(root)
 	if len(paths) != len(sportAllTools) {
@@ -66,6 +66,11 @@ func TestSportCommandTreeCoversAllPublishedTools(t *testing.T) {
 	for tool, cliPath := range sportAllTools {
 		if !paths[cliPath] {
 			t.Fatalf("工具 %s 对应的命令 %s 不在命令树中", tool, cliPath)
+		}
+	}
+	for _, excluded := range []string{"sport org orgs", "sport competition update", "sport competition cancel", "sport competition delete"} {
+		if paths[excluded] {
+			t.Fatalf("CLI 不应公开未接入的命令 %s", excluded)
 		}
 	}
 }
