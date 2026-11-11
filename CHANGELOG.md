@@ -6,6 +6,39 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.68] - 2026-11-11
+
+本版本将已交付的 `v1.0.68-beta.1` 晋级正式版，并纳入下方列出的 beta 后变更。
+
+### Changed
+
+- **应用事件** (#1597) — 新增应用事件目录发现、Schema 查询和消费输出，以及 `dws dev event list/get/create/update/validate/lint/debug/publish/offline` 九条事件定义管理命令。写操作使用真实 `configRevision`，修订冲突不自动重放；debug 明确区分未就绪、未通过和通过。真实 debug、草稿体验投递及发布后消费闭环仍需在目标服务环境验收。
+- **Runtime payload** (#1594) — 升级至 `20261104`，同步六平台资源、配置及完整性校验，继续使用单文件交付。
+- **轻应用创建** (#1597，前置迁移 #1598) — `dws dev liteapp create --desc` 改为必填且去除首尾空白后非空，已有脚本需要显式提供描述。
+
+### Changes since `v1.0.68-beta.1`
+
+### Added
+
+- **钉钉运动** (#1603) — 新增 `dws sport` 下的 21 条命令，覆盖企业运动状态、步数明细与排行、比赛创建与配置查询、开赛播报及参与统计。通过 `dws sport --help` 和 dingtalk-misc Skill 发现；创建比赛和播报需用户确认，`--dry-run` 仅预览请求。
+- **Windows 按 Agent 隔离凭据** (#1587) — 配合 `DWS_CONFIG_DIR` 设置 Agent 专属的绝对路径 `DWS_KEYCHAIN_DIR`，可选择独立的 DPAPI 保护注册表命名空间。所有调用需使用相同配置；首次切换命名空间需重新登录，logout/reset 只清理所选命名空间。未设置时沿用原凭据存储。
+
+### Changed
+
+- **A2UI 卡片转发** (#1607，前置准入 #1608) — `chat message send-a2ui-card` 默认允许转发，可用 `--support-forward=false` 关闭；数字员工回复继续遵循独立转发设置，审批卡片保持不可转发。
+
+### Fixed
+
+- **消息解密与分页完整性** (#1607) — 区分策略查询失败、策略关闭和逐消息解密失败，保留消息身份及服务端原因；分页成功不再覆盖解密缺口，分页事实未知时不再宣称完整，DING 列表允许递减但不重复的续页游标。
+- **AI 表格写入恢复** (#1607) — 含创建的 `+record-upsert` 在发送前保存原操作恢复信息，超时后使用原 token 只读核对；`+record-write-result` 将合法的 `unknown` 回执保留为 `pending`，不重放写入。
+- **AI 表格建表、仪表盘与链接** (#1607) — 拒绝不适用的 formatter，建表后返回字段 ID 并容忍短暂不可见，补齐图表模板与布局诊断；列表和搜索保留逐对象导航链接，Skill 明确填写入口与管理入口的区别。
+- **表格批量样式** (#1607) — `sheet range batch-set-style` 的 `--ranges` 和 `--batch` 最多接受 20 项，超限时在本地返回 validation（退出码 3），提示手动分批。
+- **考勤与文档图片** (#1607) — `attendance group update-members` 要求显式传入 `--member-join-policy SPECIFIC_USERS`；内联图片保留上传回执的资源 ID，并兼容旧回执。
+
+### Known limitations
+
+- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+
 ## [1.0.68-beta.1] - 2026-11-06
 
 ### Added
