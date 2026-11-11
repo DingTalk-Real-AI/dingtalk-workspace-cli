@@ -16,28 +16,55 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **Runtime payload** (#1594) — 升级至 `20261104`，同步六平台资源、配置及完整性校验，继续使用单文件交付。
 - **轻应用创建** (#1597，前置迁移 #1598) — `dws dev liteapp create --desc` 改为必填且去除首尾空白后非空，已有脚本需要显式提供描述。
 
+### Known limitations
+
+- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+
+下方按仓库契约原样汇总本次归档的 fragments，其中应用事件定义与 Runtime payload 条目已在 beta 交付，本次补齐归档，不代表 beta 后新增。
+
 ### Changes since `v1.0.68-beta.1`
 
 ### Added
 
-- **钉钉运动** (#1603) — 新增 `dws sport` 下的 21 条命令，覆盖企业运动状态、步数明细与排行、比赛创建与配置查询、开赛播报及参与统计。通过 `dws sport --help` 和 dingtalk-misc Skill 发现；创建比赛和播报需用户确认，`--dry-run` 仅预览请求。
-- **Windows 按 Agent 隔离凭据** (#1587) — 配合 `DWS_CONFIG_DIR` 设置 Agent 专属的绝对路径 `DWS_KEYCHAIN_DIR`，可选择独立的 DPAPI 保护注册表命名空间。所有调用需使用相同配置；首次切换命名空间需重新登录，logout/reset 只清理所选命名空间。未设置时沿用原凭据存储。
+- **企业自建应用事件定义配置** — 新增 `dws dev event list/get/create/update/validate/lint/debug/publish/offline` 九条命令，覆盖事件定义的草稿创建与编辑、静态校验、本地 lint、端到端调试、直接启用与下线。定义只从 `--file` 读取并做本地预检：eventKey 必须符合 `app_user_{业务系统}_{对象}_{动作}`，`payloadSchema.type` 固定为 object，`category` 不属于本轮输入契约，保留键（Scope/状态/版本/修订号）一律拒绝，CLI 不改写开发者文件。写操作必须携带从 `get` 读回的真实 `configRevision`，409 修订冲突按不可重试的显式失败返回并给出双方修订号，不自动换号重放。`debug` 区分未就绪、未通过与通过三种结论并列出未完成阶段，超时不视为通过。九条命令走统一结果契约，分页事实缺失时失败而非返回半页结果；`dws dev app event`（回调订阅）与 `dws event`（个人事件监听）两条命令面保持不变。
+
+- 新增 misc 长尾能力 `dws sport`（企业运动健康/钉钉运动），接入选定的 21 个 MCP 工具。命令树位于 `internal/helpers/sport.go`，通过 `register_sport.go` 手写注册进入 `NewPublicCommands`，不修改生成式注册表或 app 装配逻辑；端点登记于 edition supplement servers（server ID `sport`）
+- sport 根命令不在 `dws --help` 展示；`dws sport --help`、21 个叶子的直接调用和 Agent Schema 查询仍可用，通过 dingtalk-misc Skill 发现能力
+- `sport org status`：查询企业是否开通钉钉运动步数榜（`get_org_step_participate_status`）
+- `sport step org-info|org-total`：企业单日步数概况、区间总步数（`get_org_health_step_info`、`get_org_total_step_count`）
+- `sport step emp-ranking|dept-ranking|dept-emp-ranking`：员工/部门/部门内员工步数排行，支持日/周/月维度与 cursor 分页（`list_emp_step_ranking`、`list_dept_step_ranking`、`list_emp_ranking_in_dept`）
+- `sport step emp-info|emp-infos|dept-infos`：员工与部门多日步数明细（`get_emp_step_ext_info`、`get_emp_step_infos`、`get_dept_step_infos_by_dept_id`）
+- `sport competition create|config|rule-detail|instances|current-instance|next-instance|announce`：比赛创建、配置/规则/期次查询、开赛播报；create 与 announce 为无幂等写操作，均有 `user_required` 确认门；不提供更新、取消或删除命令
+- `sport stats signup|participants-daily|participants|reached|trend`：比赛报名、每日参与、累计参与、达标与趋势统计，分别映射 `get_signup_count`、`count_daily_participants`、`count_total_participants`、`count_reached_users`、`list_daily_participation_trend`
+- 新增 dingtalk-misc Skill 的 sport 产品主文档（`skills/multi/dingtalk-misc/references/sport.md`，与 `skills/mono/references/products/sport.md` 保持 identical），并在两份 SKILL.md 与 coverage 清单登记
+- 全部 21 个叶子声明 `dry_run.preview_kind=request`、`remote_reads=false`；本地预览在统一信封顶层标记 `dry_run=true`，返回待调用工具与参数及 `executed=false`，不调用远端工具；真实执行沿用统一 MCP 错误分类
+- `get_user_org_list`（用户所属企业列表）不接入 CLI；MCP 平台当前仍保留该工具，平台下线由服务维护方单独处理
+
+- **Windows 按 Agent 隔离凭据存储** — `DWS_KEYCHAIN_DIR` 在 Windows 上用于选择独立的 DPAPI 保护 HKCU 注册表命名空间，使同一台机器上的多个 Agent 不再共享登录凭据。需与 `DWS_CONFIG_DIR` 成对设置，并在每次调用（登录、业务命令、logout、reset）时传入相同的 Agent 专属绝对路径；凭据仍保存在注册表，不会作为文件写入该目录。目录会先清理、尽可能解析为绝对路径并做大小写折叠后再哈希，等价写法映射到同一命名空间；未设置该变量时沿用历史注册表键，已有登录不受影响。升级后显式设置该变量会进入新的命名空间并需要重新登录；logout/reset 只清理所选命名空间。macOS/Linux/OpenHarmony 上 `DWS_KEYCHAIN_DIR` 仍作为加密文件存储根目录，`DWS_DISABLE_KEYCHAIN` 依旧仅对 macOS 生效。
 
 ### Changed
 
-- **A2UI 卡片转发** (#1607，前置准入 #1608) — `chat message send-a2ui-card` 默认允许转发，可用 `--support-forward=false` 关闭；数字员工回复继续遵循独立转发设置，审批卡片保持不可转发。
+- **Runtime payload** — 升级内嵌 runtime payload 至 `20261104`，同步平台资源、配置及完整性校验，保持单文件交付方式。
 
 ### Fixed
 
-- **消息解密与分页完整性** (#1607) — 区分策略查询失败、策略关闭和逐消息解密失败，保留消息身份及服务端原因；分页成功不再覆盖解密缺口，分页事实未知时不再宣称完整，DING 列表允许递减但不重复的续页游标。
-- **AI 表格写入恢复** (#1607) — 含创建的 `+record-upsert` 在发送前保存原操作恢复信息，超时后使用原 token 只读核对；`+record-write-result` 将合法的 `unknown` 回执保留为 `pending`，不重放写入。
-- **AI 表格建表、仪表盘与链接** (#1607) — 拒绝不适用的 formatter，建表后返回字段 ID 并容忍短暂不可见，补齐图表模板与布局诊断；列表和搜索保留逐对象导航链接，Skill 明确填写入口与管理入口的区别。
-- **表格批量样式** (#1607) — `sheet range batch-set-style` 的 `--ranges` 和 `--batch` 最多接受 20 项，超限时在本地返回 validation（退出码 3），提示手动分批。
-- **考勤与文档图片** (#1607) — `attendance group update-members` 要求显式传入 `--member-join-policy SPECIFIC_USERS`；内联图片保留上传回执的资源 ID，并兼容旧回执。
+- **消息解密失败原因透传** — 策略查询失败与策略关闭不再共用一个笼统原因：查询失败记为 `policy_query_failed`，策略关闭透传服务端 `reason`（如 `org_crypto_disabled`、`crypto_disabled_by_switch`），仅在旧服务端未给出原因时回退 `policy_disabled`；批量解密整体失败按消息逐条记为 `batch_decrypt_failed` 并保留 `messageId`/`conversationId`，不再输出一条无归属的 Go 错误文本（#1404）。
+- **分页聚合保留正文缺口** — 单聊全量读取（`+messages-list-direct --page-all`）与智能读取快捷入口在写完分页诊断后不再覆盖解密账本的 `partial`，解密失败但分页成功时结果仍标记为不完整；`chat +messages-mget` 等原子入口补齐 `decryptAllowedCount`，与快捷入口的账本字段一致（#1297）。
+- **策略响应缺失 mode 时不再静默降级** — 仅当响应是不含任何策略字段的纯成功回执时才按 `mode=off` 兼容处理；缺少 `mode` 却带有 `reason`、`friendlyHint` 或错误字段的响应直接失败，避免把契约缺字段读成"组织未开通"。
 
-### Known limitations
+- **AI 表格丢响应后的原操作恢复**：含创建的 `+record-upsert` 在发送前原子保存原 token、稳定身份、环境及目标摘要，保存失败不发送；超时后保留原恢复文件，按原 token 只读核对创建组，更新组按原 recordId 独立读回。
 
-- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+- **AI 表格写入结果 unknown 保持 pending**：`+record-write-result` 收到合法的 `state=unknown` 回执时返回 `pending`，不再误报失败；保留原 baseId/tableId/clientToken 和只读恢复命令，不重放写入，也不把未知结果当作未写入。坏身份、坏 ID 或部分确认的 ID 仍然拒绝。
+
+- **Sheet batch style limit** — `sheet range batch-set-style` 的 `--ranges` 和 `--batch` 统一最多 20 项，与服务端 `batch_update` 上限一致；超限在本地返回 validation（退出码 3），提示手动分批。同步 Help/Schema 与 Skill 说明，合法输入继续一次提交。
+
+- **AI 表格建表及仪表盘指引**：建表前拒绝不适用的 formatter，bootstrap 返回字段 ID 并容忍建表后短暂不可见；补齐图表模板说明兼容、均值配置与布局尺寸诊断。更新 mono/multi Skill 的单条执行、独立核验及关联记录格式指引。
+- **AI 表格链接交付**：保留 Base 列表和搜索返回的逐对象导航字段；过程展示或宿主卡片不替代最终正文中的有效具名完整链接。按对象身份和用途选择入口，原样保留 URL 编码，缺少填写入口时不向填写者交付管理页。详见 [过程链接与最终交付](../docs/aitable-process-link-display.md)。
+- **分页完整性**：聊天及智能读取在分页未知时不再宣称 `paginationKnown=true`；DING 列表允许递减但不重复的续页游标，避免误判停滞。
+- **考勤组成员更新**：`attendance group update-members` 必须显式传入 `--member-join-policy SPECIFIC_USERS`，并同步参数声明、校验、示例与 Skill。
+- **文档图片预览**：上传回执带资源 ID 时，内联图片写入 `extraData.resourceId`；兼容不含资源 ID 的旧内联图片回执，其他依赖资源 ID 的写入仍严格校验。
+
+- `chat message send-a2ui-card` now sends `supportForward=true` by default. Explicit `--support-forward=false` still disables forwarding; explicit true remains supported. Digital employee replies explicitly preserve their independent `--reply-card-forward` setting, and approval cards remain non-forwardable.
 
 ## [1.0.68-beta.1] - 2026-11-06
 
