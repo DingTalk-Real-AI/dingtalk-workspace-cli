@@ -9,6 +9,23 @@ import (
 	"strings"
 )
 
+const ChartTemplateDataSchema = `{
+  "type":"object",
+  "description":"按请求类型投影的结构化图表模板及可用的原文说明；不代表图表已创建或示例 ID 已绑定",
+  "properties":{
+    "templates":{"type":"object","description":"按请求大写 chartType 索引的配置模板，写入前须绑定真实表和字段 ID","additionalProperties":{"type":"object","additionalProperties":true}},
+    "documentation":{
+      "type":"object","description":"服务端提供的增强说明；旧服务端或旧全量投影路径可能不提供，缺失时可依据随包指南与模板继续语义明确的配置，仅具体必需信息无法确认时停止；异常或不完整说明整体丢弃，保留合法 templates，并向 stderr 写入非阻断诊断，不伪造原文，不得提交为 config",
+      "properties":{
+        "common":{"type":"string","minLength":1,"description":"公共说明原文，只需读取一次"},
+        "byType":{"type":"object","description":"仅按请求 chartType 索引的原始 JSONC 字符串，保留注释与转义，不是业务写入配置","additionalProperties":{"type":"string","minLength":1}}
+      },
+      "required":["common","byType"],"additionalProperties":false
+    }
+  },
+  "required":["templates"]
+}`
+
 // ParseJSONC removes comments outside strings and trailing commas. It does not
 // repair invalid JSON or change URLs, escaped quotes or comment-like text.
 func ParseJSONC(raw string) (map[string]any, error) {
@@ -124,6 +141,46 @@ func ProjectChartTemplates(raw string, types []string) (map[string]any, error) {
 		selected[name] = config
 	}
 	return selected, nil
+}
+
+func ProjectChartTemplateResponse(body map[string]any, types []string) (map[string]any, string, error) {
+	configurations := make(map[string]any, len(types))
+	for _, name := range types {
+		name = strings.TrimSpace(name)
+		configurations[name] = body[name]
+	}
+	templates, err := ProjectStructuredChartTemplates(configurations, types)
+	if err != nil {
+		return nil, "", err
+	}
+	result := map[string]any{"templates": templates}
+	value, exists := body["documentation"]
+	if !exists {
+		return result, "", nil
+	}
+	documentation, ok := value.(map[string]any)
+	if !ok {
+		return result, "documentation 必须是对象", nil
+	}
+	common, ok := documentation["common"].(string)
+	if !ok || strings.TrimSpace(common) == "" {
+		return result, "documentation.common 必须是非空字符串", nil
+	}
+	byType, ok := documentation["byType"].(map[string]any)
+	if !ok {
+		return result, "documentation.byType 必须是对象", nil
+	}
+	selected := make(map[string]any, len(templates))
+	for name := range templates {
+		text, ok := byType[name].(string)
+		if !ok || strings.TrimSpace(text) == "" {
+			return result, "documentation.byType 必须包含每个请求类型的非空字符串说明", nil
+		}
+		// 文本原样输出；重新解析或格式化会丢失注释和原始转义。
+		selected[name] = text
+	}
+	result["documentation"] = map[string]any{"common": common, "byType": selected}
+	return result, "", nil
 }
 
 // BindReferences substitutes only an entire {"$ref":"logical.property"}

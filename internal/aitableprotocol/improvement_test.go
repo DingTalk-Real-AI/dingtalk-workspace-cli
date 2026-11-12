@@ -49,6 +49,57 @@ func TestCrossPlatformCoverageStructuralResourceBindings(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageKnownChartMinimumSizes(t *testing.T) {
+	for _, columns := range []int{12, 48} {
+		for _, kind := range []string{"BAR", "LINE", "HISTOGRAM", "PIE", "SUMMARY"} {
+			minW, minH := 3, 4
+			if kind == "SUMMARY" {
+				minW = 2
+			}
+			if columns == 48 {
+				minW *= 4
+				minH *= 3
+				if kind == "SUMMARY" {
+					minH = 8
+				}
+			}
+			charts := []map[string]any{{"chartId": "C", "chartType": kind}}
+			for _, dimension := range []string{"w", "h", "pass"} {
+				item := map[string]any{"i": "C", "x": 0, "y": 0, "w": minW, "h": minH}
+				if dimension != "pass" {
+					item[dimension] = item[dimension].(int) - 1
+				}
+				before := map[string]any{}
+				for key, value := range item {
+					before[key] = value
+				}
+				issues, checked := DiagnoseChartMinimumSizes([]map[string]any{item}, charts, columns)
+				if len(checked) != 1 || checked[0] != "C" || (len(issues) == 0) != (dimension == "pass") || !reflect.DeepEqual(item, before) {
+					t.Fatalf("%s/%d/%s: issues=%#v checked=%#v item=%#v", kind, columns, dimension, issues, checked, item)
+				}
+				if len(issues) != 0 && issues[0].Code != "below_type_minimum" {
+					t.Fatal(issues)
+				}
+			}
+		}
+	}
+	item := map[string]any{"i": "C", "x": 0, "y": 0, "w": 1, "h": 1}
+	for _, charts := range [][]map[string]any{nil, {{"chartType": "BAR"}}, {{"chartId": 42, "chartType": "BAR"}}, {{"chartId": "C", "chartType": "RADAR"}}, {{"chartId": "other", "chartType": "BAR"}}, {{"chartId": "C", "chartType": "BAR"}, {"chartId": "C", "chartType": "LINE"}}} {
+		if issues, checked := DiagnoseChartMinimumSizes([]map[string]any{item}, charts, 48); len(issues) != 0 || len(checked) != 0 {
+			t.Fatalf("unverified chart inspected: %#v %#v", issues, checked)
+		}
+	}
+	charts := []map[string]any{{"chartId": "C", "chartType": "BAR"}}
+	for _, items := range [][]map[string]any{{item, item}, {{"i": "C", "parentId": "tab", "x": 0, "y": 0, "w": 1, "h": 1}}, {{"i": "C", "x": 0, "y": 0, "w": 0, "h": 1}}} {
+		if issues, checked := DiagnoseChartMinimumSizes(items, charts, 48); len(issues) != 0 || len(checked) != 0 {
+			t.Fatalf("invalid or child geometry inspected: %#v %#v", issues, checked)
+		}
+	}
+	if issues, checked := DiagnoseChartMinimumSizes([]map[string]any{item}, charts, 24); len(issues) != 0 || len(checked) != 0 {
+		t.Fatal("unverified grid accepted")
+	}
+}
+
 func TestCrossPlatformCoverageRootLayoutDiagnostics(t *testing.T) {
 	items := []map[string]any{{"i": "a", "x": 0, "y": 0, "w": 8, "h": 4}, {"i": "b", "x": 8, "y": 0, "w": 12, "h": 8}, {"i": "c", "x": 0, "y": 4, "w": 8, "h": 4}}
 	if issues := DiagnoseRootLayout(items, 48); len(issues) != 0 {

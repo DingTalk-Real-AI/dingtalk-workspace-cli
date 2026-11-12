@@ -33,6 +33,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/contract.md
+  - mono: sport
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/sport.md
   - mono: dev
     multi_skill: dingtalk-misc
     multi_refs:
@@ -188,6 +192,9 @@ paired_files:
     mode: identical
   - mono: references/products/contract.md
     multi: dingtalk-misc/references/contract.md
+    mode: identical
+  - mono: references/products/sport.md
+    multi: dingtalk-misc/references/sport.md
     mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py

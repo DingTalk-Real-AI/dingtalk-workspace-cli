@@ -184,6 +184,7 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
 	truncatedByResultLimit := false
+	paginationKnown := true
 	eligibleCount := 0
 	var nextCursor any
 
@@ -242,6 +243,7 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 				"page": pagesFetched, "stage": "pagination",
 				"error": "我的群列表下层未返回可靠的 hasMore，无法证明结果完整",
 			})
+			paginationKnown = false
 			stopReason = "pagination_error"
 			break
 		}
@@ -288,7 +290,7 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 
 	payload := myGroupsPayload(rt, allGroups)
 	payload["pagesFetched"] = pagesFetched
-	payload["paginationKnown"] = true
+	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason

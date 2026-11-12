@@ -646,9 +646,14 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 		return err
 	}
 
-	uploadURL, resourceID, resourceURL, err := parseAttachmentUploadInfo(credText)
+	uploadURL, resourceID, resourceURL, err := decodeAttachmentUploadInfo(credText)
 	if err != nil {
 		return err
+	}
+	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
+	inlineImage := strings.HasPrefix(mimeType, "image/") && resourceURL != "" && fileSize <= maxInlineImageSize
+	if !inlineImage && resourceID == "" {
+		return fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
 	}
 
 	// Step 2: HTTP PUT file to OSS
@@ -677,11 +682,13 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 	// Step 3: insert block into document
 	fmt.Fprintln(cmd.ErrOrStderr(), "[3/4] 插入块到文档...")
 
-	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
-
 	var element map[string]any
-	if strings.HasPrefix(mimeType, "image/") && resourceURL != "" && fileSize <= maxInlineImageSize {
+	if inlineImage {
 		// Image files: insert as inline image (paragraph + children image)
+		properties := map[string]any{"src": resourceURL}
+		if resourceID != "" {
+			properties["extraData"] = map[string]any{"resourceId": resourceID}
+		}
 		element = map[string]any{
 			"blockType": "paragraph",
 			"paragraph": map[string]any{
@@ -690,9 +697,7 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 			"children": []any{
 				map[string]any{
 					"elementType": "image",
-					"properties": map[string]any{
-						"src": resourceURL,
-					},
+					"properties":  properties,
 				},
 			},
 		}
@@ -1092,6 +1097,16 @@ func docNumberAsInt(value any) (int, bool) {
 
 // parseAttachmentUploadInfo extracts uploadUrl, resourceId and resourceUrl from the MCP tool response.
 func parseAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL string, err error) {
+	uploadURL, resourceID, resourceURL, err = decodeAttachmentUploadInfo(text)
+	if err == nil && resourceID == "" {
+		err = fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
+	}
+	return
+}
+
+// decodeAttachmentUploadInfo allows old receipts without resource metadata.
+// Callers must require an ID before performing operations that need one.
+func decodeAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL string, err error) {
 	var data map[string]any
 	if err = json.Unmarshal([]byte(text), &data); err != nil {
 		err = fmt.Errorf("failed to parse attachment upload info JSON: %w", err)
@@ -1105,8 +1120,11 @@ func parseAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL 
 	uploadURL, _ = data["uploadUrl"].(string)
 	resourceID, _ = data["resourceId"].(string)
 	resourceURL, _ = data["resourceUrl"].(string)
+	if strings.TrimSpace(resourceID) == "" {
+		resourceID = ""
+	}
 
-	if uploadURL == "" || resourceID == "" {
+	if strings.TrimSpace(uploadURL) == "" {
 		err = fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
 	}
 	return

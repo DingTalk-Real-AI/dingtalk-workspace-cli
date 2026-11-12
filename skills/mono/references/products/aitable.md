@@ -9,21 +9,22 @@
 | Base 文档 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` |
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
-> **操作后展示建议**：可从当前有效回执提取对象名称及 `url/links` 展示阶段结果；上表仅用于识别 URI，不作为缺链接时拼接地址的依据。
+> **操作后链接展示**：收到目标对象的当前有效入口后，必须按下文过程要求展示具名完整链接；上表仅用于识别 URI，不作为缺链接时拼接地址的依据。
 > 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
 
 ## 过程展示建议
 
-创建与修改采用相同的展示建议：结合核验结果按需展示阶段进展，可使用 Markdown 标题与链接（如 `[项目台账](完整URL)`）、卡片或当前宿主支持的其他格式；在满足宿主明确交付要求的前提下，遵循用户指定的展示方式。最终汇总保留当前有效的具名链接及名称转义，不拆成名称与裸 URL；用户或宿主指定格式除外。
+- **链接保真必经步骤：**仅当存在明确识别为 JSON 格式的原始业务回执文件时，展示前必须先调用本地 JSON 解析器，从该回执文件提取每条实际待展示的业务 URL，并与实际链接严格比较；核对成功后才生成展示内容。CSV、XLS、XLSX 等非 JSON 导入附件不是业务回执，不作为 JSON 解析；没有上述 JSON 回执文件时，直接使用当前命令的结构化回执核对并展示链接，不因非 JSON 附件阻断成功结果展示。不手抄 JSON 充作源数据，不将聊天摘要当原文；源文件不可用时不伪造输入文件。只提取允许展示的业务 URL，凭据及失效入口不回显。此核对只读本地文件，不调用 DWS、网络或宿主；百分号编码中的字母大小写须原样保留，即使访问等价也不可互换。
 
-- 展示链接时，名称与对象对应，复用当前有效回执中对象自身的完整 `url` 或身份匹配的 `relation=target` 链接，保留原编码；不得截断、缩写或用 `...` / `…` 替代 URL 任一部分。不用父级链接冒充目标对象，不拼接地址或为补链接重放写入。独立读回优先，显式 null/空值不由旧回执覆盖。
-- 如实描述结果，保留 pending/unknown/partial/STOP；链接本身不证明成功、核验完成或流程启用。缺链接时可简短说明。
-- 字段 target 须满足 `objectType=field` 且 `objectId=当前 fieldId`；不额外展示错配链接。字段自身无可用链接时直说缺失，核验状态仍按有效回执保留。
+- **入口身份：**按链接的对象类型与对象 ID 判断入口身份，不按 `relation` 的字面含义判断；身份匹配的 `links` 即使 `relation=parent` 仍是当前对象入口，只有链接身份确属父级时才称父级入口。
+- **最终交付：**回复前按用户请求、已确认范围及当前状态清点全部最终目标，入口须有效且匹配身份、用途；成功回执、`relation=target` 和过程对象不自动成为最终产物。按用户及宿主规定逐目标完成交付／登记和呈现，核对正文链接，不以父级入口合并替代；普通链接不替代登记；过程已展示链接或宿主已呈现卡片，最终 Markdown 正文仍须保留最终目标的有效具名完整链接（`[对象名称](完整URL)`）；过程去重不免除此要求。缺少适用入口时说明缺口。用户要求完整汇总时保留各项完整链接及原状态。某目标恢复中不遗漏其他可交付目标。
+- **过程展示：**真实业务回执返回后，对用户要求且有当前有效、角色匹配入口的对象，必须逐一展示具名完整链接；不同目标不合并为 Base，不以父级替代已有深链。仅有父级入口时明确说明，不冒充目标直达。同对象同入口在过程内可去重；内部自动对象不自动纳入，用户要求的对象不因自动创建而排除。过程展示与最终交付分别完成，形式及面板行为遵循用户与宿主要求。
+- **入口与名称：**取当前对象 `url`、身份匹配的 `links` 或已确认可用的 `shareFormUrl`；`target/parent` 仅表调用关系。独立读回优先，显式 null/空值不由旧回执覆盖。业务 URL 及参数（含编码和顺序）逐字符原样保留，不截断、改写或重建；逐对象提取本条回执的完整原始 URL，直接用于该对象的链接目标；从本条回执直接复制完整 URL，不套用其他对象的 URL 替换 ID，不重新键入、解码再编码或统一大小写；同批链接各自保留编码，前一条的 `%3d` 不决定后一条的编码，如 `%3D` 不改为 `%3d`。发送前将实际待发送链接与本条回执逐字符比对，一处不同就修正；只声称原样保留不算核对。上传签名 URL、token 等凭据脱敏。名称须对应链接对象；缺名用对象类型或任务标签，仅在无法区分时附 ID，不编造名称。
+- **填写者交付边界：**交付给填写者且填写入口未就绪时，只说明缺口，不展示或登记管理页链接；即使注明非填写入口，也不将管理页列为可交付内容。只有用户明确要求管理操作或接收者为管理者时，才交付当前可用的管理页，并注明“管理页，非填写入口”。
+- **表单与字段：**填写者只用已确认可用的填写页；未分享或关闭时可向管理者交付可用管理页，注明“管理页，非填写入口”。分享未知或入口未就绪时说明缺口，不自动开启分享或扩大权限。字段 target 须满足 `objectType=field`、`objectId=当前 fieldId`，无自身链接时说明缺口，不展示错配链接，保留核验状态。
+- **缺链与状态：**缺链仅按工具明确规则及本次真实标识回退，否则说明缺口，不拼接或臆造。业务核验、登记、展示状态分别判断，保留 pending/unknown/partial/STOP；链接不证明成功、核验、权限、分享或流程启用，回执或展示请求不证明登记、渲染或面板已打开。失败、工具不可用或状态未知时说明缺口，不为补链接或交付重放业务写入。成功登记不重复，未知登记不自动重发，仅按宿主查询／安全恢复契约处理；展示去重不裁剪业务回执及 `links`。
+- **预发交付：**只使用可信完整预发 URL，前缀不证明环境映射；缺少时保留业务结果并说明未完成，不拼接、换域或改交生产链接。
 - **回执转述边界：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
-
-业务核验与宿主交付分别判断。对当前宿主明确要求交付或登记的最终产物，按其适用范围和规则执行，普通链接不替代规定的登记。展示或登记失败、工具不可用或状态未确认时，应简短分别说明当前已知的业务核验、登记与展示状态，不因此重放业务写入；无需重复对象或链接清单；用户明确要求字段完整汇总时除外，应按宿主及用户指定格式保留各项已有完整链接与原核验状态。展示请求已提交不等于登记或渲染成功。
-
-收尾时检查所有用户最终目标，某个目标进入恢复流程，不遗漏其他满足交付条件的目标；不额外登记未被用户指定为最终交付对象的内部 Table、字段或中间产物。已确认完成的登记不重复提交；结果未知的登记请求不自动重发，保留未确认状态并说明限制，仅在宿主提供明确查询或安全恢复契约时按其处理。用户要求预发交付时，指定预发前缀不证明环境映射成立；缺少可信完整预发 URL 时，保留业务结果并说明预发交付未完成，不自行拼接、换域登记或擅自改交生产链接。
 
 ## 命令索引表
 
@@ -114,6 +115,8 @@
 | `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 无文档时返回 `no record` 错误 |
 | `record primary-doc-create` | 为记录创建主键文档 | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 幂等；`--field-id` 须 primaryDoc 类型 |
 
+含创建的 `+record-upsert` 写前自动保存原操作号与恢复文件；超时不重放，使用原 Base/Table/clientToken 和回执 `writeIntentFiles` 执行 `+record-write-result --write-intent <原文件>`。unknown 表示尚未确认；创建组核对原 token，更新组另按原 recordId 读回。不得省略恢复文件或改写身份绕过校验；此自动落盘保证不适用于原子 `record create/upsert`。
+
 ### comment (记录评论) → 详见 [aitable-comment.md](./aitable/aitable-comment.md)
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
@@ -176,6 +179,8 @@
 > 当前支持创建、更新、查询、启停、手动执行和执行历史；删除工作流仍未开放。
 
 ### dashboard & chart → 详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
+
+新建/重构分析仪表盘、选图/指标/布局不明、图表批建恢复决策或异常复验时按专项处理，仅统计步骤可补读 record-stats 或 psql；普通 Dashboard CRUD 直接使用下表命令，不加载分析闭环。
 
 | 命令 | 用途 |
 |------|------|
@@ -330,17 +335,11 @@ Flags:
 
 ## 复杂操作
 
-### 仪表盘 / 图表（建议顺序）
+### 仪表盘 / 图表（按需配置）
 
-```bash
-# 1) 先看配置模板（JSONC）
-dws aitable dashboard config-example --format json
-dws aitable chart widgets-example --format json
+新建/重构分析仪表盘、图表批建恢复决策、Chart config 或 Dashboard 完整 config/arrange，按需读取 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)；普通 Dashboard CRUD 直接使用命令，不进入复杂配置流程。
 
-# 2) 先拿 dashboard，再拿 chart 详情
-dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
-dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
-```
+已有合法 config 且指标/布局语义明确时不重复读模板；需要构造配置时仅获取所需类型模板，Dashboard 完整 config 结构缺失时才读取对应模板。具体读取路径以专项指南为准，不预读两份全量模板。
 
 要点：
 
@@ -422,7 +421,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"查找引用/lookup/filterUp/跨表" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)（§5.4 跨表引用）
 
-用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
+用户说"仪表盘/图表/chart" → 普通 Dashboard CRUD 直接使用命令；构建、配置、图表批建恢复决策或异常复验读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
 用户说"应用模式/App 页面/Widget" → `app get` 后按 `app page` / `app widget` 子命令处理；不要混同普通 Base 信息或开放平台应用
 

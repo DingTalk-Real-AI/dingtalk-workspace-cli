@@ -480,6 +480,10 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
 			t.Fatalf("policy-off ledger = %#v", ledger)
 		}
+		ledgerFailures, _ := ledger["decryptFailures"].([]map[string]any)
+		if len(ledgerFailures) != 1 || ledgerFailures[0]["hint"] != messagecrypto.CryptoDisabledGuidance {
+			t.Fatalf("policy-off failure hint = %#v", ledger["decryptFailures"])
+		}
 		if got := projectChatMessagesPayload(map[string]any{"result": map[string]any{"messages": []any{}}}, false); got["messages"] == nil {
 			t.Fatalf("projected payload = %#v", got)
 		}

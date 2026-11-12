@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/spf13/cobra"
 
@@ -87,6 +88,45 @@ func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
 		got, err := parseChatCryptoMCPData("tool", `{"ok":true}`, nil)
 		if err != nil || got["ok"] != true {
 			t.Fatalf("parse = %#v, %v", got, err)
+		}
+	})
+	t.Run("crypto_disabled_guidance_rewrite", func(t *testing.T) {
+		if got := applyCryptoDisabledGuidance(errors.New("plain boom")); got.Error() != "plain boom" {
+			t.Fatalf("untyped error must pass through, got %v", got)
+		}
+		other := apperrors.NewAPI("business error: success=false",
+			apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PARAM_ERROR", TraceID: "trace-x"}))
+		if got := applyCryptoDisabledGuidance(other); got != error(other) {
+			t.Fatalf("non-crypto error must pass through: %v", got)
+		}
+
+		disabled := apperrors.NewAPI("business error: success=false",
+			apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+				ServerErrorCode: "CRYPTO_DISABLED",
+				TraceID:         "trace-ims349",
+				Details:         map[string]any{"stage": "decrypt"},
+			}),
+			apperrors.WithDetails(map[string]any{"stage": "decrypt"}),
+		)
+		got := applyCryptoDisabledGuidance(disabled).(*apperrors.Error)
+		if got.Message != messagecrypto.CryptoDisabledGuidance || got.Hint != messagecrypto.CryptoDisabledGuidance {
+			t.Fatalf("message = %q hint = %q", got.Message, got.Hint)
+		}
+		if got.ServerDiag.ServerErrorCode != "CRYPTO_DISABLED" || got.Details["stage"] != "decrypt" {
+			t.Fatalf("server diagnostics lost: %#v", got)
+		}
+		if got.Cause == nil || !strings.Contains(got.Cause.Error(), "trace-ims349") {
+			t.Fatalf("cause = %v, want trace reference", got.Cause)
+		}
+
+		withServerHint := apperrors.NewAPI("business error: success=false",
+			apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+				ServerErrorCode: "CRYPTO_DISABLED",
+				FriendlyHint:    "服务端开通指引",
+			}))
+		got = applyCryptoDisabledGuidance(withServerHint).(*apperrors.Error)
+		if got.Message != "服务端开通指引" || got.Hint != "服务端开通指引" {
+			t.Fatalf("server hint must win: %q / %q", got.Message, got.Hint)
 		}
 	})
 	t.Run("read_input_sources", func(t *testing.T) {

@@ -138,6 +138,74 @@ func TestCrossPlatformCoverageBaseCompositeNavigation(t *testing.T) {
 	}
 }
 
+// Preserve a handwritten reduced receipt fixture and same-Base targets; this is not a production MCP text or rendering test.
+func TestCrossPlatformCoverageBaseBootstrapPreservesSummaryFixtureAndNavigation(t *testing.T) {
+	const fixtureGuidance = "User-facing guidance: 过程中必须逐对象展示具名完整链接；多个对象不得合并为单条 Base 入口，不得用父级入口代替已有目标深链。完整保留 URL 及参数。"
+	baseURL := "https://alidocs.dingtalk.com/i/nodes/base"
+	base := map[string]any{"baseId": "base", "url": baseURL,
+		"links": []any{map[string]any{"objectType": "base", "objectId": "base", "relation": "target", "url": baseURL}}}
+	receipt := map[string]any{"data": base,
+		"summary": "Created base. " + fixtureGuidance}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		parityStep(receipt), parityStep(map[string]any{"data": base}),
+	}}
+	var tables []map[string]any
+	for _, id := range []string{"orders", "history"} {
+		url := baseURL + "?iframeQuery=entrance%3ddata%26sheetId%3d" + id
+		table := map[string]any{"tableId": id, "url": url, "links": []any{
+			map[string]any{"objectType": "table", "objectId": id, "relation": "target", "url": url},
+			map[string]any{"objectType": "base", "objectId": "base", "relation": "parent", "url": baseURL},
+		}}
+		tables = append(tables, table)
+		caller.steps = append(caller.steps,
+			parityStep(map[string]any{"data": table}),
+			parityStep(map[string]any{"tables": []any{table}}),
+			parityStep(map[string]any{"fields": []any{}}),
+		)
+	}
+	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap", "--name", "工单系统",
+		"--tables", `[{"name":"工单记录","fields":[]},{"name":"处理记录","fields":[]}]`, "--yes")
+	if err != nil {
+		t.Fatal(err, out)
+	}
+	var envelope struct {
+		Data compositeResult `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatal(err, out)
+	}
+	if len(envelope.Data.CompletedSteps) == 0 || !reflect.DeepEqual(envelope.Data.CompletedSteps[0].Result, receipt) {
+		t.Fatalf("handwritten receipt fixture changed: %s", out)
+	}
+	// Inspect the emitted fixture text; these clauses do not import or validate the MCP production constant.
+	summary, _ := envelope.Data.CompletedSteps[0].Result["summary"].(string)
+	for _, required := range []string{
+		"过程中必须逐对象展示具名完整链接",
+		"多个对象不得合并为单条 Base 入口",
+		"不得用父级入口代替已有目标深链",
+		"完整保留 URL 及参数",
+	} {
+		if !strings.Contains(summary, required) {
+			t.Fatalf("data.completedSteps[0].result.summary missing fixture clause %q: %s", required, out)
+		}
+	}
+	final := navigationFinalResult(t, out)
+	gotTables := final["tables"].([]any)
+	if len(gotTables) != len(tables) || !reflect.DeepEqual(final["links"], base["links"]) {
+		t.Fatalf("same-Base navigation was collapsed: %s", out)
+	}
+	for i, want := range tables {
+		got := gotTables[i].(map[string]any)
+		if got["url"] != want["url"] || !reflect.DeepEqual(got["links"], want["links"]) {
+			t.Fatalf("target/parent links or URL encoding changed: %s", out)
+		}
+	}
+	if len(caller.calls) != 8 {
+		t.Fatal(caller.calls)
+	}
+	t.Logf("Handwritten receipt fixture output (not MCP production guidance or host rendering evidence):\n%s", out)
+}
+
 func TestCrossPlatformCoverageBaseNavigationSurvivesPartialFailure(t *testing.T) {
 	for _, command := range []string{"+base-copy", "+base-bootstrap"} {
 		for _, wrongID := range []bool{false, true} {

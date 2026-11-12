@@ -34,6 +34,7 @@ func aitableBaseCompositeResultSpec(operation string) *contract.ResultSpec {
 		"properties": map[string]any{
 			"tableId": entityProperties["tableId"], "name": map[string]any{"type": "string", "description": "数据表名称"},
 			"fieldCount": map[string]any{"type": "integer", "description": "读回的字段数量"},
+			"fields":     map[string]any{"type": "array", "description": "读回的字段（含 fieldId、fieldName、type），可直接用于后续写入", "items": map[string]any{"type": "object", "additionalProperties": true}},
 			"url":        entityProperties["url"], "links": entityProperties["links"],
 		},
 	}}

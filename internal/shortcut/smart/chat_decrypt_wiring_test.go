@@ -331,6 +331,29 @@ func TestCrossPlatformCoverageChatDecryptWiringPolicyDisabled(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageChatDecryptWiringPolicyOffKeepsServerReason(t *testing.T) {
+	chatmsg.SwapMessageDecryptClientForTest(t, chatDecryptGateClient())
+	caller := &chatDecryptWireCaller{stubs: map[string]string{
+		"list_conversation_message_v2": `{"list":[
+			{"openMessageId":"m-enc","openConversationId":"cid-wire","sender":"小明","createTime":1757900000000,"content":"` + chatDecryptGateCiphertext + `"}],
+			"hasMore":false}`,
+		"get_message_crypto_policy":   `{"result":{"mode":"off","reason":"org_crypto_disabled"}}`,
+		"batch_ding_decrypt_messages": chatDecryptWireBatchOK,
+	}}
+	run := runChatDecryptWireShortcut(t, ChatMessages, caller,
+		map[string]string{"conversation-id": "cid-wire"}, "no-reactions")
+	if run.err != nil {
+		t.Fatalf("policy-off must not break the command: %v; raw=%s", run.err, run.raw)
+	}
+	failure := chatDecryptWireFirstFailure(t, run)
+	if failure["reason"] != "org_crypto_disabled" || failure["messageId"] != "m-enc" {
+		t.Fatalf("server policy reason must reach the ledger: %#v", failure)
+	}
+	if partial, _ := run.payload["partial"].(bool); !partial {
+		t.Fatalf("policy-off body gap must mark partial; raw=%s", run.raw)
+	}
+}
+
 func TestCrossPlatformCoverageChatDecryptWiringStubAndDryRunByteIdentical(t *testing.T) {
 	stubs := func(caller *chatDecryptWireCaller) {
 		caller.stubs = map[string]string{

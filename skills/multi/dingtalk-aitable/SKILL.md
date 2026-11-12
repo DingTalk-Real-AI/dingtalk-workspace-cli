@@ -17,16 +17,17 @@ metadata:
 
 ## 过程展示建议
 
-创建与修改采用相同的展示建议：结合核验结果按需展示阶段进展，可使用 Markdown 标题与链接（如 `[项目台账](完整URL)`）、卡片或当前宿主支持的其他格式；在满足宿主明确交付要求的前提下，遵循用户指定的展示方式。最终汇总保留当前有效的具名链接及名称转义，不拆成名称与裸 URL；用户或宿主指定格式除外。
+- **链接保真必经步骤：**仅当存在明确识别为 JSON 格式的原始业务回执文件时，展示前必须先调用本地 JSON 解析器，从该回执文件提取每条实际待展示的业务 URL，并与实际链接严格比较；核对成功后才生成展示内容。CSV、XLS、XLSX 等非 JSON 导入附件不是业务回执，不作为 JSON 解析；没有上述 JSON 回执文件时，直接使用当前命令的结构化回执核对并展示链接，不因非 JSON 附件阻断成功结果展示。不手抄 JSON 充作源数据，不将聊天摘要当原文；源文件不可用时不伪造输入文件。只提取允许展示的业务 URL，凭据及失效入口不回显。此核对只读本地文件，不调用 DWS、网络或宿主；百分号编码中的字母大小写须原样保留，即使访问等价也不可互换。
 
-- 展示链接时，名称与对象对应，复用当前有效回执中对象自身的完整 `url` 或身份匹配的 `relation=target` 链接，保留原编码；不得截断、缩写或用 `...` / `…` 替代 URL 任一部分。不用父级链接冒充目标对象，不拼接地址或为补链接重放写入。独立读回优先，显式 null/空值不由旧回执覆盖。
-- 如实描述结果，保留 pending/unknown/partial/STOP；链接本身不证明成功、核验完成或流程启用。缺链接时可简短说明。
-- 字段 target 须满足 `objectType=field` 且 `objectId=当前 fieldId`；不额外展示错配链接。字段自身无可用链接时直说缺失，核验状态仍按有效回执保留。
+- **入口身份：**按链接的对象类型与对象 ID 判断入口身份，不按 `relation` 的字面含义判断；身份匹配的 `links` 即使 `relation=parent` 仍是当前对象入口，只有链接身份确属父级时才称父级入口。
+- **最终交付：**回复前按用户请求、已确认范围及当前状态清点全部最终目标，入口须有效且匹配身份、用途；成功回执、`relation=target` 和过程对象不自动成为最终产物。按用户及宿主规定逐目标完成交付／登记和呈现，核对正文链接，不以父级入口合并替代；普通链接不替代登记；过程已展示链接或宿主已呈现卡片，最终 Markdown 正文仍须保留最终目标的有效具名完整链接（`[对象名称](完整URL)`）；过程去重不免除此要求。缺少适用入口时说明缺口。用户要求完整汇总时保留各项完整链接及原状态。某目标恢复中不遗漏其他可交付目标。
+- **过程展示：**真实业务回执返回后，对用户要求且有当前有效、角色匹配入口的对象，必须逐一展示具名完整链接；不同目标不合并为 Base，不以父级替代已有深链。仅有父级入口时明确说明，不冒充目标直达。同对象同入口在过程内可去重；内部自动对象不自动纳入，用户要求的对象不因自动创建而排除。过程展示与最终交付分别完成，形式及面板行为遵循用户与宿主要求。
+- **入口与名称：**取当前对象 `url`、身份匹配的 `links` 或已确认可用的 `shareFormUrl`；`target/parent` 仅表调用关系。独立读回优先，显式 null/空值不由旧回执覆盖。业务 URL 及参数（含编码和顺序）逐字符原样保留，不截断、改写或重建；逐对象提取本条回执的完整原始 URL，直接用于该对象的链接目标；从本条回执直接复制完整 URL，不套用其他对象的 URL 替换 ID，不重新键入、解码再编码或统一大小写；同批链接各自保留编码，前一条的 `%3d` 不决定后一条的编码，如 `%3D` 不改为 `%3d`。发送前将实际待发送链接与本条回执逐字符比对，一处不同就修正；只声称原样保留不算核对。上传签名 URL、token 等凭据脱敏。名称须对应链接对象；缺名用对象类型或任务标签，仅在无法区分时附 ID，不编造名称。
+- **填写者交付边界：**交付给填写者且填写入口未就绪时，只说明缺口，不展示或登记管理页链接；即使注明非填写入口，也不将管理页列为可交付内容。只有用户明确要求管理操作或接收者为管理者时，才交付当前可用的管理页，并注明“管理页，非填写入口”。
+- **表单与字段：**填写者只用已确认可用的填写页；未分享或关闭时可向管理者交付可用管理页，注明“管理页，非填写入口”。分享未知或入口未就绪时说明缺口，不自动开启分享或扩大权限。字段 target 须满足 `objectType=field`、`objectId=当前 fieldId`，无自身链接时说明缺口，不展示错配链接，保留核验状态。
+- **缺链与状态：**缺链仅按工具明确规则及本次真实标识回退，否则说明缺口，不拼接或臆造。业务核验、登记、展示状态分别判断，保留 pending/unknown/partial/STOP；链接不证明成功、核验、权限、分享或流程启用，回执或展示请求不证明登记、渲染或面板已打开。失败、工具不可用或状态未知时说明缺口，不为补链接或交付重放业务写入。成功登记不重复，未知登记不自动重发，仅按宿主查询／安全恢复契约处理；展示去重不裁剪业务回执及 `links`。
+- **预发交付：**只使用可信完整预发 URL，前缀不证明环境映射；缺少时保留业务结果并说明未完成，不拼接、换域或改交生产链接。
 - **回执转述边界：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
-
-业务核验与宿主交付分别判断。对当前宿主明确要求交付或登记的最终产物，按其适用范围和规则执行，普通链接不替代规定的登记。展示或登记失败、工具不可用或状态未确认时，应简短分别说明当前已知的业务核验、登记与展示状态，不因此重放业务写入；无需重复对象或链接清单；用户明确要求字段完整汇总时除外，应按宿主及用户指定格式保留各项已有完整链接与原核验状态。展示请求已提交不等于登记或渲染成功。
-
-收尾时检查所有用户最终目标，某个目标进入恢复流程，不遗漏其他满足交付条件的目标；不额外登记未被用户指定为最终交付对象的内部 Table、字段或中间产物。已确认完成的登记不重复提交；结果未知的登记请求不自动重发，保留未确认状态并说明限制，仅在宿主提供明确查询或安全恢复契约时按其处理。用户要求预发交付时，指定预发前缀不证明环境映射成立；缺少可信完整预发 URL 时，保留业务结果并说明预发交付未完成，不自行拼接、换域登记或擅自改交生产链接。
 
 ## 先区分操作、用法与契约评审
 
@@ -49,7 +50,8 @@ metadata:
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 
-- 钉钉业务操作只通过 `dws` CLI；本 Skill 明确发布的脚本可编排 `dws` 并完成预签名文件上传。结构化读取使用 `--format json`，按真实返回判断结果。
+- 钉钉业务操作只通过 `dws` CLI；本 Skill 明确发布的脚本可编排 `dws` 并完成预签名文件上传。结构化读取使用 `--format json`，按真实返回判断结果。references 中的复合 shell 示例仅供普通终端。写命令不加 `--jq`，避免执行后过滤失败丢失回执。
+- **AI 表格命令执行：**按既有参数/确认规则组装命令，用宿主执行工具逐条原样执行，不附加 shell 管道、重定向、分号、`&&`、`cd`/`env` 前缀或 `echo`/`wc`。Schema/读取查询可按既有规则使用 CLI 原生 `--jq` 投影及 `--format`，不属额外命令加工；保留命令原始输出，不另加命令加工回执、触发展示或重复确认已核验结果。业务必需的独立读回及本地链接核对照常，组合核验不重复拆步；任务可分多次执行。不额外调用工具在浏览器中打开或展示结果；侧边栏由宿主 Hook 按支持范围处理，宿主明确要求的交付/登记仍按约定执行。
 - 已知 leaf 直接执行。只有参数或安全语义不确定时，最多读取一次 `dws schema --cli-path "aitable <leaf>" --compact --format json`；仅当该 compact leaf Schema 与 Cobra 实际不一致时，才读取同一 leaf 的 `dws aitable <leaf> --help`。禁止通过父级 Help、产品 Help 或完整 Catalog 探索命令。
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
@@ -145,15 +147,15 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 | 搜索 Base 候选或检查是否存在 | `dws aitable +base-search --query <关键词>` | 用户说“搜索/找一下/候选/如果没有就创建”时直接走本入口，不先调用 `+resolve-base`；返回 `hasMore/nextCursor`，仅 `hasMore=true` 时续页；AITable Base 名称不得路由到 `dws aisearch person` |
 | 浏览 Base 下的数据表 | `dws aitable +list-tables --base <ID>` | 只返回 tableId/tableName，不加载字段 |
 | 新建独立空白 Base，未指定自定义表结构 | `dws aitable base create --name <名称>` | 保留平台默认结构，不额外创建默认同名表或写入业务记录；不以 `tables=[]` 表达空白 Base；未独立核验记录数时，不宣称已验证零记录 |
-| 新建 Base 与整套表字段 | `dws aitable +base-bootstrap --name <名称> --tables '[{"name":"<表名>","fields":[{"fieldName":"<字段名>","type":"text"}]}]'` | 表对象键必须是 `name`，不是 `tableName`；字段使用 `fieldName/type/config`，可选 `description`；参数已足够时直接执行 |
+| 新建 Base 与整套表字段 | `dws aitable +base-bootstrap --name <名称> --tables '[{"name":"<表名>","fields":[{"fieldName":"<字段名>","type":"text"}]}]' --yes` | 表对象键必须是 `name`，不是 `tableName`；字段使用 `fieldName/type/config`，可选 `description`；用户已明确要求新建时首次调用即带 `--yes`；用户未要求时不写示例记录；明确要求交付的表逐表核对登记及正文链接，使用各表自身入口，Base 不默认追加 |
 | 复制 Base | `dws aitable +base-copy --base-id <B_OR_URL> [--target-folder-id <FOLDER_ID_OR_URL>] [--only-struct] [--new-name <名称>]` | `base-id` 可传 Base ID 或标准节点 URL；`target-folder-id` 可传 dentryUuid、标准节点 URL 或 Drive 文件夹 URL，省略时复制到源 Base 所在工作区根目录；参数解析与目标验证由 AITable MCP 负责 |
-| 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`，可选 `description`；自动按 15 个字段分片并读回验证 |
+| 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>' --yes` | 字段使用 `fieldName/type/config`，可选 `description`；自动按 15 个字段分片并读回验证 |
 | 读取字段目录或完整配置 | `dws aitable field list --base-id <B> --table-id <T>` / `dws aitable +field-get --base-id <B> --table-id <T>` | 只需 fieldId/name/type 用 `field list`；需要 config 用 `+field-get`；不存在 `+field-list` 或 `+list-fields` |
 | 按名称解析人员、部门或群组实体 | `dws aitable entity search --entity-type PERSON\|DEPARTMENT\|GROUP --keyword <名称>` | 返回候选和可用于筛选的稳定身份；零命中、重名、模糊命中或分页不完整时停止，不默认选择第一项 |
 | 查询原始记录、记录筛选/排序、原始记录 Top N 或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；单表直接标量、分组或去重统计改走 `record stats` / `record group-stats`，复杂服务端分析改走 psql。已获用户明确许可的非分析完整逐行明细可直接使用原子 `record query --all --page-limit <N>`，不需要也不触发 psql 降级门禁。 |
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
-| 按原写入 token 核对记录结果 | `dws aitable +record-write-result --base-id <B> --table-id <T> --client-token <原UUID>` | unknown 或 ID 不完整时，停止后续写入，下一步仍按原 Base/Table/token 调用本命令只读对账，不改成全表查询；applied 的 ID 集合不保证整批完整或输入顺序，未返回 ID 的记录仍未核实，不按数量差额或输入位置补写；完整 ID 集合确认后再逐 ID 核对实际值，查询失败不是可以重建的写入终态 |
-| 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
+| 按原写入 token 核对记录结果 | `dws aitable +record-write-result --base-id <B> --table-id <T> --client-token <原UUID> [--write-intent <原恢复文件>]` | 含创建的 `+record-upsert` 写前自动保存原操作号和恢复文件；回执已有 `writeIntentFiles` 时必须沿原文件核对，不能省略 `--write-intent` 或改写文件绕过身份/端点校验。unknown 为 pending，不代表未写入，停止后续写入，下一步仍按原 Base/Table/token/文件只读对账，不改成全表查询；applied 的 ID 集合不保证整批完整或输入顺序，未返回 ID 的记录仍未核实，不按数量差额或输入位置补写；完整 ID 集合确认后再逐 ID 核对实际值，查询失败不是可以重建的写入终态；创建组以 token 核对，更新组另按原 recordId 回读 |
+| 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON> --yes` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
 | 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回；空评论页仍读取 `meta.pagination`，仅 `meta.pagination.endpoint_exhausted=true` 时停止，否则将 `meta.pagination.next_token` 原样传给下一次 `--cursor`；写入未知状态先 list 对账 |
 | 按业务键同步或按条件批改 | 唯一键用 `dws aitable +record-upsert-by-key ...`；有界批改用 `dws aitable +record-bulk-patch ... --max-matches <N>` | upsert 仅允许 0 条创建、1 条更新；批改必须有 query/filters/record-ids 边界。普通 update/upsert 直接执行；只有历史、分享、删除恢复、空行或特殊字段值才读 [record-ops](references/aitable-record-ops.md)；明确 AND/OR、日期或比较操作符只读 [filter-sort](references/aitable/aitable-filter-sort.md) |
@@ -191,7 +193,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 - 已有 ID 直接使用；URL 只解析一次；“唯一定位并操作”用 `+resolve-base` / `+resolve-table`，“搜索候选/存在性检查”直接用 `+base-search`。人员、部门或群组只有显示名称时用 `entity search` 取得稳定身份；这些路径不要串行探测。filters/sort 缺 fieldId 时才读取字段目录。
 - Golden Route 已给出准确命令和参数时直接执行；不预读或默认读取通用 `references/aitable.md`。只有操作参数、JSON 结构或恢复语义确实缺失时，才读取下方一个精确操作 Reference。
-- Shortcut 已含分片或验证时不重复拆步；已有 Base 新建完整表结构直接用 `+table-bootstrap`。
+- Shortcut 已含分片或验证时不重复拆步；已有 Base 新建完整表结构直接用 `+table-bootstrap`。`+base-bootstrap`／`+table-bootstrap` 成功即已逐层读回，返回的字段已含 fieldId，后续写入直接使用，不再用 `+list-tables`、`field list`、`+record-query` 重复核对。
 - 明确仪表盘设计、大小混排或纵向叠放时保留显式 layout，创建后不默认 arrange。多图集中编排用 `+charts-create`；需要多步依赖和中断接续时读 dashboard-chart 专项，使用 `+build-plan` / `+build-plan-verify`。
 - AI submitted 只表示有真实 taskId 的受理；新状态入口已部署且有固定目标记录时才使用 `+field-wait-ai`。本轮终态与结果写回可读分别判断，缺少版本证据时保持 pending。
 - 单产品线性任务直接执行，不创建 TodoWrite；只有跨产品或多个独立分支的长任务才建计划，并且只在阶段切换时更新，不在每条 CLI 后刷新状态。
@@ -200,7 +202,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 - 记录 filter/sort 缺 fieldId 时才读取字段目录。
 - record filter/sort 与 view filter/sort/group 的协议和 Reference 互斥。普通 record query/create/update/upsert 直达；只有历史、分享、删除恢复、空行或特殊字段值读 `record-ops`。
-- 普通字段 type 使用 `text/number/date/singleSelect/currency`；`singleSelect` 的 config 为 `{"options":[{"name":"<选项>"}]}`，人民币 `currency` 为 `{"currencyType":"CNY","formatter":"FLOAT_2"}`。
+- 普通字段 type 使用 `text/number/date/singleSelect/currency`；`singleSelect` 的 config 为 `{"options":[{"name":"<选项>"}]}`，人民币 `currency` 为 `{"currencyType":"CNY","formatter":"FLOAT_2"}`，`date` 只用 `{"formatter":"YYYY-MM-DD"}`（默认）、`"YYYY-MM-DD HH:mm"` 或 `"YYYY-MM-DD HH:mm:ss"`，不写 `dateFormat`/`includeTime` 等未列出的键（会被丢弃，bootstrap 读回报 `config mismatch`）。日期单元格写 `"YYYY-MM-DD HH:mm"` 字符串，不自行换算时间戳。
 - 仅任务包含 4 个及以上独立业务步骤或用户明确要求时使用 TodoWrite；不按单条 CLI 拆步，只在阶段切换时更新。
 - 多个资源名要求同一时间戳时，只取一次并复用。
 - 复用 JSON 已返回字段，不以 `--verbose/raw/pretty` 重复请求。
@@ -229,7 +231,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 ## 按需加载（复杂 JSON 与恢复语义）
 
-Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取一个精确 Reference。读取后直接执行，不再读取其他 AITable Reference。
+Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取一个精确 Reference。读取后直接执行，不再读取其他 AITable Reference。下表分析仪表盘任务按专项处理，仅统计步骤可补读 record-stats 或 psql；此限定例外优先于通用直达、数据分析及单 Reference 规则，普通 Dashboard CRUD 不适用。
 
 | 触发条件 | Reference |
 |---|---|
@@ -246,7 +248,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | Kanban/Gallery 的 card、Gantt 的 timebar、Grid 的 aggregate | [view-types](references/aitable/aitable-view-types.md) |
 | 视图锁定、明确冻结前 N 列、行高或填色 | [view-extras](references/aitable/aitable-view-extras.md) |
 | Base 内 Section/节点移动或清理 | [section](references/aitable-section.md) |
-| Chart 创建或更新所需 config，或 Dashboard 完整 config/arrange；普通 Dashboard CRUD 走上方直达 | [dashboard-chart](references/aitable/aitable-dashboard-chart.md) |
+| 新建/重构分析仪表盘、选图/指标/布局语义不明、图表批建恢复决策或数值/页面异常复验；Chart config 或 Dashboard 完整 config/arrange；普通 Dashboard CRUD 仍直达 | [dashboard-chart](references/aitable/aitable-dashboard-chart.md) |
 | 表单创建、题目或分享 | [form](references/aitable/aitable-form.md) |
 | 附件上传或移除 | [attachment](references/aitable/aitable-attachment.md) |
 | 自动化工作流 | [workflow](references/aitable/aitable-workflow.md) |

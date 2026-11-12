@@ -2329,7 +2329,7 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 		Use:   "update-members",
 		Short: "更新考勤组成员（添加/删除考勤人员、部门、无需考勤人员）",
 		Long: `调用 MCP 工具 update_group_member，对指定考勤组的成员进行增删操作。
---group-id 必填；所有成员/部门参数均可选，但至少需要传一个变更项。由于保存考勤组耗时较久，指令需要带上--timeout 10
+--group-id 和 --member-join-policy 必填；所有成员/部门参数均可选，但至少需要传一个变更项。由于保存考勤组耗时较久，指令需要带上--timeout 10
 每次调用各参数最多传 20 个 ID。
 --yes 需要用户二次确认之后才允许带入，参考attendance.md中对于更新考勤组成员的说明
   --add-users           添加考勤人员 userId 列表，逗号分隔
@@ -2337,10 +2337,11 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
   --add-extra-users     添加无需考勤的人员 userId 列表，逗号分隔
   --remove-extra-users  删除无需考勤的成员 userId 列表，逗号分隔
   --add-depts           添加考勤部门 ID 列表，逗号分隔，若要添加全公司，根部门id为-1
-  --remove-depts        删除考勤部门 ID 列表，逗号分隔，全公司根部门id为-1`,
-		Example: `  dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --timeout 10
-  dws attendance group update-members --group-id 123456 --remove-users userId1 --timeout 10
-  dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2 --timeout 10`,
+  --remove-depts        删除考勤部门 ID 列表，逗号分隔，全公司根部门id为-1
+  --member-join-policy  员工加入策略，仅支持 SPECIFIC_USERS（拉入指定员工）；所有人员、部门增删均须显式传入（必填）`,
+		Example: `  dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --member-join-policy SPECIFIC_USERS --timeout 10
+  dws attendance group update-members --group-id 123456 --remove-users userId1 --member-join-policy SPECIFIC_USERS --timeout 10
+  dws attendance group update-members --group-id 123456 --add-depts deptId1 --remove-users userId2 --member-join-policy SPECIFIC_USERS --timeout 10`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID, _ := cmd.Flags().GetInt64("group-id")
 			if groupID == 0 {
@@ -2371,6 +2372,8 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			if len(updateParam) == 0 {
 				return fmt.Errorf("至少需要指定一个变更项：--add-users / --remove-users / --add-extra-users / --remove-extra-users / --add-depts / --remove-depts")
 			}
+			memberJoinPolicy, _ := cmd.Flags().GetString("member-join-policy")
+			updateParam["memberJoinPolicy"] = memberJoinPolicy
 
 			return callMCPToolOnServer("attendance-wukong", "update_group_member", map[string]any{
 				"groupId":     groupID,
@@ -2382,6 +2385,13 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
 			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			memberJoinPolicy, _ := cmd.Flags().GetString("member-join-policy")
+			if memberJoinPolicy != "SPECIFIC_USERS" {
+				return fmt.Errorf("--member-join-policy 必填，且仅支持 SPECIFIC_USERS")
+			}
+			return nil
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -2397,6 +2407,9 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 				Availability: "available",
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
+			Parameters: []contract.ParamDecl{
+				{Name: "member-join-policy", Required: boolPtr(true), Enum: []string{"SPECIFIC_USERS"}},
+			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "增删考勤组成员",
 				UseWhen:      []string{"需要向考勤组添加或移除成员，且 groupId 与成员列表已确认时"},
@@ -2406,8 +2419,8 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 					"创建新考勤组时使用 attendance group create",
 				},
 				Examples: []string{
-					"dws attendance group update-members --group-id 123456 --add-users userId1,userId2",
-					"dws attendance group update-members --group-id 123456 --remove-users userId1",
+					"dws attendance group update-members --group-id 123456 --add-users userId1,userId2 --member-join-policy SPECIFIC_USERS",
+					"dws attendance group update-members --group-id 123456 --remove-users userId1 --member-join-policy SPECIFIC_USERS",
 				},
 			},
 		},
@@ -4589,6 +4602,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	attendanceGroupUpdateMembersCmd.Flags().String("remove-extra-users", "", "删除无需考勤的成员 userId 列表，逗号分隔，最多 20 个（可选）")
 	attendanceGroupUpdateMembersCmd.Flags().String("add-depts", "", "添加考勤部门 ID 列表，逗号分隔，最多 20 个（可选）")
 	attendanceGroupUpdateMembersCmd.Flags().String("remove-depts", "", "删除考勤部门 ID 列表，逗号分隔，最多 20 个（可选）")
+	attendanceGroupUpdateMembersCmd.Flags().String("member-join-policy", "", "员工加入策略，仅支持 SPECIFIC_USERS（拉入指定员工）；所有人员、部门增删均须显式传入（必填）")
 	attendanceGroupUpdateMembersCmd.Flags().Bool("yes", false, "跳过确认提示")
 	attendanceGroupCmd.AddCommand(attendanceGroupUpdateMembersCmd)
 
