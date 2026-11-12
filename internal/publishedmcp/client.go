@@ -44,6 +44,7 @@ type Client struct {
 // ValidatedInvocationResult is evidence from the schema snapshot used by one
 // discover-validate-call operation plus the arbitrary remote call result.
 type ValidatedInvocationResult struct {
+	ResultTool            string
 	InputSchemaValidation string
 	InputSchemaDigest     string
 	Result                transport.ToolCallResult

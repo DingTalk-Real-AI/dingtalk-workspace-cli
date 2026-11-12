@@ -158,3 +158,24 @@ dws mcp published invoke <mcpId> <toolName> \
 消费端不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
 
 当前内置调用面适用于可直接接受 JSON-RPC `tools/list`/`tools/call` 的服务，不宣称覆盖必须显式 initialize、SSE 或 `Mcp-Session-Id` 的严格会话型端点。异常处理见 [故障定位](mcp/troubleshooting.md)。
+
+
+### CC HTTP 操作恢复模式（候选 CLI，部署验收待完成）
+
+对于声明稳定 `requestId` 并提供 `operation_get` 的 CC HTTP 工具，使用
+`mcp published invoke` 的 `--operation-file <path>`。这不是所有 MCP 的通用重试保证；
+普通 invoke 仍保持零自动重放。
+
+- 首次执行前自动生成请求编号并持久保存。模型参数中不得传 requestId。
+- 一次业务操作对应一个文件；重试必须复用同一路径及相同服务、工具、参数。
+- 再次运行只查询原操作。即使首次响应丢失、CLI 重启，也不再次执行业务工具。
+- pending 在原总超时预算内自动查询；终态原样保留 partial/rejected/unknown，不根据 success 宣称业务完成。
+- 文件只保存服务、工具、参数摘要和请求编号，不保存凭据、服务 URL 或业务结果。
+- 文件损坏、查询未找到或结果未知时不能删除文件换编号重试；先核实原业务。
+- 该模式要求网关将工具入参 requestId 映射到 HTTP Body.requestId，并提供按 requestId 查询的 operation_get。缺声明时首次写入前拒绝。
+- `resultTool` 标明最终结果及 inputSchemaDigest 所属的实际工具；续查时为 operation_get。
+- dry-run 不创建操作文件，也不访问远端。
+
+这是本地候选能力，尚未证明钉钉市场网关已发布对应配置；仍需通过真实 DWS 入口验收。
+
+当前最小方案不改变原工具输出额度或格式，不增加对象存储、上传或结果分段。超限仍按后端原有截断错误返回，不能解释为完整成功；列表优先使用业务分页。

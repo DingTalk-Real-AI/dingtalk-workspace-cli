@@ -47,6 +47,7 @@ const maxMCPPublishedParamsBytes = 1 << 20
 var validateMCPPublishedResult = output.ValidateResult
 
 type mcpPublishedInvokeResult struct {
+	ResultTool            string                   `json:"resultTool,omitempty"`
 	MCPID                 string                   `json:"mcpId"`
 	Tool                  string                   `json:"tool"`
 	InputSchemaValidation string                   `json:"inputSchemaValidation"`
@@ -156,13 +157,14 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 	cmd := &cobra.Command{
 		Use:               "invoke <mcpId> <tool>",
 		Short:             "调用当前身份可用的已发布 MCP 工具",
-		Long:              "调用指定 mcpId 下的已发布工具。由于远端工具的副作用无法由静态 CLI Contract 判断，真实调用一律需要显式确认。安全门禁能力标识：inputSchemaDigest (fresh_core_subset_snapshot)。",
+		Long:              "调用指定 mcpId 下的已发布工具。由于远端工具的副作用无法由静态 CLI Contract 判断，真实调用一律需要显式确认。安全门禁能力标识：inputSchemaDigest (fresh_core_subset_snapshot)。支持 CC HTTP 操作契约的服务可使用 --operation-file：首次持久保存请求编号并调用，后续复用文件只查询原操作；pending 在总超时内自动续查。文件不得删除后用于重试，不能用一个文件表示两次新操作。",
 		Example:           `  dws mcp published invoke 2480 search --params '{"query":"example"}' --dry-run --format json`,
 		Args:              mcpPublishedExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE:              runMCPPublishedInvoke(caller, factory),
 	}
 	cmd.Flags().String("params", "{}", "工具参数 JSON 对象")
+	cmd.Flags().String("operation-file", "", "CC HTTP 操作恢复文件：首次自动保存请求编号并调用，复用同一文件只查询原操作；需要服务提供 operation_get")
 	cli.AnnotateRuntimePositionals(cmd,
 		contract.RuntimeSchemaPositional{
 			Name: "mcp_id", Type: "string", Description: "钉钉 MCP 市场中的 mcpId", Required: true, Index: 0,
@@ -196,7 +198,10 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 					"properties":{
 						"mcpId":{"type":"string","description":"MCP 市场服务 ID"},
 						"tool":{"type":"string","description":"经全量实时发现后精确唯一匹配的工具名"},
+ "resultTool":{"type":"string","description":"操作恢复模式下实际返回本次结果及 Schema 摘要的工具，可能为 operation_get"},
 						"kind":{"type":"string","description":"dry-run 预演的调用类型"},
+ "operationFile":{"type":"string","description":"本地持久请求编号文件，不保存凭据"},
+ "operationMode":{"type":"string","description":"显式启用的稳定请求及原操作查询模式"},
 						"dry_run":{"type":"boolean","description":"是否仅完成本地预演"},
 						"executed":{"type":"boolean","description":"是否已发送远端工具调用"},
 						"product":{"type":"string","description":"固定为 mcp 的产品标识"},
@@ -238,6 +243,10 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 				"tool":      tool,
 				"arguments": params,
 			}
+			if file, _ := cmd.Flags().GetString("operation-file"); file != "" {
+				payload["operationFile"] = file
+				payload["operationMode"] = "durable_request_and_lookup"
+			}
 			if err := validateMCPPublishedResult(output.Success(payload, output.WithDryRun())); err != nil {
 				return err
 			}
@@ -256,7 +265,13 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 		if err != nil {
 			return err
 		}
-		invocation, err := client.InvokeValidated(ctx, endpoint, tool, params)
+		var invocation publishedmcp.ValidatedInvocationResult
+		operationFile, _ := cmd.Flags().GetString("operation-file")
+		if operationFile != "" {
+			invocation, err = publishedmcp.InvokeOperation(ctx, client, endpoint, mcpID, tool, params, operationFile)
+		} else {
+			invocation, err = client.InvokeValidated(ctx, endpoint, tool, params)
+		}
 		if err != nil {
 			return err
 		}
@@ -268,6 +283,7 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 		}
 		payload := mcpPublishedInvokeResult{
 			MCPID:                 mcpID,
+			ResultTool:            invocation.ResultTool,
 			Tool:                  tool,
 			InputSchemaValidation: invocation.InputSchemaValidation,
 			InputSchemaDigest:     invocation.InputSchemaDigest,
@@ -354,6 +370,11 @@ func parseMCPPublishedInvoke(cmd *cobra.Command, args []string) (string, string,
 	decoder.UseNumber()
 	if err := decoder.Decode(&params); err != nil || params == nil {
 		return "", "", nil, apperrors.NewValidation("--params 必须是 JSON 对象")
+	}
+	if file, _ := cmd.Flags().GetString("operation-file"); file != "" {
+		if _, exists := params["requestId"]; exists {
+			return "", "", nil, apperrors.NewValidation("--operation-file 自动管理 requestId，请从 --params 移除该字段")
+		}
 	}
 	return mcpID, tool, params, nil
 }

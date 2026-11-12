@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -925,5 +927,27 @@ func TestCrossPlatformCoverageMCPPublishedClientConfigCreatesDefaultTransport(t 
 	}
 	if token != "explicit-token" {
 		t.Fatalf("token = %q, want explicit-token", token)
+	}
+}
+
+func TestCrossPlatformCoverageMCPPublishedOperationDryRunHasNoFileOrCall(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "operation.json")
+	c := &mcpPublishedTestTransport{}
+	out, err := executeMCPPublishedCommand(t, publishedURLCaller(), c, "published", "invoke", "10836", "item_update", "--operation-file", file, "--params", `{"updates":[]}`, "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "operationFile") || c.factoryCtx != nil {
+		t.Fatal("dry run executed")
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatal("dry run created operation")
+	}
+}
+func TestCrossPlatformCoverageMCPPublishedOperationOwnsRequestID(t *testing.T) {
+	c := &mcpPublishedTestTransport{}
+	_, err := executeMCPPublishedCommand(t, publishedURLCaller(), c, "published", "invoke", "10836", "item_update", "--operation-file", filepath.Join(t.TempDir(), "operation.json"), "--params", `{"requestId":"model-generated"}`, "--yes")
+	if err == nil || c.factoryCtx != nil {
+		t.Fatal("model request identity accepted")
 	}
 }
