@@ -139,5 +139,11 @@ func voipMinutesAutoStartCall(cmd *cobra.Command, tool string, args map[string]a
 	if err != nil {
 		return nil, err
 	}
+	// 写请求已发出；缺少明确成功回执时不能推断设置生效，也不能自动重放。
+	body, ok := data.(map[string]any)
+	if !ok || body["success"] != true {
+		return nil, apperrors.NewAPI("VoIP 设置已提交，但服务端未返回明确成功回执，结果未知；请核实通话行为，不要自动重试",
+			apperrors.WithReason("remote_outcome_unknown"), apperrors.WithExecutionStarted(true), apperrors.WithRetryable(false))
+	}
 	return output.Success(data), nil
 }

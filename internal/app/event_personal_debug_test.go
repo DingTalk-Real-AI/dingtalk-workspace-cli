@@ -25,6 +25,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -276,6 +277,24 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 			cmd.SetArgs(append(append([]string(nil), baseArgs...), "--debug-raw-events"))
 			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("reused VoIP raw with explicit debug error = %v", err)
+			}
+			// 仅提供订阅 ID 时，SDK token 校验必须等订阅解析完成。
+			cmd = newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			args := []string{"--subscribe-id", "voip-sub", "--include-voip-sdk-token", "--format", "ndjson"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			cmd.SetArgs(args)
+			testseam.Swap(t, &personalConsumeRun, func(_ context.Context, cfg consume.Config) error {
+				if cfg.EventKey != personal.EventVoIPCallReceiveInvite {
+					t.Fatalf("event=%q", cfg.EventKey)
+				}
+				return nil
+			})
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
+				t.Fatalf("reused VoIP SDK token: %v", err)
 			}
 		})
 	}

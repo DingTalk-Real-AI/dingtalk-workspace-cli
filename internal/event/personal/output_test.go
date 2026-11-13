@@ -1829,3 +1829,14 @@ func TestCrossPlatformCoverageProjectOutputKnownEventWithoutProjectorStillUnsupp
 		t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
 	}
 }
+func TestCrossPlatformCoverageVoIPHeaderBoundaries(t *testing.T) {
+	if got := removeHeaderEqualFold(nil, VoIPSDKTokenHeader); got != nil {
+		t.Fatalf("nil headers=%v", got)
+	}
+	if got := headerValueEqualFold(map[string]string{"other": "value"}, VoIPSDKTokenHeader); got != "" {
+		t.Fatalf("missing token=%q", got)
+	}
+	if got := headerValueEqualFold(map[string]string{" x-mozi-agent-sdk-token ": "fixture"}, VoIPSDKTokenHeader); got != "fixture" {
+		t.Fatalf("token=%q", got)
+	}
+}

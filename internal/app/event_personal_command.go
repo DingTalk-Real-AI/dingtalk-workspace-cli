@@ -1140,7 +1140,8 @@ func validatePersonalEventOutputModeWithOptions(eventKeys []string, flatten, deb
 	if includeVoIPSDKToken && format == consume.FormatRaw {
 		return fmt.Errorf("--include-voip-sdk-token is not supported with --format raw; use ndjson, json, pretty, or compact")
 	}
-	if includeVoIPSDKToken {
+	// 复用订阅且尚未查询 event_key 时延迟类型校验；解析后会再次调用。
+	if includeVoIPSDKToken && !(len(eventKeys) == 1 && strings.TrimSpace(eventKeys[0]) == "") {
 		hasVoIP := false
 		for _, eventKey := range eventKeys {
 			if strings.TrimSpace(eventKey) == personal.EventVoIPCallReceiveInvite {

@@ -3,12 +3,14 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
@@ -107,5 +109,36 @@ func TestVoipRootCommandHidden(t *testing.T) {
 	root := newVoipCommand()
 	if !root.Hidden {
 		t.Fatal("voip 根命令应保持 Hidden（misc 长尾形态）")
+	}
+}
+
+func TestVoipMinutesAutoStartRejectsUnconfirmedResult(t *testing.T) {
+	for _, text := range []string{"", "{}", "null", "[]", `{"success":"true"}`, `{"success":false}`, `{"success":true} trailing`} {
+		t.Run(text, func(t *testing.T) {
+			fake := &sportFakeCaller{blocks: 1, text: text}
+			InitDepsForTest(t, fake)
+			_, err := runVoipCommandOutput(t, "--yes", "minutes", "auto-start", "--enable")
+			if err == nil || len(fake.calls) != 1 {
+				t.Fatalf("err=%v calls=%v", err, fake.calls)
+			}
+			if text == "" || text == "{}" || text == "null" || text == "[]" || text == `{"success":"true"}` {
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
+					t.Fatalf("unknown write error=%#v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestVoipMinutesAutoStartMissingCallerAndRemoteFailure(t *testing.T) {
+	InitDepsForTest(t, nil)
+	if _, err := voipMinutesAutoStartCall(nil, "set_voip_minutes_auto_start", nil); err == nil {
+		t.Fatal("missing caller accepted")
+	}
+	fake := &sportFakeCaller{err: errors.New("remote failed")}
+	InitDepsForTest(t, fake)
+	if _, err := runVoipCommandOutput(t, "--yes", "minutes", "auto-start", "--enable"); err == nil {
+		t.Fatal("remote error accepted")
 	}
 }
