@@ -211,7 +211,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 ## 记录稳定约束
 
 - 记录分页报 `INVALID_CURSOR`、`CURSOR_SNAPSHOT_CHANGED` 或 `CURSOR_SNAPSHOT_UNAVAILABLE` 时，必须丢弃全部累计结果与旧 cursor，不存在可续传的新 cursor，也不能保留第一页再去重拼接。前两者核对条件后不传 `--cursor` 从第一页只读重查；UNAVAILABLE 需先等待服务修复。不得重跑含写入的整条命令。仅普通可恢复错误且实际提供有效断点时可续传，详见 [record-query](references/aitable/aitable-record-query.md)。
-- 查询、写入、筛选或排序前，先用 `field get` 获取目标字段的 `fieldId`、`type` 和 `config`；`cells` 的 key 必须使用 `fieldId`，不是字段中文名。
+- 查询、写入、筛选或排序前，先用 `field get` 获取目标字段的 `fieldId`、`type` 和 `config`；`cells` 的 key 推荐使用真实 `fieldId`，也支持当前表内唯一、精确匹配的字段名。
 - select/multipleSelect 写入传选项名称；过滤时先唯一解析 option ID。对 multipleSelect 或其他数组型字段，第二个 operand 必须是 option ID/稳定 ID 数组，不能传裸字符串。
 - 人员、部门、群组和关联记录等条件先解析为稳定的结构化 ID；零命中、多命中或类型不符时停止，不得把展示名称或原值直接透传。
 - 已获用户明确许可的非分析完整逐行明细可直接使用 `record query --all --page-limit 0`，不需要也不触发 psql 降级门禁；不得用它替代 psql 复杂分析，或在 Agent context、Python、jq、JavaScript、电子表格等本地工具做计算。自动翻页禁止模型手写循环；手动分页必须透传真实 `data.nextCursor`，且查询条件不变。成功空续页 `records=[]` 且 `nextCursor` 为空是正常末页，不得报错、重试或判定漏查。
