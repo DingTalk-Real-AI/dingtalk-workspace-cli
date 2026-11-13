@@ -25,6 +25,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -89,7 +90,8 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 		EventBornTime: 1787903566711,
 		EventType:     personal.EventVoIPCallReceiveInvite,
 		SubscribeID:   "sub-1",
-		Data:          `{"eventId":"business-event-1","eventKey":"user_voip_call_receive_invite","occurredAtMs":1787903566579,"subId":"sub-1","payload":{"bizid":"VOIP-1","body":{"callId":"call-1","roomCode":"7286913750"}}}`,
+		Headers:       map[string]string{"X-Mozi-Agent-Sdk-Token": "dynamic-sdk-token", "keep": "value"},
+		Data:          `{"eventId":"business-event-1","eventKey":"user_voip_call_receive_invite","occurredAtMs":1787903566579,"subId":"sub-1","payload":{"bizid":"VOIP-1","body":{"callId":"call-1","roomCode":"7286913750","sdkAuth":{"appId":"meeting-app","sdkToken":"body-sdk-token"}}}}`,
 	}
 	formatter, err := consume.NewFormatter(consume.FormatNDJSON,
 		consume.WithProjector(personalEventProjector(false, false)),
@@ -101,8 +103,8 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(rendered, []byte("7286913750")) || bytes.Contains(rendered, []byte("roomCode")) {
-		t.Fatalf("default VoIP output leaked room code: %s", rendered)
+	if bytes.Contains(rendered, []byte("7286913750")) || bytes.Contains(rendered, []byte("roomCode")) || bytes.Contains(rendered, []byte("dynamic-sdk-token")) || bytes.Contains(rendered, []byte("body-sdk-token")) || bytes.Contains(rendered, []byte("sdkToken")) {
+		t.Fatalf("default VoIP output leaked sensitive credentials: %s", rendered)
 	}
 	var envelope transport.Event
 	if err := json.Unmarshal(bytes.TrimSpace(rendered), &envelope); err != nil {
@@ -113,6 +115,26 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 	}
 	if !strings.Contains(envelope.Data, `"callId":"call-1"`) {
 		t.Fatalf("default VoIP output dropped non-sensitive payload: %s", envelope.Data)
+	}
+	if envelope.Headers["keep"] != "value" {
+		t.Fatalf("default VoIP output dropped non-sensitive header: %#v", envelope.Headers)
+	}
+
+	credentialFormatter, err := consume.NewFormatter(consume.FormatNDJSON,
+		consume.WithProjector(personalEventProjectorWithOptions(false, true, true)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentialOutput, err := credentialFormatter.Render(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(credentialOutput, []byte(`"sdk_token":"body-sdk-token"`)) {
+		t.Fatalf("explicit VoIP credential output omitted body sdkToken: %s", credentialOutput)
+	}
+	if bytes.Contains(credentialOutput, []byte("7286913750")) || bytes.Contains(credentialOutput, []byte("roomCode")) {
+		t.Fatalf("explicit VoIP credential output leaked room code: %s", credentialOutput)
 	}
 }
 
@@ -158,6 +180,21 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 			args: []string{personal.EventVoIPCallReceiveInvite, "--format", "raw"},
 			want: "--format raw for VoIP events requires explicit --debug-raw-events",
 		},
+		{
+			name: "sdk token on non VoIP event",
+			args: []string{personal.EventMention, "--include-voip-sdk-token"},
+			want: "--include-voip-sdk-token requires event user_voip_call_receive_invite",
+		},
+		{
+			name: "sdk token with raw format",
+			args: []string{personal.EventVoIPCallReceiveInvite, "--include-voip-sdk-token", "--format", "raw"},
+			want: "--include-voip-sdk-token is not supported with --format raw",
+		},
+		{
+			name: "sdk token with raw debug",
+			args: []string{personal.EventVoIPCallReceiveInvite, "--include-voip-sdk-token", "--debug-raw-events"},
+			want: "--include-voip-sdk-token and --debug-raw-events are mutually exclusive",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
@@ -169,7 +206,7 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
 			}
-			if strings.Contains(err.Error(), "login") || strings.Contains(err.Error(), "token") {
+			if strings.Contains(err.Error(), "login") || strings.Contains(err.Error(), "load access token") || strings.Contains(err.Error(), "organization") {
 				t.Fatalf("output-mode validation ran after identity resolution: %v", err)
 			}
 		})
@@ -241,6 +278,24 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("reused VoIP raw with explicit debug error = %v", err)
 			}
+			// 仅提供订阅 ID 时，SDK token 校验必须等订阅解析完成。
+			cmd = newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			args := []string{"--subscribe-id", "voip-sub", "--include-voip-sdk-token", "--format", "ndjson"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			cmd.SetArgs(args)
+			testseam.Swap(t, &personalConsumeRun, func(_ context.Context, cfg consume.Config) error {
+				if cfg.EventKey != personal.EventVoIPCallReceiveInvite {
+					t.Fatalf("event=%q", cfg.EventKey)
+				}
+				return nil
+			})
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
+				t.Fatalf("reused VoIP SDK token: %v", err)
+			}
 		})
 	}
 	if !reflect.DeepEqual(consumeDryRuns, []bool{true, false}) {
@@ -257,6 +312,9 @@ func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testin
 	if err := validatePersonalEventOutputMode([]string{personal.EventVoIPCallReceiveInvite}, false, true, consume.FormatRaw); err != nil {
 		t.Fatalf("explicit VoIP raw debug mode error = %v", err)
 	}
+	if err := validatePersonalEventOutputModeWithOptions([]string{personal.EventVoIPCallReceiveInvite}, true, false, true, consume.FormatNDJSON); err != nil {
+		t.Fatalf("explicit VoIP sdkToken flattened mode error = %v", err)
+	}
 }
 
 func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
@@ -271,11 +329,11 @@ func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
 	cmd := newEventConsumeCommand()
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
-	cmd.SetArgs([]string{personal.EventMention, "--flatten", "--format", "compact"})
+	cmd.SetArgs([]string{personal.EventVoIPCallReceiveInvite, "--flatten", "--include-voip-sdk-token", "--format", "compact"})
 	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !got.Flatten || got.Common.FormatRaw != "compact" {
+	if !got.Flatten || !got.IncludeVoIPSDKToken || got.Common.FormatRaw != "compact" {
 		t.Fatalf("forwarded options = %#v", got)
 	}
 }

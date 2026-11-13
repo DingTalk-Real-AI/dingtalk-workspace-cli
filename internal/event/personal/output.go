@@ -452,23 +452,34 @@ type OAApprovalInstanceFinishedOutput struct {
 // when the current user receives a VoIP call invitation. BizID is preserved
 // because it is the business event's retry-stable deduplication key.
 type VoIPCallReceiveInviteOutput struct {
-	Type         string `json:"type" description:"事件类型，固定为当前 event_key"`
-	EventID      string `json:"event_id" description:"transport 事件 ID，可用于传输层去重"`
-	Timestamp    int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
-	SubscribeID  string `json:"subscribe_id" description:"订阅 ID"`
-	BizID        string `json:"biz_id" description:"业务事件唯一 ID；同一事件重试时保持不变，可用于业务去重"`
-	CorpID       string `json:"corp_id" description:"事件所属组织的 corpId"`
-	OrgID        int64  `json:"org_id" description:"事件所属组织 ID"`
-	TargetUID    int64  `json:"target_uid" description:"订阅并接收邀请的目标用户 UID"`
-	CallID       string `json:"call_id" description:"通话会话 ID"`
-	CallerUID    string `json:"caller_uid" description:"主叫用户标识，按上游协议保留字符串原值"`
-	CallerCorpID string `json:"caller_corp_id" description:"主叫用户所属组织 corpId"`
-	CalleeUID    string `json:"callee_uid" description:"被叫用户标识，按上游协议保留字符串原值"`
-	CalleeCorpID string `json:"callee_corp_id" description:"被叫用户所属组织 corpId"`
-	CallType     string `json:"call_type" description:"通话类型；值以服务端实际推送为准"`
-	RoomID       string `json:"room_id" description:"会议房间 ID"`
-	CreateTime   int64  `json:"create_time" description:"通话邀请创建时间" format:"timestamp_ms"`
-	EventTime    int64  `json:"event_time" description:"通话邀请事件业务时间" format:"timestamp_ms"`
+	Type          string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID       string `json:"event_id" description:"transport 事件 ID，可用于传输层去重"`
+	Timestamp     int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID   string `json:"subscribe_id" description:"订阅 ID"`
+	BizID         string `json:"biz_id" description:"业务事件唯一 ID；同一事件重试时保持不变，可用于业务去重"`
+	CorpID        string `json:"corp_id" description:"事件所属组织的 corpId"`
+	OrgID         int64  `json:"org_id" description:"事件所属组织 ID"`
+	TargetUID     int64  `json:"target_uid" description:"订阅并接收邀请的目标用户 UID"`
+	CallID        string `json:"call_id" description:"通话会话 ID"`
+	CallerUID     string `json:"caller_uid" description:"主叫用户标识；读取上游 callerUserId，并按字符串保留原值"`
+	CallerCorpID  string `json:"caller_corp_id" description:"主叫用户所属组织 corpId"`
+	CalleeUID     string `json:"callee_uid" description:"被叫用户标识，按上游协议保留字符串原值"`
+	CalleeCorpID  string `json:"callee_corp_id" description:"被叫用户所属组织 corpId"`
+	CallType      string `json:"call_type" description:"通话类型；值以服务端实际推送为准"`
+	RoomID        string `json:"room_id" description:"会议房间 ID"`
+	SDKAppID      string `json:"sdk_app_id,omitempty" description:"MeetingSDK appId，与动态 sdkToken 配对使用"`
+	SDKExpireTime int64  `json:"sdk_expire_time,omitempty" description:"MeetingSDK sdkToken 过期时间，Unix 秒"`
+	SDKToken      string `json:"sdk_token,omitempty" description:"MeetingSDK 动态凭证；仅显式 --include-voip-sdk-token 时输出"`
+	CreateTime    int64  `json:"create_time" description:"通话邀请创建时间" format:"timestamp_ms"`
+	EventTime     int64  `json:"event_time" description:"通话邀请事件业务时间" format:"timestamp_ms"`
+}
+
+const VoIPSDKTokenHeader = "X-Mozi-Agent-Sdk-Token"
+
+// ProjectionOptions controls explicitly reviewed additions to personal-event
+// output. Sensitive VoIP credentials stay excluded unless the caller opts in.
+type ProjectionOptions struct {
+	IncludeVoIPSDKToken bool
 }
 
 type TodoTaskCreatedOutput struct {
@@ -569,6 +580,12 @@ var marshalPersonalTransportData = json.Marshal
 // non-flatten output mode while removing sensitive VoIP invitation fields.
 // Callers that explicitly opt into raw debugging bypass this projector.
 func ProjectTransportOutput(ev transport.Event) (any, error) {
+	return ProjectTransportOutputWithOptions(ev, ProjectionOptions{})
+}
+
+// ProjectTransportOutputWithOptions preserves the transport envelope while
+// applying the VoIP credential disclosure policy selected by the caller.
+func ProjectTransportOutputWithOptions(ev transport.Event, options ProjectionOptions) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
 		if isVoIPEvent(ev.EventType) {
@@ -586,7 +603,7 @@ func ProjectTransportOutput(ev transport.Event) (any, error) {
 		return ev, nil
 	}
 
-	sanitizedPayload, err := redactVoIPRoomCode(data.Payload)
+	sanitizedPayload, err := redactVoIPSensitiveFields(data.Payload, options.IncludeVoIPSDKToken)
 	if err != nil {
 		return baseEventOutput{
 			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
@@ -608,10 +625,36 @@ func ProjectTransportOutput(ev transport.Event) (any, error) {
 
 	safe := ev
 	safe.Data = string(encoded)
+	if !options.IncludeVoIPSDKToken {
+		safe.Headers = removeHeaderEqualFold(ev.Headers, VoIPSDKTokenHeader)
+	}
 	return safe, nil
 }
 
-func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
+func removeHeaderEqualFold(headers map[string]string, name string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	result := make(map[string]string, len(headers))
+	for key, value := range headers {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func headerValueEqualFold(headers map[string]string, name string) string {
+	for key, value := range headers {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return value
+		}
+	}
+	return ""
+}
+
+func redactVoIPSensitiveFields(raw json.RawMessage, includeSDKToken bool) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, fmt.Errorf("payload is missing")
@@ -625,11 +668,11 @@ func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
 		}
 		for key, value := range object {
 			normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
-			if normalized == "roomcode" {
+			if normalized == "roomcode" || (normalized == "sdktoken" && !includeSDKToken) {
 				delete(object, key)
 				continue
 			}
-			redacted, err := redactVoIPRoomCode(value)
+			redacted, err := redactVoIPSensitiveFields(value, includeSDKToken)
 			if err != nil {
 				return nil, err
 			}
@@ -642,7 +685,7 @@ func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
 			return nil, err
 		}
 		for i, value := range values {
-			redacted, err := redactVoIPRoomCode(value)
+			redacted, err := redactVoIPSensitiveFields(value, includeSDKToken)
 			if err != nil {
 				return nil, err
 			}
@@ -781,14 +824,22 @@ type personalVoIPCallReceiveInvitePayload struct {
 }
 
 type personalVoIPCallReceiveInviteBody struct {
-	CallID       string             `json:"callId"`
-	CallerUID    voIPUserIdentifier `json:"callerUid"`
-	CallerCorpID string             `json:"callerCorpId"`
-	CalleeUID    voIPUserIdentifier `json:"calleeUid"`
-	CalleeCorpID string             `json:"calleeCorpId"`
-	CallType     string             `json:"callType"`
-	RoomID       string             `json:"roomId"`
-	CreateTime   int64              `json:"createTime"`
+	CallID          string              `json:"callId"`
+	CallerUserID    voIPUserIdentifier  `json:"callerUserId"`
+	LegacyCallerUID voIPUserIdentifier  `json:"callerUid"`
+	CallerCorpID    string              `json:"callerCorpId"`
+	CalleeUID       voIPUserIdentifier  `json:"calleeUid"`
+	CalleeCorpID    string              `json:"calleeCorpId"`
+	CallType        string              `json:"callType"`
+	RoomID          string              `json:"roomId"`
+	SDKAuth         personalVoIPSDKAuth `json:"sdkAuth"`
+	CreateTime      int64               `json:"createTime"`
+}
+
+type personalVoIPSDKAuth struct {
+	AppID      string `json:"appId"`
+	ExpireTime int64  `json:"expireTime"`
+	SDKToken   string `json:"sdkToken"`
 }
 
 // voIPUserIdentifier preserves the String contract introduced by the VoIP
@@ -891,6 +942,12 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 // so sensitive transport fields cannot leak through the projection fallback;
 // legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
+	return ProjectOutputWithOptions(ev, ProjectionOptions{})
+}
+
+// ProjectOutputWithOptions converts the transport envelope while exposing
+// sensitive VoIP credentials only after an explicit caller opt-in.
+func ProjectOutputWithOptions(ev transport.Event, options ProjectionOptions) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
 		if isVoIPEvent(ev.EventType) || ev.EventType == EventCalendarEventChanged {
@@ -1007,7 +1064,7 @@ func ProjectOutput(ev transport.Event) (any, error) {
 	case isOAEvent(eventType):
 		return projectOAApprovalEvent(ev, base, data.Payload)
 	case isVoIPEvent(eventType):
-		return projectVoIPCallReceiveInviteEvent(base, data.Payload)
+		return projectVoIPCallReceiveInviteEvent(base, data.Payload, ev.Headers, options)
 	case isTodoEvent(eventType):
 		return projectTodoEvent(ev, base, data.Payload)
 	case isFriendRequestReceivedEvent(eventType):
@@ -1033,7 +1090,7 @@ func ProjectOutput(ev transport.Event) (any, error) {
 	}
 }
 
-func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage) (any, error) {
+func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage, headers map[string]string, options ProjectionOptions) (any, error) {
 	var payload personalVoIPCallReceiveInvitePayload
 	if err := decodeRequiredPayload(raw, &payload); err != nil {
 		return base, fmt.Errorf("decode personal VoIP payload: %w", err)
@@ -1042,25 +1099,38 @@ func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage
 		return base, fmt.Errorf("decode personal VoIP payload: bizid is required")
 	}
 
-	return VoIPCallReceiveInviteOutput{
-		Type:         base.Type,
-		EventID:      base.EventID,
-		Timestamp:    base.Timestamp,
-		SubscribeID:  base.SubscribeID,
-		BizID:        payload.BizID,
-		CorpID:       payload.CorpID,
-		OrgID:        payload.OrgID,
-		TargetUID:    payload.UID,
-		CallID:       payload.Body.CallID,
-		CallerUID:    string(payload.Body.CallerUID),
-		CallerCorpID: payload.Body.CallerCorpID,
-		CalleeUID:    string(payload.Body.CalleeUID),
-		CalleeCorpID: payload.Body.CalleeCorpID,
-		CallType:     payload.Body.CallType,
-		RoomID:       payload.Body.RoomID,
-		CreateTime:   payload.Body.CreateTime,
-		EventTime:    payload.EventTime,
-	}, nil
+	callerUID := string(payload.Body.CallerUserID)
+	if strings.TrimSpace(callerUID) == "" {
+		callerUID = string(payload.Body.LegacyCallerUID)
+	}
+	output := VoIPCallReceiveInviteOutput{
+		Type:          base.Type,
+		EventID:       base.EventID,
+		Timestamp:     base.Timestamp,
+		SubscribeID:   base.SubscribeID,
+		BizID:         payload.BizID,
+		CorpID:        payload.CorpID,
+		OrgID:         payload.OrgID,
+		TargetUID:     payload.UID,
+		CallID:        payload.Body.CallID,
+		CallerUID:     callerUID,
+		CallerCorpID:  payload.Body.CallerCorpID,
+		CalleeUID:     string(payload.Body.CalleeUID),
+		CalleeCorpID:  payload.Body.CalleeCorpID,
+		CallType:      payload.Body.CallType,
+		RoomID:        payload.Body.RoomID,
+		SDKAppID:      payload.Body.SDKAuth.AppID,
+		SDKExpireTime: payload.Body.SDKAuth.ExpireTime,
+		CreateTime:    payload.Body.CreateTime,
+		EventTime:     payload.EventTime,
+	}
+	if options.IncludeVoIPSDKToken {
+		output.SDKToken = payload.Body.SDKAuth.SDKToken
+		if strings.TrimSpace(output.SDKToken) == "" {
+			output.SDKToken = headerValueEqualFold(headers, VoIPSDKTokenHeader)
+		}
+	}
+	return output, nil
 }
 
 func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
