@@ -46,7 +46,7 @@ func runVoipCommandOutput(t *testing.T, args ...string) (map[string]any, error) 
 	return envelope, nil
 }
 
-func TestVoipMinutesAutoStartRequiresEnableFlag(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartRequiresEnableFlag(t *testing.T) {
 	InitDepsForTest(t, &sportFakeCaller{blocks: 1, text: `{"success":true}`})
 	_, err := runVoipCommandOutput(t, "minutes", "auto-start")
 	if err == nil || !strings.Contains(err.Error(), "--enable") {
@@ -54,7 +54,7 @@ func TestVoipMinutesAutoStartRequiresEnableFlag(t *testing.T) {
 	}
 }
 
-func TestVoipMinutesAutoStartEnableSendsTrue(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartEnableSendsTrue(t *testing.T) {
 	fake := &sportFakeCaller{blocks: 1, text: `{"success":true,"errorCode":"","errorMsg":""}`}
 	InitDepsForTest(t, fake)
 	envelope, err := runVoipCommandOutput(t, "--yes", "minutes", "auto-start", "--enable")
@@ -73,7 +73,7 @@ func TestVoipMinutesAutoStartEnableSendsTrue(t *testing.T) {
 	}
 }
 
-func TestVoipMinutesAutoStartDisableSendsFalse(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartDisableSendsFalse(t *testing.T) {
 	fake := &sportFakeCaller{blocks: 1, text: `{"success":true}`}
 	InitDepsForTest(t, fake)
 	if _, err := runVoipCommandOutput(t, "--yes", "minutes", "auto-start", "--enable=false"); err != nil {
@@ -84,7 +84,7 @@ func TestVoipMinutesAutoStartDisableSendsFalse(t *testing.T) {
 	}
 }
 
-func TestVoipMinutesAutoStartDryRunSkipsToolCall(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartDryRunSkipsToolCall(t *testing.T) {
 	fake := &sportFakeCaller{dryRun: true}
 	InitDepsForTest(t, fake)
 	envelope, err := runVoipCommandOutput(t, "--dry-run", "minutes", "auto-start", "--enable")
@@ -97,7 +97,7 @@ func TestVoipMinutesAutoStartDryRunSkipsToolCall(t *testing.T) {
 	}
 }
 
-func TestVoipMinutesAutoStartRequiresConfirmationWithoutYes(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartRequiresConfirmationWithoutYes(t *testing.T) {
 	InitDepsForTest(t, &sportFakeCaller{blocks: 1, text: `{"success":true}`})
 	_, err := runVoipCommandOutput(t, "minutes", "auto-start", "--enable")
 	if err == nil || !strings.Contains(err.Error(), "需要用户确认") {
@@ -105,14 +105,14 @@ func TestVoipMinutesAutoStartRequiresConfirmationWithoutYes(t *testing.T) {
 	}
 }
 
-func TestVoipRootCommandHidden(t *testing.T) {
+func TestCrossPlatformCoverageVoipRootCommandHidden(t *testing.T) {
 	root := newVoipCommand()
 	if !root.Hidden {
 		t.Fatal("voip 根命令应保持 Hidden（misc 长尾形态）")
 	}
 }
 
-func TestVoipMinutesAutoStartRejectsUnconfirmedResult(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartRejectsUnconfirmedResult(t *testing.T) {
 	for _, text := range []string{"", "{}", "null", "[]", `{"success":"true"}`, `{"success":false}`, `{"success":true} trailing`} {
 		t.Run(text, func(t *testing.T) {
 			fake := &sportFakeCaller{blocks: 1, text: text}
@@ -131,7 +131,7 @@ func TestVoipMinutesAutoStartRejectsUnconfirmedResult(t *testing.T) {
 	}
 }
 
-func TestVoipMinutesAutoStartMissingCallerAndRemoteFailure(t *testing.T) {
+func TestCrossPlatformCoverageVoipMinutesAutoStartMissingCallerAndRemoteFailure(t *testing.T) {
 	InitDepsForTest(t, nil)
 	if _, err := voipMinutesAutoStartCall(nil, "set_voip_minutes_auto_start", nil); err == nil {
 		t.Fatal("missing caller accepted")
