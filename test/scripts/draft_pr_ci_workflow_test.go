@@ -79,12 +79,12 @@ func TestDraftPRCIWorkflowContract(t *testing.T) {
 	if strings.Contains(aiBehavior, "if: ${{ github.event_name == 'push' || github.event.pull_request.draft == false }}") {
 		t.Error("AI Behavior must run and publish a failing status for Draft revisions")
 	}
-	pendingIndex := strings.Index(aiBehavior, "await setStatus('pending', 'Evaluating AI-generated PR boundaries');")
+	pendingIndex := strings.Index(aiBehavior, "await setStatus('pending', 'Evaluating pull request readiness');")
 	draftCheckIndex := strings.Index(aiBehavior, "if (before.draft)")
 	draftFailureIndex := strings.Index(aiBehavior, "await setStatus('failure', 'Draft PR; mark Ready to run Code Admission');")
-	labelPolicyIndex := strings.Index(aiBehavior, "const labels = before.labels.map")
-	if pendingIndex < 0 || draftCheckIndex <= pendingIndex || draftFailureIndex <= draftCheckIndex || labelPolicyIndex <= draftFailureIndex {
-		t.Error("AI Behavior must publish pending, fail Draft, then evaluate Ready-only label policy")
+	readyIndex := strings.Index(aiBehavior, "await setStatus('success', 'Ready PR; no AI-only restrictions');")
+	if pendingIndex < 0 || draftCheckIndex <= pendingIndex || draftFailureIndex <= draftCheckIndex || readyIndex <= draftFailureIndex {
+		t.Error("AI Behavior must publish pending, reject Draft, then accept Ready revisions regardless of labels")
 	}
 
 	draft := read(".github/workflows/draft-ci.yml")
