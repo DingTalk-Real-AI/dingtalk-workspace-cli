@@ -2083,7 +2083,8 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 冷缓存会串行运行五个完整分片；实测 30 分钟在最后一个分片被取消。
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
