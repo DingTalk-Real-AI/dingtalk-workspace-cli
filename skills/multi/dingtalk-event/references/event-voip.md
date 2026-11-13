@@ -4,6 +4,8 @@
 
 当前用户收到语音通话邀请时，使用 `dws event consume` 长连接实时监听，不轮询通话记录。
 
+VoIP 通话的纪要自动开启设置（发起通话自动开启通话纪要）走 `dws voip minutes auto-start`（见 [dingtalk-misc voip 参考](../../dingtalk-misc/references/voip.md)），不在事件能力内。
+
 ## Event catalog
 
 | 事件码 | 订阅规则 | 接收语义 | 必填参数 |
