@@ -5,18 +5,18 @@ package helpers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 )
 
 // ChatQuoteContent 统一聊天与数字员工的文本引用格式。
 func ChatQuoteContent(messageID, sender, text string) string {
-	content, _ := json.Marshal(map[string]string{
+	content, _ := jsonutil.Marshal(map[string]string{
 		"referenceOpenMessageId": messageID, "srcMsgSendOpenDingTalkId": sender,
 		"replyMsgType": "text", "content": text,
 	})

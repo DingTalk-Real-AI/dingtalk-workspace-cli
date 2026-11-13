@@ -36,66 +36,24 @@ check_hash() {
   [ "$actual" = "$expected" ] || fail "checksum mismatch for $relative"
 }
 
-# Windows architecture assertion. Byte integrity is already pinned by the
-# SHA-256 checks above; the COFF machine field is the byte-level ground truth
-# for architecture and is read directly with od(1), which is POSIX and
-# present on every supported host. Tool magic databases are not stable across
-# toolchain releases: GNU objdump 2.46 on Ubuntu 26 cannot parse ARM64 PE
-# images at all, and file(1) 5.46 renamed COFF machine 0xaa64 from "Aarch64"
-# to "ARM64", so tool output is advisory evidence only - it can confirm the
-# expected architecture but never overrule the machine field, and a probe
-# that cannot decide falls through instead of failing.
-pe_coff_machine() {
-  # e_lfanew (4 bytes LE at offset 0x3C) locates the PE signature; the COFF
-  # machine field is 2 bytes LE at e_lfanew+4. Prints the machine value as
-  # decimal, or nothing when the header cannot be parsed.
-  pe_off_bytes="$(od -A n -j 60 -N 4 -t u1 "$1" 2>/dev/null || true)"
-  pe_off="$(printf '%s\n' "$pe_off_bytes" | awk 'NF==4 {print $1 + 256*$2 + 65536*$3 + 16777216*$4}')"
-  [ -n "$pe_off" ] || return 2
-  pe_sig="$(od -A n -j "$pe_off" -N 4 -t u1 "$1" 2>/dev/null || true)"
-  printf '%s\n' "$pe_sig" | awk 'NF==4 && $1==80 && $2==69 && $3==0 && $4==0 {print 1}' | grep -q '^1$' || return 2
-  pe_machine_bytes="$(od -A n -j "$((pe_off + 4))" -N 2 -t u1 "$1" 2>/dev/null || true)"
-  printf '%s\n' "$pe_machine_bytes" | awk 'NF==2 {print $1 + 256*$2}'
-}
-
+# Read the PE/COFF Machine field directly. Host objdump builds may guess an
+# unsupported PE target's architecture, and file(1) descriptions vary by database.
+# Bytes are read individually so this is independent of the host's endianness.
 check_pe_arch() {
-  pe_relative="$1"
-  pe_objdump_pattern="$2"
-  pe_file_pattern="$3"
-  pe_label="$4"
-  pe_expected_machine="$5"
-  pe_path="$PAYLOAD/$pe_relative"
+  pe_path="$PAYLOAD/$1"
+  pe_machine="$2"
+  pe_label="$3"
 
-  pe_machine="$(pe_coff_machine "$pe_path" || true)"
-  if [ -n "$pe_machine" ]; then
-    [ "$pe_machine" -eq "$pe_expected_machine" ] || fail "invalid $pe_label library architecture (COFF machine 0x$(printf '%x' "$pe_machine"))"
-    return 0
-  fi
+  pe_bytes="$(od -An -tu1 -j 60 -N 4 "$pe_path")" || fail "cannot read $pe_label PE offset"
+  set -- $pe_bytes
+  [ "$#" -eq 4 ] || fail "invalid $pe_label PE offset"
+  pe_offset=$(( $1 + ($2 << 8) + ($3 << 16) + ($4 << 24) ))
 
-  # Advisory probes as a legacy fallback when the header cannot be extracted.
-  pe_probe="$(objdump -f "$pe_path" 2>/dev/null || true)"
-  # Keep only the architecture line: the probe echoes the file path first, and
-  # the amd64/arm64 token in that path is not architecture evidence.
-  pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
-  if printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern"; then
-    return 0
-  fi
-  if command -v llvm-objdump >/dev/null 2>&1; then
-    pe_probe="$(llvm-objdump -f "$pe_path" 2>/dev/null || true)"
-    pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
-    if printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern"; then
-      return 0
-    fi
-  fi
-  # Likewise file(1) prints "<path>: <description>"; keep the description.
-  pe_probe="$(file "$pe_path" 2>/dev/null || true)"
-  pe_desc="${pe_probe#*: }"
-  if printf '%s\n' "$pe_desc" | grep -Eiq "$pe_file_pattern"; then
-    return 0
-  fi
-
-  [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 1 ] || fail "cannot inspect $pe_label library architecture"
-  printf 'Skipping %s library architecture inspection: compatible tooling is unavailable.\n' "$pe_label"
+  pe_bytes="$(od -An -tx1 -j "$pe_offset" -N 6 "$pe_path")" || fail "cannot read $pe_label PE header"
+  set -- $pe_bytes
+  [ "$#" -eq 6 ] || fail "invalid $pe_label PE header"
+  [ "$1$2$3$4" = 50450000 ] || fail "invalid $pe_label PE signature"
+  [ "$5$6" = "$pe_machine" ] || fail "invalid $pe_label library architecture (PE Machine bytes $5$6, expected $pe_machine)"
 }
 
 check_hash darwin/universal/x7k2m9p4q1w8.dylib 8e4460791f12381863f5844ded6423b2a9b75d6f394e9bd146410e7f160b0c5c
@@ -175,10 +133,8 @@ done
 file "$PAYLOAD/darwin/universal/x7k2m9p4q1w8.dylib" | grep -Eiq 'universal|arm64.*x86_64|x86_64.*arm64' || fail "invalid macOS library architecture"
 file "$PAYLOAD/linux/amd64/libx7k2m9p4q1w8.so" | grep -Eiq 'ELF 64-bit.*x86-64' || fail "invalid Linux amd64 library architecture"
 file "$PAYLOAD/linux/arm64/libx7k2m9p4q1w8.so" | grep -Eiq 'ELF 64-bit.*(ARM aarch64|ARM64)' || fail "invalid Linux arm64 library architecture"
-# Expected machines are the COFF values: 0x8664 = AMD64, 0xaa64 = ARM64.
-check_pe_arch windows/amd64/x7k2m9p4q1w864.dll 'x86[_-]64' 'PE32\+.*x86-64' 'Windows amd64' 34404
-# file(1) names COFF machine 0xaa64 "Aarch64" in older magic and "ARM64" in newer magic.
-check_pe_arch windows/arm64/x7k2m9p4q1w864.dll 'aarch64|arm64' 'PE32\+.*(Aarch64|ARM64)' 'Windows arm64' 43620
+check_pe_arch windows/amd64/x7k2m9p4q1w864.dll 6486 'Windows amd64'
+check_pe_arch windows/arm64/x7k2m9p4q1w864.dll 64aa 'Windows arm64'
 
 printf 'Runtime payload verified: 5 libraries, 3 configurations, 6 targets, no ps files.\n'
 if [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 0 ]; then
