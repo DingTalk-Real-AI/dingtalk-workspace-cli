@@ -449,6 +449,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 
 	wantReferences := []string{
 		"event-app.md",
+		"event-send.md",
 		"event-im-keys.md",
 		"event-im-lifecycle.md",
 		"event-im-operations.md",

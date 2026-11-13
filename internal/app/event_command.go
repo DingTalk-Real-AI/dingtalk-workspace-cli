@@ -83,14 +83,16 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 		HelpReferences: contract.HelpReferences{
 			RelatedSkills: []string{"dingtalk-event"},
 			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("自建应用三方事件发送", "dingtalk-event", "references/event-send.md"),
 				contract.SkillDocumentation("事件订阅深度指南", "dingtalk-event", "references/event-im.md"),
 				contract.SkillDocumentation("互动卡片回调事件", "dingtalk-event", "references/event-card.md"),
 				contract.SkillDocumentation("日历个人事件", "dingtalk-event", "references/event-calendar.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办、日历、互动卡片回调与听记事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办、日历、互动卡片回调与听记事件，管理订阅生命周期，并用企业自建应用身份上报三方事件",
 			UseWhen: []string{
+				"需要用企业自建应用凭证向指定企业内 userId 发送该应用的三方事件",
 				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、user_card_action_triggered 互动卡片回调或听记创建/纪要生成事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
@@ -100,14 +102,15 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	})
 	cmd := &cobra.Command{
 		Use:               "event",
-		Short:             "事件订阅 (DingTalk Stream 长连接)",
-		Long:              "通过 DingTalk Stream 长连接订阅事件并以 NDJSON 输出到 stdout。详见 `dws event consume --help`。",
+		Short:             "事件订阅与企业自建应用事件发送",
+		Long:              "通过 DingTalk Stream 长连接订阅事件并以 NDJSON 输出，或用企业自建应用凭证上报三方事件。详见 `dws event consume --help` 和 `dws event send --help`。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
 		RunE:              func(c *cobra.Command, _ []string) error { return c.Help() },
 	}
 	cmd.AddCommand(
+		newEventSendCommand(globalFlags...),
 		newEventListenIMCommand(globalFlags...),
 		newEventConsumeCommand(globalFlags...),
 		newEventListCommand(globalFlags...),

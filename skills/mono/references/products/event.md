@@ -1,6 +1,20 @@
-# dws event — 个人 IM、OA 审批、VoIP、待办、好友、互动卡片、听记与日历事件
+# dws event — 个人事件监听与应用三方事件发送
 
 通过个人 Stream 长连接监听当前用户的钉钉消息接收、已读、撤回、表情回应、群生命周期、审批任务/实例、VoIP 通话邀请、待办创建/更新/删除、好友申请/添加成功、互动卡片回调，以及听记创建/纪要生成、主日历创建/修改/取消事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。普通 IM 监听默认使用 `dws event +listen-im`；OA 审批、VoIP、Todo、好友、互动卡片、听记、日历、群生命周期、显式 EventKey、Filter DSL、subscribe_id 复用或原始 envelope 使用 `dws event consume`。不要写脚本轮询消息历史、审批列表、通话记录、待办列表、好友列表、好友申请列表、听记列表或日程列表。
+
+企业自建应用发送三方事件使用 `dws event send`，以应用 Token 对接现有事件上报接口。完整应用凭证即可调用，事件 ID、业务版本、接收人和 payload 由调用方提供。
+
+## 应用事件发送
+
+```bash
+dws event send --event-key app_user_order_created --event-id order-1001-created --payload-schema-version 3 --user-id '<企业内 userId>' --payload '{"orderId":"order-1001"}' -f json
+```
+
+- `--event-key`、`--event-id`、`--payload-schema-version`、`--user-id` 和 `--payload` 必填。`--user-id` 可重复，去重后最多 100 人。`--payload` 支持 JSON 对象、`@文件` 或 `-` 标准输入并保留数字精度。可选 `--occurred-at` 使用带时区的 ISO 8601 时间。
+- 凭证优先使用完整 `--client-id` / `--client-secret`，再到完整 `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET`，最后读取应用配置和 Keychain。显式来源只提供一项时按错误提示补齐。凭证只用于应用 Token 换取，结果和日志保持脱敏。
+- 统一结果的 `data` 包含 `eventId`、`status`、`duplicate`。`ACCEPTED` 与 `DUPLICATE` 都是事件已接纳的成功回执，退出码 0。实际收件由订阅端核验。
+- 每次调用上报一次。重发同一事件沿用原 `--event-id` 和完整请求内容，发送新事件使用新 ID。同键不同内容会返回冲突。结果不确定时保留原事件 ID，按服务端错误与重试提示处理。
+- `--dry-run` 校验直接 JSON，文件和 stdin 仅显示来源。预览阶段不读取文件内容、stdin 或 Keychain，也不调用网络。
 
 ## 运行方式
 
@@ -9,7 +23,7 @@
 - 一个组织一个 bus，互不干扰、可同时跑；同组织内多个 consume 共享一个 bus。
 - 非默认组织加全局 `--profile <corpId 或 profile 名>`；漏传会退回默认 profile 而失败。
 
-## AppKey 与认证排障
+## 监听的 AppKey 与认证排障
 
 开源版默认 `normal` 模式只需要用户 token 和 AppKey，不要求用户提供 AppSecret。已有 AppKey 沿用本地身份；本地元数据缺失时，CLI 从当前事件 MCP 的 `/cli/clientId` 自动获取，仅用于本次调用并传给后台 bus，不写入 token/profile/app 配置。`custom` 模式和定制版不使用此兜底；取得 AppKey 不代表已验证 token 的应用归属，仍由服务端校验。
 
@@ -19,6 +33,7 @@
 
 | Command | Purpose |
 |---|---|
+| `dws event send --event-key ... --event-id ... --payload-schema-version ... --user-id ... --payload ...` | 使用企业自建应用凭证向指定企业内用户上报三方事件 |
 | `dws event +listen-im --kind ... [flags]` | 普通 message/reaction/read/recall 监听；支持自然姓名/群名唯一解析 |
 | `dws event list --category oa` | 查看当前公开的 OA 个人事件目录 |
 | `dws event list --category voip` | 查看当前公开的 VoIP 个人事件目录 |
@@ -73,7 +88,7 @@
 | `user_minutes_summary_generated` | 默认纪要首次生成成功且可读取；重新生成、切换模板、人工修改不通知 | 无 |
 | `user_calendar_event_changed` | 当前用户主日历创建及新增参与、修改、取消 | `--calendar-ids` / `--change-types` 可选 |
 
-只承认上表 33 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件、一个 VoIP 事件、两个好友事件、互动卡片事件和两个听记事件均使用 `all` 规则和 `{}` `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
+个人官方事件使用上表 33 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件、一个 VoIP 事件、两个好友事件、互动卡片事件和两个听记事件均使用 `all` 规则和 `{}` `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
 
 ## Intent mapping
 
