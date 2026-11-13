@@ -15,8 +15,6 @@ metadata:
 
 个人事件以外，应用事件经远端目录发现（见 [应用事件参考](references/event-app.md)）；消息、审批、待办、日程操作分别走 `dingtalk-chat`、`dingtalk-misc`、`dingtalk-todo`、`dingtalk-calendar`。
 
-企业自建应用使用 `dws event send` 上报三方事件；完整应用凭证即可调用，参数及重发见 [发送参考](references/event-send.md)。
-
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用 `event consume`。
 
@@ -101,15 +99,8 @@ OA/好友/听记各 EventKey 使用 `ruleType=all`、空 `filterRule`，不接�
 
 | 何时读取 | Reference |
 |---|---|
-| 应用事件发现、事件 Schema、版本与安全 | [event-app.md](references/event-app.md) |
 | 任务索引 | [event-im.md](references/event-im.md) |
 | EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) |
 | ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) |
 | 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) |
 | Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) |
-| OA 审批事件 | [event-oa.md](references/event-oa.md) |
-| VoIP 通话邀请 | [event-voip.md](references/event-voip.md) |
-| Todo 待办事件 | [event-todo.md](references/event-todo.md) |
-| 好友事件 | [event-contact.md](references/event-contact.md) |
-| 互动卡片回调事件 | [event-card.md](references/event-card.md) |
-| 日历创建/修改/取消、过滤与去重 | [event-calendar.md](references/event-calendar.md) |
