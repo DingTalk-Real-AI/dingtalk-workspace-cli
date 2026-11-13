@@ -159,7 +159,7 @@ func TestCrossPlatformCoveragePersonalVoIPDebugRawOutputRequiresExplicitOptIn(t 
 	}
 }
 
-func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T) {
+func TestCrossPlatformCoverageEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -303,7 +303,7 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 	}
 }
 
-func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testing.T) {
+func TestCrossPlatformCoverageValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testing.T) {
 	for _, format := range []consume.Format{consume.FormatNDJSON, consume.FormatJSON, consume.FormatPretty, consume.FormatCompact} {
 		if err := validatePersonalEventOutputMode([]string{personal.EventVoIPCallReceiveInvite}, true, false, format); err != nil {
 			t.Fatalf("validatePersonalEventOutputMode(VoIP, true, false, %q) error = %v", format, err)
@@ -317,7 +317,7 @@ func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testin
 	}
 }
 
-func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
+func TestCrossPlatformCoverageEventConsumeFlattenFlagIsForwarded(t *testing.T) {
 	oldRun := eventRunPersonalConsume
 	t.Cleanup(func() { eventRunPersonalConsume = oldRun })
 
