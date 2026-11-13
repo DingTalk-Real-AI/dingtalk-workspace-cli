@@ -147,9 +147,9 @@ func TestCrossPlatformCoverageRunDocReadJsonMLCoverage(t *testing.T) {
 		`{"jsonml":"{\"type\":\"doc\"}","revision":"bad"}`,
 	} {
 		caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}
-		_ = runDocReadJsonML("node", "", "", 0, false)
+		_ = runDocReadJsonML("node", "", "", 0, false, false)
 	}
 	caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"jsonml":"{\"type\":\"doc\"}"}`}}}
-	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "out.json"), "", 0, false)
-	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "missing", "out.json"), "pw", 3, true)
+	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "out.json"), "", 0, false, false)
+	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "missing", "out.json"), "pw", 3, true, false)
 }

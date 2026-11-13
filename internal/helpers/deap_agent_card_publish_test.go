@@ -109,8 +109,14 @@ func TestCrossPlatformCoverageEmployeeCardRevisionPublication(t *testing.T) {
 					if rec.Status != "card_incomplete" || rec.FlowStatus != "FINISH" {
 						t.Fatal(rec)
 					}
-				} else if rec.Status != "needs_review" || finalCalls != 2 {
-					t.Fatalf("unexpected retry/status: %d %+v", finalCalls, rec)
+				} else {
+					wantStatus := "needs_review"
+					if failure == "card_write_rejected" {
+						wantStatus = "card_delivery_failed"
+					}
+					if rec.Status != wantStatus || finalCalls != 2 {
+						t.Fatalf("unexpected retry/status: %d %+v", finalCalls, rec)
+					}
 				}
 				if surface.text("root") != want {
 					t.Fatalf("visible answer lost or mixed: got %d bytes, want %d", len(surface.text("root")), len(want))
@@ -160,7 +166,7 @@ func TestCrossPlatformCoverageEmployeeCardFailedPreviewIsNotGenerating(t *testin
 			if strings.Contains(surface.text("answer"), "生成中") || strings.Contains(surface.text("answer"), "展示全文") {
 				t.Fatal("terminal promises future output")
 			}
-			if strings.Contains(surface.components["execution"]["title"].(string), "AIGenerating") {
+			if strings.Contains(surface.components[employeeCardPanelID(false)]["title"].(string), "AIGenerating") {
 				t.Fatal("terminal still loading")
 			}
 		})
@@ -289,7 +295,7 @@ func TestCrossPlatformCoverageCodexRepeatedStartKeepsDelta(t *testing.T) {
 	p.handle("item/agentMessage/delta", json.RawMessage(`{"threadId":"thread","itemId":"a","delta":"完整"}`), "thread")
 	p.handle("item/started", start, "thread")
 	p.handle("item/agentMessage/delta", json.RawMessage(`{"threadId":"thread","itemId":"a","delta":"段落\n\n"}`), "thread")
-	if len(p.items) != 1 || len(p.order) != 1 || len(got) != 1 || got[0].Text != "完整段落" {
+	if len(p.items) != 1 || len(p.order) != 1 || len(got) != 2 || got[0].Text != "完整" || got[1].Text != "完整段落\n\n" {
 		t.Fatalf("duplicate start discarded or duplicated text: %+v", got)
 	}
 }

@@ -4,6 +4,7 @@ package aitable
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -59,11 +60,30 @@ func createRecordsReconciled(rt *shortcut.RuntimeContext, base, table string, re
 	return data, token, fmt.Errorf("create_records outcome is unknown (clientToken %s); reconcile without repeating the write: %v; original receipt: %v", token, readErr, writeErr)
 }
 
+// errRecordWriteUnknown identifies a validated receipt for the original write
+// which is not confirmed yet; it never permits resending that write.
+var errRecordWriteUnknown = errors.New("write reconciliation state is unknown")
+
 // reconciledRecordIDs binds a receipt to all three original selectors and
 // rejects duplicate, empty or malformed IDs. Unknown never means not written.
 func reconciledRecordIDs(body map[string]any, base, table, token string) ([]string, error) {
-	if body["state"] != "applied" || body["baseId"] != base || body["tableId"] != table || body["clientToken"] != token {
-		return nil, fmt.Errorf("write reconciliation is unknown or identifies a different request")
+	if body["baseId"] != base || body["tableId"] != table || body["clientToken"] != token {
+		return nil, fmt.Errorf("write reconciliation identifies a different request")
+	}
+	switch body["state"] {
+	case "applied":
+	case "unknown":
+		// Unknown can omit IDs or carry an empty collection, but must not
+		// smuggle malformed or partially confirmed IDs into a pending result.
+		if raw, present := body["recordIds"]; present {
+			ids, ok := raw.([]any)
+			if !ok || len(ids) != 0 {
+				return nil, fmt.Errorf("unknown write reconciliation has invalid record IDs")
+			}
+		}
+		return nil, errRecordWriteUnknown
+	default:
+		return nil, fmt.Errorf("write reconciliation has an unsupported state")
 	}
 	values, ok := body["recordIds"].([]any)
 	if !ok || len(values) < 1 || len(values) > recordBatchSize {
@@ -101,10 +121,23 @@ const recordWriteResultSchema = `{"oneOf":[
       "baseId":{"type":"string","minLength":1,"description":"原请求 Base ID"},
       "tableId":{"type":"string","minLength":1,"description":"原请求 Table ID"},
       "clientToken":{"type":"string","minLength":1,"description":"原请求核对键"},
-      "state":{"type":"string","const":"applied","description":"成功结果已确认请求至少部分应用；unknown 会返回失败而非成功数据"},
+      "state":{"type":"string","const":"applied","description":"已确认请求至少部分应用；仍需独立核对数量和值"},
       "recordIds":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"description":"实际已应用的 ID 集合，不保证输入顺序，也不保证整批完整；未返回 ID 的记录仍未核实，不能按数量差额或输入位置补写","items":{"type":"string","minLength":1}}
     },
     "required":["baseId","tableId","clientToken","state","recordIds"],
+    "additionalProperties":true
+  },
+  {
+    "type":"object",
+    "description":"合法但尚未确认的原写入，outcome 为 pending；只能沿原身份只读对账，不能重放写入",
+    "properties":{
+      "baseId":{"type":"string","minLength":1,"description":"原请求 Base ID"},
+      "tableId":{"type":"string","minLength":1,"description":"原请求 Table ID"},
+      "clientToken":{"type":"string","minLength":1,"description":"原请求核对键"},
+      "state":{"type":"string","const":"unknown","description":"原写入尚未确认，不代表未写入"},
+      "recordIds":{"type":"array","maxItems":0,"description":"可省略或为空；未知状态不承诺已写入 ID","items":{"type":"string"}}
+    },
+    "required":["baseId","tableId","clientToken","state"],
     "additionalProperties":true
   },
   {
@@ -124,11 +157,12 @@ func recordWriteResultContract() corecmd.ContractDecl {
 	declaration := aitableCompositeContractWithResult("+record-write-result", "只读核对一次记录写入的实际结果",
 		"批量写入失败或超时后，持有原 clientToken 需要确定已写入 ID 时", "普通查询用 +record-query；本命令不会补写或重放数据，不能证明 upsert 更新分组或子记录父子链接完成",
 		`dws aitable +record-write-result --base-id B --table-id T --client-token 123e4567-e89b-42d3-a456-426614174000`,
-		&contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(recordWriteResultSchema)})
+		&contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePending, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(recordWriteResultSchema)})
 	declaration.Parameters = []contract.ParamDecl{
 		{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
 		{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
 		{Name: "client-token", Property: "clientToken", Required: boolPtr(true)},
+		{Name: "write-intent", Property: "writeIntent"},
 	}
 	declaration.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest}
 	return declaration
@@ -138,7 +172,7 @@ var RecordWriteResult = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "aitable", Command: "+record-write-result", Product: serverMain,
 	Description: "按原 clientToken 只读核对已落库记录；未知结果不能作为重新创建依据",
-	Intent:      "批量写入失败或超时且持有原 clientToken 时使用；只读核对实际已应用的记录 ID，不补写或重放，未知结果不代表未写入。unknown 或 ID 不完整时停止后续写入，下一步仍使用本命令和原 baseId/tableId/clientToken 只读对账，不能用全表查询替代；完整 ID 集合确认后才逐 ID 核对实际值。返回部分 ID 只证明这些记录已应用，不证明其余记录未写入，不能按数量差额补写或更换 token。用户评审恢复方案并要求下一步命令时，先给本命令使用原三个参数的完整只读命令并注明未执行，再解释判断；不要先展开 Schema 字段表。",
+	Intent:      "批量写入失败或超时且持有原 clientToken 时使用；只读核对实际已应用的记录 ID，不补写或重放。合法 unknown 返回 pending，不代表未写入；unknown 或 ID 不完整时停止后续写入，下一步仍使用本命令和原 baseId/tableId/clientToken 只读对账，不能用全表查询替代；完整 ID 集合确认后才逐 ID 核对实际值。返回部分 ID 只证明这些记录已应用，不证明其余记录未写入，不能按数量差额补写或更换 token。用户评审恢复方案并要求下一步命令时，先给本命令使用原三个参数的完整只读命令并注明未执行，再解释判断；不要先展开 Schema 字段表。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract:    recordWriteResultContract(),
@@ -146,12 +180,14 @@ var RecordWriteResult = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "原写入 Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "原写入 Table ID", Required: true},
 		{Name: "client-token", Type: shortcut.FlagString, Desc: "原写入使用的 UUID v4", Required: true},
+		{Name: "write-intent", Type: shortcut.FlagString, Desc: "原 upsert 写前保存的恢复文件；查询前核对原账号、端点与目标"},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		token := strings.TrimSpace(rt.Str("client-token"))
 		if err := aitableprotocol.ValidateClientToken(token); err != nil {
 			return apperrors.NewValidation("--client-token: " + err.Error())
 		}
+		intentPath := rt.Str("write-intent")
 		args := map[string]any{"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id"), "clientToken": token}
 		if rt.DryRun() {
 			return rt.Output(map[string]any{
@@ -160,12 +196,30 @@ var RecordWriteResult = shortcut.Shortcut{
 				"arguments": args,
 			})
 		}
+		// 预览不查询外部身份，也不证明恢复文件已通过执行校验。
+		if intentPath != "" {
+			if err := validateRecordWriteIntent(rt, intentPath, token); err != nil {
+				// 身份查询的认证/PAT/网络分类必须留给原有执行器处理。
+				if apperrors.DeclaresClassification(err) {
+					return err
+				}
+				return apperrors.NewValidation("--write-intent: " + err.Error())
+			}
+		}
 		data, err := rt.CallMCPReadData(serverMain, "get_record_write_result", args)
 		if err != nil {
 			return err
 		}
 		body := parityResponseObject(data)
 		if _, err := reconciledRecordIDs(body, rt.Str("base-id"), rt.Str("table-id"), token); err != nil {
+			if errors.Is(err, errRecordWriteUnknown) {
+				// A valid unknown is a successful read of an unresolved write,
+				// not a bad receipt and not permission to issue another mutation.
+				return output.StoreResult(rt.Command().Context(), output.Pending(body, &output.OperationInfo{
+					ID: token, State: "unknown",
+					NextCommand: recordWriteRecoveryCommand(rt.Str("base-id"), rt.Str("table-id"), token, intentPath),
+				}))
+			}
 			return invalidRecordWriteResult(err)
 		}
 		return rt.Output(body)

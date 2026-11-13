@@ -2,4 +2,4 @@
 category: Fixed
 ---
 
-- **Runtime payload verification** — verify Windows DLL architectures directly from the PE Machine field so host inspection tools cannot reject valid payloads or accept a mismatched architecture.
+- **Runtime payload verification** — reject malformed Windows PE headers instead of falling back to host tool guesses or skipping architecture validation.

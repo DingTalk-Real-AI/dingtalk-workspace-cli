@@ -56,6 +56,12 @@
  *  20. unmarked stamps       — stamp-shaped directories without the exact
  *                              ownership marker survive pruning and never
  *                              consume a keep slot.
+ *  21. binary-only install   — DWS_NO_SKILLS=1 installs the CLI without
+ *                              reading or writing any Skill asset or state.
+ *  22. archive validation    — binary-only still validates the platform
+ *                              archive; normal installs still validate Skills.
+ *  23. cache refresh warning — mono/multi cache failures are isolated,
+ *                              preserve the previous cache, and do not throw.
  *  24. stamp-root cleanup    — a failed marker write removes an empty fresh
  *                              root (rmdir path) but never a non-empty
  *                              foreign root.
@@ -99,6 +105,7 @@ const {
   backupAndRemoveSkillDir,
   movePathRecoverablySync,
   publishCacheAtomically,
+  cacheUserSkills,
   publishCanonicalLinksAtomically,
   publishManagedMonoSkillSetAtomically,
   publishManagedMultiSkillSetAtomically,
@@ -451,6 +458,9 @@ function stagePkg(zipEntries, emptyDirs = []) {
 
 function runInstall(pkg, home, skillMode, extraEnv = {}) {
   const env = { ...process.env, HOME: home, ...extraEnv };
+  if (!Object.hasOwn(extraEnv, "DWS_NO_SKILLS")) {
+    delete env.DWS_NO_SKILLS;
+  }
   if (skillMode !== undefined) {
     env.DWS_SKILL_MODE = skillMode;
   } else {
@@ -509,6 +519,118 @@ scenario("multi install lays out sibling skills and caches", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+scenario("DWS_NO_SKILLS=1 installs only the CLI and ignores Skill inputs", () => {
+  const { tmp, pkg, home } = stagePkg({
+    "mono/SKILL.md": "# mono fixture\n",
+    "multi/dingtalk-test/SKILL.md": "# dingtalk-test\n",
+  });
+  try {
+    const res = runInstall(pkg, home, "bogus", { DWS_NO_SKILLS: "1" });
+    assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
+    assert.match(res.stdout, /DWS_NO_SKILLS=1.*skipping bundled Skill/s);
+    assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws")), "binary installed into vendor/");
+    assert.ok(!fs.existsSync(path.join(pkg, "share", "skills")), "skills archive was not extracted");
+    assert.ok(!fs.existsSync(path.join(home, ".agents", "skills")), "Agent skill directories were not touched");
+    assert.ok(!fs.existsSync(path.join(home, ".dws", "skills-state.json")), "skill state was not written");
+    assert.ok(!fs.existsSync(path.join(home, ".dws", "skills")), "user cache was not written");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+for (const [label, prepareSkillsArchive] of [
+  ["missing", (skillsArchive) => fs.rmSync(skillsArchive)],
+  ["corrupt", (skillsArchive) => fs.writeFileSync(skillsArchive, "not a zip\n")],
+]) {
+  scenario(`DWS_NO_SKILLS=1 ignores a ${label} Skills archive`, () => {
+    const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono fixture\n" });
+    try {
+      prepareSkillsArchive(path.join(pkg, "assets", "dws-skills.zip"));
+      const res = runInstall(pkg, home, undefined, { DWS_NO_SKILLS: "1" });
+      assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
+      assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws")), "binary installed without reading Skills");
+      assert.ok(!fs.existsSync(path.join(home, ".agents", "skills")), "Agent skill directories were not touched");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
+
+scenario("binary-only validates the platform archive and normal install validates Skills", () => {
+  for (const [label, preparePlatformArchive] of [
+    ["missing", (platformArchive) => fs.rmSync(platformArchive)],
+    ["corrupt", (platformArchive) => fs.writeFileSync(platformArchive, "not an archive\n")],
+  ]) {
+    const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono fixture\n" });
+    try {
+      preparePlatformArchive(path.join(pkg, "assets", assetName));
+      const res = runInstall(pkg, home, undefined, { DWS_NO_SKILLS: "1" });
+      assert.notEqual(res.status, 0, `binary-only install must reject a ${label} platform archive`);
+      assert.ok(!fs.existsSync(path.join(pkg, "vendor", "dws")), "invalid archive must not install a binary");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono fixture\n" });
+    try {
+      fs.rmSync(path.join(pkg, "assets", "dws-skills.zip"));
+      const res = runInstall(pkg, home, undefined);
+      assert.notEqual(res.status, 0, "normal install must reject a missing Skills archive");
+      assert.match(res.stderr, /missing skills archive/);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+});
+
+for (const failedCache of ["mono", "multi"]) {
+  scenario(`${failedCache} cache refresh failure preserves old data and still attempts the other cache`, () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `dws-installjs-cache-${failedCache}-`));
+    const extracted = path.join(tmp, "extracted");
+    const home = path.join(tmp, "home");
+    const attempts = [];
+    const warnings = [];
+    const originalWarn = console.warn;
+    try {
+      writeFile(path.join(extracted, "mono", "SKILL.md"), "new mono\n");
+      writeFile(path.join(extracted, "multi", "dingtalk-new", "SKILL.md"), "new multi\n");
+      writeFile(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "old mono\n");
+      writeFile(path.join(home, ".dws", "skills", "multi", "dingtalk-old", "SKILL.md"), "old multi\n");
+      console.warn = (...args) => warnings.push(args.join(" "));
+
+      cacheUserSkills(
+        extracted,
+        (sourceDir, cacheDir) => {
+          const name = path.basename(cacheDir);
+          attempts.push(name);
+          if (name === failedCache) throw new Error(`injected ${name} cache failure`);
+          publishCacheAtomically(sourceDir, cacheDir);
+        },
+        home,
+      );
+
+      assert.deepEqual(attempts, ["mono", "multi"], "a cache failure must not skip the other cache");
+      assert.match(
+        warnings.join("\n"),
+        new RegExp(`${failedCache === "mono" ? "Mono" : "Multi"} Skill cache refresh failed`),
+      );
+      assert.match(warnings.join("\n"), /the CLI is installed.*dws skill setup/s);
+      if (failedCache === "mono") {
+        assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "utf8"), "old mono\n");
+        assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "multi", "dingtalk-new", "SKILL.md"), "utf8"), "new multi\n");
+      } else {
+        assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "utf8"), "new mono\n");
+        assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "multi", "dingtalk-old", "SKILL.md"), "utf8"), "old multi\n");
+      }
+    } finally {
+      console.warn = originalWarn;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
 
 scenario("pinned universal global topology installs canonical and retires private copies", () => {
   const { tmp, pkg, home } = stagePkg({

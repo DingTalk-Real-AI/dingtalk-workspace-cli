@@ -76,6 +76,53 @@ func TestSkillDocsDoNotRecommendRetiredCommands(t *testing.T) {
 	}
 }
 
+func TestDevScopeSkillDocumentsExposeScopeCommands(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	scopeDoc := filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "scope.md")
+	content, err := os.ReadFile(scopeDoc)
+	if err != nil {
+		t.Fatalf("read %s: %v", scopeDoc, err)
+	}
+	text := string(content)
+	for _, required := range []string{
+		"dev app scope get",
+		"dev app scope set",
+		"全量替换",
+		"--precheck-only --yes",
+		"--precheck-only=false --yes",
+		"本地调用预览",
+		"服务端预检",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("scope skill doc missing contract %q", required)
+		}
+	}
+	// --dry-run is a local invocation preview (RemoteReads=false); the doc
+	// must not sell it as the server-side precheck of the full-replace write.
+	dryRunIndex := strings.Index(text, "--dry-run")
+	if dryRunIndex >= 0 && dryRunIndex < strings.Index(text, "服务端预检") &&
+		!strings.Contains(text[max(0, dryRunIndex-120):dryRunIndex], "本地") {
+		t.Errorf("scope skill doc must label --dry-run as local preview, not server precheck")
+	}
+	for _, path := range []string{
+		filepath.Join(root, "skills", "mono", "references", "products", "dev.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "dev", "dev-index.md"),
+	} {
+		navContent, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		navText := string(navContent)
+		if !strings.Contains(navText, "dev app scope get") || !strings.Contains(navText, "dev app scope set") {
+			t.Errorf("%s missing scope get/set route", path)
+		}
+	}
+}
+
 func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -390,8 +437,10 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"<!-- dws-intent: event.listen.todo -->",
 		"<!-- dws-intent: event.listen.card -->",
 		"<!-- dws-intent: event.listen.contact -->",
+		"<!-- dws-intent: event.listen.minutes -->",
+		"<!-- dws-intent: event.listen.calendar -->",
 		"16 个 EventKey",
-		"30 个公开个人 EventKey",
+		"33 个公开个人 EventKey",
 	} {
 		if !strings.Contains(string(skillContent), required) {
 			t.Errorf("%s missing standalone event contract %q", skillPath, required)
@@ -399,6 +448,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 	}
 
 	wantReferences := []string{
+		"event-app.md",
 		"event-im-keys.md",
 		"event-im-lifecycle.md",
 		"event-im-operations.md",
@@ -409,6 +459,8 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"event-todo.md",
 		"event-card.md",
 		"event-contact.md",
+		"event-minutes.md",
+		"event-calendar.md",
 	}
 	var combined strings.Builder
 	combined.Write(skillContent)
@@ -459,6 +511,9 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"user_card_action_triggered",
 		"user_contact_friend_request_received",
 		"user_contact_friend_added",
+		"user_minutes_task_created",
+		"user_minutes_summary_generated",
+		"user_calendar_event_changed",
 	}
 	for _, eventKey := range allEventKeys {
 		if !strings.Contains(combined.String(), eventKey) {
@@ -562,7 +617,7 @@ func TestCrossPlatformCoverageDocSkillPinsExactVersionRoutesAndHelpBudget(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"Help 不参与选路", "unknown flag", "只查一次 shortcut 清单", "禁止试探后缀"} {
+	for _, required := range []string{"Help 不参与选路", "unknown flag", "统一恢复路径", "禁止试探后缀"} {
 		if !strings.Contains(string(rootSkill), required) {
 			t.Errorf("Doc root Skill missing Help budget rule %q", required)
 		}

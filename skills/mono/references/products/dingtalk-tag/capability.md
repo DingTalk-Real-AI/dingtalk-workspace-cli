@@ -17,6 +17,8 @@ dws dingtalk-tag capability skill query --agent-uuid <agentUuid> --skill-id <ski
 
 Skill ZIP 最大 50 MiB，必须包含 `SKILL.md`。create 和带 `--file` 的 update 会先校验本地 ZIP，再通过 OpenAPI multipart 上传；临时上传地址不会输出或落盘。update 必须二选一且互斥：切换启停用 `--enabled=true|false`、替换包用 `--file`，二者不能同时提供（对应服务端 update_skill 的 fileUrl 不能与 enabled/attributes 并存，同时传会被 CLI 本地拦截）；未提供的字段保持原值。create/update/delete 均为 `confirmation=user_required`，必须先预览并取得用户确认。
 
+权限失败以服务端具体文案为准。Skill 上传阶段保留公开权限管理页链接，不因包含该链接而清空整段引导；凭证、签名地址及其他 URL 仍脱敏。Skill 更新仅收到裸 `NO_PERMISSION` 时，CLI 补充条件式说明：未获管理权限可联系企业主管理员在管理页授权；已是共同管理员、部门管理员或企业主管理员则联系平台核查，不要求重复申请或扩大权限。保留原错误码和可用 Trace ID，不自动重试；获取上传凭证被拒不代表已经执行 ZIP 替换。
+
 ## MCP
 
 ```text

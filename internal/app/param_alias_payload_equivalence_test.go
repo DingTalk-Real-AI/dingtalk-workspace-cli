@@ -79,7 +79,7 @@ var paramAliasCompleteCommands = map[string][]string{
 	"calendar event suggest":                   {"calendar", "event", "suggest", "--users", "user-1,user-2", "--duration", "30", "--start", "2026-03-10T09:00:00+08:00", "--end", "2026-03-10T18:00:00+08:00", "--timezone", "Asia/Shanghai"},
 	"calendar event update":                    {"calendar", "event", "update", "--id", "event-1", "--timezone", "Asia/Shanghai"},
 	"calendar room add":                        {"calendar", "room", "add", "--event", "event-1", "--rooms", "room-1,room-2"},
-	"calendar room delete":                     {"calendar", "room", "delete", "--event", "event-1", "--rooms", "room-1,room-2"},
+	"calendar room delete":                     {"calendar", "room", "delete", "--event", "event-1", "--rooms", "room-1,room-2", "--yes"},
 	"calendar room search":                     {"calendar", "room", "search", "--room-name", "Fixture Room", "--group-id", "group-1", "--start", "2027-03-10T09:00:00+08:00", "--end", "2027-03-10T10:00:00+08:00", "--page", "1", "--limit", "7"},
 	"chat +chat-messages":                      {"chat", "+chat-messages", "--group", "fixture-conversation"},
 	"chat +chat-add-bot":                       {"chat", "+chat-add-bot", "--id", "fixture-conversation", "--robot-code", "robot-1", "--yes"},
@@ -466,7 +466,7 @@ var paramAliasCandidateCompleteCommands = map[string][]string{
 	"minutes hot-word add":        {"minutes", "hot-word", "add", "--words", "DWS,Minutes"},
 	"minutes list all":            {"minutes", "list", "all", "--end", "2026-03-10T23:59:59+08:00"},
 	"minutes list mine":           {"minutes", "list", "mine", "--start", "2026-03-10T00:00:00+08:00"},
-	"minutes replace-text":        {"minutes", "replace-text", "--id", "u1", "--search", "old", "--replace", "new"},
+	"minutes replace-text":        {"minutes", "replace-text", "--id", "u1", "--search", "old", "--replace", "new", "--yes"},
 	"minutes tag query":           {"minutes", "tag", "query", "--tag-id", "tag-1"},
 	"minutes update title":        {"minutes", "update", "title", "--id", "u1", "--title", "Fixture Minutes", "--yes"},
 	"minutes upload complete":     {"minutes", "upload", "complete", "--session-id", "session-1"},
@@ -927,7 +927,7 @@ var paramAliasRepresentativePayloadCases = map[string]bool{
 	paramAliasPayloadCaseKey("doc +doc-append", "text"):                              true, // shortcut content rename keeps append payload
 	paramAliasPayloadCaseKey("doc block insert", "text"):                             true, // block write content compatibility alias
 	paramAliasPayloadCaseKey("doc block update", "text"):                             true, // update uses the same typed compatibility path
-	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // scoped block-role alias
+	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // unsupported parent role retains the same pre-write validation
 	paramAliasPayloadCaseKey("doc comment delete", "comment-id"):                     true, // destructive comment-key alias
 	paramAliasPayloadCaseKey("doc comment reply", "mentioned-open-conversation-ids"): true, // list-valued group mention role
 	paramAliasPayloadCaseKey("drive info", "workspace"):                              true, // published numeric storage-space compatibility remains payload-equivalent
@@ -1096,6 +1096,26 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 		}
 		executedRepresentatives[caseKey] = true
 		t.Run(fixture.Command+"/"+fixture.Emitted, func(t *testing.T) {
+			if fixture.Command == "doc block insert" && fixture.Expect == "parent-block" {
+				var canonicalMessage string
+				for _, args := range [][]string{canonicalArgs, aliasArgs} {
+					caller := &paramAliasCaptureCaller{}
+					ctx, err := executeParamAliasPayloadE2E(t, caller, args...)
+					var classified *apperrors.Error
+					if ctx == nil || !errors.As(err, &classified) || classified.Category != apperrors.CategoryValidation || apperrors.ExitCode(err) != 3 {
+						t.Fatalf("unsupported parent role must reach pre-write validation: args=%v err=%v", args, err)
+					}
+					if len(caller.calls) != 0 {
+						t.Fatalf("unsupported parent role crossed transport boundary: args=%v calls=%#v", args, caller.calls)
+					}
+					if canonicalMessage == "" {
+						canonicalMessage = err.Error()
+					} else if err.Error() != canonicalMessage {
+						t.Fatalf("canonical and alias validation differ: canonical=%q alias=%q", canonicalMessage, err.Error())
+					}
+				}
+				return
+			}
 			assertParamAliasFinalPayloadEquivalent(t, fixture.Command, canonicalArgs, aliasArgs)
 		})
 	}

@@ -12,7 +12,7 @@ metadata:
 
 执行任何 `dws` 操作前，先完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。先用 [dingtalk-tag-index.md](references/dingtalk-tag-index.md) 路由；生命周期读取 [manage.md](references/manage.md)，自然语言创建/恢复/DSH 接入再读 [manage-and-connect.md](references/manage-and-connect.md)；能力资源读取 [capability.md](references/capability.md)；执行排障读取 [run.md](references/run.md)。
 
-自行管理任务执行与回复的接入方，可按 [回复占位与流式](../dingtalk-chat/references/card/a2ui.md) 实现启动钩子和卡片更新。使用该流程需已安装 `dingtalk-chat`；按需安装时请同时选择该 Skill。DWS 直接托管本地 Agent 时，对已适配公开进度的 Agent，新连接默认发送 A2UI 占位并更新同一卡片，由运行时负责投递，模型不重复发卡；连接时指定 `--reply-mode text` 可只发最终文本。适配范围和首卡策略见 [接入说明](references/manage-and-connect.md)。
+自行管理任务执行与回复的接入方，可按 [回复占位与流式](../dingtalk-chat/references/card/a2ui.md) 实现启动钩子和卡片更新。使用该流程需已安装 `dingtalk-chat`；按需安装时请同时选择该 Skill。DWS 直接托管本地 Agent 时，默认发送 A2UI 占位并在同一卡片更新最终答案，已适配的 Agent 同时显示公开进度；历史配置缺少回复模式时升级并重启后也启用 A2UI，显式 `text` 保持不变。运行时负责投递，模型不重复发卡；连接时指定 `--reply-mode text` 可只发最终文本。适配范围和首卡策略见 [接入说明](references/manage-and-connect.md)。
 
 ## 路由
 
@@ -33,7 +33,7 @@ metadata:
 
 ## 自然语言编排硬约束
 
-- 创建/更新的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，列表过滤使用顶层 `type`，仅支持 `open_code`、`local_agent`，`a2a` 暂不支持。CLI 参数为 `--type`；创建时必须显式传 `--type open_code|local_agent`，缺失或空值由 DWS 本地拦截；应告知调用方选择主程序类型，不能省略或发送空值。更新时未传则保持原值；明确接入本地 Agent/DSH 时传 `--type local_agent`。注意 `create`/`list`/`save-draft` 的 `--type` 是主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，不要混淆。
+- 创建/更新的 MCP 主程序类型字段为 `digitalTagEmployeeProfile.type`，列表过滤使用顶层 `type`，仅支持 `qwenwork`、`local_agent`，`a2a` 暂不支持。CLI 参数为 `--type`；创建时必须显式传 `--type qwenwork|local_agent`，缺失或空值由 DWS 本地拦截；应告知调用方选择主程序类型，不能省略或发送空值。更新时未传则保持原值；明确接入本地 Agent/DSH 时传 `--type local_agent`。注意 `create`/`list`/`save-draft` 的 `--type` 是主程序类型，而 `detail` 使用 `--snapshot draft|published` 选择配置来源，不要混淆。
 - 创建时未提供 `--response-mode` 或值为空，CLI 默认发送 `mention_only`，包括 `local_agent`。更新时不传就不更新该字段，显式值保持不变；最终有效配置由服务端按当前草稿校验。
 - 创建要求名称、描述和主程序类型；部门可不传，由服务端补操作人的主任职部门。不要向用户索要部门名称、岗位、工号或内部 uid。
 - `save-draft` 只更新用户明确修改的基础草稿字段，不接受 Skill/MCP 完整数组。Skill/MCP 生命周期统一使用 `capability skill|mcp create|update|delete|list|query`；不设计 attach/detach，`check_mcp` 只在 create 和带配置的 update 内部调用。

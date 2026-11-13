@@ -13,6 +13,7 @@
 | `form field update` | 更新字段必填/描述 |
 | `form field hide` | 在表单中隐藏/显示字段（不影响底层数据表字段） |
 | `form share get` | 获取分享配置 |
+| `form share url` | 获取标准填写链接，可用 `--qr-file form.png` 生成本地二维码 |
 | `form share update` | 部分更新分享开关、授权、有效期和通知等配置 |
 | `form questions create` | 添加题目（等价于 `field create`，命令位置上的别名） |
 | `form questions delete` | 删除题目（等价于 `field delete`，命令位置上的别名） |
@@ -83,6 +84,16 @@ dws aitable form field list --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 ```
 
+开启并取得可发送链接的最短闭环使用 canonical shortcut：
+
+```bash
+dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name "表单名" --format json
+dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "表单名" --format json
+dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
+```
+
+分享地址统一为 `https://alidocs.dingtalk.com/notable/share/form/{shareFormUuid}`。执行 `form share url --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --qr-file form.png` 可交付 `shareUrl/copyableUrl/qrFile`；二维码路径必须位于工作目录内，不覆盖已有文件。未开启分享或受处罚时失败，dry-run 不读远端、不生成文件。发送时把真实 `shareUrl` 交给 Chat 的发送命令并检查发送回执。
+
 ## 要点
 
 - **创建表单**有两种等价方式：
@@ -100,8 +111,8 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
-| `form list` | 列出表单视图 | `--base-id` `--table-id` | 每条返回 viewId/name；新建表单**无 title 且 createdAt=0**，改过（form update）后才出现 title 和真实 createdAt |
-| `form get` | 按 viewId 取单个表单 | `--base-id` `--table-id` `--view-id` | 客户端按 viewId 过滤后 `data` **即该表单对象**（不是 formViews 数组）；viewId 不存在返回 `form view ... not found` 错误 |
+| `form list` | 列出表单视图 | `--base-id` `--table-id` | 返回 viewId/name/title/createdAt |
+| `form get` | 按 viewId 取单个表单 | `--base-id` `--table-id` `--view-id` | 内部基于 list_form_views 过滤 |
 | `form create` | 创建表单视图 | `--base-id` `--table-id` `--name` | viewType=FormDesigner |
 | `form update` | 更新表单 | `--base-id` `--table-id` `--view-id` | `--title`/`--name`（等价）和 `--description` 至少传一项；同时传 title/name 时 title 优先 |
 | `form delete` | 删除表单 | `--base-id` `--table-id` `--view-id` `--yes` | 不可逆 |
@@ -129,6 +140,7 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 |------|------|----------|------|
 | `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回服务端真实的 enabled/status/shareFormUuid/formCover；只读，不修复 CP |
 | `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 成功返回真实 shareFormUuid/status/formCover/cpSynced；只有 cpSynced=true 才完成闭环；未传字段保持原值 |
+| `form share url` | 获取可复制的标准分享链接 | `--base-id` `--table-id` `--view-id` | 读取 `shareFormUuid` 后返回 `shareUrl`/`copyableUrl`；未开启分享时失败 |
 
 ## 完整工作流示例
 
@@ -165,15 +177,25 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 ## 返回结构补充
 
-- `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（+ `createdAt`）；**新建表单没有 `title` 字段且 `createdAt=0`**，只有在 `form update` 碰过之后才会出现 `title` 和真实 `createdAt`。`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
-- `form get` 的 `data` **就是命中的那一条表单对象**（如 `{viewId, name, createdAt, title?, shareFormUuid?}`），不是 `formViews` 数组。Agent 直接读 `data.viewId` / `data.name` 即可，**不要**再取 `data.formViews[0]`。服务端的 viewIds 过滤参数当前不生效，CLI 在客户端按 viewId 精确筛出单条；传了不存在的 viewId 会返回 `form view <id> not found in table` 错误。
+- `form list` 返回 `data.formViews[]`，每条含 `viewId/name` 及服务端可用的 `title/createdAt/shareFormUuid/shareFormUrl`。列表中的链接仅为候选地址，不证明当前仍可填写。发送前用 `form share url` 验证当前是否已开启、未受处罚，不能仅凭历史 UUID 判断可填写。
+- `form get` 的 `data` 是客户端按 `viewId` 精确筛出的单个表单对象，不是 `formViews` 数组。Agent 直接读取 `data.viewId` / `data.name`；不存在的 `viewId` 会明确失败。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。
 
 ## MCP 交互注意事项
 
 - `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
 - 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
+- 时间限制可使用 `--form-start-time/--form-end-time` 的毫秒时间戳，也可使用带明确时区的 `--form-start-at/--form-end-at`（RFC3339）；传 `0` 清除对应一端，未传字段保持原值。
+- `--load-last-submit true` 开启提交后查看/修改；`--submit-record-view-mode` 取 `0`（最近一次）或 `1`（全部历史），不会修改历史记录数据。
+- 本地封面用 `--form-cover-file ./cover.png`，支持 PNG/JPEG/GIF、最大 10 MiB。CLI 上传图片，MCP 将资源转为公开封面，再同步分享配置与页面主题并回读；与 `--form-cover`、`--form-cover-resource-id` 互斥。上传后配置未确认时保留回执和 resourceId，先只读检查，不重复上传或原样重放。
+- `--form-cover` 仅接受 HTTPS，主机名精确限于 `img.alicdn.com`、`static.dingtalk.com`、`down-cdn.dingtalk.com`、`alidocs.oss-cn-zhangjiakou.aliyuncs.com`、`alidocs2.oss-cn-zhangjiakou.aliyuncs.com`、`alidocs.oss-cn-hangzhou.aliyuncs.com`，不含子域名，仅默认端口或 443；其他图片先上传到当前 Base。不支持清除封面：省略保持原值，显式空串/全空白报错。URL 不得含空白、未编码的引号/括号、鉴权信息、查询参数（包括空 `?`）、片段（包括空 `#`）或 `/core/api/resources` 内部资源路径（含编码/点路径变体）；文件名中的引号/括号须百分号编码。URL 只做结构校验，不验证可访问性、图片内容或文件大小。
+- `--form-cover-resource-id` 必须是当前 Base 已上传的非空图片资源 ID，不能含首尾空白；资源服务按当前操作者身份校验，转存 URL 同样受上述域名、端口和格式限制，拒绝或公开失败时不能继续写配置。资源公开无法随后续配置失败回滚；先回读配置，已有符合限制的目标公开 URL 时人工核验后使用 `--form-cover`，不重复公开或上传。内部鉴权 URL 不能代替资源 ID。
+- `--auth-type-code`：`0` 企业内、`1` 需登录的钉钉用户、`2` 指定成员、`6` 免登录。指定成员用 `--auth-data USER_ID_1,USER_ID_2`，当前组织内 1-100 人，由 MCP 转换内部身份；回读为含 userId/corpId 的成员 JSON。非指定成员模式允许显式 `--auth-data ""` 清空残留授权；未传保持原值，空字符串回读表示已清空，`null` 不表示清空。
+- 匿名 `--anonymous-submit` 不等于免登录。开启免登录时沿用页面规则，自动开启匿名、关闭提交后修改和单人次数限制；显式传入矛盾配置会失败。
+- 简单填写通知用 `--reply-notice true`，接收人用 `--share-uid-list USER_ID_1,USER_ID_2`（历史参数名，实际接受当前组织 userId，最多 100 人，空字符串清除）。这与 `form share notify` 催填是两种不同操作。
+- `form share notify --recipients USER_ID_1,USER_ID_2` 接受当前组织的 userId，1-100 人，由 MCP 转换并按实际成员去重；回执 `recipients` 为 userId。该命令会真实触达用户，需确认；超时或结果不明时不自动重发。
 - `form share update` 的成功结果已经来自服务端回读并完成 CP 投影校验；必须检查 `shareFormUuid/status/formCover/cpSynced`，只有 `cpSynced=true` 才能确认闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。
-- `form share update` 的成功结果还与本次请求逐项比对：响应 `baseId/tableId/viewId` 必须与请求一致，本次显式请求的 `enabled/formName/formDesc` 必须与响应回读值一致，不一致即返回 `partial_failure`。响应不回读的显式请求字段（如 `anonymousSubmit`、`authData`）列在 `data.unverified` 且 `verified=false`；这些字段只能报告“已提交但未验证”，不得声称已生效。
+- `form share update` 的成功结果还与本次请求逐项比对：响应 `baseId/tableId/viewId` 必须与请求一致，已回读的权限、匿名、查看范围、通知、时间和封面等请求配置按类型及语义比对，不一致返回 `partial_failure`（退出码 7）。数字按整数值比较；通知接收人和指定成员按外部 userId 集合比较，`authData` 回读的成员 JSON 不能直接写回；负数总次数上限归零，正数上限允许服务端归一为不超过请求值的非负值。旧服务端缺少回读、身份不可用或 `formCoverResourceId` 无资源对应证明时，列入 `data.unverified` 且 `verified=false`，只能报告“已提交但未验证”。
+- 历史成员无法转换时，`authData/shareUidList=null` 表示身份不可用，不能当作成员已清空。MCP 的安全提示保留在成功结果的 `data.warnings`；终态部分失败时保留在 `data.failed[0].error.details.warnings`。只保留提示的 `action/reason/priority`，不会自动执行建议或重放写入。
 - DWS 不自行调用第二个 View 更新命令补偿 CP，也不拼装封面 URL。旧服务端发布窗口内 `formCover` 可能为空，应如实说明；稍后诊断当前配置时可用 `form share get`。
 - “已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`。写超时时先查询真实状态，不原样重放 mutation。

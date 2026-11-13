@@ -80,8 +80,7 @@ func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 		"audit.verify":                 "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
 		"dev.connect_status":           "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 		"dev.connect_stop":             "命令仅操作本地进程或策略文件，不调用 MCP 接口",
-		"event.list":                   "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
-		"event.schema":                 "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+		"dev.lint_event_definition":    "本地校验：文件预检与结构规则为服务端校验器的 Go 直译，样例校验用内嵌 Draft 2020-12 校验器；不绑定 MCP RPC",
 		"pat.browser_policy":           "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 	}
 	loaded := mustDeliverySchemaCatalogMaps(t)

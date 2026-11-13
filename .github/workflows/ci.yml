@@ -2036,7 +2036,9 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The unchanged base already needs about nine minutes on hosted runners.
+    # Keep both complete coverage passes and allow for the expanded command tree.
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

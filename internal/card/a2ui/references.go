@@ -110,6 +110,7 @@ func (p *Protocol) checkReferences(s referenceSnapshot, surfaceID string) []Diag
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	ds = append(ds, checkStaticOwnership(s, surfaceID, edges)...)
 	colors := map[string]int{}
 	type frame struct {
 		id   string
@@ -153,6 +154,120 @@ func (p *Protocol) checkReferences(s referenceSnapshot, surfaceID string) []Diag
 	for _, id := range ids {
 		ds = append(ds, Diagnostic{"reference.unreachable_component", "warning", s.nodes[id].location + "/id",
 			fmt.Sprintf("Component %s is unreachable from root or its templates; retain it if needed for a later update", id), ""})
+	}
+	return ds
+}
+
+// checkStaticOwnership follows source references in renderer DFS order. Template
+// source IDs are global: indexed clones do not include the owning container ID.
+func checkStaticOwnership(s referenceSnapshot, surfaceID string, edges map[string][]referenceEdge) []Diagnostic {
+	ds := []Diagnostic{}
+	type owner struct{ id, location string }
+	owners := map[string]owner{}
+	visited := map[string]bool{"root": true}
+	order := []string{"root"}
+	templates := []owner{}
+	type frame struct {
+		id   string
+		next int
+	}
+	stack := []frame{{"root", 0}}
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		if top.next == len(edges[top.id]) {
+			stack = stack[:len(stack)-1]
+			continue
+		}
+		id := top.id
+		edge := edges[id][top.next]
+		top.next++
+		if _, ok := s.nodes[edge.target]; !ok {
+			continue
+		}
+		if edge.template {
+			templates = append(templates, owner{edge.target, edge.location})
+		}
+		if parent, ok := owners[edge.target]; ok {
+			code := "reference.multiple_parents"
+			if parent.id == id {
+				code = "reference.duplicate_child"
+			}
+			ds = append(ds, Diagnostic{code, "error", edge.location,
+				fmt.Sprintf("Surface %s child %s is referenced by %s (%s) and %s (%s)",
+					surfaceID, edge.target, parent.id, parent.location, id, edge.location),
+				"Keep one reference per component ID; use distinct IDs for separate placements."})
+		} else {
+			owners[edge.target] = owner{id, edge.location}
+		}
+		if !visited[edge.target] {
+			visited[edge.target] = true
+			order = append(order, edge.target)
+			stack = append(stack, frame{edge.target, 0})
+		}
+	}
+	staticReachable := func(seeds []owner) map[string]string {
+		found := map[string]string{}
+		pending := []owner{}
+		for i := len(seeds) - 1; i >= 0; i-- {
+			pending = append(pending, seeds[i])
+		}
+		for len(pending) > 0 {
+			item := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if _, ok := found[item.id]; ok {
+				continue
+			}
+			found[item.id] = item.location
+			children := edges[item.id]
+			for i := len(children) - 1; i >= 0; i-- {
+				edge := children[i]
+				_, exists := s.nodes[edge.target]
+				_, seen := found[edge.target]
+				if !edge.template && exists && !seen {
+					pending = append(pending, owner{edge.target, item.location})
+				}
+			}
+		}
+		return found
+	}
+	// Nest expands every snapshot template, including unreachable containers.
+	orphans := []string{}
+	for id := range s.nodes {
+		if !visited[id] {
+			orphans = append(orphans, id)
+		}
+	}
+	sort.Strings(orphans)
+	for _, id := range orphans {
+		for _, edge := range edges[id] {
+			if _, exists := s.nodes[edge.target]; edge.template && exists {
+				templates = append(templates, owner{edge.target, edge.location})
+			}
+		}
+	}
+	static := staticReachable([]owner{{"root", s.nodes["root"].location + "/id"}})
+	sources := staticReachable(templates)
+	conflicts := []owner{}
+	if _, ok := sources["root"]; ok {
+		conflicts = append(conflicts, owner{"root", s.nodes["root"].location + "/id"})
+	}
+	for _, id := range order {
+		_, live := static[id]
+		_, source := sources[id]
+		if !live || source {
+			continue
+		}
+		for _, edge := range edges[id] {
+			if _, ok := sources[edge.target]; !edge.template && ok {
+				conflicts = append(conflicts, owner{edge.target, edge.location})
+			}
+		}
+	}
+	for _, conflict := range conflicts {
+		ds = append(ds, Diagnostic{"reference.template_source_referenced", "error", conflict.location,
+			fmt.Sprintf("Surface %s statically references template source %s (%s); template reference %s removes this source subtree",
+				surfaceID, conflict.id, conflict.location, sources[conflict.id]),
+			"Use separate component IDs for static content and every template source subtree."})
 	}
 	return ds
 }

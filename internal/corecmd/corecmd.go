@@ -137,7 +137,9 @@ type FlagSpec struct {
 	// toolArgs still needs a fallback. For KindString it is used when the
 	// effective value is empty. For KindInt it is also the floor: when the
 	// resolved integer is < 1, ArgDefault is emitted instead (cursor page-size
-	// semantics).
+	// semantics). For KindBool it is emitted only when no declared flag name
+	// was provided; explicit true/false still wins, and presence constraints
+	// continue to count only Changed rather than this payload default.
 	ArgDefault string
 	// Bind is the toolArgs key; empty uses Name.
 	Bind string
@@ -203,6 +205,117 @@ type Constraint struct {
 	Description string
 }
 
+// PositionalSpec declares one positional argument (declaration surface). The
+// framework validates arity and value, binds the parsed value into toolArgs,
+// and annotates the Runtime Schema positional (name/type/description/required).
+type PositionalSpec struct {
+	// Name is the Runtime Schema positional name (e.g. "app_id").
+	Name string
+	// Usage is the --help / Runtime Schema description.
+	Usage string
+	// Kind restricts the value type: empty/KindString keeps the raw string,
+	// KindInt requires a positive integer and binds int64.
+	Kind FlagKind
+	// Required rejects an empty effective value (after Trim).
+	Required bool
+	// Trim Space-trims the raw token before checks and binding.
+	Trim bool
+	// Bind is the toolArgs key; empty falls back to Name.
+	Bind string
+}
+
+// positionalBindKey is the toolArgs key for a positional.
+func positionalBindKey(p PositionalSpec) string {
+	if p.Bind != "" {
+		return p.Bind
+	}
+	return p.Name
+}
+
+// validatePositionalDecls rejects malformed positional declarations at build
+// time: unknown kinds, empty names, and bind-key collisions with flags or
+// ConstParams are programming errors.
+func validatePositionalDecls(spec Spec) {
+	if len(spec.Positionals) == 0 {
+		return
+	}
+	taken := map[string]bool{}
+	for _, flag := range spec.Flags {
+		taken[bindKey(flag)] = true
+	}
+	for key := range spec.ConstParams {
+		taken[key] = true
+	}
+	optionalSeen := false
+	for _, p := range spec.Positionals {
+		if strings.TrimSpace(p.Name) == "" {
+			panic(fmt.Sprintf("command %q declares a positional with an empty Name", spec.Use))
+		}
+		switch p.Kind {
+		case KindString, KindInt:
+		default:
+			panic(fmt.Sprintf("command %q positional %q: only KindString/KindInt are supported", spec.Use, p.Name))
+		}
+		// 可选位置参数只允许出现在尾部：省略参数时 Cobra 按 RangeArgs 校验，
+		// 前置可选会让必填/可选边界无法从 arity 推断。
+		if p.Required && optionalSeen {
+			panic(fmt.Sprintf("command %q positional %q: required positional cannot follow an optional one (only trailing positionals may be optional)", spec.Use, p.Name))
+		}
+		if !p.Required {
+			optionalSeen = true
+		}
+		key := positionalBindKey(p)
+		if taken[key] {
+			panic(fmt.Sprintf("command %q positional %q bind key %q conflicts with a flag/ConstParams key", spec.Use, p.Name, key))
+		}
+		taken[key] = true
+	}
+}
+
+// buildPositionalArgs validates and binds positional tokens into toolArgs.
+// KindInt requires a positive integer (>= 1) and binds int64 so large IDs keep
+// their JSON representation; Required string positionals reject empty values.
+// An optional positional explicitly passed as an empty token (after Trim) is
+// treated the same as omitted and stays unbound: omission is keyed on the
+// effective empty value, not on the argument count.
+func buildPositionalArgs(args []string, positionals []PositionalSpec) (map[string]any, error) {
+	if len(positionals) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(positionals))
+	for i, p := range positionals {
+		// 省略尾部可选位置参数时按空值走必填/跳过逻辑（调用方用
+		// RangeArgs 保证 args 长度落在 [必填数, 声明数] 区间）。
+		raw := ""
+		if i < len(args) {
+			raw = args[i]
+		}
+		if p.Trim {
+			raw = strings.TrimSpace(raw)
+		}
+		switch p.Kind {
+		case KindInt:
+			if raw == "" && !p.Required {
+				continue
+			}
+			v, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || v < 1 {
+				return nil, apperrors.NewValidation(fmt.Sprintf("参数 %s 必须是正整数", p.Name))
+			}
+			out[positionalBindKey(p)] = v
+		default:
+			if p.Required && raw == "" {
+				return nil, apperrors.NewValidation(fmt.Sprintf("缺少必填参数 %s", p.Name))
+			}
+			if raw == "" {
+				continue
+			}
+			out[positionalBindKey(p)] = raw
+		}
+	}
+	return out, nil
+}
+
 // ParameterProjectionMode selects how declared flags are embedded into Runtime
 // Schema annotations. The zero value makes the declaration the final parameter
 // authority (the LeafSpec/command default).
@@ -256,6 +369,13 @@ type Spec struct {
 
 	Flags       []FlagSpec
 	Constraints []Constraint
+	// Positionals declares positional arguments. When non-empty the command's
+	// Args validator becomes cobra.RangeArgs(required, len(Positionals)) so
+	// trailing optional positionals may be omitted; values are validated and
+	// bound once in the declared preflight and reused as toolArgs before the
+	// Safety confirmation gate. The Runtime Schema positional is annotated
+	// from the declaration.
+	Positionals []PositionalSpec
 	// ParameterProjection controls whether parameter facts are final
 	// declaration annotations or Cobra-backed compatibility facts.
 	ParameterProjection ParameterProjectionMode
@@ -414,6 +534,7 @@ func New(spec Spec) *cobra.Command {
 	validateConstParamsDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	validatePositionalDecls(spec)
 	normalizeWaitDecl(&spec)
 	validateWaitDecl(spec)
 	validateInputSpecs(spec.Use, spec.Flags)
@@ -434,6 +555,29 @@ func New(spec Spec) *cobra.Command {
 	RegisterFlags(cmd, spec.Flags)
 	registerWaitFlags(cmd, spec)
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
+	if len(spec.Positionals) > 0 {
+		requiredPositionals := 0
+		for _, p := range spec.Positionals {
+			if p.Required {
+				requiredPositionals++
+			}
+		}
+		// 声明了可选（尾部）位置参数时必须允许省略：arity 校验取
+		// [必填数, 声明数] 区间，与 Schema 发布的 required 语义一致。
+		cmd.Args = cobra.RangeArgs(requiredPositionals, len(spec.Positionals))
+		annos := make([]contract.RuntimeSchemaPositional, 0, len(spec.Positionals))
+		for i, p := range spec.Positionals {
+			positionalType := "string"
+			if p.Kind == KindInt {
+				positionalType = "integer"
+			}
+			annos = append(annos, contract.RuntimeSchemaPositional{
+				Name: p.Name, Type: positionalType, Description: p.Usage,
+				Required: p.Required, Index: i,
+			})
+		}
+		runtimeannotate.AnnotateRuntimePositionals(cmd, annos...)
+	}
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
 	if help := ConstraintHelp(spec.Constraints); help != "" {
@@ -455,6 +599,7 @@ func New(spec Spec) *cobra.Command {
 	installExecution(cmd, executionSpec{
 		Flags:        spec.Flags,
 		Constraints:  spec.Constraints,
+		Positionals:  spec.Positionals,
 		Safety:       spec.Safety,
 		ConfirmFirst: spec.ConfirmFirst,
 		ConstParams:  spec.ConstParams,
@@ -477,6 +622,7 @@ func New(spec Spec) *cobra.Command {
 type executionSpec struct {
 	Flags        []FlagSpec
 	Constraints  []Constraint
+	Positionals  []PositionalSpec
 	Safety       contract.SafetySpec
 	ConfirmFirst bool
 	ConstParams  map[string]any
@@ -494,6 +640,10 @@ type executionSpec struct {
 }
 
 func installExecution(cmd *cobra.Command, spec executionSpec) {
+	// positionalArgs 由 runDeclaredPreflight 在同一次执行内校验并产出，
+	// dispatch 直接复用：位置参数只解析一次，避免第二次解析靠忽略错误
+	// 依赖 preflight 调用顺序这一隐式约定。
+	var positionalArgs map[string]any
 	var dispatch func(*cobra.Command, []string) error
 	if spec.RunE != nil {
 		dispatch = func(cmd *cobra.Command, args []string) error {
@@ -518,6 +668,9 @@ func installExecution(cmd *cobra.Command, spec executionSpec) {
 			toolArgs, err := BuildArgs(cmd, spec.Flags)
 			if err != nil {
 				return err
+			}
+			for key, value := range positionalArgs {
+				toolArgs[key] = value
 			}
 			for key, value := range spec.ConstParams {
 				toolArgs[key] = value
@@ -550,9 +703,11 @@ func installExecution(cmd *cobra.Command, spec executionSpec) {
 	}
 	validated := WithValidation(spec.Validate, dispatch)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := runDeclaredPreflight(cmd, args, &spec); err != nil {
+		bound, err := runDeclaredPreflight(cmd, args, &spec)
+		if err != nil {
 			return err
 		}
+		positionalArgs = bound
 		return validated(cmd, args)
 	}
 }
@@ -585,25 +740,34 @@ func HasDeclaredConfirmFirst(cmd *cobra.Command) bool {
 // legacy guard-first commands: those confirm before parameter completeness is
 // known. Keeping this in one function is deliberate — when the RunE escape
 // hatch carried its own copy it silently dropped every declared check, so a
-// spec could publish Required flags that nothing enforced.
-func runDeclaredPreflight(cmd *cobra.Command, args []string, spec *executionSpec) error {
+// spec could publish Required flags that nothing enforced. The returned map is
+// the validated positional binding; installExecution threads it into toolArgs
+// so positionals are parsed exactly once per execution.
+func runDeclaredPreflight(cmd *cobra.Command, args []string, spec *executionSpec) (map[string]any, error) {
 	if spec.ConfirmFirst {
 		if err := ConfirmSafety(cmd, spec.Safety); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// Input resolution rewrites explicit @file / stdin values in place so the
 	// required/enum/constraint/Validate stages below check the payload content.
 	if err := resolveInputFlags(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ValidateRequired(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
 	if err := ValidateEnums(cmd, spec.Flags); err != nil {
-		return err
+		return nil, err
 	}
-	return ValidateConstraints(cmd, spec.Flags, spec.Constraints)
+	if err := ValidateConstraints(cmd, spec.Flags, spec.Constraints); err != nil {
+		return nil, err
+	}
+	positionalArgs, err := buildPositionalArgs(args, spec.Positionals)
+	if err != nil {
+		return nil, err
+	}
+	return positionalArgs, nil
 }
 
 // Wait-phase framework flags. They are registered natively on the leaf (never
@@ -1451,8 +1615,9 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 			continue
 		}
 		if flag.Kind == KindBool {
-			// Enter on Changed only (main OR alias): explicit false is still
-			// sent (matching the handwritten "transmit on Changed" semantics).
+			// Existing booleans remain Changed-only. A declared ArgDefault opts
+			// this parameter into a required wire value without opting the user
+			// into a different boolean choice or altering flag presence.
 			if flagNameProvided(cmd, flag) {
 				v, _ := cmd.Flags().GetBool(flag.Name)
 				if !cmd.Flags().Changed(flag.Name) {
@@ -1462,6 +1627,12 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 							break
 						}
 					}
+				}
+				toolArgs[bind] = v
+			} else if flag.ArgDefault != "" {
+				v, err := strconv.ParseBool(flag.ArgDefault)
+				if err != nil {
+					return nil, fmt.Errorf("flag --%s: invalid boolean ArgDefault %q", flag.Name, flag.ArgDefault)
 				}
 				toolArgs[bind] = v
 			}

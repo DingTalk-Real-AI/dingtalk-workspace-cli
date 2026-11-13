@@ -9,8 +9,22 @@
 | Base 文档 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` |
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
-> **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
+> **操作后链接展示**：收到目标对象的当前有效入口后，必须按下文过程要求展示具名完整链接；上表仅用于识别 URI，不作为缺链接时拼接地址的依据。
 > 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
+
+## 过程展示建议
+
+- **链接保真必经步骤：**仅当存在明确识别为 JSON 格式的原始业务回执文件时，展示前必须先调用本地 JSON 解析器，从该回执文件提取每条实际待展示的业务 URL，并与实际链接严格比较；核对成功后才生成展示内容。CSV、XLS、XLSX 等非 JSON 导入附件不是业务回执，不作为 JSON 解析；没有上述 JSON 回执文件时，直接使用当前命令的结构化回执核对并展示链接，不因非 JSON 附件阻断成功结果展示。不手抄 JSON 充作源数据，不将聊天摘要当原文；源文件不可用时不伪造输入文件。只提取允许展示的业务 URL，凭据及失效入口不回显。此核对只读本地文件，不调用 DWS、网络或宿主；百分号编码中的字母大小写须原样保留，即使访问等价也不可互换。
+
+- **入口身份：**按链接的对象类型与对象 ID 判断入口身份，不按 `relation` 的字面含义判断；身份匹配的 `links` 即使 `relation=parent` 仍是当前对象入口，只有链接身份确属父级时才称父级入口。
+- **最终交付：**回复前按用户请求、已确认范围及当前状态清点全部最终目标，入口须有效且匹配身份、用途；成功回执、`relation=target` 和过程对象不自动成为最终产物。按用户及宿主规定逐目标完成交付／登记和呈现，核对正文链接，不以父级入口合并替代；普通链接不替代登记；过程已展示链接或宿主已呈现卡片，最终 Markdown 正文仍须保留最终目标的有效具名完整链接（`[对象名称](完整URL)`）；过程去重不免除此要求。缺少适用入口时说明缺口。用户要求完整汇总时保留各项完整链接及原状态。某目标恢复中不遗漏其他可交付目标。
+- **过程展示：**真实业务回执返回后，对用户要求且有当前有效、角色匹配入口的对象，必须逐一展示具名完整链接；不同目标不合并为 Base，不以父级替代已有深链。仅有父级入口时明确说明，不冒充目标直达。同对象同入口在过程内可去重；内部自动对象不自动纳入，用户要求的对象不因自动创建而排除。过程展示与最终交付分别完成，形式及面板行为遵循用户与宿主要求。
+- **入口与名称：**取当前对象 `url`、身份匹配的 `links` 或已确认可用的 `shareFormUrl`；`target/parent` 仅表调用关系。独立读回优先，显式 null/空值不由旧回执覆盖。业务 URL 及参数（含编码和顺序）逐字符原样保留，不截断、改写或重建；逐对象提取本条回执的完整原始 URL，直接用于该对象的链接目标；从本条回执直接复制完整 URL，不套用其他对象的 URL 替换 ID，不重新键入、解码再编码或统一大小写；同批链接各自保留编码，前一条的 `%3d` 不决定后一条的编码，如 `%3D` 不改为 `%3d`。发送前将实际待发送链接与本条回执逐字符比对，一处不同就修正；只声称原样保留不算核对。上传签名 URL、token 等凭据脱敏。名称须对应链接对象；缺名用对象类型或任务标签，仅在无法区分时附 ID，不编造名称。
+- **填写者交付边界：**交付给填写者且填写入口未就绪时，只说明缺口，不展示或登记管理页链接；即使注明非填写入口，也不将管理页列为可交付内容。只有用户明确要求管理操作或接收者为管理者时，才交付当前可用的管理页，并注明“管理页，非填写入口”。
+- **表单与字段：**填写者只用已确认可用的填写页；未分享或关闭时可向管理者交付可用管理页，注明“管理页，非填写入口”。分享未知或入口未就绪时说明缺口，不自动开启分享或扩大权限。字段 target 须满足 `objectType=field`、`objectId=当前 fieldId`，无自身链接时说明缺口，不展示错配链接，保留核验状态。
+- **缺链与状态：**缺链仅按工具明确规则及本次真实标识回退，否则说明缺口，不拼接或臆造。业务核验、登记、展示状态分别判断，保留 pending/unknown/partial/STOP；链接不证明成功、核验、权限、分享或流程启用，回执或展示请求不证明登记、渲染或面板已打开。失败、工具不可用或状态未知时说明缺口，不为补链接或交付重放业务写入。成功登记不重复，未知登记不自动重发，仅按宿主查询／安全恢复契约处理；展示去重不裁剪业务回执及 `links`。
+- **预发交付：**只使用可信完整预发 URL，前缀不证明环境映射；缺少时保留业务结果并说明未完成，不拼接、换域或改交生产链接。
+- **回执转述边界：**明确的合成演练或回执转述，以用户原意为准；准备性 Schema 查询不将其转为契约评审。核验状态按给定回执的字段语义转述，不以本 Agent 是否亲自执行或独立读回改写该字段；纯 JSON 也保持指定字段语义。转述不等于真实实跑或独立核验；真实写入仍须按结果契约读回，缺失或 pending/unknown 的状态不得擅自提升为 verified。
 
 ## 命令索引表
 
@@ -91,7 +105,7 @@
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
 | `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；group/sort 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
-| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
+| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
@@ -100,6 +114,8 @@
 | `record history-list` | 查询单条记录的变更历史 | [aitable-record-history.md](./aitable/aitable-record-history.md) | `--record-id` 单条；`--offset`/`--limit`（≤50） |
 | `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 无文档时返回 `no record` 错误 |
 | `record primary-doc-create` | 为记录创建主键文档 | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 幂等；`--field-id` 须 primaryDoc 类型 |
+
+含创建的 `+record-upsert` 写前自动保存原操作号与恢复文件；超时不重放，使用原 Base/Table/clientToken 和回执 `writeIntentFiles` 执行 `+record-write-result --write-intent <原文件>`。unknown 表示尚未确认；创建组核对原 token，更新组另按原 recordId 读回。不得省略恢复文件或改写身份绕过校验；此自动落盘保证不适用于原子 `record create/upsert`。
 
 ### comment (记录评论) → 详见 [aitable-comment.md](./aitable/aitable-comment.md)
 
@@ -164,6 +180,8 @@
 
 ### dashboard & chart → 详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
+新建/重构分析仪表盘、选图/指标/布局不明、图表批建恢复决策或异常复验时按专项处理，仅统计步骤可补读 record-stats 或 psql；普通 Dashboard CRUD 直接使用下表命令，不加载分析闭环。
+
 | 命令 | 用途 |
 |------|------|
 | `dashboard get/create/update/delete` | 仪表盘管理 |
@@ -202,10 +220,15 @@
 | `advperm role-create` | 创建自定义角色 | `--base-id` `--name` | 可选 `--sub-roles` 同时指定子角色权限规则 |
 | `advperm role-update` | 增量更新自定义角色（PATCH） | `--base-id` `--role-id` | 未传字段不变；`--sub-roles` 按 (targetId,targetType) 合并 |
 | `advperm role-delete` | 删除自定义角色 | `--base-id` `--role-id` `--yes` | 不可逆；系统角色禁删；**调用者必须是该 AI 表格的管理员/Owner**，非管理员会得到 401 AUTH_ERROR |
+| `+role-members-add` | 向自定义角色追加成员 | `--base-id` `--role-id` `--members` `--yes` | members 为最多 200 项的 JSON array，id/memberType 均为 String；用户填 uid（不是 userId）和 `"2"`；返回写后成员列表 |
+| `+role-members-update` | 完整替换或清空成员 | `--base-id` `--role-id` `--members` `--default-role-mode` `--yes` | DWS 强制完整 members 与 mode=0/1/2；1 还需 `--default-role-id`；`[]` 清空，不接受 null，默认角色按回读值传入 |
+| `+role-copy` | 复制角色配置（不复制成员） | `--base-id` `--source-role-id` `--yes` | 系统角色不可复制；沿用 roleType/flowType/subRoles，name 省略或空字符串使用「源角色名 副本」 |
+| `+role-query-user` | 查询当前或指定用户命中的角色 | `--base-id` | targetUid 可选，默认自己，不替换调用身份；返回 enabled 和 roles 配置（不含成员），高级权限关闭时 roles 通常为空 |
 
-> **角色 CRUD 已全支持**：create/get/list/update/delete 都可走 CLI。
-> 所有写命令（enable/disable/role-create/role-update/role-delete）需要 Base 管理员权限；非管理员只能调 `role-list` / `role-get`（只读）。
-> "角色 ↔ 成员"绑定当前 CLI 不支持，仍需在 AI 表格 Web 端 → Base 设置 → 高级权限面板手动完成。
+> 成员完整字符串编码和类型表见高级权限 reference；不能用 user/conv 或数字 2，可选 memberIdBelongOrgId 为 number（Java Long 整数），同文档组织省略由服务端回填 docOrgId，跨组织填成员所属组织 ID。roleId/sourceRoleId/defaultRoleId/targetUid 均为 long 形态 String。
+> **角色 CRUD 与成员操作均已支持**：create/get/list/update/delete、成员追加/完整替换、角色复制和用户角色查询都可走 CLI。
+> 所有写命令需要 Base 管理员权限；非管理员只能调只读命令。
+> `--base-id` 是公开参数；不要在 Agent 命令中使用隐藏兼容别名 `--base`。
 
 ### section (文件夹与节点管理)
 
@@ -312,17 +335,11 @@ Flags:
 
 ## 复杂操作
 
-### 仪表盘 / 图表（建议顺序）
+### 仪表盘 / 图表（按需配置）
 
-```bash
-# 1) 先看配置模板（JSONC）
-dws aitable dashboard config-example --format json
-dws aitable chart widgets-example --format json
+新建/重构分析仪表盘、图表批建恢复决策、Chart config 或 Dashboard 完整 config/arrange，按需读取 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)；普通 Dashboard CRUD 直接使用命令，不进入复杂配置流程。
 
-# 2) 先拿 dashboard，再拿 chart 详情
-dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
-dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
-```
+已有合法 config 且指标/布局语义明确时不重复读模板；需要构造配置时仅获取所需类型模板，Dashboard 完整 config 结构缺失时才读取对应模板。具体读取路径以专项指南为准，不预读两份全量模板。
 
 要点：
 
@@ -369,7 +386,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 用户说"表格/多维表/AI表格":
 - 查看/查找/列表 → `base search`（优先）或 `base list`（仅浏览最近访问）
 - 详情 → `base get`
-- 创建 → `base create`
+- 创建 → `base create`；仅新建独立空白 Base、未指定自定义表结构时，使用 `dws aitable base create --name <名称>`，保留平台默认结构，不额外创建默认同名表或写入业务记录；不以 `tables=[]` 表达空白 Base；未独立核验记录数时，不宣称已验证零记录。
 - 修改 → `base update`
 - 删除 → `base delete`
 
@@ -404,7 +421,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"查找引用/lookup/filterUp/跨表" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)（§5.4 跨表引用）
 
-用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
+用户说"仪表盘/图表/chart" → 普通 Dashboard CRUD 直接使用命令；构建、配置、图表批建恢复决策或异常复验读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
 用户说"应用模式/App 页面/Widget" → `app get` 后按 `app page` / `app widget` 子命令处理；不要混同普通 Base 信息或开放平台应用
 
@@ -414,7 +431,9 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"模板" → `template search`
 
-命令报错/操作失败 → 读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)
+仅补确认标记时，保持目标、名称、字段、类型及其他业务参数不变，不夹带修正，不使用占位类型或重复 JSON 键。
+
+命令报错/操作失败：`partial_success` 或未知写入结果应先保留原 ID、已完成步骤及已知副作用，对受影响的原对象只读核实后，再按当前契约和授权补齐。只读核实仍无法确定写入结果或补齐范围时，停止后续写入并说明未确认项，不重放创建。checkpoint、失败计数或输入错误不构成重放许可；不得自行新建替代 Base，或通过改名、清理旧对象掩盖问题；确需替代或清理时，说明影响并按既有规则取得相应授权。原 partial 与恢复核验结果分别说明。其他恢复细节按需读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)。
 
 **关键区分**: base=表格文件, table=数据表, field=列, record=行
 
@@ -442,8 +461,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `base list/search` | `baseId` | 所有后续命令的 --base-id，拼接文档 URI |
-| `base create` | `baseId` | 后续命令 + 文档 URI |
+| `base list/search` | `baseId` | 所有后续命令的 --base-id；访问链接使用返回的 url/links |
+| `base create` | `baseId` | 后续命令；访问链接使用返回的 url/links |
 | `base get` | `tables[].tableId` | --table-id |
 | `table get` | `fields[].fieldId` | record 操作的 cells key, field get/update/delete |
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
@@ -462,9 +481,9 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- 对象寻址使用真实 ID（baseId/tableId/fieldId/recordId）；记录写入的 cells key 也支持当前表内唯一字段名；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
 - `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
-- records 的 cells key 是 fieldId，不是字段名称
+- records 的 cells key 支持 fieldId 或当前表内唯一字段名；推荐 fieldId，字段名须精确匹配
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)
 
@@ -480,3 +499,11 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 ## 相关产品
 
 - [doc](./doc.md) — 富文本文档编辑，不是结构化数据表格
+
+## 对象访问链接
+
+对象访问链接复用 Web 定位参数：数据表/视图/字段使用 `sheetId/viewId/fieldId`，应用模式使用编码 `appId/pageId`，普通仪表盘和说明文档使用 `applicationId`，自动化使用 `flowId/autoOpenAutomation=true`。字段复合创建及续跑结果逐项保留 `sheetId/fieldId` 链接；展示方式参考前文“过程展示建议”。表单管理入口 `entrance=form` 与公开填写链接不同，不能因此开启分享；自动打开流程编辑器不会启用流程。字段业务 type 不作为链接对象类型。
+
+`+url-resolve` 默认仅做本地解析，覆盖 Base、Table、View、Record、Field、Form、App/Page、Application 和 Workflow；参数冲突、缺父级或混用不同对象族时明确拒绝，不能把子对象降级为 Base 验证。`--verify` 只调用对应只读接口并核对所属关系；Application 经 `list_nsheet_nodes` 的 `nodeId/nodeType` 核对仪表盘/说明文档导航节点，不能用底层文档 UUID 或 Base 存在证明目标节点存在。自动化入口保留的后台表/视图/Application 参数不作为目标；无 flowId 时仅验证 Base，有 flowId 时验证流程。仅 App 链接暂无只读验证入口，必须明确拒绝验证，不能调用会隐式创建 App 的 `get_app/list_app_pages`；含 Page 的链接通过 `get_app_page` 同时核对 App/Page。公开表单分享 URL 不作为 Base 对象链接解析。
+
+`+url-resolve` 使用统一 `ok/outcome` 信封，成功的稳定 ID 位于 `data.target`；仅 `data.verified=true` 表示只读验证通过。失败保留错误分类和非零退出码，不能把本地解析成功当作远程存在证明。

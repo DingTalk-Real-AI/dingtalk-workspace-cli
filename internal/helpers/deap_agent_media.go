@@ -63,6 +63,13 @@ func employeeImageRefs(e employeeEvent) ([]employeeImageRef, error) {
 			return nil, err
 		}
 	}
+	for _, message := range e.ForwardMessages {
+		// 员工有权读取的是收到的合并转发；原单聊可能不对员工开放。
+		// 资源仍取自子消息，下载授权上下文使用本轮外层消息，不切换身份。
+		if err := add(message.Content, e.MessageID, e.ConversationID); err != nil {
+			return nil, err
+		}
+	}
 	return refs, nil
 }
 

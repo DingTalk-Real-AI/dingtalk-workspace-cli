@@ -63,6 +63,15 @@ func (r recordingToolCaller) ResolveToolProduct(ctx context.Context, products []
 	return inner.ResolveToolProduct(ctx, products, tool)
 }
 
+// SupportsMCPTool forwards read-only discovery without recording it as a write.
+func (r recordingToolCaller) SupportsMCPTool(ctx context.Context, product, tool string) (bool, error) {
+	reader, ok := r.inner.(mcpToolCapabilityReader)
+	if !ok {
+		return false, nil
+	}
+	return reader.SupportsMCPTool(ctx, product, tool)
+}
+
 func (r recordingToolCaller) CallToolWithToken(
 	ctx context.Context,
 	token, product, tool string,

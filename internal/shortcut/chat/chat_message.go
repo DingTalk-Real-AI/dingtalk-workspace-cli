@@ -443,6 +443,7 @@ func listMessagesResolveMaps(data map[string]any) []map[string]any {
 
 type messageDecryptLedger struct {
 	candidateCount int
+	allowedCount   int
 	decryptedCount int
 	failures       []map[string]any
 }
@@ -501,7 +502,8 @@ func decryptMessageItemsIfRequested(rt *shortcut.RuntimeContext, messages []map[
 	result, err := messageReadCryptoClient.BatchDecryptInbound(rt.Command().Context(), rt, messagecrypto.Options{}, filtered)
 	if err != nil {
 		for _, item := range filtered {
-			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID,
+				chatmsg.ReasonBatchDecryptFailed))
 		}
 		markMessageDecryptFailures(messages, ledger.failures)
 		return ledger
@@ -546,14 +548,23 @@ func filterMessageDecryptItemsByPolicy(
 			OpenConversationID: item.ConversationID,
 		})
 		if err != nil {
-			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, err)))
 			continue
 		}
-		if decision.Enabled {
-			filtered = append(filtered, item)
+		if !decision.Enabled {
+			// A policy that resolves to off still leaves the body unreadable, so it
+			// is recorded with the server's concrete reason instead of being dropped.
+			// The onboarding hint travels with it: the server hint wins, and the
+			// standard guidance is the fallback when the server omits one.
+			ledger.failures = append(ledger.failures, messageDecryptFailureWithHint(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, nil),
+				messagecrypto.PolicyDisabledHint(decision.Policy.FriendlyHint)))
+			continue
 		}
+		filtered = append(filtered, item)
 	}
-	ledger.candidateCount = len(filtered)
+	ledger.allowedCount = len(filtered)
 	return filtered, ledger
 }
 
@@ -637,6 +648,7 @@ func applyMessageDecryptLedger(payload map[string]any, ledger messageDecryptLedg
 		return
 	}
 	payload["decryptCandidateCount"] = ledger.candidateCount
+	payload["decryptAllowedCount"] = ledger.allowedCount
 	payload["decryptedCount"] = ledger.decryptedCount
 	payload["decryptFailedCount"] = len(ledger.failures)
 	if len(ledger.failures) > 0 {
@@ -653,6 +665,14 @@ func messageDecryptFailure(messageID, conversationID, reason string) map[string]
 	}
 	if strings.TrimSpace(conversationID) != "" {
 		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func messageDecryptFailureWithHint(messageID, conversationID, reason, hint string) map[string]any {
+	failure := messageDecryptFailure(messageID, conversationID, reason)
+	if trimmed := strings.TrimSpace(hint); trimmed != "" {
+		failure["hint"] = trimmed
 	}
 	return failure
 }
@@ -819,6 +839,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	hasMore := false
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
+	paginationKnown := true
 	var nextPage map[string]any
 
 	for pagesFetched < pageLimit {
@@ -853,6 +874,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 				"page": pagesFetched, "stage": "pagination",
 				"error": "单聊消息下层未返回可靠的 hasMore，无法证明结果完整",
 			})
+			paginationKnown = false
 			stopReason = "pagination_error"
 			break
 		}
@@ -904,7 +926,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	payload := chatmsg.NewMessageListPayload(messages)
 	applyMessageDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
-	payload["paginationKnown"] = true
+	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason
@@ -912,7 +934,10 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
-	payload["partial"] = len(failures) > 0 && len(messages) > 0
+	// The decrypt ledger is applied above, so its partial flag must survive the
+	// pagination failure semantics written here (#1297).
+	decryptPartial, _ := payload["partial"].(bool)
+	payload["partial"] = decryptPartial || len(failures) > 0 && len(messages) > 0
 	if hasMore && nextPage != nil {
 		payload["nextPage"] = nextPage
 	}

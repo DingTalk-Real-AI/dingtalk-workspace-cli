@@ -89,6 +89,8 @@ func aitableDashboardGetResultSpec() *contract.ResultSpec {
       "type":"object",
       "description":"Dashboard 详情",
       "properties":{
+        "url":{"type":["string","null"],"description":"MCP 返回的仪表盘访问链接，携带 applicationId；显式 null 保留，不代表写后核验完成"},
+        "links":{"type":["array","null"],"description":"仪表盘目标和父级 Base 的访问上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}},
         "meta":{
           "description":"决定根布局协议的只读 Dashboard 元信息",
           "oneOf":[
@@ -218,16 +220,16 @@ func aitableRunAIFieldResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(`{
-  "type":"object","description":"run_ai_field 的 MCP 响应",
-  "properties":{"data":{"type":"object","description":"AI 字段任务提交结果","properties":{
-    "tasks":{"type":"array","description":"各 AI 字段的独立提交结果","items":{"type":"object","properties":{
+  "type":"object","description":"run_ai_field 的 MCP 响应；仅提交任务，不证明本轮计算完成",
+  "properties":{"data":{"type":"object","description":"AI 字段任务提交结果；已有单元格非空或固定等待结束不能证明本轮完成","properties":{
+    "tasks":{"type":"array","description":"各 AI 字段的独立提交结果；仅 submitted 且真实非空 taskId 确认受理","items":{"type":"object","properties":{
       "fieldId":{"type":"string","description":"AI 字段 ID"},
-      "taskId":{"type":"string","description":"提交成功后的任务 ID"},
-      "status":{"type":"string","description":"submitted 或 conflict"},
+      "taskId":{"type":"string","minLength":1,"pattern":"\\S","description":"服务端真实返回的非空任务 ID；submitted 时必填，只证明受理，不证明计算完成"},
+      "status":{"type":"string","enum":["submitted","conflict","failed","unknown"],"description":"submitted=凭真实非空 taskId 确认受理；conflict=结构化幂等冲突；failed=明确拒绝提交；unknown=受理未知，保留回执且不自动重新触发"},
       "total":{"type":"integer","description":"任务涉及的记录数"},
-      "error":{"type":"string","description":"冲突或提交失败时的错误信息"}
-    },"required":["fieldId","status"],"additionalProperties":true}},
-    "documentUrl":{"type":"string","description":"查看运行进度和结果的文档链接"}
+      "error":{"type":"string","description":"冲突、明确拒绝或受理未知时的原始错误信息；不按文案推断冲突"}
+    },"required":["fieldId","status"],"allOf":[{"if":{"properties":{"status":{"const":"submitted","description":"受理已确认状态"}},"required":["status"]},"then":{"required":["taskId"]}}],"additionalProperties":true}},
+    "documentUrl":{"type":"string","description":"查看运行进度和结果的文档链接；本轮终态与目标记录结果可读仍需独立核验"}
   },"required":["tasks"],"additionalProperties":true}},
   "required":["data"],"additionalProperties":true
 }`),
@@ -301,7 +303,9 @@ func aitableCreateFormResultSpec() *contract.ResultSpec {
   "properties":{"data":{"type":"object","description":"新建表单视图的标识","properties":{
     "baseId":{"type":"string","description":"Base ID 回显"},
     "tableId":{"type":"string","description":"Table ID 回显"},
-    "viewId":{"type":"string","description":"新建的表单视图 ID"}
+    "viewId":{"type":"string","description":"新建的表单视图 ID"},
+    "url":{"type":["string","null"],"description":"表单管理访问链接，携带 sheetId/viewId；显式 null 保留，实际定位由 Web 页面处理"},
+    "links":{"type":["array","null"],"description":"表单对象与父级上下文；显式 null 保留","items":{"type":"object","additionalProperties":true}}
   },"required":["baseId","tableId","viewId"],"additionalProperties":true}},
   "required":["data"],"additionalProperties":true
 }`),
@@ -317,7 +321,7 @@ func aitableNotifyShareFormResultSpec() *contract.ResultSpec {
     "baseId":{"type":"string","description":"Base ID 回显"},
     "tableId":{"type":"string","description":"Table ID 回显"},
     "viewId":{"type":"string","description":"表单视图 ID 回显"},
-    "recipients":{"type":"array","description":"实际接收通知的用户 ID","items":{"type":"string"}},
+    "recipients":{"type":"array","description":"本次催填目标的当前组织 userId，按实际成员去重；不证明各渠道已送达","items":{"type":"string"}},
     "sentAt":{"type":"string","description":"服务端记录的发送时间"}
   },"required":["baseId","tableId","viewId","recipients","sentAt"],"additionalProperties":true}},
   "required":["data"],"additionalProperties":true

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -48,9 +49,10 @@ var TableBootstrap = shortcut.Shortcut{
 }
 
 type createdTableStructure struct {
-	TableID  string
-	Fields   []map[string]any
-	Warnings []string
+	TableID    string
+	Fields     []map[string]any
+	Warnings   []string
+	Navigation map[string]any
 }
 
 var bootstrapFieldAllowedKeys = map[string]bool{
@@ -94,33 +96,37 @@ func validateBootstrapField(raw any, path string) (string, error) {
 	if raw, exists := field["aiConfig"]; exists {
 		cfg, ok := raw.(map[string]any)
 		if !ok {
-			return "", fmt.Errorf("%s.aiConfig 需要非空 prompt 与 outputType", path)
+			return "", fmt.Errorf("%s.aiConfig 必须是 JSON 对象", path)
 		}
-		prompt, ok := cfg["prompt"].([]any)
-		if !ok || len(prompt) == 0 {
-			return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
-		}
-		for _, raw := range prompt {
-			part, ok := raw.(map[string]any)
-			if !ok {
-				return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
+		// Shared with create_fields, which supports builtin configurations.
+		// create_table capability checks run separately before any writes.
+		if cfg["type"] != "builtin" {
+			prompt, ok := cfg["prompt"].([]any)
+			if !ok || len(prompt) == 0 {
+				return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
 			}
-			switch part["type"] {
-			case "text":
-				if stringValue(part, "value") == "" {
-					return "", fmt.Errorf("prompt text 片段需要 value")
+			for _, raw := range prompt {
+				part, ok := raw.(map[string]any)
+				if !ok {
+					return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
 				}
-			case "fieldRef":
-				if stringValue(part, "fieldId") == "" {
-					return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+				switch part["type"] {
+				case "text":
+					if stringValue(part, "value") == "" {
+						return "", fmt.Errorf("prompt text 片段需要 value")
+					}
+				case "fieldRef":
+					if stringValue(part, "fieldId") == "" {
+						return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+					}
+				default:
+					return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
 				}
-			default:
-				return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
 			}
-		}
-		expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
-		if expected == "" || expected != fieldType {
-			return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
+			expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
+			if expected == "" || expected != fieldType {
+				return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
+			}
 		}
 	}
 	if description, exists := field["description"]; exists {
@@ -129,6 +135,32 @@ func validateBootstrapField(raw any, path string) (string, error) {
 		}
 	}
 	return name, nil
+}
+
+// createTableFormatterTypes mirrors the MCP field-config check: formatter is
+// accepted only on these types. The server checks it inside create_table,
+// after +base-bootstrap has already created the Base, so rejecting it here
+// avoids leaving an empty Base behind.
+var createTableFormatterTypes = map[string]bool{"number": true, "currency": true, "date": true, "progress": true, "formula": true}
+
+// create_table does not accept builtin aiConfig or object output. Keep that
+// capability on create_fields/update_field, including the legacy config shape.
+func validateCreateTableCapabilities(fields []any, path string) error {
+	for index, raw := range fields {
+		field, _ := raw.(map[string]any)
+		aiConfig, _ := field["aiConfig"].(map[string]any)
+		config, _ := field["config"].(map[string]any)
+		decorator, _ := config["decoratorConfigs"].(map[string]any)
+		if field["type"] == "object" || aiConfig["type"] == "builtin" || decorator["type"] == "builtin" {
+			return fmt.Errorf("%s[%d] 的 builtin 配置或 object 字段不支持组合建表；请先创建普通表，再用 field create 或 field update 配置内置 AI 字段", path, index)
+		}
+		if fieldType, _ := field["type"].(string); config != nil && !createTableFormatterTypes[fieldType] {
+			if _, exists := config["formatter"]; exists {
+				return fmt.Errorf("%s[%d].config.formatter 不适用于 type=%s；只有 number、currency、date、progress、formula 支持 formatter，createdTime 等系统字段不传 config", path, index, fieldType)
+			}
+		}
+	}
+	return nil
 }
 
 func parseBootstrapFields(raw string) ([]any, error) {
@@ -165,10 +197,15 @@ func tableBootstrapValidation(message string) error {
 	)
 }
 
+// executeTableBootstrap publishes navigation only after the new table and its
+// declared fields pass independent readback; failures retain the recovery ID.
 func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	fields, err := parseBootstrapFields(rt.Str("fields"))
 	if err != nil {
 		return err
+	}
+	if err := validateCreateTableCapabilities(fields, "--fields"); err != nil {
+		return tableBootstrapValidation(err.Error())
 	}
 	baseID, tableName := rt.Str("base-id"), rt.Str("name")
 	result := newCompositeResult("table_bootstrap")
@@ -203,10 +240,14 @@ func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 	result.CompletedSteps = []compositeStep{{Index: 1, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(fields), Result: map[string]any{"tableId": created.TableID, "fieldCount": len(created.Fields)}}}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableId": created.TableID, "fieldCount": len(created.Fields)}
 	result.Result = map[string]any{"baseId": baseID, "tableId": created.TableID, "tableName": tableName, "fields": created.Fields}
+	aitablenavigation.Preserve(result.Result, created.Navigation)
 	result.NextCommand = ""
 	return rt.Output(result)
 }
 
+// createAndVerifyTableStructure creates once, reads back the returned ID and
+// fields, and retains server navigation without another request. Navigation
+// never substitutes for table identity or field-structure verification.
 func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableName string, fields []any) (createdTableStructure, error) {
 	created := createdTableStructure{}
 	initialEnd := minInt(15, len(fields))
@@ -228,14 +269,17 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 			created.Warnings = append(created.Warnings, fmt.Sprintf("create_fields offset %d returned an error; final read-back decides success: %v", offset, fieldErr))
 		}
 	}
-	if err := verifyCreatedTableEventually(rt, baseID, created.TableID); err != nil {
+	table, readFields, err := readCreatedTableEventually(rt, baseID, created.TableID)
+	if table == nil {
 		return created, err
 	}
-	fieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": created.TableID})
-	created.Fields, _ = findNamedObjectList(fieldsData, "fields", "fieldList")
-	if err == nil && created.Fields == nil {
-		err = fmt.Errorf("field read-back for table %s is missing the fields collection", created.TableID)
-	}
+	// Readback navigation wins per key. Older readers can omit it, in which
+	// case only server-provided creation navigation fills the missing keys.
+	// Explicit null/empty readback values are preserved rather than replaced.
+	created.Navigation = map[string]any{}
+	aitablenavigation.Preserve(created.Navigation, table)
+	aitablenavigation.Preserve(created.Navigation, parityResponseObject(createData))
+	created.Fields = readFields
 	if err == nil {
 		err = verifyDeclaredFieldStructures(created.Fields, fields)
 	}

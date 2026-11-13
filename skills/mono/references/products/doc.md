@@ -1,6 +1,5 @@
 # 文档 (doc) 命令参考
 
-
 ## Shortcut边界与代价
 
 - `doc +search` 用于按关键词或属性定位待阅读编辑的在线文档；文字文档可加 `--extensions adoc`。`--folder` 是搜索后的直接成员过滤，不递归，必须配 `--page-all`，需要分别完整读取搜索候选和目录成员；触及上限不能宣称完整。只浏览文档文件夹用 `doc +list`，钉盘目录用 `drive +list`，普通钉盘文件搜索用 `drive +search`。不要为目录浏览重复走搜索与列表。
@@ -12,7 +11,7 @@
 
 ## 路由与帮助预算
 
-已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 只执行一次 `dws shortcut list --service doc --format json`，禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。
+已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 统一按一条恢复路径处理：优先错误中的明确 suggestion，其次本页或已加载 Skill/reference 中的明确兼容入口，均无则报漂移并停；禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。只有现有路由仍无法定位低频能力时，才执行一次 `dws shortcut list --service doc --format json` 做能力发现回退。
 
 本页已给出精确命令且参数足够时，禁止读取 reference 子页。只有复杂 JSONML、block/划词评论高级参数、分页或部分成功恢复仍无法由本页和精确 leaf Schema处理时，才最多读取一个对应子 reference；普通创建、全文读取、append/overwrite、导出和导入直接执行。
 
@@ -25,6 +24,14 @@ dws doc +version-revert --node <DOC_ID> --version <N>
 ```
 
 `+history-*` 仅兼容已有调用，不用于新的 Agent 选路。
+
+## 收尾与展示交付
+
+创建或更新用户要求的最终在线资源并完成必要核验后，按顺序收尾：复用已确认的最终文档 URL（当次回执的 `documentUrl`/`docUrl`/`url`，缺失时用 `doc info` 只读补查）→ 当前宿主提供资源展示能力时，按其声明完成展示请求；所有交付物处理后再最终回复，以 `[名称](完整URL)` 形式保留具名链接，URL 保留原编码，不截断、不缩写、不用省略号替代。宿主未提供展示能力时，直接交付已确认的链接。业务成功标志、正文链接或浏览器已打开，均不替代宿主要求的展示步骤；按宿主回执描述实际交付状态，展示请求已受理不等于界面已展示。
+
+本轮相同 URL 的展示请求已受理后不重复调用；普通只读引用、用户明确排除展示时跳过展示步骤；用户明确要求展示已有资源时，无须新增业务写入。URL 无法确认或展示请求失败时，保留业务结果与已有确定链接并说明限制，不猜地址、不用父级入口冒充直达、不重复业务写入。
+
+创建后的完整示例：`+create` 返回 `docUrl` 且 `verified=true` 时，Runtime 已完成写后核验，直接进入交付——按宿主交付规则请求展示 `[文档名](docUrl)` 并回复用户；复用该核验结果，不额外 `+fetch`，不为展示效果重新创建文档。
 
 ## 命令总览
 

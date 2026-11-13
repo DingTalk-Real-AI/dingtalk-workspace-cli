@@ -96,9 +96,16 @@ type TokenData struct {
 	UserName       string    `json:"user_name,omitempty"`
 	CorpName       string    `json:"corp_name,omitempty"`
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
-	UpdatedAt      string    `json:"updated_at,omitempty"`
-	Source         string    `json:"source,omitempty"`
-	LoginRegion    string    `json:"login_region,omitempty"`
+	// OIDCProvider is the sole OIDC session discriminator; endpoint and secret
+	// mode fields below do not identify the login source.
+	OIDCProvider string `json:"oidc_provider,omitempty"`
+	// OIDC sessions keep their Portal and credential mode across invocations.
+	// The secret itself lives in the application keychain slot, never this DTO.
+	MCPBaseURL              string `json:"mcp_base_url,omitempty"`
+	MCPClientSecretRequired bool   `json:"mcp_client_secret_required,omitempty"`
+	UpdatedAt               string `json:"updated_at,omitempty"`
+	Source                  string `json:"source,omitempty"`
+	LoginRegion             string `json:"login_region,omitempty"`
 	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
 	// matched historical profile whose userId was never resolved. It is never
 	// persisted as token material.
@@ -404,7 +411,10 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 // Caller holds the auth lock. The direct-login secret participates in the same
 // snapshot and rollback as the profile and token slots, never a separate write.
 func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, runtimeSelector, clientSecret string) error {
-	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || data.UserID == "") {
+	// OIDC login retains the normal organization-scoped login support when
+	// contact cannot resolve a user. The existing persistence plan still
+	// prevents that credential from overwriting an exact account identity.
+	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || (data.UserID == "" && !data.isOIDCSession())) {
 		return fmt.Errorf("direct login persistence requires a complete identity and application")
 	}
 

@@ -259,6 +259,15 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 	if action != "list" && len(bindings) != 1 {
 		return fmt.Errorf("agent-uuid 必须对应唯一的本地员工绑定")
 	}
+	// 预览必须早于文件锁、绑定写入及任何宿主控制。
+	if action != "list" && commandDryRun(cmd) {
+		b := bindings[0]
+		steps := []string{"stop_old", "confirm_released"}
+		if action == "restart" {
+			steps = append(steps, "start_saved_binding", "confirm_ready")
+		}
+		return writeDWSMachinePlan(cmd, map[string]any{"status": "planned", "action": action, "agentUuid": b.AgentUUID, "channel": bindingChannel(b), "steps": steps})
+	}
 	items := []map[string]any{}
 	for _, b := range bindings {
 		if action == "stop" || action == "restart" {

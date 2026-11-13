@@ -19,8 +19,8 @@ func TestEventRegistryDeliversOneTypedSchemaPath(t *testing.T) {
 	}
 	wantModes := map[string]string{
 		"event.consume": "composite",
-		"event.list":    "local",
-		"event.schema":  "local",
+		"event.list":    "composite",
+		"event.schema":  "composite",
 		"event.status":  "composite",
 		"event.stop":    "composite",
 	}

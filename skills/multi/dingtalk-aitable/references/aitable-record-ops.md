@@ -31,9 +31,13 @@ dws aitable record create --base-id <B> --table-id <T> \
   --records '[{"cells":{"fldText":"内容"}}]' --format json
 ```
 
-长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.createdRecordIds[]` 取 recordId（兼容保留 `data.newRecordIds[]`），再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。需要回收丢失回执时，调用前持久化 UUID v4 并传 `--client-token`；遇到超时只用原 Base/Table/token 调用 `+record-write-result`，不得自动重放创建。
+长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.createdRecordIds[]` 取 recordId（兼容保留 `data.newRecordIds[]`），再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。
+
+含创建的 `+record-upsert` 在发请求前自动生成或保留 `clientToken`，并保存不含 cell 内容的恢复文件；不能将此保证外推到原子 `record create/upsert`。超时后沿回执的原 Base/Table/token 和 `writeIntentFiles` 调用 `+record-write-result --write-intent <原文件>`，不得自动重放创建。unknown 返回 pending，不代表未写入；创建组只读对账，更新组另按原 recordId 回读。身份或端点不匹配时切回原账号/环境，不能删掉参数或修改恢复文件；同账号换证不代表换号，旧文件仍按原版本严格校验。
 
 ## 更新、同步与批量修改
+
+记录复合写入沿用服务端的 fieldId/唯一字段名寻址，CLI 不在写前读取字段目录或改写 cells。回读先直接比较；仅缺少对应字段键或需要类型投影时，才读取 `get_fields`，将校验期望中的字段名精确映射为 fieldId，同一轮校验复用目录。字段目录读取失败、不完整或映射存在歧义时，保留写入回执和已知 recordId，返回非零退出码、unknown 与 verification.status=pending，不代表写入失败，也不自动重发写入；`+record-upsert`、`+record-batch-create` 与按键创建复用有界只读回读重试（500ms、1500ms）；预算耗尽仍报告未确认，不重发写入。目录是写后观测，不能证明与写入时的 schema 原子一致。`+record-upsert-by-key` 的 `--key-field-id` 仍只接受字段 ID，原有唯一键预检不变。dry-run 不新增字段请求；`+record-bulk-patch` 仍查询匹配记录，按键 upsert 仍查询唯一键以生成计划。
 
 已知 recordId：
 
@@ -68,7 +72,8 @@ dws aitable +record-delete --base-id <B> --table-id <T> --record-ids <R1,R2>
 | 复选框 | boolean |
 | 日期 | 日期字符串（如 `"2026-03-15"`、`"2026-03-15 09:00"`）、含时区的 RFC3339 字符串或整数毫秒时间戳（允许 `0` 和负值） |
 | URL | 按当前字段 Schema 要求的对象或字符串 |
-| 人员、关联记录 | 使用真实 userId/recordId，不用姓名代替 |
+| 人员 | 使用真实 userId，不用姓名代替 |
+| 关联记录 | `{"linkedRecordIds":["<真实 recordId>"]}`，不是 recordId 数组或字符串 |
 | 附件 | 本地文件用 `+attachment-put` 完成上传和记录写入；在线 URL 通过原子 `record create/update` 传 `[{"url":"https://..."}]`，独立回读验证异步转存结果 |
 
 日期的含时区字符串和毫秒时间戳按固定 UTC+8 转为分钟精度写入，秒和毫秒不保留，转换后的年份须在 0001–9999。合法日期读出统一为东八区 RFC3339 字符串，不保留原始输入类型。写入后查询读回示例：`1788883200000` → `"2026-09-09T00:00:00+08:00"`；`0` → `"1970-01-01T08:00:00+08:00"`；`-60000` → `"1970-01-01T07:59:00+08:00"`。

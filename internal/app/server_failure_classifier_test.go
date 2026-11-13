@@ -14,18 +14,258 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
+
+func TestCrossPlatformCoverageServerFailureClassifierFillsServerMetadata(t *testing.T) {
+	serverRetryable := true
+	serverStarted := false
+	unknown := true
+	err := newServerFailureAPIError(
+		"upstream failure",
+		"business_error",
+		"fallback hint",
+		"chat",
+		"send_message",
+		apperrors.ServerDiagnostics{
+			Reason:           "server_reason",
+			Operation:        "server/operation",
+			Origin:           "server_origin",
+			FailureStage:     "server_stage",
+			FriendlyHint:     "server hint",
+			Actions:          []string{"check status", "check status"},
+			NextCommand:      "dws check status",
+			ServerRetryable:  &serverRetryable,
+			ExecutionStarted: &serverStarted,
+			Outcome:          "unknown",
+			ContractVersion:  "v1",
+			Unknown:          &unknown,
+			Details:          map[string]any{"checkpoint": "v"},
+		},
+	)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	if typed.Reason != "server_reason" || typed.Operation != "server/operation" || typed.Origin != "server_origin" || typed.FailureStage != "server_stage" || typed.Hint != "server hint" {
+		t.Fatalf("server metadata = %#v", typed)
+	}
+	if !typed.RetryableSet || !typed.Retryable || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("server execution metadata = %#v", typed)
+	}
+	if !strings.Contains(strings.Join(typed.Actions, "\n"), "dws check status") {
+		t.Fatalf("actions = %#v", typed.Actions)
+	}
+	if typed.Details["outcome"] != "unknown" || typed.Details["contractVersion"] != "v1" || typed.Details["unknown"] != true || typed.Details["checkpoint"] != "v" {
+		t.Fatalf("details = %#v", typed.Details)
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierRateLimitGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		code      string
+		message   string
+		detail    string
+		retryable *bool
+		wantMatch bool
+	}{
+		{
+			name:      "exact code",
+			code:      "RATE_LIMIT_ERROR",
+			message:   "business error: success=false",
+			wantMatch: true,
+		},
+		{
+			name:      "normalized code takes precedence over incidental text",
+			code:      " rate_limit_error ",
+			message:   "openConversationId is required",
+			detail:    "connection refused",
+			retryable: boolPointer(false),
+			wantMatch: true,
+		},
+		{
+			name:      "similar code does not match",
+			code:      "RATE_LIMITED",
+			message:   "当前请求频率过高，本次请求被限流",
+			wantMatch: false,
+		},
+		{
+			name:      "message alone does not match",
+			message:   "RATE_LIMIT_ERROR: 当前请求频率过高",
+			wantMatch: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				tc.message,
+				"business_error",
+				"check parameters",
+				"im",
+				"send_personal_message",
+				apperrors.ServerDiagnostics{
+					ServerErrorCode: tc.code,
+					TechnicalDetail: tc.detail,
+					ServerRetryable: tc.retryable,
+				},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T %v, want structured error", err, err)
+			}
+			if got := typed.Reason == "rate_limited"; got != tc.wantMatch {
+				t.Fatalf("reason = %q, rate-limit match = %v", typed.Reason, got)
+			}
+			if !tc.wantMatch {
+				if typed.Message != tc.message {
+					t.Fatalf("non-matching message = %q, want original %q", typed.Message, tc.message)
+				}
+				return
+			}
+			if typed.Message != "由于当前请求频率过高，本次请求被限流，请等待 10 秒后重试。" {
+				t.Fatalf("message = %q", typed.Message)
+			}
+			if !strings.Contains(typed.Hint, "降低请求频率") || !strings.Contains(typed.Hint, "等待 10 秒后重试") {
+				t.Fatalf("hint = %q", typed.Hint)
+			}
+			if typed.Origin != "" || typed.FailureStage != "" || typed.ExecutionStarted != nil {
+				t.Fatalf("invented failure semantics: %#v", typed)
+			}
+			if tc.retryable == nil {
+				if typed.RetryableSet {
+					t.Fatalf("client invented retryability: %#v", typed)
+				}
+			} else if !typed.RetryableSet || typed.Retryable != *tc.retryable {
+				t.Fatalf("retryability = (%v, %v), want %v", typed.RetryableSet, typed.Retryable, *tc.retryable)
+			}
+			if typed.RetryAfterSeconds != nil {
+				t.Fatalf("client invented retry_after_seconds: %v", typed.RetryAfterSeconds)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageExecuteInvocationRateLimitGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		isError   bool
+		code      string
+		retryable bool
+		detail    string
+	}{
+		{name: "business failure", code: "RATE_LIMIT_ERROR", retryable: false},
+		{name: "tool failure", isError: true, code: " rate_limit_error ", retryable: true, detail: "connection refused; openConversationId is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				var request struct {
+					ID int `json:"id"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode request: %v", err)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"jsonrpc": "2.0",
+					"id":      request.ID,
+					"result": map[string]any{
+						"isError": tc.isError,
+						"structuredContent": map[string]any{
+							"success":          false,
+							"code":             tc.code,
+							"message":          "请求被限流。当前请求过于频繁，请稍后重试",
+							"trace_id":         "trace-rate-limit",
+							"retryable":        tc.retryable,
+							"technical_detail": tc.detail,
+						},
+					},
+				})
+			}))
+			defer server.Close()
+
+			client := transport.NewClient(server.Client())
+			client.TrustedDomains = []string{strings.TrimPrefix(server.URL, "http://")}
+			runner := &runtimeRunner{transport: client, globalFlags: &GlobalFlags{Token: "local-test-token"}}
+			_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+				CanonicalProduct: "chat",
+				Tool:             "send_personal_message",
+				Params:           map[string]any{"content": "fixture"},
+			})
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("business requests = %d, want 1 (no automatic replay)", got)
+			}
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T %v, want structured error", err, err)
+			}
+			if typed.Retryable != tc.retryable || !typed.RetryableSet || typed.ExecutionStarted != nil || typed.RetryAfterSeconds != nil {
+				t.Fatalf("retry semantics = retryable(%v,%v) execution_started=%v retry_after=%v", typed.RetryableSet, typed.Retryable, typed.ExecutionStarted, typed.RetryAfterSeconds)
+			}
+
+			var legacy bytes.Buffer
+			if printErr := apperrors.PrintJSON(&legacy, err); printErr != nil {
+				t.Fatal(printErr)
+			}
+			var legacyWire struct {
+				Error map[string]any `json:"error"`
+			}
+			if decodeErr := json.Unmarshal(legacy.Bytes(), &legacyWire); decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+			code, unifiedWire := emitChatResultWireForTest(t, output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err)))
+			unifiedError, ok := unifiedWire["error"].(map[string]any)
+			if !ok {
+				t.Fatalf("unified error = %#v", unifiedWire["error"])
+			}
+			if code != apperrors.ExitCodeAPI || unifiedWire["ok"] != false || unifiedWire["outcome"] != "failure" {
+				t.Fatalf("exit = %d, unified = %#v", code, unifiedWire)
+			}
+			for _, wire := range []map[string]any{legacyWire.Error, unifiedError} {
+				if wire["message"] != "由于当前请求频率过高，本次请求被限流，请等待 10 秒后重试。" || wire["trace_id"] != "trace-rate-limit" {
+					t.Errorf("guidance wire = %#v", wire)
+				}
+				if _, exists := wire["retry_after_seconds"]; exists {
+					t.Errorf("client invented retry delay: %#v", wire)
+				}
+				if _, exists := wire["execution_started"]; exists {
+					t.Errorf("client invented execution state: %#v", wire)
+				}
+			}
+			if legacyWire.Error["retryable"] != tc.retryable {
+				t.Errorf("legacy retryable = %#v, want %v", legacyWire.Error["retryable"], tc.retryable)
+			}
+			if tc.retryable {
+				if unifiedError["retryable"] != true {
+					t.Errorf("unified retryable = %#v, want true", unifiedError["retryable"])
+				}
+			} else if _, exists := unifiedError["retryable"]; exists {
+				t.Errorf("unified retryable=false should follow the existing omitempty contract: %#v", unifiedError)
+			}
+			if legacyWire.Error["reason"] != "rate_limited" || legacyWire.Error["server_error_code"] != tc.code || unifiedError["subtype"] != "rate_limited" || unifiedError["upstream_code"] != tc.code {
+				t.Fatalf("classification/diagnostics: legacy=%#v unified=%#v", legacyWire.Error, unifiedError)
+			}
+		})
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
+}
 
 func TestCrossPlatformCoverageServerFailureClassifierBackendMetadataUnavailable(t *testing.T) {
 	retryable := true
@@ -126,6 +366,44 @@ func TestCrossPlatformCoverageServerFailureClassifierDingRobotNotInOrg(t *testin
 				t.Fatalf("terminal robot isolation actions = %#v", typed.Actions)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierPreservesLocalGuidance(t *testing.T) {
+	serverRetryable := true
+	serverStarted := true
+	err := newServerFailureAPIError(
+		"robotCode is invalid",
+		"business_error",
+		"generic fallback hint",
+		"ding",
+		"send_ding_message",
+		apperrors.ServerDiagnostics{
+			Reason:           "server_reason",
+			Operation:        "server/operation",
+			Origin:           "server_origin",
+			FailureStage:     "server_stage",
+			FriendlyHint:     "server retry hint",
+			Actions:          []string{"retry with another robot"},
+			ServerRetryable:  &serverRetryable,
+			ExecutionStarted: &serverStarted,
+		},
+	)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	if typed.Reason != "robot_not_in_org" || typed.Operation != "ding/send_ding_message" ||
+		typed.Origin != "dingtalk_api" || typed.FailureStage != "precondition_rejected" ||
+		typed.Hint != "请提供当前组织内有效且已发布的 robot-code 后重新发起请求。" {
+		t.Fatalf("local classification overwritten: %#v", typed)
+	}
+	if !typed.RetryableSet || typed.Retryable || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("local safety state overwritten: retryable=(%v,%v) execution_started=%v", typed.RetryableSet, typed.Retryable, typed.ExecutionStarted)
+	}
+	actions := strings.Join(typed.Actions, " ")
+	if !strings.Contains(actions, "禁止尝试或替换为其他机器人") || strings.Contains(actions, "retry with another robot") {
+		t.Fatalf("local safety actions were replaced or conflicted: %#v", typed.Actions)
 	}
 }
 
@@ -391,6 +669,166 @@ func TestCrossPlatformCoverageExecuteInvocationClassifiesObservedMCPMetadataFail
 	}
 	if typed.ExecutionStarted != nil {
 		t.Fatalf("execution_started must remain unknown: %v", typed.ExecutionStarted)
+	}
+}
+
+func TestCrossPlatformCoverageExecuteInvocationPreservesExplicitErrorCategory(t *testing.T) {
+	for _, tc := range []struct {
+		category apperrors.Category
+		wire     string
+		exitCode int
+	}{
+		{category: apperrors.CategoryAuth, wire: "auth", exitCode: apperrors.ExitCodeAuth},
+		{category: apperrors.CategoryAuth, wire: "permission", exitCode: apperrors.ExitCodeAuth},
+		{category: apperrors.CategoryAuth, wire: "forbidden", exitCode: apperrors.ExitCodeAuth},
+		{category: apperrors.CategoryValidation, wire: "validation", exitCode: apperrors.ExitCodeValidation},
+		{category: apperrors.CategoryDiscovery, wire: "discovery", exitCode: apperrors.ExitCodeDiscovery},
+		{category: apperrors.CategoryInternal, wire: "internal", exitCode: apperrors.ExitCodeInternal},
+	} {
+		t.Run(tc.wire, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					ID int `json:"id"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode request: %v", err)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"jsonrpc": "2.0",
+					"id":      request.ID,
+					"result": map[string]any{
+						"structuredContent": map[string]any{
+							"success": false,
+							"error": map[string]any{
+								"errorDetail": map[string]any{
+									"errorType": tc.wire,
+									"message":   "access denied",
+									"reason":    "permission_denied",
+								},
+							},
+							"data": map[string]any{
+								"reason": "confirmation_required",
+							},
+						},
+					},
+				})
+			}))
+			defer server.Close()
+
+			client := transport.NewClient(server.Client())
+			client.TrustedDomains = []string{strings.TrimPrefix(server.URL, "http://")}
+			runner := &runtimeRunner{transport: client, globalFlags: &GlobalFlags{Token: "local-test-token"}}
+			_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+				CanonicalProduct: "other",
+				Tool:             "test_tool",
+			})
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("executeInvocation() error = %T %v, want typed error", err, err)
+			}
+			if typed.Category != tc.category || typed.ExitCode() != tc.exitCode {
+				t.Fatalf("category/exit = %q/%d, want %q/%d", typed.Category, typed.ExitCode(), tc.category, tc.exitCode)
+			}
+			if tc.wire == "auth" && typed.Reason != "permission_denied" {
+				t.Fatalf("reason = %q, want explicit errorDetail reason", typed.Reason)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageExecuteInvocationIgnoresBusinessCategory(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result": map[string]any{
+				"structuredContent": map[string]any{
+					"success": false,
+					"errorDetail": map[string]any{
+						"category": "application_scope",
+						"message":  "business failure",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := transport.NewClient(server.Client())
+	client.TrustedDomains = []string{strings.TrimPrefix(server.URL, "http://")}
+	runner := &runtimeRunner{transport: client, globalFlags: &GlobalFlags{Token: "local-test-token"}}
+	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: "other",
+		Tool:             "test_tool",
+	})
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("executeInvocation() error = %T %v, want typed error", err, err)
+	}
+	if typed.Category != apperrors.CategoryAPI || typed.ExitCode() != apperrors.ExitCodeAPI {
+		t.Fatalf("business category = %q/%d, want api/%d", typed.Category, typed.ExitCode(), apperrors.ExitCodeAPI)
+	}
+}
+
+func TestCrossPlatformCoverageExecuteInvocationBusinessScopeHintSkipsPatRetry(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var request struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result": map[string]any{
+				"isError": true,
+				"structuredContent": map[string]any{
+					"success": false,
+					"message": "business denied",
+					"error": map[string]any{
+						"errorDetail": map[string]any{
+							"errorType":     "permission",
+							"message":       "business denied",
+							"friendly_hint": "application scope approval required",
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := transport.NewClient(server.Client())
+	client.TrustedDomains = []string{strings.TrimPrefix(server.URL, "http://")}
+	runner := &runtimeRunner{transport: client, globalFlags: &GlobalFlags{Token: "local-test-token"}}
+	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: "devapp",
+		Tool:             "publish_dev_app_version",
+	})
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("executeInvocation() error = %T %v, want typed error", err, err)
+	}
+	if typed.Category != apperrors.CategoryAuth || typed.ExitCode() != apperrors.ExitCodeAuth {
+		t.Fatalf("business authorization = %q/%d, want auth/%d", typed.Category, typed.ExitCode(), apperrors.ExitCodeAuth)
+	}
+	if isPatScopeError(err) {
+		t.Fatal("business scope hint must not be classified as a PAT scope error")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("business requests = %d, want 1 (PAT retry must not replay the call)", got)
 	}
 }
 

@@ -40,7 +40,7 @@ var mailRuleAllowedOperations = map[string]map[string]bool{
 }
 
 var (
-	mailHTTPClient    = func() *http.Client { return &http.Client{Timeout: 5 * time.Minute} }
+	mailHTTPClient    = func() *http.Client { return &http.Client{Timeout: filePutClientTimeout} }
 	mailPutAttachment = httpPutMailAttachment
 	mailGetAttachment = httpGetMailAttachment
 )
@@ -3976,7 +3976,7 @@ func runMailDraftWithAttachment(draftTool string, draftArgs map[string]any, mess
 
 	from, _ := draftArgs["from"].(string)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), filePutFlowTimeout())
 	defer cancel()
 
 	// Step 0: 查询邮箱类型（个人/企业），用于确定附件上传域名

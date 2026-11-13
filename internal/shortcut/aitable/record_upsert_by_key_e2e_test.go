@@ -27,10 +27,11 @@ type upsertByKeyStep struct {
 }
 
 type upsertByKeyCaller struct {
-	steps  []upsertByKeyStep
-	calls  []aitableURLCall
-	dryRun bool
-	callFn func(index int, product, tool string, args map[string]any) (string, error)
+	steps        []upsertByKeyStep
+	calls        []aitableURLCall
+	dryRun       bool
+	callFn       func(index int, product, tool string, args map[string]any) (string, error)
+	capabilityFn func(context.Context, string, string) (bool, error)
 }
 
 func (c *upsertByKeyCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -351,6 +352,9 @@ func TestCrossPlatformCoverageRecordUpsertByKeyVerificationMismatchFailsE2E(t *t
 
 func runRecordBatchCLI(t *testing.T, caller *upsertByKeyCaller, command string, records []map[string]any, extra ...string) (string, error) {
 	t.Helper()
+	if command == "+record-upsert" {
+		setupRecordWriteTestProfile(t)
+	}
 	helpers.InitDepsForTest(t, caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -735,5 +736,104 @@ func TestCrossPlatformCoveragePublishedMCPDefiniteRPCFailuresAreNotReplayable(t 
 	var typed *apperrors.Error
 	if got != validation || !errors.As(got, &typed) || typed.ExecutionStarted == nil || *typed.ExecutionStarted || typed.Retryable || typed.Actions != nil {
 		t.Fatalf("validation RPC -32602 metadata = %#v", typed)
+	}
+}
+
+// TestCrossPlatformCoverageInvokeValidatedRejectsUnserializableArguments 覆盖
+// normalizeJSONArguments 的 nil 直通、序列化失败与解码失败分支，并确认失败前
+// 不会发出 tools/call。
+func TestCrossPlatformCoverageNormalizeJSONArgumentsPreservesWireTypesAndPrecision(t *testing.T) {
+	large := int64(9007199254740993)
+	normalized, err := normalizeJSONArguments(map[string]any{
+		"names": []string{"a", "b"},
+		"count": int64(7),
+		"large": large,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := normalized["names"].([]any); !ok || !reflect.DeepEqual(got, []any{"a", "b"}) {
+		t.Fatalf("names = %#v, want JSON array", normalized["names"])
+	}
+	if got, ok := normalized["count"].(json.Number); !ok || got.String() != "7" {
+		t.Fatalf("count = %#v (%T), want json.Number(7)", normalized["count"], normalized["count"])
+	}
+	if got, ok := normalized["large"].(json.Number); !ok || got.String() != "9007199254740993" {
+		t.Fatalf("large = %#v (%T), want exact json.Number", normalized["large"], normalized["large"])
+	}
+}
+
+func TestCrossPlatformCoverageInvokeValidatedRejectsUnserializableArguments(t *testing.T) {
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID     int    `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		calls = append(calls, request.Method)
+		w.Header().Set("Content-Type", "application/json")
+		if request.Method == "tools/list" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      request.ID,
+				"result": map[string]any{
+					"tools": []map[string]any{{
+						"name":        "search",
+						"description": "Search",
+						"inputSchema": map[string]any{"type": "object"},
+					}},
+				},
+			})
+			return
+		}
+		// nil 参数用例会走到 tools/call：返回合法结果即可。
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "ok"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	base := transport.NewClient(server.Client())
+	base.TrustedDomains = []string{"127.0.0.1"}
+	client := New(base, "test-token", nil)
+
+	// nil 参数直通（normalizeJSONArguments 的 nil 分支）。
+	if _, err := client.InvokeValidated(t.Context(), server.URL, "search", nil); err != nil {
+		t.Fatalf("nil arguments: %v", err)
+	}
+
+	// 不可序列化参数：marshal 失败，且不得发出 tools/call。
+	calls = nil
+	_, err := client.InvokeValidated(t.Context(), server.URL, "search", map[string]any{"bad": func() {}})
+	if err == nil || !strings.Contains(err.Error(), "序列化为 JSON 失败") {
+		t.Fatalf("unserializable error = %v", err)
+	}
+	if len(calls) != 1 || calls[0] != "tools/list" {
+		t.Fatalf("calls = %v, want only tools/list", calls)
+	}
+
+	// 直接驱动注入缝内部的解码错误返回（非法 JSON 输入）。
+	if _, err := decodeNormalizedArguments([]byte("not-json")); err == nil {
+		t.Fatal("decodeNormalizedArguments must fail on invalid JSON")
+	}
+
+	// marshal 成功但产出非法 JSON：decode 失败分支（经注入缝驱动，该分支在
+	// 正常路径不可达——json.Marshal 输出恒为合法 JSON）。
+	testseam.Swap(t, &decodeNormalizedArguments, func([]byte) (map[string]any, error) {
+		return nil, errors.New("injected decode failure")
+	})
+	_, err = client.InvokeValidated(t.Context(), server.URL, "search", map[string]any{"q": "x"})
+	if err == nil || !strings.Contains(err.Error(), "JSON 解码失败") {
+		t.Fatalf("decode error = %v", err)
 	}
 }

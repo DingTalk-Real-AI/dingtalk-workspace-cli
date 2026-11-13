@@ -368,7 +368,8 @@ func TestCrossPlatformCoverageA2UISupportForward(t *testing.T) {
 			want    bool
 			invalid bool
 		}{
-			{name: "default"},
+			{name: "default", want: true},
+			{name: "explicit true", flags: []string{"--support-forward=true"}, want: true},
 			{name: "enabled", flags: []string{"--support-forward"}, want: true},
 			{name: "disabled", flags: []string{"--support-forward=false"}},
 			{name: "invalid", flags: []string{"--support-forward=invalid"}, invalid: true},
@@ -393,4 +394,72 @@ func TestCrossPlatformCoverageA2UISupportForward(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestCrossPlatformCoverageA2UIExtension(t *testing.T) {
+	for _, target := range [][]string{
+		{"--conversation-id", "group-1"},
+		{"--open-dingtalk-id", "DAAAAAAAAAAAiE"},
+	} {
+		for _, tc := range []struct {
+			name string
+			raw  string
+			want map[string]string
+		}{
+			{name: "omitted"},
+			{name: "empty object", raw: "{}", want: map[string]string{}},
+			{name: "business values", raw: `{"scene":"中文\n\"quoted\"","empty":""," spaced key ":" preserved "}`, want: map[string]string{"scene": "中文\n\"quoted\"", "empty": "", " spaced key ": " preserved "}},
+			{name: "server controlled keys", raw: `{"clawType":"example-agent","MessageTail":"untrusted","dynamicSummary":"untrusted"}`, want: map[string]string{"clawType": "example-agent", "MessageTail": "untrusted", "dynamicSummary": "untrusted"}},
+		} {
+			t.Run(target[0]+"/"+tc.name, func(t *testing.T) {
+				caller := &scriptedToolCaller{}
+				args := append([]string{"message", "send-a2ui-card", "--content", `["message"]`}, target...)
+				if tc.name != "omitted" {
+					args = append(args, "--extension", tc.raw)
+				}
+				if err := runNativeCardUpdate(t, caller, args...); err != nil {
+					t.Fatal(err)
+				}
+				if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_a2ui_card" {
+					t.Fatalf("unexpected calls: %#v", caller)
+				}
+				value, present := caller.args["extension"]
+				if tc.name == "omitted" {
+					if present {
+						t.Fatal("omitted extension must remain absent")
+					}
+				} else if !present || !reflect.DeepEqual(value, tc.want) {
+					t.Fatalf("extension = %#v, want %#v", value, tc.want)
+				}
+				if caller.args["flowStatus"] != "PROCESSING" || caller.args["supportForward"] != true || caller.args["summary"] != "互动卡片" {
+					t.Fatalf("existing defaults changed: %#v", caller.args)
+				}
+			})
+		}
+	}
+	t.Run("extension preserves explicit summary", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runNativeCardUpdate(t, caller, "message", "send-a2ui-card", "--conversation-id", "group-1", "--content", `["message"]`, "--summary", "custom fallback", "--extension", `{"scene":"example"}`)
+		if err != nil || caller.calls != 1 || caller.args["summary"] != "custom fallback" || !reflect.DeepEqual(caller.args["extension"], map[string]string{"scene": "example"}) {
+			t.Fatalf("err=%v calls=%d args=%#v", err, caller.calls, caller.args)
+		}
+	})
+	for _, raw := range []string{"", " ", "null", "[]", `"text"`, "1", "true", "{", `{} {}`, `{"key":null}`, `{"key":1}`, `{"key":false}`, `{"key":[]}`, `{"key":{}}`, `{"":"value"}`, `{" \t":"value"}`} {
+		t.Run("invalid/"+raw, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			// A non-D-form recipient would require a lookup; validation must run first.
+			err := runNativeCardUpdate(t, caller, "message", "send-a2ui-card", "--open-dingtalk-id", "user-needs-lookup", "--content", `["message"]`, "--extension", raw)
+			var classified *apperrors.Error
+			if !errors.As(err, &classified) || classified.ExitCode() != 3 || !strings.Contains(err.Error(), "--extension") || caller.calls != 0 {
+				t.Fatalf("err=%v calls=%d; want validation and zero calls", err, caller.calls)
+			}
+		})
+	}
+	t.Run("remote failure is not retried", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("extension send unavailable")}}}
+		err := runNativeCardUpdate(t, caller, "message", "send-a2ui-card", "--conversation-id", "group-1", "--content", `["message"]`, "--extension", `{"scene":"example"}`)
+		if err == nil || !strings.Contains(err.Error(), "extension send unavailable") || caller.calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, caller.calls)
+		}
+	})
 }

@@ -102,6 +102,241 @@ func loadMonoMultiQAContract(t *testing.T) (string, monoMultiQAContract) {
 	return root, c
 }
 
+// Keep per-target final delivery and body links explicit on every AI Table Skill entry.
+func TestMonoMultiSkillContentAITableHostDeliveryBoundary(t *testing.T) {
+	root := repoRoot(t)
+	for _, tt := range []struct {
+		path    string
+		heading string
+	}{
+		{"skills/mono/SKILL.md", "## 严格要求 (MUST DO)"},
+		{"skills/multi/dingtalk-aitable/SKILL.md", "## 过程展示建议"},
+		{"skills/mono/references/products/aitable.md", "## 过程展示建议"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(root, tt.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(data), tt.heading+"\n")
+			if !ok {
+				t.Fatalf("main Skill is missing %q", tt.heading)
+			}
+			section, _, _ = strings.Cut(section, "\n## ")
+			for _, required := range []string{
+				"当前有效、角色匹配入口",
+				"逐一展示具名完整链接",
+				"不合并为 Base",
+				"不以父级",
+				"仅有父级入口时明确说明，不冒充目标直达",
+				"同对象同入口",
+				"可去重",
+				"URL 及参数",
+				"逐字符原样保留",
+				"身份匹配的 `links` 即使 `relation=parent` 仍是当前对象入口",
+				"只有链接身份确属父级时才称父级入口",
+				"从本条回执直接复制完整 URL",
+				"不套用其他对象的 URL 替换 ID",
+				"不手抄 JSON 充作源数据",
+				"仅当存在明确识别为 JSON 格式的原始业务回执文件时",
+				"CSV、XLS、XLSX 等非 JSON 导入附件不是业务回执，不作为 JSON 解析",
+				"直接使用当前命令的结构化回执核对并展示链接",
+				"不因非 JSON 附件阻断成功结果展示",
+				"不重新键入、解码再编码或统一大小写",
+				"同批链接各自保留编码",
+				"实际待发送链接与本条回执逐字符比对",
+				"一处不同就修正",
+				"只声称原样保留不算核对",
+				"`%3D` 不改为 `%3d`",
+				"上传签名 URL、token 等凭据脱敏",
+				"不编造名称",
+				"名称须对应链接对象",
+				"最终目标",
+				"清点",
+				"逐目标完成",
+				"核对正文链接",
+				"最终产物",
+				"普通链接不替代登记",
+				"过程已展示链接或宿主已呈现卡片，最终 Markdown 正文仍须保留最终目标的有效具名完整链接",
+				"（`[对象名称](完整URL)`）",
+				"过程去重不免除此要求",
+				"缺少适用入口时说明缺口",
+				"同对象同入口在过程内可去重",
+				"业务核验、登记、展示",
+				"成功登记不重复",
+				"未知登记不自动重发",
+				"缺链仅按工具明确规则及本次真实标识回退",
+				"说明缺口",
+				"不拼接",
+				"不为补链接",
+				"重放业务写入",
+				"填写页",
+				"交付给填写者且填写入口未就绪时，只说明缺口，不展示或登记管理页链接",
+				"即使注明非填写入口，也不将管理页列为可交付内容",
+				"只有用户明确要求管理操作或接收者为管理者时，才交付当前可用的管理页",
+				"分享未知",
+				"开启分享或扩大权限",
+				"回执或展示请求不证明登记、渲染或面板已打开",
+			} {
+				if !strings.Contains(section, required) {
+					t.Errorf("%s must publish %q in %s without loading references", tt.path, required, tt.heading)
+				}
+			}
+			if strings.Index(section, "最终目标") >= strings.Index(section, "逐一展示具名完整链接") {
+				t.Error("closure guidance must precede process display")
+			}
+			for _, forbidden := range []string{
+				"[名称](完整URL)",
+				"正文可不重复",
+				"不重复卡片 URL",
+				"同对象同入口在本任务内可去重",
+				"无有效入口时说明缺口，不拼接",
+				"当输入含有原始回执文件或请求附件时",
+				"无有效入口时必须说明缺口，不拼接",
+				"Base 缺链回退",
+				"Base 列表／搜索缺链回退",
+				"https://alidocs.dingtalk.com/i/nodes/{baseId}",
+			} {
+				if strings.Contains(section, forbidden) {
+					t.Errorf("%s contains forbidden guidance %q", tt.path, forbidden)
+				}
+			}
+			if strings.Contains(section, "show_link") || strings.Contains(section, "open_in_qwenwork") {
+				t.Error("main Skill must leave host tool names to the host")
+			}
+			if tt.path == "skills/mono/SKILL.md" {
+				for _, required := range []string{
+					"规定工具与成功条件",
+					"- **AI 表格链接保真必经步骤：**",
+					"只读及明确不展示要求按宿主适用范围处理",
+				} {
+					if !strings.Contains(section, required) {
+						t.Errorf("Mono MUST DO is missing %q", required)
+					}
+				}
+				if !strings.Contains(string(data), "不预加载完整产品参考文件") {
+					t.Error("Mono must retain progressive reference loading")
+				}
+			}
+		})
+	}
+}
+
+// TestMonoMultiSkillContentAITableBootstrapDeliveryBoundary keeps explicit table targets on the bootstrap route.
+func TestMonoMultiSkillContentAITableBootstrapDeliveryBoundary(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "skills/multi/dingtalk-aitable/SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "| 新建 Base 与整套表字段 |") {
+			continue
+		}
+		for _, required := range []string{
+			"aitable +base-bootstrap", "明确要求交付的表逐表核对登记及正文链接",
+			"使用各表自身入口", "Base 不默认追加",
+		} {
+			if !strings.Contains(line, required) {
+				t.Errorf("bootstrap route must publish %q", required)
+			}
+		}
+		return
+	}
+	t.Fatal("AI Table bootstrap Golden Route is missing")
+}
+
+// Compare only the shared presentation section; G4 does not pair these entire files.
+func TestMonoMultiSkillContentAITableProcessSectionMatches(t *testing.T) {
+	root := repoRoot(t)
+	var sections []string
+	for _, path := range []string{
+		"skills/multi/dingtalk-aitable/SKILL.md",
+		"skills/mono/references/products/aitable.md",
+	} {
+		data, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, section, ok := strings.Cut(string(data), "## 过程展示建议\n")
+		if !ok {
+			t.Fatalf("%s: process section missing", path)
+		}
+		section, _, _ = strings.Cut(section, "\n## ")
+		sections = append(sections, strings.TrimSpace(section))
+		for _, required := range []string{
+			"成功回执、`relation=target` 和过程对象不自动成为最终产物",
+			"某目标恢复中不遗漏其他可交付目标",
+			"用户要求完整汇总时保留各项完整链接及原状态",
+			"内部自动对象不自动纳入",
+			"用户要求的对象不因自动创建而排除",
+			"过程展示与最终交付分别完成",
+			"当前对象 `url`、身份匹配的 `links` 或已确认可用的 `shareFormUrl`",
+			"`target/parent` 仅表调用关系",
+			"独立读回优先，显式 null/空值不由旧回执覆盖",
+			"编码和顺序",
+			"不截断、改写或重建",
+			"仅在无法区分时附 ID",
+			"填写者只用已确认可用的填写页",
+			"未分享或关闭时可向管理者交付可用管理页",
+			"管理页，非填写入口",
+			"`objectType=field`、`objectId=当前 fieldId`",
+			"无自身链接时说明缺口，不展示错配链接，保留核验状态",
+			"保留 pending/unknown/partial/STOP",
+			"链接不证明成功、核验、权限、分享或流程启用",
+			"失败、工具不可用或状态未知时说明缺口",
+			"仅按宿主查询／安全恢复契约处理",
+			"展示去重不裁剪业务回执及 `links`",
+			"只使用可信完整预发 URL，前缀不证明环境映射",
+			"缺少时保留业务结果并说明未完成，不拼接、换域或改交生产链接",
+		} {
+			if !strings.Contains(section, required) {
+				t.Errorf("%s: missing process boundary %q", path, required)
+			}
+		}
+	}
+	if sections[0] != sections[1] {
+		t.Error("AI Table process presentation differs between Mono and Multi")
+	}
+}
+
+func TestMonoMultiSkillContentAITableReceiptStatusBoundary(t *testing.T) {
+	root := repoRoot(t)
+	for _, tt := range []struct {
+		path    string
+		heading string
+	}{
+		{"skills/mono/SKILL.md", "## 严格要求 (MUST DO)"},
+		{"skills/multi/dingtalk-aitable/SKILL.md", "## 过程展示建议"},
+		{"skills/mono/references/products/aitable.md", "## 过程展示建议"},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(root, tt.path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, section, ok := strings.Cut(string(data), tt.heading+"\n")
+			if !ok {
+				t.Fatalf("missing %q", tt.heading)
+			}
+			section, _, _ = strings.Cut(section, "\n## ")
+			for _, required := range []string{
+				"明确的合成演练或回执转述",
+				"准备性 Schema 查询不将其转为契约评审",
+				"按给定回执的字段语义转述",
+				"不以本 Agent 是否亲自执行或独立读回改写该字段",
+				"纯 JSON 也保持指定字段语义",
+				"转述不等于真实实跑或独立核验",
+				"真实写入仍须按结果契约读回",
+				"缺失或 pending/unknown 的状态不得擅自提升为 verified",
+			} {
+				if !strings.Contains(section, required) {
+					t.Errorf("%s must publish receipt provenance boundary %q in %s", tt.path, required, tt.heading)
+				}
+			}
+		})
+	}
+}
+
 func TestMonoMultiSkillContentG1Shape(t *testing.T) {
 	root, c := loadMonoMultiQAContract(t)
 	multiRoot := filepath.Join(root, "skills", "multi")

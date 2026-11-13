@@ -39,6 +39,41 @@ func SetHTTPPutFile(fn func(ctx context.Context, url string, headers map[string]
 	httpPutFile = fn
 }
 
+// DefaultFilePutTimeout is the default (and floor) transfer budget for direct
+// file-storage PUT uploads. Slow uplinks on large files need a window beyond
+// ordinary RPC timeouts, so a short --timeout must never shrink it.
+const DefaultFilePutTimeout = 5 * time.Minute
+
+// filePutClientTimeout is applied by the app layer from the parsed --timeout
+// flag; the package-level var doubles as the testseam injection point.
+var filePutClientTimeout = DefaultFilePutTimeout
+
+// SetFilePutClientTimeout raises the direct-upload PUT budget above the
+// default floor only. Values at or below DefaultFilePutTimeout (including the
+// 30s default --timeout) fall back to the floor so the flag can extend slow
+// transfers without regressing them.
+func SetFilePutClientTimeout(d time.Duration) {
+	if d > DefaultFilePutTimeout {
+		filePutClientTimeout = d
+		return
+	}
+	filePutClientTimeout = DefaultFilePutTimeout
+}
+
+// FilePutClientTimeout exposes the current direct-upload PUT budget for app
+// assembly regression tests.
+func FilePutClientTimeout() time.Duration {
+	return filePutClientTimeout
+}
+
+// filePutFlowTimeout is the flow-level context budget for commands that wrap a
+// direct file-storage PUT. Historically 10 minutes against a 5-minute PUT
+// client: the gap is headroom for the surrounding credential and commit RPCs,
+// and the headroom is preserved when --timeout raises the PUT budget.
+func filePutFlowTimeout() time.Duration {
+	return filePutClientTimeout + 5*time.Minute
+}
+
 func docVersionExists(ctx context.Context, nodeID string, version int) (bool, error) {
 	// 注意: 不传 maxResults —— 服务端实际接受的上限小于 schema 声明的 1-50，
 	// 传大值会直接报错 (与悟空实现一致: 默认分页大小 + 游标翻页)。
@@ -186,7 +221,7 @@ func runDocUpload(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), filePutFlowTimeout())
 	defer cancel()
 
 	// Step 1: get upload credentials。与 dry-run 预检共用 docFileUploadInfoArgs，
@@ -329,7 +364,7 @@ func defaultHTTPPutFile(ctx context.Context, url string, headers map[string]stri
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := &http.Client{Timeout: filePutClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("file upload failed: %w", err)
@@ -611,9 +646,14 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 		return err
 	}
 
-	uploadURL, resourceID, resourceURL, err := parseAttachmentUploadInfo(credText)
+	uploadURL, resourceID, resourceURL, err := decodeAttachmentUploadInfo(credText)
 	if err != nil {
 		return err
+	}
+	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
+	inlineImage := strings.HasPrefix(mimeType, "image/") && resourceURL != "" && fileSize <= maxInlineImageSize
+	if !inlineImage && resourceID == "" {
+		return fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
 	}
 
 	// Step 2: HTTP PUT file to OSS
@@ -642,11 +682,13 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 	// Step 3: insert block into document
 	fmt.Fprintln(cmd.ErrOrStderr(), "[3/4] 插入块到文档...")
 
-	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
-
 	var element map[string]any
-	if strings.HasPrefix(mimeType, "image/") && resourceURL != "" && fileSize <= maxInlineImageSize {
+	if inlineImage {
 		// Image files: insert as inline image (paragraph + children image)
+		properties := map[string]any{"src": resourceURL}
+		if resourceID != "" {
+			properties["extraData"] = map[string]any{"resourceId": resourceID}
+		}
 		element = map[string]any{
 			"blockType": "paragraph",
 			"paragraph": map[string]any{
@@ -655,9 +697,7 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 			"children": []any{
 				map[string]any{
 					"elementType": "image",
-					"properties": map[string]any{
-						"src": resourceURL,
-					},
+					"properties":  properties,
 				},
 			},
 		}
@@ -1057,6 +1097,16 @@ func docNumberAsInt(value any) (int, bool) {
 
 // parseAttachmentUploadInfo extracts uploadUrl, resourceId and resourceUrl from the MCP tool response.
 func parseAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL string, err error) {
+	uploadURL, resourceID, resourceURL, err = decodeAttachmentUploadInfo(text)
+	if err == nil && resourceID == "" {
+		err = fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
+	}
+	return
+}
+
+// decodeAttachmentUploadInfo allows old receipts without resource metadata.
+// Callers must require an ID before performing operations that need one.
+func decodeAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL string, err error) {
 	var data map[string]any
 	if err = json.Unmarshal([]byte(text), &data); err != nil {
 		err = fmt.Errorf("failed to parse attachment upload info JSON: %w", err)
@@ -1070,8 +1120,11 @@ func parseAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL 
 	uploadURL, _ = data["uploadUrl"].(string)
 	resourceID, _ = data["resourceId"].(string)
 	resourceURL, _ = data["resourceUrl"].(string)
+	if strings.TrimSpace(resourceID) == "" {
+		resourceID = ""
+	}
 
-	if uploadURL == "" || resourceID == "" {
+	if strings.TrimSpace(uploadURL) == "" {
 		err = fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
 	}
 	return
@@ -1602,15 +1655,16 @@ func newDocCommand() *cobra.Command {
 					password,
 					historyVersion,
 					historyVersionSet,
+					docSuggestionEnabled(cmd),
 				)
 			}
 			if format == "jsonml" {
 				outputPath, _ := cmd.Flags().GetString("output")
-				return runDocReadJsonML(nodeID, outputPath, password, historyVersion, historyVersionSet)
+				return runDocReadJsonML(nodeID, outputPath, password, historyVersion, historyVersionSet, docSuggestionEnabled(cmd))
 			}
 			toolArgs := map[string]any{"nodeId": nodeID}
 			applyDocReadAccessParams(toolArgs, password, historyVersion, historyVersionSet)
-			return callMCPTool("get_document_content", toolArgs)
+			return callMCPTool("get_document_content", withDocSuggestion(cmd, toolArgs))
 		},
 	}
 	DeclareLeafMetadata(readCmd, LeafSpec{
@@ -1652,6 +1706,7 @@ func newDocCommand() *cobra.Command {
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "suggestion", Property: "suggestion", InterfaceType: "boolean", Required: boolPtr(false)},
 				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
 				{Name: "content-format", Property: "format", Required: boolPtr(false)},
 				{Name: "end-block-id", Required: boolPtr(false)},
@@ -1803,6 +1858,7 @@ func newDocCommand() *cobra.Command {
 
 WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
   - 必须显式传 --yes 才会执行覆盖；不传 --yes 时命令直接返回错误。
+  - 服务端检查本人有效待处理建议；存在时需另加 --force。--yes 不代表 --force。
   - 可先用 --dry-run 预览待写入内容与当前内容的差异 (不调远端 update)。
   - 调用前建议先用 dws doc read 备份现状；调用后建议再次 read 校验。
 
@@ -1858,9 +1914,6 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				deps.Out.PrintWarning(`若要按 JSONML 解析，请加 --content-format jsonml；否则将按 markdown 解析。`)
 			}
 			if format == "jsonml" {
-				if mode == "append" {
-					return fmt.Errorf("--content-format jsonml 当前仅支持 --mode overwrite，append 模式将在后续版本支持")
-				}
 				jsonmlStr, err := prepareJsonMLBody(cmd, md)
 				if err != nil {
 					return err
@@ -1870,9 +1923,22 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 					"format": "jsonml",
 					"jsonml": jsonmlStr,
 					"mode":   mode,
+					"force":  mustGetBool(cmd, "force"),
 				}
 				if rev, _ := cmd.Flags().GetInt("revision"); cmd.Flags().Lookup("revision").Changed {
 					updateArgs["revision"] = rev
+				}
+				if mode == "append" {
+					if idx, _ := cmd.Flags().GetInt("index"); cmd.Flags().Lookup("index").Changed {
+						updateArgs["index"] = idx
+					}
+					// This leaf's local flag shadows the global dry-run barrier.
+					if dryRun {
+						return deps.Out.PrintJSON(map[string]any{
+							"dry_run": true, "executed": false,
+							"tool": "update_document", "arguments": updateArgs,
+						})
+					}
 				}
 				return callMCPTool("update_document", updateArgs)
 			}
@@ -1880,9 +1946,19 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				"nodeId":   nodeID,
 				"markdown": md,
 				"mode":     mode,
+				"force":    mustGetBool(cmd, "force"),
 			}
 			if idx, _ := cmd.Flags().GetInt("index"); cmd.Flags().Lookup("index").Changed {
 				toolArgs["index"] = idx
+			}
+			// This leaf owns --dry-run for overwrite diffs, so its local flag
+			// shadows the global ToolCaller barrier. Guard append explicitly.
+			if dryRun {
+				toolArgs["markdown"] = stripInputUnsafeChars(md)
+				return deps.Out.PrintJSON(map[string]any{
+					"dry_run": true, "executed": false,
+					"tool": "update_document", "arguments": toolArgs,
+				})
 			}
 			return docWritePipeline(cmd, "update_document", toolArgs, md, "doc update")
 		},
@@ -1925,6 +2001,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
+				{Name: "force", Property: "force", InterfaceType: "boolean", Required: boolPtr(false)},
 				{Name: "content-format", Property: "format"},
 			},
 		},
@@ -2253,7 +2330,9 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		Use:   "insert",
 		Short: "插入块元素",
 		Long: `向文档插入块元素。通过 --element 传入 JSON 格式的块元素。
+多节点可用 --content-format markdown --content，或 --content-format jsonml --jsonml-nodes。
 可用 --content 快速插入段落，--heading + --level 快速插入标题。
+--ref-block 配合 --where before/after 定位相邻块；序列内容可用 --index 指定顶层位置。
 
 块类型: paragraph, heading, blockquote, callout, columns,
         orderedList, unorderedList, table, sheet, attachment, slot`,
@@ -2283,15 +2362,35 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
   # 在指定位置之前插入
   dws doc block insert --node DOC_ID --content "插入内容" --ref-block BLOCK_ID --where before`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("parent-block") {
+				return apperrors.NewValidation("--parent-block 暂不支持；可用 --ref-block 与 --where 定位相邻块，序列内容可用 --index 指定顶层位置")
+			}
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			if err := validateDocFormat(cmd, []string{"", "element", "jsonml"}, "doc block insert",
+			if err := validateDocFormat(cmd, []string{"", "element", "jsonml", "markdown"}, "doc block insert",
 				"dws doc block insert --node DOC_ID --content-format jsonml --element '[\"p\",{},\"hello\"]'"); err != nil {
 				return err
 			}
 			format, _ := cmd.Flags().GetString("content-format")
+			if format == "markdown" || mustGetFlag(cmd, "jsonml-nodes") != "" {
+				params := map[string]any{"nodeId": nodeID}
+				if ref := mustGetFlag(cmd, "ref-block"); ref != "" {
+					params["referenceBlockId"] = ref
+				}
+				if where := mustGetFlag(cmd, "where"); where != "" {
+					params["where"] = where
+				}
+				if cmd.Flags().Changed("index") {
+					idx, _ := cmd.Flags().GetInt("index")
+					params["index"] = idx
+				}
+				if err := docBlockSequenceContent(cmd, params); err != nil {
+					return err
+				}
+				return callMCPTool("insert_document_block", withDocSuggestion(cmd, params))
+			}
 			if format != "jsonml" {
 				if el, _ := cmd.Flags().GetString("element"); el != "" && sniffJsonMLLike(el) {
 					deps.Out.PrintWarning(`--element 内容看起来是 JSONML 结构（首字符 '[' 后紧跟 JSON 字符串）。`)
@@ -2317,14 +2416,11 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 					}
 					toolArgs["where"] = where
 				}
-				if v, _ := cmd.Flags().GetString("parent-block"); v != "" {
-					toolArgs["referenceBlockId"] = v
-				}
 				if cmd.Flags().Changed("index") {
 					idx, _ := cmd.Flags().GetInt("index")
 					toolArgs["index"] = idx
 				}
-				return callMCPTool("insert_document_block", toolArgs)
+				return callMCPTool("insert_document_block", withDocSuggestion(cmd, toolArgs))
 			}
 			element, err := buildBlockElement(cmd)
 			if err != nil {
@@ -2343,7 +2439,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			if v, _ := cmd.Flags().GetString("ref-block"); v != "" {
 				toolArgs["referenceBlockId"] = v
 			}
-			return callMCPTool("insert_document_block", toolArgs)
+			return callMCPTool("insert_document_block", withDocSuggestion(cmd, toolArgs))
 		},
 	}
 	DeclareLeafMetadata(blockInsertCmd, LeafSpec{
@@ -2379,9 +2475,10 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "suggestion", Property: "suggestion", InterfaceType: "boolean", Required: boolPtr(false)},
 				{Name: "content-format", Property: "format"},
+				{Name: "jsonml-nodes", Property: "jsonml", InterfaceType: "string"},
 				{Name: "node", Property: "nodeId"},
-				{Name: "parent-block", Property: "referenceBlockId"},
 				{Name: "ref-block", Property: "referenceBlockId"},
 			},
 		},
@@ -2390,12 +2487,13 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	blockUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新块元素",
-		Long: `更新文档中指定块的内容或样式。需提供 --block-id 和块元素内容。
+		Long: `更新指定块或顶层闭区间。提供 --block-id 或成对的 --start-block-id/--end-block-id，不能混用。
+范围使用 --content-format markdown --content 或 --content-format jsonml --jsonml-nodes；服务端一次原子处理。
 可用 --content 快速更新为段落，--heading + --level 快速更新为标题。`,
 		Example: `  dws doc block update --node DOC_ID --block-id BLOCK_ID --content "新内容"    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
   dws doc block update --node DOC_ID --block-id BLOCK_ID --element '{"blockType":"heading","heading":{"text":"新标题","level":1}}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
+			if err := validateDocBlockTarget(cmd); err != nil {
 				return err
 			}
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
@@ -2403,11 +2501,23 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				return err
 			}
 			blockID := mustGetFlag(cmd, "block-id")
-			if err := validateDocFormat(cmd, []string{"", "element", "jsonml"}, "doc block update",
+			if err := validateDocFormat(cmd, []string{"", "element", "jsonml", "markdown"}, "doc block update",
 				"dws doc block update --node DOC_ID --block-id BLOCK_ID --content-format jsonml --element '[\"p\",{},\"new\"]'"); err != nil {
 				return err
 			}
 			format, _ := cmd.Flags().GetString("content-format")
+			if format == "markdown" || mustGetFlag(cmd, "jsonml-nodes") != "" || mustGetFlag(cmd, "start-block-id") != "" {
+				params := map[string]any{"nodeId": nodeID}
+				if start := mustGetFlag(cmd, "start-block-id"); start != "" {
+					params["startBlockId"], params["endBlockId"] = start, mustGetFlag(cmd, "end-block-id")
+				} else {
+					params["blockId"] = blockID
+				}
+				if err := docBlockSequenceContent(cmd, params); err != nil {
+					return err
+				}
+				return callMCPTool("update_document_block", withDocSuggestion(cmd, params))
+			}
 			if format != "jsonml" {
 				if el, _ := cmd.Flags().GetString("element"); el != "" && sniffJsonMLLike(el) {
 					deps.Out.PrintWarning(`--element 内容看起来是 JSONML 结构（首字符 '[' 后紧跟 JSON 字符串）。`)
@@ -2420,22 +2530,22 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				if err != nil {
 					return err
 				}
-				return callMCPTool("update_document_block", map[string]any{
+				return callMCPTool("update_document_block", withDocSuggestion(cmd, map[string]any{
 					"nodeId":  nodeID,
 					"blockId": blockID,
 					"jsonml":  normalized,
 					"format":  "jsonml",
-				})
+				}))
 			}
 			element, err := buildBlockElement(cmd)
 			if err != nil {
 				return err
 			}
-			return callMCPTool("update_document_block", map[string]any{
+			return callMCPTool("update_document_block", withDocSuggestion(cmd, map[string]any{
 				"nodeId":  nodeID,
 				"blockId": blockID,
 				"element": element,
-			})
+			}))
 		},
 	}
 	DeclareLeafMetadata(blockUpdateCmd, LeafSpec{
@@ -2467,8 +2577,12 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				Examples: []string{"dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content \"新内容\" --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "suggestion", Property: "suggestion", InterfaceType: "boolean", Required: boolPtr(false)},
 				{Name: "content-format", Property: "format"},
+				{Name: "jsonml-nodes", Property: "jsonml", InterfaceType: "string"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "start-block-id", Property: "startBlockId"},
+				{Name: "end-block-id", Property: "endBlockId"},
 			},
 		},
 	})
@@ -2494,10 +2608,10 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			if err != nil {
 				return err
 			}
-			return callMCPTool("delete_document_block", map[string]any{
+			return callMCPTool("delete_document_block", withDocSuggestion(cmd, map[string]any{
 				"nodeId":  nodeID,
 				"blockId": strings.Join(blockIDs, ","),
-			})
+			}))
 		},
 	}
 	DeclareLeafMetadata(blockDeleteCmd, LeafSpec{
@@ -2536,6 +2650,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "suggestion", Property: "suggestion", InterfaceType: "boolean", Required: boolPtr(false)},
 				{Name: "node", Property: "nodeId"},
 			},
 		},
@@ -2846,8 +2961,9 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	updateCmd.Flags().String("mode", "", "更新模式: overwrite=覆盖, append=追加 (必填)")
 	_ = updateCmd.MarkFlagRequired("mode")
 	updateCmd.Flags().Int("index", -1, "插入位置（从 0 开始），仅在 mode=append 时生效。指定将内容插入到文档第几个 block 之前。不传时追加到末尾")
+	updateCmd.Flags().Bool("force", false, "允许全文覆盖使本人待处理建议失效；独立于 --yes，仍检查权限与 revision")
 	updateCmd.Flags().Bool("yes", false, "确认执行破坏性写入 (仅 --mode overwrite 需要)")
-	updateCmd.Flags().Bool("dry-run", false, "预览覆盖写入差异，不调用远端 update")
+	updateCmd.Flags().Bool("dry-run", false, "预览更新请求；overwrite 模式预览内容差异，不调用远端 update")
 	updateCmd.Flags().String("content-format", "", "内容格式: 默认为 markdown，可选 jsonml")
 	updateCmd.Flags().Int("revision", 0,
 		"可选，文档编辑版本号（仅 --content-format jsonml 生效）；"+
@@ -2894,20 +3010,24 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	blockInsertCmd.Flags().String("heading", "", "快捷: 标题文本")
 	blockInsertCmd.Flags().Int("level", 1, "标题级别 1-6 (配合 --heading)")
 	blockInsertCmd.Flags().String("element", "", "块元素 JSON (高级)")
-	blockInsertCmd.Flags().Int("index", 0, "参照位置索引 (从 0 开始)")
+	blockInsertCmd.Flags().Int("index", 0, "Markdown/jsonml-nodes 顶层插入位置（0 到块数量）；ref-block 优先；旧单节点 jsonml 无参照块仍追加末尾")
 	blockInsertCmd.Flags().String("where", "", "插入方向: before / after (默认 after)")
 	blockInsertCmd.Flags().String("ref-block", "", "参照块 ID (优先级高于 --index)")
-	blockInsertCmd.Flags().String("content-format", "", "输入格式: 默认为 element，可选 jsonml")
-	blockInsertCmd.Flags().String("parent-block", "", "父容器 UUID（容器内插入时使用，与 --index 配合）")
+	blockInsertCmd.Flags().String("content-format", "", "输入格式: element（默认）、markdown、jsonml；序列用 --jsonml-nodes")
+	blockInsertCmd.Flags().String("jsonml-nodes", "", "非空 JSONML 节点序列的 JSON 字符串；与 --element 互斥")
+	blockInsertCmd.Flags().String("parent-block", "", "父容器定位（当前公开接口暂不支持）")
 	addJsonMLFlags(blockInsertCmd)
 
 	// block update
 	blockUpdateCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
-	blockUpdateCmd.Flags().String("block-id", "", "目标块 ID (必填)")
+	blockUpdateCmd.Flags().String("block-id", "", "目标块 ID；与起止范围互斥")
+	blockUpdateCmd.Flags().String("start-block-id", "", "顶层闭区间起点 UUID；须与 --end-block-id 成对")
+	blockUpdateCmd.Flags().String("end-block-id", "", "顶层闭区间终点 UUID（含）；须与 --start-block-id 成对")
 	blockUpdateCmd.Flags().String("heading", "", "快捷: 标题文本")
 	blockUpdateCmd.Flags().Int("level", 1, "标题级别 1-6 (配合 --heading)")
 	blockUpdateCmd.Flags().String("element", "", "块元素 JSON (高级)")
-	blockUpdateCmd.Flags().String("content-format", "", "输入格式: 默认为 element，可选 jsonml")
+	blockUpdateCmd.Flags().String("content-format", "", "输入格式: element（默认）、markdown、jsonml；序列用 --jsonml-nodes")
+	blockUpdateCmd.Flags().String("jsonml-nodes", "", "非空 JSONML 节点序列的 JSON 字符串；与 --element 互斥")
 	addJsonMLFlags(blockUpdateCmd)
 
 	// block delete
@@ -3867,8 +3987,8 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	}
 	DeclareLeafMetadata(permissionUpdateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -4900,8 +5020,16 @@ completed 后回读验证真实落点。只传 taskId 也可查询全部状态�
 	for _, cmd := range []*cobra.Command{blockInsertCmd, blockUpdateCmd} {
 		corecmd.RegisterFlags(cmd, []corecmd.FlagSpec{{
 			Name:    "content",
-			Usage:   "快捷: 段落文本内容",
+			Usage:   "element 快捷段落文本；--content-format markdown 时为 Markdown 内容",
 			Aliases: []string{"text"},
+		}})
+	}
+
+	for _, cmd := range []*cobra.Command{readCmd, blockInsertCmd, blockUpdateCmd, blockDeleteCmd} {
+		corecmd.RegisterFlags(cmd, []corecmd.FlagSpec{{
+			Name: "suggestion", Kind: corecmd.KindBool,
+			Hidden: true,
+			Usage:  "请求服务端建议模式；未命中服务端灰度时按普通读写执行",
 		}})
 	}
 
@@ -5000,6 +5128,19 @@ func wrapDocDeprecatedToTarget(cmd *cobra.Command, targetCmd string) {
 	}
 }
 
+// docSuggestionEnabled selects the optional RPC branch with --suggestion.
+func docSuggestionEnabled(cmd *cobra.Command) bool {
+	enabled, _ := cmd.Flags().GetBool("suggestion")
+	return enabled
+}
+
+func withDocSuggestion(cmd *cobra.Command, args map[string]any) map[string]any {
+	if docSuggestionEnabled(cmd) {
+		args["suggestion"] = true
+	}
+	return args
+}
+
 // applyDocReadAccessParams 把 doc read 的访问参数（互联网公开文档密码、历史版本号）
 // 附加到 get_document_content 请求上；空密码或未显式设置版本时不发送对应字段，
 // 显式 --version 0 表示读取文档初始版本。
@@ -5014,7 +5155,7 @@ func applyDocReadAccessParams(args map[string]any, password string, historyVersi
 
 // resolveContentFromFlags 从 --content-file / --content-path / --content / --markdown 获取文档内容。
 // 优先级：--content-file/--content-path > --content > --markdown（已弃用别名，向后兼容）。
-func runDocReadJsonML(nodeID, outputPath, password string, historyVersion int, historyVersionSet bool) error {
+func runDocReadJsonML(nodeID, outputPath, password string, historyVersion int, historyVersionSet bool, suggestion bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -5023,6 +5164,9 @@ func runDocReadJsonML(nodeID, outputPath, password string, historyVersion int, h
 		"format": "jsonml",
 	}
 	applyDocReadAccessParams(toolArgs, password, historyVersion, historyVersionSet)
+	if suggestion {
+		toolArgs["suggestion"] = true
+	}
 	resultText, err := callMCPToolReturnText(ctx, "get_document_content", toolArgs)
 	if err != nil {
 		return err
@@ -5075,7 +5219,7 @@ func runDocReadJsonML(nodeID, outputPath, password string, historyVersion int, h
 
 // runDocReadScope calls get_document_content with JSONML filtering parameters
 // and preserves the returned read-only fragment container.
-func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool, startBlockID, endBlockID, outputPath, password string, historyVersion int, historyVersionSet bool) error {
+func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool, startBlockID, endBlockID, outputPath, password string, historyVersion int, historyVersionSet bool, suggestion bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -5096,6 +5240,9 @@ func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool,
 		args["endBlockId"] = endBlockID
 	}
 	applyDocReadAccessParams(args, password, historyVersion, historyVersionSet)
+	if suggestion {
+		args["suggestion"] = true
+	}
 
 	resultText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_document_content", args)
 	if err != nil {

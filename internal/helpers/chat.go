@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cardmentions"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -95,6 +96,22 @@ func parseA2UIAnnotations(raw string) ([]map[string]json.RawMessage, error) {
 		}
 	}
 	return annotations, nil
+}
+
+func parseA2UIExtension(raw string) (map[string]string, error) {
+	var values map[string]any
+	if err := json.Unmarshal([]byte(raw), &values); err != nil || values == nil {
+		return nil, apperrors.NewValidation("--extension must be a JSON object with string values")
+	}
+	extension := make(map[string]string, len(values))
+	for key, value := range values {
+		text, ok := value.(string)
+		if strings.TrimSpace(key) == "" || !ok {
+			return nil, apperrors.NewValidation("--extension requires nonblank keys and string values")
+		}
+		extension[key] = text
+	}
+	return extension, nil
 }
 
 func normalizeChatGroupCreateResponse(resp map[string]any) {
@@ -414,7 +431,9 @@ func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string
 	result, err := chatCryptoClient.BatchDecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{}, batchItems)
 	if err != nil {
 		failures := append([]map[string]any{}, policyFailures...)
-		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
+		for _, item := range batchItems {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, chatmsg.ReasonBatchDecryptFailed))
+		}
 		ledger["decryptFailedCount"] = len(failures)
 		ledger["decryptFailures"] = failures
 		ledger["partial"] = true
@@ -471,11 +490,14 @@ func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecryp
 			OpenConversationID: item.ConversationID,
 		})
 		if err != nil {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, err)))
 			continue
 		}
 		if !decision.Enabled {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			failures = append(failures, chatDecryptFailureWithHint(item.MessageID, item.ConversationID,
+				chatmsg.DecryptPolicyFailureReason(decision, nil),
+				messagecrypto.PolicyDisabledHint(decision.Policy.FriendlyHint)))
 			continue
 		}
 		filtered = append(filtered, item)
@@ -491,6 +513,14 @@ func chatDecryptFailure(messageID, conversationID, reason string) map[string]any
 	}
 	if strings.TrimSpace(conversationID) != "" {
 		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func chatDecryptFailureWithHint(messageID, conversationID, reason, hint string) map[string]any {
+	failure := chatDecryptFailure(messageID, conversationID, reason)
+	if trimmed := strings.TrimSpace(hint); trimmed != "" {
+		failure["hint"] = trimmed
 	}
 	return failure
 }
@@ -1797,7 +1827,13 @@ func projectChatMessageRangeAllPayload(payload, requestArgs map[string]any, omit
 		}
 		if value, ok := paging["hasMore"].(bool); ok {
 			hasMore = value
-			paginationKnown = true
+			// Only partial envelopes publish hasMoreReliable; a success path
+			// parsed its hasMore, so the absent key still means known.
+			if reliable, ok := paging["hasMoreReliable"].(bool); ok {
+				paginationKnown = reliable
+			} else {
+				paginationKnown = true
+			}
 		}
 		truncated, _ = paging["truncated"].(bool)
 		partial, _ = paging["partial"].(bool)
@@ -1973,6 +2009,130 @@ func pagedMCPParamDecls() []contract.ParamDecl {
 		{Name: "page-limit", InterfaceType: "integer"},
 		{Name: "max-items", InterfaceType: "integer"},
 		{Name: "page-delay", InterfaceType: "integer"},
+	}
+}
+
+func chatListAllConversationsArgs(cmd *cobra.Command) (map[string]any, error) {
+	args := map[string]any{}
+	if value, err := cmd.Flags().GetInt("limit"); err == nil && value > 0 {
+		if value > 100 {
+			return nil, fmt.Errorf("--limit 最大 100（服务端上限），got %d；如需取全部会话请配合 --cursor 翻页", value)
+		}
+		args["limit"] = value
+	}
+	if value, _ := cmd.Flags().GetInt64("cursor"); value > 0 {
+		args["cursor"] = value
+	}
+	if value, _ := cmd.Flags().GetBool("exclude-muted"); value {
+		args["excludeMuted"] = true
+	}
+	return args, nil
+}
+
+func parseChatListAllConversationsPage(text string) (map[string]any, []any, any, bool, error) {
+	var envelope map[string]any
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	if err := decoder.Decode(&envelope); err != nil {
+		return nil, nil, nil, false, fmt.Errorf("parse paged response JSON: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, nil, nil, false, fmt.Errorf("paged response must contain exactly one JSON object")
+	}
+	rawResult, ok := envelope["result"]
+	if !ok {
+		return nil, nil, nil, false, fmt.Errorf("paged response missing result")
+	}
+
+	var items []any
+	var nextCursor any
+	var hasMore bool
+	result := map[string]any{}
+	switch typed := rawResult.(type) {
+	case map[string]any:
+		for key, value := range typed {
+			result[key] = value
+		}
+		for _, key := range []string{"conversationList", "conversations", "list"} {
+			rawItems, exists := typed[key]
+			if !exists {
+				continue
+			}
+			var valid bool
+			items, valid = rawItems.([]any)
+			if !valid {
+				return nil, nil, nil, false, fmt.Errorf("paged response result.%s must be array", key)
+			}
+			break
+		}
+		if items == nil {
+			return nil, nil, nil, false, fmt.Errorf("paged response missing result.conversationList")
+		}
+		delete(result, "conversations")
+		delete(result, "list")
+		rawHasMore, exists := typed["hasMore"]
+		if !exists {
+			return nil, nil, nil, false, fmt.Errorf("paged response missing result.hasMore")
+		}
+		var valid bool
+		hasMore, valid = rawHasMore.(bool)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result.hasMore must be boolean")
+		}
+		nextCursor, ok = typed["nextCursor"]
+	case []any:
+		if len(typed) < 3 {
+			return nil, nil, nil, false, fmt.Errorf("paged response result tuple must contain items, nextCursor and hasMore")
+		}
+		var valid bool
+		items, valid = typed[0].([]any)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result[0] must be array")
+		}
+		nextCursor = typed[1]
+		hasMore, valid = typed[2].(bool)
+		if !valid {
+			return nil, nil, nil, false, fmt.Errorf("paged response result[2] must be boolean")
+		}
+		ok = true
+	default:
+		return nil, nil, nil, false, fmt.Errorf("paged response result must be object or gateway tuple")
+	}
+	if hasMore && !ok {
+		return nil, nil, nil, false, fmt.Errorf("paged response missing result.nextCursor")
+	}
+	if number, numeric := nextCursor.(json.Number); numeric {
+		cursor, err := number.Int64()
+		if err != nil {
+			return nil, nil, nil, false, fmt.Errorf("paged response result.nextCursor must be int64: %w", err)
+		}
+		nextCursor = cursor
+	}
+	result["conversationList"] = items
+	result["hasMore"] = hasMore
+	if ok {
+		result["nextCursor"] = nextCursor
+	}
+	envelope["result"] = result
+	return envelope, items, nextCursor, hasMore, nil
+}
+
+func chatListAllConversationsPagedConfig() PagedMCPCommandConfig {
+	return PagedMCPCommandConfig{
+		ServerID:         "im",
+		ToolName:         "list_all_conversations",
+		ItemPath:         "result.conversationList",
+		ItemIdentityPath: "openConversationId",
+		CursorPath:       "result.nextCursor",
+		HasMorePath:      "result.hasMore",
+		CursorArg:        "cursor",
+		PageSizeArg:      "limit",
+		CursorKind:       PagedCursorInt64,
+		BuildArgs:        chatListAllConversationsArgs,
+		ParsePage:        parseChatListAllConversationsPage,
+		Fallback: func(args map[string]any) error {
+			return callMCPToolOnServer("im", "list_all_conversations", args)
+		},
 	}
 }
 
@@ -3023,7 +3183,7 @@ func uploadConversationFileOnlyResult(cmd *cobra.Command, _ string, args map[str
 		}, output.WithDryRun()), nil
 	}
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 	defer cancel()
 	commitText, err := uploadConversationLocalFile(ctx, targetArgs, meta, stringFromJSONScalar(args["uuid"]))
 	if err != nil {
@@ -3090,7 +3250,7 @@ func uploadRobotMessageLocalFile(
 		return "", nil
 	}
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 	defer cancel()
 	commitText, err := uploadConversationLocalFile(ctx, uploadTarget, meta, "")
 	if err != nil {
@@ -3792,8 +3952,8 @@ func newChatCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(chatGroupMemberRemoveCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -4218,7 +4378,7 @@ func newChatCommand() *cobra.Command {
 								deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", meta.FileSize))
 								return nil
 							}
-							ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+							ctx, cancel := context.WithTimeout(cmd.Context(), filePutFlowTimeout())
 							defer cancel()
 							commitText, err := uploadConversationLocalFile(ctx, targetArgs, meta, "")
 							if err != nil {
@@ -7378,7 +7538,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd := &cobra.Command{
 		Use:     "send-a2ui-card",
 		Short:   "创建并推送 A2UI 卡片",
-		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组；传 - 时从 stdin 读取。--summary 可指定会话列表中的可读摘要，省略时沿用消息数组拼接结果。创建时默认 flowStatus=PROCESSING。",
+		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，传 - 时从 stdin 读取；创建时默认 flowStatus=PROCESSING。--summary 是卡片无法渲染时的降级文案；完结后的会话摘要由 --a2ui-annotations 中的 artifact 组件生成。群聊可用 --at-open-dingtalk-ids/--at-all @ 成员或所有人，检查静态 Markdown 与同批绑定值；合法绑定可在占位创建后填充正文。--extension 可传字符串值的 JSON 对象，业务 key 由服务端白名单控制；省略时不携带该字段。",
 		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID := mustGetFlag(cmd, "conversation-id")
@@ -7388,6 +7548,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			if groupID != "" && receiver != "" {
 				return fmt.Errorf("--conversation-id and --open-dingtalk-id are mutually exclusive")
+			}
+			var extension map[string]string
+			if cmd.Flags().Changed("extension") {
+				var err error
+				extension, err = parseA2UIExtension(mustGetFlag(cmd, "extension"))
+				if err != nil {
+					return err
+				}
 			}
 			var annotations []map[string]json.RawMessage
 			if cmd.Flags().Changed("a2ui-annotations") {
@@ -7401,13 +7569,34 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err != nil {
 				return err
 			}
-			supportForward, _ := cmd.Flags().GetBool("support-forward")
-			summary := strings.Join(messages, "\n")
-			if cmd.Flags().Changed("summary") {
-				summary = strings.TrimSpace(mustGetFlag(cmd, "summary"))
-				if summary == "" {
-					return fmt.Errorf("--summary must not be blank")
+			rawAtIDs, _ := cmd.Flags().GetStringSlice("at-open-dingtalk-ids")
+			if len(rawAtIDs) > cardmentions.MaxMentionDeclarations {
+				return apperrors.NewValidation(fmt.Sprintf("--at-open-dingtalk-ids 声明总数（含重复）不能超过 %d", cardmentions.MaxMentionDeclarations))
+			}
+			atIDs := uniqueNonEmptyStrings(rawAtIDs)
+			atAll, _ := cmd.Flags().GetBool("at-all")
+			for _, id := range atIDs {
+				if err := targetresolver.ValidateExplicitOpenDingTalkID("--at-open-dingtalk-ids", id); err != nil {
+					return err
 				}
+			}
+			if receiver != "" && (len(atIDs) > 0 || atAll) {
+				return apperrors.NewValidation("单聊不接受 @ 参数；@ 只适用于群聊")
+			}
+			// Notification validation is opt-in. Preserve legacy bodies, including
+			// direct-chat markup and documentation examples, without mention flags.
+			if len(atIDs) > 0 || atAll {
+				if err := cardmentions.ValidateMentionConsistency(messages, atIDs, atAll); err != nil {
+					return apperrors.NewValidation(err.Error())
+				}
+			}
+			supportForward, _ := cmd.Flags().GetBool("support-forward")
+			summary, err := NormalizeChatA2UISummary("summary", mustGetFlag(cmd, "summary"), cmd.Flags().Changed("summary"))
+			if err != nil {
+				return err
+			}
+			if atAll {
+				messages = cardmentions.RewriteMentionAllTags(messages)
 			}
 			toolArgs := map[string]any{
 				"requestId":       uuid.NewString(),
@@ -7418,8 +7607,17 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				"a2uiMessages":    messages,
 				"summary":         summary,
 			}
+			if len(atIDs) > 0 {
+				toolArgs["atOpenDingTalkIds"] = atIDs
+			}
+			if atAll {
+				toolArgs["atAll"] = true
+			}
 			if cmd.Flags().Changed("a2ui-annotations") {
 				toolArgs["a2uiAnnotations"] = annotations
+			}
+			if cmd.Flags().Changed("extension") {
+				toolArgs["extension"] = extension
 			}
 			if groupID != "" {
 				toolArgs["openConversationId"] = groupID
@@ -7454,26 +7652,32 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并向群聊或单聊发送 A2UI 卡片",
-				UseWhen:      []string{"已准备 A2UI 初始消息数组，需要创建并发送 A2UI 卡片时"},
-				AvoidWhen:    []string{"只发送普通聊天消息、不创建卡片时使用 chat message send 或 chat message send-by-bot", "需要卡片内 @成员时，此入口不支持 @ 参数；明确要求 A2UI 时说明限制，不自动改发文本卡片"},
+				UseWhen:      []string{"已准备 A2UI 初始消息数组，需要创建并发送 A2UI 卡片或在群聊卡片中 @成员、所有人时"},
+				AvoidWhen:    []string{"只发送普通聊天消息、不创建卡片时使用 chat message send 或 chat message send-by-bot", "更新已有 A2UI 卡片时使用 chat message update-a2ui-card；更新不接受 @ 参数"},
 				Examples:     []string{`dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array", Description: "非空 JSON 字符串数组；传 - 时从 stdin 读取"},
-				{Name: "summary", Property: "summary", Required: boolPtr(false), InterfaceType: "string"},
+				{Name: "extension", Property: "extension", Required: boolPtr(false), InterfaceType: "object"},
 				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "support-forward", Property: "supportForward", Required: boolPtr(false), InterfaceType: "boolean"},
+				{Name: "summary", Property: "summary", Required: boolPtr(false), InterfaceType: "string", Description: "卡片无法渲染时的降级文案；省略时为“互动卡片”，显式空白会被拒绝"},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId", Required: boolPtr(false)},
+				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
 			},
 		},
 	})
 	chatMessageSendA2UICardCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填，与 --open-dingtalk-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
-	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", false, "允许转发 A2UI 卡片（默认不允许）")
+	chatMessageSendA2UICardCmd.Flags().String("extension", "", "AICard 消息扩展 JSON 对象，key 非空白且 value 必须为字符串；业务 key 由服务端白名单控制（可选，支持 {}）")
+	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", true, "允许转发 A2UI 卡片（默认允许；--support-forward=false 禁止转发）")
+	chatMessageSendA2UICardCmd.Flags().StringSlice("at-open-dingtalk-ids", nil, "@ 的成员 openDingTalkId（仅群聊；检查静态 Markdown 与同批绑定值，合法绑定可延后填充；透传 atOpenDingTalkIds，声明总数含重复不超过 100）")
+	chatMessageSendA2UICardCmd.Flags().Bool("at-all", false, "@所有人（仅群聊；静态正文须含 <a atId=\"all\">，合法绑定可延后填充；线上传 atAll 并改写已知标签为高亮别名）")
+	chatMessageSendA2UICardCmd.Flags().String("summary", "", "卡片无法渲染时的降级文案；省略时为“互动卡片”，显式传入时不能为空")
 	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组，或 - 从 stdin 读取 (必填)")
-	chatMessageSendA2UICardCmd.Flags().String("summary", "", "会话列表中的可读摘要；省略时拼接卡片消息，显式传入时不能为空")
 	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
 	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{{"conversation-id", "open-dingtalk-id"}},
@@ -10247,6 +10451,261 @@ status 可选值:
 		},
 	})
 
+	// callChatGroupJoinTool invokes one IM group-join tool. Under the unified
+	// rollout it stores a CommandResult so the declared Result contract reaches
+	// the Schema delivery path; the legacy rollout keeps the print path.
+	callChatGroupJoinTool := func(cmd *cobra.Command, tool string, args map[string]any) error {
+		if !output.UsesUnifiedResult(cmd) {
+			return callMCPToolOnServer("im", tool, args)
+		}
+		if deps.Caller.DryRun() {
+			return storeChatThreadDryRun(cmd, "im", tool, args)
+		}
+		data, err := CallMCPToolDataOnServer(cmd.Context(), "im", tool, args)
+		result, err := chatGroupJoinCommandResult(tool, args, data, err)
+		if err != nil {
+			return err
+		}
+		return output.StoreResult(cmd.Context(), result)
+	}
+
+	// ── group join-by-group-id: 群号申请入群 ─────────────────────────
+
+	chatGroupJoinByGroupIdCmd := &cobra.Command{
+		Use:   "join-by-group-id",
+		Short: "通过群号申请加入群聊",
+		Long: `通过群号（groupId）申请加入群聊。已在群内时服务端直接返回 ALREADY_MEMBER，不产生重复写入。
+
+免审批并确认入群时返回 JOINED；需要审批时不等于已入群。当前服务端可能返回 400001「成员邀请已发送」：申请/邀请已提交，请等待群主或管理员处理，按专用提示先只读回查，不要重复提交。此时仍返回原错误码和非零退出码，不能据此认定申请没有提交。
+
+服务端明确返回 APPLIED 且提供 openConversationId 时，CLI 返回 pending 和只读回查命令；缺少回查标识时仅提示等待审批。写入后结果暂未确认（RESULT_UNKNOWN）时也必须先查群状态，不要重试写入。仅收到 JOINED 或 ALREADY_MEMBER 并回查确认成员状态后，才能认定已入群。
+
+如何获取 groupId（如果上层已有则直接使用，不必再查）：
+  - 群号搜索：dws chat search --query "群名"`,
+		Example: `  dws chat group join-by-group-id --group-id 123456`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "group-id"); err != nil {
+				return err
+			}
+			groupID, err := strconv.ParseInt(mustGetFlag(cmd, "group-id"), 10, 64)
+			if err != nil || groupID <= 0 {
+				return apperrors.NewValidation(fmt.Sprintf("--group-id must be a positive integer (numeric groupId), got %q", mustGetFlag(cmd, "group-id")))
+			}
+			return callChatGroupJoinTool(cmd, "join_group_by_group_id", map[string]any{
+				"groupId": groupID,
+			})
+		},
+	}
+	chatGroupJoinByGroupIdCmd.Flags().String("group-id", "", "目标群 numeric groupId (必填)")
+	_ = chatGroupJoinByGroupIdCmd.MarkFlagRequired("group-id")
+	DeclareLeafMetadata(chatGroupJoinByGroupIdCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "join_group_by_group_id",
+				CanonicalPath:  "chat.join_group_by_group_id",
+				CLIPath:        "chat group join-by-group-id",
+				PrimaryCLIPath: "chat group join-by-group-id",
+			},
+			Description: "通过群号（groupId）申请加入群聊",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "join_group_by_group_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群号（groupId）申请加入群聊",
+				UseWhen:      []string{"已知目标群的 numeric groupId，需要当前用户加入该群时"},
+				AvoidWhen:    []string{"只有群邀请链接时使用 chat group join-by-invite-url；仅查询群信息时使用 chat group get-by-group-id"},
+				Examples:     []string{"dws chat group join-by-group-id --group-id 123456"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "group-id", Property: "groupId", Required: boolPtr(true), InterfaceType: "integer"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomePending,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 入群响应；入群状态与成员事实位于 result，缺失字段不推断为 false",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的入群结果","properties":{
+							"openConversationId":{"type":"string","description":"目标群会话 ID，仅保留服务端实际返回值"},
+							"status":{"type":"string","description":"服务端入群状态：JOINED（已加入）/ALREADY_MEMBER（已是成员）/APPLIED（已提交审批，完成状态需只读回查）"},
+							"isMember":{"type":["boolean","null"],"description":"观察时点本人是否在群；缺失或 null 时未知，不默认 false"},
+							"alreadyMember":{"type":"boolean","description":"调用前是否已是成员；仅在服务端返回该兼容字段时提供"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
+	// ── group get-info-by-invite-url: 邀请链接查群 ─────────────────────────
+
+	chatGroupGetInfoByInviteUrlCmd := &cobra.Command{
+		Use:   "get-info-by-invite-url",
+		Short: "通过群邀请链接查询群信息",
+		Long: `通过群邀请链接查询目标群的预览信息（群名称、成员数、本人是否在群）。只读接口，不产生任何写入；isMember 未知时为 null，不默认 false。
+
+如何获取群邀请链接（如果上层已有则直接使用，不必再查）：
+  - 生成邀请链接：dws chat group invite-url --conversation-id <openConversationId>`,
+		Example: `  dws chat group get-info-by-invite-url --invite-url "https://qr.dingtalk.com/action/joingroup?code=xxx"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "invite-url"); err != nil {
+				return err
+			}
+			return callChatGroupJoinTool(cmd, "get_group_info_by_invite_url", map[string]any{
+				"inviteUrl": mustGetFlag(cmd, "invite-url"),
+			})
+		},
+	}
+	chatGroupGetInfoByInviteUrlCmd.Flags().String("invite-url", "", "群邀请链接 (必填，原样透传服务端)")
+	_ = chatGroupGetInfoByInviteUrlCmd.MarkFlagRequired("invite-url")
+	DeclareLeafMetadata(chatGroupGetInfoByInviteUrlCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "get_group_info_by_invite_url",
+				CanonicalPath:  "chat.get_group_info_by_invite_url",
+				CLIPath:        "chat group get-info-by-invite-url",
+				PrimaryCLIPath: "chat group get-info-by-invite-url",
+			},
+			Description: "通过群邀请链接查询群预览信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "get_group_info_by_invite_url"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群邀请链接查询群预览信息（群名称、成员数、本人是否在群）",
+				UseWhen:      []string{"持有群邀请链接，需要在加入前确认群名称、规模或本人是否已在群时"},
+				AvoidWhen:    []string{"已知 openConversationId 查询群详情使用 chat conversation-info --conversation-id；确认后直接入群使用 chat group join-by-invite-url"},
+				Examples:     []string{"dws chat group get-info-by-invite-url --invite-url \"https://qr.dingtalk.com/action/joingroup?code=xxx\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "invite-url", Property: "inviteUrl", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 邀请链接预览响应；群预览白名单和成员事实位于 result",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的群预览结果","properties":{
+							"groupInfo":{"type":"object","description":"群预览白名单，不含群主或邀请人身份","properties":{"openConversationId":{"type":"string","description":"群会话 ID（授权后返回）"},"title":{"type":"string","description":"群名称"},"memberCount":{"type":"integer","description":"群成员数"}}},
+							"isMember":{"type":["boolean","null"],"description":"本人当前是否在群；缺失或 null 时未知，不默认 false"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
+	// ── group join-by-invite-url: 邀请链接入群 ─────────────────────────
+
+	chatGroupJoinByInviteUrlCmd := &cobra.Command{
+		Use:   "join-by-invite-url",
+		Short: "通过群邀请链接申请加入群聊",
+		Long: `通过群邀请链接申请加入群聊。已在群内时服务端直接返回 ALREADY_MEMBER，不产生重复写入。
+
+免审批并确认入群时返回 JOINED；需要审批时不等于已入群。当前服务端可能返回 400001「成员邀请已发送」：申请/邀请已提交，请等待群主或管理员处理，按专用提示先只读回查，不要重复提交。此时仍返回原错误码和非零退出码，不能据此认定申请没有提交。
+
+服务端明确返回 APPLIED 且提供 openConversationId 时，CLI 返回 pending 和只读回查命令；缺少回查标识时仅提示等待审批。写入后结果暂未确认（RESULT_UNKNOWN）时也请先用 chat group get-info-by-invite-url 查询群状态，不要重试写入。仅收到 JOINED 或 ALREADY_MEMBER 并回查确认成员状态后，才能认定已入群。`,
+		Example: `  dws chat group join-by-invite-url --invite-url "https://qr.dingtalk.com/action/joingroup?code=xxx"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "invite-url"); err != nil {
+				return err
+			}
+			return callChatGroupJoinTool(cmd, "join_group_by_invite_url", map[string]any{
+				"inviteUrl": mustGetFlag(cmd, "invite-url"),
+			})
+		},
+	}
+	chatGroupJoinByInviteUrlCmd.Flags().String("invite-url", "", "群邀请链接 (必填，原样透传服务端)")
+	_ = chatGroupJoinByInviteUrlCmd.MarkFlagRequired("invite-url")
+	DeclareLeafMetadata(chatGroupJoinByInviteUrlCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "join_group_by_invite_url",
+				CanonicalPath:  "chat.join_group_by_invite_url",
+				CLIPath:        "chat group join-by-invite-url",
+				PrimaryCLIPath: "chat group join-by-invite-url",
+			},
+			Description: "通过群邀请链接申请加入群聊",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "join_group_by_invite_url"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "通过群邀请链接申请加入群聊",
+				UseWhen:      []string{"持有群邀请链接，需要当前用户加入该群时"},
+				AvoidWhen:    []string{"只有 numeric groupId 时使用 chat group join-by-group-id；加入前需确认群信息时先用 chat group get-info-by-invite-url"},
+				Examples:     []string{"dws chat group join-by-invite-url --invite-url \"https://qr.dingtalk.com/action/joingroup?code=xxx\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "invite-url", Property: "inviteUrl", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomePending,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"原样透传的 IM 入群响应；入群状态与成员事实位于 result，缺失字段不推断为 false",
+					"properties":{
+						"success":{"type":"boolean","description":"下游响应中的业务成功标志"},
+						"result":{"type":"object","description":"服务端实际返回的入群结果","properties":{
+							"openConversationId":{"type":"string","description":"目标群会话 ID，仅保留服务端实际返回值"},
+							"status":{"type":"string","description":"服务端入群状态：JOINED（已加入）/ALREADY_MEMBER（已是成员）/APPLIED（已提交审批，完成状态需只读回查）"},
+							"isMember":{"type":["boolean","null"],"description":"观察时点本人是否在群；缺失或 null 时未知，不默认 false"},
+							"alreadyMember":{"type":"boolean","description":"调用前是否已是成员；仅在服务端返回该兼容字段时提供"}
+						},"additionalProperties":true},
+						"errorCode":{"type":["string","number","null"],"description":"下游业务错误码，成功响应中通常为 null"},
+						"errorMsg":{"type":["string","null"],"description":"下游业务错误信息，成功响应中通常为 null"},
+						"arguments":{"type":["array","null"],"description":"下游消息模板参数，成功响应中通常为空数组"}
+					},
+					"additionalProperties":true
+				}`),
+			},
+		},
+	})
+
 	// ── mark-unread: 标记会话为未读 ───────────────────────────
 
 	chatMarkUnreadCmd := &cobra.Command{
@@ -10412,33 +10871,22 @@ status 可选值:
 		Use:   "list-all-conversations",
 		Short: "分页获取当前用户的全部会话列表",
 		Long: `分页获取当前用户的全部会话列表（包含单聊和群聊）。--limit 指定每页数量（1-100，默认 100），--cursor 传分页游标（首次不传或传 0）。
-返回 hasMore=true 时用 nextCursor 作为下次 --cursor 继续翻页。`,
+默认保持单页调用；显式传 --page-all 时，CLI 按 nextCursor 自动翻页，并按 openConversationId 去重聚合 result.conversationList。--page-limit 控制最多请求页数，--max-items 控制最多返回条数，--page-delay 控制页间等待毫秒数。`,
 		Example: `  dws chat list-all-conversations
   dws chat list-all-conversations --limit 50
   dws chat list-all-conversations --limit 100 --cursor <nextCursor>
-  dws chat list-all-conversations --exclude-muted`,
+  dws chat list-all-conversations --exclude-muted
+  dws chat list-all-conversations --page-all --page-limit 20 --max-items 500 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{}
-			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
-				// 服务端每页上限 100，超过会被静默截断，这里显式拒绝以免误以为取全。
-				if v > 100 {
-					return fmt.Errorf("--limit 最大 100（服务端上限），got %d；如需取全部会话请配合 --cursor 翻页", v)
-				}
-				toolArgs["limit"] = v
-			}
-			if v, _ := cmd.Flags().GetInt64("cursor"); v > 0 {
-				toolArgs["cursor"] = v
-			}
-			if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
-				toolArgs["excludeMuted"] = true
-			}
-			return callMCPToolOnServer("im", "list_all_conversations", toolArgs)
+			return RunPagedMCPCommand(cmd, chatListAllConversationsPagedConfig())
 		},
 	}
 	chatListAllConversationsCmd.Flags().Int("limit", 100, "每页数量（1-100，默认 100）")
 	chatListAllConversationsCmd.Flags().Int64("cursor", 0, "分页游标（首次不传或传 0，翻页传 nextCursor）")
 	chatListAllConversationsCmd.Flags().Bool("exclude-muted", false, "是否排除已免打扰会话（默认 false）")
+	AddPagedMCPFlags(chatListAllConversationsCmd)
 	DeclareLeafMetadata(chatListAllConversationsCmd, LeafSpec{
+		OutputRollout: output.RolloutDualValidate,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -10463,10 +10911,18 @@ status 可选值:
 				AvoidWhen:    []string{"常规枚举全部会话使用 chat +conversation-list；只搜索群聊使用 chat +chat-search"},
 				Examples:     []string{"dws chat list-all-conversations --limit 100"},
 			},
-			Parameters: []contract.ParamDecl{
+			Parameters: append([]contract.ParamDecl{
 				{Name: "cursor", Property: "cursor", Required: boolPtr(false), InterfaceType: "integer"},
 				{Name: "exclude-muted", Property: "excludeMuted", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "limit", Property: "limit", Required: boolPtr(false), InterfaceType: "integer"},
+			}, pagedMCPParamDecls()...),
+			Result: chatListAllConversationsResult(),
+			Pagination: &contract.PaginationSpec{
+				Kind:                  contract.PaginationKindCursor,
+				CursorParameter:       "cursor",
+				MetaPath:              contract.PaginationMetaPath,
+				EndpointExhaustedPath: contract.PaginationExhaustedPath,
+				NextTokenPath:         contract.PaginationNextTokenPath,
 			},
 		},
 	})
@@ -11685,7 +12141,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	})
 	chatTextCmd.AddCommand(chatTextTranslateCmd)
 
-	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
+	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupJoinByGroupIdCmd, chatGroupGetInfoByInviteUrlCmd, chatGroupJoinByInviteUrlCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
 
 	// ── chat group user-settings ──
 	chatGroupUserSettingsCmd := newGroupCommand(&cobra.Command{

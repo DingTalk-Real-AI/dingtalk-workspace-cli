@@ -36,7 +36,7 @@ func TestRuntimePayloadPEArchitectureIgnoresHostToolGuesses(t *testing.T) {
 			}
 			// Keep the real pinned libraries and checksum checks. Only the host
 			// inspection tools vary, as they do between macOS and Linux runners.
-			exports := "for symbol in k9Xm2pQv d4Rw7Lnz h6Yb3Jtq m8Vc5Kxf p2Zn9Gsa t5Qe1Hud b7Uj4Myr f3Wi8Olc; do printf ' T %s\\n' \"$symbol\"; done\n"
+			exports := "for symbol in k9Xm2pQv d4Rw7Lnz h6Yb3Jtq m8Vc5Kxf p2Zn9Gsa t5Qe1Hud b7Uj4Myr f3Wi8Olc r7Qk3Wzp m2Xt9Bvn; do printf ' T %s\\n' \"$symbol\"; done\n"
 			writeTool("nm", exports)
 			objdump := func(arch string) string {
 				probe := "printf '%s\\n' 'architecture: " + arch + "'\n"

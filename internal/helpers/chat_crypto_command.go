@@ -6,6 +6,7 @@ package helpers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -122,7 +123,7 @@ func runChatCryptoDecrypt(cmd *cobra.Command, _ []string) error {
 		Ciphertext: string(ciphertext),
 	})
 	if err != nil {
-		return err
+		return applyCryptoDisabledGuidance(err)
 	}
 	return writeCommandPayload(cmd, map[string]any{
 		"ok":         true,
@@ -182,6 +183,28 @@ func parseChatCryptoMCPData(tool, text string, err error) (map[string]any, error
 		return nil, fmt.Errorf("解析 %s 返回失败: %w", tool, err)
 	}
 	return out, nil
+}
+
+// applyCryptoDisabledGuidance rewrites the raw business failure of a
+// crypto-disabled organization so the onboarding guidance reaches the caller
+// instead of an opaque success=false. Server diagnostics, details and trace are
+// preserved; the server's own friendlyHint wins over the standard guidance.
+func applyCryptoDisabledGuidance(err error) error {
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) ||
+		!strings.EqualFold(strings.TrimSpace(typed.ServerDiag.ServerErrorCode), "CRYPTO_DISABLED") {
+		return err
+	}
+	message := strings.TrimSpace(typed.ServerDiag.FriendlyHint)
+	if message == "" {
+		message = messagecrypto.CryptoDisabledGuidance
+	}
+	typed.Message = message
+	typed.Hint = message
+	if typed.Cause == nil && typed.ServerDiag.TraceID != "" {
+		typed.Cause = fmt.Errorf("trace_id %s", typed.ServerDiag.TraceID)
+	}
+	return typed
 }
 
 var _ messagecrypto.Runtime = chatCryptoRuntime{}

@@ -83,6 +83,19 @@ func (a *toolCallerAdapter) ResolveToolProduct(ctx context.Context, productIDs [
 	return resolver.ResolveToolProduct(ctx, productIDs, toolName)
 }
 
+type mcpToolCapabilityReader interface {
+	SupportsMCPTool(context.Context, string, string) (bool, error)
+}
+
+// SupportsMCPTool must not infer support merely from an available product route.
+func (a *toolCallerAdapter) SupportsMCPTool(ctx context.Context, product, tool string) (bool, error) {
+	reader, ok := a.runner.(mcpToolCapabilityReader)
+	if !ok {
+		return false, nil
+	}
+	return reader.SupportsMCPTool(ctx, product, tool)
+}
+
 type dryRunReadRunner interface {
 	RunReadOnly(context.Context, executor.Invocation) (executor.Result, error)
 }

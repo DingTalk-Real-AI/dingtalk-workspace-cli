@@ -51,7 +51,11 @@ scripts/policy/interface-migrations/approved-command-migrations-v1.json
 
 清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。历史未声明 `kind` 的记录按 `flag_rename` 解释；新增同名 requiredness 迁移必须显式写 `kind: requiredness_change` 和单一 `flag` before/after。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
 
-首次引入一个旧 merge-base 不认识的新 `kind` 时，机制 PR 不得同时写入该 kind 的 pending 记录，因为旧的 base-owned 严格解析器会拒绝未知字段。必须先合入 parser、lifecycle、CLI/Schema adapter 与 hostile tests；待这些实现成为新的 merge-base authority 后，再用独立治理审批 PR 新增 pending，最后才由产品 PR 消费。
+首次向旧 merge-base 已读取的清单引入未知 `kind` 时，机制 PR 不得同时向该清单写入新 kind，
+因为旧 base-owned 严格解析器会拒绝未知字段。若扩展使用独立的新清单，且旧 checker 不读取它，
+可以在同一个前置 MR 提交机制和 pending 计划：旧 base checker 仍不带新豁免完整比较实际产品，
+新增检查仅以空审批清单验证 pending、三方 before 及无非 enum 漂移。机制和计划均须真人审阅；
+不能在该 MR 同时修改产品或登记 consumed，合入后才成为下一业务 MR 的 base-owned authority。
 
 ## 跨命令迁移原语
 
@@ -278,6 +282,27 @@ format、enum、`required_when`、constraints、positionals 与 safety 等全部
 任何不相干漂移继续阻塞。
 
 ## 本地验证
+
+### Schema 参数枚举变更
+
+`scripts/policy/interface-migrations/approved-schema-parameter-migrations-v1.json`
+独立治理 `schema_enum_change`，不将 enum 替换伪装成 flag 改名或 requiredness 变更。
+其严格格式见同目录 [README](../scripts/policy/interface-migrations/README.md)。
+
+枚举不在 CLI Flag Snapshot 中，因此授权使用原始完整 Schema 的 merge-base、最高可达
+未撤回 GA 和 candidate 三份参数契约；命令路径还必须精确对应。只有 enum 可改变，
+目标参数的类型、property、required、默认值等所有其他已检查字段必须完全相同。
+其他参数、命令和 safety 仍由普通兼容规则检查。
+
+生命周期与上述流程一致。新机制 bootstrap 可以使用空清单，也可以在同一个前置 MR
+登记 pending；老 base checker 不接收未知参数，不读取新清单，仍完整检查 main 与 GA，
+不会批准同次业务变化。两次基线检查均成功后，新 checker 以空审批清单补查声明，要求
+全部记录 pending、三份契约均精确保持 before；新机制及计划正确性仍须真人审阅。
+该前置 MR 合入后，下一业务 MR
+一次性切到 after 并改为 consumed。consumed 不得改写或退回 pending；GA 仍为 before
+时必须保留回执，base 和 GA 都达到 after 后才允许清理。候选新增记录不能自行授权。
+当前机制不支持目标工具/参数在历史 GA 中缺失、参数并行改名、非 string 参数或迁移链叠加，
+这些情况失败关闭，须另行设计评审。
 
 先确保 merge-base 和 stable tag 已在本地，然后运行与 CI 相同的权威门禁：
 

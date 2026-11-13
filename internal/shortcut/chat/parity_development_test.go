@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -291,6 +292,113 @@ func TestCrossPlatformCoverageChatParityA2UICreate(t *testing.T) {
 	}
 }
 
+func a2uiMentionMessages(body string) string {
+	msg := fmt.Sprintf(`{"version":"v1.0","updateComponents":{"surfaceId":"s","components":[{"id":"m","component":"Markdown","content":%q}]}}`, body)
+	return fmt.Sprintf("[%q]", msg)
+}
+
+func TestCrossPlatformCoverageChatParityA2UIMentions(t *testing.T) {
+	memberAndAll := a2uiMentionMessages(`hi <a atId="DAAAAAAAAAAAiE">nick</a> <a atId="all">everyone</a>`)
+
+	t.Run("group mention flags pass through atOpenDingTalkIds and atAll", func(t *testing.T) {
+		f := &larkAlignmentCaller{}
+		_, err := runChatParity(t, f, "+messages-send", "--group", "cid", "--a2ui-messages", memberAndAll,
+			"--at-open-dingtalk-ids", "DAAAAAAAAAAAiE", "--at-all", "--yes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(f.calls) != 1 || f.calls[0].tool != "create_and_send_a2ui_card" {
+			t.Fatalf("calls %#v", f.calls)
+		}
+		if got := f.calls[0].args["atOpenDingTalkIds"]; !reflect.DeepEqual(got, []string{"DAAAAAAAAAAAiE"}) {
+			t.Fatalf("atOpenDingTalkIds = %#v", got)
+		}
+		if f.calls[0].args["atAll"] != true {
+			t.Fatalf("atAll = %#v", f.calls[0].args["atAll"])
+		}
+		if _, ok := f.calls[0].args["atIdList"]; ok {
+			t.Fatalf("legacy atIdList must not be sent: %#v", f.calls[0].args)
+		}
+		messages, ok := f.calls[0].args["a2uiMessages"].([]string)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("a2uiMessages = %#v", f.calls[0].args["a2uiMessages"])
+		}
+		if !strings.Contains(messages[0], `<a atId=\"10\">everyone</a>`) || strings.Contains(messages[0], `<a atId=\"all\">`) {
+			t.Fatalf("at-all tag not rewritten to wire alias: %s", messages[0])
+		}
+	})
+
+	t.Run("no mention flags leaves atOpenDingTalkIds absent", func(t *testing.T) {
+		f := &larkAlignmentCaller{}
+		_, err := runChatParity(t, f, "+messages-send", "--group", "cid", "--a2ui-messages", `["{\"version\":\"v1.0\"}"]`, "--yes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := f.calls[0].args["atOpenDingTalkIds"]; ok {
+			t.Fatalf("atOpenDingTalkIds must be absent without mention flags: %#v", f.calls[0].args)
+		}
+		if _, ok := f.calls[0].args["atAll"]; ok {
+			t.Fatalf("atAll must be absent without --at-all: %#v", f.calls[0].args)
+		}
+	})
+
+	t.Run("dry run previews atOpenDingTalkIds", func(t *testing.T) {
+		f := &larkAlignmentCaller{}
+		out, err := runChatParity(t, f, "+messages-send", "--group", "cid", "--a2ui-messages", memberAndAll,
+			"--at-open-dingtalk-ids", "DAAAAAAAAAAAiE", "--at-all", "--dry-run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(f.calls) != 0 {
+			t.Fatalf("dry run wrote %#v", f.calls)
+		}
+		if !strings.Contains(out, `"atOpenDingTalkIds"`) || !strings.Contains(out, "DAAAAAAAAAAAiE") || !strings.Contains(out, `"atAll"`) {
+			t.Fatalf("dry run lost atOpenDingTalkIds/atAll: %s", out)
+		}
+	})
+
+	t.Run("raw declaration count over 100 is rejected", func(t *testing.T) {
+		ids := make([]string, 0, 101)
+		for i := 0; i < 101; i++ {
+			ids = append(ids, "DAAAAAAAAAAAiE")
+		}
+		f := &larkAlignmentCaller{}
+		_, err := runChatParity(t, f, "+messages-send", "--group", "cid", "--a2ui-messages", memberAndAll,
+			"--at-open-dingtalk-ids", strings.Join(ids, ","), "--at-all", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "不能超过 100") {
+			t.Fatalf("err = %v, want raw declaration limit rejection", err)
+		}
+		if len(f.calls) != 0 {
+			t.Fatalf("over-limit declarations wrote %#v", f.calls)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"malformed member message", []string{"--group", "cid", "--a2ui-messages", `["not-json"]`, "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE"}, "消息[0] JSON 无效"},
+		{"malformed everyone message", []string{"--group", "cid", "--a2ui-messages", `["not-json"]`, "--at-all"}, "消息[0] JSON 无效"},
+		{"declared but unused", []string{"--group", "cid", "--a2ui-messages", `["{}"]`, "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE"}, "未使用: DAAAAAAAAAAAiE"},
+		{"at-all without all tag", []string{"--group", "cid", "--a2ui-messages", `["{}"]`, "--at-all"}, "--at-all 需要卡片 Markdown 中同时包含"},
+		{"single chat rejects mention flags", []string{"--open-dingtalk-id", "DAAAAAAAAAAAiE", "--a2ui-messages", memberAndAll, "--at-open-dingtalk-ids", "DAAAAAAAAAAAiE", "--at-all"}, "user 单聊不接受 @ 参数"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &larkAlignmentCaller{}
+			argv := append([]string{"+messages-send"}, tc.args...)
+			argv = append(argv, "--yes")
+			_, err := runChatParity(t, f, argv...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want containing %q", err, tc.want)
+			}
+			if len(f.calls) != 0 {
+				t.Fatalf("invalid mentions wrote %#v", f.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageChatParityUnknownWritesNeverBecomeSuccess(t *testing.T) {
 	for _, tc := range []struct {
 		command      string
@@ -331,6 +439,20 @@ func TestCrossPlatformCoverageChatParityLarkRepeatedChatIDKeepsAllTargets(t *tes
 	for i, want := range []string{"one", "two", "three"} {
 		if f.calls[i].args["openConversationId"] != want || f.calls[i].args["top"] != false {
 			t.Fatalf("wrong target %#v", f.calls[i])
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatParityA2UILegacyMarkup(t *testing.T) {
+	body := a2uiMentionMessages(`<a atId="all">everyone</a> <a atId="DAAAAAAAAAAAiE">member</a>`)
+	for _, target := range [][]string{{"--group", "cid"}, {"--open-dingtalk-id", "DAAAAAAAAAAAiE"}} {
+		f := &larkAlignmentCaller{}
+		args := append([]string{"+messages-send", "--a2ui-messages", body, "--yes"}, target...)
+		if _, err := runChatParity(t, f, args...); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.calls) != 1 || f.calls[0].args["atAll"] != nil || f.calls[0].args["summary"] != "互动卡片" || f.calls[0].args["supportForward"] != false {
+			t.Fatalf("legacy payload changed: %#v", f.calls)
 		}
 	}
 }

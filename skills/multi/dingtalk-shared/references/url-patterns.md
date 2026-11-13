@@ -35,6 +35,9 @@
 | `aitable` | AI表格 Base 链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` | `base list/search/create/get` 返回的 `baseId` |
 | `aitable` | AI表格指定数据表链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}` | `baseId` + `table create/get` 或 `base get` 返回的 `tableId` |
 | `aitable` | AI表格指定数据表+视图链接 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}` | `baseId` + `tableId` + `view create/get` 返回的 `viewId` |
+| `aitable` | AI表格字段定位 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=entrance%3Ddata%26sheetId%3D{tableId}%26fieldId%3D{fieldId}` | 已确认的 `baseId/tableId/fieldId`；字段定位依赖前端能力 |
+| `aitable` | 应用模式页面 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=entrance%3Dapps%26appId%3D{appId}%26pageId%3D{pageId}` | 编码 `appId` 与真实 `pageId` |
+| `aitable` | 自动化流程编辑 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=entrance%3Dautomation%26flowId%3D{flowId}%26autoOpenAutomation%3Dtrue` | 真实 `flowId`；导航不会启用流程 |
 | `aitable` | AI表格模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` | `template search` 返回的 `templateId` |
 | `doc` | 文档链接 | `https://alidocs.dingtalk.com/i/nodes/{dentryUuid}` | `doc` 命令返回的 `dentryUuid` |
 | `sheet` | 电子表格链接 | `https://alidocs.dingtalk.com/i/nodes/{dentryUuid}` | `sheet create` 返回的 `dentryUuid` |

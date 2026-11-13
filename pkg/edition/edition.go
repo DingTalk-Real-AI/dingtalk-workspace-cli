@@ -139,6 +139,12 @@ type Hooks struct {
 	OnAuthError       func(configDir string, err error) error
 	TokenProvider     func(ctx context.Context, fallback func() (string, error)) (string, error)
 
+	// OIDCProviders registers the SDK authorizers available to auth provider-login.
+	// Return declarations only: enumeration must not initialize SDKs or perform
+	// I/O. Names must be unique and Authorize must be non-nil. Nil/empty means
+	// no SDK integration; the core does not install a provider-specific fallback.
+	OIDCProviders func() []OIDCProvider
+
 	// --- token persistence (overlay-managed keychain / encrypted storage) ---
 	SaveToken   func(configDir string, data []byte) error // persist token blob
 	LoadToken   func(configDir string) ([]byte, error)    // retrieve token blob

@@ -24,10 +24,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -852,6 +854,8 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		operation = "jsonrpc"
 	}
 	var lastErr error
+	// 任一尝试或重定向发出过请求，都不能再声称业务未提交。
+	requestNotSent := true
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
@@ -896,15 +900,22 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			)
 		}
 
+		var written atomic.Bool
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+			WroteHeaders: func() { written.Store(true) },
+			WroteRequest: func(httptrace.WroteRequestInfo) { written.Store(true) },
+		}))
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
 			lastErr = err
+			requestNotSent = requestNotSent && !written.Load() && requestFailureBeforeSend(err)
 			if isTimeoutError(err) {
 				break
 			}
 		} else if !retryable(resp.StatusCode) || attempt == c.MaxRetries {
 			return resp, nil
 		} else {
+			requestNotSent = false
 			lastErr = fmt.Errorf("retryable HTTP %d", resp.StatusCode)
 			resp.Body.Close()
 		}
@@ -949,6 +960,8 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		!isTimeoutError(lastErr), "")
 	opts := []apperrors.Option{
 		apperrors.WithOperation(operation),
+		apperrors.WithFailureStage(string(CallStageRequest)),
+		apperrors.WithDetails(map[string]any{"execution_id": c.ExecutionId}),
 		apperrors.WithReason(reason),
 		apperrors.WithRetryable(!isTimeoutError(lastErr)),
 		apperrors.WithHint(hint),
@@ -957,6 +970,9 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			Stage: CallStageRequest,
 			Cause: lastErr,
 		}),
+	}
+	if requestNotSent && lastErr != nil {
+		opts = append(opts, apperrors.WithExecutionStarted(false))
 	}
 	message := fmt.Sprintf("request to %s failed: %v", RedactURL(endpoint), lastErr)
 	if category == apperrors.CategoryAPI {
@@ -1038,6 +1054,9 @@ func classifyRequestFailure(err error) (reason, hint string) {
 		return "request_failed", i18n.T("请检查网络连通性和 MCP 服务状态后重试。")
 	}
 	msg := err.Error()
+	if reason := certificateFailureReason(err); reason != "" {
+		return reason, i18n.T("TLS 证书校验失败，请检查服务证书与本机信任链；不要关闭证书校验。")
+	}
 
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):

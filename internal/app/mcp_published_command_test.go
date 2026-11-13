@@ -28,6 +28,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -81,6 +82,7 @@ func executeMCPPublishedCommand(
 	args ...string,
 ) (string, error) {
 	t.Helper()
+	helpers.InitDepsForTest(t, nil)
 	root := &cobra.Command{Use: "mcp", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().Bool("yes", false, "")

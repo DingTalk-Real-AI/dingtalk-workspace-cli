@@ -35,7 +35,7 @@ Structural errors use `schema.*` codes such as `type_mismatch`, `missing_require
 
 ## Explicit new-card preflight
 
-`--preflight new-card` checks initialization and the final component snapshot after structural validation. Top-level `valid` still represents only Schema validity. Components are isolated by Surface and merged across messages: a later message may replace an ID, but duplicate IDs within one message are errors. Protocol-derived `childRefs` locate the root, reachable static references, template targets, and static cycles. Dynamic template edges do not participate in static cycle detection; preflight neither expands templates nor evaluates relative bindings.
+`--preflight new-card` checks initialization and the final component snapshot after structural validation. Top-level `valid` still represents only Schema validity. Components are isolated by Surface and merged across messages: a later message may replace an ID, but duplicate IDs within one message are errors. Protocol-derived `childRefs` locate references. Ordered DFS from root assigns the first owner; later references produce `reference.multiple_parents` or, for the same parent, `reference.duplicate_child`, both errors. Diagnostics point to the second reference and include both original pointers. Template source IDs and descendants cannot be reused across reachable contexts. `reference.template_source_referenced` rejects root-static references to template sources or descendants, including sources owned by unreachable containers that Nest still expands. These structural rules apply even with empty data arrays. Unrelated unreachable components remain warnings. Template edges do not participate in static cycle detection. Preflight does not evaluate dynamic data, instantiate templates, or certify rendering. See [the ownership validation record](../../../../../docs/reference-ownership-validation.md) for renderer evidence and limits.
 
 Unreachable components produce only a `reference.unreachable_component` warning; their subgraphs are not checked as part of the current root tree. Only errors invalidate `preflight.valid` or block preview. Binding values, template expansion, intermediate frames, and client effects remain unverified. The `resources` mode does not require an incremental update to be reference-closed on its own.
 
@@ -101,11 +101,17 @@ run the same command without `--check` to install and verify. Verification runs
 `Aicard`. The helper filter is separate from the unfiltered validator package.
 `--check` alone proves neither compilation nor installed runtime behavior.
 
-## Base64 compatibility change
+## Inline resource policy
 
-Resource preflight emits `resource.base64_image_unverified` with severity
-`warning` for inline Base64 images. Relative to master, this adds a warning; master did not reject these images. Valid encoding
-alone does not prove image decoding, client support or transport size safety.
-Malformed data URIs and invalid/empty Base64 retain their existing errors.
-Prefer HTTPS for new authoring; this policy does not change public Schema
-validity or impose an invented per-image byte limit.
+Resource and new-card preflight reject literal `data:` values in component
+resource fields, including `icon` and `darkIcon`, with
+`resource.inline_data_unsupported` (`error`). Leading whitespace and control
+characters are ignored; registered IconName values remain valid. Preview
+rejects these errors before any service call. Prefer verified HTTPS assets.
+
+Markdown `content` and `fallbackMarkdown` containing `data:` text produce the
+nonblocking `resource.markdown_data_unverified` warning. It is a text marker
+check, not a Markdown/HTML parser, so its absence does not prove that no inline
+image exists. Table rows and chart data/config are business values and are not
+checked. Both implementations read the shared cases in
+`testdata/resource-policy.json`. Schema validity is unchanged.

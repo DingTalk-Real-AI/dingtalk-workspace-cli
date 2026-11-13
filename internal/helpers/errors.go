@@ -535,6 +535,10 @@ func ClassifyToolResultContent(content map[string]any) error {
 		}
 	}
 
+	if pending := classifyDocOverwriteError(content); pending != nil {
+		return pending
+	}
+
 	// Permission-denied business errors: surface apply-permission guidance before
 	// the framework's generic rendering swallows it. Guidance is limited to
 	// document/wiki-specific signals (forbidden.* codes or role-threshold
@@ -609,12 +613,20 @@ func ClassifyMCPResponseText(text string) error {
 		}
 	}
 
+	if projected := classifyAitableMutationError(body); projected != nil {
+		return projected
+	}
+
 	if isNoPermissionError(body) {
 		return &CLIError{
 			Code:       CodeAuthPermission,
 			Message:    text,
 			Suggestion: permissionDeniedSuggestionFor(body),
 		}
+	}
+
+	if pending := classifyDocOverwriteError(body); pending != nil {
+		return pending
 	}
 
 	if isBusinessError(body) {

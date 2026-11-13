@@ -12,6 +12,31 @@ import (
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 )
 
+const (
+	// ReasonPolicyQueryFailed marks a policy lookup that produced no usable
+	// decision. It is a different failure from a policy that resolved to off.
+	ReasonPolicyQueryFailed = "policy_query_failed"
+	// ReasonPolicyDisabled is the fallback for a server that resolves a policy
+	// to off without saying why.
+	ReasonPolicyDisabled = "policy_disabled"
+	// ReasonBatchDecryptFailed marks a batch decrypt call that returned no
+	// per-message results at all.
+	ReasonBatchDecryptFailed = "batch_decrypt_failed"
+)
+
+// DecryptPolicyFailureReason maps a policy decision to the stable ledger reason.
+// The server-provided reason always wins so a concrete closure cause is never
+// flattened into a generic value; a query error stays distinct from policy off.
+func DecryptPolicyFailureReason(decision messagecrypto.PolicyDecision, err error) string {
+	if err != nil {
+		return ReasonPolicyQueryFailed
+	}
+	if reason := strings.TrimSpace(decision.Policy.Reason); reason != "" {
+		return reason
+	}
+	return ReasonPolicyDisabled
+}
+
 // messageDecryptClient mirrors helpers.chatCryptoClient: the app wiring builds
 // one crypto client and injects it into both consumers.
 var messageDecryptClient = messagecrypto.DefaultClient()
@@ -88,8 +113,12 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 	}
 	result, err := messageDecryptClient.BatchDecryptInbound(ctx, rt, messagecrypto.Options{}, batchItems)
 	if err != nil {
+		// A failed batch call leaves every pending item without a body, so the
+		// gap is recorded per message instead of as one opaque error string.
 		failures := append([]map[string]any{}, policyFailures...)
-		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
+		for _, item := range batchItems {
+			failures = append(failures, decryptFailure(item.MessageID, item.ConversationID, ReasonBatchDecryptFailed))
+		}
 		ledger["decryptFailedCount"] = len(failures)
 		ledger["decryptFailures"] = failures
 		ledger["partial"] = true
@@ -179,11 +208,14 @@ func filterDecryptItemsByPolicy(ctx context.Context, rt messagecrypto.Runtime, i
 			OpenConversationID: item.ConversationID,
 		})
 		if err != nil {
-			failures = append(failures, decryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			failures = append(failures, decryptFailure(item.MessageID, item.ConversationID,
+				DecryptPolicyFailureReason(decision, err)))
 			continue
 		}
 		if !decision.Enabled {
-			failures = append(failures, decryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			failures = append(failures, decryptFailureWithHint(item.MessageID, item.ConversationID,
+				DecryptPolicyFailureReason(decision, nil),
+				messagecrypto.PolicyDisabledHint(decision.Policy.FriendlyHint)))
 			continue
 		}
 		filtered = append(filtered, item)
@@ -199,6 +231,14 @@ func decryptFailure(messageID, conversationID, reason string) map[string]any {
 	}
 	if strings.TrimSpace(conversationID) != "" {
 		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func decryptFailureWithHint(messageID, conversationID, reason, hint string) map[string]any {
+	failure := decryptFailure(messageID, conversationID, reason)
+	if trimmed := strings.TrimSpace(hint); trimmed != "" {
+		failure["hint"] = trimmed
 	}
 	return failure
 }

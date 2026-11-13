@@ -12,6 +12,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	whiteboardcore "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard"
@@ -150,7 +151,7 @@ var Diff = shortcut.Shortcut{
 		}
 		data, err := rt.CallMCPData(serverWhiteboard, call.Tool, call.Args)
 		if err != nil {
-			return err
+			return helpers.WithWhiteboardRecovery(err)
 		}
 		var projected map[string]any
 		if call.Kind == whiteboardcore.KindEmbedded {

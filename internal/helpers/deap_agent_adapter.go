@@ -37,6 +37,7 @@ type digitalEmployeeAdapterConfig struct {
 	AlwaysOn            bool                   `json:"alwaysOn"`
 	Name                string                 `json:"name,omitempty"`
 	ReplyMode           string                 `json:"replyMode,omitempty"`
+	ReplyCardForward    bool                   `json:"replyCardForward,omitempty"`
 }
 
 // digitalEmployeeAdapter 接收已经完成身份准备的非敏感配置。
@@ -170,7 +171,7 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 }
 
 func digitalEmployeeAdapterFlagNames() []string {
-	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "reply-mode", "daemon", "alwayson", "local-worker", "local-supervise"}
+	return []string{"agent-cmd", "agent-model", "agent-workdir", "agent-memory", "agent-timeout", "agent-permission-mode", "agent-approval-mode", "yolo", "allowed-users", "allowed-groups", "reply-mode", "reply-card-forward", "daemon", "alwayson", "local-worker", "local-supervise"}
 }
 
 func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
@@ -184,6 +185,26 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 		opts.Command = strings.TrimSpace(os.Getenv("DWS_AGENT_CMD"))
 	}
 	channel, _ := resolveDigitalEmployeeChannel(cmd)
+	if channel == "codex" {
+		// 只记住显式模式；旧的 Yolo 布尔默认值不能等价为用户选择完全访问。
+		mode := ""
+		for _, value := range []string{devAppStringFlag(cmd, "agent-permission-mode"), os.Getenv("DWS_AGENT_PERMISSION_MODE"), devAppStringFlag(cmd, "agent-approval-mode"), os.Getenv("DWS_AGENT_APPROVAL_MODE")} {
+			if strings.TrimSpace(value) != "" {
+				mode = value
+				break
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(mode)) {
+		case "ask":
+			opts.CodexInitialPermissionMode = "ask"
+		case "bypass", "yolo":
+			opts.CodexInitialPermissionMode = "bypass"
+		default:
+			if commandBoolFlag(cmd, "yolo") {
+				opts.CodexInitialPermissionMode = "bypass"
+			}
+		}
+	}
 	if channel == "custom" && opts.Command == "" {
 		return opts, fmt.Errorf("custom 需要 --agent-cmd")
 	}
@@ -212,7 +233,8 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 
 func digitalEmployeeAgentFlags() []LeafFlag {
 	return []LeafFlag{
-		{Name: "reply-mode", Default: "a2ui", Enum: []string{"a2ui", "text"}, Usage: "DWS 直接托管本地 Agent 的回复模式：a2ui 发送占位并更新；text 仅发送最终文本。未适配公开进度的 Agent 仍用文本；外部宿主接入（--channel dsh）不接受此参数"},
+		{Name: "reply-mode", Default: "a2ui", Enum: []string{"a2ui", "text"}, Usage: "DWS 直接托管本地 Agent 的回复模式：a2ui 发送占位并更新最终答案，已适配的 Agent 同时显示公开进度，未适配公开进度的 Agent 仍用文本；text 仅发送最终文本。外部宿主接入（--channel dsh）不接受此参数"},
+		{Name: "reply-card-forward", Kind: LeafBool, Default: "false", Usage: "允许转发新创建的 A2UI 回复卡片，默认关闭；仅对 A2UI 回复生效，不修改已发送卡片"},
 		{Name: "local-lease", Kind: LeafBool, Hidden: true, Usage: "internal: DSH 员工占用凭据无关的本地运行锁"},
 		{Name: "binding-revision", Hidden: true, Usage: "internal: 精确绑定版本"},
 		{Name: "runtime-instance-id", Hidden: true, Usage: "internal: DSH 宿主运行实例"},
@@ -220,8 +242,8 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 		{Name: "agent-model", Usage: "Agent 模型；同 dev connect"},
 		{Name: "agent-workdir", Usage: "Agent 工作目录；同 dev connect"},
 		{Name: "agent-memory", Kind: LeafBool, Default: "true", Usage: "按员工和会话保留 Agent 上下文"},
-		{Name: "agent-timeout", Kind: LeafInt, Usage: "Agent 每轮超时秒数；0 不限制"},
-		{Name: "agent-permission-mode", Enum: []string{"ask", "bypass"}, Usage: "Agent 权限模式；同 dev connect"},
+		{Name: "agent-timeout", Kind: LeafInt, Usage: "Agent 每轮超时秒数；0 不限制 Agent 回合，Codex 桌面共享仍受连接和结果等待上限约束"},
+		{Name: "agent-permission-mode", Enum: []string{"ask", "bypass"}, Usage: "Agent 权限模式；Codex 仅初始化新会话，未传默认帮我批准，已有会话跟随 Codex 人工设置；其他 Agent 同 dev connect"},
 		{Name: "agent-approval-mode", Enum: []string{"ask", "yolo"}, Usage: "Agent 审批模式；同 dev connect"},
 		{Name: "yolo", Kind: LeafBool, Usage: "显式选择 Agent 最高权限模式"},
 		{Name: "allowed-users", Usage: "其他本地场景的额外 userId 白名单；local_agent 使用 DEAP 已发布可见范围"},
@@ -293,12 +315,18 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid adapter configuration")
 	}
-	// Configurations written before reply modes existed retain text and their thread.
+	// 旧连接未显式选择模式时随升级启用卡片；显式 text 保持不变。
 	if cfg.ReplyMode == "" {
-		cfg.ReplyMode = "text"
+		cfg.ReplyMode = "a2ui"
 	}
 	if cfg.ReplyMode != "a2ui" && cfg.ReplyMode != "text" {
 		return cfg, fmt.Errorf("invalid adapter reply mode")
+	}
+	if bindingChannel(cfg.Binding) == "codex" {
+		cfg.Options.CodexInitialPermissionMode, err = employeeCodexInitialMode(cfg.Options)
+		if err != nil {
+			return cfg, err
+		}
 	}
 	if !validMachineString(cfg.SelfOpenDingTalkID) {
 		return cfg, fmt.Errorf("adapter 缺少自身开放 ID，请重新 connect 初始化，不能跳过自消息过滤")
@@ -368,6 +396,7 @@ func newDigitalEmployeeStopCommand() *cobra.Command {
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "stop") },
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_stop", CanonicalPath: "dingtalk-tag.connect_stop", CLIPath: "dingtalk-tag connect stop", PrimaryCLIPath: "dingtalk-tag connect stop", Group: "connect"},
+			DryRun:      deapAgentPlanDryRun,
 			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
@@ -386,6 +415,7 @@ func newDigitalEmployeeRestartCommand() *cobra.Command {
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "restart") },
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_restart", CanonicalPath: "dingtalk-tag.connect_restart", CLIPath: "dingtalk-tag connect restart", PrimaryCLIPath: "dingtalk-tag connect restart", Group: "connect"},
+			DryRun:      deapAgentPlanDryRun,
 			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
@@ -399,6 +429,13 @@ const codexEmployeeDeveloperInstructions = "你是通过钉钉协作的本地数
 
 // 保留此接口参数中的 context，所有运行操作必须服从宿主取消。
 var digitalEmployeeNewForwarder = func(ctx context.Context, cfg digitalEmployeeAdapterConfig) (forwarder, error) {
+	if bindingChannel(cfg.Binding) == "codex" {
+		mode, err := employeeCodexInitialMode(cfg.Options)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Options.CodexInitialPermissionMode = mode
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -407,8 +444,24 @@ var digitalEmployeeNewForwarder = func(ctx context.Context, cfg digitalEmployeeA
 	if codex, ok := fwd.(*codexAppServerForwarder); ok {
 		// 数字员工可按用户授权执行本地任务；群聊机器人保留原有问答限制。
 		codex.developerInstructions = codexEmployeeDeveloperInstructions
+		codex.initialPermissionMode = cfg.Options.CodexInitialPermissionMode
 	}
 	return fwd, err
+}
+
+// 旧配置只用 Yolo=false 保存显式 ask；缺少新字段不能被解释为自动审核。
+// 只改变新建会话的初始值，已有 thread 继续恢复其最新人工权限。
+func employeeCodexInitialMode(opts connectAgentOptions) (string, error) {
+	switch opts.CodexInitialPermissionMode {
+	case "":
+		if !opts.Yolo {
+			return "legacy-ask", nil
+		}
+	case "ask", "bypass", "legacy-ask":
+	default:
+		return "", fmt.Errorf("invalid saved Codex permission mode")
+	}
+	return opts.CodexInitialPermissionMode, nil
 }
 
 var digitalEmployeeReadyTimeout = 45 * time.Second

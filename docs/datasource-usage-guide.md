@@ -418,7 +418,7 @@ dws aitable +datasource-get-config \
 | `--fields` | 筛选输出字段（逗号分隔） |
 | `--dry-run` | 预览操作内容，不实际执行 |
 | `--profile` | 指定组织或账号 |
-| `--timeout` | HTTP 请求超时时间（秒，默认 30） |
+| `--timeout` | HTTP 请求与文件直传超时时间（秒，默认 30；文件直传最低保留 5 分钟，大文件慢速上传可显式调大） |
 | `--debug` | 显示调试日志 |
 | `-v, --verbose` | 显示详细日志 |
 

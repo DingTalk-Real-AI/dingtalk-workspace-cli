@@ -23,6 +23,13 @@
     "+field-get": {"disposition":"semantic_adapter","semantic_delta":"批量获取字段完整类型配置，避免仅返回名称的损失投影。","risk":"read","public":true,"reviewed":true},
     "+field-update": {"disposition":"semantic_adapter","semantic_delta":"统一字段名称、类型配置和 AI 配置的增量更新输入。","risk":"write","public":true,"reviewed":true},
     "+field-delete": {"disposition":"schema_leaf","semantic_delta":"不可逆删除字段的一对一入口，显式发布数据丢失风险。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+field-wait-ai": {
+      "disposition": "primary_smart",
+      "semantic_delta": "按固定 taskId/fieldId/recordIds 分片只读等待；共享请求与退避总时限，保留部分证据。可用私有检查点绑定身份和全部原目标跨进程续查，不重触发 AI；成功历史缺失仍 unknown，写回版本不证明结果可读，终态仍可能 pending。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
 
     "+record-query": {"disposition":"semantic_adapter","semantic_delta":"统一 ID、筛选、关键词、字段投影和分页查询；fieldIds 只返回用户要求的列，并投影稳定的 records/count/cursor 结果。","risk":"read","public":true,"reviewed":true},
     "+record-update": {"disposition":"primary_smart","semantic_delta":"自动按 100 条分片更新并逐条读回验证；失败返回可续跑的 nextOffset。","risk":"write","public":true,"reviewed":true},
@@ -74,10 +81,20 @@
     "+dashboard-update": {"disposition":"schema_leaf","semantic_delta":"更新仪表盘配置的一对一入口。","risk":"write","public":true,"reviewed":true},
     "+dashboard-delete": {"disposition":"schema_leaf","semantic_delta":"级联删除仪表盘及图表，显式发布不可逆高风险事实。","risk":"high-risk-write","public":true,"reviewed":true},
     "+dashboard-arrange": {"disposition":"semantic_adapter","semantic_delta":"触发服务端智能布局重排并保留统一写入确认。","risk":"write","public":true,"reviewed":true},
+    "+dashboard-diagnose": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取完整根布局并诊断越界、重叠和已声明 minW/minH；可按完整 expected-layout 比较设计差异、按 regions 核验所选卡片并集覆盖。几何、设计、区域覆盖分别报告，不证明组件尺寸规则、子容器布局或页面可读，pageReadableVerified 始终 false。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+dashboard-preview": {"disposition":"semantic_adapter","semantic_delta":"preview_dashboard_layout 确认部署后，只读获取真实源布局、同源按行重排结果和逐卡前后差异；参数回显不是预览，布局摘要不提供原子 CAS，也不证明页面可读。","risk":"read","public":true,"reviewed":true},
     "+dashboard-share-get": {"disposition":"schema_leaf","semantic_delta":"读取仪表盘分享配置的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+dashboard-share-update": {"disposition":"semantic_adapter","semantic_delta":"统一开启、关闭和设置仪表盘分享类型。","risk":"write","public":true,"reviewed":true},
 
     "+chart-widgets-example": {"disposition":"schema_leaf","semantic_delta":"返回所有图表类型的 widget config 示例，供构造合法图表配置。","risk":"read","public":true,"reviewed":true},
+    "+chart-templates": {"disposition":"semantic_adapter","semantic_delta":"正确解析 JSONC 并按大写 chartType 投影结构化模板；默认客户端筛选不减少远端响应体，仅确认新模板入口部署后显式 server-filter，模板示例 ID 仍须绑定真实资源。","risk":"read","public":true,"reviewed":true},
+    "+charts-create": {"disposition":"primary_smart","semantic_delta":"同一仪表盘编排 1～20 项完整 config/layout，默认串行提交并按真实 chartId 独立回读；只在确认 create_charts 部署后显式 server-batch，保留逐项受理、ID 和核验进度，不承诺整批原子性或自动重放未知写入，不默认追加 arrange。","risk":"write","public":true,"reviewed":true},
     "+chart-get": {"disposition":"schema_leaf","semantic_delta":"读取指定图表完整配置的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+chart-update": {"disposition":"semantic_adapter","semantic_delta":"统一更新图表配置或布局，并要求显式 config 输入。","risk":"write","public":true,"reviewed":true},
     "+chart-delete": {"disposition":"schema_leaf","semantic_delta":"删除图表及布局项，显式发布不可逆高风险事实。","risk":"high-risk-write","public":true,"reviewed":true},
@@ -96,6 +113,10 @@
     "+role-create": {"disposition":"semantic_adapter","semantic_delta":"统一角色名称、成员与权限配置的创建输入。","risk":"write","public":true,"reviewed":true},
     "+role-update": {"disposition":"semantic_adapter","semantic_delta":"按 PATCH 语义增量更新角色配置，未提供字段保持不变。","risk":"write","public":true,"reviewed":true},
     "+role-delete": {"disposition":"schema_leaf","semantic_delta":"不可逆删除自定义角色的一对一入口。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+role-members-add": {"disposition":"schema_leaf","semantic_delta":"向指定自定义角色增量追加稳定 ID 成员，写后必须独立回读。","risk":"write","public":true,"reviewed":true},
+    "+role-members-update": {"disposition":"semantic_adapter","semantic_delta":"以完整成员列表替换角色成员，并强制显式保留已回读的默认角色。","risk":"write","public":true,"reviewed":true},
+    "+role-copy": {"disposition":"schema_leaf","semantic_delta":"复制自定义角色配置但不复制成员，系统角色不可作为源。","risk":"write","public":true,"reviewed":true},
+    "+role-query-user": {"disposition":"schema_leaf","semantic_delta":"查询目标用户实际命中的高级权限角色，不覆盖调用人身份。","risk":"read","public":true,"reviewed":true},
 
     "+section-create": {"disposition":"semantic_adapter","semantic_delta":"在 Base 目录树创建用于组织表和仪表盘的文件夹。","risk":"write","public":true,"reviewed":true},
     "+section-rename": {"disposition":"schema_leaf","semantic_delta":"重命名目录文件夹的一对一入口。","risk":"write","public":true,"reviewed":true},
@@ -110,6 +131,15 @@
     "+record-share-links": {"disposition":"primary_smart","semantic_delta":"对超过 20 条 recordId 去重分片调用并合并分享链接及逐批结果。","risk":"read","public":true,"reviewed":true},
     "+resolve-base": {"disposition":"primary_smart","semantic_delta":"按名称搜索并要求唯一匹配，0 或多结果时显式失败而不猜 baseId。","risk":"read","public":true,"reviewed":true},
     "+resolve-table": {"disposition":"primary_smart","semantic_delta":"在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。","risk":"read","public":true,"reviewed":true},
+    "+read-batch": {"disposition":"primary_smart","semantic_delta":"同一 Base 集中执行 1～20 项无依赖只读请求并按输入顺序保留完整结果，默认串行，可显式启用最多 4 路并发；不减少请求总数，不接收条件写、写操作或依赖前项 ID 的未绑定请求，不替代复杂服务端分析。","risk":"read","public":true,"reviewed":true},
+    "+build-plan": {
+      "disposition": "primary_smart",
+      "semantic_delta": "在固定 Base 按声明依赖串行执行结构、记录、显式图表和固定记录 AI 步骤；真实回执绑定 ID，私有检查点绑定计划摘要、账号组织及目标，恢复先核验，不重放未知写入。AI 等待持久保留逐行证据，结果未核实可读时阻断后续步骤并保持 pending，不默认重排布局。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+build-plan-verify": {"disposition":"primary_smart","semantic_delta":"按原计划、账号组织及 Base 只读续验检查点中的真实对象并重新匹配完整数据断言；不创建尚未执行步骤，不用摘要或数量差额补写，缺少可靠回执或 ID 时停止，保留逐步状态和原任务关联。","risk":"read","public":true,"reviewed":true},
 
     "+datasource-create": {"disposition":"schema_leaf","semantic_delta":"为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。","risk":"write","public":true,"reviewed":true},
     "+datasource-update": {"disposition":"schema_leaf","semantic_delta":"更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。","risk":"write","public":true,"reviewed":true},
@@ -143,6 +173,13 @@
     "+form-submit": {"disposition":"semantic_adapter","semantic_delta":"准确表单身份、写后读回；移除题目只隐藏，核对表字段仍存在。","risk":"write","public":true,"reviewed":true},
     "+form-questions-remove": {"disposition":"semantic_adapter","semantic_delta":"准确表单身份、写后读回；移除题目只隐藏，核对表字段仍存在。","risk":"write","public":true,"reviewed":true},
     "+field-run-ai": {"disposition":"semantic_adapter","semantic_delta":"确认目标 AI 字段后提交整列或指定记录任务，回执不冒充计算完成。","risk":"write","public":true,"reviewed":true},
-    "+record-download-attachment": {"disposition":"semantic_adapter","semantic_delta":"从准确记录附件资源定位临时下载地址，校验字节数后原子发布并返回哈希。","risk":"read","public":true,"reviewed":true}
+    "+record-download-attachment": {"disposition":"semantic_adapter","semantic_delta":"从准确记录附件资源定位临时下载地址，校验字节数后原子发布并返回哈希。","risk":"read","public":true,"reviewed":true},
+    "+task-report": {
+      "disposition": "primary_smart",
+      "semantic_delta": "离线读取搭建或 AI 等待检查点，汇总已记录的 CLI 请求、退避、响应编码字节量和显式客户端模型指标；只有同输入、身份、模型、环境且双方结果核验通过才比较。缺失指标保持未知，不查询 MCP、不重触发任务、不宣称端到端提速。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    }
   }
 }

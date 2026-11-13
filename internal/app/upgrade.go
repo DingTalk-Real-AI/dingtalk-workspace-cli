@@ -68,6 +68,8 @@ var (
 	upgradeMkdirTemp                  = os.MkdirTemp
 	upgradeRemoveAll                  = os.RemoveAll
 	upgradeReadFile                   = os.ReadFile
+	upgradeWriteFile                  = os.WriteFile
+	upgradeRename                     = os.Rename
 	upgradeMkdirAll                   = os.MkdirAll
 	verifyUpgradeFile                 = strictVerifyFile
 	extractUpgradeTarGz               = extractTarGz
@@ -773,11 +775,12 @@ func validateNewBinary(binaryPath, expectedVersion string) error {
 	out, err := upgradeTryExecVersion(binaryPath)
 	if err != nil {
 		// Apple Silicon kills unsigned arm64 binaries with SIGKILL via amfid.
-		// Repair the binary in-place (ad-hoc codesign + drop quarantine) and retry once.
+		// Repair a staged copy, atomically replace the binary, and retry once.
 		if upgradeRuntimeGOOS == "darwin" && isLikelyAMFIKill(err) {
-			if repairErr := upgradeRepairDarwin(binaryPath); repairErr == nil {
-				out, err = upgradeTryExecVersion(binaryPath)
+			if repairErr := upgradeRepairDarwin(binaryPath); repairErr != nil {
+				return fmt.Errorf("二进制签名修复失败: %w", repairErr)
 			}
+			out, err = upgradeTryExecVersion(binaryPath)
 		}
 		if err != nil {
 			return fmt.Errorf("二进制无法执行: %w", err)
@@ -807,18 +810,34 @@ func isLikelyAMFIKill(err error) bool {
 	return strings.Contains(msg, "signal: killed") || strings.Contains(msg, "signal: kill")
 }
 
-// repairDarwinBinary applies an ad-hoc codesign and clears the quarantine xattr.
+// repairDarwinBinary signs a fresh inode and atomically replaces the binary.
 // Used as a self-heal step when an unsigned binary is killed by amfid on Apple Silicon.
 func repairDarwinBinary(binaryPath string) error {
-	// Best-effort: strip quarantine. Failure is fine (attribute often absent).
-	_, _ = upgradeCommandOutput("xattr", "-d", "com.apple.quarantine", binaryPath)
-
 	if _, err := upgradeLookPath("codesign"); err != nil {
 		return fmt.Errorf("codesign 不可用: %w", err)
 	}
-	out, err := upgradeCommandOutput("codesign", "--force", "--sign", "-", binaryPath)
+	data, err := upgradeReadFile(binaryPath)
+	if err != nil {
+		return fmt.Errorf("读取待修复二进制失败: %w", err)
+	}
+	stage, err := upgradeMkdirTemp(filepath.Dir(binaryPath), ".dws-codesign-*")
+	if err != nil {
+		return fmt.Errorf("创建签名暂存目录失败: %w", err)
+	}
+	defer upgradeRemoveAll(stage)
+	stagedBinary := filepath.Join(stage, filepath.Base(binaryPath))
+	if err := upgradeWriteFile(stagedBinary, data, 0755); err != nil {
+		return fmt.Errorf("写入签名暂存文件失败: %w", err)
+	}
+	// Do not sign an inode already rejected by the kernel's signature cache.
+	// Failure to remove an absent quarantine attribute remains harmless.
+	_, _ = upgradeCommandOutput("xattr", "-d", "com.apple.quarantine", stagedBinary)
+	out, err := upgradeCommandOutput("codesign", "--force", "--sign", "-", stagedBinary)
 	if err != nil {
 		return fmt.Errorf("codesign 失败: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	if err := upgradeRename(stagedBinary, binaryPath); err != nil {
+		return fmt.Errorf("发布已修复二进制失败: %w", err)
 	}
 	return nil
 }

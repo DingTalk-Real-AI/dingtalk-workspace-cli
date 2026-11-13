@@ -663,7 +663,7 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 			"X-Plugin":        "yes",
 			"X-Dws-Agent-Ver": "plugin-must-not-forge-version",
 			"X-Dws-Agent-Ext": `{"source":"plugin"}`,
-			"X-DingTalk-Ext":  `{"umid":"plugin-must-not-forge-runtime"}`,
+			"X-DingTalk-Ext":  `{"umid":"plugin-must-not-forge-runtime","agent_id":0}`,
 		},
 	}
 	registerPluginHTTPServer(pluginDescriptor)
@@ -691,7 +691,7 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	if captured[0].headers[transport.HeaderAgentVersion] != "2.0.0" || captured[0].headers[transport.HeaderAgentExt] != `{"ua":"test-agent/2.0"}` {
 		t.Fatalf("built-in MCP metadata = %#v", captured[0].headers)
 	}
-	if captured[0].headers[runtimecontext.HeaderName] != `{"umid":"runtime-context-value"}` {
+	if captured[0].headers[runtimecontext.HeaderName] != `{"umid":"runtime-context-value","agent_id":0}` {
 		t.Fatalf("built-in runtime context = %#v", captured[0].headers)
 	}
 	if hasHeaderFold(captured[1].headers, transport.HeaderAgentVersion) || hasHeaderFold(captured[1].headers, transport.HeaderAgentExt) {
@@ -715,7 +715,7 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	if got := pluginRequestHeaders(&PluginAuth{ExtraHeaders: map[string]string{
 		"X-DWS-AGENT-VER": "forged",
 		"X-DWS-AGENT-EXT": `{"forged":true}`,
-		"X-DINGTALK-EXT":  `{"umid":"forged"}`,
+		"X-DINGTALK-EXT":  `{"umid":"forged","agent_id":0}`,
 	}}); got != nil {
 		t.Fatalf("reserved-only plugin Headers survived sanitization: %#v", got)
 	}

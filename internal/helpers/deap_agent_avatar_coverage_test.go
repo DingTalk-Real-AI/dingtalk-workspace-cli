@@ -143,7 +143,7 @@ func TestCrossPlatformCoverageDeapAgentProfileHelpersAndInvalidType(t *testing.T
 	if _, ok := empty["digitalTagEmployeeProfile"]; ok {
 		t.Fatal("empty args must not add a profile key")
 	}
-	if err := deapAgentInvalidMainProgramType(); err == nil || !strings.Contains(err.Error(), "open_code") {
+	if err := deapAgentInvalidMainProgramType(); err == nil || !strings.Contains(err.Error(), "qwenwork") {
 		t.Fatalf("invalid main program type err=%v", err)
 	}
 

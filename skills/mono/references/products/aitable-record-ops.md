@@ -36,9 +36,15 @@ dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids 
 dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --limit 50 --cursor <CURSOR> --format json
 ```
 
+记录复合写入沿用服务端的 fieldId/唯一字段名寻址，CLI 不在写前读取字段目录或改写 cells。回读先直接比较；仅缺少对应字段键或需要类型投影时，才读取 `get_fields`，将校验期望中的字段名精确映射为 fieldId，同一轮校验复用目录。字段目录读取失败、不完整或映射存在歧义时，保留写入回执和已知 recordId，返回非零退出码、unknown 与 verification.status=pending，不代表写入失败，也不自动重发写入；`+record-upsert`、`+record-batch-create` 与按键创建复用有界只读回读重试（500ms、1500ms）；预算耗尽仍报告未确认，不重发写入。目录是写后观测，不能证明与写入时的 schema 原子一致。`+record-upsert-by-key` 的 `--key-field-id` 仍只接受字段 ID，原有唯一键预检不变。dry-run 不新增字段请求；`+record-bulk-patch` 仍查询匹配记录，按键 upsert 仍查询唯一键以生成计划。
+
+## 写入未知结果的只读恢复
+
+含创建的 `+record-upsert` 在发请求前自动生成或保留 `clientToken`，并保存不含 cell 内容的恢复文件；不能将此保证外推到原子 `record create/upsert`。超时后沿回执的原 Base/Table/token 和 `writeIntentFiles` 调用 `+record-write-result --write-intent <原文件>`，不得自动重放创建。unknown 返回 pending，不代表未写入；创建组只读对账，更新组另按原 recordId 回读。身份或端点不匹配时切回原账号/环境，不能删掉参数或修改恢复文件；同账号换证不代表换号，旧文件仍按原版本严格校验。
+
 ## 添加记录
 
-**必须先执行 `table get` 获取 fieldId，再写入。cells 的 key 必须是 fieldId（如 fldXXX），不是字段名。**
+**优先通过 `table get` 获取真实 fieldId 作为 cells 的 key；服务端也支持当前表内唯一字段名，名称需精确匹配。**
 
 ```bash
 # 单条
@@ -62,13 +68,13 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 ### --records 格式常见错误
 
 ```bash
-#  正确: 参数名是 --records，cells key 是 fieldId
+# 推荐写法：参数名是 --records，此例使用真实 fieldId；唯一字段名示例见下方
 --records '[{"cells":{"fldABC":"值"}}]'
 
 # 错误： 参数名写成 --data
 --data '[{"cells":{"fldABC":"值"}}]'
 
-# 错误：  cells key 用了字段名而非 fieldId
+# 唯一字段名也受服务端支持；重名或字段变更时优先使用真实 fieldId
 --records '[{"cells":{"任务名称":"值"}}]'
 
 # 错误：  用 fields 而非 cells

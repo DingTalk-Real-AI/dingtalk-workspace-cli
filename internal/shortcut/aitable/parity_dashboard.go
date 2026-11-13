@@ -5,6 +5,7 @@ package aitable
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -45,6 +46,10 @@ func dashboardCreateShortcut(chart bool) shortcut.Shortcut {
 	}
 	return shortcut.Shortcut{Service: "aitable", Command: command, Product: serverMain, Description: desc, Intent: desc + "；不把组件配置当作计算数据。", Risk: shortcut.RiskWrite, Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"}, Contract: aitableCompositeContractWithResult(command, desc, desc+"时", "需要图表计算数据时不能用配置返回代替；非根容器布局需正式协议", example, parityCompositeResultSpec()), Flags: flags, Execute: func(rt *shortcut.RuntimeContext) error { return executeDashboardCreate(rt, chart) }}
 }
+
+// executeDashboardCreate independently verifies the created Dashboard or Chart
+// before returning it. Receipt navigation only fills missing readback keys;
+// it must neither replace returned values nor promote verification status.
 func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 	cfg := map[string]any{}
 	var err error
@@ -73,6 +78,7 @@ func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 			return e
 		}
 		args["layout"] = layout
+		args["isAppMode"] = rt.Bool("is-app-mode")
 	} else {
 		cfg["name"] = rt.Str("name")
 		if rt.Str("name") == "" {
@@ -131,13 +137,7 @@ func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 		if body["dashboardId"] != args["dashboardId"] {
 			return compositeError(result, fmt.Errorf("chart parent mismatch"), false)
 		}
-		widget, _ := body["widget"].(map[string]any)
-		actual, _ := widget["config"].(map[string]any)
-		if actual == nil {
-			actual, _ = body["config"].(map[string]any)
-		}
-		layout, _ := body["layout"].(map[string]any)
-		if !mapContains(actual, cfg) || !mapContains(layout, args["layout"].(map[string]any)) {
+		if !verifyChartConfiguration(body, cfg, args["layout"].(map[string]any)) {
 			return compositeError(result, fmt.Errorf("chart configuration/layout readback mismatch"), false)
 		}
 	} else {
@@ -155,6 +155,9 @@ func executeDashboardCreate(rt *shortcut.RuntimeContext, chart bool) error {
 	}
 	result.CompletedCount = 1
 	result.Result = body
+	// Keep independently verified facts from readback; a creation receipt may
+	// only fill navigation omitted by an older get_dashboard endpoint.
+	aitablenavigation.Preserve(result.Result, parityResponseObject(raw))
 	result.Verification = map[string]any{"status": "verified", idKey: id}
 	return rt.Output(result)
 }

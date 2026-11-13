@@ -125,6 +125,16 @@ jobs:
               const reviewedPatches = [
                 {
                   repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
+                  number: 1607,
+                  author: 'haofeng0705',
+                  headRef: 'codex/fix-dwsh-6572-sync-1.0.68',
+                  base: '34cbe5c5fd6e2f08bd74f889fcdf367b88426a0f',
+                  head: 'f350e5ca0a412884cfaf99fa48bb7ea3ea9d84df',
+                  count: 112,
+                  protectedPaths: [],
+                },
+                {
+                  repository: 'DingTalk-Real-AI/dingtalk-workspace-cli',
                   number: 1463,
                   author: 'haofeng0705',
                   headRef: 'codex/sync-aitable-public-fixes',

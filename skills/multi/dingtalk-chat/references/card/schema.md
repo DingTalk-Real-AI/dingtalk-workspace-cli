@@ -33,11 +33,16 @@ streaming 不是任意组件 Schema：
 A2UI 原子命令规则：
 
 - `send-a2ui-card` 调用 `im.create_and_send_a2ui_card`。
+- 创建时可选 `--extension '{"scene":"example"}'`，接受 key 非空白、value 为字符串的 JSON 对象并透传为 `extension`；支持 `{}` 和空字符串值。省略时不携带该字段。业务 key 由服务端白名单控制，传入不代表已放行；系统字段保持服务端受控语义。`null`、非字符串值及空白 key 会在发送前拒绝。
+- 隐藏发送者头像：目标环境已将 `hide_avatar` 加入服务端白名单时，创建卡片可传 `--extension '{"hide_avatar":"true"}'`。值是字符串 `"true"`，不是布尔值；它是卡片消息扩展，不放入 A2UI `createSurface`、组件或 surface metadata。未放行时该业务 key 会被过滤，DWS 不会修改白名单；未知 key 的含义须先确认。此扩展不影响服务端生成的系统字段和权限元数据。
 - `update-a2ui-card` 调用 `im.update_a2ui_card`。
 - `--content` 必须是 JSON 字符串数组，元素为 A2UI 协议 JSON，例如
   `'["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]'`；
-  CLI 解析为 `a2uiMessages`，send-a2ui-card 额外生成 `summary`，值为数组元素按换行拼接
-  （真实 MCP 契约无 `fallbackText` 字段）。
+  CLI 解析为 `a2uiMessages`；`--summary` 写入顶层 `summary`，作为卡片无法渲染时的降级文案，
+  省略时为 `互动卡片`，显式空白校验失败。不要传 `fallbackText`，也不要在 `createSurface` 中加 `summary`。
+- 创建时 `--support-forward` 写入顶层布尔值 `supportForward`，默认 `true`；显式 `--support-forward=false` 保持禁止转发，不要包在 `cardProperty` 中。
+- `FINISH`/`CONFIRMING`/`CONFIRMED` 后，服务端按 `artifact` 注解异步生成会话摘要，无可提取产物时写入默认文案；
+  `update-a2ui-card` 没有摘要参数，更新受理不代表摘要已生成。
 - 群聊目标写入顶层 `openConversationId`；单聊目标写入顶层 `receiverOpenDingTalkId`
   （传入 userId 时由 CLI 自动解析转换为 openDingTalkId）。
 - A2UI wire 层 `flowStatus` 为字符串枚举；CLI `--flow-status` 接受枚举名和兼容数字 1–9：
@@ -47,8 +52,9 @@ A2UI 原子命令规则：
   `protocolVersion="1.0"`；创建默认 `flowStatus=PROCESSING`。
 - 两个 A2UI 命令均支持可选 `--a2ui-annotations`，接受 JSON 对象数组并透传为
   `a2uiAnnotations`。省略时创建请求不携带该字段，更新请求保持发送 `[]`。
-- A2UI 命令不提供 `--at-open-dingtalk-ids` / `--at-all`；@ 仅 streaming
-  `send-card` 群聊可用。
+- A2UI 创建命令支持群聊 `--at-open-dingtalk-ids` / `--at-all`，分别透传为
+  `atOpenDingTalkIds` / `atAll`；单聊不接受通知参数。更新命令不提供这些参数，
+  不新增通知；通知与正文绑定规则见 [A2UI 指南](a2ui.md)。
 
 参数、required 和 confirmation 读取
 `dws schema --cli-path "chat +messages-send-card" --compact -f json` 或

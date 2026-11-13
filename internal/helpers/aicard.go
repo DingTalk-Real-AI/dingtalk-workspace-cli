@@ -22,17 +22,17 @@ func newAicardCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "Look up contracts, validate structure, or preview a card to yourself when creating an A2UI file",
-			UseWhen:      []string{"Create or modify a DingTalk A2UI card file"},
+			AgentSummary: "Author and validate A2UI files, preview a card, or create, retrieve and revise cloud template assets",
+			UseWhen:      []string{"Create or modify a DingTalk A2UI card file", "Manage a cloud A2UI template by template ID and version"},
 			AvoidWhen:    []string{"Use chat for ordinary messages"},
 		},
 	})
 	root := newGroupCommand(&cobra.Command{
-		Use: "aicard", Short: "Inspect, validate, and preview DingTalk A2UI cards",
-		Long: "Look up field contracts by name, validate files offline, or send a card to the signed-in user. See the dingtalk-aicard Skill for authoring guidance.",
+		Use: "aicard", Short: "Inspect, validate, preview, and manage DingTalk A2UI templates",
+		Long: "Look up field contracts, validate files offline, preview a card, or manage cloud template assets. Template operations do not send or update a card instance. See the dingtalk-aicard Skill for authoring guidance.",
 		RunE: groupRunE, SuggestionsMinimumDistance: 2,
 	})
-	root.AddCommand(newAicardLintCommand(), newAicardExplainCommand(), newAicardPreviewCommand())
+	root.AddCommand(newAicardLintCommand(), newAicardExplainCommand(), newAicardPreviewCommand(), newAicardTemplateCommand())
 	return root
 }
 
@@ -41,7 +41,8 @@ func newAicardLintCommand() *cobra.Command {
 		Use: "lint", Short: "Validate A2UI syntax and protocol structure",
 		Long: `Check JSON syntax and the bundled A2UI protocol offline, including DingTalk extensions, field names, required fields, types, and enums.
 Use --preflight new-card or resources for explicit offline checks; valid still represents only the Schema result, while preflight has its own result.
-General lint does not check reference closure. The new-card preflight also checks the final snapshot root, reachable references, duplicate IDs within a message, and static cycles; unreachable components produce warnings.
+General lint does not check reference closure. The new-card preflight also checks the final snapshot root, reachable references, duplicate IDs within a message, multiple parents, repeated child slots, shared template sources, static/template overlap, and static cycles; unrelated unreachable components produce warnings. Template source constraints apply even with empty arrays. Dynamic expansion remains unverified.
+Resource preflight rejects literal data URLs in resource fields. Markdown data: text produces a nonblocking review warning; Markdown is not parsed. Prefer verified HTTPS assets; bindings and loading remain unverified.
 Binding initial values, template expansion, function results, and design effects still need runtime verification. Python, an installed Skill, and a Profile are not required.
 Specify exactly one of --file and --self-check. --emit and --fragment require --file and are mutually exclusive.
 Successful results are in data; structural failures exit nonzero and report details in error.details. Passing does not prove client rendering.`,
@@ -52,6 +53,7 @@ Successful results are in data; structural failures exit nonzero and report deta
 	cmd.Flags().Bool("self-check", false, "Check the embedded protocol, index, and local references")
 	cmd.Flags().Bool("fragment", false, "Accept a single component, component array, or message; incompatible with --emit")
 	cmd.Flags().String("preflight", "", "Run new-card or resources preflight after structural validation; does not send")
+	cmd.Flags().StringSlice("at-open-dingtalk-ids", nil, "Declared mention openDingTalkIds (sent as atOpenDingTalkIds); preflight also checks <a atId> consistency and IM-style <@id> misuse (requires --preflight)")
 	cmd.Flags().Bool("emit", false, "On success, return a JSON string array in data.a2uiMessages; write no file")
 	runtimeannotate.AnnotateRuntimeConstraints(cmd, runtimeannotate.RuntimeSchemaConstraints{
 		RequireOneOf:      [][]string{{"file", "self-check"}},
@@ -111,13 +113,16 @@ func newAicardPreviewCommand() *cobra.Command {
 The file must include createSurface and the public catalogId; this command does not modify the source file.
 --dry-run checks only the local file; it neither resolves an identity nor sends. Request acceptance does not prove delivery or rendering.
 Any openTaskId in the card receipt is not valid for chat message query-send-status; this command reports request acceptance only.
-The send API uses PROCESSING status. For a completed static preview, use chat message update-a2ui-card with the returned bizId, a nonempty state-preserving delta for the same Surface, and --flow-status FINISH. bizCardId is a request-side identifier, not an update ID. If bizId is absent, inspect updateWarning; do not create another card automatically.
+The send API uses PROCESSING status. --summary is the fallback text shown where the card cannot render; it is not the conversation summary of a finished card.
+For a completed static preview, use chat message update-a2ui-card with the returned bizId, a nonempty state-preserving delta for the same Surface, --a2ui-annotations identifying the public artifact components, and --flow-status FINISH. When enabled, the server asynchronously builds the final summary from these artifacts; acceptance does not verify that summary.
+bizCardId is a request-side identifier, not an update ID. If bizId is absent, inspect updateWarning; do not create another card automatically.
 Card buttons may still trigger real business actions. This command accepts no other recipient.`,
 		Example: "  dws aicard preview --file card.a2ui.json --dry-run\n  dws aicard preview --file card.a2ui.json --summary \"Card preview\"",
 		Args:    cobra.NoArgs, RunE: runAicardPreview,
 	}
 	cmd.Flags().String("file", "", "Path to a complete new-card A2UI message-array JSON file")
-	cmd.Flags().String("summary", "Card preview", "Conversation-list summary")
+	cmd.Flags().String("summary", "Card preview", "Fallback summary shown where the card cannot render")
+	cmd.Flags().Bool("support-forward", false, "Allow forwarding the preview card (default false)")
 	_ = cmd.MarkFlagRequired("file")
 	runtimeannotate.AnnotateRuntimeRequiredFlags(cmd, "file")
 	DeclareLeafMetadata(cmd, LeafSpec{
@@ -132,7 +137,7 @@ Card buttons may still trigger real business actions. This command accepts no ot
 				AvoidWhen:    []string{"Use aicard lint to check only the file; use chat message send-a2ui-card for another person or a group"},
 				Examples:     []string{"dws aicard preview --file card.a2ui.json", "dws aicard preview --file card.a2ui.json --dry-run"},
 			},
-			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success", "failure"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"preflight":{"type":"object","description":"Offline resource and delivery diagnostics, including compatibility warnings"},"requestAccepted":{"type":"boolean","description":"Whether the server explicitly accepted the send request"},"deliveryVerified":{"type":"boolean","description":"Whether delivery was confirmed by readback; false for this command"},"renderingVerified":{"type":"boolean","description":"Whether client rendering evidence exists; false for this command"},"flowStatus":{"type":"string","description":"Lifecycle status at send time"},"requestId":{"type":"string","description":"Identifier for this send request"},"bizCardId":{"type":"string","description":"Request-side business identifier; never use it as --biz-id for updates"},"bizId":{"type":"string","description":"Server-issued receipt.result.bizId for --biz-id updates and FINISH; omitted when unavailable or invalid"},"updateWarning":{"type":"string","description":"Accepted creation lacks a usable update ID; inspect the receipt without automatically creating another card"},"receipt":{"type":"object","description":"Server receipt, including available card and task identifiers"},"executed":{"type":"boolean","description":"Whether the send API was actually called"}}}`)},
+			Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success", "failure"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"preflight":{"type":"object","description":"Offline resource policy and delivery diagnostics"},"requestAccepted":{"type":"boolean","description":"Whether the server explicitly accepted the send request"},"deliveryVerified":{"type":"boolean","description":"Whether delivery was confirmed by readback; false for this command"},"renderingVerified":{"type":"boolean","description":"Whether client rendering evidence exists; false for this command"},"flowStatus":{"type":"string","description":"Lifecycle status at send time"},"summary":{"type":"string","description":"Fallback text supplied at creation and shown where the card cannot render"},"supportForward":{"type":"boolean","description":"Whether forwarding was requested at creation; false by default"},"requestId":{"type":"string","description":"Identifier for this send request"},"bizCardId":{"type":"string","description":"Request-side business identifier; never use it as --biz-id for updates"},"bizId":{"type":"string","description":"Server-issued receipt.result.bizId for --biz-id updates and FINISH; omitted when unavailable or invalid"},"updateWarning":{"type":"string","description":"Accepted creation lacks a usable update ID; inspect the receipt without automatically creating another card"},"receipt":{"type":"object","description":"Server receipt, including available card and task identifiers"},"executed":{"type":"boolean","description":"Whether the send API was actually called"}}}`)},
 		},
 	})
 	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)

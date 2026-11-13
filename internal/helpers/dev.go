@@ -37,6 +37,10 @@ func init() {
 //	             product; `dws devdoc` keeps working independently)
 //	dev mcp      MCP service, tool, auth, credential, and collaborator
 //	             authoring
+//	dev event    app-produced personal event definition configuration
+//	             (draft create/edit, static validate, controlled debug,
+//	             publish, offline). Distinct from `dev app event`, which
+//	             manages the DingTalk callback events an app *receives*.
 //
 // Future developer capabilities join as new subtrees here instead of new
 // top-level commands.
@@ -55,23 +59,28 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 			RelatedSkills: []string{"dingtalk-misc"},
 			Documentation: []contract.HelpDocumentation{
 				contract.SkillDocumentation("开放平台应用深度指南", "dingtalk-misc", "references/devapp.md"),
+				contract.SkillDocumentation("轻应用命令参考", "dingtalk-misc", "references/dev/liteapp.md"),
+				contract.SkillDocumentation("应用事件定义配置指南", "dingtalk-misc", "references/dev/event-definition.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理开放平台应用、权限、机器人、版本发布、本地连接器与 MCP 开发配置",
+			AgentSummary: "管理开放平台应用、轻应用、权限、机器人、版本发布、本地连接器与 MCP 开发配置",
 			UseWhen: []string{
 				"创建/配置开放平台应用、机器人、权限、事件订阅、MCP 服务工具或发布版本",
+				"用户要在当前组织创建一个创建即发布的轻应用（快捷入口 + OAuth），或管理自己创建的轻应用",
 				"把 OpenAPI、Swagger、Postman、curl 或 HTTP 接口转换成 MCP 工具供 Agent 使用",
+				"配置企业自建应用产生的个人事件定义（草稿、校验、调试、启用、下线）",
 			},
 			AvoidWhen: []string{
 				"只查开放平台文档用 devdoc；业务聊天/邮信用 chat/mail",
+				"应用接收钉钉回调事件的订阅管理用 dev app event；个人事件监听消费用 event",
 			},
 		},
 	})
 	root := &cobra.Command{
 		Use:               "dev",
 		Short:             "开放平台开发者能力",
-		Long:              "钉钉开放平台开发者命令组：应用生命周期管理（app）、机器人本地调试建联（connect）、开发文档搜索（doc）与 MCP 服务工具配置（mcp）。",
+		Long:              "钉钉开放平台开发者命令组：应用生命周期管理（app）、轻应用开发（liteapp）、机器人本地调试建联（connect）、开发文档搜索（doc）、MCP 服务工具配置（mcp）与应用事件定义配置（event）。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -96,9 +105,11 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 
 	root.AddCommand(
 		newDevAppCommand(runner),
+		newLiteappGroup(runner),
 		newDevAppRobotConnectCommand(runner),
 		doc,
 		newDevMCPCommand(runner),
+		newDevEventCommand(runner),
 	)
 	return root
 }

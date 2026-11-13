@@ -11,7 +11,7 @@
 | 任务 | Reference |
 |---|---|
 | ASR、上传恢复、异步生成、录音收尾、批量权限 | [07-minutes.md](07-minutes.md) |
-| 发言人/文本替换、媒体下载、离线导出、标签等低频意图 | [intent-guide.md](intent-guide.md) |
+| 纪要模板、发言人/文本替换、媒体下载、离线导出、标签等低频意图 | [intent-guide.md](intent-guide.md) |
 | 总结指定发言人的内容并处理匿名发言人候选 | [10-minutes-speaker-match.md](10-minutes-speaker-match.md) |
 | 用户确认对应关系后的发言人标注与替换 | [11-minutes-speaker-correct.md](11-minutes-speaker-correct.md) |
 | 兼容旧调用方式的轻量 Recipe 索引 | [lite-recipes.md](lite-recipes.md) |
@@ -27,6 +27,8 @@
 | [format_timestamp.py](../scripts/format_timestamp.py) | 本地批量转换时间戳、时区和星期 | 不调用 DWS；显式提供 `s/ms` 和 IANA 时区，不处理时长或相对周范围 |
 
 摘要脚本的 `--dry-run` 只打印计划且不得调用 DWS；DWS 失败、非法 JSON 与合法空结果必须分开。摘要脚本没有覆盖完整分页、目标消歧与跨 scope 聚合，因此不能用它的输出声称“全部听记”。时间转换脚本始终纯本地，不提供或需要 `--dry-run`。行动项读取由 `+action-items`（单条）或 `+detail --ids ... --artifacts todos`（多条）承接，不再发布重复脚本。
+
+本页的思维导图命令仅生成听记内置产物；独立 .amind 文件创建和主题编辑走 dingtalk-misc 的 mind reference，不因提供听记 URL 而改变明确的独立文件目标。
 
 命令前缀统一为 `dws minutes`。结构化读取加 `--format json`；参数不确定时查询精确 leaf：
 
@@ -210,15 +212,34 @@ dws minutes permission apply --id <taskUuid> --policy 4
 
 当前没有公开权限读取接口，因此权限写入成功最多证明服务端接受了这次写调用。交付边界按 `verification.mode=write_ack_only`、`verified=false` 表述；这两个值描述证据等级，不代表 Runtime 一定已经返回同名字段。`+share/+unshare` 的逐成员 `complete` ledger 仍只是写入回执，不能声称已读回最终权限状态。
 
-## 9. 标签与语音备忘
+## 9. 纪要模板、标签与语音备忘
+
+以下均为原子命令，前缀为 `dws`；写入前确认用户意图和唯一目标，并遵循 leaf Schema 的 Runtime confirmation。
+
+| 模板命令 | 用途与参数 |
+|---|---|
+| `minutes template list-system [--locale zh_CN] [--limit 20] [--cursor <token>]` | 查询系统模板目录，每页1–50条，返回 templateId、标题和简介 |
+| `minutes template list-custom [--limit 5] [--cursor <token>]` | 查询当前用户个人模板，每页1–10条，返回 templateKey、完整提示词及版本 |
+| `minutes template create --title "<标题>" --prompt "<提示词>" [--brief-intro "<简介>"]` | 创建个人模板；提示词保留空格和换行，不自动设为默认 |
+| `minutes template update --template-key <key> [--title "<标题>"] [--prompt "<提示词>"] [--brief-intro "<简介>"]` | 至少显式提供一个更新字段；省略保留旧值，空简介也保留旧简介 |
+| `minutes template delete --template-key <key>` | 幂等删除本人个人模板；不删除已有听记，也不清除默认模板设置 |
+| `minutes template set-default --template-id <id>` 或 `--template-key <key>` | 官方与个人模板二选一，不传空串，官方ID不能填 diy；可选 --locale |
+
+模板列表每次只返回一页；依据 `meta.pagination.endpoint_exhausted` 判断续页，用 `meta.pagination.next_token` 原样传入 `--cursor`。即使 items 为空也可能有下一页；系统模板续页保持相同 locale。标题非空白且最多150个UTF-16单元，提示词非空白并原样传递，最大长度由服务端校验。创建结果不确定时先 list-custom 核对，不自动重复创建；`version=0` 有效。删除结果 `wasDefault=null` 表示原默认状态未知；设置官方默认时 `templateKey=null` 有效。模板维护和默认设置只影响后续听记，不修改已有听记内容。
 
 | 原子命令 | 用途 |
 |---|---|
 | `minutes tag list` | 列出当前用户的听记标签，取得真实 tagId |
 | `minutes tag query --tag-id <tagId>` | 查询标签下的听记并按真实 token 翻页 |
+| `minutes tag create --display-name "<名称>"` | 创建本人自定义标签，名称非空白、最多50个UTF-16单元；返回真实 tagId，不自动关联听记 |
+| `minutes tag delete --tag-id <tagId>` | 删除本人标签定义并异步清理全部关联；不撤回已同步的知识库文件 |
+| `minutes tag add --id <taskUuid> --tag-ids <tagId1,tagId2> [--locale zh]` | 增量添加本人自定义标签，保留已有标签，可能触发已配置的知识库同步 |
+| `minutes tag remove --id <taskUuid> --tag-ids <tagId1,tagId2>` | 只移除这一条听记的标签关联，不删除标签定义 |
 | `minutes audio-memo list` | 查询语音备忘；具体范围和分页参数读取 leaf Schema |
 
-这些是长尾只读入口，不在根 Skill 展开。tagId 必须来自真实 `tag list`，不能按标签名猜 ID。
+tagId 必须来自真实 `tag list` 或 `tag create`，不能按标签名猜 ID。关联操作每次原始输入1–20项，首尾去空白后按首次出现顺序去重；添加后关联总数最多20个，只能操作本人自定义标签。创建同名推荐标签可能先删除原推荐标签，失败不恢复；系统或推荐标签不能通过 delete 删除。
+
+批量关联在首个失败处停止，已成功项不回滚。`APPLIED/UNCHANGED` 是已确认成功，`FAILED` 表示写结果未确认，`NOT_PROCESSED` 表示未执行；按实际统一输出的 succeeded/failed/unknown 逐项处理。有成功项且仍有失败或未知项时返回 partial_failure；无成功项返回 failure。保留回执，先查询实际状态，禁止重放整批或把外层成功解释为全部完成。
 
 ## 10. 结果与错误底线
 

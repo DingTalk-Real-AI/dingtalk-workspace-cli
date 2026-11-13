@@ -448,13 +448,17 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"},
 		contract.ParamDecl{Name: "start-block-id", Property: "startBlockId"},
 		contract.ParamDecl{Name: "end-block-id", Property: "endBlockId"},
+		contract.ParamDecl{Name: "force", Property: "force", InterfaceType: "boolean"},
+		contract.ParamDecl{Name: "suggestion", Property: "suggestion", InterfaceType: "boolean"},
 		contract.ParamDecl{Name: "src-block-ids", Property: "srcBlockIds"},
 		contract.ParamDecl{Name: "doc", Property: "node"},
 		contract.ParamDecl{Name: "text", Property: "content"}),
 	Flags: []shortcut.Flag{
+		{Name: "force", Type: shortcut.FlagBool, Desc: "允许全文覆盖使本人待处理建议失效；独立于 --yes"},
+		{Name: "suggestion", Type: shortcut.FlagBool, Hidden: true, Desc: "仅块插入/替换：请求服务端建议模式；未命中服务端灰度时按普通写入执行"},
 		{Name: "src-block-ids", Type: shortcut.FlagString, Desc: "仅block_copy_insert_after可用的逗号分隔源ID；与block-id同时提供须相同"},
-		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围起点；与end-block-id成对，0表示第一块"},
-		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围终点（含），-1表示最后块；最多50块"},
+		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围起点；与end-block-id成对"},
+		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围终点（含）；使用真实块 UUID"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
 		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, Aliases: []string{"text"}, AliasesVisible: true},
@@ -465,7 +469,7 @@ var Update = shortcut.Shortcut{
 		{Name: "heading-level", Type: shortcut.FlagInt, Desc: "将插入内容写为指定级别标题（1-6）；仅支持 Markdown block_insert_before/block_insert_after"},
 		{Name: "old", Type: shortcut.FlagString, Desc: "str_replace 原文字，不能为空"},
 		{Name: "new", Type: shortcut.FlagString, Desc: "str_replace 新文字；--old 不能为空，新值可为空但参数必须显式提供"},
-		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "仅 overwrite+jsonml：传给服务端执行原子 revision 条件写"},
+		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "仅 overwrite+jsonml：沿服务端既有路径校验 revision 条件"},
 	},
 	Tips: []string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_insert_before --before-block-id <BLOCK_ID> --content "发布说明" --heading-level 1`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
@@ -484,6 +488,12 @@ var Update = shortcut.Shortcut{
 			return err
 		}
 		command := rt.Str("command")
+		if rt.Bool("suggestion") && command != "block_insert_before" && command != "block_insert_after" && command != "block_replace" {
+			return apperrors.NewValidation("--suggestion 仅支持块插入和替换")
+		}
+		if rt.Bool("force") && command != "overwrite" {
+			return apperrors.NewValidation("--force 仅支持全文 overwrite")
+		}
 		if rt.StrFirst("node", "doc") == "" {
 			return apperrors.NewValidation("缺少 --node")
 		}
@@ -548,8 +558,9 @@ var CheckpointUpdate = shortcut.Shortcut{
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: docContract("+checkpoint-update", "先保存可回滚版本，再更新并读回验证",
 		"当用户要进行重要追加或整篇覆盖，并希望自动创建恢复点、执行更新、再读回确认时使用；任一步失败都会返回已经完成的步骤。",
-		[]string{`dws doc +checkpoint-update --node <DOC_ID> --mode append --content @section.md`, `dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @document.md`}),
+		[]string{`dws doc +checkpoint-update --node <DOC_ID> --mode append --content @section.md`, `dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @document.md`}, contract.ParamDecl{Name: "force", Property: "force", InterfaceType: "boolean"}),
 	Flags: []shortcut.Flag{
+		{Name: "force", Type: shortcut.FlagBool, Desc: "仅全文覆盖：允许使本人待处理建议失效；独立于 --yes"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "mode", Type: shortcut.FlagString, Default: "append", Desc: "更新模式", Enum: []string{"append", "overwrite"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription, Required: true},
@@ -591,7 +602,11 @@ var CheckpointUpdate = shortcut.Shortcut{
 			if len(chunks) > 1 {
 				stepName = fmt.Sprintf("update_chunk_%d", index+1)
 			}
-			if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": rt.Str("node"), "markdown": chunk, "mode": mode}); err != nil {
+			params := map[string]any{"nodeId": rt.Str("node"), "markdown": chunk, "mode": mode}
+			if mode == "overwrite" {
+				params["force"] = rt.Bool("force")
+			}
+			if _, err := rt.CallMCPWriteData(productDoc, "update_document", params); err != nil {
 				return checkpointPartialWriteError(rt.Str("node"), checkpoint, stepName, "doc_checkpoint_update_failed", err,
 					append(steps, map[string]any{"name": stepName, "status": "failed"}, map[string]any{"name": "verify", "status": "not_started"}))
 			}
@@ -684,12 +699,16 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
+	jsonmlSequence := false
 	if rt.Str("doc-format") == "jsonml" && content != "" {
 		switch command {
 		case "overwrite":
 			content, err = validateJSONMLBody(rt.Command(), content)
 		case "block_insert_before", "block_insert_after", "block_replace":
-			content, err = validateJSONMLNode(rt.Command(), content)
+			content, jsonmlSequence, err = helpers.PrepareDocJSONMLBlockInput(rt.Command(), content)
+			if err != nil {
+				err = shortcutJSONMLValidationError(err)
+			}
 		}
 		if err != nil {
 			return err
@@ -697,7 +716,7 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 	}
 	nodeID := rt.StrFirst("node", "doc")
 	if command == "block_replace" && rt.Str("start-block-id") != "" {
-		return executeDocRangeReplace(rt, nodeID, content)
+		return executeDocRangeReplace(rt, nodeID, content, jsonmlSequence)
 	}
 	if command == "block_delete" && rt.Str("start-block-id") != "" {
 		return executeDocRangeDelete(rt, nodeID)
@@ -721,6 +740,9 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 	switch command {
 	case "append", "overwrite":
 		params := map[string]any{"nodeId": node, "mode": command}
+		if command == "overwrite" {
+			params["force"] = rt.Bool("force")
+		}
 		if rt.Str("doc-format") == "jsonml" {
 			if command == "append" {
 				return apperrors.NewValidation("JSONML 当前不支持 append")
@@ -742,6 +764,21 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			referenceBlockID = rt.Str("before-block-id")
 		}
 		params := map[string]any{"nodeId": node, "referenceBlockId": referenceBlockID, "where": where}
+		if rt.Bool("suggestion") && rt.Changed("heading-level") {
+			params["suggestion"] = true
+			params["element"] = map[string]any{"blockType": "heading", "heading": map[string]any{"text": content, "level": strconv.Itoa(rt.Int("heading-level"))}}
+			result, err := rt.CallMCPWriteData(productDoc, "insert_document_block", params)
+			if err != nil {
+				return docUnknownWriteError("doc.update", "insert_document_block", node, err)
+			}
+			return rt.Output(docEnvelope("doc.update", result))
+		}
+		if !rt.Changed("heading-level") && (rt.Str("doc-format") == "markdown" || jsonmlSequence || rt.Bool("suggestion")) {
+			if rt.Str("doc-format") == "jsonml" && !jsonmlSequence {
+				content = "[" + content + "]"
+			}
+			return executeDocBlockSequence(rt, "insert_document_block", params, content)
+		}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
 		} else if rt.Changed("heading-level") {
@@ -758,6 +795,12 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		blockID := rt.Str("block-id")
 		verificationFormat := blockVerificationFormat(rt.Str("doc-format"))
 		params := map[string]any{"nodeId": node, "blockId": rt.Str("block-id")}
+		if rt.Str("doc-format") == "markdown" || jsonmlSequence || rt.Bool("suggestion") {
+			if rt.Str("doc-format") == "jsonml" && !jsonmlSequence {
+				content = "[" + content + "]"
+			}
+			return executeDocBlockSequence(rt, "update_document_block", params, content)
+		}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
 		} else {

@@ -512,6 +512,45 @@ func TestCrossPlatformCoverageBuildArgsIntZeroBoolUnsetSliceEmpty(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageBuildArgsDeclaredBooleanDefaultPreservesExplicitChoice(t *testing.T) {
+	for _, tc := range []struct {
+		name, flag, value string
+		want              bool
+	}{
+		{name: "omitted sends strict false"},
+		{name: "explicit true", flag: "protect", value: "true", want: true},
+		{name: "explicit false", flag: "protect", value: "false"},
+		{name: "alias true", flag: "p", value: "true", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := []FlagSpec{{Name: "protect", Kind: KindBool, Bind: "allowBestEffort", Default: "false", ArgDefault: "false", Aliases: []string{"p"}}}
+			cmd := newTestCommand()
+			RegisterFlags(cmd, flags)
+			if tc.flag != "" {
+				if err := cmd.Flags().Set(tc.flag, tc.value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			args, err := BuildArgs(cmd, flags)
+			if err != nil || args["allowBestEffort"] != tc.want {
+				t.Fatalf("args=%#v err=%v want=%v", args, err, tc.want)
+			}
+			if tc.flag == "" && flagNameProvided(cmd, flags[0]) {
+				t.Fatal("payload default became an explicit choice for presence constraints")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageBuildArgsRejectsMalformedBooleanDefault(t *testing.T) {
+	flags := []FlagSpec{{Name: "protect", Kind: KindBool, ArgDefault: "not-a-bool"}}
+	cmd := newTestCommand()
+	RegisterFlags(cmd, flags)
+	if _, err := BuildArgs(cmd, flags); err == nil || !strings.Contains(err.Error(), "ArgDefault") {
+		t.Fatalf("malformed declaration default accepted: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageBuildArgsTransformAndErrors(t *testing.T) {
 	// Transform result is bound
 	ok := []FlagSpec{{Name: "csv", Usage: "C", Bind: "list", Transform: func(raw string) (any, error) {

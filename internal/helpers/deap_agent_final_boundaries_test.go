@@ -37,12 +37,13 @@ func TestCrossPlatformCoverageEmployeeSupervisorFinalFailures(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer lock.Release()
-				limited, stop := context.WithTimeout(ctx, 20*time.Millisecond)
-				defer stop()
 				cmd := newDeapConnectCommand()
-				cmd.SetContext(limited)
 				_ = cmd.Flags().Set("agent-uuid", cfg.Binding.AgentUUID)
 				_ = cmd.Flags().Set("channel", cfg.Binding.Channel)
+				// 命令声明初始化不属于锁等待；覆盖率和 GC 开销不能提前耗尽锁测试窗口。
+				limited, stop := context.WithTimeout(ctx, 250*time.Millisecond)
+				defer stop()
+				cmd.SetContext(limited)
 				if err := runDigitalEmployeeSaved(cmd); err == nil {
 					t.Fatal("occupied activation ignored")
 				}

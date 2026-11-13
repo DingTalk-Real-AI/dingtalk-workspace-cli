@@ -117,6 +117,91 @@ type dwsSubListResult struct {
 	List     []dwsSubscription `json:"list"`
 }
 
+type Event struct {
+	EventKey             string `json:"event_key"`
+	Name                 string `json:"name,omitempty"`
+	Category             string `json:"category,omitempty"`
+	EventSource          string `json:"event_source,omitempty"`
+	Description          string `json:"description,omitempty"`
+	ProducerUnifiedAppID string `json:"producer_unified_app_id,omitempty"`
+	Scope                string `json:"scope,omitempty"`
+}
+
+func (e *Event) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		EventKey             string `json:"eventKey"`
+		EventKeySnake        string `json:"event_key"`
+		Name                 string `json:"name"`
+		Category             string `json:"category"`
+		EventSource          string `json:"eventSource"`
+		EventSourceSnake     string `json:"event_source"`
+		Description          string `json:"description"`
+		ProducerUnifiedAppID string `json:"producerUnifiedAppId"`
+		ProducerSnake        string `json:"producer_unified_app_id"`
+		Scope                string `json:"scope"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	e.EventKey = firstNonEmpty(raw.EventKey, raw.EventKeySnake)
+	e.Name = strings.TrimSpace(raw.Name)
+	e.Category = strings.TrimSpace(raw.Category)
+	e.EventSource = firstNonEmpty(raw.EventSource, raw.EventSourceSnake)
+	e.Description = strings.TrimSpace(raw.Description)
+	e.ProducerUnifiedAppID = firstNonEmpty(raw.ProducerUnifiedAppID, raw.ProducerSnake)
+	e.Scope = strings.TrimSpace(raw.Scope)
+	return nil
+}
+
+type dwsEventListCategory struct {
+	Category string  `json:"category"`
+	Events   []Event `json:"events"`
+}
+
+type dwsEventListResult struct {
+	Total      int                    `json:"total"`
+	Categories []dwsEventListCategory `json:"categories"`
+	Items      []Event                `json:"items"`
+	List       []Event                `json:"list"`
+}
+
+func (r *dwsEventListResult) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	if data[0] == '[' {
+		return json.Unmarshal(data, &r.Items)
+	}
+	type alias dwsEventListResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = dwsEventListResult(decoded)
+	return nil
+}
+
+func (r dwsEventListResult) events() []Event {
+	items := make([]Event, 0)
+	for _, category := range r.Categories {
+		for _, event := range category.Events {
+			if event.Category == "" {
+				event.Category = category.Category
+			}
+			items = append(items, event)
+		}
+	}
+	if len(items) == 0 {
+		if r.Items != nil {
+			items = append(items, r.Items...)
+		} else {
+			items = append(items, r.List...)
+		}
+	}
+	return items
+}
+
 // timestampText 保留服务端原值，兼容字符串时间与整数毫秒时间戳。
 type timestampText string
 
@@ -239,6 +324,176 @@ func (c *Client) GetSubscription(ctx context.Context, subscribeID string) (*Subs
 		return nil, &APIError{Code: "PERSONAL_EVENT_NOT_FOUND", Message: "subscription not found"}
 	}
 	return &subs[0], nil
+}
+
+// Server-side ServiceResult error codes used by the event catalog and schema
+// endpoints; callers branch on these instead of matching message text.
+const (
+	ErrorCodeEventNotAvailable        = "EVENT_NOT_AVAILABLE"
+	ErrorCodeSchemaNotAvailable       = "SCHEMA_NOT_AVAILABLE"
+	ErrorCodeSchemaVersionNotFound    = "SCHEMA_VERSION_NOT_FOUND"
+	ErrorCodeIllegalParameter         = "ILLEGAL_PARAMETER"
+	ErrorCodeSystemError              = "SYSTEM_ERROR"
+	ErrorCodeRemoteServiceUnavailable = "REMOTE_SERVICE_UNAVAILABLE"
+)
+
+func (c *Client) ListEvents(ctx context.Context) ([]Event, error) {
+	var result dwsEventListResult
+	if err := c.do(ctx, http.MethodGet, "/event/list", nil, nil, &result); err != nil {
+		return nil, err
+	}
+	return dedupeEvents(result.events()), nil
+}
+
+// CatalogOptions filters GET /event/catalog. Category uses the server-side
+// taxonomy ("appEvent" selects application events only). SourceType selects
+// the data source ("official" or "appEvent"); empty queries both.
+type CatalogOptions struct {
+	ProducerUnifiedAppID string
+	Category             string
+	Keyword              string
+	SourceType           string
+}
+
+const (
+	eventCatalogPageSize      = 100
+	eventCatalogMaxPagesGuard = 100
+
+	// CatalogSourceTypeAppEvent restricts the remote catalog to organization
+	// app events; official events are served from the CLI built-in registry.
+	CatalogSourceTypeAppEvent = "appEvent"
+)
+
+// ListCatalog reads the event catalog over the pagination protocol until the
+// reported total is reached. Callers choose the source via CatalogOptions
+// (the CLI queries app events only and serves official events locally).
+// Duplicate eventKeys keep the first occurrence; the server already prefers
+// official events when both sources expose the same key.
+func (c *Client) ListCatalog(ctx context.Context, opts CatalogOptions) ([]Event, error) {
+	var events []Event
+	for page := 1; ; page++ {
+		q := make(url.Values)
+		q.Set("pageNo", strconv.Itoa(page))
+		q.Set("pageSize", strconv.Itoa(eventCatalogPageSize))
+		if id := strings.TrimSpace(opts.ProducerUnifiedAppID); id != "" {
+			q.Set("producerUnifiedAppId", id)
+		}
+		if category := strings.TrimSpace(opts.Category); category != "" {
+			q.Set("category", category)
+		}
+		if keyword := strings.TrimSpace(opts.Keyword); keyword != "" {
+			q.Set("keyword", keyword)
+		}
+		if source := strings.TrimSpace(opts.SourceType); source != "" {
+			q.Set("sourceType", source)
+		}
+		var result dwsEventListResult
+		if err := c.do(ctx, http.MethodGet, "/event/catalog", q, nil, &result); err != nil {
+			return nil, err
+		}
+		pageEvents := result.events()
+		if len(pageEvents) == 0 {
+			if result.Total == 0 || len(events) >= result.Total {
+				break
+			}
+			return nil, fmt.Errorf("personal event: catalog pagination incomplete: got %d/%d events", len(events), result.Total)
+		}
+		events = append(events, pageEvents...)
+		if result.Total > 0 && len(events) >= result.Total {
+			break
+		}
+		// 与订阅列表分页一致的 fail-closed：页数耗尽仍未见 Total/空页，
+		// 说明目录被截断，必须报错而不是静默返回不完整数据。总条数恰好
+		// 达到 guard 上限时，上一行 len(events) >= Total 先命中 break，
+		// 完整数据仍正常返回。
+		if page >= eventCatalogMaxPagesGuard {
+			return nil, fmt.Errorf("personal event: catalog pagination exceeded guard (%d pages)", eventCatalogMaxPagesGuard)
+		}
+	}
+	return dedupeEvents(events), nil
+}
+
+// SchemaResult is the published business payload schema of an organization
+// app event. PayloadSchema is the business JSON Schema object, not the MQ
+// envelope and not a string.
+type SchemaResult struct {
+	EventKey             string
+	DisplayName          string
+	Description          string
+	Category             string
+	ProducerUnifiedAppID string
+	PayloadSchemaVersion string
+	PayloadSchema        map[string]any
+	Scope                string
+}
+
+type dwsEventSchemaResult struct {
+	EventKey               string         `json:"eventKey"`
+	EventKeySnake          string         `json:"event_key"`
+	DisplayName            string         `json:"displayName"`
+	Description            string         `json:"description"`
+	Category               string         `json:"category"`
+	ProducerUnifiedAppID   string         `json:"producerUnifiedAppId"`
+	ProducerSnake          string         `json:"producer_unified_app_id"`
+	PayloadSchemaVersion   string         `json:"payloadSchemaVersion"`
+	PayloadSchemaVersionSn string         `json:"payload_schema_version"`
+	PayloadSchema          map[string]any `json:"payloadSchema"`
+	PayloadSchemaSnake     map[string]any `json:"payload_schema"`
+	Scope                  string         `json:"scope"`
+}
+
+// GetSchema fetches the published business schema for one app event by
+// eventKey. Empty payloadSchemaVersion asks the server for the currently
+// effective published version; a non-empty value is forwarded verbatim as
+// query payloadSchemaVersion (portal does not rewrite it; callback rejects
+// DRAFT / over-long / never-published versions without falling back).
+// The server does not validate key format or prefix; Chinese and spaces
+// travel as normal query encoding.
+func (c *Client) GetSchema(ctx context.Context, eventKey, payloadSchemaVersion string) (*SchemaResult, error) {
+	eventKey = strings.TrimSpace(eventKey)
+	if eventKey == "" {
+		return nil, errors.New("personal event: eventKey is required")
+	}
+	q := make(url.Values)
+	q.Set("eventKey", eventKey)
+	if version := strings.TrimSpace(payloadSchemaVersion); version != "" {
+		q.Set("payloadSchemaVersion", version)
+	}
+	var result dwsEventSchemaResult
+	if err := c.do(ctx, http.MethodGet, "/event/schema", q, nil, &result); err != nil {
+		return nil, err
+	}
+	schema := result.PayloadSchema
+	if schema == nil {
+		schema = result.PayloadSchemaSnake
+	}
+	return &SchemaResult{
+		EventKey:             firstNonEmpty(result.EventKey, result.EventKeySnake),
+		DisplayName:          strings.TrimSpace(result.DisplayName),
+		Description:          strings.TrimSpace(result.Description),
+		Category:             strings.TrimSpace(result.Category),
+		ProducerUnifiedAppID: firstNonEmpty(result.ProducerUnifiedAppID, result.ProducerSnake),
+		PayloadSchemaVersion: firstNonEmpty(result.PayloadSchemaVersion, result.PayloadSchemaVersionSn),
+		PayloadSchema:        schema,
+		Scope:                strings.TrimSpace(result.Scope),
+	}, nil
+}
+
+func dedupeEvents(items []Event) []Event {
+	seen := make(map[string]struct{}, len(items))
+	events := make([]Event, 0, len(items))
+	for _, item := range items {
+		item.EventKey = strings.TrimSpace(item.EventKey)
+		if item.EventKey == "" {
+			continue
+		}
+		if _, ok := seen[item.EventKey]; ok {
+			continue
+		}
+		seen[item.EventKey] = struct{}{}
+		events = append(events, item)
+	}
+	return events
 }
 
 func (c *Client) ListSubscriptions(ctx context.Context, opts ListOptions) ([]Subscription, error) {

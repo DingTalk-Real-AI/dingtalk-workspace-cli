@@ -91,10 +91,7 @@ func Parse(data []byte) (*Source, error) {
 		}
 		nodes[index] = node
 	}
-	if err := ValidatePresentationOrder(nodes); err != nil {
-		return nil, err
-	}
-	if err := ValidateText(nodes); err != nil {
+	if err := ValidateNodes(nodes); err != nil {
 		return nil, err
 	}
 	return &Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: nodes}, nil
@@ -182,32 +179,16 @@ func (e *VerticalAlignPlacementError) Error() string {
 // boundary, including preview and writes. It is not a full server schema check.
 func ValidateText(nodes []map[string]any) error {
 	for index, node := range nodes {
-		if err := validateTextRuns(node["text"], fmt.Sprintf("/source/nodes/%d/text", index), node["id"]); err != nil {
-			return err
-		}
-		if title, ok := node["title"].(map[string]any); ok {
-			if err := validateTextRuns(title["text"], fmt.Sprintf("/source/nodes/%d/title/text", index), node["id"]); err != nil {
+		if text, present := node["text"]; present {
+			if err := validateTextObject(text, fmt.Sprintf("/source/nodes/%d/text", index), node["id"]); err != nil {
 				return err
 			}
 		}
-	}
-	return nil
-}
-
-func validateTextRuns(value any, path string, nodeID any) error {
-	text, _ := value.(map[string]any)
-	blocks, _ := text["blocks"].([]any)
-	for blockIndex, item := range blocks {
-		block, _ := item.(map[string]any)
-		if _, present := block["verticalAlign"]; present {
-			return &VerticalAlignPlacementError{NodeID: nodeID, Path: fmt.Sprintf("%s/blocks/%d/verticalAlign", path, blockIndex), ExpectedPath: path + "/verticalAlign"}
-		}
-		runs, _ := block["runs"].([]any)
-		for runIndex, item := range runs {
-			run, _ := item.(map[string]any)
-			content, _ := run["text"].(string)
-			if strings.ContainsAny(content, "\r\n\u2028\u2029") {
-				return &TextRunValidationError{NodeID: nodeID, Path: fmt.Sprintf("%s/blocks/%d/runs/%d/text", path, blockIndex, runIndex)}
+		if title, ok := node["title"].(map[string]any); ok {
+			if text, present := title["text"]; present {
+				if err := validateTextObject(text, fmt.Sprintf("/source/nodes/%d/title/text", index), node["id"]); err != nil {
+					return err
+				}
 			}
 		}
 	}

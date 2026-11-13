@@ -72,9 +72,9 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 |------|------|----------------|----------|
 | `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId 与类型；完整结果必须用 `--all --page-limit 0` 自动翻页；filters 中的实体展示名须先解析为稳定 ID/结构化值 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
-| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
+| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；单次最多 100 条 |
 | `record update` | 更新记录（每条独立 cells） | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
-| `record batch-update` | 批量更新（同一 cells 应用到多条 recordId） | [aitable-record-update.md](./aitable/aitable-record-update.md)、[aitable-cell-value.md](./aitable/aitable-cell-value.md) | 适合"统一标记完成/统一改负责人"等共享 patch 场景；`--cells` 是 JSON object（key=fieldId，value 按字段类型见 cell-value.md），与 record update 的单条 cells 结构完全一致；必填 `--record-ids` `--cells`；单次最多 100 条 |
+| `record batch-update` | 批量更新（同一 cells 应用到多条 recordId） | [aitable-record-update.md](./aitable/aitable-record-update.md)、[aitable-cell-value.md](./aitable/aitable-cell-value.md) | 适合"统一标记完成/统一改负责人"等共享 patch 场景；`--cells` 是 JSON object（key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；value 按字段类型见 cell-value.md），与 record update 的单条 cells 结构完全一致；必填 `--record-ids` `--cells`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
 | `record history-list` | 查询单条记录的变更历史 | [aitable-record-history.md](./aitable/aitable-record-history.md) | 必填 `--record-id`；分页 `--offset --limit`，limit 范围 [1,50] 默认 20 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 一页扫描 `--limit` [1,100] 默认 100；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完） |
@@ -153,7 +153,7 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 |------|------|
 | `dashboard get/create/update/delete` | 仪表盘管理 |
 | `dashboard config-example` | 查看仪表盘配置模板 |
-| `dashboard arrange` | 自动重排仪表盘图表布局（智能填满网格，避免空缺） |
+| `dashboard arrange` | 明确接受统一按行重排时使用；改变位置、宽高和叠放关系 |
 | `chart get/create/update/delete` | 图表管理 |
 | `chart widgets-example` | 查看图表 widgets 配置模板 |
 
@@ -189,9 +189,10 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 | `advperm role-update` | 增量更新自定义角色（PATCH） | `--base-id` `--role-id` | 未传字段不变；`--sub-roles` 按 (targetId,targetType) 合并 |
 | `advperm role-delete` | 删除自定义角色 | `--base-id` `--role-id` `--yes` | 不可逆；系统角色禁删；**调用者必须是该 AI 表格的管理员/Owner**，非管理员会得到 401 AUTH_ERROR |
 
-> **角色 CRUD 已全支持**：create/get/list/update/delete 都可走 CLI。
-> 所有写命令（enable/disable/role-create/role-update/role-delete）需要 Base 管理员权限；非管理员只能调 `role-list` / `role-get`（只读）。
-> "角色 ↔ 成员"绑定当前 CLI 不支持，仍需在 AI 表格 Web 端 → Base 设置 → 高级权限面板手动完成。
+> **高级权限角色与成员已支持**：角色 create/get/list/update/delete、成员追加/完整替换、角色复制和按用户查角色均可走 CLI。
+> 所有写命令（enable/disable/role-create/role-update/role-delete/role-members-add/role-members-update/role-copy）需要 Base 管理员权限；非管理员只读使用 `role-list`、`role-get`、`role-query-user`。
+> 成员全量替换前必须回读 `defaultRole`，DWS 强制完整 `--members`（`[]` 清空，不接受 null）及 `--default-role-mode`（0/1/2，1 还需 `--default-role-id`）。成员最多 200 项，id/memberType 均为 String，用户填 uid（不是 userId）及 `"2"`，不能用 user/conv 或数字 2；完整编码和可选 number `memberIdBelongOrgId` 见高级权限 reference 类型表。
+> 复制沿用 roleType/flowType/subRoles，不复制成员，name 省略或空字符串使用「源角色名 副本」；查询返回 enabled 和 roles 配置（不含成员），高级权限关闭时 roles 通常为空，targetUid 不替换调用身份。
 
 ### section (文件夹与节点管理)
 
@@ -298,17 +299,11 @@ Flags:
 
 ## 复杂操作
 
-### 仪表盘 / 图表（建议顺序）
+### 仪表盘 / 图表（按需配置）
 
-```bash
-# 1) 先看配置模板（JSONC）
-dws aitable dashboard config-example --format json
-dws aitable chart widgets-example --format json
+新建/重构分析仪表盘、图表批建恢复决策、Chart config 或 Dashboard 完整 config/arrange，按需读取 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)；普通 Dashboard CRUD 直接使用命令，不进入复杂配置流程。
 
-# 2) 先拿 dashboard，再拿 chart 详情
-dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
-dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
-```
+已有合法 config 且指标/布局语义明确时不重复读模板；需要构造配置时仅获取所需类型模板，Dashboard 完整 config 结构缺失时才读取对应模板。具体读取路径以专项指南为准，不预读两份全量模板。
 
 要点：
 
@@ -410,7 +405,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
 
-用户说"仪表盘排版乱了/图表对不齐/重新排布/自动布局/美化仪表盘" → `dashboard arrange`（读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)）
+用户明确接受改变位置和尺寸、统一按行重排 → `dashboard arrange`；已有设计、大小混排或纵向叠放保留显式布局（读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)）
 
 用户说"附件/上传文件" → 读 [aitable-attachment.md](./aitable/aitable-attachment.md)
 
@@ -424,7 +419,10 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 建角色（可同时指定子角色权限） → `advperm role-create --name ... --sub-roles '[...]'`
 - 改角色名 / 改子角色权限（PATCH 语义，未传字段不变） → `advperm role-update --role-id ... [--name ...] [--sub-roles '[...]']`
 - 删角色 → `advperm role-delete --yes`
-- **角色 ↔ 成员绑定**：当前 CLI 不支持，仍需在 AI 表格 Web 端面板手动完成
+- 向角色追加成员 → `+role-members-add --role-id ... --members '[...]' --yes`
+- 完整替换或清空成员 → `+role-members-update --role-id ... --members '[...]' --default-role-mode 0 --yes`；mode=1 时必须同时传 `--default-role-id`
+- 复制角色配置（不复制成员）→ `+role-copy --source-role-id ... --yes`
+- 查询当前或指定用户命中的角色 → `+role-query-user [--target-uid ...]`
 
 命令报错/操作失败 → 读 [aitable-error-recovery.md](./aitable/aitable-error-recovery.md)
 
@@ -475,9 +473,9 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- 对象寻址使用真实 ID（baseId/tableId/fieldId/recordId）；记录写入的 cells key 也支持当前表内唯一字段名；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
 - `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
-- records 的 cells key 是 fieldId，不是字段名称
+- records 的 cells key 支持 fieldId 或当前表内唯一字段名；推荐 fieldId，字段名须精确匹配
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)
 

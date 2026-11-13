@@ -47,7 +47,10 @@ type PagedMCPCommandConfig struct {
 	AggregationMode  PagedAggregationMode
 	BuildArgs        func(*cobra.Command) (map[string]any, error)
 	Fallback         func(map[string]any) error
-	ProjectResult    func(map[string]any) map[string]any
+	// ParsePage lets a command normalize documented response variants into its
+	// canonical ItemPath/CursorPath/HasMorePath before aggregation.
+	ParsePage     func(string) (map[string]any, []any, any, bool, error)
+	ProjectResult func(map[string]any) map[string]any
 	// ResultProjection enriches the framework-only Result after the established
 	// legacy projection. dual_validate shadows it without changing public bytes.
 	ResultProjection func(map[string]any) map[string]any
@@ -182,17 +185,25 @@ func runPagedMCPCommand(cmd *cobra.Command, cfg PagedMCPCommandConfig, opts page
 		seenCursors[currentCursor] = true
 		text, err := callMCPToolReturnTextOnServer(ctx, cfg.ServerID, cfg.ToolName, args)
 		if err != nil {
-			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, true, true)
+			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, true, true, true)
 		}
-		parsed, pageItems, nextCursor, more, err := parsePagedCommandPage(text, cfg)
+		var parsed map[string]any
+		var pageItems []any
+		var nextCursor any
+		var more bool
+		if cfg.ParsePage != nil {
+			parsed, pageItems, nextCursor, more, err = cfg.ParsePage(text)
+		} else {
+			parsed, pageItems, nextCursor, more, err = parsePagedCommandPage(text, cfg)
+		}
 		if err != nil {
-			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, false, false)
+			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, false, false, false)
 		}
 		if envelope == nil {
 			envelope = parsed
 		}
 		if err := items.Add(pageItems); err != nil {
-			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, false, false)
+			return handlePagedCommandError(cmd, envelope, cfg, items, page, currentCursor, err, false, false, true)
 		}
 		hasMore = more
 
@@ -232,17 +243,17 @@ func runPagedMCPCommand(cmd *cobra.Command, cfg PagedMCPCommandConfig, opts page
 		nextKey := cursorValueKey(nextCursor, cfg.CursorKind)
 		if nextKey == "" || nextKey == currentCursor || seenCursors[nextKey] {
 			err := fmt.Errorf("pagination cursor did not advance: %s", nextKey)
-			return handlePagedCommandError(cmd, envelope, cfg, items, page+1, "", err, false, false)
+			return handlePagedCommandError(cmd, envelope, cfg, items, page+1, "", err, false, false, true)
 		}
 		normalizedCursor, err := normalizeCursorArg(nextCursor, cfg.CursorKind)
 		if err != nil {
-			return handlePagedCommandError(cmd, envelope, cfg, items, page+1, "", err, false, false)
+			return handlePagedCommandError(cmd, envelope, cfg, items, page+1, "", err, false, false, true)
 		}
 		currentCursor = nextKey
 		args[cfg.CursorArg] = normalizedCursor
 		if opts.delayMS > 0 {
 			if err := sleepPagedCommandDelay(ctx, time.Duration(opts.delayMS)*time.Millisecond); err != nil {
-				return handlePagedCommandError(cmd, envelope, cfg, items, page+1, currentCursor, err, true, true)
+				return handlePagedCommandError(cmd, envelope, cfg, items, page+1, currentCursor, err, true, true, true)
 			}
 		}
 	}
@@ -289,8 +300,11 @@ func parsePagedCommandPage(text string, cfg PagedMCPCommandConfig) (map[string]a
 }
 
 type pagingMetadata struct {
-	Truncated            bool
-	HasMore              bool
+	Truncated bool
+	HasMore   bool
+	// HasMoreReliable marks HasMore as source-backed; the error path's true
+	// only means "not finished", not that the lower layer reported a state.
+	HasMoreReliable      bool
 	RequestSatisfied     bool
 	LastCursor           any
 	Pages                int
@@ -305,6 +319,8 @@ type pagingMetadata struct {
 	Error                string
 }
 
+// hasMoreReliable is false when the failing response could not be parsed, so
+// its pagination fields are unreadable rather than merely absent.
 func handlePagedCommandError(
 	cmd *cobra.Command,
 	envelope map[string]any,
@@ -315,6 +331,7 @@ func handlePagedCommandError(
 	err error,
 	fallbackRetryable bool,
 	resumeCursorReliable bool,
+	hasMoreReliable bool,
 ) error {
 	if envelope == nil {
 		return err
@@ -322,6 +339,7 @@ func handlePagedCommandError(
 	meta := pagingMetadata{
 		Truncated:            true,
 		HasMore:              true,
+		HasMoreReliable:      hasMoreReliable,
 		LastCursor:           failedCursor,
 		Pages:                failedPage - 1,
 		Total:                items.Total(),
@@ -546,6 +564,7 @@ func buildPagedCommandResult(envelope map[string]any, cfg PagedMCPCommandConfig,
 		paging["itemsFetched"] = meta.ItemsFetched
 		paging["error"] = meta.Error
 		paging["resumeCursorReliable"] = meta.ResumeCursorReliable
+		paging["hasMoreReliable"] = meta.HasMoreReliable
 	}
 	if meta.TruncatedWithinPage {
 		paging["truncatedWithinPage"] = true

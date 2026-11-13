@@ -1,6 +1,6 @@
 ---
 name: dingtalk-minutes
-description: 钉钉 AI 听记。Use when 查询或修改听记摘要、完整逐字稿、关键词、标签、行动项、录音、上传、思维导图、发言人洞察、ASR 热词/识别词配置或分享权限。写文档走 dingtalk-doc；建待办走 dingtalk-todo；日程走 dingtalk-calendar。命令前缀：dws minutes。
+description: 钉钉 AI 听记。Use when 查询或修改听记摘要、完整逐字稿、关键词、标签、纪要模板及默认模板、行动项、录音、上传、听记内置思维导图、发言人洞察、ASR 热词/识别词配置或分享权限。独立 .amind 脑图文件的创建和主题读写走 dingtalk-misc 的 mind reference；写文档走 dingtalk-doc；建待办走 dingtalk-todo；日程走 dingtalk-calendar。命令前缀：dws minutes。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -42,6 +42,8 @@ metadata:
 | 按标题或时间找听记 | `dws minutes +search --scope all --query "<关键词>" --page-all` | `scope` 可选 `mine/shared/all`；至少提供 query/start/end 之一。`all --page-all` 分别追完 mine/shared 后去重，不把单个 noLimit 端点当完整全集 |
 | 浏览我创建、共享给我或全部可访问听记 | `+list-mine` / `+list-shared` / `+list-all` | 默认是可续拉预览；要声称完整必须加 `--page-all` 并检查 `complete=true`。用户只说“我的听记”不等于明确 `mine`，范围不清时用 `all` |
 | 按真实标签找听记 | `dws minutes tag list --format json`，再 `tag query --tag-id <真实tagId>` | 标签不等于关键词；空标签即结束。按标签查找的分页细节见局部意图 |
+| 创建或删除自定义标签，为听记添加或移除标签 | `tag create` / `tag delete` / `tag add` / `tag remove` | 前缀为 `dws minutes`；先锁定真实标签和听记。创建定义不自动关联，删除定义与移除关联含义不同，详见局部意图 |
+| 查询系统或个人纪要模板，维护个人模板及默认模板 | `template list-system` / `template list-custom` / `template create` / `template update` / `template delete` / `template set-default` | 前缀为 `dws minutes`；系统 templateId 与个人 templateKey 分开，变更不重新生成已有听记，详见局部意图 |
 | 看我最新创建的一条 | `dws minutes +latest [--keyword <关键词>]` | 只在用户明确说“最新”时用；不能用它替代具名目标搜索，也不能在录音 start 后拿 latest 猜新录音 ID |
 | 读取基础信息、摘要或关键词 | `dws minutes +detail --id <taskUuid> --artifacts basic,summary,keywords` | 已有 taskUuid 且只读取现有产物时直接使用，不要进入上传 workflow；任一产物失败都按 partial/非零处理，不把缺失项说成空内容 |
 | 读取逐字稿 | `dws minutes +transcript --id <taskUuid> [--direction 1] [--single-page]` | 已有 taskUuid 且只读取逐字稿时直接使用，不要借 `+upload-and-analyze --resume-id` 代读。默认正序并追完分页；倒序必须传 `--direction 1`，用户明确只要第一页时传 `--single-page`，不得随后自动续页。交付前检查 `data.direction/data.complete/data.pages` 与 `meta.pagination` |
@@ -52,7 +54,7 @@ metadata:
 | 上传音视频生成听记 | `dws minutes +upload --file <相对路径>` | 真实执行会上传文件并创建远端听记，必须按 Runtime confirmation；用户明确要闪记卡片时改用 `+upload-and-notify`，需要上传后等待分析产物时用 `+upload-and-analyze` |
 | 真实开始、暂停、继续或停止录音 | `+record-start` / `+record-pause` / `+record-resume` / `+record-stop` | 这组入口会真实执行。start 返回 `accepted=true, bound=false` 或 `controlReady=false` 时，报告“已受理但未绑定”并停止：不得重试 start，也不得用 `+latest`、列表第一条或时间最近项猜 ID。结束并等待产物用 `+record-wrap-up` |
 | 只预览录音请求，不实际执行 | `dws minutes record start --dry-run --format json` | 使用对应的原子 `minutes record start|pause|resume|stop` leaf；start 的 `--session-id` 可选，pause/resume/stop 必须传真实 `--id`。不要把被拒绝的 Shortcut dry-run 描述成预览成功 |
-| 生成或继续思维导图 | `dws minutes +mindmap --id <taskUuid>` | 创建后有界轮询；超时或未知状态保留恢复信息，用 `--resume` 继续，不重复创建 |
+| 生成或继续查询听记内置思维导图 | `dws minutes +mindmap --id <taskUuid>` | 创建后有界轮询；超时或未知状态保留恢复信息，用 `--resume` 继续，不重复创建 |
 | 生成或继续发言人洞察 | `dws minutes +speaker-insights --id <taskUuid>` | 只有 `state=ready/complete=true` 才完成；pending 保留 `taskId` 并同账号 `--resume [--task-id <ID>]`，不重复创建；用户给定等待时长传 `--timeout` |
 | 当前用户申请查看/下载/编辑权限 | `dws minutes +apply-permission --id <taskUuid> --permission view|download|edit` | 这是“我申请访问”，不是所有者给别人授权；按 Runtime confirmation 执行 |
 | 所有者给成员授权或撤权 | `dws minutes +share ...` / `dws minutes +unshare ...` | 先用通讯录把姓名解析为同组织稳定 UID；撤权是破坏性操作。批量结果必须保留逐成员 ledger 和失败项 |
@@ -95,6 +97,10 @@ dws minutes +list-all --page-all --format json
 - 用户明确要求“仅预览/不实际写入”时，任务在真实现状读取、dry-run 计划和差异交付后结束；不得继续请求写入确认，也不得为了验证预览而执行真实写入后再还原。
 - 分享/撤权使用稳定成员 UID，不能把姓名、手机号或跨组织 ID 直接当 UID；同一目标解析、读取、写入和验证必须使用同一 profile。
 
+## 脑图目标边界
+
+`minutes +mindmap` 的目标是听记内置思维导图，结果展示在听记详情中，不创建可独立编辑的 .amind 文件。用户明确要求独立脑图或编辑已有脑图主题时，转 [独立脑图](../dingtalk-misc/references/mind.md)。已有听记 URL 不覆盖明确的独立文件意图；只有目标未明时才消歧。若用户明确另存独立脑图，可先读取获授权的听记内容，再按 mind reference 构造 OpenNodes；不套用内置生成的“禁止先读取内容”规则。
+
 ## 按需加载
 
 Golden Route 参数足够时直接执行，不预读 Reference。每个 Case 最多先读取一个最精确的文件；参数事实优先读取 compact leaf Schema，不读取产品级全量 Catalog。
@@ -102,7 +108,7 @@ Golden Route 参数足够时直接执行，不预读 Reference。每个 Case 最
 | 触发条件 | Reference |
 |---|---|
 | ASR 热词、上传会话恢复、复杂异步轮询、批量权限 workflow | [复杂流程](references/07-minutes.md) |
-| 发言人替换、批量文本替换、下载媒体、离线导出等低频意图 | [局部意图](references/intent-guide.md) |
+| 纪要模板、标签维护、发言人替换、批量文本替换、下载媒体、离线导出等低频意图 | [局部意图](references/intent-guide.md) |
 | 必须落到原子命令，或需要 URL/参数/确认事实 | [原子命令](references/minutes.md) |
 
 ## 错误最短路径

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
@@ -25,48 +27,73 @@ func shareRequest(extra ...map[string]any) map[string]any {
 	return request
 }
 
+// Recovery identifiers belong to local diagnostics, never to the unmodified remote response.
+func TestCrossPlatformCoverageAitableShareFormPartialCoverResource(t *testing.T) {
+	for _, resource := range []any{"rid-cover", "", " \t", nil, 123} {
+		data := validShareState()
+		data["cpSynced"] = false
+		result := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest(map[string]any{"formCoverResourceId": resource}))
+		env, err := output.EnvelopeFromResult(result)
+		if err != nil || result.ExitCode() != 7 || env.OK || env.Outcome != output.OutcomePartialFailure {
+			t.Fatalf("partial failure changed: result=%#v err=%v", env, err)
+		}
+		partial := env.Data.(*output.PartialData)
+		info := partial.Failed[0].Error
+		id, present := info.Details["formCoverResourceId"]
+		if present != (resource == "rid-cover") || (present && id != resource) {
+			t.Fatalf("wrong recovery resource: input=%#v details=%#v", resource, info.Details)
+		}
+		if info.Retryable || !*info.ExecutionStarted || !strings.Contains(info.Hint, "不自动重放") || !reflect.DeepEqual(partial.Succeeded[0].(map[string]any)["response"], data) {
+			t.Fatalf("unsafe or altered recovery evidence: %#v", partial)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageAitableShareFormTerminalProjection(t *testing.T) {
 	for _, key := range []string{"baseId", "tableId", "viewId", "enabled", "status", "cpSynced"} {
 		for _, value := range []any{nil, "", []any{}} {
 			data := validShareState()
 			data[key] = value
-			if got := AitableFormShareUpdateResult(data, shareRequest()); got.Outcome() != output.OutcomePartialFailure {
+			if got := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()); got.Outcome() != output.OutcomePartialFailure {
 				t.Fatalf("%s=%#v: outcome=%s", key, value, got.Outcome())
 			}
 		}
 		data := validShareState()
 		delete(data, key)
-		if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomePartialFailure {
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomePartialFailure {
 			t.Fatalf("missing %s accepted", key)
 		}
 	}
 	for _, key := range []string{"shareFormUuid", "formCover", "formName", "formDesc"} {
 		data := validShareState()
 		data[key] = false
-		if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomePartialFailure {
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomePartialFailure {
 			t.Fatalf("invalid optional %s accepted", key)
 		}
 		data[key] = nil
-		if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomeSuccess {
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomeSuccess {
 			t.Fatalf("nullable %s rejected", key)
 		}
 	}
-	for _, status := range []any{float64(0), int(1), int64(2), json.Number("2")} {
+	for _, tc := range []struct {
+		status  any
+		enabled bool
+	}{{float64(0), false}, {int(1), true}, {int64(2), false}, {json.Number("2"), false}, {json.Number("-1"), false}} {
 		data := validShareState()
-		data["status"] = status
-		if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomeSuccess {
-			t.Fatalf("integer status %#v rejected", status)
+		data["status"], data["enabled"] = tc.status, tc.enabled
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomeSuccess {
+			t.Fatalf("integer status %#v rejected", tc.status)
 		}
 	}
 	for _, status := range []any{1.5, math.NaN(), math.Inf(1), json.Number("1.5")} {
 		data := validShareState()
 		data["status"] = status
-		if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomePartialFailure {
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomePartialFailure {
 			t.Fatalf("non-integer status %#v accepted", status)
 		}
 	}
 	for _, data := range []any{nil, map[string]any(nil), []any{}, "bad", map[string]any{"cpSynced": false}} {
-		result := AitableFormShareUpdateResult(data, shareRequest())
+		result := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest())
 		env, err := output.EnvelopeFromResult(result)
 		if err != nil || env.OK || result.ExitCode() != 7 {
 			t.Fatalf("invalid data=%#v: result=%#v err=%v", data, env, err)
@@ -82,12 +109,33 @@ func TestCrossPlatformCoverageAitableShareFormTerminalProjection(t *testing.T) {
 	}
 }
 
+// A structurally valid response cannot prove a terminal state when its two
+// representations of the share switch contradict each other.
+func TestCrossPlatformCoverageAitableShareFormContradictoryStatus(t *testing.T) {
+	for _, pair := range []struct {
+		enabled bool
+		status  int
+	}{{true, 2}, {true, 0}, {true, 3}, {false, 1}} {
+		data := validShareState()
+		data["enabled"], data["status"] = pair.enabled, pair.status
+		result := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest())
+		env, err := output.EnvelopeFromResult(result)
+		if err != nil || env.OK || result.ExitCode() != 7 {
+			t.Fatalf("contradictory state accepted: enabled=%t status=%d env=%#v err=%v", pair.enabled, pair.status, env, err)
+		}
+		partial := env.Data.(*output.PartialData)
+		if !reflect.DeepEqual(partial.Succeeded[0].(map[string]any)["response"], data) || partial.Failed[0].Error.Retryable {
+			t.Fatalf("unsafe or altered recovery evidence: %#v", partial)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageAitableShareFormExactTarget(t *testing.T) {
 	for index, key := range []string{"baseId", "tableId", "viewId"} {
 		for _, expected := range []string{"", " \t", "another-form"} {
 			request := shareRequest()
 			request[key] = expected
-			result := AitableFormShareUpdateResult(validShareState(), request)
+			result := AitableFormShareUpdateResult(map[string]any{"data": validShareState()}, request)
 			env, err := output.EnvelopeFromResult(result)
 			if err != nil || env.OK || result.ExitCode() != 7 {
 				t.Fatalf("request %s=%q accepted: result=%#v err=%v", key, expected, env, err)
@@ -100,7 +148,7 @@ func TestCrossPlatformCoverageAitableShareFormExactTarget(t *testing.T) {
 		for _, returned := range []string{" \t", " " + []string{"b", "t", "v"}[index] + " "} {
 			data := validShareState()
 			data[key] = returned
-			if AitableFormShareUpdateResult(data, shareRequest()).Outcome() != output.OutcomePartialFailure {
+			if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest()).Outcome() != output.OutcomePartialFailure {
 				t.Fatalf("non-exact %s=%q accepted", key, returned)
 			}
 		}
@@ -136,7 +184,10 @@ func TestCrossPlatformCoverageAitableShareFormRequestedValuesVerified(t *testing
 		t.Run(tc.key, func(t *testing.T) {
 			data := validShareState()
 			data[tc.key] = tc.returned
-			result := AitableFormShareUpdateResult(data, shareRequest(map[string]any{tc.key: tc.requested}))
+			if tc.key == "enabled" && tc.returned == true {
+				data["status"] = 1
+			}
+			result := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest(map[string]any{tc.key: tc.requested}))
 			env, err := output.EnvelopeFromResult(result)
 			if err != nil || env.OK || result.ExitCode() != 7 {
 				t.Fatalf("mismatched %s accepted: result=%#v err=%v", tc.key, env, err)
@@ -150,7 +201,13 @@ func TestCrossPlatformCoverageAitableShareFormRequestedValuesVerified(t *testing
 			}
 
 			data[tc.key] = tc.requested
-			state := shareStateFromResult(t, AitableFormShareUpdateResult(data, shareRequest(map[string]any{tc.key: tc.requested})))
+			if tc.key == "enabled" {
+				data["status"] = 2
+				if tc.requested == true {
+					data["status"] = 1
+				}
+			}
+			state := shareStateFromResult(t, AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest(map[string]any{tc.key: tc.requested})))
 			if state["verified"] != true {
 				t.Fatalf("provable %s not reported as verified: %#v", tc.key, state)
 			}
@@ -164,16 +221,16 @@ func TestCrossPlatformCoverageAitableShareFormRequestedValuesVerified(t *testing
 	for _, key := range []string{"formName", "formDesc"} {
 		data := validShareState()
 		delete(data, key)
-		if AitableFormShareUpdateResult(data, shareRequest(map[string]any{key: "值"})).Outcome() != output.OutcomePartialFailure {
+		if AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest(map[string]any{key: "值"})).Outcome() != output.OutcomePartialFailure {
 			t.Fatalf("requested %s missing from response accepted", key)
 		}
 	}
 }
 
-// The helper never echoes these properties, so success must declare them
+// Older helper responses omit these properties, so success must declare them
 // unverified instead of implying the whole request converged.
 func TestCrossPlatformCoverageAitableShareFormUnverifiableRequestFields(t *testing.T) {
-	state := shareStateFromResult(t, AitableFormShareUpdateResult(validShareState(), shareRequest()))
+	state := shareStateFromResult(t, AitableFormShareUpdateResult(map[string]any{"data": validShareState()}, shareRequest()))
 	if state["verified"] != true {
 		t.Fatalf("target-only request not verified: %#v", state)
 	}
@@ -182,7 +239,7 @@ func TestCrossPlatformCoverageAitableShareFormUnverifiableRequestFields(t *testi
 		"anonymousSubmit": true, "submitTimesLimit": 3, "authData": "d",
 		"shareUidList": "u", "enabled": false,
 	})
-	result := AitableFormShareUpdateResult(validShareState(), request)
+	result := AitableFormShareUpdateResult(map[string]any{"data": validShareState()}, request)
 	if result.Outcome() != output.OutcomeSuccess {
 		t.Fatalf("unverifiable fields must not fail the write: %s", result.Outcome())
 	}
@@ -197,6 +254,155 @@ func TestCrossPlatformCoverageAitableShareFormUnverifiableRequestFields(t *testi
 	for key, value := range validShareState() {
 		if !reflect.DeepEqual(state[key], value) {
 			t.Fatalf("server state %s was rewritten: %#v", key, state[key])
+		}
+	}
+}
+
+// Exercise actual public MCP field representations, including JSON numbers,
+// missing legacy fields and contradictory read-back values.
+func TestCrossPlatformCoverageAitableShareFormExpandedReadback(t *testing.T) {
+	for _, tc := range []struct {
+		key       string
+		requested any
+		returned  any
+		wrong     any
+	}{
+		{"authTypeCode", 6, float64(6), float64(1)},
+		{"anonymousSubmit", true, true, false},
+		{"loadLastSubmit", false, false, true},
+		{"submitRecordViewMode", 1, float64(1), float64(0)},
+		{"replyNotice", true, true, false},
+		{"formStartTime", int64(1790038800000), float64(1790038800000), float64(1790038700000)},
+		{"formEndTime", int64(0), float64(0), float64(1790038800000)},
+		{"submitTimesUserLimit", 2, json.Number("2"), float64(1)},
+		{"formCover", "https://example.test/new.png", "https://example.test/new.png", "https://example.test/old.png"},
+		{"shareUidList", " user-a, user-b,user-a ", "user-b,user-a", "user-a"},
+		{"shareUidList", "", "", "user-a"},
+		{"authData", "user-a, user-b,user-a", `{"members":[{"type":"user","userId":"user-b","corpId":"corp"},{"type":"user","userId":"user-a","corpId":"corp"}]}`, `{"members":[{"type":"user","userId":"other","corpId":"corp"}]}`},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			request := shareRequest(map[string]any{tc.key: tc.requested})
+			for _, returned := range []any{tc.returned, tc.wrong, []any{}} {
+				data := validShareState()
+				data[tc.key] = returned
+				result := AitableFormShareUpdateResult(map[string]any{"data": data}, request)
+				if reflect.DeepEqual(returned, tc.returned) {
+					state := shareStateFromResult(t, result)
+					if state["verified"] != true || state["unverified"] != nil || !reflect.DeepEqual(state[tc.key], returned) {
+						t.Fatalf("matching readback was changed or left unverified: %#v", state)
+					}
+				} else if result.Outcome() != output.OutcomePartialFailure || result.ExitCode() != 7 {
+					t.Fatalf("contradictory %s readback accepted: %#v", tc.key, result.Data())
+				}
+			}
+			// Older servers can omit newly echoed fields. Keep uncertainty explicit.
+			if tc.key != "formCover" {
+				for _, missing := range []bool{true, false} {
+					data := validShareState()
+					if !missing {
+						data[tc.key] = nil
+					}
+					state := shareStateFromResult(t, AitableFormShareUpdateResult(map[string]any{"data": data}, request))
+					if state["verified"] != false || !reflect.DeepEqual(state["unverified"], []string{tc.key}) {
+						t.Fatalf("unavailable field claimed as verified: %#v", state)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShareFormReadbackNormalization(t *testing.T) {
+	for _, tc := range []struct {
+		key       string
+		requested any
+		returned  any
+		verified  bool
+		partial   bool
+	}{
+		{"submitTimesLimit", 1000000, float64(10000), true, false},
+		{"submitTimesLimit", -1, float64(0), true, false},
+		{"submitTimesLimit", 0, float64(0), true, false},
+		{"submitTimesLimit", 10, float64(0), false, true},
+		{"submitTimesLimit", 10, float64(11), false, true},
+		{"submitTimesLimit", 10, float64(-1), false, true},
+		{"authTypeCode", -1, float64(2), true, false},
+		{"submitTimesUserLimit", -1, float64(1), true, false},
+		{"formStartTime", int64(123), 123.5, false, true},
+		{"formStartTime", int64(123), math.Inf(1), false, true},
+		{"formStartTime", int64(123), -float64(math.MinInt64), false, true},
+		{"formStartTime", int64(123), json.Number("bad"), false, true},
+		{"formStartTime", "123", float64(123), false, true},
+		{"shareUidList", "user-a", "user-a,", false, true},
+		{"authData", "user-a", `{"members":[{"type":"staff","userId":"user-a","corpId":"corp"}]}`, true, false},
+		{"authData", "user-a", `{"members":[{"type":"user","id":"internal-uid"}]}`, false, false},
+		{"authData", "user-a", `{"members":[{"type":"user","userId":"user-a"}]}`, false, false},
+		{"authData", "user-a", `{"members":[]}`, false, true},
+		{"authData", "user-a", `{"members":[{"type":"dept","id":"dept"}]}`, false, true},
+		{"authData", "user-a,user-b", `{"members":[{"type":"user","userId":"user-a","corpId":"a"},{"type":"user","userId":"user-b","corpId":"b"}]}`, false, true},
+		{"authData", "user-a", `{"members":false}`, false, true},
+		{"authData", "user-a", `null`, false, true},
+		{"authData", "", "", true, false},
+		{"authData", "", `{"members":[]}`, false, true},
+		{"authData", "user-a", `bad json`, false, true},
+		{"authData", "user-a,", `{"members":[]}`, false, true},
+		{"formCoverResourceId", "rid", nil, false, false},
+	} {
+		data := validShareState()
+		data[tc.key] = tc.returned
+		result := AitableFormShareUpdateResult(map[string]any{"data": data}, shareRequest(map[string]any{tc.key: tc.requested}))
+		if tc.partial {
+			if result.Outcome() != output.OutcomePartialFailure {
+				t.Fatalf("%s=%#v accepted: %#v", tc.key, tc.returned, result.Data())
+			}
+			continue
+		}
+		state := shareStateFromResult(t, result)
+		if state["verified"] != tc.verified {
+			t.Fatalf("%s=%#v verification changed: %#v", tc.key, tc.returned, state)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAitableShareFormWarningProjection(t *testing.T) {
+	meta := map[string]any{"suggestions": []any{
+		map[string]any{"reason": " historical member unavailable ", "action": " do not clear members ", "priority": "medium", "internal": "must not leak"},
+		false, map[string]any{"reason": false}, map[string]any{"priority": "high"},
+		map[string]any{"action": "inspect settings"},
+	}}
+	data := validShareState()
+	data["authData"] = nil
+	want := []formShareWarning{{Reason: "historical member unavailable", Action: "do not clear members", Priority: "medium"}, {Action: "inspect settings"}}
+	response := map[string]any{"data": data, "meta": meta}
+	read, err := AitableFormShareGetResult(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := shareStateFromResult(t, read)
+	if !reflect.DeepEqual(state["warnings"], want) || state["authData"] != nil {
+		t.Fatalf("read warning or original state lost: %#v", state)
+	}
+	write := AitableFormShareUpdateResult(response, shareRequest(map[string]any{"authData": "user-a"}))
+	state = shareStateFromResult(t, write)
+	if state["verified"] != false || !reflect.DeepEqual(state["warnings"], want) {
+		t.Fatalf("write warning or uncertainty lost: %#v", state)
+	}
+	data["cpSynced"] = false
+	partial := AitableFormShareUpdateResult(response, shareRequest())
+	env, _ := output.EnvelopeFromResult(partial)
+	details := env.Data.(*output.PartialData).Failed[0].Error.Details
+	if !reflect.DeepEqual(details["warnings"], want) || data["warnings"] != nil {
+		t.Fatalf("partial warning lost or upstream response mutated: %#v", details)
+	}
+	for _, badMeta := range []any{nil, false, map[string]any{"suggestions": false}} {
+		read, err := AitableFormShareGetResult(map[string]any{"data": data, "meta": badMeta})
+		if err != nil || shareStateFromResult(t, read)["warnings"] != nil {
+			t.Fatalf("invalid suggestions manufactured a warning: %v", err)
+		}
+	}
+	for _, badData := range []any{nil, false, []any{}, map[string]any(nil)} {
+		if _, err := AitableFormShareGetResult(map[string]any{"data": badData}); err == nil {
+			t.Fatalf("malformed read data accepted: %#v", badData)
 		}
 	}
 }
@@ -224,7 +430,7 @@ func TestCrossPlatformCoverageAitableShareFormAtomicTerminalEnvelope(t *testing.
 				root.SetErr(stderr)
 				root.SetArgs([]string{"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true", "--format=json"})
 				ctx, _ := output.WithResultStore(context.Background())
-				cmd, err := root.ExecuteContextC(ctx)
+				cmd, err := corecmd.ExecuteContextCForTest(root, ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -266,7 +472,7 @@ func TestCrossPlatformCoverageAitableShareFormAtomicRequestTarget(t *testing.T) 
 			root.SetErr(stderr)
 			root.SetArgs([]string{"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=false", "--format=json"})
 			ctx, _ := output.WithResultStore(context.Background())
-			cmd, err := root.ExecuteContextC(ctx)
+			cmd, err := corecmd.ExecuteContextCForTest(root, ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -336,7 +542,7 @@ func TestCrossPlatformCoverageAitableShareFormAtomicRequestedValue(t *testing.T)
 			root.SetErr(stderr)
 			root.SetArgs([]string{"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", tc.flag, "--format=json"})
 			ctx, _ := output.WithResultStore(context.Background())
-			cmd, err := root.ExecuteContextC(ctx)
+			cmd, err := corecmd.ExecuteContextCForTest(root, ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

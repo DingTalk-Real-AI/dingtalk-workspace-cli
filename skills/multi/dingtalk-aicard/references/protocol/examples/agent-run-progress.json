@@ -30,7 +30,7 @@
         {
           "id": "executionPanel",
           "component": "CollapsiblePanel",
-          "title": "[AIGenerating]Reading...",
+          "title": "[AIGenerating]Thinking...",
           "children": [
             "executionTimeline"
           ],
@@ -44,6 +44,43 @@
           "id": "executionTimeline",
           "component": "Column",
           "children": [
+            "thinking"
+          ],
+          "gap": 6
+        },
+        {
+          "id": "thinking",
+          "component": "Text",
+          "text": "Plan: read the sample sales data first, then total orders and revenue by region.",
+          "colorToken": "common_level2_base_color",
+          "sizeToken": "common_action_text_style__font_size",
+          "bold": false
+        }
+      ]
+    }
+  },
+  {
+    "version": "v1.0",
+    "updateComponents": {
+      "surfaceId": "open-progress",
+      "components": [
+        {
+          "id": "executionPanel",
+          "component": "CollapsiblePanel",
+          "title": "[AIGenerating]Reading...",
+          "children": [
+            "executionTimeline"
+          ],
+          "colorToken": "common_level2_base_color",
+          "variant": "reasoning",
+          "fallbackMarkdown": "Execution details",
+          "textEffect": "shimmer"
+        },
+        {
+          "id": "executionTimeline",
+          "component": "Column",
+          "children": [
+            "thinking",
             "toolGroup_read"
           ],
           "gap": 6
@@ -53,7 +90,7 @@
           "component": "CollapsiblePanel",
           "title": "Reading...",
           "children": [
-            "toolGroup_read_row"
+            "toolGroup_read_item"
           ],
           "colorToken": "common_level2_base_color",
           "variant": "indented",
@@ -63,29 +100,23 @@
           "darkIcon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_dark.D-pS11K.gif"
         },
         {
-          "id": "toolGroup_read_row",
-          "component": "Row",
-          "align": "center",
+          "id": "toolGroup_read_item",
+          "component": "CollapsiblePanel",
+          "title": "Read sample data",
           "children": [
-            "toolGroup_read_icon",
-            "toolGroup_read_text"
-          ]
-        },
-        {
-          "id": "toolGroup_read_icon",
-          "component": "Icon",
-          "name": "Folder_L_outlined",
-          "colorToken": "common_level2_base_color"
-        },
-        {
-          "id": "toolGroup_read_text",
-          "component": "Text",
-          "text": "Read sample data",
+            "toolGroup_read_detail"
+          ],
           "colorToken": "common_level2_base_color",
-          "sizeToken": "common_action_text_style__font_size",
-          "bold": false,
-          "maxLine": 2,
-          "weight": 1
+          "variant": "indented",
+          "fallbackMarkdown": "Read sample data",
+          "defaultExpanded": false,
+          "icon": "Folder_L_outlined",
+          "maxHeight": 240
+        },
+        {
+          "id": "toolGroup_read_detail",
+          "component": "Markdown",
+          "content": "```python\nread_file(\n    \"data/sales_sample.csv\",\n    limit=5,\n)\n```"
         }
       ]
     }
@@ -112,7 +143,7 @@
           "component": "CollapsiblePanel",
           "title": "Read complete",
           "children": [
-            "toolGroup_read_row"
+            "toolGroup_read_item"
           ],
           "colorToken": "common_level2_base_color",
           "variant": "indented",
@@ -123,17 +154,23 @@
           "id": "executionTimeline",
           "component": "Column",
           "children": [
+            "thinking",
             "toolGroup_read",
             "toolGroup_summary"
           ],
           "gap": 6
         },
         {
+          "id": "toolGroup_read_detail",
+          "component": "Markdown",
+          "content": "```python\nread_file(\n    \"data/sales_sample.csv\",\n    limit=5,\n)\n```\n\n**Result** · 4 rows × 4 columns\n\n```csv\nregion,month,orders,revenue\nEast,2026-07,1280,356400\nWest,2026-07,964,271900\nNorth,2026-07,742,198300\nSouth,2026-07,1105,309800\n```"
+        },
+        {
           "id": "toolGroup_summary",
           "component": "CollapsiblePanel",
           "title": "Analyzing...",
           "children": [
-            "toolGroup_summary_row"
+            "toolGroup_summary_item"
           ],
           "colorToken": "common_level2_base_color",
           "variant": "indented",
@@ -143,29 +180,23 @@
           "darkIcon": "https://g.alicdn.com/dingding/card_a2ui/0.1.1/img/loading-circular/loading_circular_dark.D-pS11K.gif"
         },
         {
-          "id": "toolGroup_summary_row",
-          "component": "Row",
-          "align": "center",
+          "id": "toolGroup_summary_item",
+          "component": "CollapsiblePanel",
+          "title": "Calculate summary",
           "children": [
-            "toolGroup_summary_icon",
-            "toolGroup_summary_text"
-          ]
-        },
-        {
-          "id": "toolGroup_summary_icon",
-          "component": "Icon",
-          "name": "CodeProgram_L_outlined",
-          "colorToken": "common_level2_base_color"
-        },
-        {
-          "id": "toolGroup_summary_text",
-          "component": "Text",
-          "text": "Calculate summary",
+            "toolGroup_summary_detail"
+          ],
           "colorToken": "common_level2_base_color",
-          "sizeToken": "common_action_text_style__font_size",
-          "bold": false,
-          "maxLine": 2,
-          "weight": 1
+          "variant": "indented",
+          "fallbackMarkdown": "Calculate summary",
+          "defaultExpanded": false,
+          "icon": "CodeProgram_L_outlined",
+          "maxHeight": 240
+        },
+        {
+          "id": "toolGroup_summary_detail",
+          "component": "Markdown",
+          "content": "```python\nimport pandas as pd\n\ndf = pd.read_csv(\"data/sales_sample.csv\")\nsummary = (\n    df.groupby(\"region\")[[\"orders\", \"revenue\"]]\n      .sum()\n      .sort_values(\"revenue\", ascending=False)\n)\n```"
         }
       ]
     }

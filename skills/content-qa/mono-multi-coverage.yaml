@@ -33,6 +33,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/contract.md
+  - mono: sport
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/sport.md
   - mono: dev
     multi_skill: dingtalk-misc
     multi_refs:
@@ -134,6 +138,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/sheet.md
+  - mono: mind
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/mind.md
   - mono: whiteboard
     multi_skill: dingtalk-misc
     multi_refs:
@@ -176,11 +184,17 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: references/products/mind.md
+    multi: dingtalk-misc/references/mind.md
+    mode: identical
   - mono: references/products/aitable/aitable-psql.md
     multi: dingtalk-aitable/references/aitable/aitable-psql.md
     mode: identical
   - mono: references/products/contract.md
     multi: dingtalk-misc/references/contract.md
+    mode: identical
+  - mono: references/products/sport.md
+    multi: dingtalk-misc/references/sport.md
     mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py
@@ -208,6 +222,9 @@ paired_files:
 
 # Directory pairs whose relative file sets and contents must stay byte-identical.
 paired_trees:
+  - mono: references/products/mind
+    multi: dingtalk-misc/references/mind
+    mode: identical
   - mono: references/products/sheet
     multi: dingtalk-misc/references/sheet
     mode: identical

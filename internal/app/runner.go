@@ -68,7 +68,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_AGENT",
 		Category:    configmeta.CategoryExternal,
-		Description: "业务 Agent 名称；仅用于 x-dingtalk-agent 请求头，与 claw-type/host-owned PAT 判定无关",
+		Description: "业务 Agent 名称；用于 x-dingtalk-agent 请求头和四个文档编辑工具的 extraInfo.agentName（trim 后缺省 unknown），与 claw-type/host-owned PAT 判定无关",
 	})
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        "DINGTALK_TRACE_ID",
@@ -261,6 +261,20 @@ func (r *runtimeRunner) ResolveToolProduct(ctx context.Context, productIDs []str
 		apperrors.WithOperation("tools/list"),
 		apperrors.WithReason("mcp_tool_not_found"),
 	)
+}
+
+// SupportsMCPTool distinguishes a confirmed missing tool from failed discovery.
+// It reuses authenticated, paginated tools/list routing and never submits a write.
+func (r *runtimeRunner) SupportsMCPTool(ctx context.Context, product, tool string) (bool, error) {
+	_, err := r.ResolveToolProduct(ctx, []string{product}, tool)
+	if err == nil {
+		return true, nil
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) && typed.Reason == "mcp_tool_not_found" {
+		return false, nil
+	}
+	return false, err
 }
 
 func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
@@ -655,15 +669,17 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	invokeStart := time.Now()
 	execID := generateExecutionID()
-	r.transport.ExecutionId = execID
+	// Each invocation owns tracing/logging state. Independent reads may share
+	// the HTTP connection pool, but must never race on the runner's base client.
+	invocationTransport := r.transport.WithExecutionId(execID)
 
 	// Lazy bind FileLogger: it may be nil at construction time because
 	// configureLogLevel runs later in PersistentPreRunE.
-	if r.transport.FileLogger == nil {
-		r.transport.FileLogger = FileLoggerInstance()
+	if invocationTransport.FileLogger == nil {
+		invocationTransport.FileLogger = FileLoggerInstance()
 	}
 
-	fl := r.transport.FileLogger
+	fl := invocationTransport.FileLogger
 
 	defer func() {
 		var errCat, errReason string
@@ -775,16 +791,16 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		// Plugin ownership is authoritative even when the plugin is anonymous.
 		// Copy and sanitize manifest headers so plugins cannot opt themselves into
 		// DWS-owned Agent metadata by declaring the reserved names directly.
-		tc = r.transport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
+		tc = invocationTransport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
 		// Default path: use DingTalk OAuth token with identity headers. Agent
 		// metadata is resolved exactly once per invocation and is excluded from
 		// helper-only service-discovery requests.
 		if r.agentMetadata != nil {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
 		} else {
-			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
+			tc = invocationTransport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
 		}
 	}
 
@@ -826,7 +842,23 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	// tools/call can mutate remote state even when the gateway returns an error.
 	// Only callers with a reviewed read/reconciliation policy may replay it;
 	// keep discovery and the shared transport's retry budget unchanged.
-	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
+	wireParams := invocation.Params
+	if !hasPluginAuth {
+		// record_upsert's published business inputs stay unchanged. The stable
+		// creation key belongs to this request only, never the shared client.
+		var token string
+		var wireErr error
+		wireParams, token, wireErr = aitableprotocol.RecordUpsertWireParams(invocation.CanonicalProduct, invocation.Tool, invocation.Params)
+		if wireErr != nil {
+			return executor.Result{}, apperrors.NewValidation(wireErr.Error())
+		}
+		if token != "" {
+			// 非插件路径已由 resolveIdentityHeaders 保证包含 claw-type，
+			// WithAuth 上面已复制该非空 map，无需另建兜底状态。
+			tc.ExtraHeaders[aitableprotocol.RecordClientTokenHeader] = token
+		}
+	}
+	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, wireParams)
 	traceWhiteboardTransportResponse(invocation, callResult, err)
 	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
 	// A sent credential request must not enter authentication replay paths.
@@ -900,6 +932,26 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		return runnerHandlePatAuthCheck(ctx, r, invocation, patCheck, defaultConfigDir(), os.Stderr)
 	}
 
+	// Keep the two field-capability read contracts before generic isError handling
+	// discards nested error.code/retryable. Gateway and PAT classifiers stay first.
+	if readErr := aitableprotocol.FieldCapabilityReadError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); readErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(readErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(readErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, readErr, readErr)
+		if isPatScopeError(readErr) && !hasRequestToken {
+			return runnerRetryWithPatAuthRetry(ctx, r, invocation, extractPatScopeError(readErr), defaultConfigDir(), os.Stderr)
+		}
+		return executor.Result{}, readErr
+	}
+	if mutationErr := aitableprotocol.FieldGroupMutationError(invocation.CanonicalProduct, invocation.Tool, callResult.Content); mutationErr != nil {
+		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
+		diag.ServerErrorCode = serverFailureReason(mutationErr, diag.ServerErrorCode)
+		logBusinessError(fl, serverFailureReason(mutationErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		runnerCaptureRuntimeFailure(invocation, mutationErr, mutationErr)
+		return executor.Result{}, mutationErr
+	}
+
 	if callResult.IsError {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
 
@@ -925,8 +977,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.CanonicalProduct,
 			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
 		// PAT scope error in business response: offer human-readable output and retry
 		if isPatScopeError(mcpErr) {
 			if hasRequestToken {
@@ -954,8 +1007,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			invocation.CanonicalProduct,
 			invocation.Tool,
 			diag,
+			callResult.Content,
 		)
-		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
+		logBusinessError(fl, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
 		return executor.Result{}, classifiedErr
 	}
 
@@ -1203,8 +1257,12 @@ func isAuthError(err error) bool {
 }
 
 func productEndpointOverride(productID string) (string, bool) {
-	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(productID), "-", "_")) + "_MCP_URL"
+	productID = strings.TrimSpace(productID)
+	key := "DINGTALK_" + strings.ToUpper(strings.ReplaceAll(productID, "-", "_")) + "_MCP_URL"
 	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" && productID == "doc" {
+		value = strings.TrimSpace(buildDocMCPEndpoint)
+	}
 	if value == "" {
 		return "", false
 	}

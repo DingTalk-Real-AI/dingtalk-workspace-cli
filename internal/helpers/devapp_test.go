@@ -1278,8 +1278,13 @@ func TestDevAppVersionCheckApprovalPreservesApprovalCandidateNames(t *testing.T)
 		t.Fatalf("select step = %#v, want blocking user input step", selectStep)
 	}
 	publishStep := devAppStepByID(t, steps, "publish_version")
-	if command, _ := publishStep["command"].(string); !strings.Contains(command, "--approver-user-id <selectedUserId>") {
-		t.Fatalf("publish command = %q, want selected approver placeholder", command)
+	if command, _ := publishStep["command"].(string); !strings.Contains(command, "--approver-user-id <selectedUserId>") ||
+		!strings.Contains(command, "--confirmed-sensitive=false") {
+		t.Fatalf("publish command = %q, want selected approver and explicit sensitive confirmation", command)
+	}
+	missingParams, ok := publishStep["missingParams"].([]any)
+	if !ok || len(missingParams) != 2 || missingParams[0] != "approver-user-id" || missingParams[1] != "confirmed-sensitive" {
+		t.Fatalf("publish missingParams = %#v", publishStep["missingParams"])
 	}
 }
 

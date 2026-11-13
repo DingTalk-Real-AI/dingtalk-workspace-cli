@@ -19,6 +19,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // RecordUpsertByKey creates or updates exactly one record selected by a unique
@@ -151,23 +152,31 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 	}
 	result.CompletedSteps = append(result.CompletedSteps, writeStep)
 
-	verified, verifyErr := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
-	if verifyErr == nil && verified != nil {
-		verifyErr = newRecordFieldTypeResolver(rt, baseID, tableID).verify(verified, cells)
-	}
-	if verifyErr != nil || verified == nil {
+	verified, verifyErr := verifyRecordBatchEventually(rt, tool, baseID, tableID, nil, nil,
+		func(rt *shortcut.RuntimeContext, baseID, tableID string, _ []map[string]any, _ map[string]any) (map[string]any, error) {
+			record, err := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
+			if err != nil {
+				return nil, err
+			}
+			if record == nil {
+				return nil, pendingRecordReadback(fmt.Errorf("read-back found no record for the unique key"))
+			}
+			return record, newRecordFieldTypeResolver(rt, baseID, tableID).verify(record, cells)
+		})
+	if verifyErr != nil {
 		result.Status = "unknown"
 		result.FailedCount = 1
 		// An update targets a known record ID and is safe to retry. A create whose
 		// effect could not be read back must be resolved by the unique-key query
 		// first; an immediate blind retry could duplicate the row under eventual
-		// consistency.
-		retryable := action == "update"
+		// consistency. A schema lookup failure needs only read-side recovery.
+		retryable := action == "update" && !isPendingRecordReadback(verifyErr)
 		result.Retryable = retryable
-		if verifyErr == nil {
-			verifyErr = fmt.Errorf("read-back found no record for the unique key")
+		verificationStatus := "failed"
+		if isPendingRecordReadback(verifyErr) {
+			verificationStatus = "pending"
 		}
-		result.Verification = map[string]any{"status": "failed", "error": verifyErr.Error()}
+		result.Verification = map[string]any{"status": verificationStatus, "error": verifyErr.Error()}
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "write call also returned an error: "+writeErr.Error())
 		}
@@ -175,6 +184,9 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 			"nextStep":   "query the unique key again and verify its cells before retrying",
 			"keyFieldId": keyFieldID,
 			"keyValue":   keyValue,
+		}
+		if verified != nil {
+			result.Checkpoint["recordId"] = recordID(verified)
 		}
 		return compositeError(result, verifyErr, retryable)
 	}
@@ -441,13 +453,16 @@ func recordNumericValue(value any) (*big.Rat, bool) {
 	return new(big.Rat).SetString(text)
 }
 
-func recordCellsMayNeedFieldTypes(record map[string]any, expected map[string]any) bool {
+func recordCellsMayNeedFields(record map[string]any, expected map[string]any) bool {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
 		return false
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
+		if !exists {
+			return true
+		}
 		if isEmptyJSONList(want) && (!exists || got == nil) {
 			return true
 		}
@@ -507,6 +522,7 @@ type recordFieldTypeResolver struct {
 	loaded           bool
 	fieldTypes       map[string]string
 	fieldTypeLoadErr error
+	fields           []map[string]any
 }
 
 func newRecordFieldTypeResolver(rt *shortcut.RuntimeContext, baseID, tableID string) *recordFieldTypeResolver {
@@ -514,43 +530,90 @@ func newRecordFieldTypeResolver(rt *shortcut.RuntimeContext, baseID, tableID str
 }
 
 func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeResolver {
-	return &recordFieldTypeResolver{loaded: true, fieldTypes: recordFieldTypesFromFields(fields)}
+	return &recordFieldTypeResolver{loaded: true, fields: fields, fieldTypes: recordFieldTypesFromFields(fields)}
 }
 
 func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
 	exactErr := verifyRecordCells(record, expected, nil)
-	if exactErr == nil || !recordCellsMayNeedFieldTypes(record, expected) {
+	if exactErr == nil || !recordCellsMayNeedFields(record, expected) {
 		return exactErr
 	}
 	fieldTypes, err := r.resolve()
 	if err != nil {
-		return fmt.Errorf("%v; cannot load field types for record verification: %w", exactErr, err)
+		return pendingRecordReadback(fmt.Errorf("cannot load fields for record verification: %w", err))
 	}
-	return verifyRecordCells(record, expected, fieldTypes)
+	canonical, err := recordVerificationCells(expected, record["cells"].(map[string]any), r.fields)
+	if err != nil {
+		return pendingRecordReadback(err)
+	}
+	return verifyRecordCells(record, canonical, fieldTypes)
+}
+
+// Only verification expectations are rewritten. Writes retain the server's
+// field addressing semantics; unreadable/ambiguous metadata cannot prove success.
+func recordVerificationCells(expected, actual map[string]any, fields []map[string]any) (map[string]any, error) {
+	byID := map[string]int{}
+	byName := map[string][]string{}
+	namesComplete := true
+	for _, field := range fields {
+		id := stringValue(field, "fieldId", "id")
+		name := stringValue(field, "fieldName", "name")
+		byID[id]++
+		byName[name] = append(byName[name], id)
+		if name == "" {
+			namesComplete = false
+		}
+	}
+	canonical := make(map[string]any, len(expected))
+	for selector, want := range expected {
+		id := selector
+		_, present := actual[selector]
+		if byID[id] == 0 && !present {
+			matches := byName[selector]
+			// Match names exactly, as the server does. Do not infer selector
+			// kind from an ID prefix or broaden name matching in the verifier.
+			if !namesComplete || len(matches) != 1 {
+				return nil, fmt.Errorf("cannot uniquely resolve field %q for record verification", selector)
+			}
+			id = matches[0]
+		}
+		if id == "" || byID[id] > 1 {
+			return nil, fmt.Errorf("invalid field ID for record verification of %q", selector)
+		}
+		if previous, exists := canonical[id]; exists && !reflect.DeepEqual(previous, want) {
+			return nil, fmt.Errorf("conflicting expectations for field %q; record verification is incomplete", id)
+		}
+		canonical[id] = want
+	}
+	return canonical, nil
 }
 
 func (r *recordFieldTypeResolver) resolve() (map[string]string, error) {
 	if !r.loaded {
 		r.loaded = true
-		r.fieldTypes, r.fieldTypeLoadErr = loadRecordFieldTypes(r.rt, r.baseID, r.tableID)
+		r.fields, r.fieldTypeLoadErr = loadRecordFields(r.rt, r.baseID, r.tableID)
+		r.fieldTypes = recordFieldTypesFromFields(r.fields)
 	}
 	return r.fieldTypes, r.fieldTypeLoadErr
 }
 
-func loadRecordFieldTypes(rt *shortcut.RuntimeContext, baseID, tableID string) (map[string]string, error) {
+func loadRecordFields(rt *shortcut.RuntimeContext, baseID, tableID string) ([]map[string]any, error) {
 	data, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
 	if err != nil {
 		return nil, err
 	}
-	fields, found := findNamedObjectList(data, "fields", "fieldList")
-	if !found {
-		return nil, fmt.Errorf("get_fields response is missing the fields collection")
+	fields, found, err := aitabletarget.FindObjectList(data, "fields", "fieldList")
+	if err != nil {
+		return nil, err
 	}
-	fieldTypes := recordFieldTypesFromFields(fields)
-	if len(fieldTypes) == 0 {
-		return nil, fmt.Errorf("get_fields response has no fields with both fieldId and type")
+	if !found || len(fields) == 0 {
+		return nil, fmt.Errorf("get_fields response is missing a non-empty fields collection")
 	}
-	return fieldTypes, nil
+	next, more, known := aitabletarget.Pagination(data)
+	if more || (next != "" && !known) {
+		return nil, fmt.Errorf("get_fields response is incomplete; record verification is pending")
+	}
+	return fields, nil
 }
 
 func recordFieldTypesFromFields(fields []map[string]any) map[string]string {

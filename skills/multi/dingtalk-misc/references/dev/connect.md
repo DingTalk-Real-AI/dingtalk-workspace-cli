@@ -31,4 +31,6 @@ dws dev connect --daemon --unified-app-id <id> --channel <channel> --format json
 
 前台 connect 是长驻进程，不要在评测/对话 shell 里阻塞运行；需要可管理实例时用 daemon。daemon 启动后重新执行 `list --json`，用新记录的 `clientId` 做 status/restart/stop 定位。dry-run 的 `completionState=LOCAL_DEBUG_ONLY`、`doesNotPublish=true` 表示只完成本地调试准备。凭证优先由 `unifiedAppId` 自动取得，密钥不落盘、不回显；缺本地渠道 CLI 时按 dry-run 的 `installed/autoInstall/installHint` 报告，未经用户要求不扩展成系统安装排障。
 
+Pi 使用 `--channel pi`，复用 Pi 自身的登录和模型配置；`--agent-model` 可指定 `provider/model`。按会话隔离记忆，`/new`、`/clear` 重置会话映射；需要禁用工具时显式使用 `--agent-permission-mode ask`，或在未配置权限模式及其环境变量时使用 `--agent-approval-mode ask`。不存在 `--ask` 参数，`--yolo=false` 也不会关闭默认高权限模式。原生 Pi 通道不要同时设置 `--agent-cmd`，也不要用 `DWS_AGENT_CMD` 覆盖命令。
+
 同一 restart/connect 错误且记录、参数、状态没变化时停止，不重复 help、环境探测或重启。已知路径直接执行；仅当前 leaf flag 确有疑问时查一次 compact Schema，Schema 不可用才查一次精确 leaf help。

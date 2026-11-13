@@ -564,8 +564,8 @@ func TestIsLikelyAMFIKill(t *testing.T) {
 //
 // On macOS, an unsigned arm64 binary is SIGKILL'd by amfid. This test verifies
 // validateNewBinary recovers via repairDarwinBinary (ad-hoc codesign) and
-// successfully re-executes the binary. We use go itself as a stand-in for the
-// new dws binary — it's a real signed Mach-O we can strip and re-sign.
+// successfully re-executes a freshly built DWS binary after stripping its
+// Mach-O signature.
 //
 // GitHub's hosted macOS runners do not reproduce the amfid kill, so in CI this
 // test reports a skip that names the unverified path rather than implying the
@@ -584,6 +584,11 @@ func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
 
 	// Build a fresh dws binary into a temp dir.
 	tmpDir := t.TempDir()
+	// The version probe is a separate process, not a participant in the
+	// parent test's active audit sink or authentication store.
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(tmpDir, "config"))
+	t.Setenv("DWS_AUDIT_DIR", filepath.Join(tmpDir, "audit"))
+	t.Setenv("DWS_KEYCHAIN_DIR", filepath.Join(tmpDir, "keychain"))
 	bin := filepath.Join(tmpDir, "dws-test")
 
 	// Locate repo root from this test file's location.
@@ -603,9 +608,18 @@ func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
 		t.Fatalf("strip signature: %v\n%s", err, out)
 	}
 
-	// Sanity: confirm direct exec is killed. When it is not, repairDarwinBinary
-	// never runs and the rest of this test proves nothing — say so.
-	if _, err := tryExecVersion(bin); err == nil {
+	// Check host enforcement on a byte-identical copy. Executing the unsigned
+	// repair target here can leave cached failure state on its vnode before
+	// validateNewBinary performs its own first execution and signature repair.
+	unsigned, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("read unsigned binary: %v", err)
+	}
+	probe := filepath.Join(tmpDir, "unsigned-probe")
+	if err := os.WriteFile(probe, unsigned, 0755); err != nil {
+		t.Fatalf("write unsigned probe: %v", err)
+	}
+	if _, err := tryExecVersion(probe); err == nil {
 		const unverified = "amfid did not kill the unsigned binary, so repairDarwinBinary was NOT exercised"
 		if os.Getenv(requireAMFISelfHealEnv) == "1" {
 			t.Fatalf("%s (%s=1)", unverified, requireAMFISelfHealEnv)
@@ -629,5 +643,8 @@ func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
 	out, _ := exec.Command("codesign", "-dv", bin).CombinedOutput()
 	if !strings.Contains(string(out), "Signature=adhoc") {
 		t.Errorf("expected adhoc signature, got: %s", out)
+	}
+	if out, err := exec.Command("codesign", "--verify", "--strict", bin).CombinedOutput(); err != nil {
+		t.Fatalf("repaired binary signature is invalid: %v\n%s", err, out)
 	}
 }

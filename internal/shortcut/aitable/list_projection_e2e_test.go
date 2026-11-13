@@ -4,9 +4,87 @@
 package aitable
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestCrossPlatformCoverageAITableBaseListAndSearchPreserveNavigationE2E(t *testing.T) {
+	const baseURL = "https://alidocs.dingtalk.com/i/nodes/%62ase?z=%2f&z=%3D&a=%25%2b"
+	links := []any{
+		map[string]any{
+			"objectType": "base", "objectId": "base", "name": "Base", "relation": "target",
+			"url":   "https://alidocs.dingtalk.com/i/nodes/%62ase?b=%3d&a=%2F&b=%2525",
+			"extra": map[string]any{"label": "保留扩展字段"},
+		},
+		map[string]any{
+			"objectType": "folder", "objectId": "folder", "relation": "parent",
+			"url": "https://alidocs.dingtalk.com/i/desktop/folders/folder?from=%2f%3D",
+		},
+	}
+	for _, command := range []struct {
+		name, tool string
+		args       []string
+	}{
+		{name: "+base-list", tool: "list_bases"},
+		{name: "+base-search", tool: "search_bases", args: []string{"--query", "Base"}},
+	} {
+		t.Run(command.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name       string
+				navigation map[string]any
+			}{
+				{name: "url only", navigation: map[string]any{"url": baseURL}},
+				{name: "links only", navigation: map[string]any{"links": links}},
+				{name: "url and links", navigation: map[string]any{"url": baseURL, "links": links}},
+				{name: "missing stays missing"},
+				{name: "explicit null", navigation: map[string]any{"url": nil, "links": nil}},
+				{name: "explicit empty", navigation: map[string]any{"url": "", "links": []any{}}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					base := map[string]any{"baseId": "base", "baseName": "Base"}
+					for key, value := range tc.navigation {
+						base[key] = value
+					}
+					// A neighboring Base must not inherit another Base's links or a generated URL.
+					wantBases := []map[string]any{base, {"baseId": "other", "baseName": "Other"}}
+					payload := map[string]any{"bases": wantBases, "hasMore": true, "nextCursor": "next%2Fpage"}
+					if command.name == "+base-search" {
+						payload = map[string]any{"data": payload}
+					}
+					encoded, err := json.Marshal(payload)
+					if err != nil {
+						t.Fatal(err)
+					}
+					caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: string(encoded)}}}
+					out, err := runAITableCompositeCLI(t, caller, command.name, command.args...)
+					if err != nil || len(caller.calls) != 1 {
+						t.Fatalf("base command = output:%q err:%v calls:%#v", out, err, caller.calls)
+					}
+					if caller.calls[0].product != "aitable" || caller.calls[0].tool != command.tool {
+						t.Fatalf("base command called wrong tool: %#v", caller.calls)
+					}
+					var got struct {
+						Bases      []map[string]any `json:"bases"`
+						Count      int              `json:"count"`
+						HasMore    bool             `json:"hasMore"`
+						NextCursor string           `json:"nextCursor"`
+					}
+					if err := json.Unmarshal([]byte(out), &got); err != nil {
+						t.Fatal(err, out)
+					}
+					if !reflect.DeepEqual(got.Bases, wantBases) {
+						t.Fatalf("base navigation changed: got=%#v want=%#v output=%s", got.Bases, wantBases, out)
+					}
+					if got.Count != len(wantBases) || !got.HasMore || got.NextCursor != "next%2Fpage" {
+						t.Fatalf("base page metadata changed: %s", out)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestCrossPlatformCoverageAITableListProjectionExplicitEmptyIsSuccessE2E(t *testing.T) {
 	tests := []struct {

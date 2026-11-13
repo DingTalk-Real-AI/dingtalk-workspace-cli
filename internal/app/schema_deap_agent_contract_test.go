@@ -13,6 +13,28 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
+func TestCrossPlatformCoverageDigitalEmployeeQwenworkTypeSchema(t *testing.T) {
+	root := NewRootCommand()
+	names := []string{"dingtalk-tag.create_digital_employee", "dingtalk-tag.list_digital_employees", "dingtalk-tag.update_digital_employee_draft"}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, names...)
+	for _, name := range names {
+		params := schemaContractMap(payload.Tools[name]["parameters"])
+		got := params["type"]["enum"]
+		if !reflect.DeepEqual(got, []string{"qwenwork", "local_agent"}) {
+			t.Errorf("%s type enum = %#v", name, got)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDigitalEmployeeVisibilityEnumSchema(t *testing.T) {
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.set_visibility")
+	params := schemaContractMap(payload.Tools["dingtalk-tag.set_visibility"]["parameters"])
+	if got := params["visibility"]["enum"]; !reflect.DeepEqual(got, []string{"ALL", "PARTIAL"}) {
+		t.Fatalf("visibility enum = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
@@ -378,13 +400,14 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 19 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
+	if len(parameters) != 20 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 20", len(parameters))
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "client-id": "clientId",
 		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
-		"reply-mode": "replyMode",
+		"reply-mode":         "replyMode",
+		"reply-card-forward": "replyCardForward",
 	} {
 		parameter := parameters[name]
 		if parameter == nil {
@@ -398,6 +421,14 @@ func TestCrossPlatformCoverageDingTalkTagConnectReachesFinalSchema(t *testing.T)
 	channel := parameters["channel"]
 	if got := schemaContractString(parameters["reply-mode"]["default"]); got != "a2ui" {
 		t.Errorf("reply-mode default = %q, want a2ui", got)
+	}
+	// The existing wire projection omits zero defaults. Runtime's false default
+	// is checked on the owning flag; reject any contradictory published value.
+	if got, present := parameters["reply-card-forward"]["default"]; present && got != false {
+		t.Errorf("reply-card-forward published default = %#v, want false or omitted", got)
+	}
+	if got := schemaContractString(parameters["reply-card-forward"]["type"]); got != "boolean" {
+		t.Errorf("reply-card-forward type = %q, want boolean", got)
 	}
 	if got := schemaContractString(channel["required_when"]); got != "" {
 		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)

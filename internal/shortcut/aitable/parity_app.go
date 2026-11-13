@@ -4,6 +4,7 @@ package aitable
 
 import (
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitablenavigation"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -31,8 +32,8 @@ func parityAppShortcuts() []shortcut.Shortcut {
 		{command: "+app-get", idempotency: "idempotent", tool: "get_app", description: "获取 Base 唯一应用模式 App；不存在时自动创建，需确认", write: true},
 		{command: "+app-page-list", idempotency: "idempotent", tool: "list_app_pages", description: "列出 Base 应用页面；不存在 App 时会创建默认 App，需确认", collection: "pages", idKey: "pageId", write: true},
 		{command: "+app-page-get", idempotency: "idempotent", tool: "get_app_page", description: "读取准确应用页面及组件摘要", idFlag: "page-id", idKey: "pageId", flags: []shortcut.Flag{page}},
-		{command: "+app-page-create", idempotency: "non_idempotent", tool: "create_app_page", description: "新建应用仪表盘页面并按返回 ID 读回名称", idKey: "pageId", readTool: "get_app_page", write: true, create: true, flags: []shortcut.Flag{name}},
-		{command: "+app-page-update", idempotency: "idempotent", tool: "update_app_page", description: "重命名应用页面并按准确 ID 读回", idFlag: "page-id", idKey: "pageId", readTool: "get_app_page", write: true, flags: []shortcut.Flag{page, name}},
+		{command: "+app-page-create", idempotency: "non_idempotent", tool: "create_app_page", description: "新建应用仪表盘页面并按返回 ID 读回名称；result.url/links 携带完整目标，定位由 Web 处理", idKey: "pageId", readTool: "get_app_page", write: true, create: true, flags: []shortcut.Flag{name}},
+		{command: "+app-page-update", idempotency: "idempotent", tool: "update_app_page", description: "重命名应用页面并按准确 ID 读回；result.url/links 携带完整目标，定位由 Web 处理", idFlag: "page-id", idKey: "pageId", readTool: "get_app_page", write: true, flags: []shortcut.Flag{page, name}},
 		{command: "+app-page-delete", idempotency: "unknown", tool: "delete_app_page", description: "删除应用页面并核对完整页面目录中已不存在", idFlag: "page-id", idKey: "deletedPageId", write: true, flags: []shortcut.Flag{page}},
 		{command: "+app-block-delete", idempotency: "unknown", tool: "delete_app_widget", description: "删除应用 Widget 并核对其所属页面列表", idFlag: "widget-id", idKey: "deletedWidgetId", write: true, flags: []shortcut.Flag{page, widget}},
 
@@ -266,6 +267,8 @@ func executeParityApp(rt *shortcut.RuntimeContext, op parityAppOperation) error 
 					}
 				}
 			}
+			// Keep the mutation link when an older readback endpoint omits navigation.
+			aitablenavigation.Preserve(actual, body)
 			body = actual
 		}
 		if op.idKey == "widgetId" && body["pageId"] != args["pageId"] {

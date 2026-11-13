@@ -1,6 +1,8 @@
 # Dev 能力索引（只在意图不明时读取）
 
-意图清楚时不要读本索引，直接从根 Skill 进入唯一专题 Reference。默认走 `dws dev` 原子命令，不先读 `devapp.md`，也不调用 help 发现 shortcut。
+意图清楚时不要读本索引，直接从根 Skill 进入唯一专题 Reference。默认走 `dws dev` 原子命令，
+不先读 `devapp.md`，也不调用 help 发现 shortcut；已知 leaf 直接执行，参数不确定时只查该
+leaf 的 compact Schema。
 
 | 用户意图 | 标准命令路径 | 只读此文件 |
 |---|---|---|
@@ -8,13 +10,16 @@
 | AppKey、AppSecret、clientId、agentId | `dws dev app credentials get` | [`credentials.md`](./credentials.md) |
 | 开放平台应用的管理成员、成员角色与角色汇总 | `dws dev app member ...` | [`member.md`](./member.md) |
 | 应用权限 | `dws dev app permission ...` | [`permission.md`](./permission.md) |
+| 开发者后台应用的可见人员范围（部门/角色/人员，查询或全量设置） | `dws dev app scope get` / `dws dev app scope set` | [`scope.md`](./scope.md) |
 | IP 白名单、回调或 SSO 地址 | `dws dev app security config` | [`security.md`](./security.md) |
 | H5、PC 主页与 OMP 地址 | `dws dev app webapp ...` | [`webapp.md`](./webapp.md) |
 | 机器人配置、启停、提交审核 | `dws dev app robot ...` | [`robot.md`](./robot.md) |
 | 版本历史、待发布版本、创建、审批、发布与状态 | `dws dev app version ...` | [`version.md`](./version.md) |
-| 应用事件订阅 | `dws dev app event ...` | [`event.md`](./event.md) |
+| 应用事件订阅（应用接收哪些钉钉回调事件） | `dws dev app event ...` | [`event.md`](./event.md) |
+| 应用事件定义配置（企业自建应用产生什么事件：草稿、校验、启用、下线） | `dws dev event ...` | [`event-definition.md`](./event-definition.md) |
 | 本机机器人连接器、Stream/长连接实例与健康状态 | `dws dev connect ...` | [`connect.md`](./connect.md) |
 | MCP 服务、工具、鉴权、凭证与协作者 | `dws dev mcp ...` | [`mcp.md`](./mcp.md) |
+| 轻应用创建即发布、更新、删除、列表、详情、appKey/secret 凭证、配额与软删（独立于普通统一应用） | `dws dev liteapp ...` | [`liteapp.md`](./liteapp.md) |
 | 同一任务明确跨两个以上 Dev 域 | 按依赖顺序组合原子命令；先不预读专题 | [`recipes.md`](./recipes.md) |
 
 ## 共同执行约束

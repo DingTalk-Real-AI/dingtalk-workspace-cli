@@ -267,6 +267,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
 	var approvedFlagMigrationsPath, candidateFlagMigrationsPath string
 	var approvedCommandMigrationsPath, candidateCommandMigrationsPath string
+	var approvedParameterMigrationsPath, candidateParameterMigrationsPath string
+	var parameterBaseSchemaPath, parameterStableSchemaPath string
 	var migrationBaseSchemaPath string
 	var migrationCurrentSnapshotPath, migrationBaseSnapshotPath, migrationStableSnapshotPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
@@ -279,6 +281,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&candidateFlagMigrationsPath, "candidate-flag-migrations", "", "detached candidate flag migration manifest")
 	flags.StringVar(&approvedCommandMigrationsPath, "approved-command-migrations", "", "base-owned approved command migration manifest")
 	flags.StringVar(&candidateCommandMigrationsPath, "candidate-command-migrations", "", "detached candidate command migration manifest")
+	flags.StringVar(&approvedParameterMigrationsPath, "approved-schema-parameter-migrations", "", "base-owned approved Schema parameter manifest")
+	flags.StringVar(&candidateParameterMigrationsPath, "candidate-schema-parameter-migrations", "", "detached candidate Schema parameter manifest")
+	flags.StringVar(&parameterBaseSchemaPath, "parameter-migration-base-schema", "", "original normalized merge-base contract for enum lifecycle")
+	flags.StringVar(&parameterStableSchemaPath, "parameter-migration-stable-schema", "", "original normalized stable contract for enum lifecycle")
 	flags.StringVar(&migrationBaseSchemaPath, "migration-base-schema", "", "normalized merge-base Schema contract used to verify cross-migration lineage")
 	flags.StringVar(&migrationCurrentSnapshotPath, "migration-current-snapshot", "", "current interface snapshot used for migration authorization")
 	flags.StringVar(&migrationBaseSnapshotPath, "migration-base-snapshot", "", "merge-base interface snapshot used for migration authorization")
@@ -299,6 +305,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	flagMigrationPair := approvedFlagMigrationsPath != "" || candidateFlagMigrationsPath != ""
 	commandMigrationPair := approvedCommandMigrationsPath != "" || candidateCommandMigrationsPath != ""
+	parameterMigrationPair := approvedParameterMigrationsPath != "" || candidateParameterMigrationsPath != "" ||
+		parameterBaseSchemaPath != "" || parameterStableSchemaPath != ""
+	if parameterMigrationPair && (approvedParameterMigrationsPath == "" || candidateParameterMigrationsPath == "" ||
+		parameterBaseSchemaPath == "" || parameterStableSchemaPath == "" || checkPath == "") {
+		fmt.Fprintln(stderr, "Schema parameter migrations require --check, both manifests and both base/stable Schema contracts")
+		return 2
+	}
 	if flagMigrationPair && (approvedFlagMigrationsPath == "" || candidateFlagMigrationsPath == "") {
 		fmt.Fprintln(stderr, "Schema flag migration authorization requires both flag manifests")
 		return 2
@@ -364,6 +377,33 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
 			return 2
+		}
+		if parameterMigrationPair {
+			approved, readErr := readSchemaParameterMigrations(approvedParameterMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read approved Schema parameter migrations: %v\n", readErr)
+				return 2
+			}
+			candidate, readErr := readSchemaParameterMigrations(candidateParameterMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read candidate Schema parameter migrations: %v\n", readErr)
+				return 2
+			}
+			base, readErr := readContract(parameterBaseSchemaPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read parameter migration base: %v\n", readErr)
+				return 2
+			}
+			stable, readErr := readContract(parameterStableSchemaPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read parameter migration stable: %v\n", readErr)
+				return 2
+			}
+			baseline, err = normalizeSchemaParameterMigrations(baseline, base, stable, current, approved, candidate)
+			if err != nil {
+				fmt.Fprintf(stderr, "authorize Schema parameter migrations: %v\n", err)
+				return 2
+			}
 		}
 		var flagMigrations []interfacesnapshot.FlagMigration
 		if flagMigrationPair {
@@ -1016,7 +1056,9 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 // interfaceTransition identifies one reviewed interface tuple change and pins
 // both sides of the migration. A composite leaf has an empty ref. An available
 // MCP leaf carries the canonicalized ref emitted by parseTool; an unavailable
-// MCP leaf deliberately clears it.
+// MCP leaf deliberately clears it. A local leaf (pure built-in implementation)
+// is reviewed only as the one-way old side of a migration to composite and
+// always carries an empty ref.
 type interfaceTransition struct {
 	OldMode string
 	OldRef  string
@@ -1027,7 +1069,10 @@ type interfaceTransition struct {
 // reviewedInterfaceTransitions enumerates exact changes between a single-RPC
 // leaf and an orchestrated/composite leaf. Schema shape cannot prove that the declared kind
 // matches runtime execution, so every tool and both complete interface tuples
-// must be reviewed before the product change lands.
+// must be reviewed before the product change lands. A local mode may appear
+// only as the old side with an empty ref, migrating one-way to composite;
+// TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical rejects
+// any other local shape at the registry level.
 //
 // The table does not approve any CLI, parameter, availability, or safety drift.
 // compatibleReviewedInterfaceTransition requires every other compatibility
@@ -1121,6 +1166,17 @@ var reviewedInterfaceTransitions = map[string]interfaceTransition{
 		OldMode: "composite",
 		NewMode: "mcp",
 		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_info"}`,
+	},
+	// DWSH-189: event list/schema 主路径切换远端 DWS 个人事件目录
+	// （官方 + 应用事件，/event/catalog 与 /event/schema），内置目录降级为
+	// 离线回退。完整命令不再是纯内置读取，无单一可 pin 的 interface_ref。
+	"event/event.list": {
+		OldMode: "local",
+		NewMode: "composite",
+	},
+	"event/event.schema": {
+		OldMode: "local",
+		NewMode: "composite",
 	},
 }
 
@@ -1732,6 +1788,31 @@ func compatibleReviewedParameterTypeChange(toolPath, name string, oldParameter, 
 	return reviewed && parameterContractUnchangedExceptType(oldParameter, newParameter)
 }
 
+// IMS-485: this policy-only change must be reviewed and merged before the
+// separate send-a2ui-card default change can use the base-owned checker.
+// Omitted flags will enable forwarding, including employee reply/approval
+// callers that omit the flag; callers requiring the old behavior must pass
+// --support-forward=false. The unified messages-send shortcut is not covered.
+// Only this boolean parameter's false -> true default transition is accepted;
+// every other published parameter field must remain identical.
+func compatibleReviewedA2UIForwardDefaultChange(toolPath, name string, oldParameter, newParameter parameterSchema) bool {
+	if toolPath != "chat/chat.create_and_send_a2ui_card" || name != "support-forward" ||
+		oldParameter.Type != `"boolean"` || oldParameter.Property != "supportForward" {
+		return false
+	}
+	// Cobra's published Schema omits the zero false default and encodes the
+	// nonzero true default as a JSON string. Keep this native-annotation form
+	// separate from the already reviewed explicit JSON boolean transition.
+	explicitBoolean := oldParameter.Default == "false" && newParameter.Default == "true"
+	publishedCobra := oldParameter.Default == "" && newParameter.Default == `"true"` &&
+		oldParameter.PropertySource == "native_annotation"
+	if !explicitBoolean && !publishedCobra {
+		return false
+	}
+	oldParameter.Default = newParameter.Default
+	return reflect.DeepEqual(oldParameter, newParameter)
+}
+
 func checkParameterCompatibility(toolPath, name string, oldParameter, newParameter parameterSchema) []string {
 	var failures []string
 	if oldParameter.Type != newParameter.Type &&
@@ -1749,6 +1830,9 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		{name: "anyOf", old: oldParameter.AnyOf, new: newParameter.AnyOf},
 	} {
 		if field.old != field.new {
+			if field.name == "default" && compatibleReviewedA2UIForwardDefaultChange(toolPath, name, oldParameter, newParameter) {
+				continue
+			}
 			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))
 		}
 	}

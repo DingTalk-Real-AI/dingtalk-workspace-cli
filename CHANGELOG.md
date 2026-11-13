@@ -6,6 +6,294 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.68] - 2026-11-11
+
+本版本将已交付的 `v1.0.68-beta.1` 晋级正式版，并纳入下方列出的 beta 后变更。
+
+### Changed
+
+- **应用事件** (#1597) — 新增应用事件目录发现、Schema 查询和消费输出，以及 `dws dev event list/get/create/update/validate/lint/debug/publish/offline` 九条事件定义管理命令。写操作使用真实 `configRevision`，修订冲突不自动重放；debug 明确区分未就绪、未通过和通过。真实 debug、草稿体验投递及发布后消费闭环仍需在目标服务环境验收。
+- **Runtime payload** (#1594) — 升级至 `20261104`，同步六平台资源、配置及完整性校验，继续使用单文件交付。
+- **轻应用创建** (#1597，前置迁移 #1598) — `dws dev liteapp create --desc` 改为必填且去除首尾空白后非空，已有脚本需要显式提供描述。
+
+### Known limitations
+
+- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+
+下方按仓库契约原样汇总本次归档的 fragments，其中应用事件定义与 Runtime payload 条目已在 beta 交付，本次补齐归档，不代表 beta 后新增。
+
+### Changes since `v1.0.68-beta.1`
+
+### Added
+
+- **企业自建应用事件定义配置** — 新增 `dws dev event list/get/create/update/validate/lint/debug/publish/offline` 九条命令，覆盖事件定义的草稿创建与编辑、静态校验、本地 lint、端到端调试、直接启用与下线。定义只从 `--file` 读取并做本地预检：eventKey 必须符合 `app_user_{业务系统}_{对象}_{动作}`，`payloadSchema.type` 固定为 object，`category` 不属于本轮输入契约，保留键（Scope/状态/版本/修订号）一律拒绝，CLI 不改写开发者文件。写操作必须携带从 `get` 读回的真实 `configRevision`，409 修订冲突按不可重试的显式失败返回并给出双方修订号，不自动换号重放。`debug` 区分未就绪、未通过与通过三种结论并列出未完成阶段，超时不视为通过。九条命令走统一结果契约，分页事实缺失时失败而非返回半页结果；`dws dev app event`（回调订阅）与 `dws event`（个人事件监听）两条命令面保持不变。
+
+- 新增 misc 长尾能力 `dws sport`（企业运动健康/钉钉运动），接入选定的 21 个 MCP 工具。命令树位于 `internal/helpers/sport.go`，通过 `register_sport.go` 手写注册进入 `NewPublicCommands`，不修改生成式注册表或 app 装配逻辑；端点登记于 edition supplement servers（server ID `sport`）
+- sport 根命令不在 `dws --help` 展示；`dws sport --help`、21 个叶子的直接调用和 Agent Schema 查询仍可用，通过 dingtalk-misc Skill 发现能力
+- `sport org status`：查询企业是否开通钉钉运动步数榜（`get_org_step_participate_status`）
+- `sport step org-info|org-total`：企业单日步数概况、区间总步数（`get_org_health_step_info`、`get_org_total_step_count`）
+- `sport step emp-ranking|dept-ranking|dept-emp-ranking`：员工/部门/部门内员工步数排行，支持日/周/月维度与 cursor 分页（`list_emp_step_ranking`、`list_dept_step_ranking`、`list_emp_ranking_in_dept`）
+- `sport step emp-info|emp-infos|dept-infos`：员工与部门多日步数明细（`get_emp_step_ext_info`、`get_emp_step_infos`、`get_dept_step_infos_by_dept_id`）
+- `sport competition create|config|rule-detail|instances|current-instance|next-instance|announce`：比赛创建、配置/规则/期次查询、开赛播报；create 与 announce 为无幂等写操作，均有 `user_required` 确认门；不提供更新、取消或删除命令
+- `sport stats signup|participants-daily|participants|reached|trend`：比赛报名、每日参与、累计参与、达标与趋势统计，分别映射 `get_signup_count`、`count_daily_participants`、`count_total_participants`、`count_reached_users`、`list_daily_participation_trend`
+- 新增 dingtalk-misc Skill 的 sport 产品主文档（`skills/multi/dingtalk-misc/references/sport.md`，与 `skills/mono/references/products/sport.md` 保持 identical），并在两份 SKILL.md 与 coverage 清单登记
+- 全部 21 个叶子声明 `dry_run.preview_kind=request`、`remote_reads=false`；本地预览在统一信封顶层标记 `dry_run=true`，返回待调用工具与参数及 `executed=false`，不调用远端工具；真实执行沿用统一 MCP 错误分类
+- `get_user_org_list`（用户所属企业列表）不接入 CLI；MCP 平台当前仍保留该工具，平台下线由服务维护方单独处理
+
+- **Windows 按 Agent 隔离凭据存储** — `DWS_KEYCHAIN_DIR` 在 Windows 上用于选择独立的 DPAPI 保护 HKCU 注册表命名空间，使同一台机器上的多个 Agent 不再共享登录凭据。需与 `DWS_CONFIG_DIR` 成对设置，并在每次调用（登录、业务命令、logout、reset）时传入相同的 Agent 专属绝对路径；凭据仍保存在注册表，不会作为文件写入该目录。目录会先清理、尽可能解析为绝对路径并做大小写折叠后再哈希，等价写法映射到同一命名空间；未设置该变量时沿用历史注册表键，已有登录不受影响。升级后显式设置该变量会进入新的命名空间并需要重新登录；logout/reset 只清理所选命名空间。macOS/Linux/OpenHarmony 上 `DWS_KEYCHAIN_DIR` 仍作为加密文件存储根目录，`DWS_DISABLE_KEYCHAIN` 依旧仅对 macOS 生效。
+
+### Changed
+
+- **Runtime payload** — 升级内嵌 runtime payload 至 `20261104`，同步平台资源、配置及完整性校验，保持单文件交付方式。
+
+### Fixed
+
+- **消息解密失败原因透传** — 策略查询失败与策略关闭不再共用一个笼统原因：查询失败记为 `policy_query_failed`，策略关闭透传服务端 `reason`（如 `org_crypto_disabled`、`crypto_disabled_by_switch`），仅在旧服务端未给出原因时回退 `policy_disabled`；批量解密整体失败按消息逐条记为 `batch_decrypt_failed` 并保留 `messageId`/`conversationId`，不再输出一条无归属的 Go 错误文本（#1404）。
+- **分页聚合保留正文缺口** — 单聊全量读取（`+messages-list-direct --page-all`）与智能读取快捷入口在写完分页诊断后不再覆盖解密账本的 `partial`，解密失败但分页成功时结果仍标记为不完整；`chat +messages-mget` 等原子入口补齐 `decryptAllowedCount`，与快捷入口的账本字段一致（#1297）。
+- **策略响应缺失 mode 时不再静默降级** — 仅当响应是不含任何策略字段的纯成功回执时才按 `mode=off` 兼容处理；缺少 `mode` 却带有 `reason`、`friendlyHint` 或错误字段的响应直接失败，避免把契约缺字段读成"组织未开通"。
+
+- **AI 表格丢响应后的原操作恢复**：含创建的 `+record-upsert` 在发送前原子保存原 token、稳定身份、环境及目标摘要，保存失败不发送；超时后保留原恢复文件，按原 token 只读核对创建组，更新组按原 recordId 独立读回。
+
+- **AI 表格写入结果 unknown 保持 pending**：`+record-write-result` 收到合法的 `state=unknown` 回执时返回 `pending`，不再误报失败；保留原 baseId/tableId/clientToken 和只读恢复命令，不重放写入，也不把未知结果当作未写入。坏身份、坏 ID 或部分确认的 ID 仍然拒绝。
+
+- **Sheet batch style limit** — `sheet range batch-set-style` 的 `--ranges` 和 `--batch` 统一最多 20 项，与服务端 `batch_update` 上限一致；超限在本地返回 validation（退出码 3），提示手动分批。同步 Help/Schema 与 Skill 说明，合法输入继续一次提交。
+
+- **AI 表格建表及仪表盘指引**：建表前拒绝不适用的 formatter，bootstrap 返回字段 ID 并容忍建表后短暂不可见；补齐图表模板说明兼容、均值配置与布局尺寸诊断。更新 mono/multi Skill 的单条执行、独立核验及关联记录格式指引。
+- **AI 表格链接交付**：保留 Base 列表和搜索返回的逐对象导航字段；过程展示或宿主卡片不替代最终正文中的有效具名完整链接。按对象身份和用途选择入口，原样保留 URL 编码，缺少填写入口时不向填写者交付管理页。详见 [过程链接与最终交付](../docs/aitable-process-link-display.md)。
+- **分页完整性**：聊天及智能读取在分页未知时不再宣称 `paginationKnown=true`；DING 列表允许递减但不重复的续页游标，避免误判停滞。
+- **考勤组成员更新**：`attendance group update-members` 必须显式传入 `--member-join-policy SPECIFIC_USERS`，并同步参数声明、校验、示例与 Skill。
+- **文档图片预览**：上传回执带资源 ID 时，内联图片写入 `extraData.resourceId`；兼容不含资源 ID 的旧内联图片回执，其他依赖资源 ID 的写入仍严格校验。
+
+- `chat message send-a2ui-card` now sends `supportForward=true` by default. Explicit `--support-forward=false` still disables forwarding; explicit true remains supported. Digital employee replies explicitly preserve their independent `--reply-card-forward` setting, and approval cards remain non-forwardable.
+
+## [1.0.68-beta.1] - 2026-11-06
+
+### Added
+
+- **应用事件** (#1597) — 新增应用事件目录发现、Schema 查询和消费输出，支持业务 Schema 版本；新增 `dws dev event list/get/create/update/validate/lint/debug/publish/offline`，用于配置事件定义、校验及受控调试。真实 debug、草稿体验投递和发布后的消费闭环仍需在目标服务环境验收。
+
+### Changed
+
+- **Runtime payload** (#1594) — 升级内嵌资源至 `20261104`，同步六平台资源、配置和完整性校验，继续使用单文件交付。
+- **轻应用创建** (#1597，前置迁移 #1598) — `dws dev liteapp create --desc` 从可选改为必填且去除首尾空白后非空；已有脚本需要显式提供描述。
+
+### Known limitations
+
+- 应用事件业务分类与内置官方分类重名时，不带生产者筛选的分类查询只返回内置官方事件；可使用应用事件来源查询并检查返回分类，不能将前者的结果视为完整应用事件目录。
+
+## [1.0.67] - 2026-11-04
+
+本版本将已交付的 `v1.0.67-beta.1` 晋级正式版，并纳入下方列出的 beta 后变更。
+
+### Changed
+
+- **Runtime payload** — 升级至 20261028，纳入最新平台配置，同步六平台资源、完整性校验、运行时集成及安装打包兼容性。
+
+### Changes since `v1.0.67-beta.1`
+
+### Added
+
+- Extend interactive cards with template rendering, summaries, forwarding, mentions and extension metadata.
+- Support final A2UI replies across local Agent channels, preserving image attachments and interrupted-turn recovery boundaries.
+- Add personal minutes and calendar event schemas and consumer support; service availability requires separate validation.
+- Add reviewed LiteApp commands and improve AI table navigation, named links and field verification.
+- Add document suggestions, atomic range operations and scoped whiteboard recovery.
+
+- Bound upload PUT operations with the requested timeout and avoid nil-content next-step panics.
+- Replace the staged executable inode after macOS signing during upgrade.
+
+Credential rotation commands are outside this change because this public baseline does not expose them.
+
+### Fixed
+
+- **Gitee 代码镜像** — 将 main 同步步骤的超时预算从 15 分钟延长至 60 分钟，为低速链路上的二进制增量上传留出时间。
+
+- Gitee/OSS 渠道补同步使用目标封存版本的制品格式校验器，避免运行时载荷格式升级后误拒绝历史正式版；发布来源准入及镜像上传继续使用受保护主分支工具。
+
+## [1.0.67-beta.1] - 2026-11-02
+
+### Changed
+
+- **Runtime payload** — 升级至 20261028，纳入最新平台配置，同步六平台资源、完整性校验、运行时集成及安装打包兼容性。
+
+## [1.0.66] - 2026-10-28
+
+本版本将已交付的 `v1.0.66-beta.2` 晋级正式版，汇总两个 beta 的改进，并纳入下方列出的 beta 后变更。
+
+### Changed
+
+- 汇总 beta 改进：新增第三方 OIDC 登录、Provider Hook、分步换票及应用与来源隔离的凭证刷新；登录错误保留公开错误码和 Trace ID，并过滤凭证与内部诊断。核心已提供 Hook，真实 SDK 适配由 overlay 接入。
+- 汇总 beta 修复：文档创建移除与文档名重复的首个 Markdown H1；安装器在缺失可用 Skill 时明确失败；Gitee 补同步包含 OpenHarmony 归档。
+
+- **Pi 接入说明** — 补齐已有 Pi 适配器的配置、模型选择、会话隔离与重置、工具权限、文本回退及音视频限制说明；按实际参数解释 ask 模式，不引入新运行时行为。
+- **数字员工类型迁移** — 本次包含 `open_code → qwenwork` 的破坏性输入变更，脚本及返回值消费者须同步调整；分发前仍需独立核实公共服务的新旧客户端兼容行为，CI 通过不代表服务端已兼容。
+
+### Changes since `v1.0.66-beta.2`
+
+### Added
+
+- **AI Table advanced permission role members** — adds role member append/replace, role copy, and effective user-role query commands with validated member payloads and unified Agent output.
+
+- 表单分享更新按 MCP 回读的权限、匿名、查看范围、通知、时间及封面配置校验终态；已回读值矛盾时返回部分失败，旧服务端缺失字段或缺少资源对应证明时继续明确标记未验证。
+
+- 补齐表单分享 get/update 的返回 Schema，并在结果中保留历史成员身份不可用的安全提示。修正表单列表中 UUID 和候选链接的 Help/Skill 说明。
+
+- 对齐 MCP 表单分支的封面可信域名、端口及 URL 格式限制；保留已上传封面的结构化恢复 ID，并兼容非指定成员模式清空授权后的空字符串回读。催填 Help/Schema/Skill 统一使用当前组织 userId，由 MCP 复用身份转换并兼容历史 uid；提示结果不明时不自动重发，兼容不依赖旧客户端升级。
+
+本地封面上传成功后配置更新失败时，整条命令禁止自动重试并清除重试时间建议，保留错误分类、原始诊断和资源恢复 ID，避免重复上传。
+
+回执中的 enabled 与 status 相互矛盾时返回不可自动重放的部分失败，避免将关闭或受处罚的状态误标为已验证成功。
+
+正数提交上限回读为 0（不限制）时按终态不一致处理；仅显式清除上限才接受 0。分享链接读取复用分享配置查询的只读退避重试，读取成功后只生成一次链接和二维码。
+
+- `chat list-all-conversations` 新增显式 `--page-all` 自动翻页，并支持页数、条数和页间等待边界；默认单页行为保持不变。
+
+- 新增 `dws mcp market search`：按名称关键词搜索钉钉 MCP 市场，返回 `mcpId`、名称、描述、服务名、提供方、是否官方和是否收费，可直接衔接 `dws mcp published tools <mcpId>` 与 `dws mcp url get <mcpId>`。支持 `--limit` 单页数量与 `--cursor` 续页；只覆盖已上架市场的 MCP，企业内发布但未上架市场的 MCP 不在结果中。
+
+- Add independent mind-map creation and topic list/create/update/delete with reviewed OpenNodes input, unified results, and separate routing from blank wiki files and minutes mind maps.
+- Add group-number join requests and invitation-link group lookup/join with explicit pending results and invitation credential redaction.
+- Add application scope get/set and preserve failure, pending and unknown outcomes in application lifecycle results; success guidance never executes follow-up actions automatically.
+- Extend AI Table orchestration with bounded batch reads, build plans, chart templates/layout diagnostics, resumable AI task waits and reports, builtin AI field configuration and field-group operations. Mutations retain explicit verification and recovery facts; unavailable capabilities do not authorize write probes or blind replay.
+
+- 为 Schema string 参数的精确枚举迁移增加独立审批清单与 pending/consumed 生命周期；同一个前置 MR 可提交机制与仍保持 before 的 pending 计划，旧基线仍完整比较产品且不读取新清单，新 checker 仅以空审批补查声明。本次登记四项数字员工枚举迁移供维护者审阅，不修改业务参数、不提交 consumed、不调整历史基线或跳过质量门禁。
+
+### Changed
+
+- **Dangerous command confirmation** (#1096) — `calendar event delete`, `calendar attendee delete`, `calendar room delete`, `chat group members remove`, `minutes replace-text`, and `doc permission update` now require explicit confirmation and publish `high` risk in Schema. Event deletion and minutes text replacement also publish `destructive` effects. Non-interactive scripts must pass `--yes` after obtaining user approval; otherwise these commands return `confirmation_required` without calling the remote service. The mono skill's dangerous-operation table now uses the canonical `calendar attendee delete` path for Schema lookup.
+
+- `dws dingtalk-tag manage create|list|save-draft --type` 使用 `qwenwork` / `local_agent`；Help、Schema、Skill 和示例同步。
+- 创建仍须显式选择类型，响应模式默认值、人设保存、发布前更新人校验及本地 Agent 接入逻辑不变。
+- 返回值消费者需要识别 `qwenwork`。在分发新 CLI 前，须独立核实公共服务支持新类型以及旧客户端所需的兼容行为；本说明不代表线上部署已完成。
+- 更新不传类型保持原值，类型创建后不可切换。`connect --channel opencode` 是本地适配器名称，不属于本次改名。
+- 先核实公共服务兼容性，并同步 MCP 工具类型枚举/描述，再使用新 CLI。旧脚本中的 `--type open_code` 需改为 `--type qwenwork`。
+- 回滚 CLI 时需一并核对服务端返回契约；本变更不迁移员工数据。
+- `manage set-visibility` 在预览和执行前校验 ALL/PARTIAL、PARTIAL 非空目标及 ALL 与指定目标互斥，非法范围不会调用 MCP；合法请求和旧参数别名兼容保持不变。
+- `run run-status` 的 Help 与 Skill 按真实返回说明 `result` 为字符串状态文案，程序应使用 `execStatus` 判断执行状态。
+- Skill 上传失败保留公开权限管理链接，不再整段误脱敏；其他 URL、签名地址与凭证仍不输出。Skill 更新仅返回裸 `NO_PERMISSION` 时补充条件式权限引导，保留错误码、Trace ID 和退出码，不覆盖服务端具体说明、不重试写操作。
+
+### Fixed
+
+- **npm Skill installation resilience** (#1320, binary-only switch proposed in #1321) — supports `DWS_NO_SKILLS=1` for binary-only installs and keeps an optional user-cache refresh failure from rolling back an otherwise successful CLI and Agent Skill installation.
+
+- **限流错误提示** — 当服务返回 `server_error_code=RATE_LIMIT_ERROR` 时，明确说明当前请求频率过高、本次请求被限流，并引导等待 10 秒后重试；其他错误码保持原有处理。
+
+## [1.0.66-beta.2] - 2026-10-26
+
+### Added
+
+- OIDC 登录错误诊断：`auth provider-login <provider>`、`auth exchange-prepare` 和 `auth token-exchange`
+保留 Portal 的公开错误码和 trace ID，并将已定义错误码转换为可读说明。
+覆盖配置、事务/state、授权码、身份校验、限流、上游调用和 DWS 会话签发错误。
+三个命令均为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
+
+- 从 `error.code`、`error.action`、`trace_id` 解析公开诊断；响应体缺失或无效时，
+  使用合法的 `X-Dws-Trace-Id`。后端日志专用 `reason` 不进入客户端输出。
+- 人类可读错误显示 `Trace ID` 和 `Server Code`。JSON 复用现有字段：
+  传统输出为 `error.server_error_code`，统一输出为 `error.upstream_code`，
+  两者均提供 `error.trace_id` 和 `error.details.action/http_status/provider`。
+- `stop` 提示检查参数/配置或联系管理员；`restart_login` 提示重新登录或重新
+  `exchange-prepare` 取码。保持单次请求，不自动重试旧 code/state。
+- 保留现有错误分类、退出码和 token 响应格式。只保留 Portal 已定义的固定公开
+  message，不回显任意异常正文、内部 reason 或请求凭证；诊断标识限制长度和字符。
+
+验证包含真实本地 HTTP 错误响应、三条命令的 JSON/人类输出、无效响应的 trace 回退、
+配置停止与重新登录提示、取消/超时分类、凭证反射过滤及不重试行为。
+
+- OIDC Provider 通过 `edition.Hooks.OIDCProviders` 注册。核心 Hook 已实现；dws-ant 的真实 SDK 适配和注册留待后续接入。
+
+`auth provider-login <provider>` 从 `edition.Hooks.OIDCProviders` 选择授权实现。
+该命令为第三方 IdP 集成入口，不出现在 `dws auth --help` 与 shell 补全中，可显式执行。
+必填位置参数 `<provider>` 同时传给 transactions 和 exchange 接口。换票请求包含
+`provider`、`code`、`state`；显式指定 DWS 应用凭据时再加入 `client_id`、`client_secret`。
+核心通过注册项选择授权实现，具体 SDK 由 overlay 提供。
+服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），登录不修改端点配置。
+
+#### Overlay 接入
+
+公共类型位于 `pkg/edition`，overlay 不需要也不得导入核心的 `internal/auth`。
+在已有 `NewHooks()` 中注册名称及授权回调，再沿用启动入口的 `edition.Override(h)`：
+
+```go
+h.OIDCProviders = func() []edition.OIDCProvider {
+    return []edition.OIDCProvider{
+        {
+            Name:      "ant",
+            Authorize: authorizeWithAntSDK,
+        },
+    }
+}
+```
+
+`authorizeWithAntSDK` 的函数签名为：
+
+```go
+func(context.Context, edition.OIDCAuthorizationRequest) (edition.OIDCAuthorizationResult, error)
+```
+
+蚂蚁适配负责调用自己的 SDK，并把 SDK 实际返回的 `code/state` 转为公共结果类型。
+若已有 `AuthorizeOIDC` 使用业务侧 DTO，只在这个回调中转换类型；不用复制核心事务、
+换票或保存凭证代码。SDK 初始化与认证发生在回调执行时，注册函数只返回声明。
+名称可由 overlay 自定义，但必须满足 `[a-z][a-z0-9_-]{0,63}`，并与 Portal 已配置的
+provider 一致。重复名称、空回调、非法名称均为注册错误。
+
+#### 执行边界
+
+1. 核心校验 CLI 参数并选择已注册的回调。
+2. 核心向 Portal 创建事务，校验服务端 provider、授权参数与有效期。
+3. 核心向回调传入 `authorization_endpoint`、独立的参数 map 及受事务期限约束的 context。
+4. SDK 尊重取消与超时，原样使用服务端授权参数并返回实际取得的 `code/state`。
+5. 核心验证授权码及原事务 state，再换票、补全身份、保存 DWS profile。
+
+SDK 会话、密码、DWS 换票用的 client secret 和 PKCE verifier 不属于这个回调的输入输出。
+错误中不得包含认证材料；核心也不记录 SDK 原始错误文本。授权失败、取消、超时或
+state 不匹配不会触发其他 SDK 或 Mock 兜底，也不会换票或保存凭证。
+
+没有注册对应实现时，核心仍先检查 Portal 配置；服务端接受 provider 后返回
+`OIDC_SDK_UNAVAILABLE`。Help 和 dry-run 不枚举注册项、不初始化 SDK、不访问网络。
+普通 OAuth/PAT 登录和分步 `exchange-prepare` / `token-exchange` 入口保持独立。
+
+#### 联调与依赖更新
+
+核心的 Hook API 提交并推送后，overlay 需要把远程核心依赖更新到包含该 API 的提交，
+再编译上述注册代码。只修改另一 Go 包里的同名文件不会替换核心实现。
+
+回归验证覆盖自定义名称和 ant 注册、真实命令入口及凭证保存、非法/重复/缺失注册、
+后端拒绝、SDK 错误脱敏、取消/超时、state 篡改、空授权码和 help/dry-run 无副作用。
+
+```bash
+DWS_PACKAGE_VERSION=0.0.0-test CGO_ENABLED=0 go test ./pkg/edition ./internal/auth ./internal/app
+```
+
+已验证：上述三个包的完整测试、Hook 定向 race 测试、`go vet ./...`、`make build`，
+以及构建后二进制的 provider-login help / dry-run。未执行真实蚂蚁网关登录。
+
+- 支持业务分步完成第三方登录：先执行 `dws auth exchange-prepare --provider ant` 获取服务端授权参数，再由业务调用 IdP/SDK 取码，最后执行 `dws auth token-exchange --provider ant --code <code> --state <state>` 换取 DWS Token。
+
+支持 `--code-stdin`、可选且必须成对的 `--client-id/--client-secret`，默认返回现有 TokenData；显式 `--save` 后在线核验完整身份并保存，保留已有默认账号。两个命令均支持 `--dry-run`，服务地址使用系统统一的 MCP 配置（`mcp_url` 文件或默认地址），不修改全局配置；保存 Token 时记录其刷新所用的 Portal 地址。PKCE verifier 始终由服务端保存，换票失败不会自动重试一次性 code/state。
+
+命令沿用统一结果输出。作为第三方 IdP 集成入口，两个命令以 Cobra Hidden 隐藏，不出现在 `dws auth --help` 与 shell 补全中，仍可显式执行；不进入 Agent Schema（Hidden 且无 Contract.Identity），也不再占用 reviewed Schema 排除列表。
+
+macOS 终端按实际文件描述符识别，使用 `select` 等待输入，不依赖 `/dev/tty` 或 `/dev/stdin` 文件名，覆盖 `< /dev/tty` 重定向；以 50ms 周期检查取消，不改变终端模式、不关闭借用句柄。高编号输入使用低编号描述符副本等待，完成后只关闭副本；低编号描述符耗尽时明确报错。
+
+`--code-stdin` 的等待输入和后续换票共享一分钟超时，并响应调用方的取消或更短截止时间。取消、超时错误保留原有身份，不归类为参数错误，也不会继续换票。Unix 标准输入使用可取消的轮询读取，取消后保留原文件描述符；Windows 控制台保留原输入模式，通过原生 API 取消读取，重定向管道则通过关闭来中断。宿主通过 `SetIn` 注入的自定义阻塞输入须支持 `Close` 中断读取（取消时会关闭，正常完成时保留）。无 `Close` 的自定义 Reader 须为非阻塞或自行响应 context。
+
+OIDC 换票响应增加实际 DWS `clientId`（与 IdP 的 `client_id` 不同）。`provider-login` 和 `token-exchange --save` 均保存该应用绑定和原 Portal 地址。默认应用继续由 Portal 托管密钥；显式指定的自定义应用将原始密钥保存到现有安全凭证槽，并与 Token/Profile 写入一起回滚。刷新自定义应用时从该槽读取密钥，发送给原 Portal 的 `/oauth2/refreshToken`，不回退到全局应用、不跟随重定向、不在结果或 app.json 中暴露密钥。未使用 `--save` 的分步换票不写入本地凭证。
+
+需要同步部署 Portal：默认 OIDC 响应返回实际 `clientId`，刷新接口接受可选 `clientSecret`。旧版默认响应缺少应用绑定时，新 CLI 会明确要求更新 Portal；旧的缺失绑定记录需要重新登录。
+
+OIDC 登录持久化时记录 `oidc_provider`，刷新成功继续保留；该本地元数据不加入未保存的 token-exchange 返回值。所有 OIDC 分支只通过该字段识别，不再从 Portal 地址或密钥模式推断登录来源。此前未记录该字段的开发测试凭证不做兼容迁移，需重新登录。
+
+OIDC 刷新前校验原应用、Portal 和登录来源绑定，缺失时直接报错，不使用全局应用或默认端点兜底。刷新失败不读取组织镜像或历史全局凭证，即使同用户、同组织也不能切换应用。被拒绝或失效时提示重新执行 provider-login 或原分步登录流程，自定义应用需沿用原 client-id/client-secret；网络、取消、超时、限流和 5xx 保留原凭证，不强制重新登录。普通 OAuth 既有恢复策略保持不变。
+
+已确认的 `invalidParameter.authCode.notFound` 仍保留脱敏后的错误类型和规范化业务码供分类使用；错误识别不再意味着允许 OIDC 凭证恢复。服务端原始错误文本不进入输出、日志或错误链。
+
+### Fixed
+
+- **Installer skill failures** (#779) — fail explicitly without an installation-success banner when a release archive has no usable skills and no local source is available; also fail when the PowerShell local mono skill directory is missing.
+
+- 修复 Gitee 补同步入口遗漏 OpenHarmony 附件的问题，使已发布稳定版本的完整九项制品能够通过附件清单校验。
+
+
 ## [1.0.66-beta.1] - 2026-10-21
 
 ### Fixed

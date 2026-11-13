@@ -3,7 +3,6 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -19,6 +18,9 @@ func TestCrossPlatformCoverageDeapAgentCreateRequiresExplicitType(t *testing.T) 
 		{name: "empty", flags: []string{"--type", ""}},
 		{name: "whitespace", flags: []string{"--type", " \t "}},
 		{name: "unsupported", flags: []string{"--type", "a2a"}},
+		{name: "legacy_open_code", flags: []string{"--type", "open_code"}},
+		{name: "legacy_managed_agent", flags: []string{"--type", "managed_agent"}},
+		{name: "legacy_managed_agents", flags: []string{"--type", "managed_agents"}},
 	} {
 		for _, dryRun := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/dry_run=%t", tc.name, dryRun), func(t *testing.T) {
@@ -53,18 +55,20 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 		tool string
 		want map[string]any
 	}{
-		{"create_open_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code"}, deapAgentCreateTool,
-			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "mention_only"}}},
+		{"list_qwenwork", []string{"manage", "list", "--type", "qwenwork"}, deapAgentListTool,
+			map[string]any{"type": "qwenwork", "page": 1, "pageSize": 20}},
+		{"create_open_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "qwenwork"}, deapAgentCreateTool,
+			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "qwenwork", "responseMode": "mention_only"}}},
 		{"create_local_default", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "local_agent"}, deapAgentCreateTool,
 			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "local_agent", "responseMode": "mention_only"}}},
-		{"create_open_empty", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code", "--response-mode", " "}, deapAgentCreateTool,
-			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "mention_only"}}},
-		{"create_explicit_mode", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "open_code", "--response-mode", "targeted_proactive"}, deapAgentCreateTool,
-			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "open_code", "responseMode": "targeted_proactive"}}},
+		{"create_open_empty", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "qwenwork", "--response-mode", " "}, deapAgentCreateTool,
+			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "qwenwork", "responseMode": "mention_only"}}},
+		{"create_explicit_mode", []string{"manage", "create", "--name", "助手", "--description", "验收", "--type", "qwenwork", "--response-mode", "targeted_proactive"}, deapAgentCreateTool,
+			map[string]any{"name": "助手", "description": "验收", "digitalTagEmployeeProfile": map[string]any{"type": "qwenwork", "responseMode": "targeted_proactive"}}},
 		{"save_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--name", "新名称"}, deapAgentSaveDraftTool,
 			map[string]any{"agentUuid": "agent-1", "name": "新名称"}},
-		{"save_open_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--type", "open_code"}, deapAgentSaveDraftTool,
-			map[string]any{"agentUuid": "agent-1", "digitalTagEmployeeProfile": map[string]any{"type": "open_code"}}},
+		{"save_open_preserves_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--type", "qwenwork"}, deapAgentSaveDraftTool,
+			map[string]any{"agentUuid": "agent-1", "digitalTagEmployeeProfile": map[string]any{"type": "qwenwork"}}},
 		{"save_explicit_mode", []string{"manage", "save-draft", "--agent-uuid", "agent-1", "--response-mode", "targeted_proactive"}, deapAgentSaveDraftTool,
 			map[string]any{"agentUuid": "agent-1", "digitalTagEmployeeProfile": map[string]any{"responseMode": "targeted_proactive"}}},
 		{"detail_default", []string{"manage", "detail", "--agent-uuid", "agent-1"}, deapAgentDetailTool,
@@ -122,7 +126,16 @@ func TestCrossPlatformCoverageDeapAgentDefaultResponseAndSnapshotArguments(t *te
 					}
 					got = caller.calls[0].args
 				}
-				if !reflect.DeepEqual(got, tc.want) {
+				// Preview is decoded JSON (numbers are float64); compare wire values.
+				gotJSON, err := json.Marshal(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantJSON, err := json.Marshal(tc.want)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(gotJSON) != string(wantJSON) {
 					t.Fatalf("args=%#v, want %#v", got, tc.want)
 				}
 			})

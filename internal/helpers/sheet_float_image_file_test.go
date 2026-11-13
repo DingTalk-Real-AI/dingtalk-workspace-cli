@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -219,6 +220,28 @@ func TestCrossPlatformCoverageFloatImageLocalFileValidation(t *testing.T) {
 	}
 }
 
+// Only input checks are validation errors; OS failures preserve their cause and classification.
+func TestCrossPlatformCoverageFloatImageFileIOErrorsRemainUnclassified(t *testing.T) {
+	for _, failure := range []error{os.ErrPermission, errors.New("disk I/O failure")} {
+		_, err := openFloatImageLocalFileWith("cover.png", func(string) (os.FileInfo, error) {
+			return nil, failure
+		}, nil)
+		if !errors.Is(err, failure) || apperrors.ExitCode(err) != apperrors.ExitCodeInternal {
+			t.Fatalf("I/O error was reclassified: %v", err)
+		}
+		info, err := os.Stat(writeFloatImageFixture(t, "cover.png", "bytes"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = openFloatImageLocalFileWith("cover.png", func(string) (os.FileInfo, error) {
+			return info, nil
+		}, func(string) (*os.File, error) { return nil, failure })
+		if !errors.Is(err, failure) || apperrors.ExitCode(err) != apperrors.ExitCodeInternal {
+			t.Fatalf("open error was reclassified: %v", err)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageFloatImageCredentialParsingAndURLPolicy(t *testing.T) {
 	invalidResults := []*edition.ToolResult{
 		nil,
@@ -381,7 +404,7 @@ func TestCrossPlatformCoverageFloatImageHTTPPut(t *testing.T) {
 		}))
 		defer source.Close()
 		client := newFloatImageUploadClient()
-		if client.Timeout != floatImageUploadTimeout {
+		if client.Timeout != filePutClientTimeout {
 			t.Fatalf("timeout = %v", client.Timeout)
 		}
 		err := putFloatImageFileWithClient(context.Background(), client, source.URL, local)

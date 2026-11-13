@@ -355,11 +355,7 @@ func validateWhiteboardNodes(raw json.RawMessage) (string, int, error) {
 		}
 		objects[i] = object
 	}
-	if err := opennodes.ValidatePresentationOrder(objects); err != nil {
-		return "", 0, invalidWhiteboardSourceJSON(err)
-	}
-
-	if err := opennodes.ValidateText(objects); err != nil {
+	if err := opennodes.ValidateNodes(objects); err != nil {
 		return "", 0, invalidWhiteboardSourceJSON(err)
 	}
 
@@ -383,6 +379,10 @@ func invalidWhiteboardSourceJSON(err error) error {
 }
 
 func mapOpenNodesValidationError(err error) error {
+	var nodeError *opennodes.NodeValidationError
+	if errors.As(err, &nodeError) {
+		return &CLIError{Code: CodeInvalidParam, Message: nodeError.Error(), Cause: err}
+	}
 	var presentationError *opennodes.PresentationOrderValidationError
 	if errors.As(err, &presentationError) {
 		return &CLIError{Code: CodeInvalidParam, Message: presentationError.Error(), Cause: err}
@@ -423,7 +423,7 @@ func callWhiteboardTool(cmd *cobra.Command, toolName string, args map[string]any
 func callWhiteboardToolResult(cmd *cobra.Command, toolName string, args map[string]any) (map[string]any, error) {
 	text, err := callMCPToolReturnTextOnServer(cmd.Context(), whiteboardServerID, toolName, args)
 	if err != nil {
-		return nil, err
+		return nil, WithWhiteboardRecovery(err)
 	}
 	return decodeWhiteboardToolResult(toolName, text)
 }

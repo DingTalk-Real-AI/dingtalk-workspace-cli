@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 // ============================================================================
@@ -600,7 +601,7 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 两种入口，二选一：
 
 1) --ranges（对齐飞书 +cells-batch-set-style）：同一组样式应用到多个区域，支持跨工作表
-   每项必须带工作表前缀（格式 "SheetName!A1:B3"），最多 100 项；样式用与 set-style 相同的 flag。
+   每项必须带工作表前缀（格式 "SheetName!A1:B3"），最多 20 项；样式用与 set-style 相同的 flag。
 
 2) --batch <file>（每项可用不同样式）：JSON 数组，每个元素为一个批次项
 [
@@ -626,7 +627,7 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 
 每项执行与 set-style 一致的本地校验（至少一项样式字段 + rows≤1000 + rows×cols≤30000 + 枚举），
 全部校验通过后才下发，避免部分生效。
-批量上限：最多 100 个区域，且**所有区域累计**不超过 200000 个单元格（一次请求要把全部
+批量上限：两个入口都最多 20 个区域，且**所有区域累计**不超过 200000 个单元格（一次请求要把全部
 单元格矩阵建好，累计量才是真正的峰值约束）。超出请拆成多次调用。
 --continue-on-error 透传给服务端 batch_update：默认严格事务（失败整批回滚），传入后遇失败继续执行其余项。`,
 		Example: `  # 同一组样式刷多个区域（可跨工作表），一次原子提交
@@ -679,8 +680,8 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
-	cmd.Flags().String("ranges", "", `目标区域 JSON 数组，每项须带工作表前缀且最多 100 项，如 '["Sheet1!A1:B2","Sheet2!D1:D10"]'（与 --batch 二选一，同一组样式应用到所有区域）`)
-	cmd.Flags().String("batch", "", "批次配置 JSON 文件路径（与 --ranges 二选一，每项可用不同样式）")
+	cmd.Flags().String("ranges", "", `目标区域 JSON 数组，每项须带工作表前缀且最多 20 项，如 '["Sheet1!A1:B2","Sheet2!D1:D10"]'（与 --batch 二选一，同一组样式应用到所有区域）`)
+	cmd.Flags().String("batch", "", "批次配置 JSON 文件路径，最多 20 项（与 --ranges 二选一，每项可用不同样式）")
 	cmd.Flags().Bool("continue-on-error", false, "遇到失败时继续执行其余项（默认严格事务，整批回滚）")
 	bindStyleFlags(cmd)
 	DeclareLeafMetadata(cmd, LeafSpec{
@@ -696,14 +697,14 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 				CLIPath:        "sheet range batch-set-style",
 				PrimaryCLIPath: "sheet range batch-set-style",
 			},
-			Description: "批量为多个区域设置样式，组装为一次 batch_update 原子提交。",
+			Description: "批量为最多 20 个区域设置样式，组装为一次 batch_update 原子提交。",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
 				Reason:       "The CLI assembles style cell matrices locally from --ranges or a local batch file and submits them as one JSON-encoded sheet/batch_update operation array; no single direct MCP interface represents the wrapper input shape.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "批量为多个区域设置样式，组装为一次 batch_update 原子提交。",
+				AgentSummary: "批量为最多 20 个区域设置样式，组装为一次 batch_update 原子提交。",
 				UseWhen:      []string{"同一组样式要刷多个区域（可跨工作表），或多个区域样式不同需一次原子提交时"},
 				AvoidWhen:    []string{"单一区域统一样式用 range set-style"},
 				Examples:     []string{"dws sheet range batch-set-style --node <NODE_ID> --ranges '[\"Sheet1!A1:B2\"]' --bg-color \"#FFF2CC\""},
@@ -716,13 +717,13 @@ func newRangeBatchSetStyleCmd() *cobra.Command {
 	return cmd
 }
 
-// maxBatchStyleRanges 与飞书 +cells-batch-set-style 的 --ranges 上限一致。
-const maxBatchStyleRanges = 100
+// maxBatchStyleRanges 对齐钉钉 batch_update 的单次操作数上限；每个区域对应一个操作。
+const maxBatchStyleRanges = 20
 
 // maxBatchStyleCells 是一次 fan-out batch 累计可物化的单元格上限（对齐飞书
 // maxStampMatrixCells / checkBatchStampBudget）。batch 会把每个 range 的 cells
 // 矩阵全部建好再序列化成一个请求，所以真正的峰值约束是**跨 range 的总和**，
-// 而不是 buildStyleCells 里的单区域上限：100 个区域各 30000 格 = 300 万个
+// 而不是 buildStyleCells 里的单区域上限：20 个区域各 30000 格 = 60 万个
 // cell map。单区域上限继续由 buildStyleCells 按服务端硬限（30000）把关。
 const maxBatchStyleCells = 200000
 
@@ -763,7 +764,7 @@ func buildBatchStyleOpsFromRanges(cmd *cobra.Command, rangesStr string) ([]any, 
 		return nil, fmt.Errorf("--ranges 不能为空数组")
 	}
 	if len(ranges) > maxBatchStyleRanges {
-		return nil, fmt.Errorf("--ranges 最多 %d 项，当前 %d 项", maxBatchStyleRanges, len(ranges))
+		return nil, apperrors.NewValidation(fmt.Sprintf("--ranges 最多 %d 项，当前 %d 项；请拆成多次调用", maxBatchStyleRanges, len(ranges)))
 	}
 	spec := readStyleSpecFromFlags(cmd)
 	operations := make([]any, 0, len(ranges))
@@ -811,7 +812,7 @@ func buildBatchStyleOpsFromFile(batchPath string) ([]any, error) {
 	}
 	total := len(items)
 	if total > maxBatchStyleRanges {
-		return nil, fmt.Errorf("--batch 最多 %d 条，当前 %d 条", maxBatchStyleRanges, total)
+		return nil, apperrors.NewValidation(fmt.Sprintf("--batch 最多 %d 条，当前 %d 条；请拆成多次调用", maxBatchStyleRanges, total))
 	}
 	operations := make([]any, 0, total)
 	var totalCells int64

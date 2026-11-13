@@ -27,13 +27,42 @@ func (f *employeeProgressFixture) forwardProgress(_ context.Context, _, _ string
 	return f.run(emit)
 }
 
+func TestCrossPlatformCoverageEmployeeCardForwardConfiguration(t *testing.T) {
+	if got := newDeapConnectCommand().Flags().Lookup("reply-card-forward").DefValue; got != "false" {
+		t.Fatalf("card forwarding default changed: %q", got)
+	}
+	for _, enabled := range []bool{false, true} {
+		cfg := employeeBoundaryConfig(t)
+		cfg.ReplyCardForward = enabled
+		path := filepath.Join(digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile), "adapter.json")
+		if err := writeEmployeeJSON(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		loaded, err := loadDigitalEmployeeConfig(cfg.Binding.DWSProfile)
+		if err != nil || loaded.ReplyCardForward != enabled {
+			t.Fatalf("saved forwarding=%v loaded=%v err=%v", enabled, loaded.ReplyCardForward, err)
+		}
+		raw, _ := os.ReadFile(path)
+		if !enabled && strings.Contains(string(raw), "replyCardForward") {
+			t.Fatal("legacy missing-field fixture must retain forwarding disabled")
+		}
+	}
+	cmd := newDeapConnectCommand()
+	_ = cmd.Flags().Set("channel", "dsh")
+	_ = cmd.Flags().Set("reply-card-forward", "true")
+	if err := validateDigitalEmployeeAdapter(cmd); err == nil {
+		t.Fatal("external DSH host accepted a DWS-owned card setting")
+	}
+}
+
 func TestCrossPlatformCoverageEmployeeCardLifecycle(t *testing.T) {
-	for _, scenario := range []string{"success", "group", "create-unknown", "missing-biz", "update-unknown", "agent-error", "empty", "text", "control"} {
+	for _, scenario := range []string{"success", "group", "forward", "group-forward", "create-unknown", "missing-biz", "update-unknown", "agent-error", "empty", "text", "control"} {
 		t.Run(scenario, func(t *testing.T) {
 			r, e := employeeLedgerFixture(t)
 			r.cfg.Binding.DWSProfile = "corp:employee"
 			r.cfg.ReplyMode = "a2ui"
-			if scenario == "group" {
+			r.cfg.ReplyCardForward = scenario == "forward" || scenario == "group-forward"
+			if scenario == "group" || scenario == "group-forward" {
 				e.Type = "user_im_message_receive_group_all"
 				r.cfg.Options.AllowedGroups = []string{e.ConversationID}
 			}
@@ -57,8 +86,8 @@ func TestCrossPlatformCoverageEmployeeCardLifecycle(t *testing.T) {
 				if strings.Contains(string(body), "[AIGenerating]") != running || strings.Contains(string(body), `"textEffect":"shimmer"`) != running {
 					t.Fatalf("loading animation must follow running state: %s", body)
 				}
-				if strings.Contains(string(body), "defaultExpanded") {
-					t.Fatal("updates must preserve client expansion state")
+				if !strings.Contains(string(body), fmt.Sprintf(`"defaultExpanded":%t`, running)) {
+					t.Fatal("运行默认展开，终态默认收起")
 				}
 				var ledger employeeTaskRecord
 				data, err := os.ReadFile(r.recordPath(e))
@@ -67,8 +96,13 @@ func TestCrossPlatformCoverageEmployeeCardLifecycle(t *testing.T) {
 				}
 				if calls == 1 {
 					wantTarget := "--open-dingtalk-id sender"
-					if scenario == "group" {
+					if scenario == "group" || scenario == "group-forward" {
 						wantTarget = "--conversation-id conversation"
+					}
+					if r.cfg.ReplyCardForward {
+						wantTarget += " --support-forward"
+					} else {
+						wantTarget += " --support-forward=false"
 					}
 					if strings.Join(args, " ") != "send-a2ui-card "+wantTarget || ledger.Status != "card_creating" || agentCalls != 0 {
 						t.Fatalf("placeholder must precede model and use trusted target: %v %v", args, ledger)
@@ -277,9 +311,13 @@ func TestCrossPlatformCoverageEmployeeCardPersistenceAndTerminalFailures(t *test
 			}}
 			record := employeeTaskRecord{}
 			err := r.processCard(e, &record, f)
-			if scenario == "ledger-1" || scenario == "ledger-2" {
-				if err == nil || err.Error() != "ledger_unavailable" || calls > 1 {
-					t.Fatalf("unsafe create after ledger failure: calls=%d err=%v", calls, err)
+			if strings.HasPrefix(scenario, "ledger-") {
+				maxCalls := 3
+				if scenario == "ledger-1" || scenario == "ledger-2" {
+					maxCalls = 1
+				}
+				if err == nil || err.Error() != "ledger_unavailable" || calls > maxCalls || record.Status == "card_finished" {
+					t.Fatalf("持久化失败后继续交付或假报完成：calls=%d err=%v", calls, err)
 				}
 			} else if err != nil || record.Status != "needs_review" || record.CardError == "" || calls > 3 {
 				t.Fatalf("unsafe completion/retry: %+v calls=%d err=%v", record, calls, err)
@@ -297,12 +335,22 @@ func TestCrossPlatformCoverageEmployeeCardBoundedPublicView(t *testing.T) {
 	v.accept(agentProgress{ID: "39", Kind: "tool", Done: true})
 	messages := v.messages("surface", "正在处理", true)
 	body, err := json.Marshal(messages)
-	if err != nil || strings.Contains(string(body), "must not publish") || strings.Contains(string(body), `"id":"step-0"`) || !strings.Contains(string(body), `"id":"step-39"`) || !strings.Contains(string(body), "工具调用已结束") {
+	if err != nil || strings.Contains(string(body), "must not publish") || strings.Contains(string(body), `"id":"step-0"`) || !strings.Contains(string(body), `"id":"step-39"`) || !strings.Contains(string(body), "工具调用 · 已结束") {
 		t.Fatalf("invalid bounded public view: %s %v", body, err)
 	}
 	components := messages[1]["updateComponents"].(map[string]any)["components"].([]map[string]any)
-	if len(components) != 34 {
-		t.Fatalf("expected 32 visible tools plus panel and root, got %d", len(components))
+	// 新模板为每个工具保留分组、详情面板和状态文本，但仍只发布最近 32 项。
+	surface := newEmployeeCardTestSurface()
+	surface.apply(messages)
+	timeline := surface.components["executionTimeline"]["children"].([]string)
+	if len(timeline) != 32 || len(components) != 32*3+3 {
+		t.Fatalf("工具时间线未限制为 32 项：timeline=%d components=%d", len(timeline), len(components))
+	}
+	for i, id := range timeline {
+		stepID := fmt.Sprintf("step-%d", i+8)
+		if id != "tool-group-"+stepID || surface.components["tool-item-"+stepID] == nil || surface.components[stepID]["component"] != "Text" {
+			t.Fatalf("工具分组未完整保留最近 32 项：%s", id)
+		}
 	}
 }
 

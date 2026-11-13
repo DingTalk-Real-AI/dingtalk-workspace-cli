@@ -43,7 +43,8 @@ jobs:
 
       - name: Push localized main to Gitee
         if: env.GITEE_TOKEN != ''
-        timeout-minutes: 15
+        # Allow incremental binary updates to finish over a slow Gitee connection.
+        timeout-minutes: 60
         run: |
           set -eu
           REMOTE="https://gitee.com/${GITEE_REPO}.git"

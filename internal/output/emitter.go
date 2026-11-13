@@ -130,6 +130,12 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 				}
 				_, _ = fmt.Fprintln(&buf, "Action: "+action)
 			}
+			if env.Error.TraceID != "" {
+				_, _ = fmt.Fprintln(&buf, "Trace ID: "+env.Error.TraceID)
+			}
+			if env.Error.UpstreamCode != nil && fmt.Sprint(env.Error.UpstreamCode) != "" {
+				_, _ = fmt.Fprintln(&buf, "Server Code:", env.Error.UpstreamCode)
+			}
 		}
 		n, err := writeAllCount(stderr, buf.Bytes())
 		if err != nil {

@@ -2,6 +2,10 @@
 
 使用 `dws chat message send-a2ui-card` 创建卡片，使用 `update-a2ui-card` 更新和完结。`--content` 接受 JSON 字符串数组，每个元素是一条 A2UI 消息。
 
+## 卡片摘要与转发
+
+创建时用 `--summary` 传一句简短可读的降级文案，客户端无法渲染卡片时展示；它不是完结后的会话摘要，后者见[组件注解](#组件注解)。不要传序列化消息、模板摘要或实例 ID；省略时为 `互动卡片`，显式空值或纯空白会被拒绝。`send-a2ui-card` 的 `--support-forward` 默认 `true`，创建的卡片允许转发；需要禁止转发时显式传 `--support-forward=false`；转发不授予业务操作权限。两者只能在创建时设置，`update-a2ui-card` 没有对应参数，`dataModel.summary`、`fallbackMarkdown` 也不能代替。统一入口 `chat +messages-send --a2ui-messages` 对应 `--card-summary` 和 `--support-forward`，其转发默认值仍为 `false`。
+
 下面以任务进度卡片为例。布局、组件 ID、数据路径和文案可按需求调整，保持引用一致；组件属性可按需查阅[钉钉公开 Catalog](https://dingtalk.com/card/a2ui/catalogs/public/catalog.json)。
 
 ## 创建
@@ -11,13 +15,14 @@
 ```bash
 dws chat message send-a2ui-card \
   --open-dingtalk-id '<接收人openDingTalkId>' \
+  --summary "任务进度与结果" \
   --content '["{\"version\":\"v1.0\",\"createSurface\":{\"surfaceId\":\"example-card\",\"catalogId\":\"https://dingtalk.com/card/a2ui/catalogs/public/catalog.json\",\"dataModel\":{\"answer\":{\"displayText\":\"任务已开始。\"},\"status\":\"doing\"}}}","{\"version\":\"v1.0\",\"updateComponents\":{\"surfaceId\":\"example-card\",\"components\":[{\"id\":\"root\",\"component\":\"Column\",\"align\":\"stretch\",\"children\":[\"executionPanel\"]},{\"id\":\"executionPanel\",\"component\":\"CollapsiblePanel\",\"title\":\"正在处理任务\",\"children\":[\"answer\"],\"fallbackMarkdown\":\"任务进度\"},{\"id\":\"answer\",\"component\":\"Markdown\",\"content\":{\"path\":\"/answer/displayText\"}}]}}"]' \
   -f json
 ```
 
 群聊时将 `--open-dingtalk-id` 换成 `--conversation-id '<群openConversationId>'`，选择一个目标。创建状态默认 `PROCESSING`；发送成功后保存返回的 `bizId`，用于后续更新。
 
-允许转发时，在创建命令中加上 `--support-forward`，默认 `false`。
+示例默认允许转发；需要禁止转发时在创建命令中加上 `--support-forward=false`。显式 `--support-forward=true` 仍允许转发。
 
 ## 更新和完结
 
@@ -31,11 +36,12 @@ dws chat message update-a2ui-card \
   -f json
 ```
 
-可按任务进度继续更新。任务完成后写入实际结果，并将 `--flow-status` 设为 `FINISH`：
+可按任务进度继续更新。任务完成后写入实际结果，把承载结果的 `answer` 注解为产物，并将 `--flow-status` 设为 `FINISH`：
 
 ```bash
 dws chat message update-a2ui-card \
   --biz-id '<本次发送返回的bizId>' \
+  --a2ui-annotations '[{"surfaceId":"example-card","componentId":"answer","type":"artifact"}]' \
   --flow-status FINISH \
   --content '["{\"version\":\"v1.0\",\"updateComponents\":{\"surfaceId\":\"example-card\",\"components\":[{\"id\":\"executionPanel\",\"component\":\"CollapsiblePanel\",\"title\":\"处理完成\",\"children\":[\"answer\"],\"fallbackMarkdown\":\"任务进度\"}]}}","{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"example-card\",\"path\":\"/answer/displayText\",\"value\":\"任务已完成。\"}}","{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"example-card\",\"path\":\"/status\",\"value\":\"finished\"}}"]' \
   -f json
@@ -52,5 +58,7 @@ dws chat message update-a2ui-card \
 - `type` 表示注解类型，按实际支持的类型和用途选择。
 
 `answer` 和 `artifact` 是本例的取值。更新时也可关联此前已创建的组件。该参数可选，支持 `[]`；省略时创建请求不携带注解字段，更新请求沿用原有的空数组。
+
+卡片进入 `FINISH`、`CONFIRMING` 或 `CONFIRMED` 时，服务端从 `type` 为 `artifact` 的组件异步生成会话摘要，因此触发这些状态的更新要携带注解。注解组件中没有可展示内容（`Text`、`Markdown`、`Image`、`ImageList`、`Link`、`File`、`Video`、`AudioPlayer`，或包含它们的容器）时，会话摘要显示服务端默认文案，如“暂无可展示的最终产物”。注解承载主结果的组件，`root` 仅作兜底；不要注解思考过程、凭据或无关输入，也不要为生成摘要而改变业务状态。更新受理不代表摘要已生成，无法回读时如实说明未验证。
 
 发送后核对创建结果和客户端展示，再检查同一 `bizId` 的更新和完结效果。遇到 `a2ui dws catalog validation failed` 时，可对照 Catalog 检查组件属性、JSON 格式、Catalog 地址和 surface 创建顺序。

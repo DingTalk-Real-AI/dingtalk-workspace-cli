@@ -39,8 +39,8 @@ func TestGiteeCodeMirrorWorkflowBoundsCheckoutAndPush(t *testing.T) {
 	if got := workflowTimeoutMinutesAfter(t, content, "name: Checkout main history"); got != 5 {
 		t.Fatalf("checkout timeout = %d minutes, want 5", got)
 	}
-	if got := workflowTimeoutMinutesAfter(t, content, "name: Push localized main to Gitee"); got != 15 {
-		t.Fatalf("push timeout = %d minutes, want 15", got)
+	if got := workflowTimeoutMinutesAfter(t, content, "name: Push localized main to Gitee"); got != 60 {
+		t.Fatalf("push timeout = %d minutes, want 60", got)
 	}
 	if strings.Contains(content, "fetch-depth: 0") || !strings.Contains(content, "fetch-depth: 1") {
 		t.Fatal("checkout must not fetch all GitHub branches and tags")
@@ -216,7 +216,7 @@ func TestGiteeCodeMirrorDoesNotInitializeAfterRemoteReadFailure(t *testing.T) {
 	}
 }
 
-func TestSyncGiteeTagFetchesLocalizedHeadsBeforePushingAMissingTag(t *testing.T) {
+func TestSyncGiteeTagFetchesOnlyLocalizedMainBeforePushingAMissingTag(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
 	root := t.TempDir()
 	workDir := filepath.Join(root, "work")
@@ -229,6 +229,11 @@ func TestSyncGiteeTagFetchesLocalizedHeadsBeforePushingAMissingTag(t *testing.T)
 		"-c", "user.name=Mirror Test", "-c", "user.email=mirror-test@example.com",
 		"commit-tree", sourceCommit+"^{tree}", "-p", sourceCommit, "-m", "Gitee-only commit"))
 	mustRun(t, root, "git", "--git-dir", remoteDir, "update-ref", "refs/heads/main", localizedCommit)
+	topicCommit := strings.TrimSpace(mustOutput(t, root, "git", "--git-dir", remoteDir,
+		"-c", "user.name=Mirror Test", "-c", "user.email=mirror-test@example.com",
+		"commit-tree", sourceCommit+"^{tree}", "-p", sourceCommit, "-m", "unrelated feature"))
+	mustRun(t, root, "git", "--git-dir", remoteDir, "update-ref", "refs/heads/feature/unrelated", topicCommit)
+	beforeHeads := mustOutput(t, workDir, "git", "ls-remote", "--heads", remoteDir)
 
 	runGiteeTagSync(t, scriptPath, workDir, remoteDir, "v1.2.3", true)
 	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "rev-parse", "refs/remotes/gitee/main")); got != localizedCommit {
@@ -236,6 +241,12 @@ func TestSyncGiteeTagFetchesLocalizedHeadsBeforePushingAMissingTag(t *testing.T)
 	}
 	if got := peeledRemoteTag(t, workDir, remoteDir, "v1.2.3"); got != sourceCommit {
 		t.Fatalf("release tag points to %s, want %s", got, sourceCommit)
+	}
+	if got := strings.TrimSpace(mustOutput(t, workDir, "git", "for-each-ref", "--format=%(refname)", "refs/remotes/gitee/")); got != "refs/remotes/gitee/main" {
+		t.Fatalf("tag sync fetched unrelated Gitee branches: %s", got)
+	}
+	if afterHeads := mustOutput(t, workDir, "git", "ls-remote", "--heads", remoteDir); afterHeads != beforeHeads {
+		t.Fatalf("tag sync changed remote branches: before %q, after %q", beforeHeads, afterHeads)
 	}
 }
 
@@ -246,6 +257,7 @@ func TestSyncGiteeTagReportsObjectFetchFailureBeforeAnyPush(t *testing.T) {
 	remoteDir := filepath.Join(root, "gitee.git")
 	seedTaggedRepository(t, workDir, "v1.2.3")
 	mustRun(t, root, "git", "init", "--bare", remoteDir)
+	mustRun(t, workDir, "git", "push", remoteDir, "HEAD:refs/heads/main")
 	realGit, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatalf("LookPath(git) error = %v", err)
@@ -261,7 +273,7 @@ exec %q "$@"
 `, realGit)), 0o755)
 	output := runGiteeTagSync(t, scriptPath, workDir, remoteDir, "v1.2.3", false,
 		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"), "GIT_TEST_LOG="+logPath)
-	if !strings.Contains(output, "could not fetch existing Gitee heads for object reuse; tag v1.2.3 push was not attempted") {
+	if !strings.Contains(output, "could not fetch Gitee main for object reuse; tag v1.2.3 push was not attempted") {
 		t.Fatalf("object fetch failure did not identify the pre-push failure:\n%s", output)
 	}
 	logData, err := os.ReadFile(logPath)
@@ -426,6 +438,7 @@ case "$1" in
     [ -x "${GIT_ASKPASS:-}" ]
     [ "$("$GIT_ASKPASS" "Username for https://gitee.com")" = "$DWS_GITEE_USER" ]
     [ "$("$GIT_ASKPASS" "Password for https://gitee.com")" = "$DWS_GITEE_TOKEN" ]
+    printf '%%s\trefs/heads/main\n' "$EXPECTED_COMMIT"
     if [ -f "$GIT_PUSH_MARKER" ]; then
       printf '%%s\trefs/tags/v1.2.3^{}\n' "$EXPECTED_COMMIT"
     fi

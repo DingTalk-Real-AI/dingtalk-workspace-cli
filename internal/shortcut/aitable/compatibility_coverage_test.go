@@ -53,6 +53,8 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 	if response == "" {
 		response = `{"result":[]}`
 		switch tool {
+		case "update_table":
+			response = `{"status":"success","data":{"baseId":"b","tableId":"t","verificationStatus":"verified"}}`
 		case "get_share_form_config":
 			response = `{"success":true,"data":{"baseId":"base-smoke","tableId":"table-smoke","viewId":"view-smoke","enabled":true,"status":1,"shareFormUuid":"share-1","formCover":"https://example.test/cover.png"}}`
 		case "update_share_form":
@@ -309,7 +311,7 @@ func TestCrossPlatformCoverageAitableShortcutUpdatesDoNotSendDeleteConfirmation(
 			fake.reset()
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("execute: %v", err)
 			}
 			if !fake.called || fake.tool != tc.tool {
