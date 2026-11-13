@@ -90,7 +90,7 @@ func newVoipMinutesAutoStartCommand() *cobra.Command {
 			Confirmation: "user_required", Idempotency: "idempotent",
 		},
 		Contract: corecmd.ContractDecl{
-			DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation, RemoteReads: false},
+			DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Identity: contract.ToolIdentitySpec{
 				ProductID: "voip", Name: "set_voip_minutes_auto_start", Group: "minutes",
 				CanonicalPath:  "voip.set_voip_minutes_auto_start",

@@ -32,6 +32,5 @@ func StaticServers() []ServerInfo {
 		{ID: "sheet", Name: "钉钉表格", Endpoint: "https://mcp-gw.dingtalk.com/server/f7340bef5170f3baf97815989fc2bff68f4c293be82b2106c5d3e9cbbb14a17f", Prefixes: []string{"sheet"}},
 		{ID: "todo", Name: "待办", Endpoint: "https://mcp-gw.dingtalk.com/server/0f51140eddcd913106c5821a4d0cd577b2d1a0b6cb452dd0e51ab41facf3a83c", Prefixes: []string{"todo", "task"}},
 		{ID: "wiki", Name: "知识库", Endpoint: "https://mcp-gw.dingtalk.com/server/wiki", Prefixes: []string{"wiki"}},
-		{ID: "conference", Name: "会议", Endpoint: "https://mcp-gw.dingtalk.com/server/8bdad53455a0f4fe88bda77ecca5147d12d1bdef1cf6aa8ed41e01d8111d5d9b", Prefixes: []string{"conference"}},
 	}
 }
