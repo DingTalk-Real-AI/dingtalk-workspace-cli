@@ -105,7 +105,7 @@ func buildAuthCommand(patCaller edition.ToolCaller) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newAuthLogoutCommand(),
-		newAuthStatusCommand(),
+		newAuthStatusCommand(patCaller),
 		newAuthMigrateKeychainCommand(),
 		newAuthExportCommand(),
 		newAuthImportCommand(),
@@ -542,11 +542,15 @@ func newAuthLogoutCommand() *cobra.Command {
 	return cmd
 }
 
-func newAuthStatusCommand() *cobra.Command {
+func newAuthStatusCommand(callers ...edition.ToolCaller) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "查看认证状态",
 		Long: `查看当前或指定组织 profile 的认证状态。
+
+根级 --token 优先使用临时凭证查询当前用户，验证成功才报告已认证；不保存或刷新该凭证。
+临时凭证模式返回 token_source=explicit 和 verification（valid/invalid/unknown/not_checked）。
+--readonly 或 --dry-run 不验证临时凭证；authenticated=false 不表示凭证已失效。
 
 指定 --profile 时只读取并刷新被选中的 token slot，不会修改 currentProfile。
 使用 --readonly 只读本地快照，不获取认证锁、不访问认证服务、不刷新、不迁移或修复。
@@ -561,6 +565,13 @@ func newAuthStatusCommand() *cobra.Command {
   dws auth status --readonly --format json`,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if token, _ := cmd.Root().PersistentFlags().GetString("token"); strings.TrimSpace(token) != "" {
+				var caller edition.ToolCaller
+				if len(callers) > 0 {
+					caller = callers[0]
+				}
+				return runAuthStatusExplicitToken(cmd, strings.TrimSpace(token), caller)
+			}
 			configDir := defaultConfigDir()
 			profileSelector, err := cmd.Flags().GetString("profile")
 			if err != nil {
