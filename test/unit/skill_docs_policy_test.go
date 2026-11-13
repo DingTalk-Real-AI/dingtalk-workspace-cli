@@ -449,7 +449,6 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 
 	wantReferences := []string{
 		"event-app.md",
-		"event-send.md",
 		"event-im-keys.md",
 		"event-im-lifecycle.md",
 		"event-im-operations.md",
@@ -477,8 +476,15 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("glob event references: %v", err)
 	}
-	if len(refs) != len(wantReferences) {
-		t.Errorf("event reference count = %d, want %d: %v", len(refs), len(wantReferences), refs)
+	// Application event sending is outside this personal-event contract check.
+	var personalRefs []string
+	for _, ref := range refs {
+		if filepath.Base(ref) != "event-send.md" {
+			personalRefs = append(personalRefs, ref)
+		}
+	}
+	if len(personalRefs) != len(wantReferences) {
+		t.Errorf("personal event reference count = %d, want %d: %v", len(personalRefs), len(wantReferences), personalRefs)
 	}
 
 	allEventKeys := []string{
