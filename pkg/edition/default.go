@@ -56,6 +56,11 @@ func openSupplementServers() []ServerInfo {
 			Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44",
 		},
 		{
+			ID:       "conference",
+			Name:     "钉钉视频会议",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/8bdad53455a0f4fe88bda77ecca5147d12d1bdef1cf6aa8ed41e01d8111d5d9b",
+		},
+		{
 			ID:       "mind",
 			Name:     "钉钉脑图",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/mind",

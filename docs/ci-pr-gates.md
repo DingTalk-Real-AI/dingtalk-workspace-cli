@@ -10,7 +10,7 @@ The pull-request admission layer has exactly nine required external contexts:
 | `Policy` | Repository policy and the fail-closed CHANGELOG contract |
 | `Edition` | Edition contract tests |
 | `Interface Integrity` | CLI, Schema, Skill, and stable-release compatibility |
-| `AI Behavior` | Base-owned policy for PRs labeled `ai-generated` |
+| `AI Behavior` | Base-owned open/Ready revision check, independent of AI labels |
 | `CLI Smoke` | Offline help for every public top-level command |
 | `Mock MCP` | HTTP and stdio MCP lifecycle smoke tests |
 
@@ -19,167 +19,28 @@ jobs may implement `Test` and `Coverage`, but they are not ruleset contexts.
 Do not require an aggregate alias or a downstream integration check in place of
 the nine contracts above.
 
-`AI Behavior` is evaluated by a `pull_request_target` workflow that never
-checks out or executes PR code. It writes the exact `AI Behavior` status to the
-current PR head. Its Files API read is bracketed by base/head revision checks,
-and Ready/Draft state transitions cancel older evaluations and verify the live
-state, so a synchronize or state race fails closed. A Draft revision publishes
-an explicit failing `AI Behavior` status; marking it Ready first replaces that
-status with `pending` and only then evaluates the normal policy. The same
-workflow supplies a successful `AI Behavior` check run on protected `main`
-pushes for release governance.
+`AI Behavior` keeps its existing workflow name and required context for
+compatibility with branch rules, release governance, and admitted-merge reuse.
+It now checks only that the PR is open and Ready, using the base-owned
+`pull_request_target` workflow without checking out or executing PR code.
+Base/head SHAs and Draft state must match the event before and after the
+readiness evaluation; API failures or revision/state changes fail closed.
+A Draft revision publishes an explicit failing status. A Ready event first
+publishes `pending`, then succeeds for the current revision. Protected `main`
+pushes continue to produce the same successful context for release governance.
 
-### PR #1463 的精确公开补丁准入
+The `ai-generated` label is no longer a submission requirement or an admission
+input. Adding or removing it does not trigger this workflow. Ready PRs follow
+the same checks regardless of label, number of changed files, or changed paths;
+the former 30-file limit and AI-only protected-path restrictions are removed.
+Automation must not add this label as a prerequisite for submitting a PR.
+Historical labels may remain as metadata and do not require cleanup to pass.
 
-维护者已单独批准 PR #1463 的完整公开补丁。`AI Behavior` 仅为这个
-PR 保留一次精确例外：仓库、作者 `haofeng0705`、分支
-`codex/sync-aitable-public-fixes`、`main` 目标及开放状态均须一致，
-Ready/Draft 和当前 base/head 的前后检查仍然生效。批准基线固定为
-`3f0fc94111b1f9cd34e47468980b1f1a723ca69a`，批准提交固定为
-`53de9d92c9b310798d7f42a385e162273330442b`；授权保存在主分支工作流，
-不读取 PR 内的可变授权声明。
-
-补丁内容来自 GitHub 只读 Git commit/tree 和 Files API，PR get/compare
-API 用于核对身份和祖先关系。四个完整 Git tree 用于比较批准及当前
-补丁的全部路径、增改状态、修改前后 blob、
-文件模式和类型；截断、额外文件、重命名、删除和非普通文件均不能
-获得例外。批准补丁必须恰为 44 个文件，其中受保护路径恰为：
-
-- `scripts/policy/skill-command-check/main.go`
-- `scripts/policy/skill-command-check/main_test.go`
-
-当前 base 必须是当前 head 的祖先。治理合入后，业务分支可以合入或
-变基到新主分支；只有完整 44 文件差异与固定批准补丁完全一致才通过。
-任何业务修复改变内容、模式、类型或修改前基线，都必须重新审核并更新
-主分支上的批准提交，不能由同一个业务 PR 扩大自己的授权。
-
-普通 AI PR 的 30 文件上限和全部保护目录规则保持不变。这个例外只
-决定 `AI Behavior` 准入，其他八项必需检查仍须成功；引入例外的治理
-PR 也仍由旧主分支规则检查，维护者的单次 bootstrap bypass 须单独
-记录，不能将它当作本规则已通过或其他 CI 已通过的证据。
-
-### PR #1502 的精确 Chat Thread 退役补丁准入
-
-本治理记录仅针对 PR #1502 的完整公开补丁。固定身份为仓库
-`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
-`codex/fix-chat-thread-promote-retirement`、同仓 `main` 目标及开放状态；
-批准基线为 `59d1da576c6983582d5be11401e7efe07aaaa238`，批准提交为
-`c70ede29e0860a88e309bb540f27d888e9d8a8ab`。完整差异必须恰为 15 个文件，
-唯一受保护路径为：
-
-- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
-
-该路径只将已经由主分支批准的 `chat thread promote` 退役记录从
-`pending` 改为 `consumed`。CLI 已达到隐藏后的 after 状态时，迁移检查器
-要求同步消费；保留 `pending` 会失败。在业务变化之前单独消费也会失败，
-因此状态更新必须与完整退役补丁一起交付，不能删除或提前拆出以避开政策。
-
-#1502 复用上述四个完整 Git tree 与 Files API 交叉校验，严格比较所有路径、
-增改状态、修改前后 blob、模式和类型。Ready/Draft、base/head、仓库、作者、
-分支和开放状态仍在读取前后核对，当前 base 必须是当前 head 的祖先。
-治理合入后可以纳入新 main，但业务差异必须仍与固定的完整 15 文件补丁
-完全一致；任何额外文件、删除、重命名或内容变化都须重新审核。原 #1463
-记录和普通 AI PR 的 30 文件上限、受保护路径规则继续生效，未向整个迁移
-清单或任何目录授予通用写权限。
-
-本记录只有经维护者评审、通过独立治理流程进入 main 后，才成为后续
-#1502 运行的 base-owned authority；提交治理 PR 本身不授予合并或 bypass
-权限，治理 PR 也不能消费 #1502 的例外。保留业务 PR 的 `ai-generated`
-标记，不在业务 PR 内修改授权工作流。其他八项必需检查和独立评审仍须
-完成；如治理流程需要 bootstrap bypass，必须另行明确授权并记录。
-
-### PR #1529 的精确公开同步补丁准入
-
-#1529 的接口契约审批与业务实现分开交付。治理前置提交 G0
-`ca900aa3f802151591ddb59ca42ca37a4c950102` 只修改以下三个 policy 文件，
-不提前变更命令行为：
-
-- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`：
-  为 `dws aitable api-key create/list/revoke` 迁至
-  `dws aitable supabase api-key create/list/revoke` 新增三条 `pending` 记录。
-  旧 argv 保留可执行但隐藏，Schema tool 标识与参数保持不变。
-- `scripts/policy/schema-compat/main.go`：精确批准数字员工 create、publish
-  两个 tool 从各自既有 MCP RPC 引用转为 `composite` 且清空引用；另批准
-  `dingtalk-tag.update_skill` 从无约束声明变为 `enabled`、`file` 必须且只能
-  选择其一。其他 tool、接口引用、模式和约束变化仍按既有规则检查。
-- `scripts/policy/schema-compat/main_test.go`：为上述两条模式迁移和一条约束
-  迁移提供回归测试，包括拒绝未获批准的邻近变化。
-
-#1530 已将上述治理前置合入主分支 M
-`a391c42c7de6c7e86fc19f92aa1f18e630ed402e`。初次业务候选的原生 macOS
-新增代码覆盖率为 1089/1092，缺少三个错误返回分支。业务候选 C1
-`4fdf11c739e22d348d3e2878c20a168540b92b1d` 仅在现有两份测试文件中补齐
-这些回归：Codex 进度模式下拒绝未确认完成的正文，以及 A2UI 卡片处理和
-最终审计失败的错误透传。生产源码未因本次补测改变。
-
-候选 C1 的 macOS 覆盖率任务在 GitHub CI 运行 `39210879935` 中触及
-20 分钟的任务时限：helpers 阶段已通过，执行到第 42 个应用批次时被取消，
-尚未进入覆盖率判定。macOS 任务时限调整为与 Windows 一致的 30 分钟，
-为完整原生测试和 runner 耗时波动留出空间；测试选择、单批次 15 分钟时限、
-100% 新增代码覆盖率目标与失败判定均保持不变。
-
-当前批准基线与提交更新为 M、C1。旧 G0 到 C0
-`0c75478b9d12316b566595177a45ce6b420003f9` 的批准仅保留为历史，不能用于
-包含新测试内容的补丁。本次仍恰为 100 文件，未增加产品能力或受保护路径。
-业务实现达到迁移后的状态时，只将同三条已批准记录从 `pending` 改为
-`consumed`，不得更改其他内容；迁移批准和 Schema 检查器不需再次修改。
-
-本精确例外固定为 PR #1529、仓库
-`DingTalk-Real-AI/dingtalk-workspace-cli`、作者 `haofeng0705`、分支
-`codex/sync-qwenwork-1.0.65`、同仓 `main` 目标及开放状态。
-批准基线与提交分别为上述 M、C1；完整差异必须恰为 100 个文件，唯一
-受保护路径为：
-
-- `scripts/policy/interface-migrations/approved-command-migrations-v1.json`
-
-授权复用四个完整 Git tree 和 Files API 交叉校验，比较全部路径、增改
-状态、修改前后 blob、模式和类型，并在读取前后核对 Ready/Draft、
-base/head 与 PR 身份；当前 base 必须是当前 head 的祖先。治理工作流、
-本测试和本文档不属于获准业务补丁。治理进入 main 后，业务分支可合入
-或变基到新 main，但完整差异仍必须等于 M→C1；最终 head 不必等于 C1。
-任何业务修复或主分支演进改变这 100 路径中任一差异的前后内容、模式、
-类型或增改状态，都须重新评审并更新主分支授权，不能沿用旧批准。
-
-本记录不扩大整个迁移清单、Schema 检查器或任何目录的写权限。#1463、
-#1502 的精确边界与普通 AI PR 的 30 文件上限、受保护路径规则保持不变。
-本治理 PR 自身由当前主分支规则检查，不能使用 #1529 的例外自授权；
-提交治理 PR 不授予合并或 bypass 权限。治理变更须经过独立维护者评审，
-如需要 bootstrap 授权，必须另行明确批准并记录；#1530 的一次授权已消费，
-不得用于本次更新。只有本次治理进入 main，
-这些记录才成为业务运行的 base-owned authority。业务 PR 保留
-`ai-generated` 标记，其他八项必需检查与独立评审仍须完成。
-
-### PR #1607 的精确公开同步补丁准入
-
-本记录仅针对 `DingTalk-Real-AI/dingtalk-workspace-cli` 的 PR #1607，
-作者 `haofeng0705`、源分支 `codex/fix-dwsh-6572-sync-1.0.68`、同仓
-`main` 目标及开放状态。通用 30 文件限制和所有保护路径规则保持不变。
-
-初始候选 `5e04e166cf57a58341a7c2052ef8b602ccddeeb4` 包含 114 个文件。
-其 A2UI 原子发送 `support-forward` 默认值由 false 改为 true；候选自身的
-Schema 比较器不能为同一业务 PR 授权。治理前置 G0
-`34cbe5c5fd6e2f08bd74f889fcdf367b88426a0f` 仅将精确兼容规则及回归测试
-放入 `scripts/policy/schema-compat/main.go` 和
-`scripts/policy/schema-compat/a2ui_forward_default_test.go`，不改变生产行为。
-它只接受既定 tool/参数的显式 boolean false→true，或原生注解从缺省 false
-到字符串 true 的发布形式；其他参数事实、邻近工具及反向变化仍须拒绝。
-
-将 G0 整合进业务候选形成 C1
-`f350e5ca0a412884cfaf99fa48bb7ea3ea9d84df`；C1 的业务树与初始候选相同。
-G0→C1 恰为 112 个公共文件，已不包含任何受保护路径。
-固定路径及增改状态另存于
-`test/scripts/testdata/public-sync-1607-approved-delta.json`，回归测试直接
-执行主分支工作流脚本，覆盖补丁漂移、额外保护路径、身份/基线变化及自授权拒绝。
-
-本精确记录复用四个完整 Git tree 与 Files API 的交叉核对，严格比较全部路径、
-状态、前后 blob、模式与类型；Ready/Draft、PR 身份、当前 base 为 head 的祖先
-及读取前后新鲜度检查继续生效。治理合入后可整合新 main，但业务差异必须仍
-等于 G0→C1；任何路径或内容变化均须重新审查，不从可变 PR 正文读取批准。
-
-本治理改动须维护者独立评审并合入 main 后才成为 base-owned authority。
-治理 PR 自身仍受旧主分支规则检查，不能使用 #1607 的精确记录自授权；如需
-bootstrap 合并权限，须另行明确授权并由维护者处理。业务 PR 保留 `ai-generated`
-标签，其余八项必需检查和独立同行审批仍须完成，不自动合并或发布。
+The former exact-patch exceptions for #1463, #1502, #1529, and #1607 are retired
+with that AI-only policy. This does not grant an Interface/Schema migration,
+peer-review, merge, or release exemption: those independent checks and their
+base-owned approval records still apply to every PR. The nine required contexts
+remain unchanged; no repository ruleset migration is needed for this change.
 
 ## Draft pull-request feedback
 

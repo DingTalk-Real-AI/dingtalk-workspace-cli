@@ -49,6 +49,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 原生 HTML / `.html` 文件 / 新建 HTML 页面 / 上传 HTML 文件 / 读取 HTML 原文 / 覆盖 HTML / 局部替换 HTML | 原生 `.html`/`.htm` 文件读取、创建、全量覆盖与局部替换（钉盘或文档空间） | `dws html` | [html.md](references/html.md) |
 | PAT 授权 / 行为权限 / scope 授权 / 一次性授权 / 会话授权 / 永久授权 / 授权浏览器策略 | PAT 行为授权与本地浏览器策略 | `dws pat` | [pat.md](references/pat.md) |
 | 钉钉运动 / 企业运动健康 / 步数榜 / 步数排行 / 部门步数 / 挑战赛 / 运动比赛 / 开赛播报 / 比赛报名参与达标 | 企业步数榜查询与运动比赛创建、期次、播报和统计 | `dws sport` | [sport.md](references/sport.md) |
+| VoIP通话纪要自动开启 / 通话纪要自动开启 / 自动听记开关 / 通话自动纪要 | 个人 VoIP 通话（1v1 音视频通话）纪要自动开启设置（开启/关闭；目标用户按登录身份，需用户确认后写入） | `dws voip minutes auto-start` | [voip.md](references/voip.md) |
 | 切换组织 / 换组织 / 跨组织 / 多组织 / profile / 看登录了哪些组织 | 多组织 / profile 管理与跨组织取数 | `dws profile` / `dws auth` / `--profile` | [profile.md](references/profile.md) |
 | 宜搭 / AI应用脚本 / 财务辅助脚本（未产品化） | **无**稳定命令面；仅仓库内辅助脚本 | （非默认路由） | [unsupported-scripts.md](references/unsupported-scripts.md) |
 

@@ -253,7 +253,7 @@ func TestCrossPlatformCoverageVoIPEventCatalogDefinitionAndSchema(t *testing.T) 
 	wantProperties := []string{
 		"type", "event_id", "timestamp", "subscribe_id", "biz_id", "corp_id", "org_id", "target_uid",
 		"call_id", "caller_uid", "caller_corp_id", "callee_uid", "callee_corp_id", "call_type",
-		"room_id", "create_time", "event_time",
+		"room_id", "sdk_app_id", "sdk_expire_time", "sdk_token", "create_time", "event_time",
 	}
 	if len(properties) != len(wantProperties) {
 		t.Fatalf("schema.properties = %#v, want exactly %d fields", properties, len(wantProperties))
