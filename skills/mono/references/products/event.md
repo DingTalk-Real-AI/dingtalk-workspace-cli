@@ -1,6 +1,20 @@
-# dws event — 个人 IM、OA 审批、VoIP、待办、好友、互动卡片、听记与日历事件
+# dws event — 个人事件监听与应用三方事件发送
 
 通过个人 Stream 长连接监听当前用户的钉钉消息接收、已读、撤回、表情回应、群生命周期、审批任务/实例、VoIP 通话邀请、待办创建/更新/删除、好友申请/添加成功、互动卡片回调，以及听记创建/纪要生成、主日历创建/修改/取消事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。普通 IM 监听默认使用 `dws event +listen-im`；OA 审批、VoIP、Todo、好友、互动卡片、听记、日历、群生命周期、显式 EventKey、Filter DSL、subscribe_id 复用或原始 envelope 使用 `dws event consume`。不要写脚本轮询消息历史、审批列表、通话记录、待办列表、好友列表、好友申请列表、听记列表或日程列表。
+
+企业自建应用发送三方事件使用 `dws event send`，以应用 Token 对接现有事件上报接口。完整应用凭证即可调用，事件 ID、业务版本、接收人和 payload 由调用方提供。
+
+## 应用事件发送
+
+```bash
+dws event send --event-key app_user_order_created --event-id order-1001-created --payload-schema-version 3 --user-id '<企业内 userId>' --payload '{"orderId":"order-1001"}' -f json
+```
+
+- `--event-key`、`--event-id`、`--payload-schema-version`、`--user-id` 和 `--payload` 必填。`--user-id` 可重复，去重后最多 100 人。`--payload` 支持 JSON 对象、`@文件` 或 `-` 标准输入并保留数字精度。可选 `--occurred-at` 使用带时区的 ISO 8601 时间。
+- 凭证优先使用完整 `--client-id` / `--client-secret`，再到完整 `DWS_CLIENT_ID` / `DWS_CLIENT_SECRET`，最后读取应用配置和 Keychain。显式来源只提供一项时按错误提示补齐。凭证只用于应用 Token 换取，结果和日志保持脱敏。
+- 统一结果的 `data` 包含 `eventId`、`status`、`duplicate`。`ACCEPTED` 与 `DUPLICATE` 都是事件已接纳的成功回执，退出码 0。实际收件由订阅端核验。
+- 每次调用上报一次。重发同一事件沿用原 `--event-id` 和完整请求内容，发送新事件使用新 ID。同键不同内容会返回冲突。结果不确定时保留原事件 ID，按服务端错误与重试提示处理。
+- `--dry-run` 校验直接 JSON，文件和 stdin 仅显示来源。预览阶段不读取文件内容、stdin 或 Keychain，也不调用网络。
 
 ## 运行方式
 
@@ -9,7 +23,7 @@
 - 一个组织一个 bus，互不干扰、可同时跑；同组织内多个 consume 共享一个 bus。
 - 非默认组织加全局 `--profile <corpId 或 profile 名>`；漏传会退回默认 profile 而失败。
 
-## AppKey 与认证排障
+## 监听的 AppKey 与认证排障
 
 开源版默认 `normal` 模式只需要用户 token 和 AppKey，不要求用户提供 AppSecret。已有 AppKey 沿用本地身份；本地元数据缺失时，CLI 从当前事件 MCP 的 `/cli/clientId` 自动获取，仅用于本次调用并传给后台 bus，不写入 token/profile/app 配置。`custom` 模式和定制版不使用此兜底；取得 AppKey 不代表已验证 token 的应用归属，仍由服务端校验。
 
@@ -19,6 +33,7 @@
 
 | Command | Purpose |
 |---|---|
+| `dws event send --event-key ... --event-id ... --payload-schema-version ... --user-id ... --payload ...` | 使用企业自建应用凭证向指定企业内用户上报三方事件 |
 | `dws event +listen-im --kind ... [flags]` | 普通 message/reaction/read/recall 监听；支持自然姓名/群名唯一解析 |
 | `dws event list --category oa` | 查看当前公开的 OA 个人事件目录 |
 | `dws event list --category voip` | 查看当前公开的 VoIP 个人事件目录 |
@@ -73,7 +88,7 @@
 | `user_minutes_summary_generated` | 默认纪要首次生成成功且可读取；重新生成、切换模板、人工修改不通知 | 无 |
 | `user_calendar_event_changed` | 当前用户主日历创建及新增参与、修改、取消 | `--calendar-ids` / `--change-types` 可选 |
 
-只承认上表 33 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件、一个 VoIP 事件、两个好友事件、互动卡片事件和两个听记事件均使用 `all` 规则和 `{}` `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
+个人官方事件使用上表 33 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件、一个 VoIP 事件、两个好友事件、互动卡片事件和两个听记事件均使用 `all` 规则和 `{}` `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
 
 ## Intent mapping
 
@@ -341,7 +356,7 @@ dws event consume user_calendar_event_changed --calendar-ids primary --change-ty
 - 群成员加入/退出事件读取 `conversation_id/operator/operator_open_dingtalk_id/members/event_time`。`operator` 是执行操作的人，`members` 是本次加入或退出的成员数组，成员项包含 `nick/open_dingtalk_id`；系统操作或成员自行退出时操作人字段可能为空。
 - 群标题变更和群解散当前只承诺 `type/event_id/timestamp/subscribe_id/payload`；以实际 `payload` 为准，不猜测群标题、操作者等字段。
 - OA 事件读取顶层 `process_instance_id/process_code/title/status/create_time/event_time`；七类事件还支持可选字符串 `staff_id`、`activity_id`、`corp_id`、`business_id`，仅在服务端提供对应非空值时输出；抄送事件还可提供毫秒时间戳 `cc_time`；任务事件另有 `task_id`，完成、转交或终止事件按对应 schema 提供 `finish_time`，任务完成、任务转交和实例完成还提供 `result`。`status/result` 保留服务端实际值，不推断完整枚举；缺少稳定 ID 或 payload 非法时 stderr 会输出 warning，stdout 回退为原始 transport envelope。
-- VoIP 事件读取顶层 `biz_id/corp_id/org_id/target_uid/call_id/caller_uid/callee_uid/call_type/room_id/create_time/event_time`。`caller_uid/callee_uid` 是字符串标识，保留前导 `0`、连字符等原始内容，不转换为数字；`biz_id` 是重试稳定的业务去重 ID。敏感入会码不进入 `--flatten` 输出，默认非扁平 transport envelope 的 `.data` 也会移除 `roomCode`；只有显式 `--debug-raw-events` 才输出原始值，且不得记录或转发。
+- VoIP 事件读取顶层 `biz_id/corp_id/org_id/target_uid/call_id/caller_uid/callee_uid/call_type/room_id/sdk_app_id/sdk_expire_time/create_time/event_time`。`caller_uid/callee_uid` 是字符串标识，保留前导 `0`、连字符等原始内容，不转换为数字；`caller_uid` 读取新的 `body.callerUserId` 并兼容旧 `body.callerUid`；`biz_id` 是重试稳定的业务去重 ID。`sdk_app_id` 与 `sdk_expire_time` 来自非敏感的 `body.sdkAuth`，过期时间为 Unix 秒。MeetingSDK token 优先读取 `body.sdkAuth.sdkToken`，并兼容旧 header `X-Mozi-Agent-Sdk-Token`；敏感入会码不进入 `--flatten` 输出，默认非扁平 transport envelope 的 `.data` 也会移除 `roomCode` 与 body token，并从 `.headers` 中移除旧版 token；数字员工确需动态 MeetingSDK 凭证时显式加 `--include-voip-sdk-token`，并将 stdout 直接交给受控入会进程，不得记录或转发；只有显式 `--debug-raw-events` 才输出原始值。
 - Todo 事件读取顶层 `task_id/subject/creator_id/create_time`；创建和更新事件还提供角色列表、优先级、状态阶段、计划/实际时间、来源与场景字段，更新额外提供 `old_status_stage/update_time`，删除提供 `delete_time`。空的可选时间和 `parent_id` 省略；缺少 `task_id` 或 payload 非法时回退为原始 transport envelope。
 - 好友申请事件读取顶层 `src_open_dingtalk_id/src_name/dest_open_dingtalk_id/remark/source/biz_type/apply_time`；好友添加成功事件读取 `friend_open_dingtalk_id/friend_name/establish_time/direction`。`direction` 为当前用户视角，`active` 表示主动添加，`passive` 表示被动添加；`apply_time/establish_time` 是毫秒时间戳。payload 缺失、为空或无法解析时 stderr 输出 warning，stdout 回退为原始 transport envelope。
 - 互动卡片事件保持顶层 `type/event_id/timestamp/subscribe_id/payload`，结构化上下文优先读取 `payload.body.actionData.context`。通过 `questions[].id` 关联 `answers[question_id]`，`selected` 中的选项 ID 再按同一问题的 `options[].id` 转换为标签；空数组是合法未选择状态，`custom` 独立保留。操作者使用整数 `operatorDTO.uid`，`createUid/orgId` 保持字符串；`bizInfoDTO.bizId`、`sourceTurnId`、`spaceId`、`conversationContextDTO.cid` 均按不透明 ID 关联。`timestamp/event_time/triggerTimestamp` 分别保留且不假设相等；字符串化的 `body.context` 和 `extension` 只作兼容或诊断回退。各层继续保留未知字段；注册时传递 `filterRule={}`，且不接受用户、群、角色或消息 Filter 参数。
