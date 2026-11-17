@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,6 +9,39 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
+
+func TestCrossPlatformCoverageSkillSetupClassificationProtectsCanonicalAndUnknownHome(t *testing.T) {
+	t.Run("unknown HOME", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return "", errors.New("HOME unavailable") })
+		if isUniversalSkillSetupBase(filepath.Join(t.TempDir(), ".cursor", "skills")) {
+			t.Fatal("an unresolved HOME must not authorize cleanup")
+		}
+	})
+	t.Run("canonical survives retirement", func(t *testing.T) {
+		home := t.TempDir()
+		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+		testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
+		canonical := filepath.Join(home, ".agents", "skills")
+		names := []string{multiEventSkill, multiMiscSkill}
+		for _, name := range names {
+			dir := filepath.Join(canonical, name)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(name), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := retireMigratedUniversalSkills([]string{canonical}, names, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range names {
+			if body, err := os.ReadFile(filepath.Join(canonical, name, "SKILL.md")); err != nil || string(body) != name {
+				t.Fatalf("canonical Skill was retired: %q, %v", body, err)
+			}
+		}
+	})
+}
 
 func TestCrossPlatformCoverageWorkBuddyCustomRootWithUniversalSuffix(t *testing.T) {
 	for _, suffix := range []string{".cursor", ".codex", ".config/opencode", ".agents"} {
