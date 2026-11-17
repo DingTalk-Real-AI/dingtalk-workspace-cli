@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdpolicy"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -117,6 +118,29 @@ func RunContractTests(t *testing.T, h *edition.Hooks) {
 		for _, s := range h.SupplementServers() {
 			if !fbIDs[s.ID] {
 				t.Errorf("SupplementServers ID %q not found in FallbackServers", s.ID)
+			}
+		}
+	})
+
+	t.Run("Restrict_rules_valid_when_set", func(t *testing.T) {
+		if h.Restrict == nil {
+			return
+		}
+		// An invalid rule set does not disable restriction at runtime: it
+		// denies every business command. Catch it at build time instead.
+		rules := h.Restrict()
+		if err := cmdpolicy.ValidateRules(rules); err != nil {
+			t.Fatalf("Restrict() returned an invalid rule set: %v", err)
+		}
+		if len(rules) == 0 {
+			t.Log("Restrict() returns no rules: every business command is denied")
+		}
+		for _, rule := range rules {
+			if cmdpolicy.RuleAllowsAll(rule) {
+				t.Logf("rule %q has no Allow and no effect/risk ceiling: it allows every declared non-channel command", rule.Name)
+			}
+			if len(rule.AllowChannels) > 0 {
+				t.Logf("rule %q opens channel entries %v: these commands can reach operations the rule cannot see", rule.Name, rule.AllowChannels)
 			}
 		}
 	})

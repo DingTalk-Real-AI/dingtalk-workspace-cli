@@ -195,6 +195,53 @@ func GroupPolicyFor(cmd *cobra.Command) (GroupPolicy, bool, error) {
 	return policy, true, nil
 }
 
+// GroupRecoversPositionals reports whether cmd is a declared group that turns
+// a leftover positional into command-resolution recovery instead of treating
+// it as business input. Such an invocation is navigation, not the group's own
+// business operation.
+func GroupRecoversPositionals(cmd *cobra.Command) bool {
+	policy, ok, err := GroupPolicyFor(cmd)
+	return err == nil && ok && groupRecoversPositionals(policy)
+}
+
+func groupRecoversPositionals(policy GroupPolicy) bool {
+	return policy.Positionals == PositionalsReject && policy.Recovery != RecoveryDisabled
+}
+
+// DenyGroupBusiness replaces a hybrid group's own business operation with
+// deny while keeping everything the group owns as a group: its flags, its
+// children, and the positional recovery that suggests a sibling for a mistyped
+// subcommand. The denial is also installed as PreRunE so it is reported before
+// Cobra validates the business operation's required flags.
+//
+// It is the only supported way to refuse a hybrid group's business operation;
+// replacing RunE from outside would discard the group contract. It must run
+// before PrepareCommandTree and panics for anything but a declared hybrid.
+func DenyGroupBusiness(cmd *cobra.Command, deny func(*cobra.Command, []string) error) {
+	if cmd == nil || deny == nil {
+		panic("DenyGroupBusiness requires a command and a denial")
+	}
+	policy, ok, err := GroupPolicyFor(cmd)
+	if err != nil || !ok || policy.Mode != GroupHybrid {
+		panic(fmt.Sprintf("command %q is not a declared hybrid group", cmd.Name()))
+	}
+	recovers := groupRecoversPositionals(policy)
+	cmd.Run = nil
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if recovers && len(args) > 0 {
+			return runGroupPolicy(cmd, args, policy)
+		}
+		return deny(cmd, args)
+	}
+	cmd.PreRun = nil
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if recovers && len(args) > 0 {
+			return nil
+		}
+		return deny(cmd, args)
+	}
+}
+
 func encodeGroupPolicy(policy GroupPolicy) string {
 	return string(policy.Mode) + "|" + string(policy.Positionals) + "|" + string(policy.Recovery)
 }

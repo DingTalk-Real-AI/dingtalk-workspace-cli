@@ -31,6 +31,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdpolicy"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
@@ -1028,6 +1029,11 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 				}
 			}()
 			rootVersionShortCircuit = false
+			// A command denied by the compiled-in restriction policy is refused
+			// before any delegator, credential, edition, or output hook runs.
+			if err := cmdpolicy.Gate(cmd, args); err != nil {
+				return err
+			}
 			if err := beginDelegatorInvocation(cmd); err != nil {
 				return err
 			}
@@ -1132,7 +1138,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			installOutputSinkRunBoundary(cmd)
 			// 输出初始化在业务 RunE 外层，也可能失败；清理必须包住整个执行入口。
 			cmd.RunE = wrapDelegatorInvocationHook(flags.delegatorInvocation, cmd.RunE, false)
-			if fn := edition.Get().AfterPersistentPreRun; fn != nil && !isAuthStatusReadOnlyCommand(cmd) {
+			// The policy diagnostic reads only local state. An edition hook that
+			// enforces sign-in must not be able to block it, or an invalid
+			// policy could not be diagnosed without valid credentials.
+			if fn := edition.Get().AfterPersistentPreRun; fn != nil && !isAuthStatusReadOnlyCommand(cmd) && !cmdpolicy.IsPolicyDiagnostic(cmd) {
 				if err := fn(cmd, args); err != nil {
 					return err
 				}
@@ -1266,6 +1275,21 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		}
 	}
 
+	// The command restriction policy is resolved once per executable tree,
+	// before any user-controlled extension can load. Declaration-only trees
+	// (Schema source root, cache builder) never carry a policy, so the Schema
+	// surface and its cache stay independent of it.
+	var commandPolicy *cmdpolicy.Snapshot
+	if !declarationOnly {
+		commandPolicy = cmdpolicy.Resolve(edition.Get())
+	}
+	if commandPolicy.Enabled() {
+		// A restricted build trusts only what is compiled in. Runtime plugins
+		// (with their endpoints, sh -c hooks, and skill sync) and user-defined
+		// shortcuts are controlled by the local user and are not loaded.
+		loadRuntimeExtensions = false
+	}
+
 	if declarationOnly || readonlyStatusInvocation {
 		// Schema / surface assembly: mount the reviewed tree only. Do not
 		// injectStaticServers or InitDeps — those mutate process globals and
@@ -1315,6 +1339,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			mount(root)
 		}
 	}
+	// Evaluate the policy against the complete tree and install denials before
+	// help is configured and the tree is prepared; hooks must not be replaced
+	// after preparation.
+	cmdpolicy.Apply(root, commandPolicy)
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)

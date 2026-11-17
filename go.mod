@@ -12,6 +12,7 @@ replace github.com/spf13/cobra => ./third_party/cobra
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/RealAlexandreAI/json-repair v0.0.15
+	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0

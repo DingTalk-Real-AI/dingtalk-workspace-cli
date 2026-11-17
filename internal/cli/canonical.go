@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdpolicy"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -102,10 +103,23 @@ func NewSchemaCommand() *cobra.Command {
 			if err := schemaCommandCatalogError(); err != nil {
 				return fmt.Errorf("load typed Schema registry: %w", err)
 			}
+			// The command restriction policy of this tree decides what Schema
+			// may show. A denied path is refused here, before any loader or
+			// the rendered compact-leaf fast path can emit a byte.
+			policy := cmdpolicy.For(cmd)
+			if !all && len(args) == 1 {
+				if err := schemaPolicyQueryDenial(policy, args[0]); err != nil {
+					return err
+				}
+			}
 			if !all && compact && len(args) == 1 &&
 				output.ResolveFormat(cmd, output.FormatJSON) == output.FormatJSON &&
 				output.ResolveFields(cmd) == "" && output.ResolveJQ(cmd) == "" &&
-				runtimeDeliveryLiveCatalog.Load() == nil {
+				runtimeDeliveryLiveCatalog.Load() == nil &&
+				// Pre-rendered bytes cannot be projected: under an active
+				// policy every leaf goes through schemaPolicyView, which fails
+				// closed on a tool the policy cannot attribute.
+				!policy.Enabled() {
 				auditSchemaDeliveryAccess("query loader")
 				if runtime := activeSchemaCacheRuntime(); runtime != nil {
 					if data, ok := runtime.renderedCompactLeaf(args[0]); ok {
@@ -126,9 +140,13 @@ func NewSchemaCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if payload, err = schemaPolicyView(policy, payload, deliverySchemaAllPayload); err != nil {
+				return err
+			}
 			if compact {
 				payload = stripSchemaPayloadCompact(payload)
 			}
+			schemaPolicyStampView(policy, payload)
 			return output.WriteFiltered(cmd.OutOrStdout(), output.ResolveFormat(cmd, output.FormatJSON), payload, output.ResolveFields(cmd), output.ResolveJQ(cmd))
 		},
 	}

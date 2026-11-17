@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cmdpolicy"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
@@ -36,20 +37,33 @@ func configureRootHelp(root *cobra.Command) {
 		Long: i18n.T("显示任意命令的帮助文案。\n" +
 			"用法：dws help [命令路径] 查看完整说明。"),
 		DisableAutoGenTag: true,
-		Run: func(c *cobra.Command, args []string) {
+		RunE: func(c *cobra.Command, args []string) error {
 			target, _, err := c.Root().Find(args)
 			if target == nil || err != nil {
 				c.Root().HelpFunc()(c.Root(), args)
-				return
+				return nil
+			}
+			// Help is a discovery surface: a command the restriction policy
+			// denies, or a group with no permitted command, reports the
+			// denial instead of its usage and flags.
+			if denial := cmdpolicy.DiscoveryDenial(cmdpolicy.For(target), cmdpolicy.CommandPath(target)); denial != nil {
+				return denial
 			}
 			target.InitDefaultHelpFlag()
 			_ = target.Help()
+			return nil
 		},
 	})
 
 	defaultHelpFunc := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd != root {
+			// The --help flag reaches this function without running RunE, so
+			// the same discovery rule is applied here.
+			if denial := cmdpolicy.DiscoveryDenial(cmdpolicy.For(cmd), cmdpolicy.CommandPath(cmd)); denial != nil {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), denial.Error())
+				return
+			}
 			if isChatProductRoot(cmd, root) {
 				renderChatShortcutFirstHelp(cmd)
 				cli.RenderHelpAffordances(cmd)

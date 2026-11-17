@@ -202,6 +202,16 @@ type Hooks struct {
 	// overlays populate the whitelist ($currentUserId / $unionId / $corpId /
 	// $now / $today). See schema v3 §2.3.
 	RuntimeDefaults func() map[string]RuntimeDefaultFn
+
+	// Restrict contributes the compiled-in command restriction rules.
+	//
+	// nil leaves command restriction disabled and the CLI unchanged. A non-nil
+	// hook enables it: returning no rules denies every business command, and
+	// an invalid rule set (or a panic) fails closed. The hook is called once
+	// per executable command tree and must return static rules without doing
+	// network or other blocking work. While restriction is enabled, runtime
+	// plugins, plugin hooks, and user-defined shortcuts are not loaded.
+	Restrict func() []CommandRule
 }
 
 var (

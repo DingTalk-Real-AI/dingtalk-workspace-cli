@@ -75,6 +75,7 @@ func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_restart": "读取本地绑定并管理所属进程",
+		"config.policy_show":           "命令仅读取本进程内的指令裁剪策略快照，不调用 MCP 接口",
 		"audit.export":                 "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
 		"audit.tail":                   "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
 		"audit.verify":                 "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",

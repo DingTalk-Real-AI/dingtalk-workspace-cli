@@ -126,6 +126,40 @@ Schema contract) keep separate authorities — do not merge them with
   (`runtime_gate`) call sites; migrate leaves to declared `Safety` /
   `ContractDecl` instead. Existing annotate sites may remain until migrated.
 
+## Command restriction policy
+
+- Decision and rule semantics: `docs/command-restriction-policy.md`. Rules are
+  compiled in through `edition.Hooks.Restrict`; there is no user policy file.
+  A nil hook is disabled, an empty rule set denies every business command, and
+  an invalid rule set fails closed — never degrade either to "disabled".
+- `internal/cmdpolicy` resolves one immutable snapshot per executable command
+  tree, bound to its root (`cmdpolicy.For`). Do not add a process-global policy
+  or filter. Declaration-only trees (Schema source root, cache builder) carry
+  no policy, so Schema assembly and its cache never depend on it.
+- `internal/cmdpolicy` must **not** import `internal/cli`.
+- Denials are installed before `corecmd.PrepareCommandTree` and commands are
+  rewritten in place, never removed. `Hidden` is presentation only and must
+  never stand in for a denial. Refuse a hybrid group's own business operation
+  only through `corecmd.DenyGroupBusiness`; its children are judged separately.
+- Every dimension of a rule is ANDed, including `AllowChannels`: naming a
+  channel entry is an additional condition and never bypasses the rule's
+  Deny, Allow, declaration, or ceiling checks. Every spelling Cobra accepts
+  for a command (compatibility nodes and native aliases at any level) is an
+  entry path of the same identity.
+- A command's `Safety` is not channel permission. Any new generic-invocation,
+  plugin-management, or self-update command must be added to the channel list
+  in `internal/cmdpolicy/reviewed_paths.go` in the same change (exact paths, no
+  wildcards). User-defined shortcut risk is never a trusted declaration.
+- While the policy is enabled, runtime plugins, plugin hooks, and user-defined
+  shortcuts are not loaded. Do not add a load path that bypasses this.
+- Schema delivery is narrowed only as a view (`internal/cli/schema_policy_view.go`):
+  the policy never changes assembly, the persistent cache, or `ResolveMeta`,
+  and the projection must be built on a detached copy — delivery can hand out
+  the cache's own map. Every new `dws schema` output path must pass the query
+  denial check before emitting bytes and the view projection before rendering;
+  pre-rendered fast paths are skipped while the policy is enabled. With the
+  policy disabled the output must stay byte-identical.
+
 ## flag / help / schema homology
 
 - Decision (path A — Contract/LeafSpec is CLI-surface authority **and must embed into Schema**): `docs/flag-help-schema-homology.md`
