@@ -119,8 +119,22 @@ assert.equal(UPSTREAM_AGENTS.filter(({ universal }) => universal).length, 19, "u
 assert.equal(UPSTREAM_AGENTS.filter(({ universal }) => !universal).length, 57, "upstream non-universal classification is pinned");
 assert.equal(UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir === null).length, 2, "no-global Agents are retained in the registry");
 assert.equal(UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir === ".agents/skills").length, 6, "canonical-direct Agents need no target");
-assert.equal(resolvedAgentTargets(path.join(os.tmpdir(), "dws-registry-home")).length, 70, "65 upstream roots, qoderwork, and 4 migration roots are deduplicated");
 const detectionHome = fs.mkdtempSync(path.join(os.tmpdir(), "dws-agent-detect-"));
+const previousWorkBuddyConfigDir = process.env.WORKBUDDY_CONFIG_DIR;
+try {
+  process.env.WORKBUDDY_CONFIG_DIR = " ";
+  const targets = resolvedAgentTargets(detectionHome);
+  assert.equal(targets.length, 71, "65 upstream roots, qoderwork, workbuddy, and 4 migration roots are deduplicated");
+  const workbuddy = targets.find(({ id }) => id === "dws-workbuddy");
+  assert.equal(workbuddy.baseDir, path.join(detectionHome, ".workbuddy", "skills"));
+  assert.equal(workbuddy.universal, false, "WorkBuddy needs a link to the canonical store");
+  assert.equal(agentTargetDetected(workbuddy), false, "absent WorkBuddy configuration is not detected");
+  fs.mkdirSync(path.dirname(workbuddy.baseDir), { recursive: true });
+  assert.equal(agentTargetDetected(workbuddy), true, "WorkBuddy is detected without a connector");
+} finally {
+  if (previousWorkBuddyConfigDir === undefined) delete process.env.WORKBUDDY_CONFIG_DIR;
+  else process.env.WORKBUDDY_CONFIG_DIR = previousWorkBuddyConfigDir;
+}
 fs.mkdirSync(path.join(detectionHome, ".config", "kimchi"), { recursive: true });
 fs.mkdirSync(path.join(detectionHome, ".tabnine"), { recursive: true });
 const detectionTargets = resolvedAgentTargets(detectionHome);
@@ -457,7 +471,7 @@ function stagePkg(zipEntries, emptyDirs = []) {
 }
 
 function runInstall(pkg, home, skillMode, extraEnv = {}) {
-  const env = { ...process.env, HOME: home, ...extraEnv };
+  const env = { ...process.env, HOME: home, WORKBUDDY_CONFIG_DIR: "", ...extraEnv };
   if (!Object.hasOwn(extraEnv, "DWS_NO_SKILLS")) {
     delete env.DWS_NO_SKILLS;
   }
@@ -800,7 +814,7 @@ scenario("unretireable universal copy warns but still completes the install", ()
   }
 });
 
-scenario("upstream Agent roots honor XDG and custom homes with relative links", () => {
+scenario("Agent roots honor XDG and custom homes with relative links", () => {
   const { tmp, pkg, home } = stagePkg({
     "mono/SKILL.md": "# mono fixture\n",
     "multi/dingtalk-chat/SKILL.md": "# dingtalk-chat\n",
@@ -810,6 +824,7 @@ scenario("upstream Agent roots honor XDG and custom homes with relative links", 
   const claude = path.join(tmp, "claude config");
   const codex = path.join(tmp, "codex home");
   const hermes = path.join(tmp, "hermes home");
+  const workbuddy = path.join(tmp, "workbuddy config");
   try {
     writeFile(path.join(xdg, "goose", "config.yaml"), "enabled: true\n");
     writeFile(path.join(xdg, "agents", "detection.marker"), "amp\n");
@@ -821,6 +836,7 @@ scenario("upstream Agent roots honor XDG and custom homes with relative links", 
     writeFile(path.join(codex, "skills", "dingtalk-chat", "SKILL.md"), "old codex copy\n");
     writeFile(path.join(hermes, "config.json"), "{}\n");
     writeFile(path.join(hermes, "skills", "dingtalk-chat", "SKILL.md"), "old hermes copy\n");
+    writeFile(path.join(workbuddy, "config.json"), "{}\n");
     writeFile(path.join(home, ".qoderwork", "config.json"), "{}\n");
     writeFile(path.join(home, ".amp", "skills", "dingtalk-chat", "SKILL.md"), "old DWS path\n");
 
@@ -830,6 +846,7 @@ scenario("upstream Agent roots honor XDG and custom homes with relative links", 
       CLAUDE_CONFIG_DIR: claude,
       CODEX_HOME: codex,
       HERMES_HOME: hermes,
+      WORKBUDDY_CONFIG_DIR: ` ${workbuddy} `,
     });
     assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
 
@@ -838,12 +855,15 @@ scenario("upstream Agent roots honor XDG and custom homes with relative links", 
       path.join(autohand, "skills", "dingtalk-chat"),
       path.join(claude, "skills", "dingtalk-chat"),
       path.join(hermes, "skills", "dingtalk-chat"),
+      path.join(workbuddy, "skills", "dingtalk-chat"),
       path.join(home, ".qoderwork", "skills", "dingtalk-chat"),
     ]) {
       assert.ok(fs.lstatSync(linked).isSymbolicLink(), `${linked} is linked`);
       assert.ok(!path.isAbsolute(fs.readlinkSync(linked)), `${linked} uses a relative link`);
       assert.equal(fs.readFileSync(path.join(linked, "SKILL.md"), "utf8"), "# dingtalk-chat\n");
     }
+    assert.equal(fs.existsSync(path.join(home, ".workbuddy", "skills")), false, "custom WorkBuddy root replaces the default");
+    assert.equal(fs.existsSync(path.join(workbuddy, "plugins")), false, "WorkBuddy installation needs no connector cache");
     const backupText = [];
     const backupNames = [];
     const collectBackupText = (dir) => {
