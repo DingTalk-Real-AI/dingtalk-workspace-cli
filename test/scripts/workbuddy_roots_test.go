@@ -9,6 +9,9 @@ import (
 	"testing"
 )
 
+// Unicode White_Space is the shared Go / npm / PowerShell / Shell contract.
+const workbuddyWhitespace = "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+
 func TestInstallerWorkBuddyShellRootsNormalizeWhitespace(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell resolvers")
@@ -25,14 +28,15 @@ func TestInstallerWorkBuddyShellRootsNormalizeWhitespace(t *testing.T) {
 				function = "resolve_agent_base"
 				call = `resolve_agent_base "$HOME" dws-workbuddy .workbuddy/skills`
 			}
-			body := extractShellFunction(t, filepath.Join("..", "..", "scripts", filepath.FromSlash(name)), function)
-			for _, raw := range []string{"", " \t\r\n", " \t\n" + custom + "\r\n "} {
+			script := filepath.Join("..", "..", "scripts", filepath.FromSlash(name))
+			body := extractShellFunction(t, script, "trim_workbuddy_config_dir") + "\n" + extractShellFunction(t, script, function)
+			for _, raw := range []string{"", workbuddyWhitespace, workbuddyWhitespace + custom + workbuddyWhitespace, "\u00a0" + custom + "\u00a0"} {
 				want := filepath.Join(home, ".workbuddy", "skills")
 				if strings.TrimSpace(raw) != "" {
 					want = filepath.Join(custom, "skills")
 				}
 				cmd := exec.Command("sh", "-eu", "-c", body+"\n"+call)
-				cmd.Env = append(os.Environ(), "HOME="+home, "WORKBUDDY_CONFIG_DIR="+raw)
+				cmd.Env = append(os.Environ(), "HOME="+home, "WORKBUDDY_CONFIG_DIR="+raw, "LC_ALL=C")
 				out, err := cmd.CombinedOutput()
 				if err != nil || strings.TrimSpace(string(out)) != want {
 					t.Fatalf("root for %q = %q, %v; want %q", raw, out, err, want)
@@ -64,7 +68,7 @@ func TestInstallPowerShellWorkBuddyRootsNormalizeWhitespace(t *testing.T) {
 			body := strings.ReplaceAll(extractPowerShellFunction(t, text, function), "$HOME", "$env:DWS_TEST_HOME")
 			harness := filepath.Join(t.TempDir(), "workbuddy-root.ps1")
 			mustWriteFile(t, harness, []byte(body+"\n"+call), 0o644)
-			for _, raw := range []string{"", " \t\r\n", " \t\n" + custom + "\r\n "} {
+			for _, raw := range []string{"", workbuddyWhitespace, workbuddyWhitespace + custom + workbuddyWhitespace, "\u00a0" + custom + "\u00a0"} {
 				want := filepath.Join(home, ".workbuddy", "skills")
 				if strings.TrimSpace(raw) != "" {
 					want = filepath.Join(custom, "skills")

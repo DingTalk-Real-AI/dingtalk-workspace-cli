@@ -174,8 +174,12 @@ Agent 私有 global 目录；注册表中的 `globalSkillsDir` 仍用于识别�
 路径，不作为 universal symlink 模式的发布目标。
 
 WorkBuddy 的普通 Skill 目标为 `~/.workbuddy/skills`，支持
-`WORKBUDDY_CONFIG_DIR/skills` 自定义目录。`dws skill setup --target workbuddy`
-和 `dws skill install <skillId> workbuddy` 均可按名称指定；自动安装和升级在检测到
+`WORKBUDDY_CONFIG_DIR/skills` 自定义目录。各安装入口统一去除配置值首尾的
+Unicode White_Space（包括 U+00A0），
+全空白值回退默认目录，不受 Shell locale 影响。客户端分类保留目标身份；
+自定义目录与 universal 客户端路径重合时，WorkBuddy 仍建立适配入口。
+`dws skill setup --target workbuddy` 和 `dws skill install <skillId> workbuddy`
+均可按名称指定；自动安装和升级在检测到
 WorkBuddy 配置目录后建立兼容链接，链接不可用时复制。multi 安装同级
 `dingtalk-*`，mono 安装 `dws/`。该路径服务未安装钉钉连接器的普通客户端用法；
 不读写 WorkBuddy 官方连接器的插件缓存，也不检测或切换连接器的启用状态。

@@ -402,6 +402,26 @@ agent_skill_dirs() {
     .qoderwork/skills .workbuddy/skills .github/skills .windsurf/skills .cline/skills .amp/skills
 }
 
+# Unicode White_Space, matching Go strings.TrimSpace and PowerShell Trim().
+# Match complete UTF-8 byte sequences so LC_ALL=C cannot split a character.
+trim_workbuddy_config_dir() {
+  _tw_value=$1
+  while :; do
+    _tw_before=$_tw_value
+    for _tw_bytes in '\0011' '\0012' '\0013' '\0014' '\0015' '\0040' '\0302\0205' '\0302\0240' '\0341\0232\0200' \
+      '\0342\0200\0200' '\0342\0200\0201' '\0342\0200\0202' '\0342\0200\0203' '\0342\0200\0204' '\0342\0200\0205' \
+      '\0342\0200\0206' '\0342\0200\0207' '\0342\0200\0210' '\0342\0200\0211' '\0342\0200\0212' \
+      '\0342\0200\0250' '\0342\0200\0251' '\0342\0200\0257' '\0342\0201\0237' '\0343\0200\0200'; do
+      _tw_space=$(printf '%b_' "$_tw_bytes")
+      _tw_space=${_tw_space%_}
+      while :; do case "$_tw_value" in "$_tw_space"*) _tw_value=${_tw_value#"$_tw_space"} ;; *) break ;; esac; done
+      while :; do case "$_tw_value" in *"$_tw_space") _tw_value=${_tw_value%"$_tw_space"} ;; *) break ;; esac; done
+    done
+    [ "$_tw_value" = "$_tw_before" ] && break
+  done
+  printf '%s\n' "$_tw_value"
+}
+
 resolve_agent_skill_base() {
   agent_dir="$1"; base="$HOME/$agent_dir"
   case "$agent_dir" in
@@ -409,9 +429,7 @@ resolve_agent_skill_base() {
     .codex/skills) [ -n "${CODEX_HOME:-}" ] && base="$CODEX_HOME/skills" ;;
     .hermes/skills) [ -n "${HERMES_HOME:-}" ] && base="$HERMES_HOME/skills" ;;
     .workbuddy/skills)
-      _ras_workbuddy=${WORKBUDDY_CONFIG_DIR:-}
-      _ras_workbuddy="${_ras_workbuddy#"${_ras_workbuddy%%[![:space:]]*}"}"
-      _ras_workbuddy="${_ras_workbuddy%"${_ras_workbuddy##*[![:space:]]}"}"
+      _ras_workbuddy=$(trim_workbuddy_config_dir "${WORKBUDDY_CONFIG_DIR:-}")
       [ -n "$_ras_workbuddy" ] && base="$_ras_workbuddy/skills" ;;
     .autohand/skills) [ -n "${AUTOHAND_HOME:-}" ] && base="$AUTOHAND_HOME/skills" ;;
     .grok/skills) [ -n "${GROK_HOME:-}" ] && base="$GROK_HOME/skills" ;;

@@ -72,6 +72,7 @@ function openClawSkillsDir(homeDir) {
 
 function resolvedAgentTargets(homeDir) {
   const xdgConfigHome = (process.env.XDG_CONFIG_HOME || "").trim() || path.join(homeDir, ".config");
+  const workbuddyConfig = (process.env.WORKBUDDY_CONFIG_DIR || "").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
   const targets = [
     ...UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir && agentDir !== ".agents/skills"),
     // DWS compatibility targets absent from upstream's registry.
@@ -81,8 +82,8 @@ function resolvedAgentTargets(homeDir) {
   ].map((target) => {
     const { agentDir } = target;
     let baseDir = path.join(homeDir, agentDir);
-    if (agentDir === ".workbuddy/skills" && (process.env.WORKBUDDY_CONFIG_DIR || "").trim()) {
-      baseDir = path.join(process.env.WORKBUDDY_CONFIG_DIR.trim(), "skills");
+    if (agentDir === ".workbuddy/skills" && workbuddyConfig) {
+      baseDir = path.join(workbuddyConfig, "skills");
     } else if (agentDir === ".claude/skills" && (process.env.CLAUDE_CONFIG_DIR || "").trim()) {
       baseDir = path.join(process.env.CLAUDE_CONFIG_DIR.trim(), "skills");
     } else if (agentDir === ".codex/skills" && (process.env.CODEX_HOME || "").trim()) {

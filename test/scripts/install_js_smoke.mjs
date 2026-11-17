@@ -131,6 +131,12 @@ try {
   assert.equal(agentTargetDetected(workbuddy), false, "absent WorkBuddy configuration is not detected");
   fs.mkdirSync(path.dirname(workbuddy.baseDir), { recursive: true });
   assert.equal(agentTargetDetected(workbuddy), true, "WorkBuddy is detected without a connector");
+  process.env.WORKBUDDY_CONFIG_DIR = `\u0085\u00a0${path.join(detectionHome, "WorkBuddy config")}\u3000`;
+  assert.equal(resolvedAgentTargets(detectionHome).find(({ id }) => id === "dws-workbuddy").baseDir,
+    path.join(detectionHome, "WorkBuddy config", "skills"), "Unicode White_Space is normalized");
+  process.env.WORKBUDDY_CONFIG_DIR = "\u0085\u00a0\u3000";
+  assert.equal(resolvedAgentTargets(detectionHome).find(({ id }) => id === "dws-workbuddy").baseDir,
+    workbuddy.baseDir, "Unicode-only configuration falls back to the default");
 } finally {
   if (previousWorkBuddyConfigDir === undefined) delete process.env.WORKBUDDY_CONFIG_DIR;
   else process.env.WORKBUDDY_CONFIG_DIR = previousWorkBuddyConfigDir;

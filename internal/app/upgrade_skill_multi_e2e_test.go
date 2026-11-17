@@ -13,6 +13,41 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 )
 
+func TestCrossPlatformCoverageUpgradeE2EIsolatesInheritedWorkBuddyRoot(t *testing.T) {
+	external := t.TempDir()
+	victim := filepath.Join(external, "skills", "dingtalk-chat", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(victim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(victim, []byte("host skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WORKBUDDY_CONFIG_DIR", external)
+	home := t.TempDir()
+	setTestHome(t, home)
+	upgrade.SwapUserHomeDirForTest(t, func() (string, error) { return home, nil })
+	if err := os.MkdirAll(filepath.Join(home, ".workbuddy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(source, "dingtalk-chat"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "dingtalk-chat", "SKILL.md"), []byte("new skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := upgrade.UpgradeSkillLocations(source)
+	if err != nil || len(result.Failed()) != 0 {
+		t.Fatalf("upgrade = %#v, %v", result, err)
+	}
+	if body, err := os.ReadFile(victim); err != nil || string(body) != "host skill" {
+		t.Fatalf("inherited WorkBuddy root changed: %q, %v", body, err)
+	}
+	if body, err := os.ReadFile(filepath.Join(home, ".workbuddy", "skills", "dingtalk-chat", "SKILL.md")); err != nil || string(body) != "new skill" {
+		t.Fatalf("fake WorkBuddy root missing: %q, %v", body, err)
+	}
+}
+
 // TestCrossPlatformCoverageUpgradeSkillLocationsMonoSeedMigratesToMulti is the fake-HOME E2E for
 // the 2026-08-05 owner decision: upgrade is not disk-sticky. Seeding a mono
 // layout then calling UpgradeSkillLocations with a multi bundle must install
