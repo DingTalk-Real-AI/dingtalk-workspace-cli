@@ -408,7 +408,11 @@ resolve_agent_skill_base() {
     .claude/skills) [ -n "${CLAUDE_CONFIG_DIR:-}" ] && base="$CLAUDE_CONFIG_DIR/skills" ;;
     .codex/skills) [ -n "${CODEX_HOME:-}" ] && base="$CODEX_HOME/skills" ;;
     .hermes/skills) [ -n "${HERMES_HOME:-}" ] && base="$HERMES_HOME/skills" ;;
-    .workbuddy/skills) [ -n "${WORKBUDDY_CONFIG_DIR:-}" ] && base="$WORKBUDDY_CONFIG_DIR/skills" ;;
+    .workbuddy/skills)
+      _ras_workbuddy=${WORKBUDDY_CONFIG_DIR:-}
+      _ras_workbuddy="${_ras_workbuddy#"${_ras_workbuddy%%[![:space:]]*}"}"
+      _ras_workbuddy="${_ras_workbuddy%"${_ras_workbuddy##*[![:space:]]}"}"
+      [ -n "$_ras_workbuddy" ] && base="$_ras_workbuddy/skills" ;;
     .autohand/skills) [ -n "${AUTOHAND_HOME:-}" ] && base="$AUTOHAND_HOME/skills" ;;
     .grok/skills) [ -n "${GROK_HOME:-}" ] && base="$GROK_HOME/skills" ;;
     .vibe/skills) [ -n "${VIBE_HOME:-}" ] && base="$VIBE_HOME/skills" ;;

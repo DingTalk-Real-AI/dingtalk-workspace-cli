@@ -1219,6 +1219,11 @@ func skillSetupBaseForMode(dest, mode string) string {
 }
 
 func isUniversalSkillSetupBase(base string) bool {
+	home, _ := skillSetupUserHomeDir()
+	return isUniversalSkillSetupBaseForHome(base, home)
+}
+
+func isUniversalSkillSetupBaseForHome(base, home string) bool {
 	cleanBase := filepath.Clean(base)
 	if custom := strings.TrimSpace(skillSetupGetenv("CODEX_HOME")); custom != "" && sameSkillSetupPath(cleanBase, filepath.Join(custom, "skills")) {
 		return true
@@ -1229,7 +1234,12 @@ func isUniversalSkillSetupBase(base string) bool {
 			return true
 		}
 	}
-	base = filepath.ToSlash(cleanBase)
+	if home == "" {
+		return false
+	}
+	// Classification belongs to the declared Agent root. A custom non-universal
+	// root can have any suffix (for example WorkBuddy's profile/.cursor/skills).
+	// Match concrete universal roots, never suffixes of arbitrary user paths.
 	for rel := range map[string]bool{
 		".config/agents/skills": true, ".gemini/antigravity/skills": true,
 		".gemini/antigravity-cli/skills": true, ".codex/skills": true,
@@ -1240,7 +1250,7 @@ func isUniversalSkillSetupBase(base string) bool {
 		".github/skills": true, ".windsurf/skills": true,
 		".cline/skills": true, ".amp/skills": true,
 	} {
-		if strings.HasSuffix(base, "/"+rel) {
+		if sameSkillSetupPath(cleanBase, filepath.Join(home, filepath.FromSlash(rel))) {
 			return true
 		}
 	}
@@ -1308,17 +1318,19 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 		Filtered:        filtered,
 	}
 	sort.Strings(plan.MultiSkillNames)
+	// Resolution puts the canonical store first. Preserve that identity before
+	// sorting: a custom client root can itself end in /.agents/skills.
+	canonicalBase := canonicalSkillSetupBase(dests, mode)
 	sortedDests := append([]string(nil), dests...)
 	sort.Slice(sortedDests, func(i, j int) bool {
-		leftCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[i], mode))), "/.agents/skills")
-		rightCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[j], mode))), "/.agents/skills")
+		leftCanonical := sameSkillSetupPath(skillSetupBaseForMode(sortedDests[i], mode), canonicalBase)
+		rightCanonical := sameSkillSetupPath(skillSetupBaseForMode(sortedDests[j], mode), canonicalBase)
 		if leftCanonical != rightCanonical {
 			return leftCanonical
 		}
 		return sortedDests[i] < sortedDests[j]
 	})
 	managedNames := currentManagedSkillNames()
-	canonicalBase := canonicalSkillSetupBase(sortedDests, mode)
 	for _, dest := range sortedDests {
 		base := skillSetupBaseForMode(dest, mode)
 		target := skillSetupTargetPlan{Destination: dest, CanonicalBase: canonicalBase}
@@ -1326,7 +1338,7 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 			continue
 		}
 		if canonicalBase != "" && !sameSkillSetupPath(base, canonicalBase) {
-			if isUniversalSkillSetupBase(base) {
+			if isUniversalSkillSetupBaseForHome(base, filepath.Dir(filepath.Dir(canonicalBase))) {
 				target.CleanupOnly = true
 			} else {
 				target.LinkCanonical = true

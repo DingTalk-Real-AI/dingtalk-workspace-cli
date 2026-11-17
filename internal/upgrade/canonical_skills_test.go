@@ -10,6 +10,36 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
+func TestCrossPlatformCoverageFakeHomeIsolatesInheritedWorkBuddyRoot(t *testing.T) {
+	external := t.TempDir()
+	victim := filepath.Join(external, "skills", "dingtalk-chat")
+	if err := os.MkdirAll(victim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(victim, "SKILL.md"), []byte("host skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WORKBUDDY_CONFIG_DIR", external)
+	home := withFakeHome(t)
+	testseam.Swap(t, &knownSkillDirs, []string{".agents/skills", ".workbuddy/skills"})
+	if err := os.MkdirAll(filepath.Join(home, ".workbuddy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := UpgradeSkillLocations(writeMultiBundle(t, t.TempDir(), "dingtalk-chat"))
+	if err != nil || len(result.Failed()) != 0 {
+		t.Fatalf("upgrade = %#v, %v", result, err)
+	}
+	if body, err := os.ReadFile(filepath.Join(victim, "SKILL.md")); err != nil || string(body) != "host skill" {
+		t.Fatalf("inherited root changed: %q, %v", body, err)
+	}
+	if info, err := os.Lstat(victim); err != nil || isSkillPathLink(info.Mode()) {
+		t.Fatalf("inherited root replaced: %#v, %v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".workbuddy", "skills", "dingtalk-chat", "SKILL.md")); err != nil {
+		t.Fatalf("fake WorkBuddy root was not installed: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLinksOtherAgents(t *testing.T) {
 	home := withFakeHome(t)
 	testseam.Swap(t, &knownSkillDirs, []string{

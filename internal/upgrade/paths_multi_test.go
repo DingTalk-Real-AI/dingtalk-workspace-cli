@@ -18,11 +18,14 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-// withFakeHome swaps upgradeUserHomeDir to a temp dir for the test duration.
+// withFakeHome isolates both HOME and configured Agent roots for the test.
 func withFakeHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home, nil })
+	// A host-provided custom root must never escape the fake HOME. Tests for
+	// custom roots can explicitly replace this seam after calling withFakeHome.
+	testseam.Swap(t, &upgradeGetenv, func(string) string { return "" })
 	// Host-installed macOS apps must not make a fake HOME appear to have extra
 	// detected Agents. Tests that exercise application-based detection can
 	// override this seam explicitly.

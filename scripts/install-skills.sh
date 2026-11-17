@@ -857,7 +857,11 @@ agent_skill_dirs() {
 resolve_agent_skill_base() {
   _ras_root="$1"; _ras_agent="$2"
   case "$_ras_agent" in
-    ".workbuddy/skills") [ -n "${WORKBUDDY_CONFIG_DIR:-}" ] && { printf '%s\n' "$WORKBUDDY_CONFIG_DIR/skills"; return; } ;;
+    ".workbuddy/skills")
+      _ras_workbuddy=${WORKBUDDY_CONFIG_DIR:-}
+      _ras_workbuddy="${_ras_workbuddy#"${_ras_workbuddy%%[![:space:]]*}"}"
+      _ras_workbuddy="${_ras_workbuddy%"${_ras_workbuddy##*[![:space:]]}"}"
+      [ -n "$_ras_workbuddy" ] && { printf '%s\n' "$_ras_workbuddy/skills"; return; } ;;
     ".claude/skills") [ -n "${CLAUDE_CONFIG_DIR:-}" ] && { printf '%s\n' "$CLAUDE_CONFIG_DIR/skills"; return; } ;;
     ".codex/skills") [ -n "${CODEX_HOME:-}" ] && { printf '%s\n' "$CODEX_HOME/skills"; return; } ;;
     ".hermes/skills") [ -n "${HERMES_HOME:-}" ] && { printf '%s\n' "$HERMES_HOME/skills"; return; } ;;

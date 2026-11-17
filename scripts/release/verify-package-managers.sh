@@ -176,7 +176,11 @@ resolve_agent_base() {
     codex) printf '%s\n' "${CODEX_HOME:-$home_root/.codex}/skills" ;;
     grok) printf '%s\n' "${GROK_HOME:-$home_root/.grok}/skills" ;;
     hermes-agent) printf '%s\n' "${HERMES_HOME:-$home_root/.hermes}/skills" ;;
-    dws-workbuddy) printf '%s\n' "${WORKBUDDY_CONFIG_DIR:-$home_root/.workbuddy}/skills" ;;
+    dws-workbuddy)
+      workbuddy_config=${WORKBUDDY_CONFIG_DIR:-}
+      workbuddy_config="${workbuddy_config#"${workbuddy_config%%[![:space:]]*}"}"
+      workbuddy_config="${workbuddy_config%"${workbuddy_config##*[![:space:]]}"}"
+      printf '%s\n' "${workbuddy_config:-$home_root/.workbuddy}/skills" ;;
     mistral-vibe) printf '%s\n' "${VIBE_HOME:-$home_root/.vibe}/skills" ;;
     amp|replit|universal) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/agents/skills" ;;
     crush|devin|goose|kimchi|opencode) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/${default_path#.config/}" ;;

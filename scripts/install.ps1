@@ -1029,7 +1029,10 @@ function Resolve-AgentSkillBase {
     param([string]$Root, $Agent)
     if ($null -eq $Agent.Dir) { return $null }
     switch ($Agent.Id) {
-        "dws-workbuddy" { if ($env:WORKBUDDY_CONFIG_DIR) { return (Join-Path $env:WORKBUDDY_CONFIG_DIR "skills") } }
+        "dws-workbuddy" {
+            $workbuddyConfig = ([string]$env:WORKBUDDY_CONFIG_DIR).Trim()
+            if ($workbuddyConfig) { return (Join-Path $workbuddyConfig "skills") }
+        }
         "autohand-code" { if ($env:AUTOHAND_HOME) { return (Join-Path $env:AUTOHAND_HOME "skills") } }
         "claude-code" { if ($env:CLAUDE_CONFIG_DIR) { return (Join-Path $env:CLAUDE_CONFIG_DIR "skills") } }
         "codex" { if ($env:CODEX_HOME) { return (Join-Path $env:CODEX_HOME "skills") } }
