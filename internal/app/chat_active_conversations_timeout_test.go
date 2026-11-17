@@ -55,12 +55,16 @@ func TestCrossPlatformCoverageChatActiveConversationsTotalTimeoutBoundsRunner(t 
 	})
 	calls := 0
 	var deadlines []time.Time
+	var firstRequestBudget time.Duration
 	testseam.Swap(t, &runnerCallTool, func(_ *transport.Client, ctx context.Context, _, _ string, _ map[string]any) (transport.ToolCallResult, error) {
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			return transport.ToolCallResult{}, fmt.Errorf("request missing deadline")
 		}
 		deadlines = append(deadlines, deadline)
+		if calls == 0 {
+			firstRequestBudget = time.Until(deadline)
+		}
 		calls++
 		if calls == 1 {
 			return transport.ToolCallResult{Content: map[string]any{"result": map[string]any{"conversationMessagesList": []any{}, "hasMore": true, "nextCursor": "A"}}}, nil
@@ -76,6 +80,7 @@ func TestCrossPlatformCoverageChatActiveConversationsTotalTimeoutBoundsRunner(t 
 		t.Fatal(err)
 	}
 	calls, deadlines = 0, nil
+	firstRequestBudget = 0
 	helpers.InitDepsForTest(t, caller)
 	cmd := corecmd.New(shortcut.FromShortcut(chat.ActiveConversations))
 	ctx, _ := output.WithResultStore(context.Background())
@@ -96,8 +101,12 @@ func TestCrossPlatformCoverageChatActiveConversationsTotalTimeoutBoundsRunner(t 
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 || code != 7 || elapsed < time.Second || elapsed > 5*time.Second || !deadlines[0].Equal(deadlines[1]) {
-		t.Fatalf("budget reset or partial lost: calls=%d elapsed=%s code=%d deadlines=%v result=%#v", calls, elapsed, code, deadlines, result)
+	// Assert the request budget itself: the global 10s timeout must be bounded
+	// by the shared 1s deadline and that deadline must not reset on page two.
+	// Whole-command elapsed time also includes scheduling and result handling,
+	// which can exceed a fixed ceiling on instrumented Windows CI runners.
+	if calls != 2 || code != 7 || elapsed < time.Second || firstRequestBudget > time.Second || !deadlines[0].Equal(deadlines[1]) {
+		t.Fatalf("budget reset or partial lost: calls=%d elapsed=%s firstRequestBudget=%s code=%d deadlines=%v result=%#v", calls, elapsed, firstRequestBudget, code, deadlines, result)
 	}
 	batch := result["data"].(map[string]any)["succeeded"].([]any)[0].(map[string]any)
 	if batch["complete"] != false || batch["pagesFetched"] != float64(1) || result["meta"].(map[string]any)["pagination"].(map[string]any)["next_token"] != "A" {

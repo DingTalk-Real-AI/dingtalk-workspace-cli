@@ -52,7 +52,7 @@ $AgentRegistryRows = @(
     "promptscript|1|-", "adal|0|.adal\skills", "universal|1|.config\agents\skills"
 )
 $LegacyAgentCleanupRows = @(
-    "dws-qoderwork|0|.qoderwork\skills", "dws-legacy-github|1|.github\skills",
+    "dws-qoderwork|0|.qoderwork\skills", "dws-workbuddy|0|.workbuddy\skills", "dws-legacy-github|1|.github\skills",
     "dws-legacy-amp|1|.amp\skills", "dws-legacy-cline|1|.cline\skills",
     "dws-legacy-windsurf|1|.windsurf\skills"
 )
@@ -65,6 +65,10 @@ function Resolve-AgentBase([string]$row) {
     $id = $parts[0]
     if ($parts[2] -eq "-") { return $null }
     switch ($id) {
+        "dws-workbuddy" {
+            $workbuddyConfig = ([string]$env:WORKBUDDY_CONFIG_DIR).Trim()
+            if ($workbuddyConfig) { return Join-Path $workbuddyConfig "skills" }
+        }
         "autohand-code" { if ($env:AUTOHAND_HOME) { return Join-Path $env:AUTOHAND_HOME "skills" } }
         "claude-code" { if ($env:CLAUDE_CONFIG_DIR) { return Join-Path $env:CLAUDE_CONFIG_DIR "skills" } }
         "codex" { if ($env:CODEX_HOME) { return Join-Path $env:CODEX_HOME "skills" } }

@@ -25,6 +25,19 @@ import (
 // agree on the install footprint.
 var skillSetupAgentHomes = skillpaths.AgentHomes()
 
+// Agent classification is independent of HOME and custom installation paths.
+// Keep marketplace targeting and setup cleanup on the same declaration.
+var universalSkillSetupRoots = map[string]bool{
+	".config/agents/skills": true, ".gemini/antigravity/skills": true,
+	".gemini/antigravity-cli/skills": true, ".codex/skills": true,
+	".cursor/skills": true, ".deepagents/agent/skills": true,
+	".firebender/skills": true, ".gemini/skills": true,
+	".copilot/skills": true, ".config/opencode/skills": true,
+	// beta.6 compatibility roots are cleanup-only.
+	".github/skills": true, ".windsurf/skills": true,
+	".cline/skills": true, ".amp/skills": true,
+}
+
 const (
 	skillSetupModeMono  = "mono"
 	skillSetupModeMulti = "multi"
@@ -36,7 +49,7 @@ var (
 	skillSetupResolveTargets          = resolveSkillSetupTargets
 	skillSetupListMulti               = listMultiSkillNames
 	skillSetupFilterMulti             = filterMultiSkillNames
-	skillSetupBuildPlan               = buildSkillSetupPlan
+	skillSetupBuildPlan               = buildSkillSetupPlanForTarget
 	skillSetupConfirmPlan             = confirmSkillSetupPlan
 	skillSetupExecutePlan             = executeSkillSetupPlan
 	skillSetupCopyDir                 = copyDir
@@ -340,7 +353,7 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 	// 时保持 additive（不动未列出的 sibling）；全量安装与 install.sh /
 	// install.js 对齐，清掉不在 bundle 内且有明确 DWS 所有权记录的过期 Skill。
 	filtered := len(includeRaw) > 0 || len(excludeRaw) > 0
-	plan, err := skillSetupBuildPlan(mode, skillSrc, dests, multiSkillNames, filtered)
+	plan, err := skillSetupBuildPlan(target, mode, skillSrc, dests, multiSkillNames, filtered)
 	if err != nil {
 		return fmt.Errorf("无法完整计算 Skill 安装计划: %w", err)
 	}
@@ -1070,6 +1083,10 @@ func resolveOpenClawSetupBase(home string) string {
 
 func resolveSkillSetupBase(home, target string) string {
 	switch target {
+	case "workbuddy":
+		if custom := strings.TrimSpace(skillSetupGetenv("WORKBUDDY_CONFIG_DIR")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
 	case "claude", "claude-code":
 		if custom := strings.TrimSpace(skillSetupGetenv("CLAUDE_CONFIG_DIR")); custom != "" {
 			return filepath.Join(custom, "skills")
@@ -1170,6 +1187,8 @@ func detectExistingAgentHomes(home, mode string) []string {
 		}
 		base := filepath.Join(home, rel)
 		switch filepath.ToSlash(filepath.Clean(rel)) {
+		case ".workbuddy/skills":
+			base = resolveSkillSetupBase(home, "workbuddy")
 		case ".claude/skills":
 			base = resolveSkillSetupBase(home, "claude-code")
 		case ".codex/skills":
@@ -1213,32 +1232,46 @@ func skillSetupBaseForMode(dest, mode string) string {
 }
 
 func isUniversalSkillSetupBase(base string) bool {
-	cleanBase := filepath.Clean(base)
-	if custom := strings.TrimSpace(skillSetupGetenv("CODEX_HOME")); custom != "" && sameSkillSetupPath(cleanBase, filepath.Join(custom, "skills")) {
-		return true
+	home, _ := skillSetupUserHomeDir()
+	return isUniversalSkillSetupBaseForHome(base, home)
+}
+
+func isUniversalSkillSetupBaseForHome(base, home string) bool {
+	if home == "" {
+		return false
 	}
-	if custom := strings.TrimSpace(skillSetupGetenv("XDG_CONFIG_HOME")); custom != "" {
-		if sameSkillSetupPath(cleanBase, filepath.Join(custom, "agents", "skills")) ||
-			sameSkillSetupPath(cleanBase, filepath.Join(custom, "opencode", "skills")) {
-			return true
+	// The canonical store is installed, never retired as an obsolete client copy.
+	if sameSkillSetupPath(base, filepath.Join(home, ".agents", "skills")) {
+		return false
+	}
+	return skillSetupRootCapabilities(home, "all")[skillSetupPathKey(base)]
+}
+
+// Carry the declared client capability alongside its resolved destination.
+// Explicit targets keep their identity even when paths collide. In automatic
+// discovery, a non-universal client needs an adapter at a shared path, so it
+// takes precedence over a universal client's cleanup-only entry there.
+func skillSetupRootCapabilities(home, target string) map[string]bool {
+	roots := make(map[string]bool)
+	target = strings.ToLower(strings.TrimSpace(target))
+	if target != "" && target != "all" {
+		if _, ok := agentSkillPaths[target]; ok {
+			roots[skillSetupPathKey(resolveSkillSetupBase(home, target))] = isUniversalSkillInstallTarget(target)
 		}
+		return roots
 	}
-	base = filepath.ToSlash(cleanBase)
-	for rel := range map[string]bool{
-		".config/agents/skills": true, ".gemini/antigravity/skills": true,
-		".gemini/antigravity-cli/skills": true, ".codex/skills": true,
-		".cursor/skills": true, ".deepagents/agent/skills": true,
-		".firebender/skills": true, ".gemini/skills": true,
-		".copilot/skills": true, ".config/opencode/skills": true,
-		// beta.6 compatibility roots are cleanup-only.
-		".github/skills": true, ".windsurf/skills": true,
-		".cline/skills": true, ".amp/skills": true,
-	} {
-		if strings.HasSuffix(base, "/"+rel) {
-			return true
-		}
+	add := func(base string, universal bool) {
+		key := skillSetupPathKey(base)
+		previous, exists := roots[key]
+		roots[key] = universal && (!exists || previous)
 	}
-	return false
+	for rel := range universalSkillSetupRoots {
+		add(filepath.Join(home, filepath.FromSlash(rel)), true)
+	}
+	for name := range agentSkillPaths {
+		add(resolveSkillSetupBase(home, name), isUniversalSkillInstallTarget(name))
+	}
+	return roots
 }
 
 func sameSkillSetupPath(left, right string) bool {
@@ -1292,6 +1325,10 @@ func samePhysicalSkillSetupPath(left, right string) bool {
 }
 
 func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filtered bool) (*skillSetupPlan, error) {
+	return buildSkillSetupPlanForTarget("all", mode, src, dests, multiSkillNames, filtered)
+}
+
+func buildSkillSetupPlanForTarget(targetName, mode, src string, dests, multiSkillNames []string, filtered bool) (*skillSetupPlan, error) {
 	if mode != skillSetupModeMono && mode != skillSetupModeMulti {
 		return nil, fmt.Errorf("内部错误：未知 mode %q", mode)
 	}
@@ -1302,17 +1339,20 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 		Filtered:        filtered,
 	}
 	sort.Strings(plan.MultiSkillNames)
+	// Resolution puts the canonical store first. Preserve that identity before
+	// sorting: a custom client root can itself end in /.agents/skills.
+	canonicalBase := canonicalSkillSetupBase(dests, mode)
+	capabilities := skillSetupRootCapabilities(filepath.Dir(filepath.Dir(canonicalBase)), targetName)
 	sortedDests := append([]string(nil), dests...)
 	sort.Slice(sortedDests, func(i, j int) bool {
-		leftCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[i], mode))), "/.agents/skills")
-		rightCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[j], mode))), "/.agents/skills")
+		leftCanonical := sameSkillSetupPath(skillSetupBaseForMode(sortedDests[i], mode), canonicalBase)
+		rightCanonical := sameSkillSetupPath(skillSetupBaseForMode(sortedDests[j], mode), canonicalBase)
 		if leftCanonical != rightCanonical {
 			return leftCanonical
 		}
 		return sortedDests[i] < sortedDests[j]
 	})
 	managedNames := currentManagedSkillNames()
-	canonicalBase := canonicalSkillSetupBase(sortedDests, mode)
 	for _, dest := range sortedDests {
 		base := skillSetupBaseForMode(dest, mode)
 		target := skillSetupTargetPlan{Destination: dest, CanonicalBase: canonicalBase}
@@ -1320,7 +1360,7 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 			continue
 		}
 		if canonicalBase != "" && !sameSkillSetupPath(base, canonicalBase) {
-			if isUniversalSkillSetupBase(base) {
+			if capabilities[skillSetupPathKey(base)] {
 				target.CleanupOnly = true
 			} else {
 				target.LinkCanonical = true

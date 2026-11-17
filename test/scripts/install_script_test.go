@@ -5993,6 +5993,7 @@ func TestInstallerShellUsesUpstreamXDGAndCustomAgentRoots(t *testing.T) {
 			xdg := filepath.Join(tmp, "xdg config")
 			autohand := filepath.Join(tmp, "autohand home")
 			codex := filepath.Join(tmp, "codex home")
+			workbuddy := filepath.Join(tmp, "workbuddy home")
 			source := filepath.Join(tmp, "multi")
 			mustWriteFile(t, filepath.Join(source, "dingtalk-chat", "SKILL.md"), []byte("new chat\n"), 0o644)
 			mustWriteFile(t, filepath.Join(xdg, "goose", "config.yaml"), []byte("enabled: true\n"), 0o644)
@@ -6001,6 +6002,7 @@ func TestInstallerShellUsesUpstreamXDGAndCustomAgentRoots(t *testing.T) {
 			mustWriteFile(t, filepath.Join(codex, "config.toml"), []byte("model=test\n"), 0o644)
 			mustWriteFile(t, filepath.Join(codex, "skills", "dingtalk-chat", "SKILL.md"), []byte("old codex copy\n"), 0o644)
 			mustWriteFile(t, filepath.Join(home, ".qoderwork", "config.json"), []byte("{}\n"), 0o644)
+			mustWriteFile(t, filepath.Join(workbuddy, "settings.json"), []byte("{}\n"), 0o644)
 			mustWriteFile(t, filepath.Join(home, ".amp", "skills", "dingtalk-chat", "SKILL.md"), []byte("old DWS path\n"), 0o644)
 
 			installCall := `install_multi_skills_to_homes "$DWS_TEST_SOURCE"`
@@ -6017,6 +6019,7 @@ func TestInstallerShellUsesUpstreamXDGAndCustomAgentRoots(t *testing.T) {
 				"XDG_CONFIG_HOME="+xdg,
 				"AUTOHAND_HOME="+autohand,
 				"CODEX_HOME="+codex,
+				"WORKBUDDY_CONFIG_DIR="+workbuddy,
 			)
 			if output, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("%s upstream-root harness failed: %v\n%s", scriptName, err, output)
@@ -6026,6 +6029,7 @@ func TestInstallerShellUsesUpstreamXDGAndCustomAgentRoots(t *testing.T) {
 				filepath.Join(xdg, "goose", "skills", "dingtalk-chat"),
 				filepath.Join(autohand, "skills", "dingtalk-chat"),
 				filepath.Join(home, ".qoderwork", "skills", "dingtalk-chat"),
+				filepath.Join(workbuddy, "skills", "dingtalk-chat"),
 			} {
 				info, err := os.Lstat(linked)
 				if err != nil || info.Mode()&os.ModeSymlink == 0 {
