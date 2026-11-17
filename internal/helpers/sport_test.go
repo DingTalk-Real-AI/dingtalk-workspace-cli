@@ -34,6 +34,22 @@ var sportAllTools = map[string]string{
 	"count_total_participants":         "sport stats participants",
 	"count_reached_users":              "sport stats reached",
 	"list_daily_participation_trend":   "sport stats trend",
+	"send_competition_invite_msg":      "sport competition invite",
+	"update_competition":               "sport competition update",
+	"delete_competition":               "sport competition delete",
+	"audit_competition":                "sport competition audit",
+	"submit_competition_export":        "sport competition export",
+	"get_competition_export_task":      "sport competition export-task",
+	"submit_step_report_export":        "sport step export",
+	"list_competition_configs":         "sport competition list",
+	"get_competition_rank_top_n":       "sport competition rank-top",
+	"list_my_competition_rules":        "sport competition my-list",
+	"count_my_can_join_competitions":   "sport competition my-can-join-count",
+	"get_competition_activity_detail":  "sport competition activity-detail",
+	"get_personal_achievement":         "sport competition my-achievement",
+	"list_my_participated_comp":        "sport competition my-participated",
+	"count_my_participated_comp":       "sport competition my-participated-count",
+	"list_competition_rank":            "sport competition ranking",
 }
 
 // sportCollectLeafPaths 收集命令树中全部叶子命令的完整路径（空格分隔）。
