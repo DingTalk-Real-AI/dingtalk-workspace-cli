@@ -18,9 +18,9 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
 	testseam.Swap(t, &skillSetupGetenv, func(string) string { return "" })
 	testseam.Swap(t, &skillSetupAgentHomes, []string{
-		".agents/skills", ".codex/skills", ".claude/skills", ".openclaw/skills",
+		".agents/skills", ".codex/skills", ".claude/skills", ".openclaw/skills", ".workbuddy/skills",
 	})
-	for _, parent := range []string{".codex", ".claude", ".openclaw"} {
+	for _, parent := range []string{".codex", ".claude", ".openclaw", ".workbuddy"} {
 		if err := os.MkdirAll(filepath.Join(home, parent), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -31,7 +31,7 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 		t.Fatal(err)
 	}
 	canonical := filepath.Join(home, ".agents", "skills")
-	if len(dests) != 4 || dests[0] != canonical {
+	if len(dests) != 5 || dests[0] != canonical {
 		t.Fatalf("targets = %v", dests)
 	}
 
@@ -69,7 +69,7 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 	}
 	var out, errOut bytes.Buffer
 	installed, skipped, err := executeSkillSetupPlan(plan, &out, &errOut)
-	if err != nil || skipped != 0 || installed != 6 { // canonical + two linked Agents, two Skills each
+	if err != nil || skipped != 0 || installed != 8 { // canonical + three linked Agents, two Skills each
 		t.Fatalf("execute = installed %d skipped %d err %v; stdout:\n%s\nstderr:\n%s", installed, skipped, err, out.String(), errOut.String())
 	}
 	if _, err := os.Lstat(oldCodex); !os.IsNotExist(err) {
@@ -79,7 +79,7 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 		if _, err := os.Stat(filepath.Join(canonical, name, "SKILL.md")); err != nil {
 			t.Fatalf("canonical %s missing: %v", name, err)
 		}
-		for _, agent := range []string{".claude", ".openclaw"} {
+		for _, agent := range []string{".claude", ".openclaw", ".workbuddy"} {
 			link := filepath.Join(home, agent, "skills", name)
 			info, err := os.Lstat(link)
 			if err != nil {
@@ -114,7 +114,7 @@ func TestCrossPlatformCoverageSkillSetupCanonicalTargetsAndAgentCapabilities(t *
 	if _, _, err := executeSkillSetupPlan(plan, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, agent := range []string{".claude", ".openclaw"} {
+	for _, agent := range []string{".claude", ".openclaw", ".workbuddy"} {
 		link := filepath.Join(home, agent, "skills", "dingtalk-chat")
 		info, err := os.Lstat(link)
 		if err != nil {
@@ -1265,7 +1265,8 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"AUTOHAND_HOME": filepath.Join(home, "autohand-home"), "CLAUDE_CONFIG_DIR": filepath.Join(home, "claude-home"),
 		"CODEX_HOME": filepath.Join(home, "codex-home"), "GROK_HOME": filepath.Join(home, "grok-home"),
 		"HERMES_HOME": filepath.Join(home, "hermes-home"), "VIBE_HOME": filepath.Join(home, "vibe-home"),
-		"XDG_CONFIG_HOME": filepath.Join(home, "xdg"),
+		"WORKBUDDY_CONFIG_DIR": filepath.Join(home, "workbuddy-home"),
+		"XDG_CONFIG_HOME":      filepath.Join(home, "xdg"),
 	}
 	testseam.Swap(t, &skillSetupGetenv, func(name string) string { return custom[name] })
 	customCases := map[string]string{
@@ -1274,6 +1275,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"codex":         filepath.Join(custom["CODEX_HOME"], "skills"),
 		"grok":          filepath.Join(custom["GROK_HOME"], "skills"),
 		"hermes-agent":  filepath.Join(custom["HERMES_HOME"], "skills"),
+		"workbuddy":     filepath.Join(custom["WORKBUDDY_CONFIG_DIR"], "skills"),
 		"mistral-vibe":  filepath.Join(custom["VIBE_HOME"], "skills"),
 		"amp":           filepath.Join(custom["XDG_CONFIG_HOME"], "agents", "skills"),
 		"replit":        filepath.Join(custom["XDG_CONFIG_HOME"], "agents", "skills"),

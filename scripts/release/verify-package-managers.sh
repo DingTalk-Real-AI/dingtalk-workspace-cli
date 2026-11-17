@@ -133,9 +133,10 @@ promptscript|1|-
 adal|0|.adal/skills
 universal|1|.config/agents/skills'
 
-# DWS-only compatibility and old wrong global paths. Qoderwork remains a
-# non-universal install target; the other entries verify migration cleanup.
+# DWS-only compatibility and old wrong global paths. Qoderwork and WorkBuddy
+# remain non-universal install targets; the other entries verify migration cleanup.
 LEGACY_AGENT_CLEANUP_REGISTRY='dws-qoderwork|0|.qoderwork/skills
+dws-workbuddy|0|.workbuddy/skills
 dws-legacy-github|1|.github/skills
 dws-legacy-amp|1|.amp/skills
 dws-legacy-cline|1|.cline/skills
@@ -175,6 +176,7 @@ resolve_agent_base() {
     codex) printf '%s\n' "${CODEX_HOME:-$home_root/.codex}/skills" ;;
     grok) printf '%s\n' "${GROK_HOME:-$home_root/.grok}/skills" ;;
     hermes-agent) printf '%s\n' "${HERMES_HOME:-$home_root/.hermes}/skills" ;;
+    dws-workbuddy) printf '%s\n' "${WORKBUDDY_CONFIG_DIR:-$home_root/.workbuddy}/skills" ;;
     mistral-vibe) printf '%s\n' "${VIBE_HOME:-$home_root/.vibe}/skills" ;;
     amp|replit|universal) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/agents/skills" ;;
     crush|devin|goose|kimchi|opencode) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/${default_path#.config/}" ;;
@@ -203,8 +205,9 @@ with_isolated_agent_env() (
   GROK_HOME="$isolated_home/.grok"
   HERMES_HOME="$isolated_home/.hermes"
   VIBE_HOME="$isolated_home/.vibe"
+  WORKBUDDY_CONFIG_DIR="$isolated_home/.workbuddy"
   XDG_CONFIG_HOME="$isolated_home/.config"
-  export HOME AUTOHAND_HOME CLAUDE_CONFIG_DIR CODEX_HOME GROK_HOME HERMES_HOME VIBE_HOME XDG_CONFIG_HOME
+  export HOME AUTOHAND_HOME CLAUDE_CONFIG_DIR CODEX_HOME GROK_HOME HERMES_HOME VIBE_HOME WORKBUDDY_CONFIG_DIR XDG_CONFIG_HOME
   "$@"
 )
 

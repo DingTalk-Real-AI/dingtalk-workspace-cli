@@ -13,10 +13,10 @@ import (
 func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLinksOtherAgents(t *testing.T) {
 	home := withFakeHome(t)
 	testseam.Swap(t, &knownSkillDirs, []string{
-		".agents/skills", ".codex/skills", ".claude/skills", ".openclaw/skills",
+		".agents/skills", ".codex/skills", ".claude/skills", ".openclaw/skills", ".workbuddy/skills",
 	})
 
-	for _, parent := range []string{".codex", ".claude", ".openclaw"} {
+	for _, parent := range []string{".codex", ".claude", ".openclaw", ".workbuddy"} {
 		if err := os.MkdirAll(filepath.Join(home, parent), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLink
 		if _, err := os.Lstat(filepath.Join(home, ".codex", "skills", name)); !os.IsNotExist(err) {
 			t.Fatalf("universal Codex duplicate remains for %s: %v", name, err)
 		}
-		for _, agent := range []string{".claude", ".openclaw"} {
+		for _, agent := range []string{".claude", ".openclaw", ".workbuddy"} {
 			link := filepath.Join(home, agent, "skills", name)
 			info, err := os.Lstat(link)
 			if err != nil || !isSkillPathLink(info.Mode()) {
@@ -60,7 +60,7 @@ func TestCrossPlatformCoverageCanonicalSkillLayoutMigratesUniversalCopiesAndLink
 	if err != nil || len(result.Failed()) != 0 {
 		t.Fatalf("idempotent upgrade = %#v, %v", result, err)
 	}
-	for _, agent := range []string{".claude", ".openclaw"} {
+	for _, agent := range []string{".claude", ".openclaw", ".workbuddy"} {
 		info, err := os.Lstat(filepath.Join(home, agent, "skills", "dingtalk-chat"))
 		if err != nil || !isSkillPathLink(info.Mode()) {
 			t.Fatalf("idempotent upgrade replaced %s link: %#v, %v", agent, info, err)
@@ -210,13 +210,14 @@ func TestCrossPlatformCoverageConfiguredRootsDetectShallowAndApplicationAgents(t
 func TestCrossPlatformCoverageConfiguredAgentRootsMatchUpstreamAndCustomHomes(t *testing.T) {
 	home := t.TempDir()
 	custom := map[string]string{
-		"AUTOHAND_HOME":     filepath.Join(home, "custom-autohand"),
-		"CLAUDE_CONFIG_DIR": filepath.Join(home, "custom-claude"),
-		"CODEX_HOME":        filepath.Join(home, "custom-codex"),
-		"GROK_HOME":         filepath.Join(home, "custom-grok"),
-		"HERMES_HOME":       filepath.Join(home, "custom-hermes"),
-		"VIBE_HOME":         filepath.Join(home, "custom-vibe"),
-		"XDG_CONFIG_HOME":   filepath.Join(home, "custom-xdg"),
+		"AUTOHAND_HOME":        filepath.Join(home, "custom-autohand"),
+		"CLAUDE_CONFIG_DIR":    filepath.Join(home, "custom-claude"),
+		"CODEX_HOME":           filepath.Join(home, "custom-codex"),
+		"GROK_HOME":            filepath.Join(home, "custom-grok"),
+		"HERMES_HOME":          filepath.Join(home, "custom-hermes"),
+		"VIBE_HOME":            filepath.Join(home, "custom-vibe"),
+		"WORKBUDDY_CONFIG_DIR": filepath.Join(home, "custom-workbuddy"),
+		"XDG_CONFIG_HOME":      filepath.Join(home, "custom-xdg"),
 	}
 	testseam.Swap(t, &upgradeGetenv, func(name string) string { return custom[name] })
 	roots := configuredSkillRoots(home)
@@ -237,6 +238,7 @@ func TestCrossPlatformCoverageConfiguredAgentRootsMatchUpstreamAndCustomHomes(t 
 		".grok/skills":                  filepath.Join(custom["GROK_HOME"], "skills"),
 		".hermes/skills":                filepath.Join(custom["HERMES_HOME"], "skills"),
 		".vibe/skills":                  filepath.Join(custom["VIBE_HOME"], "skills"),
+		".workbuddy/skills":             filepath.Join(custom["WORKBUDDY_CONFIG_DIR"], "skills"),
 		".config/agents/skills":         filepath.Join(custom["XDG_CONFIG_HOME"], "agents", "skills"),
 		".config/crush/skills":          filepath.Join(custom["XDG_CONFIG_HOME"], "crush", "skills"),
 		".config/devin/skills":          filepath.Join(custom["XDG_CONFIG_HOME"], "devin", "skills"),

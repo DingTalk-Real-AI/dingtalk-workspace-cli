@@ -142,10 +142,11 @@ $AgentRegistry = @(
 )
 
 # DWS compatibility targets that are not part of the upstream registry.
-# Qoderwork remains a non-universal install target; the other entries are
+# Qoderwork and WorkBuddy remain non-universal install targets; the other entries are
 # migration cleanup targets only and intentionally do not count as agents.
 $LegacyAgentCleanupTargets = @(
     [pscustomobject]@{ Id = "dws-qoderwork"; Universal = $false; Dir = ".qoderwork\skills" },
+    [pscustomobject]@{ Id = "dws-workbuddy"; Universal = $false; Dir = ".workbuddy\skills" },
     [pscustomobject]@{ Id = "dws-legacy-github"; Universal = $true; Dir = ".github\skills" },
     [pscustomobject]@{ Id = "dws-legacy-amp"; Universal = $true; Dir = ".amp\skills" },
     [pscustomobject]@{ Id = "dws-legacy-cline"; Universal = $true; Dir = ".cline\skills" },
@@ -1028,6 +1029,7 @@ function Resolve-AgentSkillBase {
     param([string]$Root, $Agent)
     if ($null -eq $Agent.Dir) { return $null }
     switch ($Agent.Id) {
+        "dws-workbuddy" { if ($env:WORKBUDDY_CONFIG_DIR) { return (Join-Path $env:WORKBUDDY_CONFIG_DIR "skills") } }
         "autohand-code" { if ($env:AUTOHAND_HOME) { return (Join-Path $env:AUTOHAND_HOME "skills") } }
         "claude-code" { if ($env:CLAUDE_CONFIG_DIR) { return (Join-Path $env:CLAUDE_CONFIG_DIR "skills") } }
         "codex" { if ($env:CODEX_HOME) { return (Join-Path $env:CODEX_HOME "skills") } }

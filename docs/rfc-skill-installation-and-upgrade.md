@@ -166,12 +166,20 @@ Agent 兼容矩阵以 `vercel-labs/skills` 的 `agents.ts` 与 `installer.ts`（
 `c6f69c6`）为契约：76 个 ID 必须完整登记，其中 19 个 universal、57 个
 non-universal。`eve`、`promptscript` 没有全局目录，因此全局安装时跳过；多个 Agent
 解析到同一个 XDG 目录时按最终绝对路径去重（Windows 大小写不敏感）。DWS 额外支持
-Qoderwork（按 non-universal Agent 建立兼容链接）；旧版使用的 `.github/skills`、
+Qoderwork 和 WorkBuddy（按 non-universal Agent 建立兼容链接）；旧版使用的 `.github/skills`、
 `.amp/skills`、`.cline/skills` 与
 `.windsurf/skills` 仅作为可恢复迁移清理目标，不计入上游 Agent 枚举。
 对 universal Agent，上游 installer 的 global 模式明确选择 canonical 并跳过
 Agent 私有 global 目录；注册表中的 `globalSkillsDir` 仍用于识别和退役历史 native
 路径，不作为 universal symlink 模式的发布目标。
+
+WorkBuddy 的普通 Skill 目标为 `~/.workbuddy/skills`，支持
+`WORKBUDDY_CONFIG_DIR/skills` 自定义目录。`dws skill setup --target workbuddy`
+和 `dws skill install <skillId> workbuddy` 均可按名称指定；自动安装和升级在检测到
+WorkBuddy 配置目录后建立兼容链接，链接不可用时复制。multi 安装同级
+`dingtalk-*`，mono 安装 `dws/`。该路径服务未安装钉钉连接器的普通客户端用法；
+不读写 WorkBuddy 官方连接器的插件缓存，也不检测或切换连接器的启用状态。
+已启用官方连接器时应避免再向同一客户端添加功能重叠的普通 Skill。
 
 1. 只读计算对面布局、过期受管 Skill 和同名官方 Skill；
 2. 在目标文件系统的 staging 中复制完整新集合；

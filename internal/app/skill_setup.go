@@ -1070,6 +1070,10 @@ func resolveOpenClawSetupBase(home string) string {
 
 func resolveSkillSetupBase(home, target string) string {
 	switch target {
+	case "workbuddy":
+		if custom := strings.TrimSpace(skillSetupGetenv("WORKBUDDY_CONFIG_DIR")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
 	case "claude", "claude-code":
 		if custom := strings.TrimSpace(skillSetupGetenv("CLAUDE_CONFIG_DIR")); custom != "" {
 			return filepath.Join(custom, "skills")
@@ -1170,6 +1174,8 @@ func detectExistingAgentHomes(home, mode string) []string {
 		}
 		base := filepath.Join(home, rel)
 		switch filepath.ToSlash(filepath.Clean(rel)) {
+		case ".workbuddy/skills":
+			base = resolveSkillSetupBase(home, "workbuddy")
 		case ".claude/skills":
 			base = resolveSkillSetupBase(home, "claude-code")
 		case ".codex/skills":

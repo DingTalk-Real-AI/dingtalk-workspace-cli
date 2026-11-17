@@ -204,6 +204,7 @@ var agentSkillPaths = map[string]string{
 	"hermes":    ".hermes/skills",
 	"kiro":      ".kiro/skills",
 	"qoderwork": ".qoderwork/skills",
+	"workbuddy": ".workbuddy/skills",
 }
 
 // Eve has project-scoped Skill directories but no upstream globalSkillsDir.

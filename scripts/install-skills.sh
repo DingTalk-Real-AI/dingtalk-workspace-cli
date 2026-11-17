@@ -821,10 +821,10 @@ upstream_agent_registry() {
 }
 
 # DWS-only compatibility roots, same id|classification|root format. Qoderwork
-# stays a real non-universal install target; the other four are global paths
+# and WorkBuddy stay non-universal install targets; the other four are global paths
 # older DWS installers wrote by mistake, so they are retired like universal
 # roots. Kept separate so the upstream pin above stays byte-comparable.
-DWS_LEGACY_AGENT_ROOTS='dws-qoderwork|N|.qoderwork/skills dws-legacy-github|U|.github/skills dws-legacy-windsurf|U|.windsurf/skills dws-legacy-cline|U|.cline/skills dws-legacy-amp|U|.amp/skills'
+DWS_LEGACY_AGENT_ROOTS='dws-qoderwork|N|.qoderwork/skills dws-workbuddy|N|.workbuddy/skills dws-legacy-github|U|.github/skills dws-legacy-windsurf|U|.windsurf/skills dws-legacy-cline|U|.cline/skills dws-legacy-amp|U|.amp/skills'
 legacy_agent_roots() {
   for _lar_record in $DWS_LEGACY_AGENT_ROOTS; do printf '%s\n' "$_lar_record"; done
 }
@@ -857,6 +857,7 @@ agent_skill_dirs() {
 resolve_agent_skill_base() {
   _ras_root="$1"; _ras_agent="$2"
   case "$_ras_agent" in
+    ".workbuddy/skills") [ -n "${WORKBUDDY_CONFIG_DIR:-}" ] && { printf '%s\n' "$WORKBUDDY_CONFIG_DIR/skills"; return; } ;;
     ".claude/skills") [ -n "${CLAUDE_CONFIG_DIR:-}" ] && { printf '%s\n' "$CLAUDE_CONFIG_DIR/skills"; return; } ;;
     ".codex/skills") [ -n "${CODEX_HOME:-}" ] && { printf '%s\n' "$CODEX_HOME/skills"; return; } ;;
     ".hermes/skills") [ -n "${HERMES_HOME:-}" ] && { printf '%s\n' "$HERMES_HOME/skills"; return; } ;;

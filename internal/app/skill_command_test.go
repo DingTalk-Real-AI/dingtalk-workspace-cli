@@ -487,6 +487,7 @@ func TestSupportedTargets(t *testing.T) {
 		"agents", "claude", "cursor", "codex", "zcode", "opencode", "qoder",
 		"gemini", "github", "windsurf", "augment", "cline",
 		"amp", "kiro", "trae", "openclaw", "hermes",
+		"workbuddy",
 		".",
 	}
 	for _, expected := range expectedTargets {

@@ -74,13 +74,16 @@ function resolvedAgentTargets(homeDir) {
   const xdgConfigHome = (process.env.XDG_CONFIG_HOME || "").trim() || path.join(homeDir, ".config");
   const targets = [
     ...UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir && agentDir !== ".agents/skills"),
-    // DWS compatibility target; qoderwork is not in upstream's registry.
+    // DWS compatibility targets absent from upstream's registry.
     { id: "dws-qoderwork", agentDir: ".qoderwork/skills", universal: false, extension: true },
+    { id: "dws-workbuddy", agentDir: ".workbuddy/skills", universal: false, extension: true },
     ...LEGACY_UNIVERSAL_AGENT_DIRS.map((agentDir) => ({ agentDir, universal: true, legacy: true })),
   ].map((target) => {
     const { agentDir } = target;
     let baseDir = path.join(homeDir, agentDir);
-    if (agentDir === ".claude/skills" && (process.env.CLAUDE_CONFIG_DIR || "").trim()) {
+    if (agentDir === ".workbuddy/skills" && (process.env.WORKBUDDY_CONFIG_DIR || "").trim()) {
+      baseDir = path.join(process.env.WORKBUDDY_CONFIG_DIR.trim(), "skills");
+    } else if (agentDir === ".claude/skills" && (process.env.CLAUDE_CONFIG_DIR || "").trim()) {
       baseDir = path.join(process.env.CLAUDE_CONFIG_DIR.trim(), "skills");
     } else if (agentDir === ".codex/skills" && (process.env.CODEX_HOME || "").trim()) {
       baseDir = path.join(process.env.CODEX_HOME.trim(), "skills");
