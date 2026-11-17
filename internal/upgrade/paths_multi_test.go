@@ -93,6 +93,7 @@ func TestCrossPlatformCoverageLocateSkillsRootFallsBackToMono(t *testing.T) {
 
 func TestCrossPlatformCoverageSwapUserHomeDirForTest(t *testing.T) {
 	want := t.TempDir()
+	t.Setenv("WORKBUDDY_CONFIG_DIR", t.TempDir())
 	SwapUserHomeDirForTest(t, func() (string, error) { return want, nil })
 
 	got, err := upgradeUserHomeDir()
@@ -101,6 +102,18 @@ func TestCrossPlatformCoverageSwapUserHomeDirForTest(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("upgradeUserHomeDir() = %q, want %q", got, want)
+	}
+	found := false
+	for _, root := range configuredSkillRoots(want) {
+		if root.label == ".workbuddy/skills" {
+			found = true
+			if expected := filepath.Join(want, ".workbuddy", "skills"); root.base != expected {
+				t.Fatalf("fake HOME inherited WorkBuddy root %q, want %q", root.base, expected)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("WorkBuddy root missing from isolated configuration")
 	}
 }
 
