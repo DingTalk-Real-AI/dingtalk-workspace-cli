@@ -25,6 +25,19 @@ import (
 // agree on the install footprint.
 var skillSetupAgentHomes = skillpaths.AgentHomes()
 
+// Agent classification is independent of HOME and custom installation paths.
+// Keep marketplace targeting and setup cleanup on the same declaration.
+var universalSkillSetupRoots = map[string]bool{
+	".config/agents/skills": true, ".gemini/antigravity/skills": true,
+	".gemini/antigravity-cli/skills": true, ".codex/skills": true,
+	".cursor/skills": true, ".deepagents/agent/skills": true,
+	".firebender/skills": true, ".gemini/skills": true,
+	".copilot/skills": true, ".config/opencode/skills": true,
+	// beta.6 compatibility roots are cleanup-only.
+	".github/skills": true, ".windsurf/skills": true,
+	".cline/skills": true, ".amp/skills": true,
+}
+
 const (
 	skillSetupModeMono  = "mono"
 	skillSetupModeMulti = "multi"
@@ -1240,16 +1253,7 @@ func isUniversalSkillSetupBaseForHome(base, home string) bool {
 	// Classification belongs to the declared Agent root. A custom non-universal
 	// root can have any suffix (for example WorkBuddy's profile/.cursor/skills).
 	// Match concrete universal roots, never suffixes of arbitrary user paths.
-	for rel := range map[string]bool{
-		".config/agents/skills": true, ".gemini/antigravity/skills": true,
-		".gemini/antigravity-cli/skills": true, ".codex/skills": true,
-		".cursor/skills": true, ".deepagents/agent/skills": true,
-		".firebender/skills": true, ".gemini/skills": true,
-		".copilot/skills": true, ".config/opencode/skills": true,
-		// beta.6 compatibility roots are cleanup-only.
-		".github/skills": true, ".windsurf/skills": true,
-		".cline/skills": true, ".amp/skills": true,
-	} {
+	for rel := range universalSkillSetupRoots {
 		if sameSkillSetupPath(cleanBase, filepath.Join(home, filepath.FromSlash(rel))) {
 			return true
 		}

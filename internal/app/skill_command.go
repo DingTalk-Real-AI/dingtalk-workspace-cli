@@ -276,9 +276,8 @@ func isUniversalSkillInstallTarget(target string) bool {
 	if !ok {
 		return false
 	}
-	base := filepath.Join("__home__", rel)
-	canonical := filepath.Join("__home__", ".agents", "skills")
-	return sameSkillSetupPath(base, canonical) || isUniversalSkillSetupBase(base)
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return rel == ".agents/skills" || universalSkillSetupRoots[rel]
 }
 
 func buildSkillCommand() *cobra.Command {
