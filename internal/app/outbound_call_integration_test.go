@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -127,6 +128,7 @@ func TestCrossPlatformCoverageOutboundCallRootDispatch(t *testing.T) {
 			testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 				return AccessTokenSnapshot{AccessToken: "fixture-token"}, nil
 			})
+			stubOutboundCallTokenPrefetch(t, tc.calls > 0)
 			var logs bytes.Buffer
 			client := transport.NewClient(nil)
 			client.FileLogger = slog.New(slog.NewTextHandler(&logs, nil))
@@ -245,6 +247,7 @@ func TestCrossPlatformCoverageOutboundCallHTTPFailures(t *testing.T) {
 			testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 				return AccessTokenSnapshot{AccessToken: "fixture-token"}, nil
 			})
+			stubOutboundCallTokenPrefetch(t, true)
 			args := []string{"outbound-call", "detail", "--task-id", "fixture-task"}
 			if tc.verb == "create" {
 				args = []string{"outbound-call", "create", "--callee", "fixture-user", "--task", "fixture-task", "--opening", "fixture-opening", "--yes"}
@@ -373,4 +376,23 @@ func executeOutboundCallTestCommand(t *testing.T, factory func(*GlobalFlags) exe
 		t.Fatalf("invalid command output: %v %s", err, &stream)
 	}
 	return envelope, nil, code
+}
+
+func stubOutboundCallTokenPrefetch(t *testing.T, expectPrefetch bool) {
+	t.Helper()
+	done := make(chan struct{})
+	testseam.Swap(t, &runnerGetCachedRuntimeToken, func(context.Context) (string, error) {
+		defer close(done)
+		return "fixture-token", nil
+	})
+	if expectPrefetch {
+		// Cleanup is LIFO: join prefetch before restoring its seam or removing config.
+		t.Cleanup(func() {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Error("token prefetch did not finish before fixture cleanup")
+			}
+		})
+	}
 }
