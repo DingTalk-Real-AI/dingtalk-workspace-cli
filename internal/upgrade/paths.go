@@ -105,8 +105,9 @@ var knownSkillDirs = []string{
 	".neovate/skills",
 	".pochi/skills",
 	".adal/skills",
-	// DWS-only target retained for product compatibility.
+	// DWS-only targets retained for product compatibility.
 	".qoderwork/skills",
+	".workbuddy/skills",
 	// beta.6 compatibility roots: cleanup only, never publish new copies.
 	".cursor/skills",
 	".gemini/skills",
@@ -736,6 +737,10 @@ func configuredSkillRoots(homeDir string) []resolvedSkillRoot {
 	for _, agentDir := range knownSkillDirs {
 		base := filepath.Join(homeDir, agentDir)
 		switch filepath.ToSlash(filepath.Clean(agentDir)) {
+		case ".workbuddy/skills":
+			if custom := strings.TrimSpace(upgradeGetenv("WORKBUDDY_CONFIG_DIR")); custom != "" {
+				base = filepath.Join(custom, "skills")
+			}
 		case ".claude/skills":
 			if custom := strings.TrimSpace(upgradeGetenv("CLAUDE_CONFIG_DIR")); custom != "" {
 				base = filepath.Join(custom, "skills")

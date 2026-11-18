@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -207,6 +211,222 @@ func TestSportCreateRejectsTargetBeyondActualPeriod(t *testing.T) {
 	}
 }
 
+const sportUpdateFixture = `{"ruleCode":"RULE123","competitionName":"步行挑战","coverImageUrl":"https://example.com/cover.png","competitionType":"FIXED","firstPeriodStartDate":"20261201","firstPeriodEndDate":"20261231","periodType":null,"cycleCount":null,"goalValue":6000,"targetDayValue":20,"dailyLimit":null,"extra":null}`
+
+func TestSportNewToolsArgumentsAndConfirmation(t *testing.T) {
+	request, err := sportParseUpdateRequest(sportUpdateFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		tool string
+		args []string
+		want map[string]any
+		text string
+	}{
+		{"send_competition_invite_msg", []string{"competition", "invite", "--rule-code", "RULE123", "--receiver-user-id", "00123", "--target-group-id", "000456"}, map[string]any{"ruleCode": "RULE123", "receiverUserId": "00123", "targetGroupId": "000456"}, ""},
+		{"delete_competition", []string{"competition", "delete", "--rule-code", "RULE123"}, map[string]any{"ruleCode": "RULE123"}, ""},
+		{"audit_competition", []string{"competition", "audit", "--rule-code", "RULE123", "--approved=false"}, map[string]any{"ruleCode": "RULE123", "approved": false}, ""},
+		{"audit_competition", []string{"competition", "audit", "--rule-code", "RULE123", "--approved=true"}, map[string]any{"ruleCode": "RULE123", "approved": true}, ""},
+		{"update_competition", []string{"competition", "update", "--request", sportUpdateFixture}, map[string]any{"request": request}, ""},
+		{"submit_competition_export", []string{"competition", "export", "--competition-code", "COMP456"}, map[string]any{"competitionCode": "COMP456", "exportScope": "ALL"}, `{"success":true,"result":12345}`},
+		{"submit_competition_export", []string{"competition", "export", "--competition-code", "COMP456", "--export-scope", "STAFF", "--staff-ids", "00123,00456"}, map[string]any{"competitionCode": "COMP456", "exportScope": "STAFF", "staffIds": "00123,00456"}, `{"success":true,"result":12345}`},
+		{"submit_step_report_export", []string{"step", "export", "--stat-date", "20261001", "--end-date", "20261031", "--staff-ids", "00123"}, map[string]any{"statDate": "20261001", "endDate": "20261031", "staffIds": "00123"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool+strings.Join(tc.args, " "), func(t *testing.T) {
+			text := tc.text
+			if text == "" {
+				text = `{"success":true,"result":true,"errorCode":null,"errorMsg":null}`
+			}
+			fake := &sportFakeCaller{text: text, blocks: 1}
+			InitDepsForTest(t, fake)
+			if err := runSportCommand(t, tc.args...); err == nil || !strings.Contains(err.Error(), "确认") && !strings.Contains(err.Error(), "confirmation") {
+				t.Fatalf("写操作必须先确认：%v", err)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatal("未确认不得调用工具")
+			}
+			result, err := runSportCommandOutput(t, append(append([]string{}, tc.args...), "--yes")...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/"+tc.tool || !reflect.DeepEqual(fake.arguments[0], tc.want) {
+				t.Fatalf("实调用参数/类型不符：%v %v，期望 %v", fake.calls, fake.arguments, tc.want)
+			}
+			if tc.tool == "submit_step_report_export" {
+				data, _ := result["data"].(map[string]any)
+				if result["outcome"] != "success" || data["result"] != true || data["taskId"] != nil || result["meta"] != nil {
+					t.Fatalf("步数报表应保留受理回执，不编造任务ID或可查询状态：%v", result)
+				}
+			}
+		})
+	}
+	file := filepath.Join(t.TempDir(), "request.json")
+	if err := os.WriteFile(file, []byte(sportUpdateFixture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fake := &sportFakeCaller{err: errors.New("dry-run 不得调用")}
+	InitDepsForTest(t, fake)
+	if err := runSportCommand(t, "competition", "update", "--request", "@"+file, "--dry-run"); err != nil || len(fake.calls) != 0 {
+		t.Fatalf("文件对象预览失败：%v %v", err, fake.calls)
+	}
+}
+
+func TestSportNewToolsValidation(t *testing.T) {
+	testseam.Swap(t, &sportExportNow, func() time.Time { return time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC) })
+	cases := [][]string{
+		{"competition", "invite", "--rule-code", "RULE123"},
+		{"competition", "invite", "--rule-code", "RULE123", "--receiver-user-id", "  "},
+		{"competition", "audit", "--rule-code", "RULE123"},
+		{"competition", "audit", "--rule-code", "RULE123", "--approved=maybe"},
+		{"competition", "export", "--competition-code", "COMP456", "--export-scope", "STAFF"},
+		{"competition", "export", "--competition-code", "COMP456", "--export-scope", "WRONG"},
+		{"competition", "export", "--competition-code", "COMP456", "--staff-ids", " , "},
+		{"step", "export", "--stat-date", "20261001", "--end-date", "20261101"},
+		{"step", "export", "--stat-date", "20261010", "--end-date", "20261001"},
+		{"step", "export", "--stat-date", "20261115", "--end-date", "20261116"},
+		{"step", "export", "--stat-date", "20260230", "--end-date", "20260301"},
+		{"step", "export", "--stat-date", "20261001", "--end-date", "20261301"},
+		{"step", "export", "--stat-date", "20261001", "--end-date", "20261002", "--staff-ids", " , "},
+	}
+	for _, id := range []string{"0", "-1", "1.2", "x", "9223372036854775808"} {
+		cases = append(cases, []string{"competition", "export-task", "--task-id", id})
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			fake := &sportFakeCaller{}
+			InitDepsForTest(t, fake)
+			err := runSportCommand(t, append(args, "--yes")...)
+			if err == nil || apperrors.ExitCode(err) != ExitValidation || len(fake.calls) != 0 {
+				t.Fatalf("非法参数应本地拒绝且零调用：%v %v", err, fake.calls)
+			}
+		})
+	}
+}
+
+func TestSportUpdateRequestValidation(t *testing.T) {
+	for _, raw := range []string{"x", "[]", "null", "{} {}", "{}"} {
+		if _, err := sportParseUpdateRequest(raw); err == nil {
+			t.Fatalf("非法对象应拒绝：%s", raw)
+		}
+	}
+	cases := []struct {
+		key   string
+		value any
+	}{
+		{"sportType", "RUN"}, {"ruleCode", nil}, {"competitionName", " "},
+		{"competitionName", strings.Repeat("名", 129)}, {"coverImageUrl", strings.Repeat("x", 513)},
+		{"extra", 1}, {"goalValue", "6000"}, {"targetDayValue", nil}, {"targetDayValue", 1.5},
+		{"goalValue", -1}, {"goalValue", json.Number("1e999")}, {"dailyLimit", 0}, {"cycleCount", 13},
+		{"firstPeriodStartDate", "20260230"}, {"firstPeriodEndDate", "20261301"}, {"firstPeriodEndDate", "20261101"},
+		{"firstPeriodEndDate", nil}, {"competitionType", "BAD"}, {"periodType", "WEEK"},
+		{"competitionType", "RECURRING"}, {"targetDayValue", 32},
+	}
+	for _, tc := range cases {
+		request, err := sportDecodeObject(sportUpdateFixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request[tc.key] = tc.value
+		raw, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sportParseUpdateRequest(string(raw)); err == nil {
+			t.Errorf("%s=%v 应被拒绝", tc.key, tc.value)
+		}
+	}
+	for _, period := range []string{"WEEK", "MONTH", "CUSTOM"} {
+		request, err := sportDecodeObject(sportUpdateFixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request["competitionType"], request["periodType"], request["cycleCount"] = "RECURRING", period, 3
+		if period != "CUSTOM" {
+			request["firstPeriodEndDate"] = nil
+		}
+		raw, _ := json.Marshal(request)
+		if _, err := sportParseUpdateRequest(string(raw)); err != nil {
+			t.Fatalf("合法%s：%v", period, err)
+		}
+		request["firstPeriodStartDate"], request["firstPeriodEndDate"] = "20261229", nil
+		raw, _ = json.Marshal(request)
+		_, err = sportParseUpdateRequest(string(raw))
+		if period != "WEEK" && err == nil {
+			t.Fatalf("%s 边界应拒绝", period)
+		}
+	}
+}
+
+func TestSportServiceResultsAndExportStates(t *testing.T) {
+	const taskID = "9007199254740993"
+	cases := []struct {
+		tool, text, outcome, wantErr string
+		args                         map[string]any
+	}{
+		{"submit_competition_export", `{"success":true,"result":` + taskID + `}`, "pending", "", nil},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":` + taskID + `,"status":"PROCESSING"}}`, "pending", "", map[string]any{"taskId": int64(9007199254740993)}},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":` + taskID + `,"status":"SUCCESS","ossUrl":"https://example.com/a?x=1%2F2","dailyOssUrls":null}}`, "success", "", map[string]any{"taskId": int64(9007199254740993)}},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":1,"status":"FAILED","errorMsg":"生成失败"}}`, "", "生成失败", map[string]any{"taskId": int64(1)}},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":1,"status":"UNKNOWN"}}`, "", "状态", map[string]any{"taskId": int64(1)}},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":1,"status":"SUCCESS"}}`, "", "下载链接", map[string]any{"taskId": int64(1)}},
+		{"get_competition_export_task", `{"success":true,"result":{"taskId":2,"status":"PROCESSING"}}`, "", "taskId", map[string]any{"taskId": int64(1)}},
+		{"get_competition_export_task", `{"success":true,"result":null}`, "", "taskId", nil},
+		{"submit_competition_export", `{"success":true,"result":"12"}`, "", "taskId", nil},
+		{"submit_competition_export", `{"success":true,"result":0}`, "", "taskId", nil},
+		{"delete_competition", `{"result":true}`, "", "success", nil},
+		{"delete_competition", `{"success":true,"result":false}`, "", "result", nil},
+		{"delete_competition", `not-json`, "", "ServiceResult", nil},
+		{"delete_competition", `{"success":false,"errorCode":"QW_COMPETITION_DELETE_FAILED","errorMsg":"活动已删除"}`, "", "活动已删除", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool+tc.text, func(t *testing.T) {
+			fake := &sportFakeCaller{text: tc.text, blocks: 1}
+			InitDepsForTest(t, fake)
+			cmd := newSportCommand()
+			cmd.SetContext(context.Background())
+			cmd.PersistentFlags().String("profile", "fixture:operator", "")
+			result, err := sportServiceCallResult(cmd, tc.tool, tc.args)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("期望%s，实际%v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			env, err := output.EnvelopeFromResult(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(env.Outcome) != tc.outcome {
+				t.Fatalf("结果态：%v", env)
+			}
+			wire, err := json.Marshal(env)
+			if err != nil || !strings.Contains(string(wire), taskID) {
+				t.Fatalf("Long精度丢失：%s %v", wire, err)
+			}
+			if tc.outcome == "pending" && (env.Meta.Operation.ID != taskID || !strings.Contains(env.Meta.Operation.NextCommand, "export-task --task-id "+taskID) || !strings.Contains(env.Meta.Operation.NextCommand, "--profile 'fixture:operator'")) {
+				t.Fatalf("任务恢复指引错误：%v", env.Meta)
+			}
+			if len(fake.calls) != 1 {
+				t.Fatal("不得重复调用或下载链接")
+			}
+		})
+	}
+	InitDepsForTest(t, nil)
+	if _, err := sportServiceCallResult(newSportCommand(), "delete_competition", nil); err == nil {
+		t.Fatal("caller缺失应报错")
+	}
+	fake := &sportFakeCaller{dryRun: true}
+	InitDepsForTest(t, fake)
+	if result, err := sportServiceCallResult(newSportCommand(), "delete_competition", nil); err != nil || result == nil || len(fake.calls) != 0 {
+		t.Fatalf("caller预览失败：%v", err)
+	}
+}
+
 func TestSportNumericHelpersEdgeCases(t *testing.T) {
 	for _, v := range []string{"", "abc", "-1", "1.2.3", "00"} {
 		if sportIsPositiveNumber(v) {
@@ -246,5 +466,131 @@ func TestSportNumericHelpersEdgeCases(t *testing.T) {
 		if got := sportCompareNumbers(tc.a, tc.b); got != tc.want {
 			t.Fatalf("sportCompareNumbers(%s, %s) 应为 %d，实际 %d", tc.a, tc.b, tc.want, got)
 		}
+	}
+}
+
+func TestSportReadToolsArgumentsAndResults(t *testing.T) {
+	const page = `{"success":true,"result":{"list":[{"code":"RULE123"}],"hasMore":false,"nextCursor":null}}`
+	cases := []struct {
+		tool, text string
+		args       []string
+		want       map[string]any
+	}{
+		{"list_competition_configs", page, []string{"competition", "list"}, map[string]any{"cursor": int64(0), "size": 20}},
+		{"list_my_competition_rules", page, []string{"competition", "my-list"}, map[string]any{"listScope": "JOINED", "cursor": nil, "size": 20}},
+		{"list_my_competition_rules", page, []string{"competition", "my-list", "--list-scope", "CREATED", "--cursor", "9007199254740993", "--size", "50"}, map[string]any{"listScope": "CREATED", "cursor": int64(9007199254740993), "size": 50}},
+		{"list_my_participated_comp", page, []string{"competition", "my-participated", "--cursor", "null"}, map[string]any{"cursor": nil, "pageSize": 20}},
+		{"list_competition_rank", page, []string{"competition", "ranking", "--competition-code", "COMP456"}, map[string]any{"competitionCode": "COMP456", "cursor": nil, "size": 20}},
+		{"get_competition_rank_top_n", `{"success":true,"result":[]}`, []string{"competition", "rank-top", "--rule-code", "RULE123", "--rank-type", "TOTAL", "--sort-by-reached-times=false"}, map[string]any{"ruleCode": "RULE123", "rankType": "TOTAL", "sortByReachedTimes": false, "topN": 10}},
+		{"count_my_can_join_competitions", `{"success":true,"result":0}`, []string{"competition", "my-can-join-count"}, map[string]any{}},
+		{"count_my_participated_comp", `{"success":true,"result":3}`, []string{"competition", "my-participated-count"}, map[string]any{}},
+		{"get_competition_activity_detail", `{"success":true,"result":{"ruleCode":"RULE123","periodList":null}}`, []string{"competition", "activity-detail", "--rule-code", "RULE123", "--competition-code", "COMP456"}, map[string]any{"ruleCode": "RULE123", "competitionCode": "COMP456"}},
+		{"get_personal_achievement", `{"success":true,"result":{"userId":"00123","rankNo":-1}}`, []string{"competition", "my-achievement", "--competition-code", "COMP456"}, map[string]any{"competitionCode": "COMP456"}},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			fake := &sportFakeCaller{text: tc.text, blocks: 1}
+			InitDepsForTest(t, fake)
+			// 只读命令不得要求 --yes，且不得上送操作人身份。
+			envelope, err := runSportCommandOutput(t, tc.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/"+tc.tool || len(fake.arguments[0]) != len(tc.want) || (len(tc.want) > 0 && !reflect.DeepEqual(fake.arguments[0], tc.want)) {
+				t.Fatalf("实调用参数不符：%v %v，期望 %v", fake.calls, fake.arguments, tc.want)
+			}
+			if envelope["outcome"] != "success" {
+				t.Fatalf("只读结果应成功：%v", envelope)
+			}
+			if tc.text == page {
+				data, _ := envelope["data"].(map[string]any)
+				meta, _ := envelope["meta"].(map[string]any)
+				pagination, _ := meta["pagination"].(map[string]any)
+				if !reflect.DeepEqual(data["result"], map[string]any{"list": []any{map[string]any{"code": "RULE123"}}}) || pagination["endpoint_exhausted"] != true || pagination["next_token"] != nil {
+					t.Fatalf("分页控制信息必须只在 meta：%v", envelope)
+				}
+			}
+		})
+	}
+}
+
+func TestSportReadPaginationAndInvalidResults(t *testing.T) {
+	const next = "9007199254740993"
+	fake := &sportFakeCaller{text: `{"success":true,"result":{"list":[],"hasMore":true,"nextCursor":` + next + `}}`, blocks: 1}
+	InitDepsForTest(t, fake)
+	envelope, err := runSportCommandOutput(t, "competition", "ranking", "--competition-code", "COMP456", "--cursor", "12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, _ := envelope["meta"].(map[string]any)
+	pagination, _ := meta["pagination"].(map[string]any)
+	if pagination["endpoint_exhausted"] != false || pagination["next_token"] != next {
+		t.Fatalf("空页仍有下一页时必须保留精确 Long 游标：%v", envelope)
+	}
+
+	cases := []struct {
+		tool, text, wantErr string
+		args                map[string]any
+	}{
+		{"list_competition_rank", `{"success":true,"result":{"list":[],"hasMore":true}}`, "nextCursor", nil},
+		{"list_competition_rank", `{"success":true,"result":{"list":[],"hasMore":true,"nextCursor":5}}`, "未前进", map[string]any{"cursor": int64(5)}},
+		{"list_competition_configs", `{"success":true,"result":{"hasMore":false}}`, "list", nil},
+		{"list_my_competition_rules", `{"success":true,"result":{"list":[],"hasMore":"false"}}`, "hasMore", nil},
+		{"list_my_participated_comp", `{"result":{"list":[],"hasMore":false}}`, "success", nil},
+		{"get_competition_rank_top_n", `not-json`, "ServiceResult", nil},
+		{"get_competition_rank_top_n", `{"success":true,"result":{}}`, "数组", nil},
+		{"count_my_can_join_competitions", `{"success":true,"result":-1}`, "计数", nil},
+		{"count_my_participated_comp", `{"success":true,"result":"3"}`, "计数", nil},
+		{"count_my_participated_comp", `{"success":true,"result":1.5}`, "计数", nil},
+		{"get_competition_activity_detail", `{"success":true,"result":null}`, "详情", nil},
+		{"get_competition_activity_detail", `{"success":false,"errorCode":"QW_COMPETITION_QUERY_FAILED","errorMsg":"活动不存在"}`, "活动不存在", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool+tc.text, func(t *testing.T) {
+			fake := &sportFakeCaller{text: tc.text, blocks: 1}
+			InitDepsForTest(t, fake)
+			cmd := newSportCommand()
+			cmd.SetContext(context.Background())
+			if _, err := sportReadServiceCallResult(cmd, tc.tool, tc.args); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("异常回执不得当作空结果，期望%s，实际%v", tc.wantErr, err)
+			}
+			if len(fake.calls) != 1 {
+				t.Fatalf("只读查询不得自动重试：%v", fake.calls)
+			}
+		})
+	}
+	InitDepsForTest(t, nil)
+	if _, err := sportReadServiceCallResult(newSportCommand(), "list_competition_rank", nil); err == nil {
+		t.Fatal("caller缺失应报错")
+	}
+}
+
+func TestSportReadToolsValidation(t *testing.T) {
+	cases := [][]string{
+		{"competition", "list", "--size", "101"},
+		{"competition", "list", "--size", "0"},
+		{"competition", "list", "--size", "x"},
+		{"competition", "my-list", "--size", "51"},
+		{"competition", "my-list", "--list-scope", "ALL"},
+		{"competition", "my-list", "--cursor", "1.5"},
+		{"competition", "my-participated", "--page-size", "0"},
+		{"competition", "ranking"},
+		{"competition", "ranking", "--competition-code", "COMP456", "--size", "51"},
+		{"competition", "ranking", "--competition-code", "COMP456", "--cursor", "9223372036854775808"},
+		{"competition", "rank-top", "--rank-type", "TOTAL"},
+		{"competition", "rank-top", "--rule-code", "RULE123", "--rank-type", "YEAR"},
+		{"competition", "rank-top", "--rule-code", "RULE123", "--rank-type", "TOTAL", "--top-n", "51"},
+		{"competition", "activity-detail"},
+		{"competition", "my-achievement"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			fake := &sportFakeCaller{}
+			InitDepsForTest(t, fake)
+			err := runSportCommand(t, args...)
+			if err == nil || apperrors.ExitCode(err) != ExitValidation || len(fake.calls) != 0 {
+				t.Fatalf("非法参数应本地拒绝且零调用：%v %v", err, fake.calls)
+			}
+		})
 	}
 }

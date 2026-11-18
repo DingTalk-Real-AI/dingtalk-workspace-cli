@@ -21,8 +21,8 @@ import (
 // ──────────────────────────────────────────────────────────
 // dws sport — 企业运动健康（钉钉运动）
 //
-// CLI 接入工具清单（21 个）；get_user_org_list 不接入 CLI，
-// MCP 平台上的下线由服务维护方单独处理：
+// CLI 接入工具清单（37 个）；get_user_org_list 已在 MCP 平台下线，CLI 不接入：
+//   get_org_step_participate_status,
 //   list_emp_step_ranking, list_dept_step_ranking, list_emp_ranking_in_dept,
 //   get_emp_step_ext_info, get_emp_step_infos, get_dept_step_infos_by_dept_id,
 //   get_org_health_step_info, get_org_total_step_count,
@@ -30,7 +30,12 @@ import (
 //   list_competition_instances, get_current_competition_instance,
 //   get_next_competition_instance, send_competition_group_msg,
 //   get_signup_count, count_daily_participants, count_total_participants,
-//   count_reached_users, list_daily_participation_trend
+//   count_reached_users, list_daily_participation_trend,
+//   send_competition_invite_msg, update_competition, delete_competition, audit_competition,
+//   submit_competition_export, get_competition_export_task, submit_step_report_export,
+//   list_competition_configs, get_competition_rank_top_n, list_my_competition_rules,
+//   count_my_can_join_competitions, get_competition_activity_detail, get_personal_achievement,
+//   list_my_participated_comp, count_my_participated_comp, list_competition_rank
 // ──────────────────────────────────────────────────────────
 
 const sportServerID = "sport"
@@ -41,11 +46,14 @@ func newSportCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sport",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "钉钉企业运动健康：企业/部门/员工步数榜单与明细、运动比赛创建与查询、参与达标统计与开赛播报",
+			AgentSummary: "钉钉企业运动健康：步数榜单、企业及我的比赛、个人达标与比赛排行、比赛管理邀请审批、统计与报表导出",
 			UseWhen: []string{
 				"用户要查企业步数概况、总步数或员工/部门步数排行与明细",
+				"用户要列出企业或我的比赛、查询可参与数量、我的参与期次与达标进度、比赛 TopN 或全员排行榜",
 				"用户要创建绑定钉钉群的运动比赛，查询比赛配置、期次或报名",
 				"用户要统计比赛的参与/达标人数、逐日趋势或发送开赛播报",
+				"用户要邀请员工或群参加比赛、编辑或删除比赛、审批成员发起的比赛",
+				"用户要导出比赛数据或历史步数报表，或查询已受理比赛导出任务",
 			},
 			AvoidWhen: []string{
 				"个人运动手环、运动 App 私人数据不属于企业运动榜，不要调用",
@@ -64,7 +72,7 @@ func newSportCommand() *cobra.Command {
 		Use:    "sport",
 		Short:  "企业运动健康",
 		Hidden: true,
-		Long: `企业运动健康（钉钉运动）：步数榜单/明细、运动比赛、参与达标统计。
+		Long: `企业运动健康（钉钉运动）：步数榜单/明细、运动比赛管理与邀请、参与达标统计和数据导出。
 
 命令结构:
   dws sport org status                企业是否开通步数榜
@@ -77,12 +85,28 @@ func newSportCommand() *cobra.Command {
   dws sport step emp-infos            员工多日步数明细
   dws sport step dept-infos           部门多日步数汇总
   dws sport competition create        创建运动比赛（写操作）
+  dws sport competition list          企业启用中的比赛列表
+  dws sport competition rank-top      比赛 TopN 排行榜
+  dws sport competition ranking       比赛全员分页排行榜
+  dws sport competition my-list       我的比赛（按规则分页）
+  dws sport competition my-can-join-count 我可参与的比赛数量
+  dws sport competition activity-detail 活动详情与我的报名状态
+  dws sport competition my-achievement 我的达标进度
+  dws sport competition my-participated 我的参与期次列表
+  dws sport competition my-participated-count 我的参与比赛总数
   dws sport competition config        比赛配置详情
   dws sport competition rule-detail   比赛规则详情（仅创建人）
   dws sport competition instances     全部期实例
   dws sport competition current-instance 当前进行中的一期
   dws sport competition next-instance 下一期未开始的实例
   dws sport competition announce      发送开赛播报（写操作，无幂等）
+  dws sport competition invite        发送比赛邀请（写操作，无幂等）
+  dws sport competition update        全量编辑比赛（仅创建人）
+  dws sport competition delete        删除比赛（仅创建人，不可恢复）
+  dws sport competition audit         审批比赛（仅群主）
+  dws sport competition export        提交比赛数据导出任务
+  dws sport competition export-task   查询导出任务与钉盘链接
+  dws sport step export               提交历史步数报表，异步投递钉钉
   dws sport stats signup              累计报名人数
   dws sport stats participants-daily  某天参与人数
   dws sport stats participants        参与人数
@@ -460,7 +484,7 @@ func newSportStepGroup() *cobra.Command {
 		},
 	})
 
-	stepCmd.AddCommand(orgInfoCmd, orgTotalCmd, empRankingCmd, deptRankingCmd, deptEmpRankingCmd, empInfoCmd, empInfosCmd, deptInfosCmd)
+	stepCmd.AddCommand(orgInfoCmd, orgTotalCmd, empRankingCmd, deptRankingCmd, deptEmpRankingCmd, empInfoCmd, empInfosCmd, deptInfosCmd, newSportStepExportCmd())
 	return stepCmd
 }
 
@@ -470,7 +494,7 @@ func newSportCompetitionGroup() *cobra.Command {
 	competitionCmd := sportGroupCommand(&cobra.Command{
 		Use:   "competition",
 		Short: "运动比赛管理",
-		Long:  "创建与查询绑定钉钉群的企业运动比赛。create 与 announce 是真实写操作：create 无删除手段，参数必须先与用户确认；announce 无幂等，一次创建只调用一次。",
+		Long:  "创建、查询、编辑、删除、审批和邀请企业运动比赛，并提交或查询导出任务。写操作先与用户确认；编辑须回读详情后完整回传，删除不可恢复，邀请和开赛播报不得重复发送。",
 		RunE:  GroupRunE,
 	})
 
@@ -482,6 +506,21 @@ func newSportCompetitionGroup() *cobra.Command {
 		newSportCompetitionCurrentInstanceCmd(),
 		newSportCompetitionNextInstanceCmd(),
 		newSportCompetitionAnnounceCmd(),
+		newSportCompetitionInviteCmd(),
+		newSportCompetitionUpdateCmd(),
+		newSportCompetitionDeleteCmd(),
+		newSportCompetitionAuditCmd(),
+		newSportCompetitionExportCmd(),
+		newSportCompetitionExportTaskCmd(),
+		newSportCompetitionListCmd(),
+		newSportCompetitionRankTopCmd(),
+		newSportCompetitionMyListCmd(),
+		newSportCompetitionMyCanJoinCountCmd(),
+		newSportCompetitionActivityDetailCmd(),
+		newSportCompetitionMyAchievementCmd(),
+		newSportCompetitionMyParticipatedCmd(),
+		newSportCompetitionMyParticipatedCountCmd(),
+		newSportCompetitionRankingCmd(),
 	)
 	return competitionCmd
 }
@@ -581,8 +620,8 @@ func sportParseDate(value string) time.Time {
 func newSportCompetitionCreateCmd() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:   "create",
-		Short: "创建企业运动比赛（写操作，不可删除）",
-		Long: `创建绑定钉钉群的运动比赛。真实写操作：创建后无法删除，参数错误需重建，务必先与用户逐项确认；禁止用试探性参数反复创建，查询已有比赛用 sport competition config。
+		Short: "创建企业运动比赛（写操作，无幂等）",
+		Long: `创建绑定钉钉群的运动比赛。真实写操作且无幂等，务必先与用户逐项确认；禁止用试探性参数反复创建。查询已有比赛用 sport competition config；编辑用 update（须先查详情并完整回传），删除用 delete（仅创建人、不可恢复），不要默认删除重建。
 
 当前仅支持 FIXED（固定不循环）比赛：服务端 Schema 将 groupId 与 firstPeriodEndDate 列为无条件必填，而工具描述仍声称循环模式可省结束日期，契约冲突期间 RECURRING 创建在 CLI 侧阻断；不要用空值或猜测日期绕过。
 

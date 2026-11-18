@@ -11,11 +11,13 @@ import (
 )
 
 // SwapUserHomeDirForTest swaps the home-dir seam used by UpgradeSkillLocations
-// and related upgrade path helpers. Restored via t.Cleanup; not safe with
+// and related upgrade path helpers, isolating inherited Agent configuration
+// roots as well. Restored via t.Cleanup; not safe with
 // t.Parallel.
 func SwapUserHomeDirForTest(t *testing.T, fn func() (string, error)) {
 	t.Helper()
 	testseam.Swap(t, &upgradeUserHomeDir, fn)
+	testseam.Swap(t, &upgradeGetenv, func(string) string { return "" })
 }
 
 // SwapPlatformGitHubTokenForTest 隔离升级测试与本机登录态；不可用于并行测试。

@@ -1076,10 +1076,10 @@ upstream_agent_registry() {
 }
 
 # DWS-only compatibility roots, same id|classification|root format. Qoderwork
-# stays a real non-universal install target; the other four are global paths
+# and WorkBuddy stay non-universal install targets; the other four are global paths
 # older DWS installers wrote by mistake, so they are retired like universal
 # roots. Kept separate so the upstream pin above stays byte-comparable.
-DWS_LEGACY_AGENT_ROOTS='dws-qoderwork|N|.qoderwork/skills dws-legacy-github|U|.github/skills dws-legacy-windsurf|U|.windsurf/skills dws-legacy-cline|U|.cline/skills dws-legacy-amp|U|.amp/skills'
+DWS_LEGACY_AGENT_ROOTS='dws-qoderwork|N|.qoderwork/skills dws-workbuddy|N|.workbuddy/skills dws-legacy-github|U|.github/skills dws-legacy-windsurf|U|.windsurf/skills dws-legacy-cline|U|.cline/skills dws-legacy-amp|U|.amp/skills'
 legacy_agent_roots() {
   for _lar_record in $DWS_LEGACY_AGENT_ROOTS; do printf '%s\n' "$_lar_record"; done
 }
@@ -1110,9 +1110,32 @@ agent_skill_dirs() {
     $3 != "-" && $3 != ".agents/skills" && !seen[$3]++ { print $3 }'
 }
 
+# Unicode White_Space, matching Go strings.TrimSpace and PowerShell Trim().
+# Match complete UTF-8 byte sequences so LC_ALL=C cannot split a character.
+trim_workbuddy_config_dir() {
+  _tw_value=$1
+  while :; do
+    _tw_before=$_tw_value
+    for _tw_bytes in '\0011' '\0012' '\0013' '\0014' '\0015' '\0040' '\0302\0205' '\0302\0240' '\0341\0232\0200' \
+      '\0342\0200\0200' '\0342\0200\0201' '\0342\0200\0202' '\0342\0200\0203' '\0342\0200\0204' '\0342\0200\0205' \
+      '\0342\0200\0206' '\0342\0200\0207' '\0342\0200\0210' '\0342\0200\0211' '\0342\0200\0212' \
+      '\0342\0200\0250' '\0342\0200\0251' '\0342\0200\0257' '\0342\0201\0237' '\0343\0200\0200'; do
+      _tw_space=$(printf '%b_' "$_tw_bytes")
+      _tw_space=${_tw_space%_}
+      while :; do case "$_tw_value" in "$_tw_space"*) _tw_value=${_tw_value#"$_tw_space"} ;; *) break ;; esac; done
+      while :; do case "$_tw_value" in *"$_tw_space") _tw_value=${_tw_value%"$_tw_space"} ;; *) break ;; esac; done
+    done
+    [ "$_tw_value" = "$_tw_before" ] && break
+  done
+  printf '%s\n' "$_tw_value"
+}
+
 resolve_agent_skill_base() {
   _ras_root="$1"; _ras_agent="$2"
   case "$_ras_agent" in
+    ".workbuddy/skills")
+      _ras_workbuddy=$(trim_workbuddy_config_dir "${WORKBUDDY_CONFIG_DIR:-}")
+      [ -n "$_ras_workbuddy" ] && { printf '%s\n' "$_ras_workbuddy/skills"; return; } ;;
     ".claude/skills") [ -n "${CLAUDE_CONFIG_DIR:-}" ] && { printf '%s\n' "$CLAUDE_CONFIG_DIR/skills"; return; } ;;
     ".codex/skills") [ -n "${CODEX_HOME:-}" ] && { printf '%s\n' "$CODEX_HOME/skills"; return; } ;;
     ".hermes/skills") [ -n "${HERMES_HOME:-}" ] && { printf '%s\n' "$HERMES_HOME/skills"; return; } ;;

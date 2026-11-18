@@ -94,6 +94,9 @@ func TestDWSCompatibilityAgentTargets(t *testing.T) {
 	if !strings.Contains(legacyBlock, `Id = "dws-qoderwork"; Universal = $false`) {
 		t.Error("DWS Qoderwork compatibility target must remain non-universal")
 	}
+	if !strings.Contains(legacyBlock, `Id = "dws-workbuddy"; Universal = $false; Dir = ".workbuddy\skills"`) {
+		t.Error("DWS WorkBuddy compatibility target must use its own non-universal Skill directory")
+	}
 	for _, id := range []string{
 		"dws-legacy-github", "dws-legacy-amp", "dws-legacy-cline", "dws-legacy-windsurf",
 	} {
@@ -171,9 +174,9 @@ func TestInstallPowerShellResolvesCustomAndLegacyAgentHomes(t *testing.T) {
 
 	prefix := strings.ReplaceAll(installPS[:cut], "$HOME", "$env:DWS_TEST_HOME")
 	prefix += `
-$ids = @("amp", "autohand-code", "claude-code", "codex", "grok", "hermes-agent", "mistral-vibe", "openclaw", "goose", "kimchi", "opencode")
+$ids = @("amp", "autohand-code", "claude-code", "codex", "grok", "hermes-agent", "mistral-vibe", "openclaw", "goose", "kimchi", "opencode", "dws-workbuddy")
 foreach ($id in $ids) {
-    $agent = $AgentRegistry | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+    $agent = @($AgentRegistry + $LegacyAgentCleanupTargets) | Where-Object { $_.Id -eq $id } | Select-Object -First 1
     Write-Output ($id + "|" + (Resolve-AgentSkillBase -Root $env:DWS_TEST_HOME -Agent $agent))
 }
 exit 0
@@ -182,13 +185,14 @@ exit 0
 	mustWriteFile(t, harness, []byte(prefix), 0o644)
 
 	envRoots := map[string]string{
-		"AUTOHAND_HOME":     filepath.Join(custom, "autohand"),
-		"CLAUDE_CONFIG_DIR": filepath.Join(custom, "claude"),
-		"CODEX_HOME":        filepath.Join(custom, "codex"),
-		"GROK_HOME":         filepath.Join(custom, "grok"),
-		"HERMES_HOME":       filepath.Join(custom, "hermes"),
-		"VIBE_HOME":         filepath.Join(custom, "vibe"),
-		"XDG_CONFIG_HOME":   xdg,
+		"AUTOHAND_HOME":        filepath.Join(custom, "autohand"),
+		"CLAUDE_CONFIG_DIR":    filepath.Join(custom, "claude"),
+		"CODEX_HOME":           filepath.Join(custom, "codex"),
+		"GROK_HOME":            filepath.Join(custom, "grok"),
+		"HERMES_HOME":          filepath.Join(custom, "hermes"),
+		"VIBE_HOME":            filepath.Join(custom, "vibe"),
+		"WORKBUDDY_CONFIG_DIR": filepath.Join(custom, "workbuddy"),
+		"XDG_CONFIG_HOME":      xdg,
 	}
 	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", harness)
 	cmd.Env = append(os.Environ(), "DWS_TEST_HOME="+home)
@@ -207,6 +211,7 @@ exit 0
 		"grok":          filepath.Join(envRoots["GROK_HOME"], "skills"),
 		"hermes-agent":  filepath.Join(envRoots["HERMES_HOME"], "skills"),
 		"mistral-vibe":  filepath.Join(envRoots["VIBE_HOME"], "skills"),
+		"dws-workbuddy": filepath.Join(envRoots["WORKBUDDY_CONFIG_DIR"], "skills"),
 		"openclaw":      filepath.Join(clawdbot, "skills"),
 		"goose":         filepath.Join(xdg, "goose", "skills"),
 		"kimchi":        filepath.Join(xdg, "kimchi", "harness", "skills"),
