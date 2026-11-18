@@ -30,6 +30,8 @@ type GlobalFlags struct {
 	Mock         bool
 	Output       string
 	Profile      string
+	Proxy        string
+	NoProxy      string
 	Timeout      int
 	Token        string
 	Verbose      bool
@@ -42,9 +44,12 @@ type GlobalFlags struct {
 
 	// 每棵命令树独享执行状态；runner 克隆共享同一作用域，不读取已消费的参数。
 	delegatorInvocation *delegatorInvocation
+	network             *networkInvocation
 }
 
 func bindPersistentFlags(cmd *cobra.Command, flags *GlobalFlags) {
+	cmd.PersistentFlags().StringVar(&flags.Proxy, "proxy", "", "核心 HTTP 出口：auto、direct 或代理 URL（覆盖范围见 config network --help）")
+	cmd.PersistentFlags().StringVar(&flags.NoProxy, "no-proxy", "", "核心 HTTP 直连目标 CSV；显式空值清空绕过列表")
 	bindDelegatorFlags(cmd, flags)
 	cmd.PersistentFlags().StringVar(&flags.ClientID, "client-id", "", i18n.T("覆盖 OAuth 客户端 ID (钉钉 AppKey)"))
 	cmd.PersistentFlags().StringVar(&flags.ClientSecret, "client-secret", "", i18n.T("覆盖 OAuth 客户端密钥 (钉钉 AppSecret)"))

@@ -6,6 +6,7 @@ package localio
 import (
 	"context"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -100,7 +101,7 @@ func putFileWithClient(ctx context.Context, rawURL, path string, maxBytes int64,
 			return UploadResult{}, fmt.Errorf("创建上传请求失败: %w", requestErr)
 		}
 		request.ContentLength = info.Size()
-		response, callErr := client.Do(request)
+		response, callErr := netpolicy.Do(client, request)
 		if callErr == nil {
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 			bodyCloseErr := response.Body.Close()

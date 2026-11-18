@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net/http"
 	"net/url"
@@ -147,7 +148,7 @@ func FetchAppToken(ctx context.Context, appKey, appSecret string) (token string,
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := appTokenHTTPClient.Do(req)
+	resp, err := netpolicy.Do(appTokenHTTPClient, req)
 	if err != nil {
 		return "", 0, fmt.Errorf("fetching app token: %w", err)
 	}

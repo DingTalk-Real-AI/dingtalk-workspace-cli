@@ -45,6 +45,7 @@ func newKeyClient(cfg Config) *keyClient {
 	}
 
 	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: insecureSkipVerify,
 		},
@@ -53,10 +54,14 @@ func newKeyClient(cfg Config) *keyClient {
 		DisableCompression: true,
 	}
 
+	var roundTripper http.RoundTripper = transport
+	if cfg.HTTPTransport != nil {
+		roundTripper = cfg.HTTPTransport(transport)
+	}
 	return &keyClient{
 		httpClient: &http.Client{
 			Timeout:   cfg.HTTPTimeout,
-			Transport: transport,
+			Transport: roundTripper,
 		},
 		code:      cfg.Code,
 		keyServer: cfg.KeyServer,

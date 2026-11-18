@@ -930,6 +930,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 
 ## Reference & Docs
 
+- [Core HTTP proxy configuration](./docs/network-proxy.md) — proxy modes, profile settings, offline diagnostics, migration and supported request paths
 - [International DingTalk (`.io`) guide](./docs/international-region-guide.md) — international login, domestic/international profile switching, isolated testing, and troubleshooting
 - [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion

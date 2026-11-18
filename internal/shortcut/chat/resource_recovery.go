@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net/http"
 	"os"
@@ -62,7 +63,7 @@ func downloadWithRecovery(ctx context.Context, client *http.Client, initialURL s
 			if etag != "" {
 				req.Header.Set("If-Range", etag)
 			}
-			resp, e := safe.Do(req)
+			resp, e := netpolicy.Do(safe, req)
 			if e != nil {
 				err = e
 				if ctx.Err() != nil {

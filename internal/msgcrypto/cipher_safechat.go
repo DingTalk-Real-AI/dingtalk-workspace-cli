@@ -23,7 +23,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 
 	safechat "safechat-go-sdk"
 )
@@ -63,14 +66,23 @@ func newBackend(ctx context.Context, cfg Config) (Cipher, error) {
 	}
 
 	c := &safechatCipher{codes: cfg.AuthCode, allowedHost: cfg.AllowedRedirectHost}
+	policy := netpolicy.FromContext(ctx)
+	if policy == nil {
+		var err error
+		policy, err = netpolicy.Resolve(netpolicy.Settings{}, netpolicy.Overrides{}, netpolicy.SnapshotEnvironment())
+		if err != nil {
+			return nil, err
+		}
+	}
 	client, err := safechat.New(safechat.Config{
-		DataPath:     cfg.KeystoreDir,
-		UserID:       cfg.UserID,
-		KeyServer:    cfg.KeyServer,
-		MaxRetry:     cfg.MaxRetry,
-		HTTPTimeout:  cfg.HTTPTimeout,
-		Logger:       newRedactingLogger(logf),
-		AuthCodeHook: c.authCodeHook,
+		HTTPTransport: func(base *http.Transport) http.RoundTripper { return policy.Transport(base) },
+		DataPath:      cfg.KeystoreDir,
+		UserID:        cfg.UserID,
+		KeyServer:     cfg.KeyServer,
+		MaxRetry:      cfg.MaxRetry,
+		HTTPTimeout:   cfg.HTTPTimeout,
+		Logger:        newRedactingLogger(logf),
+		AuthCodeHook:  c.authCodeHook,
 	})
 	if err != nil {
 		if errors.Is(err, safechat.ErrAlreadyInitialized) {

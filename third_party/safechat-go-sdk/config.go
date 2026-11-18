@@ -1,6 +1,7 @@
 package safechat
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,9 @@ type Logger interface {
 
 // Config holds configuration parameters for the SafeChat client.
 type Config struct {
+	// HTTPTransport lets an embedding host apply its network policy to the
+	// SDK's tuned transport. It must not mutate a shared/global transport.
+	HTTPTransport func(*http.Transport) http.RoundTripper
 	// DataPath is the directory path for storing keys and related data (required).
 	// The directory must exist and be writable.
 	DataPath string

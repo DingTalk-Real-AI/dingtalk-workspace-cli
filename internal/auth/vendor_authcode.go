@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net/http"
 	"strings"
@@ -137,7 +138,7 @@ func FetchVendorAuthCode(ctx context.Context, in VendorAuthCodeInput) (*VendorAu
 	if client == nil {
 		client = oauthHTTPClient
 	}
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(client, req)
 	if err != nil {
 		return nil, fmt.Errorf("sending vendorAuthCode request: %w", err)
 	}

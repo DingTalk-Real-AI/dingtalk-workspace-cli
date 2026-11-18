@@ -927,6 +927,9 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 		delegatorScope = flags.delegatorInvocation
 	}
 	cleanup := func(current *cobra.Command) {
+		if flags != nil {
+			flags.network.close()
+		}
 		delegatorScope.clear()
 		if principal := current.Flags().Lookup("principal-user-id"); principal != nil {
 			_ = principal.Value.Set("")
@@ -1114,6 +1117,9 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
+			if err := configureNetworkInvocation(cmd, flags); err != nil {
+				return err
+			}
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
@@ -1140,6 +1146,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer flags.network.close()
 			if rootVersionShortCircuit {
 				rootVersionShortCircuit = false
 				rootVersionRequested = false

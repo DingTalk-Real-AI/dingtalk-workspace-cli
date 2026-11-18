@@ -34,7 +34,7 @@ func newConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newConfigListCommand())
+	cmd.AddCommand(newConfigListCommand(), newNetworkConfigCommand())
 	return cmd
 }
 
