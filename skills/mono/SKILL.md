@@ -69,7 +69,6 @@ metadata:
 | `mail` | 8 | `dingtalk-mail` |
 | `minutes` | 29 | `dingtalk-minutes` |
 | `oa` | 1 | `dingtalk-misc` |
-| `outbound-call` | AI 语音外呼：创建任务、查询通话状态与听记 | [outbound-call.md](./references/products/outbound-call.md) |
 | `pat` | 1 | `dingtalk-misc` |
 | `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
@@ -110,6 +109,7 @@ metadata:
 | `mind`            | 独立脑图：携带 OpenNodes 初始内容创建 .amind 文件，查询和增删改主题；空白文件创建走 wiki，听记内置思维导图生成走 minutes | [mind.md](./references/products/mind.md) |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/听记内置思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
+| `outbound-call`   | AI 语音外呼：创建任务、查询通话状态与听记 | [outbound-call.md](./references/products/outbound-call.md) |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
 | `report`          | 日志：按模版创建/收件箱/已发送/模版查看/详情/已读统计                         | [report.md](./references/products/report.md)                   |
 | `sport`           | 企业运动健康（钉钉运动）：步数榜开通状态/企业步数概况与总量/员工部门排行与多日明细/企业与我的比赛列表/我的达标进度与参与记录/比赛排行榜/比赛创建（FIXED，需确认）/比赛配置规则期次/邀请编辑删除审批（需确认）/开赛群播报（需确认）/报名参与达标趋势统计/比赛和步数报表异步导出 | [sport.md](./references/products/sport.md)                     |
