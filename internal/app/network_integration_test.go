@@ -31,7 +31,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-func TestNetworkCLIAPIThroughRealCONNECT(t *testing.T) {
+func TestCrossPlatformCoverageNetworkCLIAPIThroughRealCONNECT(t *testing.T) {
 	clearNetworkEnv(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

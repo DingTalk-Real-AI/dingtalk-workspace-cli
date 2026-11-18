@@ -18,7 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 )
 
-func TestResourceDownloadsUseInvocationProxy(t *testing.T) {
+func TestCrossPlatformCoverageResourceDownloadsUseInvocationProxy(t *testing.T) {
 	var connects, direct atomic.Int32
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "CONNECT" {

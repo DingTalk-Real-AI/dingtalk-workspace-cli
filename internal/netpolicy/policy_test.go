@@ -5,6 +5,8 @@ package netpolicy
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -18,6 +20,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func str(v string) *string { return &v }
@@ -31,7 +35,7 @@ func mustPolicy(t *testing.T, s Settings, o Overrides, e Environment) *Policy {
 	return p
 }
 
-func TestRoutingPrecedenceAndSnapshot(t *testing.T) {
+func TestCrossPlatformCoverageRoutingPrecedenceAndSnapshot(t *testing.T) {
 	e := Environment{"HTTP_PROXY": "http://upper:80", "http_proxy": "http://lower:80", "HTTPS_PROXY": "http://secure:80", "DWS_NO_PROXY": "", "NO_PROXY": "ignored.example"}
 	p := mustPolicy(t, Settings{Proxy: str("direct"), NoProxy: str("also-ignored.example")}, Overrides{Proxy: str("auto")}, e)
 	e["HTTP_PROXY"] = "http://changed:80"
@@ -66,7 +70,7 @@ func TestRoutingPrecedenceAndSnapshot(t *testing.T) {
 	}
 }
 
-func TestBypassRules(t *testing.T) {
+func TestCrossPlatformCoverageBypassRules(t *testing.T) {
 	p := mustPolicy(t, Settings{Proxy: str("http://proxy:80"), NoProxy: str("corp.example,.sub.example,port.example:443,10.0.0.0/8,192.168.1.2,[2001:db8::1]:443")}, Overrides{}, Environment{})
 	for _, tc := range []struct {
 		url    string
@@ -92,7 +96,7 @@ func TestBypassRules(t *testing.T) {
 	}
 }
 
-func TestInvalidConfigurationFailsClosedAndRedacts(t *testing.T) {
+func TestCrossPlatformCoverageInvalidConfigurationFailsClosedAndRedacts(t *testing.T) {
 	for _, raw := range []string{"", "ftp://proxy:21", "http://secret:password@proxy:bad", "http://proxy:65536", "http://proxy:0", "http://proxy/path", "http://proxy?password=secret", "http://", "://secret"} {
 		p, err := Resolve(Settings{}, Overrides{Proxy: &raw}, Environment{})
 		if err == nil || p != nil {
@@ -130,7 +134,7 @@ func TestInvalidConfigurationFailsClosedAndRedacts(t *testing.T) {
 
 // Local CONNECT fixture forwards to a private TLS origin. No public network or
 // real credentials are used. The origin hostname is only resolvable by the proxy.
-func TestCONNECTTLSAndNoDirectFallback(t *testing.T) {
+func TestCrossPlatformCoverageCONNECTTLSAndNoDirectFallback(t *testing.T) {
 	var originHost atomic.Value
 	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		originHost.Store(r.Host)
@@ -222,7 +226,7 @@ func TestCONNECTTLSAndNoDirectFallback(t *testing.T) {
 	}
 }
 
-func TestStoreAndCAValidation(t *testing.T) {
+func TestCrossPlatformCoverageStoreAndCAValidation(t *testing.T) {
 	dir := t.TempDir()
 	f, err := Load(dir)
 	if err != nil || f.Version != 1 {
@@ -268,7 +272,7 @@ type failingTransport struct{ err error }
 
 func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) { return nil, f.err }
 
-func TestRequestErrorsRedactSignedURLs(t *testing.T) {
+func TestCrossPlatformCoverageRequestErrorsRedactSignedURLs(t *testing.T) {
 	sentinel := errors.New("connection refused")
 	client := &http.Client{Transport: failingTransport{err: sentinel}}
 	p := mustPolicy(t, Settings{Proxy: str("direct")}, Overrides{}, Environment{})
@@ -282,4 +286,151 @@ func TestRequestErrorsRedactSignedURLs(t *testing.T) {
 			t.Fatal("request URL leaked", err)
 		}
 	}
+}
+
+func TestCrossPlatformCoverageEnvironmentRoutingEdges(t *testing.T) {
+	for _, entry := range []struct{ key, value string }{
+		{"DWS_PROXY", "auto"},
+		{"DWS_NO_PROXY", "legacy.example"},
+		{"DWS_CA_BUNDLE", ""},
+		{"HTTP_PROXY", "proxy.example:3128"},
+		{"HTTPS_PROXY", ""},
+		{"https_proxy", ""},
+		{"REQUEST_METHOD", "GET"},
+	} {
+		t.Setenv(entry.key, entry.value)
+	}
+	if got := SnapshotEnvironment()["HTTP_PROXY"]; got != "proxy.example:3128" {
+		t.Fatalf("environment proxy = %q", got)
+	}
+	plain, _ := http.NewRequest(http.MethodGet, "http://external.example", nil)
+	if _, err := EnvironmentProxy(plain); err == nil || !strings.Contains(err.Error(), "CGI") {
+		t.Fatalf("CGI HTTP proxy = %v", err)
+	}
+	p, err := Current(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Explain(plain.URL); err == nil {
+		t.Fatal("explain accepted HTTP_PROXY in a CGI process")
+	}
+	secure, _ := url.Parse("https://external.example")
+	if got, err := p.Explain(secure); err != nil || got.Reason != "no proxy configured for target scheme" {
+		t.Fatalf("HTTPS without HTTPS_PROXY = %#v, %v", got, err)
+	}
+	if _, err := p.Proxy(&http.Request{}); err == nil {
+		t.Fatal("nil URL accepted")
+	}
+	if _, err := p.Explain(&url.URL{Scheme: "ftp", Host: "external.example"}); err == nil {
+		t.Fatal("unsupported scheme accepted")
+	}
+	direct := mustPolicy(t, Settings{Proxy: str("direct")}, Overrides{}, nil)
+	if got, err := direct.Explain(secure); err != nil || got.Reason != "direct mode" {
+		t.Fatalf("direct mode = %#v, %v", got, err)
+	}
+	t.Setenv("HTTP_PROXY", "http://proxy.example/path")
+	if _, err := Do(nil, plain); err == nil || !strings.Contains(err.Error(), "invalid HTTP_PROXY") {
+		t.Fatalf("invalid HTTP_PROXY on standalone request = %v", err)
+	}
+	if _, err := EnvironmentProxy(plain); err == nil {
+		t.Fatal("invalid environment silently accepted")
+	}
+	t.Setenv("DWS_PROXY", "direct")
+	if proxy, err := EnvironmentProxy(plain); err != nil || proxy != nil {
+		t.Fatalf("standalone direct proxy = %v, %v", proxy, err)
+	}
+	for _, bad := range []string{"host:0", "host:65536"} {
+		if _, err := Resolve(Settings{NoProxy: &bad}, Overrides{}, nil); err == nil {
+			t.Fatalf("accepted invalid bypass port %q", bad)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageCorporateCAAndDefaultClient(t *testing.T) {
+	if _, err := Resolve(Settings{CABundle: str("relative.pem")}, Overrides{}, nil); err == nil {
+		t.Fatal("accepted relative CA bundle")
+	}
+	p := mustPolicy(t, Settings{Proxy: str("direct")}, Overrides{}, nil)
+	p.roots = x509.NewCertPool()
+	base := &http.Transport{TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{}}
+	got := p.Transport(base)
+	if got.TLSClientConfig == nil || got.TLSClientConfig.RootCAs == nil || base.TLSClientConfig != nil {
+		t.Fatal("TLS roots were not installed on the clone")
+	}
+	if p.Transport(base) != got {
+		t.Fatal("invocation did not reuse its transport")
+	}
+	if b := bind(p, nil); b.Transport == nil {
+		t.Fatal("default client transport missing")
+	}
+	tuned := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
+	if transport := p.Transport(tuned); transport.TLSClientConfig.MinVersion != tls.VersionTLS12 || tuned.TLSClientConfig.RootCAs != nil {
+		t.Fatal("CA override lost or mutated caller TLS settings")
+	}
+	ca := filepath.Join(t.TempDir(), "roots.pem")
+	if err := os.WriteFile(ca, []byte("certificate fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fail := errors.New("system trust unavailable")
+	testseam.Swap(t, &systemCertPool, func() (*x509.CertPool, error) { return nil, fail })
+	if _, err := Resolve(Settings{}, Overrides{}, Environment{"DWS_CA_BUNDLE": ca}); err == nil || !strings.Contains(err.Error(), "system CA roots") {
+		t.Fatalf("missing system roots error = %v", err)
+	}
+
+	client := &http.Client{Transport: failingTransport{err: fail}}
+	malformed := &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "https", Host: "["}}
+	_, err := Do(client, malformed.WithContext(WithPolicy(context.Background(), p)))
+	var targetError *url.Error
+	if !errors.As(err, &targetError) || targetError.URL != "<redacted target>" || !errors.Is(err, fail) {
+		t.Fatalf("malformed URL was not redacted: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageNetworkStoreFailures(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "network.json")
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(dir); err == nil {
+		t.Fatal("loaded a directory as a configuration file")
+	}
+	if err := Save(dir, File{Version: 1}); err == nil {
+		t.Fatal("saved over a directory")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	f := File{Version: 1, Profiles: map[string]Settings{"corp:user": {CABundle: str("")}}}
+	if err := Save(dir, f); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Settings("corp:user").CABundle; got == nil || *got != "" {
+		t.Fatal("explicit CA override lost")
+	}
+	f.Default.Proxy = str("ftp://proxy:21")
+	if err := Save(dir, f); err == nil {
+		t.Fatal("saved invalid default proxy")
+	}
+	f.Default.Proxy = nil
+	f.Profiles["corp:user"] = Settings{CABundle: str("relative.pem")}
+	if err := Save(dir, f); err == nil {
+		t.Fatal("saved invalid profile CA")
+	}
+	fail := errors.New("storage unavailable")
+	t.Run("read failure", func(t *testing.T) {
+		testseam.Swap(t, &readNetworkFile, func(string) ([]byte, error) { return nil, fail })
+		if _, err := Load(dir); err == nil {
+			t.Fatal("configuration read failure ignored")
+		}
+	})
+	t.Run("serialization failure", func(t *testing.T) {
+		testseam.Swap(t, &marshalNetworkFile, func(any, string, string) ([]byte, error) { return nil, fail })
+		if err := Save(dir, File{Version: 1}); !errors.Is(err, fail) {
+			t.Fatalf("serialization failure = %v", err)
+		}
+		if stored, err := Load(dir); err != nil || len(stored.Profiles) != 1 {
+			t.Fatalf("serialization failure changed saved settings: %v, %v", stored, err)
+		}
+	})
 }

@@ -66,13 +66,9 @@ func newBackend(ctx context.Context, cfg Config) (Cipher, error) {
 	}
 
 	c := &safechatCipher{codes: cfg.AuthCode, allowedHost: cfg.AllowedRedirectHost}
-	policy := netpolicy.FromContext(ctx)
-	if policy == nil {
-		var err error
-		policy, err = netpolicy.Resolve(netpolicy.Settings{}, netpolicy.Overrides{}, netpolicy.SnapshotEnvironment())
-		if err != nil {
-			return nil, err
-		}
+	policy, err := netpolicy.Current(ctx)
+	if err != nil {
+		return nil, err
 	}
 	client, err := safechat.New(safechat.Config{
 		HTTPTransport: func(base *http.Transport) http.RoundTripper { return policy.Transport(base) },

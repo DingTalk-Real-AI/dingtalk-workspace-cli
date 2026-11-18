@@ -24,7 +24,7 @@ import (
 
 // The origin is deliberately unreachable. Only the local proxy may be dialled;
 // counting its CONNECT proves real routing rather than a non-nil Proxy field.
-func TestDownloadUsesEnvironmentProxy(t *testing.T) {
+func TestCrossPlatformCoverageDownloadUsesEnvironmentProxy(t *testing.T) {
 	var connects atomic.Int32
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect {
@@ -55,7 +55,7 @@ func TestDownloadUsesEnvironmentProxy(t *testing.T) {
 	}
 }
 
-func TestDownloadThroughCONNECTAndNoProxy(t *testing.T) {
+func TestCrossPlatformCoverageDownloadThroughCONNECTAndNoProxy(t *testing.T) {
 	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Resource-Key") != "test-key" {
 			t.Error("resource header lost")

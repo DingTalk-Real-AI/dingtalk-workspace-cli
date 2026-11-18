@@ -34,6 +34,8 @@ type Settings struct {
 type Overrides struct{ Proxy, NoProxy *string }
 type Environment map[string]string
 
+var systemCertPool = x509.SystemCertPool
+
 func SnapshotEnvironment() Environment {
 	e := Environment{}
 	for _, k := range []string{"DWS_PROXY", "DWS_NO_PROXY", "DWS_CA_BUNDLE", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "ALL_PROXY", "all_proxy", "REQUEST_METHOD"} {
@@ -134,7 +136,7 @@ func Resolve(s Settings, o Overrides, e Environment) (*Policy, error) {
 		if err != nil {
 			return nil, fmt.Errorf("network: cannot read configured CA bundle")
 		}
-		roots, err := x509.SystemCertPool()
+		roots, err := systemCertPool()
 		if err != nil {
 			return nil, fmt.Errorf("network: cannot load system CA roots")
 		}
@@ -292,8 +294,14 @@ func redactedURL(u *url.URL) string {
 	}
 	return u.Scheme + "://" + u.Host
 }
+
+// Summary reports the effective settings without evaluating a target.
+func (p *Policy) Summary() Explanation {
+	return Explanation{Mode: p.mode, Source: p.source, NoProxySource: p.noProxySource, HTTPProxy: redactedURL(p.httpProxy), HTTPSProxy: redactedURL(p.httpsProxy), CustomCA: p.roots != nil, ALLProxyIgnored: p.unsupportedAllProxy}
+}
+
 func (p *Policy) Explain(u *url.URL) (Explanation, error) {
-	e := Explanation{Mode: p.mode, Source: p.source, NoProxySource: p.noProxySource, HTTPProxy: redactedURL(p.httpProxy), HTTPSProxy: redactedURL(p.httpsProxy), CustomCA: p.roots != nil, ALLProxyIgnored: p.unsupportedAllProxy}
+	e := p.Summary()
 	if u != nil {
 		proxy, reason, err := p.route(u)
 		if err != nil {
@@ -320,9 +328,6 @@ func FromContext(ctx context.Context) *Policy { p, _ := ctx.Value(contextKey{}).
 // Transport clones tuned caller settings and overrides only network routing and
 // optional CA roots. Caller-owned and global transports are never modified.
 func (p *Policy) Transport(base *http.Transport) *http.Transport {
-	if base == nil {
-		base = http.DefaultTransport.(*http.Transport)
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if t := p.transports[base]; t != nil {
@@ -333,8 +338,6 @@ func (p *Policy) Transport(base *http.Transport) *http.Transport {
 	if p.roots != nil {
 		if t.TLSClientConfig == nil {
 			t.TLSClientConfig = &tls.Config{}
-		} else {
-			t.TLSClientConfig = t.TLSClientConfig.Clone()
 		}
 		t.TLSClientConfig.RootCAs = p.roots.Clone()
 	}
@@ -350,17 +353,17 @@ func (p *Policy) CloseIdleConnections() {
 	}
 }
 
-// Bind captures the invocation for libraries that cannot attach it to requests
-// (notably the SafeChat callback). The returned client owns no global state.
-func Bind(ctx context.Context, client *http.Client) (*http.Client, error) {
-	p := FromContext(ctx)
-	if p == nil {
-		var err error
-		p, err = Resolve(Settings{}, Overrides{}, SnapshotEnvironment())
-		if err != nil {
-			return nil, err
-		}
+// Current returns the invocation policy, or a fresh environment policy for
+// standalone callers.
+func Current(ctx context.Context) (*Policy, error) {
+	if p := FromContext(ctx); p != nil {
+		return p, nil
 	}
+	return Resolve(Settings{}, Overrides{}, SnapshotEnvironment())
+}
+
+// bind keeps the caller's settings and custom round trippers.
+func bind(p *Policy, client *http.Client) *http.Client {
 	if client == nil {
 		client = &http.Client{}
 	}
@@ -371,16 +374,16 @@ func Bind(ctx context.Context, client *http.Client) (*http.Client, error) {
 	if t, ok := copy.Transport.(*http.Transport); ok {
 		copy.Transport = p.Transport(t)
 	}
-	return &copy, nil
+	return &copy
 }
 
 // Do preserves caller injection (including mocks), timeouts and redirects.
 func Do(client *http.Client, req *http.Request) (*http.Response, error) {
-	bound, err := Bind(req.Context(), client)
+	p, err := Current(req.Context())
 	if err != nil {
 		return nil, err
 	}
-	resp, err := bound.Do(req)
+	resp, err := bind(p, client).Do(req)
 	// net/http includes the full request URL in url.Error. Signed resource
 	// URLs and OAPI access_token queries must not escape through diagnostics.
 	var requestError *url.Error

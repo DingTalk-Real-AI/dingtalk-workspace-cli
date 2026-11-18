@@ -20,7 +20,6 @@ import (
 )
 
 func init() {
-
 	for _, item := range []configmeta.ConfigItem{
 		{Name: "DWS_PROXY", Category: configmeta.CategoryNetwork, Description: "认证/MCP/OpenAPI/SafeChat/localio 出口：auto、direct 或代理 URL", DefaultValue: "auto", Sensitive: true},
 		{Name: "DWS_NO_PROXY", Category: configmeta.CategoryNetwork, Description: "直连目标 CSV；显式空值清空绕过列表"},
@@ -95,12 +94,28 @@ func configureNetworkInvocation(cmd *cobra.Command, flags *GlobalFlags) error {
 	flags.network = nil
 	// Editing must remain possible even if an old network configuration cannot
 	// be resolved (e.g. its CA file was moved). All writes validate in RunE.
-	if cmd.Parent() != nil && cmd.Parent().Name() == "network" && (cmd.Name() == "set" || cmd.Name() == "reset") {
+	isNetworkCommand := cmd.Parent() != nil && cmd.Parent().Name() == "network"
+	if isNetworkCommand && (cmd.Name() == "set" || cmd.Name() == "reset") {
 		return nil
 	}
-	f, err := netpolicy.Load(defaultConfigDir())
+	dir := defaultConfigDir()
+	f, err := netpolicy.Load(dir)
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
+	}
+	// The saved view must work even when the current shell overrides are
+	// invalid. Resolve it using only the same file snapshot.
+	if isNetworkCommand && cmd.Name() == "show" && !corecmd.BoolFlag(cmd, "effective") {
+		key, err := networkProfile(dir, flags.Profile)
+		if err != nil {
+			return apperrors.NewValidation(err.Error())
+		}
+		p, err := netpolicy.Resolve(f.Settings(key), netpolicy.Overrides{}, nil)
+		if err != nil {
+			return apperrors.NewValidation(err.Error())
+		}
+		cmd.SetContext(netpolicy.WithPolicy(cmd.Context(), p))
+		return nil
 	}
 	o := netpolicy.Overrides{}
 	if cmd.Flags().Changed("proxy") {
@@ -111,7 +126,7 @@ func configureNetworkInvocation(cmd *cobra.Command, flags *GlobalFlags) error {
 		v := flags.NoProxy
 		o.NoProxy = &v
 	}
-	n := &networkInvocation{file: f, env: netpolicy.SnapshotEnvironment(), overrides: o, dir: defaultConfigDir(), policies: map[string]*netpolicy.Policy{}}
+	n := &networkInvocation{file: f, env: netpolicy.SnapshotEnvironment(), overrides: o, dir: dir, policies: map[string]*netpolicy.Policy{}}
 	p, err := n.policy(flags.Profile)
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
@@ -175,35 +190,7 @@ func newNetworkConfigCommand() *cobra.Command {
 		Use: "show", Short: "查看网络配置；--effective 显示脱敏生效来源", Safety: readSafety, Contract: networkContract("show", "离线查看网络配置及其生效来源"),
 		Flags: []corecmd.FlagSpec{{Name: "effective", Kind: corecmd.KindBool, Usage: "显示最终生效配置及来源（不联网）"}},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			effective, _ := cmd.Flags().GetBool("effective")
-			if effective {
-				p := netpolicy.FromContext(cmd.Context())
-				e, err := p.Explain(nil)
-				if err != nil {
-					return err
-				}
-				return output.WriteJSON(cmd.OutOrStdout(), e)
-			}
-			f, err := netpolicy.Load(defaultConfigDir())
-			if err != nil {
-				return err
-			}
-			selector, _ := cmd.Flags().GetString("profile")
-			key, err := networkProfile(defaultConfigDir(), selector)
-			if err != nil {
-				return err
-			}
-			// Saved files reject credentials, but redact on reads too: an older or
-			// manually edited file must never leak a password through this command.
-			p, err := netpolicy.Resolve(f.Settings(key), netpolicy.Overrides{}, netpolicy.Environment{})
-			if err != nil {
-				return err
-			}
-			e, err := p.Explain(nil)
-			if err != nil {
-				return err
-			}
-			return output.WriteJSON(cmd.OutOrStdout(), e)
+			return output.WriteJSON(cmd.OutOrStdout(), netpolicy.FromContext(cmd.Context()).Summary())
 		},
 	}))
 	group.AddCommand(corecmd.New(corecmd.Spec{

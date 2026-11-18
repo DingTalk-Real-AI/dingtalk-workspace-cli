@@ -44,6 +44,22 @@ func TestCrossPlatformCoverageBackendIsReportedAvailable(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageOpenRejectsInvalidProxyConfiguration(t *testing.T) {
+	t.Setenv("DWS_PROXY", "http://proxy.example/bad")
+	cipher, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("fixture"),
+		KeyServer:   "https://key.example.test",
+	})
+	if cipher != nil {
+		cipher.Close()
+		t.Fatal("backend opened with an invalid proxy")
+	}
+	if err == nil || !strings.Contains(err.Error(), "invalid proxy URL") {
+		t.Fatalf("Open() error = %v, want invalid proxy", err)
+	}
+}
+
 func TestCrossPlatformCoverageOpenInitialisesCLibraryAndClosesCleanly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 

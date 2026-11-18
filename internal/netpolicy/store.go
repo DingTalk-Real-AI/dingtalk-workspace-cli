@@ -7,6 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
+)
+
+var (
+	readNetworkFile    = os.ReadFile
+	marshalNetworkFile = json.MarshalIndent
 )
 
 // File is separate from authentication state so it can be configured before login.
@@ -26,7 +33,7 @@ func Load(dir string) (File, error) {
 	if err != nil || !info.Mode().IsRegular() {
 		return f, fmt.Errorf("network: configuration must be a readable regular file")
 	}
-	data, err := os.ReadFile(path)
+	data, err := readNetworkFile(path)
 	if err != nil {
 		return f, fmt.Errorf("network: cannot read configuration")
 	}
@@ -65,10 +72,7 @@ func Save(dir string, f File) error {
 				return fmt.Errorf("network: credentials must be supplied through DWS_PROXY, not persisted")
 			}
 		}
-		p, err := Resolve(s, Overrides{}, Environment{})
-		if p != nil {
-			p.CloseIdleConnections()
-		}
+		_, err := Resolve(s, Overrides{}, Environment{})
 		return err
 	}
 	if err := validate(f.Default); err != nil {
@@ -79,27 +83,9 @@ func Save(dir string, f File) error {
 			return err
 		}
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(f, "", "  ")
+	data, err := marshalNetworkFile(f, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".network-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(append(data, '\n')); err == nil {
-		err = tmp.Sync()
-	}
-	closeErr := tmp.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), filepath.Join(dir, "network.json"))
+	return atomicfile.WriteJSON(filepath.Join(dir, "network.json"), append(data, '\n'))
 }

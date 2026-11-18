@@ -7,13 +7,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"github.com/spf13/cobra"
 )
@@ -51,7 +54,7 @@ func clearNetworkEnv(t *testing.T) {
 	}
 }
 
-func TestNetworkConfigurationCLI(t *testing.T) {
+func TestCrossPlatformCoverageNetworkConfigurationCLI(t *testing.T) {
 	clearNetworkEnv(t)
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
@@ -87,7 +90,7 @@ func TestNetworkConfigurationCLI(t *testing.T) {
 	}
 }
 
-func TestNetworkProfileIsolationAndDryRun(t *testing.T) {
+func TestCrossPlatformCoverageNetworkProfileIsolationAndDryRun(t *testing.T) {
 	clearNetworkEnv(t)
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
@@ -121,7 +124,7 @@ func TestNetworkProfileIsolationAndDryRun(t *testing.T) {
 	}
 }
 
-func TestNetworkRootAndRunnerSnapshot(t *testing.T) {
+func TestCrossPlatformCoverageNetworkRootAndRunnerSnapshot(t *testing.T) {
 	clearNetworkEnv(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	root := NewRootCommand()
@@ -158,4 +161,119 @@ func TestNetworkRootAndRunnerSnapshot(t *testing.T) {
 	if err != nil || e.Proxy != "http://captured:80" {
 		t.Fatal(e, err)
 	}
+}
+
+func TestCrossPlatformCoverageNetworkConfigFailureBoundaries(t *testing.T) {
+	clearNetworkEnv(t)
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	configPath := filepath.Join(dir, "network.json")
+	profilesPath := filepath.Join(dir, "profiles.json")
+	write := func(path, data string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fail := func(want string, args ...string) {
+		t.Helper()
+		out, err := networkCLI(t, args...)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%v => %q, %v; want %q", args, out, err, want)
+		}
+	}
+	fail("请指定", "config", "network", "set")
+	fail("只支持单个 profile", "--profile", "a,b", "config", "network", "reset")
+	fail("没有可用的本地身份元数据", "--profile", "missing", "config", "network", "show")
+	fail("合法的 HTTP(S)", "config", "network", "explain", "--url", "ftp://example.com")
+	fail("CA bundle path must be absolute", "config", "network", "set", "--ca-bundle", "relative.pem")
+	t.Setenv("REQUEST_METHOD", "GET")
+	t.Setenv("HTTP_PROXY", "http://proxy.example:3128")
+	fail("refusing HTTP_PROXY", "config", "network", "explain", "--url", "http://example.com")
+	t.Setenv("DWS_PROXY", "http://proxy.example/invalid")
+	fail("invalid proxy URL", "config", "network", "show", "--effective")
+	if out, err := networkCLI(t, "config", "network", "show"); err != nil || !strings.Contains(out, `"mode": "auto"`) {
+		t.Fatalf("saved configuration unavailable with bad environment: %s %v", out, err)
+	}
+	t.Setenv("DWS_PROXY", "direct")
+	write(configPath, `{"version":2}`)
+	fail("unsupported configuration version", "config", "network", "show")
+	fail("unsupported configuration version", "config", "network", "reset")
+	write(configPath, `{"version":1,"network":{"proxy":"http://bad/path"}}`)
+	fail("invalid proxy URL", "config", "network", "show")
+	if _, err := networkCLI(t, "config", "network", "reset"); err != nil {
+		t.Fatalf("could not repair invalid saved setting: %v", err)
+	}
+	write(profilesPath, `{"version":3,"currentProfile":"corp:user","profiles":[{"name":"one","corpId":"corp","userId":"user"}]}`)
+	if _, err := networkCLI(t, "config", "network", "set", "--ca-bundle", ""); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := networkCLI(t, "--profile", "one,other", "config", "network", "show", "--effective"); err != nil || !strings.Contains(out, "direct") {
+		t.Fatalf("multi-profile startup policy: %s %v", out, err)
+	}
+	if _, err := networkCLI(t, "--profile", "one", "config", "network", "reset"); err != nil {
+		t.Fatal(err)
+	}
+	if stored, err := netpolicy.Load(dir); err != nil || len(stored.Profiles) != 0 {
+		t.Fatalf("profile override not removed: %#v, %v", stored, err)
+	}
+	write(profilesPath, "{")
+	fail("parse profile metadata", "config", "network", "show")
+}
+
+func TestCrossPlatformCoverageNetworkRootAndRunnerRejectInvalidPolicy(t *testing.T) {
+	clearNetworkEnv(t)
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	t.Setenv("DWS_PROXY", "http://proxy.example/bad")
+	root := NewRootCommand()
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"config", "network", "show", "--effective"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "invalid proxy URL") {
+		t.Fatalf("root did not reject invalid policy: %v", err)
+	}
+	ctx := context.Background()
+	withoutPolicy := &runtimeRunner{globalFlags: &GlobalFlags{}}
+	if got, err := withoutPolicy.withNetworkContext(ctx, ""); err != nil || got != ctx {
+		t.Fatalf("standalone runner context changed: %v, %v", got, err)
+	}
+	r := &runtimeRunner{globalFlags: &GlobalFlags{network: &networkInvocation{
+		dir: dir, file: netpolicy.File{Profiles: map[string]netpolicy.Settings{"corp:user": {}}},
+		policies: make(map[string]*netpolicy.Policy),
+	}}}
+	if _, err := r.withNetworkContext(ctx, "missing"); err == nil {
+		t.Fatal("runner accepted missing profile")
+	}
+	r.globalFlags.network.file.Profiles = nil
+	r.globalFlags.network.env = netpolicy.Environment{"DWS_PROXY": "http://proxy.example/bad"}
+	for name, call := range map[string]func() error{
+		"list tools": func() error { _, err := r.listProductTools(ctx, "chat", "test", ""); return err },
+		"run":        func() error { _, err := r.runSingle(ctx, executor.Invocation{}, false); return err },
+		"execute": func() error {
+			_, err := r.executeInvocation(ctx, "https://service.example", executor.Invocation{})
+			return err
+		},
+		"resolve auth": func() error { _, err := r.resolveAuthSnapshotForProfile(ctx, ""); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil || !strings.Contains(err.Error(), "invalid proxy URL") {
+				t.Fatalf("runtime policy did not fail before network: %v", err)
+			}
+		})
+	}
+	t.Run("configuration is locked", func(t *testing.T) {
+		lock, err := authpkg.AcquireDualLock(ctx, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lock.Release()
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		cmd := &cobra.Command{}
+		cmd.SetContext(cancelled)
+		if err := editNetworkConfig(cmd, true); !errors.Is(err, context.Canceled) {
+			t.Fatalf("locked configuration ignored cancellation: %v", err)
+		}
+	})
 }
