@@ -385,6 +385,9 @@ func defaultPerfReportPath() string {
 
 // sensitiveFlags are flag names whose values should be masked in commands.
 var sensitiveFlags = map[string]bool{
+	"--callee":                     true,
+	"--task":                       true,
+	"--opening":                    true,
 	"--delegator-user-id":          true,
 	"--delegator-corp-id":          true,
 	"--delegator-open-dingtalk-id": true,
