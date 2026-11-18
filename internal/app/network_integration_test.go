@@ -34,6 +34,7 @@ import (
 func TestCrossPlatformCoverageNetworkCLIAPIThroughRealCONNECT(t *testing.T) {
 	clearNetworkEnv(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)

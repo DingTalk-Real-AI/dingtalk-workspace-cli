@@ -127,6 +127,7 @@ func TestCrossPlatformCoverageNetworkProfileIsolationAndDryRun(t *testing.T) {
 func TestCrossPlatformCoverageNetworkRootAndRunnerSnapshot(t *testing.T) {
 	clearNetworkEnv(t)
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
 	root := NewRootCommand()
 	root.SetArgs([]string{"--proxy", "http://user:secret@proxy.example:80", "config", "network", "explain", "--url", "https://files.example/private?key=secret"})
 	var out bytes.Buffer
@@ -225,6 +226,7 @@ func TestCrossPlatformCoverageNetworkRootAndRunnerRejectInvalidPolicy(t *testing
 	clearNetworkEnv(t)
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
+	t.Cleanup(CloseFileLogger)
 	t.Setenv("DWS_PROXY", "http://proxy.example/bad")
 	root := NewRootCommand()
 	root.SetOut(&bytes.Buffer{})
