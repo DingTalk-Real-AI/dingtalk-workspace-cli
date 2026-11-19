@@ -56,7 +56,7 @@ dws config network reset
 
 网络配置不读取 token、启动登录或访问业务数据。写入使用现有目录锁和原子替换，set/reset --dry-run 不写文件。保存时校验绕过列表，包括当前选择 direct 的情况。reset 清除当前作用域，环境变量仍然有效。文件版本不兼容或格式损坏时明确报错。
 
-带 URL userinfo 的持久保存会被拒绝。代理认证通过受控环境变量 DWS_PROXY 提供，配置查询和解释移除全部 userinfo。避免将密码或签名资源 URL 复制到工单、日志或 shell 命令历史。
+带 URL userinfo 的持久保存会被拒绝。代理认证通过受控环境变量 DWS_PROXY 提供，配置查询和解释移除全部 userinfo。性能报告的 `command` 字段会屏蔽 `--proxy` 及其大小写别名的值。避免将密码或签名资源 URL 复制到工单、日志或 shell 命令历史。
 
 企业 TLS 代理可通过 DWS_CA_BUNDLE 或 `config network set --ca-bundle /absolute/path/ca.pem` 追加系统根信任。DWS_CA_BUNDLE 优先，路径必须绝对且文件包含 PEM 证书；失败不关闭校验。`--ca-bundle ''` 清除已保存值。代理和目标仍须通过 TLS 主机名与证书验证。
 
