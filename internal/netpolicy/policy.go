@@ -288,7 +288,8 @@ type Explanation struct {
 	ALLProxyIgnored bool   `json:"all_proxy_ignored"`
 }
 
-func redactedURL(u *url.URL) string {
+// Origin returns only the scheme and host, including a port when present.
+func Origin(u *url.URL) string {
 	if u == nil {
 		return ""
 	}
@@ -297,7 +298,7 @@ func redactedURL(u *url.URL) string {
 
 // Summary reports the effective settings without evaluating a target.
 func (p *Policy) Summary() Explanation {
-	return Explanation{Mode: p.mode, Source: p.source, NoProxySource: p.noProxySource, HTTPProxy: redactedURL(p.httpProxy), HTTPSProxy: redactedURL(p.httpsProxy), CustomCA: p.roots != nil, ALLProxyIgnored: p.unsupportedAllProxy}
+	return Explanation{Mode: p.mode, Source: p.source, NoProxySource: p.noProxySource, HTTPProxy: Origin(p.httpProxy), HTTPSProxy: Origin(p.httpsProxy), CustomCA: p.roots != nil, ALLProxyIgnored: p.unsupportedAllProxy}
 }
 
 func (p *Policy) Explain(u *url.URL) (Explanation, error) {
@@ -312,7 +313,7 @@ func (p *Policy) Explain(u *url.URL) (Explanation, error) {
 		e.Reason = reason
 		if proxy != nil {
 			e.Route = "proxy"
-			e.Proxy = redactedURL(proxy)
+			e.Proxy = Origin(proxy)
 		}
 	}
 	return e, nil
@@ -393,6 +394,12 @@ func Do(client *http.Client, req *http.Request) (*http.Response, error) {
 			copy.URL = target.Scheme + "://" + target.Host
 		} else {
 			copy.URL = "<redacted target>"
+		}
+		// net/http emits an untyped error with the raw Location before
+		// calling CheckRedirect. Match only that case, keeping transport
+		// cancellation, timeout and other error types intact.
+		if strings.HasPrefix(copy.Err.Error(), "failed to parse Location header ") {
+			copy.Err = errors.New("invalid HTTP redirect location")
 		}
 		err = &copy
 	}

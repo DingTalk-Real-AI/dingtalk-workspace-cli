@@ -936,6 +936,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 			principal.Changed = false
 		}
 		consumeDelegatorFlags(root)
+		consumeNetworkOverrides(root)
 		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
 		discardRootVersionInvocationFlag(root, versionRequested)
 		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
@@ -1022,6 +1023,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		Version: "",
 		RunE:    runRootHelp,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			networkOverrides := consumeNetworkOverrides(cmd.Root())
 			flags.delegatorInvocation.clear()
 			defer func() {
 				if preRunErr != nil {
@@ -1117,7 +1119,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
-			if err := configureNetworkInvocation(cmd, flags); err != nil {
+			if err := configureNetworkInvocation(cmd, flags, networkOverrides); err != nil {
 				return err
 			}
 
@@ -1242,7 +1244,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		navigationGroup(newSkillCommand()),
 		hybridGroup(newCacheCommand()),
 		newCatalogCommand(),
-		navigationGroup(newConfigCommand()),
+		navigationGroup(newConfigCommand(flags)),
 		newDoctorCommand(),
 		hybridGroup(newRecoveryCommand()),
 		navigationGroup(newEventCommand(flags)),

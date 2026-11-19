@@ -394,6 +394,8 @@ var sensitiveFlags = map[string]bool{
 	"--client-secret":              true,
 	"--client-id":                  true,
 	"--password":                   true,
+	"--proxy":                      true,
+	"--url":                        true, // May contain signed resource queries.
 }
 
 // SanitizeCommand redacts sensitive flag values from a command arg slice.

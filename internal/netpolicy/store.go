@@ -63,6 +63,11 @@ func (f File) Settings(profile string) Settings {
 // read-modify-write with the existing config-directory lock.
 func Save(dir string, f File) error {
 	validate := func(s Settings) error {
+		if s.NoProxy != nil {
+			if _, _, err := parseBypass(*s.NoProxy); err != nil {
+				return err
+			}
+		}
 		if s.Proxy != nil && *s.Proxy != "auto" && *s.Proxy != "direct" {
 			u, err := parseProxy(*s.Proxy, false)
 			if err != nil {

@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newConfigCommand() *cobra.Command {
+func newConfigCommand(flags *GlobalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "config",
 		Short:             "配置管理",
@@ -34,7 +34,7 @@ func newConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newConfigListCommand(), newNetworkConfigCommand())
+	cmd.AddCommand(newConfigListCommand(), newNetworkConfigCommand(flags))
 	return cmd
 }
 

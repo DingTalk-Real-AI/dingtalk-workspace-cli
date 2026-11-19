@@ -54,7 +54,7 @@ dws config network reset
 
 配置位于当前 DWS 配置目录的 network.json，遵循 DWS_CONFIG_DIR 和 edition 的目录选择。已登录时保存当前 profile 的覆盖；通过 --profile corpId:userId 选择另一已存在的 profile。未登录且未指定 profile 时保存默认值。profile 按字段继承默认配置，显式空绕过列表能覆盖默认列表。多 profile 的 MCP 执行逐身份解析配置及连接池，修改配置一次只接受一个 profile。
 
-网络配置不读取 token、启动登录或访问业务数据。写入使用现有目录锁和原子替换，set/reset --dry-run 不写文件。reset 清除当前作用域，环境变量仍然有效。文件版本不兼容或格式损坏时明确报错。
+网络配置不读取 token、启动登录或访问业务数据。写入使用现有目录锁和原子替换，set/reset --dry-run 不写文件。保存时校验绕过列表，包括当前选择 direct 的情况。reset 清除当前作用域，环境变量仍然有效。文件版本不兼容或格式损坏时明确报错。
 
 带 URL userinfo 的持久保存会被拒绝。代理认证通过受控环境变量 DWS_PROXY 提供，配置查询和解释移除全部 userinfo。避免将密码或签名资源 URL 复制到工单、日志或 shell 命令历史。
 
@@ -69,6 +69,8 @@ dws config network show --effective
 
 explain 只计算路由，不联网、不解析 DNS。输出模式、来源、目标 origin、代理/直连、绕过原因、脱敏代理地址及额外 CA 是否启用；不输出 URL 路径、查询或 userinfo。show 不带 --effective 时解释已保存配置，带该参数时解释本次 flags/environment 覆盖后的配置。本版没有网络 probe；选择了代理不证明其可达或认证成功。
 
+show 和 explain 一次诊断一个 profile。即使该 profile 没有独立网络配置，显式传入的选择器也必须匹配已存在的 profile。
+
 ## 下载与迁移
 
 目标策略和出口选择分开：localio 仍要求 HTTPS、禁止 URL userinfo，允许服务下发的专有部署私网目标及自定义端口，不额外强制本地解析公网地址。上传保留受信目标、443 端口和禁止跳转约束。重定向验证、跨 origin 凭据清理、大小限制和原子落盘保留。
@@ -76,6 +78,8 @@ explain 只计算路由，不联网、不解析 DNS。输出模式、来源、�
 历史 localio 固定直连，本版默认 auto：无代理配置保持直连，已有环境代理的下载/上传开始采用它。企业内网直连域名请加入 NO_PROXY，不默认绕过全部私网，因为有些内网只能经代理访问。
 
 命令开始时快照配置，后续文件/环境变动不改变当前请求和重试的出口。命令结束关闭策略拥有的空闲连接，新命令重新解析。调用方注入的自定义 RoundTripper 仍由其拥有，不改写全局 DefaultTransport。
+
+嵌入调用复用命令树时，`--proxy` 和 `--no-proxy` 由本次调用消费。后续调用按自己的参数、环境与配置重新决策。
 
 ## Verification
 

@@ -46,6 +46,7 @@ type safechatCipher struct {
 	client      *safechat.Client
 	codes       AuthCodeProvider
 	allowedHost string
+	policy      *netpolicy.Policy
 
 	mu          sync.Mutex
 	lastCodeErr error
@@ -65,11 +66,11 @@ func newBackend(ctx context.Context, cfg Config) (Cipher, error) {
 		logf = cfg.Logf
 	}
 
-	c := &safechatCipher{codes: cfg.AuthCode, allowedHost: cfg.AllowedRedirectHost}
 	policy, err := netpolicy.Current(ctx)
 	if err != nil {
 		return nil, err
 	}
+	c := &safechatCipher{codes: cfg.AuthCode, allowedHost: cfg.AllowedRedirectHost, policy: policy}
 	client, err := safechat.New(safechat.Config{
 		HTTPTransport: func(base *http.Transport) http.RoundTripper { return policy.Transport(base) },
 		DataPath:      cfg.KeystoreDir,
@@ -126,7 +127,10 @@ func (c *safechatCipher) Close() error {
 // domain is compared locally and never forwarded to portal. The returned
 // code is used once by the SDK and is not stored on the client.
 func (c *safechatCipher) authCodeHook(corpID, domain string) (string, error) {
-	code, err := mintAuthCodeForProxy(c.codes, c.allowedHost, corpID, domain)
+	// The SDK callback cannot receive a Go context. Keep the network policy
+	// chosen when opening this cipher for both portal and key-server requests.
+	ctx := netpolicy.WithPolicy(context.Background(), c.policy)
+	code, err := mintAuthCodeForProxy(ctx, c.codes, c.allowedHost, corpID, domain)
 	c.setLastCodeErr(err)
 	return code, err
 }

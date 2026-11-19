@@ -386,6 +386,9 @@ func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 	}{
 		{name: "authorization code separate", args: []string{"dws", "auth", "exchange", "--code", "fixture-code", "--dry-run"}, want: "dws auth exchange --code *** --dry-run"},
 		{name: "authorization code equals", args: []string{"dws", "auth", "exchange", "--code=fixture-code"}, want: "dws auth exchange --code=***"},
+		{name: "proxy credentials separate", args: []string{"dws", "--proxy", "http://user:fixture@proxy.test", "version"}, want: "dws --proxy *** version"},
+		{name: "proxy credentials equals", args: []string{"dws", "--proxy=http://user:fixture@proxy.test", "version"}, want: "dws --proxy=*** version"},
+		{name: "signed URL", args: []string{"dws", "config", "network", "explain", "--url=https://storage.test/file?signature=fixture"}, want: "dws config network explain --url=***"},
 		{name: "OIDC state separate", args: []string{"dws", "auth", "token-exchange", "--state", "fixture-state"}, want: "dws auth token-exchange --state ***"},
 		{name: "OIDC state equals", args: []string{"dws", "auth", "token-exchange", "--state=fixture-state"}, want: "dws auth token-exchange --state=***"},
 		{name: "stdin flag retained", args: []string{"dws", "auth", "exchange", "--code-stdin", "--dry-run"}, want: "dws auth exchange --code-stdin --dry-run"},

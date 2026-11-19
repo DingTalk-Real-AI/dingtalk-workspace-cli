@@ -27,8 +27,10 @@ func networkCLI(t *testing.T, args ...string) (string, error) {
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	corecmd.ApplyGroupPolicy(root, corecmd.GroupPolicy{Mode: corecmd.GroupNavigationOnly, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
 	bindPersistentFlags(root, flags)
-	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error { return configureNetworkInvocation(cmd, flags) }
-	config := newConfigCommand()
+	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		return configureNetworkInvocation(cmd, flags, consumeNetworkOverrides(cmd.Root()))
+	}
+	config := newConfigCommand(flags)
 	corecmd.ApplyGroupPolicy(config, corecmd.GroupPolicy{Mode: corecmd.GroupNavigationOnly, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
 	root.AddCommand(config)
 	var out bytes.Buffer
@@ -148,7 +150,7 @@ func TestCrossPlatformCoverageNetworkRootAndRunnerSnapshot(t *testing.T) {
 	cmd.Flags().AddFlagSet(cmd.PersistentFlags())
 	cmd.Flags().Set("proxy", "http://captured:80")
 	cmd.SetContext(context.Background())
-	if err := configureNetworkInvocation(cmd, flags); err != nil {
+	if err := configureNetworkInvocation(cmd, flags, consumeNetworkOverrides(cmd.Root())); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DWS_PROXY", "direct")
@@ -186,6 +188,8 @@ func TestCrossPlatformCoverageNetworkConfigFailureBoundaries(t *testing.T) {
 	fail("请指定", "config", "network", "set")
 	fail("只支持单个 profile", "--profile", "a,b", "config", "network", "reset")
 	fail("没有可用的本地身份元数据", "--profile", "missing", "config", "network", "show")
+	fail("没有可用的本地身份元数据", "--profile", "missing", "config", "network", "show", "--effective")
+	fail("没有可用的本地身份元数据", "--profile", "missing", "config", "network", "explain", "--url", "https://example.com")
 	fail("合法的 HTTP(S)", "config", "network", "explain", "--url", "ftp://example.com")
 	fail("CA bundle path must be absolute", "config", "network", "set", "--ca-bundle", "relative.pem")
 	t.Setenv("REQUEST_METHOD", "GET")
@@ -209,17 +213,64 @@ func TestCrossPlatformCoverageNetworkConfigFailureBoundaries(t *testing.T) {
 	if _, err := networkCLI(t, "config", "network", "set", "--ca-bundle", ""); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := networkCLI(t, "--profile", "one,other", "config", "network", "show", "--effective"); err != nil || !strings.Contains(out, "direct") {
-		t.Fatalf("multi-profile startup policy: %s %v", out, err)
-	}
+	fail("只支持单个 profile", "--profile", "one,other", "config", "network", "show", "--effective")
 	if _, err := networkCLI(t, "--profile", "one", "config", "network", "reset"); err != nil {
 		t.Fatal(err)
 	}
 	if stored, err := netpolicy.Load(dir); err != nil || len(stored.Profiles) != 0 {
 		t.Fatalf("profile override not removed: %#v, %v", stored, err)
 	}
+	if out, err := networkCLI(t, "--profile", "one", "config", "network", "show", "--effective"); err != nil || !strings.Contains(out, "direct") {
+		t.Fatalf("expected valid selector with no overrides: %s %v", out, err)
+	}
 	write(profilesPath, "{")
 	fail("parse profile metadata", "config", "network", "show")
+}
+
+func TestCrossPlatformCoverageNetworkFlagsAreConsumedOnRootReuse(t *testing.T) {
+	clearNetworkEnv(t)
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	t.Setenv("DWS_PROXY", "http://default-proxy.invalid:80")
+	t.Setenv("DWS_NO_PROXY", "bypass.example")
+	root := NewRootCommand()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	explain := []string{"config", "network", "explain", "--url", "https://bypass.example/resource"}
+	run := func(args ...string) error {
+		t.Helper()
+		out.Reset()
+		root.SetArgs(args)
+		return root.Execute()
+	}
+	assertEnv := func() {
+		t.Helper()
+		if err := run(explain...); err != nil || !strings.Contains(out.String(), `"source": "DWS_PROXY"`) ||
+			!strings.Contains(out.String(), `"no_proxy_source": "DWS_NO_PROXY"`) || !strings.Contains(out.String(), `"route": "direct"`) {
+			t.Fatalf("later call did not use env proxy and bypass: %s, %v", out.String(), err)
+		}
+	}
+	overrides := []string{"--proxy=http://user:fixture@invocation.invalid:80", "--no-proxy="}
+	if err := run(append(append([]string{}, overrides...), explain...)...); err != nil ||
+		!strings.Contains(out.String(), `"route": "proxy"`) || strings.Contains(out.String(), "fixture") {
+		t.Fatalf("explicit override failed: %s, %v", out.String(), err)
+	}
+	assertEnv()
+	for _, args := range [][]string{
+		{"config", "network", "explain", "--url", "invalid-url"},
+		{"config", "network", "explain", "--url", "https://bypass.example", "--nonexistent-flag"},
+		{"config", "network", "unexpected"},
+	} {
+		if err := run(append(append([]string{}, overrides...), args...)...); err == nil {
+			t.Fatalf("expected failure for %v", args)
+		}
+		assertEnv()
+	}
+	if err := run("--proxy", "http://invocation.invalid:80", "--no-proxy", "", "config", "network", "set"); err != nil {
+		t.Fatalf("config set lost its invocation flags: %v", err)
+	}
+	assertEnv()
 }
 
 func TestCrossPlatformCoverageNetworkRootAndRunnerRejectInvalidPolicy(t *testing.T) {
@@ -244,11 +295,16 @@ func TestCrossPlatformCoverageNetworkRootAndRunnerRejectInvalidPolicy(t *testing
 		dir: dir, file: netpolicy.File{Profiles: map[string]netpolicy.Settings{"corp:user": {}}},
 		policies: make(map[string]*netpolicy.Policy),
 	}}}
+	if p, err := r.globalFlags.network.policy("corp:user,corp:other"); err != nil || p.Summary().Source != "default" {
+		t.Fatalf("multi-profile business dispatch needs a default startup policy: %v", err)
+	}
 	if _, err := r.withNetworkContext(ctx, "missing"); err == nil {
 		t.Fatal("runner accepted missing profile")
 	}
-	r.globalFlags.network.file.Profiles = nil
-	r.globalFlags.network.env = netpolicy.Environment{"DWS_PROXY": "http://proxy.example/bad"}
+	r.globalFlags.network = &networkInvocation{
+		dir: dir, env: netpolicy.Environment{"DWS_PROXY": "http://proxy.example/bad"},
+		policies: make(map[string]*netpolicy.Policy),
+	}
 	for name, call := range map[string]func() error{
 		"list tools": func() error { _, err := r.listProductTools(ctx, "chat", "test", ""); return err },
 		"run":        func() error { _, err := r.runSingle(ctx, executor.Invocation{}, false); return err },
@@ -274,7 +330,7 @@ func TestCrossPlatformCoverageNetworkRootAndRunnerRejectInvalidPolicy(t *testing
 		cancel()
 		cmd := &cobra.Command{}
 		cmd.SetContext(cancelled)
-		if err := editNetworkConfig(cmd, true); !errors.Is(err, context.Canceled) {
+		if err := editNetworkConfig(cmd, true, netpolicy.Overrides{}); !errors.Is(err, context.Canceled) {
 			t.Fatalf("locked configuration ignored cancellation: %v", err)
 		}
 	})

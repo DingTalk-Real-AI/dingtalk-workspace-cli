@@ -89,19 +89,46 @@ func (n *networkInvocation) policy(selector string) (*netpolicy.Policy, error) {
 	return p, err
 }
 
-func configureNetworkInvocation(cmd *cobra.Command, flags *GlobalFlags) error {
+// Proxy overrides are request-scoped because they can contain credentials.
+// Capture the distinction between absent and explicitly empty before clearing.
+func consumeNetworkOverrides(root *cobra.Command) netpolicy.Overrides {
+	var out netpolicy.Overrides
+	for _, entry := range []struct {
+		name string
+		dest **string
+	}{{"proxy", &out.Proxy}, {"no-proxy", &out.NoProxy}} {
+		f := root.PersistentFlags().Lookup(entry.name)
+		if f == nil || !f.Changed {
+			continue
+		}
+		value := f.Value.String()
+		*entry.dest = &value
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	}
+	return out
+}
+
+func configureNetworkInvocation(cmd *cobra.Command, flags *GlobalFlags, o netpolicy.Overrides) error {
 	flags.network.close()
 	flags.network = nil
 	// Editing must remain possible even if an old network configuration cannot
 	// be resolved (e.g. its CA file was moved). All writes validate in RunE.
-	isNetworkCommand := cmd.Parent() != nil && cmd.Parent().Name() == "network"
+	parent := cmd.Parent()
+	isNetworkCommand := parent != nil && parent.Name() == "network" && parent.Parent() != nil && parent.Parent().Name() == "config"
 	if isNetworkCommand && (cmd.Name() == "set" || cmd.Name() == "reset") {
+		if cmd.Name() == "set" {
+			flags.network = &networkInvocation{overrides: o}
+		}
 		return nil
 	}
 	dir := defaultConfigDir()
 	f, err := netpolicy.Load(dir)
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
+	}
+	if isNetworkCommand && strings.Contains(flags.Profile, ",") {
+		return apperrors.NewValidation("网络配置诊断只支持单个 profile")
 	}
 	// The saved view must work even when the current shell overrides are
 	// invalid. Resolve it using only the same file snapshot.
@@ -117,14 +144,11 @@ func configureNetworkInvocation(cmd *cobra.Command, flags *GlobalFlags) error {
 		cmd.SetContext(netpolicy.WithPolicy(cmd.Context(), p))
 		return nil
 	}
-	o := netpolicy.Overrides{}
-	if cmd.Flags().Changed("proxy") {
-		v := flags.Proxy
-		o.Proxy = &v
-	}
-	if cmd.Flags().Changed("no-proxy") {
-		v := flags.NoProxy
-		o.NoProxy = &v
+	// A typo must fail even without any profile-specific settings.
+	if isNetworkCommand && flags.Profile != "" && len(f.Profiles) == 0 {
+		if _, err := networkProfile(dir, flags.Profile); err != nil {
+			return apperrors.NewValidation(err.Error())
+		}
 	}
 	n := &networkInvocation{file: f, env: netpolicy.SnapshotEnvironment(), overrides: o, dir: dir, policies: map[string]*netpolicy.Policy{}}
 	p, err := n.policy(flags.Profile)
@@ -172,7 +196,7 @@ func networkContract(name, description string) corecmd.ContractDecl {
 	return c
 }
 
-func newNetworkConfigCommand() *cobra.Command {
+func newNetworkConfigCommand(flags *GlobalFlags) *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "config",
 		Selection: contract.ProductSelectionDecl{
@@ -196,11 +220,15 @@ func newNetworkConfigCommand() *cobra.Command {
 	group.AddCommand(corecmd.New(corecmd.Spec{
 		Use: "set", Short: "保存配置；使用全局 --proxy / --no-proxy 设置值", Safety: writeSafety, Contract: networkContract("set", "将非敏感网络配置原子保存到当前 profile；未登录时保存默认值"),
 		Flags: []corecmd.FlagSpec{{Name: "ca-bundle", Usage: "追加系统信任的 PEM 文件路径；空值清空"}},
-		RunE:  func(cmd *cobra.Command, _ []string) error { return editNetworkConfig(cmd, false) },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			o := flags.network.overrides
+			flags.network.overrides = netpolicy.Overrides{}
+			return editNetworkConfig(cmd, false, o)
+		},
 	}))
 	group.AddCommand(corecmd.New(corecmd.Spec{
 		Use: "reset", Short: "清除当前 profile 的网络配置", Safety: writeSafety, Contract: networkContract("reset", "清除当前 profile 的网络覆盖，恢复默认和环境配置"),
-		RunE: func(cmd *cobra.Command, _ []string) error { return editNetworkConfig(cmd, true) },
+		RunE: func(cmd *cobra.Command, _ []string) error { return editNetworkConfig(cmd, true, netpolicy.Overrides{}) },
 	}))
 	group.AddCommand(corecmd.New(corecmd.Spec{
 		Use: "explain", Short: "离线解释一个目标的出口路由", Safety: readSafety, Contract: networkContract("explain", "计算目标的代理/直连路由，隐藏路径和凭据；不解析 DNS、不联网"),
@@ -221,8 +249,8 @@ func newNetworkConfigCommand() *cobra.Command {
 	return group
 }
 
-func editNetworkConfig(cmd *cobra.Command, reset bool) error {
-	if !reset && !cmd.Flags().Changed("proxy") && !cmd.Flags().Changed("no-proxy") && !cmd.Flags().Changed("ca-bundle") {
+func editNetworkConfig(cmd *cobra.Command, reset bool, o netpolicy.Overrides) error {
+	if !reset && o.Proxy == nil && o.NoProxy == nil && !cmd.Flags().Changed("ca-bundle") {
 		return apperrors.NewValidation("请指定 --proxy、--no-proxy 或 --ca-bundle")
 	}
 	dir := defaultConfigDir()
@@ -253,13 +281,11 @@ func editNetworkConfig(cmd *cobra.Command, reset bool) error {
 	if reset {
 		s = netpolicy.Settings{}
 	} else {
-		if cmd.Flags().Changed("proxy") {
-			v, _ := cmd.Flags().GetString("proxy")
-			s.Proxy = &v
+		if o.Proxy != nil {
+			s.Proxy = o.Proxy
 		}
-		if cmd.Flags().Changed("no-proxy") {
-			v, _ := cmd.Flags().GetString("no-proxy")
-			s.NoProxy = &v
+		if o.NoProxy != nil {
+			s.NoProxy = o.NoProxy
 		}
 		if cmd.Flags().Changed("ca-bundle") {
 			v, _ := cmd.Flags().GetString("ca-bundle")

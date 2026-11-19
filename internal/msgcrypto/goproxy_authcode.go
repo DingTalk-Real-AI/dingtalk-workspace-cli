@@ -18,7 +18,7 @@ import "context"
 // mintAuthCodeForProxy is the goProxy-only mint path. domain is compared
 // locally and never forwarded. A successful mint invalidates any unconsumed
 // cache so a one-shot code cannot be reused.
-func mintAuthCodeForProxy(codes AuthCodeProvider, allowedHost, corpID, domain string) (string, error) {
+func mintAuthCodeForProxy(ctx context.Context, codes AuthCodeProvider, allowedHost, corpID, domain string) (string, error) {
 	if err := matchRedirectHost(domain, allowedHost); err != nil {
 		return "", err
 	}
@@ -31,9 +31,9 @@ func mintAuthCodeForProxy(codes AuthCodeProvider, allowedHost, corpID, domain st
 		err  error
 	)
 	if provider, ok := codes.(CorpAuthCodeProvider); ok {
-		code, err = provider.AuthCodeForCorp(context.Background(), corpID)
+		code, err = provider.AuthCodeForCorp(ctx, corpID)
 	} else {
-		code, err = codes.AuthCode(context.Background())
+		code, err = codes.AuthCode(ctx)
 	}
 	if err != nil {
 		invalidateAuthCode(codes)

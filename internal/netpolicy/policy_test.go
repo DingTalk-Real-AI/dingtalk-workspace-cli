@@ -48,8 +48,8 @@ func TestCrossPlatformCoverageRoutingPrecedenceAndSnapshot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if redactedURL(got) != tc.want {
-			t.Errorf("%s = %s, want %s", tc.url, redactedURL(got), tc.want)
+		if Origin(got) != tc.want {
+			t.Errorf("%s = %s, want %s", tc.url, Origin(got), tc.want)
 		}
 	}
 	for _, tc := range []struct {
@@ -433,4 +433,44 @@ func TestCrossPlatformCoverageNetworkStoreFailures(t *testing.T) {
 			t.Fatalf("serialization failure changed saved settings: %v, %v", stored, err)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageMalformedRedirectErrorDoesNotExposeLocation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/bad%zz?signature=fixture-signature")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+	policy := mustPolicy(t, Settings{Proxy: str("direct")}, Overrides{}, nil)
+	req, err := http.NewRequestWithContext(WithPolicy(context.Background(), policy), http.MethodGet,
+		server.URL+"/source?access_token=fixture-token", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Do(server.Client(), req)
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) || !strings.Contains(err.Error(), "invalid HTTP redirect location") {
+		t.Fatalf("malformed redirect = %v", err)
+	}
+	if strings.Contains(err.Error(), "fixture-") || strings.Contains(urlErr.Err.Error(), "signature") {
+		t.Fatalf("redirect error retained a credential: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDirectModeRejectsMalformedStoredBypass(t *testing.T) {
+	dir := t.TempDir()
+	f := File{Version: 1, Default: Settings{Proxy: str("direct"), NoProxy: str("bad.example:65536")}}
+	if err := Save(dir, f); err == nil {
+		t.Fatal("saved an invalid bypass while routing was direct")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "network.json")); !os.IsNotExist(err) {
+		t.Fatalf("failed save wrote a file: %v", err)
+	}
+	f.Default.NoProxy = str("")
+	if err := Save(dir, f); err != nil {
+		t.Fatalf("explicit empty bypass should be saved: %v", err)
+	}
+	if _, err := Resolve(f.Default, Overrides{}, Environment{"NO_PROXY": "bad.example:65536"}); err != nil {
+		t.Fatalf("direct mode should ignore unused environment bypass: %v", err)
+	}
 }

@@ -354,7 +354,7 @@ func TestCrossPlatformCoverageOverlayRecoveryHostAndHelperRemainingCoverage(t *t
 }
 
 func TestCrossPlatformCoverageConfigAndCacheCommandRemainingCoverage(t *testing.T) {
-	for _, command := range []*cobra.Command{newConfigCommand(), newCacheCommand()} {
+	for _, command := range []*cobra.Command{newConfigCommand(&GlobalFlags{}), newCacheCommand()} {
 		command.SetOut(io.Discard)
 		rootWrap := &cobra.Command{Use: "dws"}
 		rootWrap.PersistentFlags().String("format", "json", "")
