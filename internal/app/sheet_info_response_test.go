@@ -63,21 +63,42 @@ func TestCrossPlatformCoverageSheetInfoHTTPResponseContract(t *testing.T) {
 			defer server.Close()
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			t.Cleanup(CloseFileLogger)
+			t.Setenv("DO_NOT_TRACK", "1")
 			t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
 			t.Setenv("DWS_TRUSTED_DOMAINS", "127.0.0.1")
 			t.Setenv("DINGTALK_SHEET_MCP_URL", server.URL)
 			args := []string{"--token", "synthetic-sheet-token", "sheet", "info", "--node", "n1", "--sheet-id", "Sheet1", "--format", "json"}
 			testseam.Swap(t, &os.Args, append([]string{"dws"}, args...))
+			// Runtime initialization can recreate the legacy formatter. Capture the
+			// process stream used by both instances, including after setup.
+			capture, err := os.CreateTemp(t.TempDir(), "sheet-info-stdout-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = capture.Close() })
+			testseam.Swap(t, &os.Stdout, capture)
 			helpers.InitDepsForTest(t, helpers.GetCaller())
 			root := NewRootCommand()
-			var stdout, stderr bytes.Buffer
-			root.SetOut(&stdout)
+			var stderr bytes.Buffer
+			root.SetOut(capture)
 			root.SetErr(&stderr)
-			helpers.GetFormatter().SetWriters(&stdout, &stderr)
 			root.SetArgs(args)
 			leaf, err := root.ExecuteC()
 			if calls.Load() != 1 {
 				t.Fatalf("HTTP calls=%d, want one get_sheet", calls.Load())
+			}
+			if !tc.success {
+				var failure *apperrors.Error
+				if !errors.As(err, &failure) || failure.Category != apperrors.CategoryAPI || failure.Reason != helpers.CodeMCPToolError || apperrors.ExitCode(err) != 1 || failure.Operation != "sheet/get_sheet" {
+					t.Fatalf("invalid response accepted or misclassified: %v", err)
+				}
+				if err := printExecutionError(leaf, capture, &stderr, err); err != nil {
+					t.Fatal(err)
+				}
+			}
+			stdout, readErr := os.ReadFile(capture.Name())
+			if readErr != nil {
+				t.Fatal(readErr)
 			}
 			if tc.success {
 				if err != nil {
@@ -90,17 +111,10 @@ func TestCrossPlatformCoverageSheetInfoHTTPResponseContract(t *testing.T) {
 						LastCell string `json:"lastCell"`
 					} `json:"nonEmptyRange"`
 				}
-				if e := json.Unmarshal(stdout.Bytes(), &got); e != nil || got.SheetID != "s1" || got.NonEmptyRange.Range != "A1:C2" || got.NonEmptyRange.LastCell != "C2" || stderr.Len() != 0 {
-					t.Fatalf("normal response changed: stdout=%s stderr=%s error=%v", &stdout, &stderr, e)
+				if e := json.Unmarshal(stdout, &got); e != nil || got.SheetID != "s1" || got.NonEmptyRange.Range != "A1:C2" || got.NonEmptyRange.LastCell != "C2" || stderr.Len() != 0 {
+					t.Fatalf("normal response changed: stdout=%s stderr=%s error=%v", stdout, &stderr, e)
 				}
 				return
-			}
-			var failure *apperrors.Error
-			if !errors.As(err, &failure) || failure.Category != apperrors.CategoryAPI || failure.Reason != helpers.CodeMCPToolError || apperrors.ExitCode(err) != 1 || failure.Operation != "sheet/get_sheet" || stdout.Len() != 0 {
-				t.Fatalf("invalid response accepted or misclassified: error=%v stdout=%s", err, &stdout)
-			}
-			if err := printExecutionError(leaf, &stdout, &stderr, err); err != nil {
-				t.Fatal(err)
 			}
 			// sheet info retains its legacy error contract: one JSON error on stderr.
 			var wire struct {
@@ -111,8 +125,8 @@ func TestCrossPlatformCoverageSheetInfoHTTPResponseContract(t *testing.T) {
 					Operation string `json:"operation"`
 				} `json:"error"`
 			}
-			if e := json.Unmarshal(stderr.Bytes(), &wire); e != nil || wire.Error.Code != 1 || wire.Error.Category != "api" || wire.Error.Reason != helpers.CodeMCPToolError || wire.Error.Operation != "sheet/get_sheet" || stdout.Len() != 0 || strings.Contains(stderr.String(), "internal panic") {
-				t.Fatalf("invalid CLI error: stdout=%s stderr=%s error=%v", &stdout, &stderr, e)
+			if e := json.Unmarshal(stderr.Bytes(), &wire); e != nil || wire.Error.Code != 1 || wire.Error.Category != "api" || wire.Error.Reason != helpers.CodeMCPToolError || wire.Error.Operation != "sheet/get_sheet" || len(stdout) != 0 || strings.Contains(stderr.String(), "internal panic") {
+				t.Fatalf("invalid CLI error: stdout=%s stderr=%s error=%v", stdout, &stderr, e)
 			}
 		})
 	}
