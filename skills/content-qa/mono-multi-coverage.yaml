@@ -33,6 +33,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/contract.md
+  - mono: outbound-call
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/outbound-call.md
   - mono: sport
     multi_skill: dingtalk-misc
     multi_refs:

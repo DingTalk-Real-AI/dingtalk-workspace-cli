@@ -174,13 +174,13 @@ func TestCrossPlatformCoverageMindBoundaryTransportAndLocalIO(t *testing.T) {
 func TestCrossPlatformCoverageMindPendingProfileWithoutMetadata(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	valid := output.Pending(map[string]any{}, &output.OperationInfo{ID: "req", State: "INITIALIZING", NextCommand: "dws mind create"})
-	got, err := mindBindRecoveryProfile(&cobra.Command{}, valid)
+	got, err := bindRecoveryProfile(&cobra.Command{}, valid)
 	if err != nil || got.Outcome() != output.OutcomePending {
 		t.Fatalf("pending without profile: %v", err)
 	}
 	cmd := &cobra.Command{}
 	cmd.Flags().String("profile", "corp:user", "")
-	if _, err := mindBindRecoveryProfile(cmd, output.Pending(nil, nil)); err == nil {
+	if _, err := bindRecoveryProfile(cmd, output.Pending(nil, nil)); err == nil {
 		t.Fatal("malformed pending accepted")
 	}
 }
