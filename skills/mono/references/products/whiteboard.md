@@ -81,6 +81,10 @@ diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过�
   `+update --expected-source-digest`；任一值或 source 变化都重新 diff 和确认。
 - 成功须同时满足终态 receipt、请求节点映射和同板读回；`verified=false`、partial、
   commit-unknown 不得报成功或盲重试。
+- `whiteboard +insert-image` 的恢复回执默认保存在 `os.UserConfigDir()/dws/whiteboard-image-receipts`，
+  包含已上传资源身份并持续保留。人工清理前先核对回执中的目标和
+  `uploaded`/`committed`/`verified` 状态，再与同一白板读回对账；提交或验证状态未知时
+  保留回执，不盲删、不重复上传。CLI 不自动清理回执或删除托管资源。
 - `+update` 内部仍使用完整同板 query 校验：内嵌分支调用
   `read_whiteboard_content`，独立分支调用 `get_whiteboard_detail(view=page)`；成功结果只返回稳定目标、mode、验证节点
   数、summary 和精简 receipt，不返回 `source.pages[].nodes` 完整快照。用户明确要求

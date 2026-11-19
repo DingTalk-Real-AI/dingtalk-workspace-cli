@@ -41,6 +41,11 @@ func ValidateNodes(nodes []map[string]any) error {
 		if err := validateCommonFields(node, index); err != nil {
 			return err
 		}
+		if node["type"] == "image" {
+			if err := validateImageNode(node, index); err != nil {
+				return err
+			}
+		}
 		if id, _ := node["id"].(string); id != "" {
 			if _, exists := indexByID[id]; exists {
 				return nodeIssue(index, "id", "duplicateTemporaryId")
@@ -83,6 +88,26 @@ func ValidateNodes(nodes []map[string]any) error {
 		for cursor >= 0 && colors[cursor] == 1 {
 			colors[cursor] = 2
 			cursor = parents[cursor]
+		}
+	}
+	return nil
+}
+
+func validateImageNode(node map[string]any, index int) error {
+	resource, ok := node["resource"].(map[string]any)
+	if !ok || resource["kind"] != "managed" {
+		return nodeIssue(index, "resource", "invalidValue")
+	}
+	for _, key := range []string{"resourceId", "url"} {
+		value, ok := resource[key].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nodeIssue(index, "resource/"+key, "invalidValue")
+		}
+	}
+	for _, key := range []string{"intrinsicWidth", "intrinsicHeight"} {
+		value, ok := finiteNumber(node[key])
+		if !ok || value <= 0 || value > 9007199254740991 || math.Trunc(value) != value {
+			return nodeIssue(index, key, "invalidValue")
 		}
 	}
 	return nil

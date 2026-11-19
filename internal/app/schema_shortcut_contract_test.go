@@ -21,12 +21,12 @@ import (
 const (
 	// CLI acceleration adds nine public shortcuts beyond main's role/member
 	// commands; the deferred layout write is not part of the delivered surface.
-	publicShortcutCount = 496
+	publicShortcutCount = 497
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 553
+	schemaPublishedShortcutCount = 554
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 496
+	publiclyDeliveredShortcutCount = 497
 )
 
 func TestCrossPlatformCoverageAITableRecordWriteResultDelivery(t *testing.T) {
@@ -677,9 +677,46 @@ func assertChatCatalogCompleteLeafContracts(t testing.TB) {
 
 	auditJoin := executeShortcutSchemaQuery(t, "--cli-path", "chat group audit-join-validation")
 	assertSchemaLeafParameterRequired(t, auditJoin, "chat group audit-join-validation", "conversation-id", true)
-	assertSchemaLeafParameterEnum(t, auditJoin, "chat group audit-join-validation", "status", []string{"AuditApprove", "AuditDelete"})
+	assertSchemaLeafParameterEnum(t, auditJoin, "chat group audit-join-validation", "status", []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"})
 	if parameters := schemaContractMap(auditJoin["parameters"]); parameters["group"] != nil {
 		t.Fatalf("chat group audit-join-validation publishes hidden --group alias: %#v", parameters["group"])
+	}
+}
+
+func TestCrossPlatformCoverageChatAuditIdentityContract(t *testing.T) {
+	for _, path := range []string{"chat group audit-join-validation", "chat +chat-audit-join"} {
+		t.Run(path, func(t *testing.T) {
+			full := executeShortcutSchemaQuery(t, "--cli-path", path)
+			compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+			root := NewRootCommand()
+			cmd, _, err := root.Find(strings.Fields(path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			properties := map[string]string{
+				"applicant": "applicantUid", "inviter": "inviterUid",
+			}
+			if path == "chat +chat-audit-join" {
+				// Preserve the shortcut's published Schema properties. Its Execute
+				// adapter already maps these CLI flags to the MCP UID fields.
+				properties = map[string]string{"applicant": "applicant", "inviter": "inviter"}
+			}
+			for name, property := range properties {
+				for _, leaf := range []map[string]any{full, compact} {
+					param := schemaContractMap(leaf["parameters"])[name]
+					if param["required"] != true || !strings.Contains(schemaContractString(param["description"]), "userId") {
+						t.Errorf("%s --%s must preserve its required userId input: %#v", path, name, param)
+					}
+				}
+				if got := schemaContractMap(full["parameters"])[name]["property"]; got != property {
+					t.Errorf("%s --%s property = %v, want %s", path, name, got, property)
+				}
+				if flag := cmd.Flags().Lookup(name); flag == nil || !strings.Contains(flag.Usage, "userId") {
+					t.Errorf("%s --%s Help must preserve the existing userId input", path, name)
+				}
+			}
+			assertSchemaLeafParameterEnum(t, full, path, "status", []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"})
+		})
 	}
 }
 

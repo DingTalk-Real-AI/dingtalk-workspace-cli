@@ -12,4 +12,4 @@ Read only the matching JSON. Adapt its content and layout to the task.
 
 Execution replay requires the [batch instructions](../../patterns/progress.md#examples-and-replay); sending the whole array at once may hide intermediate states.
 
-These arrays initialize new cards. For existing cards, send only intended changes, not initialization. See [Construct and validate](../../../SKILL.md#construct-and-validate) for creation and update scenarios.
+These arrays initialize new cards. For existing cards, send only intended changes, not initialization. See [Construction and updates](../../../SKILL.md#construct-and-validate) for creation and update scenarios.

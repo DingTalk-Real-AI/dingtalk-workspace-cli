@@ -63,6 +63,7 @@ func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormali
 		"filters":   "禁止原值透传",
 		"sort":      "direction 仅用 asc/desc",
 		"cursor":    "成功返回空续页属于正常情况",
+		"limit":     "上限 100",
 	} {
 		if !strings.Contains(flags[name], required) {
 			t.Errorf("RecordQuery flag %s missing %q in %q", name, required, flags[name])

@@ -35,6 +35,7 @@ var aicardLoadProtocol = aicardProtocol
 var aicardLoadExplain = a2ui.BundledExplain
 var aicardLint = (*a2ui.Protocol).Lint
 var aicardPreflight = (*a2ui.Protocol).Preflight
+var aicardExistingContentPreflight = (*a2ui.Protocol).PreflightForExistingContent
 
 func aicardFailure(cmd *cobra.Command, kind, message string, details map[string]any) error {
 	return output.StoreResult(cmd.Context(), output.Failure(&output.ErrorInfo{Type: kind, Message: message, Details: details}))
@@ -64,7 +65,7 @@ func runAicardLint(cmd *cobra.Command, _ []string) error {
 	if checkMode != "" && (checkMode != "new-card" && checkMode != "resources" || self || fragment) {
 		return aicardFailure(cmd, "validation", "Preflight requires a complete message file; use new-card or resources", nil)
 	}
-	if len(atIDs) > 0 && checkMode == "" {
+	if cmd.Flags().Changed("at-open-dingtalk-ids") && checkMode == "" {
 		return aicardFailure(cmd, "validation", "--at-open-dingtalk-ids requires --preflight new-card or resources", nil)
 	}
 	if (strings.TrimSpace(file) == "") == !self || self && (fragment || emit) || fragment && emit {
@@ -176,7 +177,7 @@ func runAicardPreview(cmd *cobra.Command, _ []string) error {
 	if !report.Valid {
 		return aicardReport(cmd, report)
 	}
-	preflight, err := aicardPreflight(p, report.A2UIMessages, "new-card")
+	preflight, err := aicardExistingContentPreflight(p, report.A2UIMessages, "new-card")
 	if err != nil {
 		return aicardFailure(cmd, "validation", err.Error(), nil)
 	}

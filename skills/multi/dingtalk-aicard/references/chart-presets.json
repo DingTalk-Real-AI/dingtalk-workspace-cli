@@ -1,0 +1,798 @@
+{
+  "registryVersion": "1.0",
+  "sourceArchiveSha256": "29a0d528ee8478a77708df20b55941fc126f019284adee5481a681d916cfe0f2",
+  "presets": [
+    {
+      "id": "G01",
+      "alias": "bar.grouped",
+      "family": "category",
+      "sourceSha256": "0dba7aa389f02cad689f7b455e2d08cd19db32fd0ccaff511cfe1ea4b2a1b9c9",
+      "seriesTypes": [
+        "bar",
+        "bar"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G02",
+      "alias": "bar.horizontal_rank",
+      "family": "category",
+      "sourceSha256": "de5911ef278bd6d5d7350527a888f512a330a124227077840d3b0b3996dc7f4e",
+      "seriesTypes": [
+        "bar"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "y",
+      "legend": false
+    },
+    {
+      "id": "G03",
+      "alias": "bar.stacked",
+      "family": "category",
+      "sourceSha256": "f955715618722cd562da7b7f2a7e3ff2ed3a074f92d31eacf8a49928b97c2787",
+      "seriesTypes": [
+        "bar",
+        "bar",
+        "bar"
+      ],
+      "seriesStyles": [
+        {
+          "stack": "cost"
+        },
+        {
+          "stack": "cost"
+        },
+        {
+          "stack": "cost"
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G04",
+      "alias": "bar.signed",
+      "family": "category",
+      "sourceSha256": "99cb86ca3adb4a525d4dc61eae7387f1d6cd4bde45561e2213dda9b4e606f9b6",
+      "seriesTypes": [
+        "bar"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G05",
+      "alias": "bar.dense",
+      "family": "category",
+      "sourceSha256": "111a8f4598d3a0e901d9a065e9cf0b4df46fd4ff9e9ea8a1df4b5392a71e47d1",
+      "seriesTypes": [
+        "bar"
+      ],
+      "seriesStyles": [
+        {
+          "barMaxWidth": 24
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G06",
+      "alias": "line.double",
+      "family": "category",
+      "sourceSha256": "aa7d92a254f9d14a6f1e83ba2aa839268c150319e38c4fe5d8802e2d9b81db88",
+      "seriesTypes": [
+        "line",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G07",
+      "alias": "line.smooth",
+      "family": "category",
+      "sourceSha256": "7a15ed234025edf6d85b874bb24719dc9dd3b6cfddb2fd0ea668df929e926bbf",
+      "seriesTypes": [
+        "line"
+      ],
+      "seriesStyles": [
+        {
+          "smooth": true
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G08",
+      "alias": "line.step",
+      "family": "category",
+      "sourceSha256": "dd3cbbb4df2d633f4e53bdf3f2d19e1e471b6e75df01bbdaa9c65812a4e402ae",
+      "seriesTypes": [
+        "line"
+      ],
+      "seriesStyles": [
+        {
+          "step": "end"
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G09",
+      "alias": "line.area",
+      "family": "category",
+      "sourceSha256": "2fe6de0e7f7251179b975bbdeb2e5fc87663e78db3f91d496adbc0492e273598",
+      "seriesTypes": [
+        "line"
+      ],
+      "seriesStyles": [
+        {
+          "areaStyle": {
+            "opacity": 0.18
+          },
+          "smooth": true
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G10",
+      "alias": "line.triple",
+      "family": "category",
+      "sourceSha256": "14604e79761c5066415da9044dc5bf0a4022a6a841ea1c8119f06eb85723de27",
+      "seriesTypes": [
+        "line",
+        "line",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G11",
+      "alias": "mixed.bar_line",
+      "family": "category",
+      "sourceSha256": "0d8b933d55a67532e2ecc47a918acc55615e7cc2118fad6454e6fcd014e9b216",
+      "seriesTypes": [
+        "bar",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G12",
+      "alias": "mixed.two_bar_line",
+      "family": "category",
+      "sourceSha256": "c38c5319ea7d2520e2a5ae968a1b3329c4144f3f5df6ebd697dee63cfa1ff9a7",
+      "seriesTypes": [
+        "bar",
+        "bar",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G13",
+      "alias": "pie.donut",
+      "family": "named_values",
+      "sourceSha256": "35501483fa97b5bf13e430475f460db184a585868a1e5840bf29b44f592b3596",
+      "seriesTypes": [
+        "pie"
+      ],
+      "seriesStyles": [
+        {
+          "center": [
+            "50%",
+            "50%"
+          ],
+          "radius": [
+            "42%",
+            "64%"
+          ]
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G14",
+      "alias": "pie.rose_radius",
+      "family": "named_values",
+      "sourceSha256": "23469fe55beb0e0c29fb14acdd13e9f973bfd43b25a169fc131fe61c1c25639d",
+      "seriesTypes": [
+        "pie"
+      ],
+      "seriesStyles": [
+        {
+          "radius": [
+            "12%",
+            "61%"
+          ],
+          "roseType": "radius"
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G15",
+      "alias": "pie.rose_area",
+      "family": "named_values",
+      "sourceSha256": "9a206ef869ab70b059b3240581d8941e674103879d285f0a93c3b1435bfffdc9",
+      "seriesTypes": [
+        "pie"
+      ],
+      "seriesStyles": [
+        {
+          "radius": [
+            "8%",
+            "62%"
+          ],
+          "roseType": "area"
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G17",
+      "alias": "radar.double",
+      "family": "radar",
+      "sourceSha256": "c1a03d7b4bebb755b775f14439578beacfc941ddbe3cf2f853630464a9dadc2b",
+      "seriesTypes": [
+        "radar"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "",
+      "legend": true,
+      "radarStyle": {},
+      "radarGroupCount": 2
+    },
+    {
+      "id": "G18",
+      "alias": "radar.six_axis",
+      "family": "radar",
+      "sourceSha256": "e670272375d85bef366d85d7dc8e262fb8d109b2120501ebf4f1216a421e839c",
+      "seriesTypes": [
+        "radar"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "",
+      "legend": false,
+      "radarStyle": {},
+      "radarGroupCount": 1
+    },
+    {
+      "id": "G19",
+      "alias": "scatter.grouped",
+      "family": "points",
+      "sourceSha256": "36f68f047f7b1d4eb09af51878e7558fbe1432d389214cc474ee53927d68e0d6",
+      "seriesTypes": [
+        "scatter",
+        "scatter"
+      ],
+      "seriesStyles": [
+        {
+          "symbolSize": 17
+        },
+        {
+          "symbolSize": 17
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G20",
+      "alias": "scatter.bubble_groups",
+      "family": "points",
+      "sourceSha256": "542932624e4fd9f358808d6ba11f81620bdb1f05c930c6e0debd5f2e87d33585",
+      "seriesTypes": [
+        "scatter",
+        "scatter"
+      ],
+      "seriesStyles": [
+        {
+          "symbolSize": 30
+        },
+        {
+          "symbolSize": 13
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G21",
+      "alias": "scatter.ripple",
+      "family": "points",
+      "sourceSha256": "ec5319c15a0963d543bccd80c7c7b6ded2d3eafe12b3eb180da6c908b685bafa",
+      "seriesTypes": [
+        "effectScatter"
+      ],
+      "seriesStyles": [
+        {
+          "rippleEffect": {
+            "scale": 3
+          },
+          "symbolSize": 18
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G22",
+      "alias": "heatmap.weekly",
+      "family": "matrix",
+      "sourceSha256": "672d1d24eddc93ab1893475f2116f484070421d4f14265ad234ba7edf8e30d12",
+      "seriesTypes": [
+        "heatmap"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": false,
+      "visualMapStyle": {
+        "show": false
+      }
+    },
+    {
+      "id": "G23",
+      "alias": "heatmap.matrix",
+      "family": "matrix",
+      "sourceSha256": "987bd6c75ae809f3bddd7409ca2cf648ee7b9e73a7cf7be3ea101e89c5fe7630",
+      "seriesTypes": [
+        "heatmap"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": false,
+      "visualMapStyle": {
+        "show": false
+      }
+    },
+    {
+      "id": "G24",
+      "alias": "candlestick.ohlc",
+      "family": "ohlc",
+      "sourceSha256": "0f54471ccbdb0a31a890c0e6fabb59af25ddbafaa186831f8c924a484a43ae84",
+      "seriesTypes": [
+        "candlestick"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G26",
+      "alias": "gauge.goal",
+      "family": "measure",
+      "sourceSha256": "69178fdedafbe85d650de6b4a4f0bd1643256e7e04e64cb47dee8820a4e646d8",
+      "seriesTypes": [
+        "gauge"
+      ],
+      "seriesStyles": [
+        {
+          "axisLine": {
+            "lineStyle": {
+              "width": 18
+            }
+          },
+          "progress": {
+            "show": true,
+            "width": 18
+          }
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G27",
+      "alias": "gauge.segmented",
+      "family": "measure",
+      "sourceSha256": "e674278db80e5148b10e18ccf9d9f36a27af490659f0c4e57b880502d1decce4",
+      "seriesTypes": [
+        "gauge"
+      ],
+      "seriesStyles": [
+        {
+          "axisLine": {
+            "lineStyle": {
+              "width": 18,
+              "color": [
+                [
+                  0.4,
+                  "#CFE0FF"
+                ],
+                [
+                  0.75,
+                  "#9FC0FF"
+                ],
+                [
+                  1,
+                  "#4A8AFF"
+                ]
+              ]
+            }
+          },
+          "progress": {
+            "show": true,
+            "width": 18
+          },
+          "splitNumber": 5
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G28",
+      "alias": "funnel.five_stage",
+      "family": "named_values",
+      "sourceSha256": "53b0138d2cc68a504290727896b4f66c62c94a2b2c9293879352786b7513e4a0",
+      "seriesTypes": [
+        "funnel"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G29",
+      "alias": "sankey.flow",
+      "family": "flow",
+      "sourceSha256": "616acb998341f07a48ae8293e7256c435c7235c85635290a05531e7ae0673c4d",
+      "seriesTypes": [
+        "sankey"
+      ],
+      "seriesStyles": [
+        {
+          "bottom": 30,
+          "left": 40,
+          "right": 60,
+          "top": 80
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G30",
+      "alias": "sankey.multi_path",
+      "family": "flow",
+      "sourceSha256": "8512ec5eb7b52ab6a2e5ee577294dc3baa2566e16200583d4c32d640b7653b52",
+      "seriesTypes": [
+        "sankey"
+      ],
+      "seriesStyles": [
+        {
+          "bottom": 30,
+          "left": 40,
+          "right": 70,
+          "top": 80
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G31",
+      "alias": "bar.percent_stacked",
+      "family": "category",
+      "sourceSha256": "e3bcc36713c522cc6ae030d34d107d37a4a7ef0938d2b6a6e94395445306d21c",
+      "seriesTypes": [
+        "bar",
+        "bar"
+      ],
+      "seriesStyles": [
+        {
+          "stack": "share"
+        },
+        {
+          "stack": "share"
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G32",
+      "alias": "bar.horizontal_stacked",
+      "family": "category",
+      "sourceSha256": "3e74684e586aaa09cbd3d3d5a763a5411c2c011fd4a7c0192b9f46327a170f8b",
+      "seriesTypes": [
+        "bar",
+        "bar"
+      ],
+      "seriesStyles": [
+        {
+          "stack": "supply"
+        },
+        {
+          "stack": "supply"
+        }
+      ],
+      "categoryAxis": "y",
+      "legend": true
+    },
+    {
+      "id": "G33",
+      "alias": "bar.actual_forecast",
+      "family": "category",
+      "sourceSha256": "8af9393e1ad1f04a78f9673ee38bfe07478aba91d43e1f18d0350332e539326e",
+      "seriesTypes": [
+        "bar",
+        "bar"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G34",
+      "alias": "line.cumulative",
+      "family": "category",
+      "sourceSha256": "2ac18bd65c9efe54cc4a083cdfdb83a2cf9612163fdca4b4e2c0c68807cbe69a",
+      "seriesTypes": [
+        "line"
+      ],
+      "seriesStyles": [
+        {
+          "areaStyle": {
+            "opacity": 0.12
+          },
+          "smooth": true
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": false
+    },
+    {
+      "id": "G35",
+      "alias": "line.target",
+      "family": "category",
+      "sourceSha256": "78321bcd37de131a138c74453bf4585a053e9514cd99a8a31075580fe0efa0c2",
+      "seriesTypes": [
+        "line",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G36",
+      "alias": "line.double_step",
+      "family": "category",
+      "sourceSha256": "09cdcd146086c7154170aad849a37a2ca6a2ea763b7b491cd410815f5b5f390e",
+      "seriesTypes": [
+        "line",
+        "line"
+      ],
+      "seriesStyles": [
+        {
+          "step": "middle"
+        },
+        {
+          "step": "middle"
+        }
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G37",
+      "alias": "mixed.two_line_bar",
+      "family": "category",
+      "sourceSha256": "1f0f905ebb5d83a15a32cad8cd588712e262d9edcfc5e85efd14c6c1096924e2",
+      "seriesTypes": [
+        "bar",
+        "line",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G38",
+      "alias": "mixed.profit_loss",
+      "family": "category",
+      "sourceSha256": "44b7d6f5a0db1da07a2e5d1129d37a2f63a67fa623d1d75aea8e43b4bf42d947",
+      "seriesTypes": [
+        "bar",
+        "line"
+      ],
+      "seriesStyles": [
+        {},
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": true
+    },
+    {
+      "id": "G39",
+      "alias": "pie.five_part_donut",
+      "family": "named_values",
+      "sourceSha256": "a51d41339ff505b66189828076e826be41872c01fc245e3c1affba7943f7a31c",
+      "seriesTypes": [
+        "pie"
+      ],
+      "seriesStyles": [
+        {
+          "radius": [
+            "45%",
+            "64%"
+          ]
+        }
+      ],
+      "categoryAxis": "",
+      "legend": true
+    },
+    {
+      "id": "G40",
+      "alias": "pie.offset",
+      "family": "named_values",
+      "sourceSha256": "50e7ff25f453069cf96261764085796aa9c1f6721c111c870ceef6819fe6f11b",
+      "seriesTypes": [
+        "pie"
+      ],
+      "seriesStyles": [
+        {
+          "center": [
+            "57%",
+            "53%"
+          ],
+          "radius": "59%"
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G41",
+      "alias": "radar.triple",
+      "family": "radar",
+      "sourceSha256": "9412ee2c20a1dfd6d931fff0ae72420ec11b5654bd6708b5308131220d9630f1",
+      "seriesTypes": [
+        "radar"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "",
+      "legend": true,
+      "radarStyle": {},
+      "radarGroupCount": 3
+    },
+    {
+      "id": "G42",
+      "alias": "scatter.dense",
+      "family": "points",
+      "sourceSha256": "cbbaa759263babebad9c0f8578cd164d9e34f0c1b6f7f840d0e227b0d9531666",
+      "seriesTypes": [
+        "scatter"
+      ],
+      "seriesStyles": [
+        {
+          "symbolSize": 12
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G43",
+      "alias": "heatmap.square",
+      "family": "matrix",
+      "sourceSha256": "85b57baaf8c2980f5b3c580d4a909514eadc56aadba0dea30054ea119b2b5d1d",
+      "seriesTypes": [
+        "heatmap"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "x",
+      "legend": false,
+      "visualMapStyle": {
+        "show": false
+      }
+    },
+    {
+      "id": "G44",
+      "alias": "gauge.compact",
+      "family": "measure",
+      "sourceSha256": "704563abb898f06faa218b37b023a263d4557a6491f271348ff8ce975663657d",
+      "seriesTypes": [
+        "gauge"
+      ],
+      "seriesStyles": [
+        {
+          "axisLine": {
+            "lineStyle": {
+              "width": 16
+            }
+          },
+          "progress": {
+            "show": true,
+            "width": 16
+          },
+          "splitNumber": 5
+        }
+      ],
+      "categoryAxis": "",
+      "legend": false
+    },
+    {
+      "id": "G45",
+      "alias": "funnel.descending",
+      "family": "named_values",
+      "sourceSha256": "b230f4a61d44afe7a66c69883be43f7abf9aa1efe5b852f2c50a44036c338737",
+      "seriesTypes": [
+        "funnel"
+      ],
+      "seriesStyles": [
+        {}
+      ],
+      "categoryAxis": "",
+      "legend": false
+    }
+  ]
+}

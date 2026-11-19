@@ -26,6 +26,14 @@
       "availability": "available",
       "public": true,
       "reviewed": true
+    },
+    "+insert-image": {
+      "disposition": "primary_smart",
+      "semantic_delta": "本地校验 PNG/JPEG 与画布布局后只读预览目标，用户确认后上传托管资源，以真实资源运行 diff；目标未变且无 blocker 时 append 并按原更新链路精确读回，dry-run 不上传。",
+      "risk": "high-risk-write",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
     }
   }
 }

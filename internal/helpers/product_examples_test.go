@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 	"unicode"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -129,6 +131,15 @@ func (*productExampleCaller) Fields() string { return "" }
 func (*productExampleCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *testing.T) {
+	// These examples use a synthetic caller, but real RunE paths can still read
+	// profile credentials. Isolate both config and secure storage so the test
+	// cannot read a developer's accounts or wait for an interactive Keychain.
+	stateDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(stateDir, "config"))
+	t.Setenv(keychain.StorageDirEnv, filepath.Join(stateDir, "keychain"))
+	t.Setenv(keychain.TestNamespaceEnv, stateDir)
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("get working directory: %v", err)

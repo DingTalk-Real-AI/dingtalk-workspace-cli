@@ -1278,7 +1278,7 @@ var ChatAuditJoin = shortcut.Shortcut{
 		{Name: "record-id", Type: shortcut.FlagInt, Desc: "申请记录 ID", Required: true},
 		{Name: "applicant", Type: shortcut.FlagString, Desc: "申请人 userId", Required: true},
 		{Name: "inviter", Type: shortcut.FlagString, Desc: "邀请人 userId", Required: true},
-		{Name: "status", Type: shortcut.FlagString, Desc: "审批动作", Required: true, Enum: []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"}},
+		{Name: "status", Type: shortcut.FlagString, Desc: "审批动作: AuditApprove(通过) / AuditDelete(删除) / AuditIgnore(忽略) / AuditRefuse(拒绝) / AuditBlock(拒绝且拉黑)", Required: true, Enum: []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"}},
 		{Name: "description", Type: shortcut.FlagString, Desc: "审批说明"},
 	},
 	Tips: []string{`dws chat +chat-audit-join --group <openConversationId> --record-id 123 --applicant <userId> --inviter <userId> --status AuditApprove`},

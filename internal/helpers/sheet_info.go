@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func callMCPToolSheetInfo(toolArgs map[string]any) error {
@@ -16,18 +18,32 @@ func callMCPToolSheetInfo(toolArgs map[string]any) error {
 		return err
 	}
 	if text == "" {
-		return nil
+		return sheetInfoResponseError("get_sheet returned an empty response")
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		deps.Out.PrintRaw(text)
-		return nil
+		return sheetInfoResponseError("get_sheet returned a non-object response")
+	}
+	if parsed == nil {
+		return sheetInfoResponseError("get_sheet returned a null response")
 	}
 	normalizeSheetInfoCoordinatesForAgent(parsed)
 	return deps.Out.PrintJSON(parsed)
 }
 
+func sheetInfoResponseError(message string) error {
+	return apperrors.NewAPI(message,
+		apperrors.WithReason(CodeMCPToolError),
+		apperrors.WithOperation("sheet/get_sheet"),
+		apperrors.WithServerKey("sheet"),
+		apperrors.WithHint("请稍后重试；若持续失败，请确认 --node 指向当前用户可访问的钉钉在线表格，并携带请求时间和 trace 信息排查服务端"),
+	)
+}
+
 func normalizeSheetInfoCoordinatesForAgent(sheet map[string]any) {
+	if sheet == nil {
+		return
+	}
 	if nonEmptyRange := normalizeNonEmptyRangeObject(sheet["nonEmptyRange"]); nonEmptyRange != nil {
 		sheet["nonEmptyRange"] = nonEmptyRange
 	} else if nonEmptyRange := buildNonEmptyRangeFromLegacy(sheet); nonEmptyRange != nil {

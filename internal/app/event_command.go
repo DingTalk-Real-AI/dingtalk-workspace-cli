@@ -394,7 +394,7 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 	f.StringVar(&personalOpts.OpenDingTalkID, "open-dingtalk-id", "",
 		"单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）")
 	f.StringVar(&personalOpts.GroupID, "group", "",
-		"group 规则：openConversationId")
+		"group 规则：单个 openConversationId；多群请分别创建订阅")
 	f.StringSliceVar(&personalOpts.RoleTypes, "role-types", nil,
 		"待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色")
 	f.StringSliceVar(&personalOpts.CalendarIDs, "calendar-ids", nil,

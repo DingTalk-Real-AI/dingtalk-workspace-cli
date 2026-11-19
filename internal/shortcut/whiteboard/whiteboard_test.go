@@ -36,16 +36,24 @@ type whiteboardCoverageCaller struct {
 	responses map[string][]string
 	calls     []whiteboardCoverageCall
 	dry       bool
+	onCall    func(string)
 }
 
 func (caller *whiteboardCoverageCaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
 	caller.calls = append(caller.calls, whiteboardCoverageCall{server: server, tool: tool, args: args})
+	if caller.onCall != nil {
+		caller.onCall(tool)
+	}
 	queue := caller.responses[tool]
 	if len(queue) == 0 {
 		return nil, errors.New("missing fake response for " + tool)
 	}
 	caller.responses[tool] = queue[1:]
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: queue[0]}}}, nil
+}
+
+func (caller *whiteboardCoverageCaller) CallReadTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return caller.CallTool(ctx, server, tool, args)
 }
 
 func (*whiteboardCoverageCaller) Format() string      { return "json" }

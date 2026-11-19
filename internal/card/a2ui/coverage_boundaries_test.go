@@ -5,6 +5,7 @@ package a2ui
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"reflect"
@@ -13,8 +14,10 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills"
 	"github.com/dlclark/regexp2"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestCrossPlatformCoverageAicardProtocolUtilities(t *testing.T) {
@@ -216,6 +219,93 @@ func TestCrossPlatformCoverageAicardLoadIntegrityFailures(t *testing.T) {
 	setAssets(a)
 	check("outside the embedded package")
 	setDoc(&a, otherName, originalOther)
+	// The pure-series marker and the separately compiled legacy resource
+	// are independent protocol capabilities.
+	chartDoc := func() (map[string]any, map[string]any, []any) {
+		var doc map[string]any
+		if err := json.Unmarshal(originalOther, &doc); err != nil {
+			t.Fatal(err)
+		}
+		chart := object(object(doc["components"])["Chart"])
+		if guarded := object(chart["then"]); guarded != nil {
+			chart = guarded
+		}
+		data := object(object(chart["properties"])["data"])
+		return doc, data, array(data["anyOf"])
+	}
+	t.Run("missing pure-series marker", func(t *testing.T) {
+		a := clone()
+		doc, data, options := chartDoc()
+		data["anyOf"] = options[:1]
+		missingPure, _ := json.Marshal(doc)
+		setDoc(&a, otherName, missingPure)
+		setAssets(a)
+
+		// This fixture intentionally changes the protocol manifest. Bind a test-only
+		// explain store to that manifest so the assertion reaches the optional Chart
+		// marker behavior instead of correctly failing the package integrity gate.
+		originalExplain, err := bundledExplain.ReadFile("explain.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var index explainIndex
+		if err := json.Unmarshal(originalExplain, &index); err != nil {
+			t.Fatal(err)
+		}
+		manifestJSON, err := json.Marshal(a.Manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestJSON = append(manifestJSON, '\n')
+		index.ManifestSHA256 = fmt.Sprintf("%x", sha256.Sum256(manifestJSON))
+		explainJSON, err := json.Marshal(index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store, err := NewExplainStore(fstest.MapFS{"explain.json": &fstest.MapFile{Data: explainJSON}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &explainCached, store)
+
+		withoutPure, err := load(files, assetData)
+		if err != nil || withoutPure.hasPureChartVariant {
+			t.Fatalf("missing pure-series marker must degrade only Chart-specific validation: protocol=%#v err=%v", withoutPure, err)
+		}
+	})
+	setDoc(&a, otherName, originalOther)
+
+	a = clone()
+	doc, _, _ := chartDoc()
+	doc["$id"] = "urn:dws:a2ui:chart-legacy"
+	duplicateLegacyResource, _ := json.Marshal(doc)
+	setDoc(&a, otherName, duplicateLegacyResource)
+	setAssets(a)
+	check("already exists")
+	setDoc(&a, otherName, originalOther)
+
+	t.Run("root compile failure", func(t *testing.T) {
+		testseam.Swap(t, &protocolCompile, func(c *jsonschema.Compiler, location string) (*jsonschema.Schema, error) {
+			if strings.Contains(location, "agent-to-renderer") {
+				return nil, errors.New("root compile injected")
+			}
+			return c.Compile(location)
+		})
+		if _, err := load(source, original); err == nil || !strings.Contains(err.Error(), "root compile injected") {
+			t.Fatalf("root compile error = %v", err)
+		}
+	})
+	t.Run("legacy chart compile failure", func(t *testing.T) {
+		testseam.Swap(t, &protocolCompile, func(c *jsonschema.Compiler, location string) (*jsonschema.Schema, error) {
+			if location == "urn:dws:a2ui:chart-legacy" {
+				return nil, errors.New("legacy compile injected")
+			}
+			return c.Compile(location)
+		})
+		if _, err := load(source, original); err == nil || !strings.Contains(err.Error(), "legacy compile injected") {
+			t.Fatalf("legacy compile error = %v", err)
+		}
+	})
 	// Duplicate document IDs are rejected before the root is compiled.
 	a = clone()
 	other["$id"] = root["$id"]

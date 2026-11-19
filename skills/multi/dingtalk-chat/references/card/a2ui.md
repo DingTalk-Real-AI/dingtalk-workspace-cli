@@ -109,6 +109,10 @@ dws chat message send-a2ui-card --conversation-id '<群ID>' --at-open-dingtalk-i
 
 止血：`DWS_A2UI_MENTIONS_DISABLED=1` 或 `true` 会拒绝新的显式 @ 通知，并停止创建时标签改写。默认关闭止血开关；无通知参数的原路径不变。每次 CLI 调用读取变量，宿主必须向 DWS 子进程传入；它不会中断已运行请求或撤回已发消息。恢复时去掉变量，必要时回滚二进制。
 
+To reply to a source message, pass `--reference-open-message-id '<openMessageId>'` to `chat message send-a2ui-card` for either a group or a direct conversation. Use the encrypted source message ID; the target service must support replies and authorize access to that message. The CLI trims surrounding whitespace and rejects empty or whitespace-only values with validation exit code 3 before any remote call. Omitting the flag sends an ordinary new message without `replyTo`.
+
+The unified `chat +messages-send --a2ui-messages` entry does not expose the reply option. Continue updating and finishing the reply card through `chat message update-a2ui-card` with its original `bizId`; do not resend the source message ID on updates. See [the wire mapping](schema.md).
+
 ## 更新和完结
 
 更新使用创建时的 `bizId` 和 `surfaceId`。本例第一批更新面板标题，写入已生成正文；示例步骤和文案需替换为实际执行结果：
