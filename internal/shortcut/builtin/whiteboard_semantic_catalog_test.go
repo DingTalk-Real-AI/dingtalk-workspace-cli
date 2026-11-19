@@ -36,8 +36,8 @@ func TestCrossPlatformCoverageWhiteboardSemanticCatalogExactlyCoversRegisteredSu
 		}
 		registered[item.Command] = item
 	}
-	if len(registered) != 3 || len(source.Shortcuts) != 3 {
-		t.Fatalf("registered/catalog=%d/%d, want 3/3", len(registered), len(source.Shortcuts))
+	if len(registered) != 4 || len(source.Shortcuts) != 4 {
+		t.Fatalf("registered/catalog=%d/%d, want 4/4", len(registered), len(source.Shortcuts))
 	}
 	public, unavailable, hidden := 0, 0, 0
 	var missing, stale []string
@@ -68,8 +68,8 @@ func TestCrossPlatformCoverageWhiteboardSemanticCatalogExactlyCoversRegisteredSu
 			t.Errorf("%s lacks Result/Safety/unified output or publishes false pagination", command)
 		}
 	}
-	if public != 3 || unavailable != 0 || hidden != 0 {
-		t.Fatalf("Whiteboard source/public/unavailable/hidden=3/%d/%d/%d, want 3/3/0/0", public, unavailable, hidden)
+	if public != 4 || unavailable != 0 || hidden != 0 {
+		t.Fatalf("Whiteboard source/public/unavailable/hidden=4/%d/%d/%d, want 4/4/0/0", public, unavailable, hidden)
 	}
 	for command := range source.Shortcuts {
 		if _, ok := registered[command]; !ok {

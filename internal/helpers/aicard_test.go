@@ -104,7 +104,7 @@ const aicardTestSnapshot = `[{"version":"v1.0","createSurface":{"surfaceId":"s",
 
 func TestCrossPlatformCoverageAicardCommandSurface(t *testing.T) {
 	root := newAicardCommand()
-	want := map[string]int{"lint": 6, "explain": 1, "preview": 3, "template": 0}
+	want := map[string]int{"lint": 6, "explain": 1, "preview": 3, "template": 0, "chart": 0}
 	for _, cmd := range root.Commands() {
 		n, ok := want[cmd.Name()]
 		if !ok {

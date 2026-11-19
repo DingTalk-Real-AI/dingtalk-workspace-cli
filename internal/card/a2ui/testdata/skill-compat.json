@@ -1,0 +1,381 @@
+[
+  {
+    "name": "Plain creation retains existing update acceptance",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "plain",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [],
+            "answer": "user input"
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Original"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "plain",
+          "path": "/rows/0",
+          "value": {
+            "label": "A"
+          }
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "status": "not_applicable",
+    "checked": 0
+  },
+  {
+    "name": "Unrelated Surface cannot fail chart validation",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "plain",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [],
+            "answer": "user input"
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Original"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "plain",
+          "path": "/rows/0",
+          "value": {
+            "label": "A"
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "chart",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    1
+                  ]
+                }
+              ]
+            }
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              },
+              "fallbackMarkdown": "A: 1"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "Chart replaced by Text uses final component type",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "chart",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    1
+                  ]
+                }
+              ]
+            }
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              },
+              "fallbackMarkdown": "A: 1"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "chart",
+          "path": "/rows",
+          "value": []
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "chart",
+          "path": "/rows/0",
+          "value": {
+            "label": "A"
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "chart",
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Replacement"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "status": "not_applicable",
+    "checked": 0
+  },
+  {
+    "name": "Chart introduced after creation is checked",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "plain",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [],
+            "answer": "user input"
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Original"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "plain",
+          "path": "/chart",
+          "value": {
+            "xAxis": {
+              "type": "category",
+              "data": [
+                "A"
+              ]
+            },
+            "yAxis": {
+              "type": "value"
+            },
+            "series": [
+              {
+                "type": "bar",
+                "data": [
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "plain",
+          "components": [
+            {
+              "id": "root",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              },
+              "fallbackMarkdown": "A: 1"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "Missing Chart binding remains strict",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "plain",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [],
+            "answer": "user input"
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Original"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "plain",
+          "components": [
+            {
+              "id": "root",
+              "component": "Chart",
+              "data": {
+                "path": "/missing"
+              },
+              "fallbackMarkdown": "Pending"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": false,
+    "status": "invalid",
+    "checked": 0
+  },
+  {
+    "name": "Existing card delta does not require creation",
+    "messages": [
+      {
+        "version": "v1.0",
+        "updateComponents": {
+          "surfaceId": "existing",
+          "components": [
+            {
+              "id": "title",
+              "component": "Text",
+              "text": "New title"
+            }
+          ]
+        }
+      }
+    ],
+    "mode": "resources",
+    "valid": true,
+    "status": "unverified",
+    "checked": 0
+  },
+  {
+    "name": "Chart data update does not mutate caller snapshot",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "chart",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    1
+                  ]
+                }
+              ]
+            }
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              },
+              "fallbackMarkdown": "A: 1"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "chart",
+          "path": "/chart/series/0/data/0",
+          "value": 2
+        }
+      }
+    ],
+    "mode": "new-card",
+    "valid": true,
+    "status": "valid",
+    "checked": 1
+  }
+]

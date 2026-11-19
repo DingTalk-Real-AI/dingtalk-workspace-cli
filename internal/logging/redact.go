@@ -69,8 +69,12 @@ var sensitiveKeys = map[string]bool{
 	"invite_url": true,
 	"invite-url": true,
 	// 消息正文可能来自 stdin 机器协议；传输日志不得记录正文或审批内容。
-	"content": true,
-	"text":    true,
+	"content":     true,
+	"text":        true,
+	"callee":      true,
+	"prompt":      true,
+	"greeting":    true,
+	"calleeinfos": true,
 }
 
 // sensitiveSubstrings are substrings that mark a key as sensitive.

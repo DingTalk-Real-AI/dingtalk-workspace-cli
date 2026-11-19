@@ -157,6 +157,10 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 				}
 			}
 		}
+		// Outbound failures may echo private conversation text in upstream errors.
+		if errorMessage != "" && strings.HasPrefix(commandPath, "outbound-call ") {
+			errorMessage = "outbound call failed"
+		}
 	}()
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()

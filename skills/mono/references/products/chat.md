@@ -1992,27 +1992,28 @@ Flags:
 
 ### group audit-join-validation (审批入群验证)
 
-#### 审批入群验证 — 通过、删除单个审核
+#### 审批入群验证 — 通过、删除、忽略、拒绝、拉黑
 
-当前仅 AuditApprove（通过）和 AuditDelete（删除）两个动作可用。
+支持五种审批动作：AuditApprove（通过）、AuditDelete（删除）、AuditIgnore（忽略）、AuditRefuse（拒绝）、AuditBlock（拒绝且不再接受该用户的申请）。AuditApplying 是记录的待处理状态，不是审批操作，传入会被客户端拒绝。
 
 ```
 Usage:
   dws chat group audit-join-validation [flags]
 Example:
   dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditApprove
-  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditDelete
+  dws chat group audit-join-validation --group <openConversationId> --record-id 123456 --applicant <openDingTalkId> --inviter <openDingTalkId> --status AuditRefuse
   # 查询入群验证记录: dws chat group list-join-validations
 Flags:
       --group string        群 openConversationId (必填)
       --record-id string    申请记录 ID (必填)
       --applicant string    申请人 openDingTalkId (必填)
       --inviter string      邀请人 openDingTalkId (必填)
-      --status string       审批动作: AuditApprove(通过) / AuditDelete(删除) (必填)
+      --status string       审批动作: AuditApprove(通过) / AuditDelete(删除) / AuditIgnore(忽略) / AuditRefuse(拒绝) / AuditBlock(拒绝且拉黑) (必填)
       --description string  审批说明（可选）
 
 注意:
-  - status 仅支持 AuditApprove(通过) 和 AuditDelete(删除)；AuditIgnore(忽略)、AuditRefuse(拒绝)、AuditBlock(拒绝且拉黑) 会被服务端拒绝报 unsupported audit status，属服务端限制
+  - status 支持上述五种动作；AuditApplying 与未知值会在客户端被拒绝，不会发起 MCP 调用
+  - 审批为写操作且需要群主/管理员权限；服务端拒绝、无权限或重复处理会原样返回错误
   - record-id、applicant、inviter 可通过 dws chat group list-join-validations 查询获得
 ```
 
@@ -2470,7 +2471,9 @@ dws chat message send --conversation-id <openConversationId> --msg-type image --
 
 **注意：send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
 
-`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON）。生成内容时可参考 [A2UI 展示卡片指南](chat/a2ui.md)，使用完整的 `createSurface`、组件定义和数据绑定创建卡片。CLI 会解析为 `a2uiMessages`，单聊传 userId 时自动解析为 openDingTalkId。`--summary` 写入顶层 `summary`，是卡片无法渲染时的降级文案，省略时为 `互动卡片`；`--support-forward` 写入顶层 `supportForward`，默认 `true`；显式 `--support-forward=false` 保持禁止转发。创建时默认 `flowStatus=PROCESSING`。群聊支持 `--at-open-dingtalk-ids`（成员声明，含重复最多100）和 `--at-all`，透传 `atOpenDingTalkIds` / `atAll`；仅显式通知启用一致性校验。支持同批静态绑定，后续流式正文可延后；代码示例不算 @。不传通知参数时保留原正文，单聊拒绝通知参数。流式推荐固定 @ 组件、仅更新绑定正文；更新不新增通知，参见 A2UI 指南。`DWS_A2UI_MENTIONS_DISABLED=1` 可停止新通知和改写。可选 `--a2ui-annotations` 接受 JSON 对象数组并透传为 `a2uiAnnotations`，支持 `[]`；省略时创建请求不携带该字段。完结后的会话摘要由 `artifact` 注解生成，见指南的“组件注解”。创建时还可选 `--extension '{"scene":"example"}'`，接受 key 非空白、value 为字符串的 JSON 对象并透传为 `extension`；支持 `{}` 和空字符串值，省略时不携带该字段。业务 key 由服务端白名单控制，传入不代表已放行；系统字段保持服务端受控语义。`null`、非字符串值及空白 key 会在发送前拒绝。
+`send-a2ui-card` 调用 `im.create_and_send_a2ui_card`，必须传 `--content` JSON 字符串数组（元素为 A2UI 协议 JSON）。生成内容时可参考 [A2UI 展示卡片指南](chat/a2ui.md)，使用完整的 `createSurface`、组件定义和数据绑定创建卡片。CLI 会解析为 `a2uiMessages`，单聊传 userId 时自动解析为 openDingTalkId。`--summary` 写入顶层 `summary`，是卡片无法渲染时的降级文案，省略时为 `互动卡片`；`--support-forward` 写入顶层 `supportForward`，默认 `true`；显式 `--support-forward=false` 保持禁止转发。创建时默认 `flowStatus=PROCESSING`。群聊支持 `--at-open-dingtalk-ids`（成员声明，含重复最多100）和 `--at-all`，透传 `atOpenDingTalkIds` / `atAll`；仅显式通知启用一致性校验。支持同批静态绑定，后续流式正文可延后；代码示例不算 @。不传通知参数时保留原正文，单聊拒绝通知参数。流式推荐固定 @ 组件、仅更新绑定正文；更新不新增通知，参见 A2UI 指南。`DWS_A2UI_MENTIONS_DISABLED=1` 可停止新通知和改写。可选 `--a2ui-annotations` 接受 JSON 对象数组并透传为 `a2uiAnnotations`，支持 `[]`；省略时创建请求不携带该字段。可选 `--reference-open-message-id` 传入被回复消息的加密 openMessageId，透传为嵌套 `replyTo.referenceOpenMessageId`，卡片以回复形式发送；省略时请求不携带 `replyTo`。完结后的会话摘要由 `artifact` 注解生成，见指南的“组件注解”。创建时还可选 `--extension '{"scene":"example"}'`，接受 key 非空白、value 为字符串的 JSON 对象并透传为 `extension`；支持 `{}` 和空字符串值，省略时不携带该字段。业务 key 由服务端白名单控制，传入不代表已放行；系统字段保持服务端受控语义。`null`、非字符串值及空白 key 会在发送前拒绝。
+
+Reply creation requires the atomic `chat message send-a2ui-card` entry; the unified `chat +messages-send --a2ui-messages` entry does not expose the reply option. The CLI trims surrounding whitespace from `--reference-open-message-id` and rejects empty or whitespace-only values with validation exit code 3 before identity resolution or sending. The target service must support `replyTo` and authorize access to the source message. Update and finish the same card with `chat message update-a2ui-card` and its original `bizId`, without resending the reference ID.
 
 隐藏发送者头像：目标环境已将 `hide_avatar` 加入服务端白名单时，创建卡片可传 `--extension '{"hide_avatar":"true"}'`。值是字符串 `"true"`，不是布尔值；它是卡片消息扩展，不放入 A2UI `createSurface`、组件或 surface metadata。未放行时该业务 key 会被过滤，DWS 不会修改白名单；未知 key 的含义须先确认。此扩展不影响服务端生成的系统字段和权限元数据。
 ```

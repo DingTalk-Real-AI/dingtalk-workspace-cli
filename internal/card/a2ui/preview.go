@@ -17,6 +17,17 @@ func resourceLeadingSpace(r rune) bool {
 
 // Preflight is an explicit offline delivery/resource check, separate from Schema validity.
 func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, error) {
+	return p.preflight(messages, mode, true)
+}
+
+// PreflightForExistingContent preserves preview and template-save compatibility:
+// delivery structure stays strict, while Chart binding issues are reported as
+// unverified warnings. Explicit lint and chart build continue to use Preflight.
+func (p *Protocol) PreflightForExistingContent(messages []string, mode string) (map[string]any, error) {
+	return p.preflight(messages, mode, false)
+}
+
+func (p *Protocol) preflight(messages []string, mode string, strictCharts bool) (map[string]any, error) {
 	if mode != "new-card" && mode != "resources" {
 		return nil, fmt.Errorf("unknown preflight mode %s", mode)
 	}
@@ -108,6 +119,12 @@ func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, er
 			}
 		}
 	}
+	chartValidation := map[string]any{"valid": nil, "checked": 0, "unverified": 0, "status": "unverified"}
+	if mode == "new-card" {
+		chartDiagnostics, result := p.checkChartBindings(docs, strictCharts)
+		diagnostics = append(diagnostics, chartDiagnostics...)
+		chartValidation = result
+	}
 	resourceKeys := map[string]bool{"url": true, "darkUrl": true, "imageUrl": true, "posterUrl": true, "coverUrl": true, "images": true, "icon": true, "darkIcon": true}
 	var walk func(any, string, string)
 	walk = func(node any, ptr, field string) {
@@ -166,10 +183,10 @@ func (p *Protocol) Preflight(messages []string, mode string) (map[string]any, er
 	}
 	unverified := []string{"component-reference closure and binding evaluation"}
 	if mode == "new-card" {
-		unverified = []string{"template expansion and binding evaluation", "intermediate-frame references and runtime state"}
+		unverified = []string{"template expansion and other binding evaluation", "intermediate-frame references and runtime state"}
 	}
 	unverified = append(unverified, "media decoding and client resource loading", "client rendering and interaction")
-	return map[string]any{"mode": mode, "valid": valid, "diagnostics": diagnostics, "renderingVerified": false, "unverified": unverified}, nil
+	return map[string]any{"mode": mode, "valid": valid, "diagnostics": diagnostics, "chartValidation": chartValidation, "renderingVerified": false, "unverified": unverified}, nil
 }
 
 func (p *Protocol) CheckNewCard(messages []string) error {

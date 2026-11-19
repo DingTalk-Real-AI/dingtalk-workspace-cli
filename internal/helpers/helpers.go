@@ -311,7 +311,7 @@ func callMCPReadToolReturnTextOnServer(ctx context.Context, serverID, toolName s
 // ReadToolCaller.
 func IsReadToolName(toolName string) bool {
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	if toolName == "enterprise_person_search" {
+	if toolName == "enterprise_person_search" || toolName == "read_whiteboard_content" {
 		return true
 	}
 	for _, prefix := range []string{
