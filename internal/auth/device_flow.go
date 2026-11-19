@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"log/slog"
 	"net/http"
@@ -631,7 +632,7 @@ func (p *DeviceFlowProvider) postForm(ctx context.Context, endpoint string, para
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := netpolicy.Do(p.httpClient, req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("发送请求失败"), err)
 	}
@@ -654,7 +655,7 @@ func (p *DeviceFlowProvider) doGet(ctx context.Context, endpoint string) ([]byte
 		return nil, fmt.Errorf("%s: %w", i18n.T("创建请求失败"), err)
 	}
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := netpolicy.Do(p.httpClient, req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("发送请求失败"), err)
 	}

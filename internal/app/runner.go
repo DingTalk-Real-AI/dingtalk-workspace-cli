@@ -278,6 +278,11 @@ func (r *runtimeRunner) SupportsMCPTool(ctx context.Context, product, tool strin
 }
 
 func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, profile)
+	if networkErr != nil {
+		return nil, networkErr
+	}
 	if r == nil || r.transport == nil {
 		return nil, fmt.Errorf("runtime transport is not configured")
 	}
@@ -388,6 +393,11 @@ func (r *runtimeRunner) RunReadOnly(ctx context.Context, invocation executor.Inv
 }
 
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, authpkg.RuntimeProfile())
+	if networkErr != nil {
+		return executor.Result{}, networkErr
+	}
 	if r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -658,6 +668,10 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	ctx, retErr = r.withNetworkContext(ctx, authpkg.RuntimeProfile())
+	if retErr != nil {
+		return executor.Result{}, retErr
+	}
 	ctx = r.withDelegatorContext(ctx)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
@@ -1160,6 +1174,11 @@ func (r *runtimeRunner) resolveAuthSnapshot(ctx context.Context) (AccessTokenSna
 }
 
 func (r *runtimeRunner) resolveAuthSnapshotForProfile(ctx context.Context, profile string) (AccessTokenSnapshot, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, profile)
+	if networkErr != nil {
+		return AccessTokenSnapshot{}, networkErr
+	}
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token

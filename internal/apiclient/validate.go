@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 )
 
 // AllowedHosts is the set of trusted DingTalk API hosts.
@@ -78,7 +80,7 @@ func ValidateRedirect(req *http.Request, via []*http.Request) error {
 	}
 	origin := via[0].URL
 	if !sameHTTPSOrigin(origin, req.URL) {
-		return fmt.Errorf("安全限制: 拒绝跨域或 HTTPS 降级重定向 (%s -> %s)", origin.Redacted(), req.URL.Redacted())
+		return fmt.Errorf("安全限制: 拒绝跨域或 HTTPS 降级重定向 (%s -> %s)", netpolicy.Origin(origin), netpolicy.Origin(req.URL))
 	}
 	return nil
 }

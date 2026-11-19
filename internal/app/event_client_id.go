@@ -17,6 +17,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -71,7 +72,7 @@ func fetchPersonalEventClientID(ctx context.Context, baseURL string) (string, er
 		return "", personalClientIDFetchError("event_client_id_configuration", false)
 	}
 	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(client, req)
 	if err != nil {
 		// Never include transport errors: URLs and proxy diagnostics can carry secrets.
 		var networkError net.Error

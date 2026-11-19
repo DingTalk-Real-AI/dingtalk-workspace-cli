@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net/http"
 	"net/url"
@@ -548,7 +549,7 @@ func downloadResourceAtomically(
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
-	response, err := client.Do(request)
+	response, err := netpolicy.Do(client, request)
 	if err != nil {
 		return 0, apperrors.NewAPI(fmt.Sprintf("下载消息资源失败: %v", err))
 	}

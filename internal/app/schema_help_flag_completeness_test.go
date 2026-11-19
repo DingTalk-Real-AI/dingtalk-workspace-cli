@@ -264,7 +264,7 @@ func schemaHelpVisibleFlagNames(command *cobra.Command) map[string]bool {
 func schemaRootExecutionControl(name string) bool {
 	switch name {
 	case "client-id", "client-secret", "debug", "dry-run", "fields", "format", "jq", "mock",
-		"output", "profile", "timeout", "token", "verbose", "yes":
+		"output", "profile", "proxy", "no-proxy", "timeout", "token", "verbose", "yes":
 		return true
 	default:
 		return false

@@ -166,6 +166,28 @@ func TestCrossPlatformCoverageClientDoesNotFollowCrossOriginRedirectWithToken(t 
 	}
 }
 
+func TestCrossPlatformCoverageLegacyRedirectErrorOmitsQuerySecrets(t *testing.T) {
+	client := NewClient("fixture-legacy-token", "https://oapi.dingtalk.com")
+	calls := 0
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls > 1 || req.URL.Query().Get("access_token") != "fixture-legacy-token" {
+			t.Fatal("legacy auth missing or refused redirect followed")
+		}
+		return &http.Response{
+			StatusCode: http.StatusFound,
+			Header:     http.Header{"Location": {"https://api.dingtalk.com/v1.0/target?signature=fixture-redirect"}},
+			Body:       io.NopCloser(strings.NewReader("redirect")),
+			Request:    req,
+		}, nil
+	})
+	_, err := client.Do(context.Background(), RawAPIRequest{Method: http.MethodGet, Path: "/topapi/source"})
+	if err == nil || !strings.Contains(err.Error(), "https://oapi.dingtalk.com -> https://api.dingtalk.com") ||
+		strings.Contains(err.Error(), "fixture-") || strings.Contains(err.Error(), "?") || calls != 1 {
+		t.Fatalf("redirect handling calls=%d err=%v", calls, err)
+	}
+}
+
 func TestCrossPlatformCoverageJSONAtFileAndMultipartStreaming(t *testing.T) {
 	dir := t.TempDir()
 	paramsPath := filepath.Join(dir, "params.json")

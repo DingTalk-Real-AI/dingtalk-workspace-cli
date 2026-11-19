@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"html"
 	"io"
 	"log/slog"
@@ -369,7 +370,7 @@ func (p *OAuthProvider) postJSON(ctx context.Context, endpoint string, body any)
 	if client == nil {
 		client = oauthHTTPClient
 	}
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(client, req)
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
@@ -1653,7 +1654,7 @@ func (p *OAuthProvider) doCheckCLIAuthEnabledAttempt(ctx context.Context, access
 	if client == nil {
 		client = oauthHTTPClient
 	}
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(client, req)
 	if err != nil {
 		slog.Debug("auth.cli_auth_enabled.error",
 			"attempt", attempt,
@@ -1768,7 +1769,7 @@ func doGetSuperAdminsForLoginRegion(ctx context.Context, accessToken string, reg
 	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
-	resp, err := oauthHTTPClient.Do(req)
+	resp, err := netpolicy.Do(oauthHTTPClient, req)
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
@@ -1825,7 +1826,7 @@ func doSendCliAuthApplyForLoginRegion(ctx context.Context, accessToken, adminSta
 	applyCLIAuthAgentCodeHeader(req)
 	applyEditionEnterpriseCredentialHeaders(req)
 
-	resp, err := oauthHTTPClient.Do(req)
+	resp, err := netpolicy.Do(oauthHTTPClient, req)
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
@@ -1888,7 +1889,7 @@ func doFetchClientIDFromMCPForLoginRegion(ctx context.Context, region LoginRegio
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	resp, err := oauthHTTPClient.Do(req)
+	resp, err := netpolicy.Do(oauthHTTPClient, req)
 	if err != nil {
 		return "", fmt.Errorf("sending request: %w", err)
 	}

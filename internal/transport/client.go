@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"log/slog"
 	"net"
@@ -908,7 +909,7 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			WroteHeaders: func() { written.Store(true) },
 			WroteRequest: func(httptrace.WroteRequestInfo) { written.Store(true) },
 		}))
-		resp, err := c.HTTPClient.Do(req)
+		resp, err := netpolicy.Do(c.HTTPClient, req)
 		if err != nil {
 			lastErr = err
 			requestNotSent = requestNotSent && !written.Load() && requestFailureBeforeSend(err)

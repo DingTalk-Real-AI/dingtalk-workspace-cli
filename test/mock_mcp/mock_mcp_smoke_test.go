@@ -326,9 +326,12 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 	defer server.Close()
 
 	env := isolatedCLIEnv(t, map[string]string{
-		"DINGTALK_CONTACT_MCP_URL":  server.URL + "/mcp/contact",
-		"DINGTALK_CHAT_MCP_URL":     server.URL + "/mcp/chat",
-		"DINGTALK_IM_MCP_URL":       server.URL + "/mcp/im",
+		"DINGTALK_CONTACT_MCP_URL": server.URL + "/mcp/contact",
+		"DINGTALK_CHAT_MCP_URL":    server.URL + "/mcp/chat",
+		"DINGTALK_IM_MCP_URL":      server.URL + "/mcp/im",
+		// This fixture redirects direct origin dials to the local TLS server;
+		// it is not a CONNECT proxy. Downloads now honor the isolated proxy.
+		"NO_PROXY":                  "127.0.0.1,localhost,::1,download.dingtalk.com",
 		mockMCPSmokeDownloadDialEnv: download.DialAddr,
 		"SSL_CERT_FILE":             download.CAFile,
 		mockMCPSmokeCAEnv:           download.CAFile,
