@@ -651,6 +651,43 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 	}
 }
 
+func TestEventConsumeRejectsMultiValueGroup(t *testing.T) {
+	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
+		AccessToken:  "access-1",
+		RefreshToken: "refresh-1",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "corp-1",
+		UserID:       "user-1",
+		ClientID:     "client-1",
+	})
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	for _, eventKey := range []string{personal.EventInChat, personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+		if err := ensurePublicPersonalEvent(eventKey); err != nil {
+			t.Fatalf("ensurePublicPersonalEvent(%s) error = %v", eventKey, err)
+		}
+	}
+
+	cases := [][]string{
+		{personal.EventInChat, "--group", "cid-1,cid-2", "--dry-run"},
+		{personal.EventInChat, "--group", "cid-1, cid-2", "--dry-run"},
+		{personal.EventGroupUpdated, "--group", ",cid-1", "--dry-run"},
+		{personal.EventGroupDisbanded, "--group", "cid-1,", "--dry-run"},
+		{personal.EventGroupUpdated, personal.EventGroupDisbanded, "--group", "cid-1,cid-2", "--dry-run"},
+	}
+	for _, args := range cases {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs(args)
+		err := corecmd.ExecuteForTest(cmd)
+		if err == nil || !strings.Contains(err.Error(), "--group 仅支持单个 openConversationId，多群请分别创建订阅") {
+			t.Fatalf("consume %v error = %v, want single-group rejection", args, err)
+		}
+	}
+}
+
 func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 	root := NewRootCommand()
 	root.SilenceUsage = true

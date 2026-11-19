@@ -13,13 +13,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// query_records is backed by a service pager whose stable typed-envelope
-// boundary is 20 records. Asking that layer to aggregate more than one page can
-// drop the envelope fields used by the record projector, turning a successful
-// read into an empty collection. Keep every remote request on one service page
-// and aggregate only after each page has passed the CLI's shape validation.
+// Ordinary record-query scans support 100-row service responses. Exact-ID reads
+// and shared composite/write verification helpers retain the historical 20-row
+// boundary: exact-ID responses may omit continuation for IDs beyond one page.
+// Larger pages are opt-in at the read-only command entry, not a shared default.
 const (
 	recordQueryServicePageSize          = 20
+	recordQueryScanPageSize             = 100
 	recordQueryMaxConsecutiveEmptyPages = 3
 )
 
@@ -33,6 +33,12 @@ type recordQueryWindow struct {
 }
 
 func queryRecordWindow(rt *shortcut.RuntimeContext, params map[string]any, limit int) (recordQueryWindow, error) {
+	return queryRecordWindowWithPolicy(rt, params, limit, recordQueryReadPolicy{pageSize: recordQueryServicePageSize})
+}
+
+// queryRecordWindowWithPolicy preserves the existing cursor and completeness
+// checks while allowing the ordinary read-only query to select a larger page.
+func queryRecordWindowWithPolicy(rt *shortcut.RuntimeContext, params map[string]any, limit int, policy recordQueryReadPolicy) (recordQueryWindow, error) {
 	if limit <= 0 {
 		return recordQueryWindow{}, fmt.Errorf("record query limit must be positive, got %d", limit)
 	}
@@ -48,14 +54,14 @@ func queryRecordWindow(rt *shortcut.RuntimeContext, params map[string]any, limit
 	seenRecords := map[string]bool{}
 
 	for len(window.Records) < limit {
-		pageSize := minInt(recordQueryServicePageSize, limit-len(window.Records))
+		pageSize := minInt(policy.pageSize, limit-len(window.Records))
 		request["limit"] = pageSize
 		if cursor == "" {
 			delete(request, "cursor")
 		} else {
 			request["cursor"] = cursor
 		}
-		data, err := rt.CallMCPData(serverMain, "query_records", request)
+		data, err := policy.callPage(rt, request)
 		if err != nil {
 			return recordQueryWindow{}, helpers.RecordQueryRecoveryError(err)
 		}
@@ -66,6 +72,9 @@ func queryRecordWindow(rt *shortcut.RuntimeContext, params map[string]any, limit
 			window.TotalCount, window.HasTotalCount = responseTotalCount(data)
 		}
 		records, found := findRecords(data)
+		if err := policy.validateEmptyPage(data, records, found, recordQueryReadState{query: params, fetched: len(window.Records), total: window.TotalCount, hasTotal: window.HasTotalCount, pageSize: pageSize}); err != nil {
+			return recordQueryWindow{}, err
+		}
 		if !found {
 			if explicitEmptyRecordQuery(data) {
 				window.Pages++
@@ -217,8 +226,8 @@ func executeRecordQuery(rt *shortcut.RuntimeContext, params map[string]any) erro
 		if exactIDQuery {
 			records, err = queryRecordsByIDParams(rt, params, requestedIDs)
 		} else {
-			params["limit"] = minInt(recordQueryServicePageSize, limit)
-			records, err = queryAllRecords(rt, params, maxRecords)
+			params["limit"] = limit
+			records, err = queryAllRecordsForScan(rt, params, maxRecords)
 		}
 		if err != nil {
 			return err
@@ -241,7 +250,7 @@ func executeRecordQuery(rt *shortcut.RuntimeContext, params map[string]any) erro
 		window.Records, err = queryRecordsByIDParams(rt, params, selected)
 		window.Pages = (len(selected) + recordQueryServicePageSize - 1) / recordQueryServicePageSize
 	} else {
-		window, err = queryRecordWindow(rt, params, limit)
+		window, err = queryRecordWindowForScan(rt, params, limit)
 	}
 	if err != nil {
 		return err
@@ -350,6 +359,12 @@ func validateExactRecordQuery(records []map[string]any, requestedIDs []string) (
 }
 
 func queryAllRecords(rt *shortcut.RuntimeContext, params map[string]any, maxRecords int) ([]map[string]any, error) {
+	return queryAllRecordsWithPolicy(rt, params, maxRecords, recordQueryReadPolicy{pageSize: recordQueryServicePageSize})
+}
+
+// queryAllRecordsWithPolicy keeps shared composite reads on their existing
+// page policy; only the ordinary record-query command opts into larger pages.
+func queryAllRecordsWithPolicy(rt *shortcut.RuntimeContext, params map[string]any, maxRecords int, policy recordQueryReadPolicy) ([]map[string]any, error) {
 	all := make([]map[string]any, 0)
 	cursor, _ := params["cursor"].(string)
 	seen := map[string]bool{}
@@ -358,16 +373,17 @@ func queryAllRecords(rt *shortcut.RuntimeContext, params map[string]any, maxReco
 	}
 	emptyPages := 0
 	seenRecordIDs := map[string]bool{}
+	state := recordQueryReadState{query: params}
 	for page := 0; ; page++ {
 		request := cloneAnyMap(params)
-		request["limit"] = recordQueryServicePageSize
-		if requested, ok := params["limit"].(int); ok && requested > 0 && requested < recordQueryServicePageSize {
+		request["limit"] = policy.pageSize
+		if requested, ok := params["limit"].(int); ok && requested > 0 && requested < policy.pageSize {
 			request["limit"] = requested
 		}
 		if cursor != "" {
 			request["cursor"] = cursor
 		}
-		data, err := rt.CallMCPData(serverMain, "query_records", request)
+		data, err := policy.callPage(rt, request)
 		if err != nil {
 			return nil, helpers.RecordQueryRecoveryError(err)
 		}
@@ -375,6 +391,14 @@ func queryAllRecords(rt *shortcut.RuntimeContext, params map[string]any, maxReco
 			return nil, helpers.NonResumableCursorResponseError(guard, true)
 		}
 		records, found := findRecords(data)
+		if !state.hasTotal {
+			state.total, state.hasTotal = responseTotalCount(data)
+		}
+		state.fetched = len(all)
+		state.pageSize = request["limit"].(int)
+		if err := policy.validateEmptyPage(data, records, found, state); err != nil {
+			return nil, err
+		}
 		if !found {
 			if explicitEmptyRecordQuery(data) {
 				return all, nil

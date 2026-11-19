@@ -790,7 +790,7 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "filters", Type: shortcut.FlagString, Desc: aitableprotocol.RecordFiltersHelp + "；先用 field get 完整读一遍表头，确定字段和类型。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
 		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 普通查询时作为每个请求的页大小，上限 100；按 ID 查询仍按最多 20 条分片（可选）"},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "准确视图 ID；读取其筛选/排序，显式 filters/sort 覆盖；与 record-ids 互斥"},
 		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
 		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},

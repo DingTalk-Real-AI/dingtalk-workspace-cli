@@ -71,6 +71,9 @@ func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
 		"aicard.explain":               "Reads the protocol index generated into the binary",
 		"aicard.lint":                  "Uses the protocol embedded in the binary; does not access the network or execute card functions",
+		"aicard.chart.build":           "Uses an embedded, source-traceable chart preset registry; never sends a card",
+		"aicard.chart.explain":         "Uses an embedded, source-traceable chart preset registry; never sends a card",
+		"aicard.chart.list":            "Uses an embedded, source-traceable chart preset registry; never sends a card",
 		"dingtalk-tag.connect_status":  "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",

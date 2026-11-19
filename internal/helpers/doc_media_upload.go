@@ -21,11 +21,16 @@ func runDocMediaUpload(cmd *cobra.Command, _ []string) error {
 // RunDocMediaUploadWithResult shares the existing upload without coupling the
 // Shortcut to the legacy renderer. emit receives only a completed upload.
 func RunDocMediaUploadWithResult(cmd *cobra.Command, emit func(map[string]any) error) error {
+	return RunDocMediaUploadWithFile(cmd, mustGetFlag(cmd, "file"), "", emit)
+}
+
+// RunDocMediaUploadWithFile uploads a caller-owned, validated file snapshot.
+// The displayed name can differ from the private snapshot path.
+func RunDocMediaUploadWithFile(cmd *cobra.Command, filePath, originalName string, emit func(map[string]any) error) error {
 	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 	if err != nil {
 		return err
 	}
-	filePath := mustGetFlag(cmd, "file")
 	if filePath == "" {
 		return fmt.Errorf("flag --file is required")
 	}
@@ -38,6 +43,9 @@ func RunDocMediaUploadWithResult(cmd *cobra.Command, emit func(map[string]any) e
 	}
 
 	fileName, _ := cmd.Flags().GetString("name")
+	if originalName != "" {
+		fileName = originalName
+	}
 	if fileName == "" {
 		fileName = filepath.Base(filePath)
 	} else if filepath.Ext(fileName) == "" {
@@ -73,7 +81,7 @@ func RunDocMediaUploadWithResult(cmd *cobra.Command, emit func(map[string]any) e
 	if err != nil {
 		return err
 	}
-	if resourceURL == "" {
+	if strings.TrimSpace(resourceURL) == "" {
 		return fmt.Errorf("incomplete attachment upload info: missing resourceUrl")
 	}
 	if err := httpPutFile(cmd.Context(), uploadURL, map[string]string{"Content-Type": mimeType}, filePath, fileInfo.Size()); err != nil {

@@ -430,10 +430,16 @@ func pagedRecordQueryResponse(t *testing.T, records []map[string]any, args map[s
 	return string(raw)
 }
 
-func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit int, extra ...string) (map[string]any, error) {
+func runRecordQueryShortcutCLI(t *testing.T, caller edition.ToolCaller, limit int, extra ...string) (map[string]any, error) {
+	t.Helper()
+	return runRecordQueryShortcutCLIContext(t, context.Background(), caller, limit, extra...)
+}
+
+func runRecordQueryShortcutCLIContext(t *testing.T, ctx context.Context, caller edition.ToolCaller, limit int, extra ...string) (map[string]any, error) {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+	root.SetContext(ctx)
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
@@ -490,7 +496,7 @@ func TestCrossPlatformCoverageRecordQueryServicePageBoundariesE2E(t *testing.T) 
 				if tool != "query_records" {
 					return "", fmt.Errorf("unexpected tool %s", tool)
 				}
-				return pagedRecordQueryResponse(t, records, args), nil
+				return scanRecordQueryResponse(t, records, args, 100), nil
 			}
 			payload, err := runRecordQueryShortcutCLI(t, caller, size)
 			if err != nil {
@@ -500,7 +506,7 @@ func TestCrossPlatformCoverageRecordQueryServicePageBoundariesE2E(t *testing.T) 
 			if !ok || payload["success"] != true || data["hasMore"] != false || data["totalCount"] != float64(size) || len(data["records"].([]any)) != size {
 				t.Fatalf("record query size %d payload = %#v", size, payload)
 			}
-			wantCalls := (size + recordQueryServicePageSize - 1) / recordQueryServicePageSize
+			wantCalls := 1
 			if len(caller.calls) != wantCalls || data["page"] != float64(wantCalls) || data["size"] != float64(size) {
 				t.Fatalf("record query size %d calls=%d payload=%#v, want calls=%d", size, len(caller.calls), payload, wantCalls)
 			}

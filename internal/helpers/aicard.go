@@ -22,17 +22,17 @@ func newAicardCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "Author and validate A2UI files, preview a card, or create, retrieve and revise cloud template assets",
-			UseWhen:      []string{"Create or modify a DingTalk A2UI card file", "Manage a cloud A2UI template by template ID and version"},
+			AgentSummary: "Create charts from business facts, validate A2UI files, preview a card, or manage cloud templates",
+			UseWhen:      []string{"Create a chart from natural-language intent and supplied facts", "Create or modify a DingTalk A2UI card file", "Manage a cloud A2UI template by template ID and version"},
 			AvoidWhen:    []string{"Use chat for ordinary messages"},
 		},
 	})
 	root := newGroupCommand(&cobra.Command{
-		Use: "aicard", Short: "Inspect, validate, preview, and manage DingTalk A2UI templates",
-		Long: "Look up field contracts, validate files offline, preview a card, or manage cloud template assets. Template operations do not send or update a card instance. See the dingtalk-aicard Skill for authoring guidance.",
+		Use: "aicard", Short: "Build charts, validate cards, preview, and manage A2UI templates",
+		Long: "Build chart cards from business facts, look up field contracts, validate files offline, preview a card, or manage cloud template assets. Chart build and template operations do not send a card instance. See the dingtalk-aicard Skill for authoring guidance.",
 		RunE: groupRunE, SuggestionsMinimumDistance: 2,
 	})
-	root.AddCommand(newAicardLintCommand(), newAicardExplainCommand(), newAicardPreviewCommand(), newAicardTemplateCommand())
+	root.AddCommand(newAicardLintCommand(), newAicardExplainCommand(), newAicardPreviewCommand(), newAicardTemplateCommand(), newAicardChartCommand())
 	return root
 }
 
@@ -42,8 +42,7 @@ func newAicardLintCommand() *cobra.Command {
 		Long: `Check JSON syntax and the bundled A2UI protocol offline, including DingTalk extensions, field names, required fields, types, and enums.
 Use --preflight new-card or resources for explicit offline checks; valid still represents only the Schema result, while preflight has its own result.
 General lint does not check reference closure. The new-card preflight also checks the final snapshot root, reachable references, duplicate IDs within a message, multiple parents, repeated child slots, shared template sources, static/template overlap, and static cycles; unrelated unreachable components produce warnings. Template source constraints apply even with empty arrays. Dynamic expansion remains unverified.
-Resource preflight rejects literal data URLs in resource fields. Markdown data: text produces a nonblocking review warning; Markdown is not parsed. Prefer verified HTTPS assets; bindings and loading remain unverified.
-Binding initial values, template expansion, function results, and design effects still need runtime verification. Python, an installed Skill, and a Profile are not required.
+Resource preflight rejects literal data URLs in resource fields. Markdown data: text produces a nonblocking review warning; Markdown is not parsed. Prefer verified HTTPS assets. Complete-card Chart paths and known series data are validated in new-card preflight; other bindings, loading, template expansion, function results, and design effects still need runtime verification. Python, an installed Skill, and a Profile are not required.
 Specify exactly one of --file and --self-check. --emit and --fragment require --file and are mutually exclusive.
 Successful results are in data; structural failures exit nonzero and report details in error.details. Passing does not prove client rendering.`,
 		Example: "  dws aicard lint --file card.a2ui.json --emit\n  dws aicard lint --self-check",

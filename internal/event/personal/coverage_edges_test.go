@@ -292,6 +292,14 @@ func TestCrossPlatformCoveragePersonalRegistryEdgeCases(t *testing.T) {
 	if _, _, err := BuildRuleParam(EventFromUser, RuleOptions{UserID: "u", GroupID: "g"}); err == nil {
 		t.Fatal("sender group accepted")
 	}
+	for _, groupID := range []string{"g1,g2", "g1, g2", ",g1", "g1,", "g1，g2"} {
+		if _, _, err := BuildRuleParam(EventInChat, RuleOptions{GroupID: groupID}); err == nil {
+			t.Fatalf("multi-value group %q accepted", groupID)
+		}
+	}
+	if _, _, err := BuildRuleParam(EventGroupUpdated, RuleOptions{GroupID: "g1,g2"}); err == nil {
+		t.Fatal("multi-value group accepted for group-updated event")
+	}
 	if _, _, err := BuildFilter(`{`, ""); err == nil {
 		t.Fatal("invalid filter accepted")
 	}

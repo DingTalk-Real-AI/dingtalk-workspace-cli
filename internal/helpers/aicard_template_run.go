@@ -111,7 +111,7 @@ func aicardTemplateEscapedRune(r rune) bool {
 	return r < 0x20 || (r >= 0x7f && r <= 0x9f) || r == 0x2028 || r == 0x2029 || unicode.Is(unicode.Cf, r)
 }
 
-func validateAicardTemplate(data []byte) (string, error) {
+func validateAicardTemplate(data []byte, reports ...*map[string]any) (string, error) {
 	if len(data) > aicardTemplateMaxBytes {
 		return "", apperrors.NewValidation("Template must contain UTF-8 JSON text of at most 768 KiB, including a leading BOM")
 	}
@@ -145,12 +145,15 @@ func validateAicardTemplate(data []byte) (string, error) {
 	if !report.Valid {
 		return "", apperrors.NewValidation("Template violates the A2UI protocol", apperrors.WithDetails(map[string]any{"diagnostics": report.Diagnostics}))
 	}
-	preflight, err := aicardPreflight(p, report.A2UIMessages, "new-card")
+	preflight, err := aicardExistingContentPreflight(p, report.A2UIMessages, "new-card")
 	if err != nil {
 		return "", apperrors.NewValidation("Template initialization is invalid", apperrors.WithCause(err))
 	}
 	if preflight["valid"] != true {
 		return "", apperrors.NewValidation("Template must fully initialize a new card", apperrors.WithDetails(preflight))
+	}
+	if len(reports) > 0 {
+		*reports[0] = preflight
 	}
 	// This is a versioned content-normalization algorithm, not RFC 8785.
 	// Sort object keys, retain array order and exact JSON number lexemes, and
@@ -243,7 +246,8 @@ func runAicardTemplateWrite(cmd *cobra.Command, tool, id string) error {
 	if err != nil {
 		return err
 	}
-	digest, err := validateAicardTemplate(data)
+	var preflight map[string]any
+	digest, err := validateAicardTemplate(data, &preflight)
 	if err != nil {
 		return err
 	}
@@ -251,7 +255,7 @@ func runAicardTemplateWrite(cmd *cobra.Command, tool, id string) error {
 	if len(wire) > aicardTemplateMaxBytes {
 		return apperrors.NewValidation("The transport-safe template exceeds 768 KiB after JSON escaping")
 	}
-	result := map[string]any{"executed": false, "templateDigest": digest, "digestAlgorithm": aicardTemplateDigestAlgorithm}
+	result := map[string]any{"executed": false, "templateDigest": digest, "digestAlgorithm": aicardTemplateDigestAlgorithm, "preflight": preflight}
 	if id != "" {
 		result["templateId"] = id
 	}
@@ -313,7 +317,8 @@ func runAicardTemplateGet(cmd *cobra.Command, _ []string) error {
 	if !ok {
 		return aicardTemplateUnconfirmed("get_aicard_template", fmt.Errorf("missing file string"))
 	}
-	digest, err := validateAicardTemplate([]byte(file))
+	var preflight map[string]any
+	digest, err := validateAicardTemplate([]byte(file), &preflight)
 	if err != nil {
 		return apperrors.NewAPI("The retrieved template is not a valid complete A2UI file", apperrors.WithCause(err), apperrors.WithRetryable(false))
 	}
@@ -325,6 +330,7 @@ func runAicardTemplateGet(cmd *cobra.Command, _ []string) error {
 		return apperrors.NewValidation("Cannot save template to --out; no existing file was overwritten", apperrors.WithCause(err))
 	}
 	result["executed"], result["templateDigest"], result["digestAlgorithm"] = true, digest, aicardTemplateDigestAlgorithm
+	result["preflight"] = preflight
 	aicardTemplateEvidence(result, service, invocation)
 	return output.StoreResult(cmd.Context(), output.Success(result))
 }

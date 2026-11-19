@@ -735,6 +735,144 @@ func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
 		}
 	})
 
+	t.Run("group send without reply flag omits replyTo", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller, "message", "send-a2ui-card", "--conversation-id=cid", "--content=[\"message\"]")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := caller.args["replyTo"]; ok {
+			t.Fatalf("replyTo present without flag: %#v", caller.args)
+		}
+	})
+
+	t.Run("reply flag passes nested replyTo in group", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message\"]",
+			"--reference-open-message-id=omsg123",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_a2ui_card" {
+			t.Fatalf("call = count:%d server:%q tool:%q", caller.calls, caller.server, caller.tool)
+		}
+		if !reflect.DeepEqual(caller.args["replyTo"], map[string]any{"referenceOpenMessageId": "omsg123"}) {
+			t.Fatalf("replyTo = %#v", caller.args["replyTo"])
+		}
+	})
+
+	t.Run("reply flag passes nested replyTo in direct message", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=DAAAAAAAAAAAiE",
+			"--content=[\"message\"]",
+			"--reference-open-message-id=omsg123",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.args["receiverOpenDingTalkId"] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("receiverOpenDingTalkId = %#v", caller.args["receiverOpenDingTalkId"])
+		}
+		if !reflect.DeepEqual(caller.args["replyTo"], map[string]any{"referenceOpenMessageId": "omsg123"}) {
+			t.Fatalf("replyTo = %#v", caller.args["replyTo"])
+		}
+	})
+
+	for _, target := range []struct {
+		name string
+		flag string
+	}{
+		{"group", "--conversation-id=cid"},
+		// A userId requires resolution, so invalid input must also prevent that call.
+		{"direct user", "--open-dingtalk-id=user123"},
+	} {
+		for _, reference := range []struct {
+			name  string
+			value string
+		}{
+			{"empty", ""},
+			{"spaces", "  "},
+			{"whitespace", "\t\r\n"},
+		} {
+			t.Run(target.name+" rejects "+reference.name+" reference before any call", func(t *testing.T) {
+				caller := &scriptedToolCaller{}
+				err := runChatCoverageCommand(t, caller,
+					"message", "send-a2ui-card", target.flag,
+					"--content=[\"message\"]",
+					"--reference-open-message-id="+reference.value,
+				)
+				if err == nil || !strings.Contains(err.Error(), "--reference-open-message-id must not be blank") {
+					t.Fatalf("error = %v", err)
+				}
+				if code := apperrors.ExitCode(err); code != apperrors.ExitCodeValidation {
+					t.Fatalf("exit code = %d, want %d; error = %v", code, apperrors.ExitCodeValidation, err)
+				}
+				if caller.calls != 0 {
+					t.Fatalf("invalid reference made %d calls", caller.calls)
+				}
+			})
+		}
+	}
+
+	for _, target := range []struct {
+		name string
+		flag string
+	}{
+		{"group", "--conversation-id=cid"},
+		{"direct", "--open-dingtalk-id=DAAAAAAAAAAAiE"},
+	} {
+		t.Run(target.name+" trims reference message id", func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card", target.flag,
+				"--content=[\"message\"]",
+				"--reference-open-message-id= \tomsg123\r\n",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 1 || caller.tool != "create_and_send_a2ui_card" ||
+				!reflect.DeepEqual(caller.args["replyTo"], map[string]any{"referenceOpenMessageId": "omsg123"}) {
+				t.Fatalf("calls = %d, tool = %q, replyTo = %#v", caller.calls, caller.tool, caller.args["replyTo"])
+			}
+		})
+	}
+
+	t.Run("reply flag combines with extension support-forward and annotations", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message\"]",
+			"--reference-open-message-id=omsg123",
+			"--support-forward",
+			"--extension={\"hide_avatar\":\"true\"}",
+			"--summary=等待你确认操作",
+			"--a2ui-annotations=[{\"component\":\"x\"}]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.args["supportForward"] != true || caller.args["summary"] != "等待你确认操作" {
+			t.Fatalf("supportForward = %#v, summary = %#v", caller.args["supportForward"], caller.args["summary"])
+		}
+		if !reflect.DeepEqual(caller.args["replyTo"], map[string]any{"referenceOpenMessageId": "omsg123"}) {
+			t.Fatalf("replyTo = %#v", caller.args["replyTo"])
+		}
+		if _, ok := caller.args["a2uiAnnotations"]; !ok {
+			t.Fatalf("a2uiAnnotations missing: %#v", caller.args)
+		}
+		if !reflect.DeepEqual(caller.args["extension"], map[string]string{"hide_avatar": "true"}) {
+			t.Fatalf("extension = %#v", caller.args["extension"])
+		}
+	})
+
 	t.Run("direct message passes through D-form receiver", func(t *testing.T) {
 		caller := &scriptedToolCaller{}
 		err := runChatCoverageCommand(t, caller,

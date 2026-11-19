@@ -33,6 +33,8 @@ func TestCrossPlatformCoverageOpenNodesKnownInvalidFieldsAndGraphs(t *testing.T)
 		{`[{"id":"a","type":"icon"},{"type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"a"}}}]`, "connectorTargetUnsupported", "/1/start/nodeRef/id"},
 		{`[{"id":"a","type":"shape","hidden":true},{"type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"a"}}}]`, "connectorTargetUnsupported", "/1/start/nodeRef/id"},
 		{`[{"id":"a","type":"shape"},{"type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"a"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"a"}}}]`, "connectorSelfLoop", "/1/end/nodeRef/id"},
+		{`[{"id":"image","type":"image","resource":{"kind":"managed","resourceId":"r","url":"https://example.test/r"},"intrinsicWidth":0,"intrinsicHeight":100}]`, "invalidValue", "/0/intrinsicWidth"},
+		{`[{"id":"image","type":"image","resource":{"kind":"managed","resourceId":"r"},"intrinsicWidth":100,"intrinsicHeight":100}]`, "invalidValue", "/0/resource/url"},
 	} {
 		t.Run(tc.code+tc.path, func(t *testing.T) {
 			_, err := Parse([]byte(`{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":` + tc.nodes + `}`))
@@ -82,5 +84,25 @@ func TestCrossPlatformCoverageOpenNodesValidationPreservesValidSource(t *testing
 	}
 	if err := ValidateNodes(nodes); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoverageImageNodeValidationAcceptsManagedResourceAndIntrinsicSize(t *testing.T) {
+	nodes := []map[string]any{{
+		"id": "image", "type": "image", "x": 10, "y": 20, "width": 300, "height": 200,
+		"resource":       map[string]any{"kind": "managed", "resourceId": "r", "url": "https://example.test/r"},
+		"intrinsicWidth": 1200, "intrinsicHeight": 800,
+	}}
+	if err := ValidateNodes(nodes); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoverageImageNodeValidationRejectsUnmanagedResource(t *testing.T) {
+	for _, resource := range []any{nil, map[string]any{"kind": "external", "resourceId": "r", "url": "https://example.test/r"}} {
+		nodes := []map[string]any{{"id": "image", "type": "image", "x": 10, "y": 20, "width": 300, "height": 200, "resource": resource, "intrinsicWidth": 1200, "intrinsicHeight": 800}}
+		if err := ValidateNodes(nodes); err == nil {
+			t.Fatalf("unmanaged image resource accepted: %#v", resource)
+		}
 	}
 }

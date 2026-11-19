@@ -1,0 +1,497 @@
+{
+  "schemaVersion": 1,
+  "basis": "Nest A2UILocalChartError; unknown series additionally require a registered exact-type template at runtime",
+  "cases": [
+    {
+      "id": "gauge-defaults",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "data": [
+              {
+                "value": 42
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "gauge-five",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "data": [
+              {
+                "value": 1
+              },
+              {
+                "value": 2
+              },
+              {
+                "value": 3
+              },
+              {
+                "value": 4
+              },
+              {
+                "value": 5
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "gauge-six",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "data": [
+              {
+                "value": 1
+              },
+              {
+                "value": 2
+              },
+              {
+                "value": 3
+              },
+              {
+                "value": 4
+              },
+              {
+                "value": 5
+              },
+              {
+                "value": 6
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "gauge-zero-split",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "splitNumber": 0,
+            "data": [
+              {
+                "value": 42
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "gauge-valid-split",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "splitNumber": 10,
+            "data": [
+              {
+                "value": 42
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "gauge-outside-default",
+      "option": {
+        "series": [
+          {
+            "type": "gauge",
+            "data": [
+              {
+                "value": 101
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "scatter-triple",
+      "option": {
+        "xAxis": {
+          "type": "value"
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "scatter",
+            "data": [
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "scatter-category",
+      "option": {
+        "xAxis": {
+          "type": "category",
+          "data": [
+            "A",
+            "B"
+          ]
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "scatter",
+            "data": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "scatter-category-mismatch",
+      "option": {
+        "xAxis": {
+          "type": "category",
+          "data": [
+            "A"
+          ]
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "scatter",
+            "data": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "scatter-short-tuple",
+      "option": {
+        "xAxis": {
+          "type": "value"
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "scatter",
+            "data": [
+              [
+                1
+              ]
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "effect-range-excludes",
+      "option": {
+        "xAxis": {
+          "type": "value",
+          "min": 10,
+          "max": 20
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "effectScatter",
+            "data": [
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "effect-range-inverted",
+      "option": {
+        "xAxis": {
+          "type": "value",
+          "min": 20,
+          "max": 10
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "effectScatter",
+            "data": [
+              [
+                15,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "effect-range-valid",
+      "option": {
+        "xAxis": {
+          "type": "value",
+          "min": 0,
+          "max": 20
+        },
+        "yAxis": {
+          "type": "value",
+          "min": 0,
+          "max": 20
+        },
+        "series": [
+          {
+            "type": "effectScatter",
+            "data": [
+              [
+                15,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "sankey-bad-orient",
+      "option": {
+        "series": [
+          {
+            "type": "sankey",
+            "orient": "diagonal",
+            "data": [
+              {
+                "name": "A"
+              },
+              {
+                "name": "B"
+              }
+            ],
+            "links": [
+              {
+                "source": "A",
+                "target": "B",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "sankey-valid-orient",
+      "option": {
+        "series": [
+          {
+            "type": "sankey",
+            "orient": "vertical",
+            "data": [
+              {
+                "name": "A"
+              },
+              {
+                "name": "B"
+              }
+            ],
+            "links": [
+              {
+                "source": "A",
+                "target": "B",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "funnel-max-excludes",
+      "option": {
+        "series": [
+          {
+            "type": "funnel",
+            "max": 50,
+            "data": [
+              {
+                "name": "A",
+                "value": 60
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "funnel-valid-range",
+      "option": {
+        "series": [
+          {
+            "type": "funnel",
+            "min": 0,
+            "max": 100,
+            "data": [
+              {
+                "name": "A",
+                "value": 60
+              }
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "valid"
+    },
+    {
+      "id": "unknown-template-required",
+      "option": {
+        "series": [
+          {
+            "type": "custom",
+            "data": [
+              1
+            ]
+          }
+        ]
+      },
+      "nestValid": true,
+      "status": "unverified"
+    },
+    {
+      "id": "invalid-type-name",
+      "option": {
+        "series": [
+          {
+            "type": "bad-type",
+            "data": [
+              1
+            ]
+          }
+        ]
+      },
+      "nestValid": false,
+      "status": "invalid"
+    },
+    {
+      "id": "html-text-budget",
+      "option": {
+        "xAxis": {
+          "type": "category",
+          "data": [
+            "A"
+          ]
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "bar",
+            "data": [
+              1
+            ]
+          }
+        ],
+        "title": {
+          "text": "<>&"
+        }
+      },
+      "nestValid": true,
+      "status": "valid",
+      "repeatTitle": 15000
+    },
+    {
+      "id": "option-over-budget",
+      "option": {
+        "xAxis": {
+          "type": "category",
+          "data": [
+            "A"
+          ]
+        },
+        "yAxis": {
+          "type": "value"
+        },
+        "series": [
+          {
+            "type": "bar",
+            "data": [
+              1
+            ]
+          }
+        ],
+        "title": {
+          "text": "A"
+        }
+      },
+      "nestValid": false,
+      "status": "invalid",
+      "repeatTitle": 262145
+    }
+  ]
+}

@@ -665,6 +665,11 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		if groupID == "" {
 			return "", nil, fmt.Errorf("--group is required for %s", eventKey)
 		}
+		// 一个 group 规则只对应一个群；多值会被服务端会话 ID 解码静默截断成单群，
+		// 使调用方误以为多个群都已订阅成功。
+		if strings.ContainsAny(groupID, ",，") {
+			return "", nil, errors.New("--group 仅支持单个 openConversationId，多群请分别创建订阅")
+		}
 		return def.RuleType, map[string]any{
 			"openConversationId": groupID,
 		}, nil
