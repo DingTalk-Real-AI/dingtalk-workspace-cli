@@ -91,6 +91,12 @@ func openSupplementServers() []ServerInfo {
 			Endpoint: "https://mcp-gw.dingtalk.com/server/8dfdd41a0171a9e8b6575b0dee9b69960412c36675f2a891e63ddac63be08157",
 			Prefixes: []string{"sport"},
 		},
+		{
+			ID:       "outbound-call",
+			Name:     "AI 语音外呼",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/1b382233a46b7208b9adeb2396bcaac5ffc344b97502f11dea0a3eaa13853e5f",
+			Prefixes: []string{"outbound-call"},
+		},
 	}
 }
 
