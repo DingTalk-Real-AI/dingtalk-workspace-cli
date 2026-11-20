@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -18,6 +17,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
+
+var outboundCallQuoteScopeValue = driveLatestScopeValue
 
 func outboundCallResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
 	if corecmd.BoolFlag(cmd, "dry-run") || deps.Caller.DryRun() {
@@ -58,9 +59,13 @@ func outboundCallResult(cmd *cobra.Command, tool string, args map[string]any) (o
 		return output.Failure(&output.ErrorInfo{Type: "api", Subtype: "upstream_failure", Message: message, UpstreamCode: receipt.Code, Hint: "检查服务端权限及任务状态后再决定后续操作。"}), nil
 	}
 	if tool == outboundCallCreateTool && receipt.TaskID != "" {
+		taskIDArg, inline := outboundCallQuoteScopeValue(receipt.TaskID)
+		if !inline {
+			taskIDArg = "TASK_ID"
+		}
 		return bindRecoveryProfile(cmd, output.Pending(receipt.Data, &output.OperationInfo{
 			ID: receipt.TaskID, State: "accepted",
-			NextCommand: "dws outbound-call detail --task-id '" + strings.ReplaceAll(receipt.TaskID, "'", "'\\''") + "'",
+			NextCommand: "dws outbound-call detail --task-id " + taskIDArg,
 		}))
 	}
 	return output.Success(receipt.Data), nil

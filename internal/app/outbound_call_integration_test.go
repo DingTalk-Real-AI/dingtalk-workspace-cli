@@ -321,7 +321,7 @@ func TestCrossPlatformCoverageOutboundCallProfileBoundary(t *testing.T) {
 				t.Fatalf("single-profile call changed: outcome=%s args=%s", envelope.Outcome, runner.args)
 			}
 			if tc.verb == "create" {
-				const next = "dws outbound-call detail --task-id 'fixture-task' --profile corp_a:user-corp_a"
+				const next = "dws outbound-call detail --task-id fixture-task --profile corp_a:user-corp_a"
 				if envelope.Meta.Operation == nil || envelope.Meta.Operation.NextCommand != next {
 					t.Fatalf("query command lost the creation profile: %#v", envelope.Meta.Operation)
 				}
