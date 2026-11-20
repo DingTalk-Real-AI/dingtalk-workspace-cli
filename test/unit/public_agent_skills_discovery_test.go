@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -71,6 +72,10 @@ func TestPublicAgentSkillsCLIDiscoveryContract(t *testing.T) {
 		if parseErr != nil {
 			t.Errorf("%s: %v", relSlash, parseErr)
 			return nil
+		}
+		// Skill consumers limit descriptions by characters, not UTF-8 bytes.
+		if length := utf8.RuneCountInString(fm.Description); length > 1024 {
+			t.Errorf("%s: description is %d characters; maximum is 1024", relSlash, length)
 		}
 		found = append(found, foundSkill{
 			rel:      relSlash,

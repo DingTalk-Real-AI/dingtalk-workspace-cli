@@ -109,10 +109,10 @@ func TestWhiteboardSkillTopLevelDescriptionsPreserveContainerRouting(t *testing.
 
 	miscDescription := readDescription("../../skills/multi/dingtalk-misc/SKILL.md")
 	for _, required := range []string{
-		"独立白板（白板文件）",
-		"文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写",
-		"两类目标相互独立，不互相推断或切换",
-		"已有 nodeId 和 partId 的文档内嵌白板图形内容读写",
+		"独立白板创建/绘图/保存/修改",
+		"已有承载文档 nodeId 和 partId 的内嵌白板图形读写走 dws whiteboard",
+		"两类目标不得互推或切换",
+		"内嵌白板卡片容器不属本 skill",
 	} {
 		if !strings.Contains(miscDescription, required) {
 			t.Errorf("dingtalk-misc description missing embedded-content boundary %q", required)
