@@ -417,6 +417,13 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	if schemaContractString(interfaceRef["product_id"]) != "chat" || schemaContractString(interfaceRef["rpc_name"]) != "send_personal_message" {
 		t.Fatalf("reply interface = %#v", interfaceRef)
 	}
+	parameters, _ := reply["parameters"].(map[string]any)
+	atUsers, _ := parameters["at-users"].(map[string]any)
+	if schemaContractString(atUsers["property"]) != "atOpenDingTalkIds" ||
+		schemaContractString(atUsers["interface_type"]) != "array" ||
+		atUsers["required"] != false {
+		t.Fatalf("reply at-users parameter = %#v", atUsers)
+	}
 	if _, exists := snapshot.Tools["chat.upload_conversation_file"]; exists {
 		t.Fatal("downlined chat file upload must not be advertised in Schema")
 	}
