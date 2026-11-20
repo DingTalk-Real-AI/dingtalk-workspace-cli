@@ -18,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -76,6 +77,71 @@ func TestCrossPlatformCoverageOutboundCallSingleInput(t *testing.T) {
 }
 
 type outboundCallContextKey struct{}
+
+func TestCrossPlatformCoverageOutboundCallNextCommandPlatformQuoting(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	for _, platform := range []struct {
+		name  string
+		quote func(string) (string, bool)
+	}{
+		{"posix", driveLatestPosixScopeValue},
+		{"windows", driveLatestWindowsScopeValue},
+	} {
+		t.Run(platform.name, func(t *testing.T) {
+			testseam.Swap(t, &outboundCallQuoteScopeValue, platform.quote)
+			for _, tc := range []struct {
+				name, taskID, posix, windows string
+			}{
+				{"safe", "fixture-task", "fixture-task", "fixture-task"},
+				{"safe_punctuation", "task_1:2/3+4=5,@user", "task_1:2/3+4=5,@user", "task_1:2/3+4=5,@user"},
+				{"space", "task 1", "'task 1'", "TASK_ID"},
+				{"single_quote", "task'1", `'task'\''1'`, "TASK_ID"},
+				{"command_separator", "task&echo injected", "'task&echo injected'", "TASK_ID"},
+				{"variable", "%PATH%", "'%PATH%'", "TASK_ID"},
+				{"command_substitution", "$(echo injected)", "'$(echo injected)'", "TASK_ID"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					receipt, err := json.Marshal(map[string]any{"taskId": tc.taskID, "status": "accepted"})
+					if err != nil {
+						t.Fatal(err)
+					}
+					caller := &outboundCallCapture{text: string(receipt)}
+					root := outboundCallTestRoot(t, caller, "create", "--callee", "u", "--task", "p", "--opening", "g", "--yes")
+					root.PersistentFlags().String("profile", "corp:user", "profile")
+					leaf, err := corecmd.ExecuteCForTest(root)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var stream bytes.Buffer
+					leaf.SetOut(&stream)
+					code, emitted, err := output.EmitStoredResult(leaf)
+					if err != nil || code != 0 || !emitted || caller.count != 1 {
+						t.Fatalf("pending result: code=%d emitted=%v calls=%d err=%v", code, emitted, caller.count, err)
+					}
+					var env output.Envelope
+					if err := json.Unmarshal(stream.Bytes(), &env); err != nil {
+						t.Fatal(err)
+					}
+					if !env.OK || env.Outcome != output.OutcomePending || env.Meta == nil || env.Meta.Operation == nil || env.Meta.Operation.ID != tc.taskID || env.Meta.Operation.State != "accepted" {
+						t.Fatalf("task identity or pending state changed: %#v", env)
+					}
+					data, err := json.Marshal(env.Data)
+					if err != nil || !bytes.Equal(data, receipt) {
+						t.Fatalf("business receipt changed: %s, err=%v", data, err)
+					}
+					wantArg := tc.posix
+					if platform.name == "windows" {
+						wantArg = tc.windows
+					}
+					want := "dws outbound-call detail --task-id " + wantArg + " --profile corp:user"
+					if got := env.Meta.Operation.NextCommand; got != want {
+						t.Fatalf("next command = %q, want %q", got, want)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestCrossPlatformCoverageOutboundCallValidationAndConfirmation(t *testing.T) {
 	for _, args := range [][]string{
