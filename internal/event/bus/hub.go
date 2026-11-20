@@ -295,12 +295,18 @@ func (h *Hub) Unregister(id int) {
 // callers (Hub uses an RLock, Consumer drop-oldest is single-producer-safe
 // because the daemon serialises Deliver per event).
 func (h *Hub) Deliver(raw *dwsevent.RawEvent) {
+	h.deliver(raw)
+}
+
+// deliver also reports the routing snapshot without a second matcher pass.
+func (h *Hub) deliver(raw *dwsevent.RawEvent) (consumers, matches int) {
 	if raw == nil {
-		return
+		return 0, 0
 	}
 	h.counters.AddReceived(raw.EventType)
 
 	h.mu.RLock()
+	consumers = len(h.consumers)
 	matched := make([]*Consumer, 0, len(h.consumers))
 	for _, c := range h.consumers {
 		if c.matcher.matches(raw) {
@@ -312,6 +318,7 @@ func (h *Hub) Deliver(raw *dwsevent.RawEvent) {
 	for _, c := range matched {
 		c.deliver(raw, h.counters)
 	}
+	return consumers, len(matched)
 }
 
 // deliver builds the per-consumer Event frame (assigning seq) and pushes
