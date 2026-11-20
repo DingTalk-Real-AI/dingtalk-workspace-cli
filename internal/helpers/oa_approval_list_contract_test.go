@@ -4,10 +4,56 @@
 package helpers
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestCrossPlatformCoverageOAApprovalListFormsDocumentsPaginationFields(t *testing.T) {
+	root := newOaCommand()
+	leaf, _, err := root.Find([]string{"approval", "list-forms"})
+	if err != nil {
+		t.Fatalf("find list-forms: %v", err)
+	}
+	for _, want := range []string{"单页", "result.hasMore", "result.nextCursor"} {
+		if !strings.Contains(leaf.Long, want) {
+			t.Errorf("list-forms Long = %q, want %q", leaf.Long, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOAApprovalListFormsPreservesPaginationFields(t *testing.T) {
+	const response = `{"success":true,"result":{"processCodeList":[{"processCode":"PROC-1","processName":"报销","processIconUrl":"https://example.test/icon.png","dirName":"财务"}],"totalCount":101,"nextCursor":200,"hasMore":true},"errorCode":0,"errorMessage":""}`
+	caller := &scriptedToolCaller{
+		format: "json",
+		steps:  []scriptedToolStep{{text: response}},
+	}
+	stdout, err := executeOAAttachmentCommandCapturingOutput(t, caller,
+		"approval", "list-forms", "--cursor", "100", "--limit", "100", "--format", "json")
+	if err != nil {
+		t.Fatalf("execute list-forms: %v", err)
+	}
+	if caller.calls != 1 || caller.server != "oa" || caller.tool != "list_user_visible_process" {
+		t.Fatalf("call = %d %s/%s, want one oa/list_user_visible_process call", caller.calls, caller.server, caller.tool)
+	}
+	wantArgs := map[string]any{"cursor": float64(100), "pageSize": float64(100)}
+	if !reflect.DeepEqual(caller.args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", caller.args, wantArgs)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("decode stdout: %v; stdout=%q", err, stdout)
+	}
+	result, ok := payload["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v, want object", payload["result"])
+	}
+	if result["hasMore"] != true || result["nextCursor"] != float64(200) {
+		t.Fatalf("pagination fields = %#v", result)
+	}
+}
 
 func TestCrossPlatformCoverageOAApprovalListCommandsForwardCurrentMCPFilters(t *testing.T) {
 	commonArgs := []string{
