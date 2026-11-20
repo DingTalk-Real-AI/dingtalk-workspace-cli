@@ -4,13 +4,19 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -467,5 +473,116 @@ func TestAitableDatasourceCreateRejectsMissingBaseID(t *testing.T) {
 		"--source-config", `{"processCode":"P","name":"N","dataType":"recent_time","iconUrl":"u","url":"v"}`)
 	if err == nil || !strings.Contains(err.Error(), "base-id") {
 		t.Fatalf("error = %v, want base-id required", err)
+	}
+}
+
+// runAitablePluginCreate executes datasource plugin-create through the unified result store.
+func runAitablePluginCreate(t *testing.T, caller *aitableTestCaller, args ...string) (map[string]any, error) {
+	t.Helper()
+	InitDepsForTest(t, caller)
+	root := newAitableCommand()
+	installExampleGlobalFlags(root)
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	root.SetArgs(append(append([]string{"datasource", "plugin-create"}, args...), "--format=json"))
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return nil, err
+	}
+	code, emitted, err := output.EmitStoredResult(cmd)
+	if err != nil || !emitted || code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d emitted=%v err=%v stderr=%s", code, emitted, err, stderr)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("invalid envelope %q: %v", stdout, err)
+	}
+	return envelope, nil
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateSuccess(t *testing.T) {
+	data := map[string]any{"pluginType": "minutes", "baseId": "BASE", "tableId": "TBL", "flowId": "FLOW", "documentUrl": "https://example.test/doc"}
+	raw, _ := json.Marshal(map[string]any{"success": true, "data": data})
+	caller := &aitableTestCaller{responses: []string{string(raw)}}
+	envelope, err := runAitablePluginCreate(t, caller, "--base-id", "BASE", "--plugin-type", "minutes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "create_plugin_datasource" ||
+		!reflect.DeepEqual(caller.calls[0].args, map[string]any{"baseId": "BASE", "pluginType": "minutes"}) {
+		t.Fatalf("unexpected calls: %#v", caller.calls)
+	}
+	if envelope["ok"] != true || envelope["outcome"] != "success" || !reflect.DeepEqual(envelope["data"], data) {
+		t.Fatalf("bad envelope: %#v", envelope)
+	}
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateRejectsInvalidInputBeforeCall(t *testing.T) {
+	for name, args := range map[string][]string{
+		"missing plugin type": {"--base-id", "BASE"},
+		"missing base id":     {"--plugin-type", "minutes"},
+		"uppercase type":      {"--base-id", "BASE", "--plugin-type", "Minutes"},
+		"unsupported type":    {"--base-id", "BASE", "--plugin-type", "oa"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			_, err := runAitablePluginCreate(t, caller, args...)
+			if err == nil || apperrors.ExitCode(err) == 0 || len(caller.calls) != 0 {
+				t.Fatalf("err=%v exit=%d calls=%#v", err, apperrors.ExitCode(err), caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateDryRunSkipsCall(t *testing.T) {
+	caller := &aitableTestCaller{dryRun: true}
+	envelope, err := runAitablePluginCreate(t, caller, "--base-id", "BASE", "--plugin-type", "minutes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if len(caller.calls) != 0 || data["executed"] != false || data["tool"] != "create_plugin_datasource" {
+		t.Fatalf("dry-run executed or bad preview: calls=%#v envelope=%#v", caller.calls, envelope)
+	}
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateUnknownOutcome(t *testing.T) {
+	cases := map[string]*aitableTestCaller{
+		"missing tableId": {responses: []string{`{"success":true,"data":{"flowId":"FLOW"}}`}},
+		"missing flowId":  {responses: []string{`{"success":true,"data":{"tableId":"TBL"}}`}},
+		"missing data":    {responses: []string{`{"success":true}`}},
+		"transport error": {errors: []error{errors.New("connection reset")}},
+	}
+	for name, caller := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := runAitablePluginCreate(t, caller, "--base-id", "BASE", "--plugin-type", "minutes")
+			var structured *apperrors.Error
+			if !errors.As(err, &structured) || structured.Reason != "create_outcome_unknown" ||
+				structured.Retryable || !structured.RetryableSet ||
+				structured.ExecutionStarted == nil || !*structured.ExecutionStarted ||
+				!strings.Contains(structured.Hint, "table get") || len(caller.calls) != 1 {
+				t.Fatalf("unsafe unknown outcome: %#v / %v / calls=%d", structured, err, len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateKeepsDefiniteBusinessError(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{`{"success":false,"errorCode":"INVALID_BASE_ID","errorMsg":"base not found"}`}}
+	_, err := runAitablePluginCreate(t, caller, "--base-id", "BASE", "--plugin-type", "minutes")
+	var structured *apperrors.Error
+	if err == nil || (errors.As(err, &structured) && structured.Reason == "create_outcome_unknown") ||
+		!strings.Contains(err.Error(), "INVALID_BASE_ID") || len(caller.calls) != 1 {
+		t.Fatalf("definite business error rewritten: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageAitableDatasourcePluginCreateKeepsPreDispatchError(t *testing.T) {
+	original := apperrors.NewAPI("request not sent", apperrors.WithExecutionStarted(false))
+	got := aitableDatasourcePluginCreateCallError(map[string]any{"baseId": "BASE", "pluginType": "minutes"}, original)
+	if got != original {
+		t.Fatalf("pre-dispatch error rewritten: got %v, want %v", got, original)
 	}
 }

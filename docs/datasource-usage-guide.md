@@ -2,9 +2,9 @@
 
 ## 概述
 
-dws 新增了 7 个 AI 表格数据源同步管理指令，用于将外部数据源（一期支持审批数据）接入 AI 表格，实现数据的自动同步。
+dws 提供 8 个 AI 表格数据源同步管理指令，用于将外部数据源（审批数据、AI 听记插件）接入 AI 表格，实现数据的自动同步。
 
-所有指令均通过 `dws aitable +datasource-*` 前缀调用，操作对象是 AI 表格中的"数据源表"——一种由数据源同步创建的特殊数据表。
+除 `datasource plugin-create` 为原生命令外，其余指令均通过 `dws aitable +datasource-*` 前缀调用，操作对象是 AI 表格中的"数据源表"——一种由数据源同步创建的特殊数据表。
 
 ## 指令速览
 
@@ -17,6 +17,7 @@ dws 新增了 7 个 AI 表格数据源同步管理指令，用于将外部数据
 | `+datasource-sync` | 手动触发一次同步 | 写 | medium |
 | `+datasource-sync-status` | 查询同步任务状态 | 读 | low |
 | `+datasource-get-config` | 查看数据源表配置 | 读 | low |
+| `datasource plugin-create` | 创建 AI 听记插件数据源表并触发首次同步 | 写 | medium |
 
 ## 前置条件
 
@@ -316,6 +317,39 @@ dws aitable +datasource-get-config \
   --base-id BASE123 \
   --table-id TBL456
 ```
+
+---
+
+## 8. 创建插件数据源表（AI 听记）
+
+```
+dws aitable datasource plugin-create [flags]
+```
+
+在指定 Base 中创建插件数据源表，保存并发布同步流程后触发一次手动同步。该指令为原生命令，没有 `+` 前缀的快捷方式。
+
+### 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `--base-id` | string | 是 | 目标 Base ID |
+| `--plugin-type` | string | 是 | 插件类型，目前仅支持 `minutes`（AI 听记），区分大小写 |
+
+### 示例
+
+```bash
+dws aitable datasource plugin-create \
+  --base-id BASE123 \
+  --plugin-type minutes
+```
+
+### 返回值
+
+返回 `pluginType`、`baseId`、`tableId`、`flowId`、`documentUrl`。成功仅表示已触发首次同步，不代表同步已完成；不返回 taskId，不能用 `+datasource-sync-status` 查询。
+
+### 注意事项
+
+该指令非幂等。超时或结果不明时报 `create_outcome_unknown` 且不可重试，应先用 `dws aitable table get` 只读核对 Base 中是否已出现新表，确认不存在后再决定是否重新创建。
 
 ---
 
