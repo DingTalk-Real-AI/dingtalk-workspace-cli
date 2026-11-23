@@ -14,6 +14,7 @@ import (
 // get_user_org_list 不接入 CLI；不要求 MCP 平台工具目录与此清单完全相等。
 var sportAllTools = map[string]string{
 	"get_org_step_participate_status":  "sport org status",
+	"is_org_admin":                     "sport org admin",
 	"list_emp_step_ranking":            "sport step emp-ranking",
 	"list_dept_step_ranking":           "sport step dept-ranking",
 	"list_emp_ranking_in_dept":         "sport step dept-emp-ranking",

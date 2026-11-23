@@ -99,6 +99,75 @@ func TestSportCallResultWithoutCallerFails(t *testing.T) {
 	}
 }
 
+func TestSportOrgAdminResults(t *testing.T) {
+	for _, tc := range []struct {
+		name, text string
+		want       any
+	}{
+		{"管理员", `{"success":true,"result":true,"errorCode":null,"errorMsg":null}`, true},
+		{"非管理员", `{"success":true,"result":false,"errorCode":null,"errorMsg":null}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sportFakeCaller{text: tc.text, blocks: 1}
+			InitDepsForTest(t, fake)
+			envelope, err := runSportCommandOutput(t, "org", "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/is_org_admin" {
+				t.Fatalf("应调用 is_org_admin：%v", fake.calls)
+			}
+			if !reflect.DeepEqual(fake.arguments[0], map[string]any{}) {
+				t.Fatalf("无业务入参工具应发送空对象：%v", fake.arguments[0])
+			}
+			data, _ := envelope["data"].(map[string]any)
+			if data["result"] != tc.want || envelope["outcome"] != "success" {
+				t.Fatalf("三态结果错误：%v", envelope)
+			}
+		})
+	}
+
+	t.Run("组织服务不可用不得当作非管理员", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":false,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		// success=false 由统一通道按业务错误体分类，携带 errorMsg 作为 API 错误返回，不会产出 result=false 的结果。
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "组织管理员服务查询不可用") {
+			t.Fatalf("success=false 应作为组织服务不可用错误返回：%v", err)
+		}
+	})
+
+	t.Run("缺 success 视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"result":false}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "不能当作非管理员") {
+			t.Fatalf("缺 success 应报组织服务不可用而非 false：%v", err)
+		}
+	})
+
+	t.Run("result 非布尔视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":true,"result":"yes"}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "缺少布尔 result") {
+			t.Fatalf("result 类型不符应报错：%v", err)
+		}
+	})
+
+	t.Run("dry-run 不调用 MCP", func(t *testing.T) {
+		fake := &sportFakeCaller{dryRun: true, err: errors.New("预览不得调用 MCP")}
+		InitDepsForTest(t, fake)
+		envelope, err := runSportCommandOutput(t, "org", "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if envelope["dry_run"] != true || len(fake.calls) != 0 {
+			t.Fatalf("预览不得调用工具：%v", envelope)
+		}
+	})
+}
+
 func TestSportCallerDryRunSkipsToolCall(t *testing.T) {
 	fake := &sportFakeCaller{dryRun: true, err: errors.New("预览不得调用 MCP")}
 	InitDepsForTest(t, fake)
@@ -211,6 +280,37 @@ func TestSportCreateRejectsTargetBeyondActualPeriod(t *testing.T) {
 	}
 }
 
+func TestSportCreateAcceptsOpenConversationIdOnly(t *testing.T) {
+	fake := &sportFakeCaller{text: `{"ruleCode":"R1","status":1}`, blocks: 1}
+	InitDepsForTest(t, fake)
+	err := runSportCommand(t, "competition", "create",
+		"--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK",
+		"--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130",
+		"--goal-value", "8000", "--target-day-value", "18",
+		"--open-conversation-id", "cidXXXXXXXX==",
+		"--need-signup", "false", "--allow-free-join", "false",
+		"--cover-image-url", "https://gw.alicdn.com/cover.png", "--yes")
+	if err != nil {
+		t.Fatalf("仅凭加密会话 id 创建不应报错: %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/create_competition" {
+		t.Fatalf("create 应调用 create_competition: %v", fake.calls)
+	}
+	want := map[string]any{
+		"userId": "0123456789",
+		"CompetitionCreateMcpRequest": map[string]any{
+			"competitionName": "走路挑战赛", "sportType": "WALK", "competitionType": "FIXED",
+			"firstPeriodStartDate": "20261111", "firstPeriodEndDate": "20261130",
+			"goalValue": "8000", "targetDayValue": "18",
+			"needSignup": "false", "allowFreeJoin": "false", "coverImageUrl": "https://gw.alicdn.com/cover.png",
+			"openConversationId": "cidXXXXXXXX==",
+		},
+	}
+	if !reflect.DeepEqual(fake.arguments[0], want) {
+		t.Fatalf("仅会话 id 时应只发 openConversationId，不发 groupId：got=%v want=%v", fake.arguments[0], want)
+	}
+}
+
 const sportUpdateFixture = `{"ruleCode":"RULE123","competitionName":"步行挑战","coverImageUrl":"https://example.com/cover.png","competitionType":"FIXED","firstPeriodStartDate":"20261201","firstPeriodEndDate":"20261231","periodType":null,"cycleCount":null,"goalValue":6000,"targetDayValue":20,"dailyLimit":null,"extra":null}`
 
 func TestSportNewToolsArgumentsAndConfirmation(t *testing.T) {
@@ -278,6 +378,8 @@ func TestSportNewToolsValidation(t *testing.T) {
 	cases := [][]string{
 		{"competition", "invite", "--rule-code", "RULE123"},
 		{"competition", "invite", "--rule-code", "RULE123", "--receiver-user-id", "  "},
+		{"competition", "create", "--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK", "--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130", "--goal-value", "8000", "--target-day-value", "18", "--need-signup", "false", "--allow-free-join", "false", "--cover-image-url", "https://gw.alicdn.com/cover.png"},
+		{"competition", "create", "--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK", "--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130", "--goal-value", "8000", "--target-day-value", "18", "--open-conversation-id", "  ", "--need-signup", "false", "--allow-free-join", "false", "--cover-image-url", "https://gw.alicdn.com/cover.png"},
 		{"competition", "audit", "--rule-code", "RULE123"},
 		{"competition", "audit", "--rule-code", "RULE123", "--approved=maybe"},
 		{"competition", "export", "--competition-code", "COMP456", "--export-scope", "STAFF"},

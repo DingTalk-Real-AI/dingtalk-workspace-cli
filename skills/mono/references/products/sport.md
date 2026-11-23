@@ -4,7 +4,7 @@
 
 ## 能力范围与前置条件
 
-覆盖企业钉钉运动步数榜查询与运动比赛（挑战赛）管理：开通状态、企业/部门/员工步数排行与多日明细、企业比赛列表、比赛创建与期次查询、我的比赛/参与记录/个人达标、比赛 TopN 与全员排行榜、编辑/删除/审批/邀请、开赛群播报、报名/参与/达标/趋势统计、比赛数据与历史步数报表导出。CLI 共接入 37 个工具，不接入 `get_user_org_list`。
+覆盖企业钉钉运动步数榜查询与运动比赛（挑战赛）管理：开通状态、企业/部门/员工步数排行与多日明细、企业比赛列表、比赛创建与期次查询、我的比赛/参与记录/个人达标、比赛 TopN 与全员排行榜、编辑/删除/审批/邀请、开赛群播报、报名/参与/达标/趋势统计、比赛数据与历史步数报表导出。CLI 共接入 38 个工具，不接入 `get_user_org_list`。
 
 前置条件：企业已在钉钉客户端开通运动步数榜；比赛功能需要企业已开通运动健康服务。调用身份为当前登录用户所属企业。
 
@@ -13,7 +13,7 @@ Use when：用户要查企业步数榜开通状态、企业步数概况与总步
 Avoid when：
 
 - 个人健康数据（非企业步数榜）或钉钉运动客户端内设置，不在本能力范围。
-- 群创建、群成员管理、普通群消息发送走 `dws chat`；比赛绑定群必须已存在，`--group-id` 从 `dws chat` 真实返回获取，禁止猜测。
+- 群创建、群成员管理、普通群消息发送走 `dws chat`；比赛绑定群必须已存在。数字群 id（groupId）优先从 `competition list` / `config` / `my-list` 真实返回的 `groupId`+`groupName` 获取，禁止猜测；`dws chat` 只返回加密会话 id（openConversationId 体系），不能当数字群 id 用，只有加密会话 id 时用 `--open-conversation-id`。
 - 找人获取 `--user-id` 对应的员工时走 `dws aisearch` / `dws contact`，用真实 staffId。
 - 普通通知、OA 审批走各自产品；本能力的审批仅指运动比赛审批，不是 OA 审批。
 
@@ -22,6 +22,7 @@ Avoid when：
 | 用户意图 | 命令族 |
 |---|---|
 | 查步数榜是否开通 | `dws sport org status` |
+| 判断当前用户是否企业管理员（受限操作前预判） | `dws sport org admin` |
 | 企业步数概况、区间总步数 | `dws sport step org-info` / `dws sport step org-total` |
 | 员工/部门/部门内员工步数排行 | `dws sport step emp-ranking` / `dept-ranking` / `dept-emp-ranking` |
 | 某员工/某部门多日步数明细 | `dws sport step emp-info` / `emp-infos` / `dept-infos` |
@@ -49,14 +50,16 @@ Avoid when：
 8. 新增 invite/update/delete/audit/export/export-task 和 step export 不接受操作人 `--user-id` 或 `--corp-id`，身份由平台注入；邀请中的 `--receiver-user-id` 与导出的 `--staff-ids` 是业务工号，须保持字符串及前导零。旧 create/rule-detail/announce 仍按各自 Schema 提供原有参数。
 9. 所有写操作先确认。`invite` 的 `--receiver-user-id` 与 `--target-group-id` 至少一个，可同时传；无幂等，成功不保证送达，待审批比赛可能改发群主审批提醒。
 10. 新增的 list/rank-top/ranking/my-*/activity-detail 均为只读，不需 `--yes`；企业与“我”的身份由平台注入，不接受 `--user-id`/`--corp-id`，也不能查询他人的个人视角数据。空列表、0、`rankNo=-1` 都是正常结果，不要当失败重试。
+11. `org admin` 只读无入参，身份平台注入：result=true=管理员，result=false=确认非管理员；调用失败（success=false，组织服务查询不可用）时命令返回错误而不是 false，绝不能把失败当非管理员回复，应提示用户稍后重试。可在导出/删除/审批等受限操作前预判并提前话术分流；预判与执行之间有权限变化窗口，受限工具仍会服务端复查，结论以受限工具为准。
 
 ## 比赛创建约束（CLI 本地校验）
 
-- 当前仅支持 `--competition-type FIXED`（固定不循环）。RECURRING 因服务端 Schema 将 `groupId`、`firstPeriodEndDate` 列为无条件必填而工具描述仍称循环模式可省结束日期，契约冲突期间 CLI 侧直接阻断，不要用空值或猜测日期绕过。
+- 当前仅支持 `--competition-type FIXED`（固定不循环），RECURRING 创建在 CLI 侧直接阻断，不要用空值或猜测日期绕过。
+- 绑定群用 `--group-id`（数字群 cid）与 `--open-conversation-id`（`cid...==` 加密会话 id）至少一个，也可同时传（都传时服务端以群 id 为准）；只传会话 id 时服务端换取数字 cid 补到 groupId。
 - `--start-date` / `--end-date` 必须是真实日期（含闰年校验）；结束不得早于开始。
 - `--target-day-value` 不得超过单期实际天数。
 - `--daily-limit`（可选）必须 ≥ `--goal-value`。
-- `--cover-image-url` 优先使用官方默认头图；`--group-id` 群必须属于当前企业。
+- `--cover-image-url` 优先使用官方默认头图；绑定群必须属于当前企业，群标识二选一见上。
 
 ## 标准流程
 
@@ -69,7 +72,7 @@ Avoid when：
 
 ### 创建挑战赛
 
-1. 从 `dws chat` 拿真实群会话 `--group-id`，与用户确认比赛名称、类型（WALK 走路=步 / RUN 跑步=米 / COMPREHENSIVE 综合=千卡）、起止日期、每日目标与达标天数。
+1. 拿真实群标识：数字群 id 从 `competition list`/`config`/`my-list` 返回的 `groupId` 获取；只有加密会话 id（`cid...==`）时改用 `--open-conversation-id`。与用户确认比赛名称、类型（WALK 走路=步 / RUN 跑步=米 / COMPREHENSIVE 综合=千卡）、起止日期、每日目标与达标天数。
 2. 向用户逐项确认全部参数，确认后执行 `sport competition create ... --yes`。
 3. 保存返回的 `ruleCode`；`status=1` 表示已生效（群主/管理员创建），`0` 表示待群主审批（普通成员创建），据实告知。
 4. 用 `sport competition config --rule-code <ruleCode>` 回读验证。
@@ -113,6 +116,7 @@ Avoid when：
 | 命令 | 必填参数 | 用途 |
 |---|---|---|
 | `dws sport org status` | 无 | 查询当前企业是否开通步数榜 |
+| `dws sport org admin` | 无 | 判断当前用户是否企业管理员（失败不等于非管理员） |
 | `dws sport step org-info` | `--stat-date` | 企业当日步数概况（人数、总步数） |
 | `dws sport step org-total` | `--begin-date`, `--end-date` | 企业区间总步数 |
 | `dws sport step emp-ranking` | `--stat-date`, `--stat-type` | 员工步数排行（D/W/M），cursor 分页 |
@@ -121,7 +125,7 @@ Avoid when：
 | `dws sport step emp-info` | `--user-id`, `--stat-date` | 单员工单日步数扩展信息 |
 | `dws sport step emp-infos` | `--user-id`, `--stat-dates` | 单员工多日（1~30 天）步数明细 |
 | `dws sport step dept-infos` | `--dept-id`, `--stat-dates` | 部门多日（1~30 天）步数明细 |
-| `dws sport competition create` | `--user-id`, `--name`, `--sport-type`, `--competition-type`, `--start-date`, `--end-date`, `--goal-value`, `--target-day-value`, `--group-id`, `--need-signup`, `--allow-free-join`, `--cover-image-url` | 创建 FIXED 比赛（写操作，需 `--yes`） |
+| `dws sport competition create` | `--user-id`, `--name`, `--sport-type`, `--competition-type`, `--start-date`, `--end-date`, `--goal-value`, `--target-day-value`, `--group-id`/`--open-conversation-id` 至少一个, `--need-signup`, `--allow-free-join`, `--cover-image-url` | 创建 FIXED 比赛（写操作，需 `--yes`） |
 | `dws sport competition list` | 无（`--cursor` 首页0，`--size` 1~100） | 企业启用中的比赛配置分页 |
 | `dws sport competition my-list` | 无（`--list-scope` 缺省 JOINED，`--size` 1~50） | 我的比赛规则分页 |
 | `dws sport competition my-can-join-count` | 无 | 我可参与的比赛数 |
@@ -166,6 +170,7 @@ Avoid when：
 | CLI 命令 | MCP 工具 |
 |---|---|
 | `org status` | `get_org_step_participate_status` |
+| `org admin` | `is_org_admin` |
 | `step org-info` / `step org-total` | `get_org_health_step_info` / `get_org_total_step_count` |
 | `step emp-ranking` / `dept-ranking` / `dept-emp-ranking` | `list_emp_step_ranking` / `list_dept_step_ranking` / `list_emp_ranking_in_dept` |
 | `step emp-info` / `emp-infos` / `dept-infos` | `get_emp_step_ext_info` / `get_emp_step_infos` / `get_dept_step_infos_by_dept_id` |

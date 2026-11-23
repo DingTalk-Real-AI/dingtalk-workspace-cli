@@ -169,6 +169,10 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 	}
 	body, err := sportDecodeObject(text)
 	if err != nil || body["success"] != true {
+		if tool == "is_org_admin" {
+			// 三态语义：success=false 表示组织服务查询不可用，绝不能当作非管理员。
+			return nil, apperrors.NewAPI("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=" + fmt.Sprint(body["errorCode"]) + "）：不能当作非管理员，请稍后重试")
+		}
 		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult 或缺少 success=true，不能把异常当成空结果")
 	}
 	if paged {
@@ -192,6 +196,10 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 		return output.Success(body, output.WithMeta(&output.Meta{Count: output.NewCount(len(items)), Pagination: &output.Pagination{EndpointExhausted: !more, NextToken: next, Pages: 1, Items: len(items)}})), nil
 	}
 	switch tool {
+	case "is_org_admin":
+		if _, ok := body["result"].(bool); !ok {
+			return nil, apperrors.NewAPI(tool + " 缺少布尔 result 判定，不能当作非管理员")
+		}
 	case "get_competition_rank_top_n":
 		if _, ok := body["result"].([]any); !ok {
 			return nil, apperrors.NewAPI(tool + " 缺少 result 数组")
@@ -319,3 +327,17 @@ const sportRankingRowSchema = `{"type":"object","description":"全员排行榜�
 "nickName":{"type":"string","description":"用户昵称"},"avatar":{"type":"string","description":"头像 URL"},
 "cumulativeValue":{"type":"string","description":"累计运动值字符串，步数/米/卡路里"},
 "achievedDays":{"type":"number","description":"达标天数"},"rank":{"type":"number","description":"排名"}}}`
+
+const sportOrgAdminResultSchema = `{"type":"boolean","description":"是否企业管理员：true=管理员（企业主/子管理员）；false=确认非管理员；success=false 时本命令返回错误而非 false"}`
+
+// newSportOrgAdminCmd 判断当前用户是否企业管理员。无业务入参，操作人与企业由平台注入，不接受 user-id/corp-id；供受限操作前权限预判与话术分流。
+func newSportOrgAdminCmd() *cobra.Command {
+	const example = "dws sport org admin --format json"
+	return NewLeafCommand(LeafSpec{
+		Use: "admin", Short: "判断当前用户是否企业管理员",
+		Long:    "判断当前用户是否企业管理员（企业主与子管理员均算管理员），只读无副作用，不受灰度。三态语义：result=true=管理员；result=false=确认非管理员；调用失败（success=false，如 QW_ADMIN_CHECK_FAILED 组织服务查询不可用）时本命令返回错误而不是 false，绝不能当作非管理员处理，应提示用户稍后重试。典型用途是在导出、删除、审批等受限操作前预判权限并提前话术分流：非管理员时告知用户需联系企业管理员，避免直接调用受限工具拿失败码；预判与执行之间存在权限变化窗口，受限工具仍会服务端复查，两者结论以受限工具为准。",
+		Example: example, OutputRollout: output.RolloutUnifiedActive, Server: sportServerID, Tool: "is_org_admin",
+		ResultCall: sportReadServiceCallResult, Safety: sportReadLeaf(),
+		Contract: sportServiceContract("is_org_admin", "sport org admin", "org", "判断当前用户是否企业管理员（预发与生产口径一致）", "把调用失败当非管理员；判定结果不能代替受限工具的服务端权限复查", example, sportOrgAdminResultSchema),
+	})
+}
