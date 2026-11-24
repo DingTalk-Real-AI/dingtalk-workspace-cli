@@ -1,0 +1,936 @@
+[
+  {
+    "name": "legacy_placeholder",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "type": "bar"
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": false,
+    "existingValid": true,
+    "status": "invalid",
+    "checked": 0
+  },
+  {
+    "name": "chart_control",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "non_chart_append_control",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Plain card"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/rows/-",
+          "value": 3
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "not_applicable",
+    "checked": 0
+  },
+  {
+    "name": "append_dash",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/rows/-",
+          "value": 3
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "append_equal_length",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/rows/2",
+          "value": 3
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "append_chart_series",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/chart/series/1",
+          "value": {
+            "type": "bar",
+            "data": [
+              3,
+              4
+            ]
+          }
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "relative_chart_in_loop",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat-loop",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": [
+              {
+                "chart": {
+                  "type": "histogram",
+                  "data": [
+                    {
+                      "x": "A",
+                      "y": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "itemChart",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "itemChart",
+              "component": "Chart",
+              "data": {
+                "path": "chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "unverified",
+    "checked": 0
+  },
+  {
+    "name": "relative_chart_in_empty_loop",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat-loop",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "rows": []
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "itemChart",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "itemChart",
+              "component": "Chart",
+              "data": {
+                "path": "chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "unverified",
+    "checked": 0
+  },
+  {
+    "name": "unused_chart_template",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat-unused",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {},
+          "components": [
+            {
+              "id": "root",
+              "component": "Text",
+              "text": "Hello"
+            },
+            {
+              "id": "unusedChart",
+              "component": "Chart",
+              "data": {
+                "path": "/missing"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "unverified",
+    "checked": 0
+  },
+  {
+    "name": "inline_null_path",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "xAxis": {
+                  "type": "category",
+                  "data": [
+                    "A",
+                    "B"
+                  ]
+                },
+                "yAxis": {
+                  "type": "value"
+                },
+                "series": [
+                  {
+                    "type": "bar",
+                    "data": [
+                      2,
+                      3
+                    ]
+                  }
+                ],
+                "path": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "inline_nonbinding_path",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "xAxis": {
+                  "type": "category",
+                  "data": [
+                    "A",
+                    "B"
+                  ]
+                },
+                "yAxis": {
+                  "type": "value"
+                },
+                "series": [
+                  {
+                    "type": "bar",
+                    "data": [
+                      2,
+                      3
+                    ]
+                  }
+                ],
+                "path": "/missing"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "valid",
+    "checked": 1
+  },
+  {
+    "name": "strict_missing_binding",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/missing"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": false,
+    "existingValid": true,
+    "status": "invalid",
+    "checked": 0
+  },
+  {
+    "name": "missing_root_stays_error_in_existing_mode",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "other",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": false,
+    "existingValid": false,
+    "status": "unverified",
+    "checked": 0
+  },
+  {
+    "name": "append_gap_is_error",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/rows/4",
+          "value": 3
+        }
+      }
+    ],
+    "strictValid": false,
+    "existingValid": true,
+    "status": "invalid",
+    "checked": 1
+  },
+  {
+    "name": "append_leading_zero_is_error",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "version": "v1.0",
+        "updateDataModel": {
+          "surfaceId": "compat",
+          "path": "/rows/02",
+          "value": 3
+        }
+      }
+    ],
+    "strictValid": false,
+    "existingValid": true,
+    "status": "invalid",
+    "checked": 1
+  },
+  {
+    "name": "nested_template_chart_is_unverified",
+    "messages": [
+      {
+        "version": "v1.0",
+        "createSurface": {
+          "surfaceId": "compat",
+          "catalogId": "https://dingtalk.com/card/a2ui/catalogs/public/catalog.json",
+          "dataModel": {
+            "chart": {
+              "xAxis": {
+                "type": "category",
+                "data": [
+                  "A",
+                  "B"
+                ]
+              },
+              "yAxis": {
+                "type": "value"
+              },
+              "series": [
+                {
+                  "type": "bar",
+                  "data": [
+                    2,
+                    3
+                  ]
+                }
+              ]
+            },
+            "rows": [
+              1,
+              2
+            ]
+          },
+          "components": [
+            {
+              "id": "root",
+              "component": "Loop",
+              "children": {
+                "componentId": "wrapper",
+                "path": "/rows"
+              }
+            },
+            {
+              "id": "wrapper",
+              "component": "Column",
+              "children": [
+                "chart"
+              ]
+            },
+            {
+              "id": "chart",
+              "component": "Chart",
+              "data": {
+                "path": "/chart"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "strictValid": true,
+    "existingValid": true,
+    "status": "unverified",
+    "checked": 0
+  }
+]

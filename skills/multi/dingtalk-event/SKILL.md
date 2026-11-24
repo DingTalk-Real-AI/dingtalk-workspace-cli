@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、和事件Schema 查询、实时消费。命令前缀：dws event。
+description: 企业自建应用三方事件发送（dws event send），以及钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、和事件Schema 查询、实时消费。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -40,6 +40,7 @@ metadata:
 | 互动卡片回调 | [卡片参考](references/event-card.md) |
 | 听记创建/纪要生成 | <!-- dws-intent: event.listen.minutes -->`dws event consume`，见 [听记参考](references/event-minutes.md) |
 | 应用事件发现 → 事件 Schema → 消费 | [event-app.md](references/event-app.md)：`event list --category appEvent`、`event schema`、`event consume` |
+| 企业自建应用上报三方事件 | `dws event send`，见 [发送参考](references/event-send.md) |
 | 查看事件目录 | `dws event list --category <分类>` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
 | 查看状态 / 停止 | `dws event status` / `dws event stop <subscribe_id> --dry-run`，确认后再 `--yes` |
@@ -62,6 +63,7 @@ OA/好友/听记各 EventKey 使用 `ruleType=all`、空 `filterRule`，不接�
 
 ## 运行与结果契约
 
+- `event send` 回执在 `data`；`ACCEPTED`/`DUPLICATE` 表示事件已接纳，实际收件由订阅端核验。
 - 正常消费使用当前用户 OAuth、`--flatten` 和 NDJSON；stdout 仅事件，stderr 为生命周期状态。
 - 单事件 ready：`[event] ready event_key=<key> bus_pid=<pid> subscribe_id=<id>`。
 - 多事件先逐条输出 subscription，全部就绪后输出 `[event] ready event_count=<n> bus_pid=<pid>`；等 ready，不用 `sleep` 猜测。
@@ -73,7 +75,7 @@ OA/好友/听记各 EventKey 使用 `ruleType=all`、空 `filterRule`，不接�
 
 ## 安全与失败处理
 
-开源 normal 获取缺失 AppKey，无需 AppSecret；custom／定制版除外。[排障](references/event-im-operations.md)。
+个人监听的开源 normal 获取缺失 AppKey，无需 AppSecret；custom／定制版除外。[排障](references/event-im-operations.md)。
 
 - `event stop` 取消订阅并影响本地 consumer：先 `--dry-run`，确认后 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
@@ -97,15 +99,8 @@ OA/好友/听记各 EventKey 使用 `ruleType=all`、空 `filterRule`，不接�
 
 | 何时读取 | Reference |
 |---|---|
-| 应用事件发现、事件 Schema、版本与安全 | [event-app.md](references/event-app.md) |
 | 任务索引 | [event-im.md](references/event-im.md) |
 | EventKey、目标规则与底层 consume | [event-im-keys.md](references/event-im-keys.md) |
 | ready、bounded consume 与退出清理 | [event-im-lifecycle.md](references/event-im-lifecycle.md) |
 | 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) |
 | Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) |
-| OA 审批事件 | [event-oa.md](references/event-oa.md) |
-| VoIP 通话邀请 | [event-voip.md](references/event-voip.md) |
-| Todo 待办事件 | [event-todo.md](references/event-todo.md) |
-| 好友事件 | [event-contact.md](references/event-contact.md) |
-| 互动卡片回调事件 | [event-card.md](references/event-card.md) |
-| 日历创建/修改/取消、过滤与去重 | [event-calendar.md](references/event-calendar.md) |

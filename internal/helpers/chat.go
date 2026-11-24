@@ -7616,6 +7616,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if cmd.Flags().Changed("a2ui-annotations") {
 				toolArgs["a2uiAnnotations"] = annotations
 			}
+			if cmd.Flags().Changed("reference-open-message-id") {
+				referenceOpenMessageID := strings.TrimSpace(mustGetFlag(cmd, "reference-open-message-id"))
+				if referenceOpenMessageID == "" {
+					return apperrors.NewValidation("--reference-open-message-id must not be blank")
+				}
+				toolArgs["replyTo"] = map[string]any{"referenceOpenMessageId": referenceOpenMessageID}
+			}
 			if cmd.Flags().Changed("extension") {
 				toolArgs["extension"] = extension
 			}
@@ -7664,6 +7671,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				{Name: "summary", Property: "summary", Required: boolPtr(false), InterfaceType: "string", Description: "卡片无法渲染时的降级文案；省略时为“互动卡片”，显式空白会被拒绝"},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId", Required: boolPtr(false)},
+				{Name: "reference-open-message-id", Property: "replyTo.referenceOpenMessageId", Required: boolPtr(false), InterfaceType: "string", Description: "被回复消息的加密 openMessageId（可选）"},
 				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
 			},
@@ -7672,6 +7680,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageSendA2UICardCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填，与 --open-dingtalk-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
+	chatMessageSendA2UICardCmd.Flags().String("reference-open-message-id", "", "被回复消息的加密 openMessageId（可选，传入后卡片作为该消息的回复）")
 	chatMessageSendA2UICardCmd.Flags().String("extension", "", "AICard 消息扩展 JSON 对象，key 非空白且 value 必须为字符串；业务 key 由服务端白名单控制（可选，支持 {}）")
 	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", true, "允许转发 A2UI 卡片（默认允许；--support-forward=false 禁止转发）")
 	chatMessageSendA2UICardCmd.Flags().StringSlice("at-open-dingtalk-ids", nil, "@ 的成员 openDingTalkId（仅群聊；检查静态 Markdown 与同批绑定值，合法绑定可延后填充；透传 atOpenDingTalkIds，声明总数含重复不超过 100）")
@@ -10357,19 +10366,28 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 
 	// ── group audit-join-validation: 审批入群验证 ─────────────────────────
 
+	// AuditApplying 表示待处理状态，不作为审批操作开放。
+	auditJoinGroupActions := map[string]bool{
+		"AuditApprove": true,
+		"AuditDelete":  true,
+		"AuditIgnore":  true,
+		"AuditRefuse":  true,
+		"AuditBlock":   true,
+	}
+
 	chatGroupAuditJoinValidationCmd := &cobra.Command{
 		Use:   "audit-join-validation",
-		Short: "审批入群验证（通过、拒绝、删除）",
-		Long: `审批入群验证。真机实测服务端仅接受 AuditApprove / AuditDelete，其余状态会被拒绝（unsupported audit status）。
-
+		Short: "审批入群验证（通过、删除、忽略、拒绝、拉黑）",
+		Long: `审批入群验证，支持五种审批操作。
 status 可选值:
-  AuditApprove — 通过（可用）
-  AuditDelete  — 删除（可用）
-  AuditIgnore  — 忽略（服务端拒绝，不可用）
-  AuditRefuse  — 拒绝（服务端拒绝，不可用）
-  AuditBlock   — 拒绝且不再接受该用户的申请（服务端拒绝，不可用）`,
+  AuditApprove — 通过
+  AuditDelete  — 删除
+  AuditIgnore  — 忽略
+  AuditRefuse  — 拒绝
+  AuditBlock   — 拒绝且不再接受该用户的申请
+AuditApplying 是记录的待处理状态，不是审批操作；未知值会被客户端拒绝。`,
 		Example: `  dws chat group audit-join-validation --conversation-id <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditApprove
-  dws chat group audit-join-validation --conversation-id <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditDelete --description "不符合入群条件"
+  dws chat group audit-join-validation --conversation-id <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditRefuse --description "不符合入群条件"
   # 查询入群验证记录: dws chat group list-join-validations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group"); err != nil {
@@ -10383,8 +10401,8 @@ status 可选值:
 				return fmt.Errorf("--record-id must be a valid integer: %w", err)
 			}
 			status := mustGetFlag(cmd, "status")
-			if status != "AuditApprove" && status != "AuditDelete" {
-				return fmt.Errorf("unsupported audit status %q, must be one of: AuditApprove, AuditDelete", status)
+			if !auditJoinGroupActions[status] {
+				return fmt.Errorf("unsupported audit status %q, must be one of: AuditApprove, AuditDelete, AuditIgnore, AuditRefuse, AuditBlock; AuditApplying is a pending record status, not an audit action", status)
 			}
 			toolArgs := map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group"),
@@ -10408,7 +10426,7 @@ status 可选值:
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("conversation-id")
 	chatGroupAuditJoinValidationCmd.Flags().String("record-id", "", "申请记录 ID (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("record-id")
-	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作，真机仅 AuditApprove/AuditDelete 可用；AuditIgnore/AuditRefuse/AuditBlock 服务端拒绝 (必填)")
+	chatGroupAuditJoinValidationCmd.Flags().String("status", "", "审批动作: AuditApprove(通过) / AuditDelete(删除) / AuditIgnore(忽略) / AuditRefuse(拒绝) / AuditBlock(拒绝且拉黑) (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("status")
 	chatGroupAuditJoinValidationCmd.Flags().String("applicant", "", "申请人 userId (必填)")
 	_ = chatGroupAuditJoinValidationCmd.MarkFlagRequired("applicant")
@@ -10446,7 +10464,7 @@ status 可选值:
 				{Name: "description", Property: "auditDescription", Required: boolPtr(false)},
 				{Name: "inviter", Property: "inviterUid", Required: boolPtr(true)},
 				{Name: "record-id", Property: "applyRecordId", Required: boolPtr(true), InterfaceType: "integer"},
-				{Name: "status", Property: "status", Required: boolPtr(true), Enum: []string{"AuditApprove", "AuditDelete"}},
+				{Name: "status", Property: "status", Required: boolPtr(true), Enum: []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"}},
 			},
 		},
 	})

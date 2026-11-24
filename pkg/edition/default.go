@@ -56,6 +56,11 @@ func openSupplementServers() []ServerInfo {
 			Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44",
 		},
 		{
+			ID:       "conference",
+			Name:     "钉钉视频会议",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/8bdad53455a0f4fe88bda77ecca5147d12d1bdef1cf6aa8ed41e01d8111d5d9b",
+		},
+		{
 			ID:       "mind",
 			Name:     "钉钉脑图",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/mind",
@@ -85,6 +90,12 @@ func openSupplementServers() []ServerInfo {
 			Name:     "企业运动健康",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/8dfdd41a0171a9e8b6575b0dee9b69960412c36675f2a891e63ddac63be08157",
 			Prefixes: []string{"sport"},
+		},
+		{
+			ID:       "outbound-call",
+			Name:     "AI 语音外呼",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/1b382233a46b7208b9adeb2396bcaac5ffc344b97502f11dea0a3eaa13853e5f",
+			Prefixes: []string{"outbound-call"},
 		},
 	}
 }

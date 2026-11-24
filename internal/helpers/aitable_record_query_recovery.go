@@ -17,7 +17,7 @@ const (
 	nonResumableCursorHint   = "服务端返回了不可恢复的错误游标（error-v1: 保护游标）；丢弃全部累计结果和旧游标，立即停止分页，禁止将该游标回传。核对查询条件后可尝试不传 --cursor 从第一页重新查询。"
 )
 
-// RecordQueryRecoveryError 仅为记录查询的已知游标错误补充恢复策略，不重试请求或重放写流程。
+// RecordQueryRecoveryError 为记录查询的已知游标和不完整读取错误补充恢复策略，不重试请求或重放写流程。
 // 网络、权限与未知错误保持原样；判断依据为结构化错误码，不能匹配报错文案猜测原因。
 func RecordQueryRecoveryError(err error) error {
 	if recovery := recordQueryCursorError(err); recovery != nil {
@@ -34,7 +34,7 @@ func recordQueryCursorError(err error) *apperrors.Error {
 	diag := aitableServerDiag(err)
 	code := diag.ServerErrorCode
 	switch code {
-	case "INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE", "CURSOR_OFFSET_LIMIT", "NON_RESUMABLE_ERROR_CURSOR":
+	case "INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE", "CURSOR_OFFSET_LIMIT", "NON_RESUMABLE_ERROR_CURSOR", "QUERY_RECORDS_INCOMPLETE":
 	default:
 		return nil
 	}
@@ -43,6 +43,9 @@ func recordQueryCursorError(err error) *apperrors.Error {
 	hint := "丢弃本轮和此前保存的累计结果及旧游标；核对查询条件后，不传 --cursor 从第一页重新查询。若持续失败，先等待服务版本/数据稳定；不要重跑含写入步骤的整条命令。"
 	details := map[string]any{"discard_previous_results": true, "restart_from_first_page": true}
 	switch code {
+	case "QUERY_RECORDS_INCOMPLETE":
+		reason = "pagination_incomplete_read"
+		hint = "服务端未能确认本页明细完整；丢弃全部累计结果和旧游标，仅将只读查询从第一页重新执行。不要续传失败游标，也不要重跑含写入步骤的整条流程。"
 	case "NON_RESUMABLE_ERROR_CURSOR":
 		reason = nonResumableCursorReason
 		hint = nonResumableCursorHint

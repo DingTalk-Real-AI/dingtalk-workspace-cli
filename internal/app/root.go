@@ -158,6 +158,10 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 				}
 			}
 		}
+		// Outbound failures may echo private conversation text in upstream errors.
+		if errorMessage != "" && strings.HasPrefix(commandPath, "outbound-call ") {
+			errorMessage = "outbound call failed"
+		}
 	}()
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()
@@ -928,12 +932,16 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 		delegatorScope = flags.delegatorInvocation
 	}
 	cleanup := func(current *cobra.Command) {
+		if flags != nil {
+			flags.network.close()
+		}
 		delegatorScope.clear()
 		if principal := current.Flags().Lookup("principal-user-id"); principal != nil {
 			_ = principal.Value.Set("")
 			principal.Changed = false
 		}
 		consumeDelegatorFlags(root)
+		consumeNetworkOverrides(root)
 		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
 		discardRootVersionInvocationFlag(root, versionRequested)
 		if exchange, _, err := root.Find([]string{"auth", "exchange"}); err == nil {
@@ -1020,6 +1028,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		Version: "",
 		RunE:    runRootHelp,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (preRunErr error) {
+			networkOverrides := consumeNetworkOverrides(cmd.Root())
 			flags.delegatorInvocation.clear()
 			defer func() {
 				if preRunErr != nil {
@@ -1120,6 +1129,9 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
+			if err := configureNetworkInvocation(cmd, flags, networkOverrides); err != nil {
+				return err
+			}
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
@@ -1149,6 +1161,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) (err error) {
+			defer flags.network.close()
 			if rootVersionShortCircuit {
 				rootVersionShortCircuit = false
 				rootVersionRequested = false
@@ -1244,7 +1257,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		navigationGroup(newSkillCommand()),
 		hybridGroup(newCacheCommand()),
 		newCatalogCommand(),
-		navigationGroup(newConfigCommand()),
+		navigationGroup(newConfigCommand(flags)),
 		newDoctorCommand(),
 		hybridGroup(newRecoveryCommand()),
 		navigationGroup(newEventCommand(flags)),

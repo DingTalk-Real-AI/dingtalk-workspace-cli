@@ -1,5 +1,10 @@
 # 全局参考
 
+## 核心 HTTP 出口代理
+
+下载出网失败或需要自定义代理时，先用 `dws config network show --effective` 查看脱敏生效来源，或用 `dws config network explain --url <目标URL>` 离线计算路由；这两者不证明网络可达。已覆盖的认证、MCP/OpenAPI、SafeChat 取密钥、localio/聊天资源传输支持全局 `--proxy auto|direct|代理URL` 与 `--no-proxy`，以及 DWS_PROXY/DWS_NO_PROXY。白板、Stream、升级/安装器和其他独立客户端尚未接入，不能由这些全局参数推断其路由。只有用户要求修改网络配置时，才使用 `dws config network set`；读取配置后不要自行清除企业代理或关闭 TLS 校验。
+
+
 ## 认证
 
 ```bash

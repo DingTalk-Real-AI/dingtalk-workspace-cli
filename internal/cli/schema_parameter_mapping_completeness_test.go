@@ -69,8 +69,15 @@ func TestDeliveryCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 
 func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
+		"config.network_show":          "命令仅计算或保存本地网络配置，不调用业务 RPC 或联网探测",
+		"config.network_set":           "命令仅计算或保存本地网络配置，不调用业务 RPC 或联网探测",
+		"config.network_reset":         "命令仅计算或保存本地网络配置，不调用业务 RPC 或联网探测",
+		"config.network_explain":       "命令仅计算或保存本地网络配置，不调用业务 RPC 或联网探测",
 		"aicard.explain":               "Reads the protocol index generated into the binary",
 		"aicard.lint":                  "Uses the protocol embedded in the binary; does not access the network or execute card functions",
+		"aicard.chart.build":           "Uses an embedded, source-traceable chart preset registry; never sends a card",
+		"aicard.chart.explain":         "Uses an embedded, source-traceable chart preset registry; never sends a card",
+		"aicard.chart.list":            "Uses an embedded, source-traceable chart preset registry; never sends a card",
 		"dingtalk-tag.connect_status":  "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",

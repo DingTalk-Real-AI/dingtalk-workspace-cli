@@ -593,7 +593,7 @@ var dangerousEnvVars = map[string]bool{
 	"NODE_OPTIONS": true, "PYTHONPATH": true, "RUBYLIB": true,
 	"GOPATH": true, "GOROOT": true,
 	"HTTP_PROXY": true, "HTTPS_PROXY": true, "ALL_PROXY": true, "NO_PROXY": true,
-	"http_proxy": true, "https_proxy": true, "all_proxy": true, "no_proxy": true,
+	"DWS_PROXY": true, "DWS_NO_PROXY": true, "DWS_CA_BUNDLE": true,
 }
 
 func (l *Loader) InjectPluginConfigEnv() bool {
@@ -609,7 +609,7 @@ func (l *Loader) InjectPluginConfigEnv() bool {
 				continue
 			}
 			// Block dangerous environment variable names.
-			if dangerousEnvVars[key] {
+			if dangerousEnvVars[strings.ToUpper(key)] {
 				slog.Warn("plugin: blocked dangerous env var from config",
 					"key", key)
 				continue

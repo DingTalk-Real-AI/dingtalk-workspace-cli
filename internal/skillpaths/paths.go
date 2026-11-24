@@ -73,6 +73,7 @@ func AgentHomes() []string {
 		".pochi/skills",
 		".adal/skills",
 		".qoderwork/skills",
+		".workbuddy/skills",
 		// beta.6 compatibility roots: cleanup only.
 		".cursor/skills",
 		".gemini/skills",

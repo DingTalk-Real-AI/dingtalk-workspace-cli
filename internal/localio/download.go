@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"net"
 	"net/http"
@@ -99,7 +100,7 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 			req.Header.Set(key, value)
 		}
 	}
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(client, req)
 	if err != nil {
 		return DownloadResult{}, fmt.Errorf("下载资源失败: %w", err)
 	}
@@ -339,14 +340,9 @@ func SecureHTTPClient() *http.Client {
 
 func secureHTTPClient() *http.Client {
 	transport := &http.Transport{
-		// Dial the service-issued host directly, ignoring environment proxies:
-		// dedicated-deployment storage may live on customer intranets that are
-		// only reachable without a proxy, and TLS hostname verification always
-		// runs against the requested host. Download URLs never come from
-		// user input — every command resolves them through an authenticated
-		// MCP response first, mirroring the official GUI client which applies
-		// no client-side SSRF interception to downloads.
-		Proxy: nil,
+		// Routing is independent of the service-issued HTTPS target policy.
+		// Dedicated intranet targets can opt out through NO_PROXY.
+		Proxy: netpolicy.EnvironmentProxy,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			return secureDialContext(ctx, network, address)
 		},

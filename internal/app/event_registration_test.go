@@ -37,7 +37,7 @@ func TestCrossPlatformCoverageEventCommandRemainsVisibleAsBuiltInPublicGroup(t *
 		leaves = append(leaves, command.Name())
 	}
 	sort.Strings(leaves)
-	want := []string{"+listen-im", "consume", "list", "schema", "status", "stop"}
+	want := []string{"+listen-im", "consume", "list", "schema", "send", "status", "stop"}
 	if len(leaves) != len(want) {
 		t.Fatalf("public event leaves = %v, want %v", leaves, want)
 	}

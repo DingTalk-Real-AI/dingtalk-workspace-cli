@@ -261,6 +261,7 @@ func TestCrossPlatformCoverageDingTalkTagConnectDryRunHasNoExternalEffects(t *te
 }
 
 func TestCrossPlatformCoverageDingTalkTagConnectRejectsMissingMode(t *testing.T) {
+	clearChannelEnv(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
 	leaf := newConnectTestCommandWithMode(t, true, "")

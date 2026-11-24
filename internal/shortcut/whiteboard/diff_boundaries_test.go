@@ -181,7 +181,7 @@ func TestCrossPlatformCoverageDiffLogicalMediaTransitions(t *testing.T) {
 		category      string
 	}{
 		{map[string]any{"type": "text"}, nil, "logicalDeleted"},
-		{map[string]any{"type": "image"}, map[string]any{"type": "image"}, "logicalUnmatched"},
+		{map[string]any{"type": "image"}, map[string]any{"type": "image"}, "unchanged"},
 		{map[string]any{"type": "text", "parentId": "unknown"}, map[string]any{"type": "text"}, "logicalUnmatched"},
 		{map[string]any{"type": "text"}, map[string]any{"type": "text"}, "unchanged"},
 	} {

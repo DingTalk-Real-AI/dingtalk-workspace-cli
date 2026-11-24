@@ -83,14 +83,16 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 		HelpReferences: contract.HelpReferences{
 			RelatedSkills: []string{"dingtalk-event"},
 			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("自建应用三方事件发送", "dingtalk-event", "references/event-send.md"),
 				contract.SkillDocumentation("事件订阅深度指南", "dingtalk-event", "references/event-im.md"),
 				contract.SkillDocumentation("互动卡片回调事件", "dingtalk-event", "references/event-card.md"),
 				contract.SkillDocumentation("日历个人事件", "dingtalk-event", "references/event-calendar.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办、日历、互动卡片回调与听记事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办、日历、互动卡片回调与听记事件，管理订阅生命周期，并用企业自建应用身份上报三方事件",
 			UseWhen: []string{
+				"需要用企业自建应用凭证向指定企业内 userId 发送该应用的三方事件",
 				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、user_card_action_triggered 互动卡片回调或听记创建/纪要生成事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
@@ -100,14 +102,15 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	})
 	cmd := &cobra.Command{
 		Use:               "event",
-		Short:             "事件订阅 (DingTalk Stream 长连接)",
-		Long:              "通过 DingTalk Stream 长连接订阅事件并以 NDJSON 输出到 stdout。详见 `dws event consume --help`。",
+		Short:             "事件订阅与企业自建应用事件发送",
+		Long:              "通过 DingTalk Stream 长连接订阅事件并以 NDJSON 输出，或用企业自建应用凭证上报三方事件。详见 `dws event consume --help` 和 `dws event send --help`。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
 		RunE:              func(c *cobra.Command, _ []string) error { return c.Help() },
 	}
 	cmd.AddCommand(
+		newEventSendCommand(globalFlags...),
 		newEventListenIMCommand(globalFlags...),
 		newEventConsumeCommand(globalFlags...),
 		newEventListCommand(globalFlags...),
@@ -229,8 +232,12 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 			if personalOpts.DebugRawEvents {
 				return fmt.Errorf("event consume: --debug-raw-events is only supported with --as user")
 			}
+			if personalOpts.IncludeVoIPSDKToken {
+				return fmt.Errorf("event consume: --include-voip-sdk-token is only supported with --as user")
+			}
 			if err := rejectChangedFlags(c, "user",
 				"flatten",
+				"include-voip-sdk-token",
 				"subscribe-id",
 				"rule",
 				"name",
@@ -387,7 +394,7 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 	f.StringVar(&personalOpts.OpenDingTalkID, "open-dingtalk-id", "",
 		"单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）")
 	f.StringVar(&personalOpts.GroupID, "group", "",
-		"group 规则：openConversationId")
+		"group 规则：单个 openConversationId；多群请分别创建订阅")
 	f.StringSliceVar(&personalOpts.RoleTypes, "role-types", nil,
 		"待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色")
 	f.StringSliceVar(&personalOpts.CalendarIDs, "calendar-ids", nil,
@@ -398,6 +405,8 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 		"个人事件控制面 base URL；默认由 MCP base 派生 /dws")
 	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
 		"个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件")
+	f.BoolVar(&personalOpts.IncludeVoIPSDKToken, "include-voip-sdk-token", false,
+		"显式输出 VoIP MeetingSDK sdkToken（敏感；仅将 stdout 安全管道传给入会进程）")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
 		"个人 Stream 建联模式；默认 normal")
 	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),

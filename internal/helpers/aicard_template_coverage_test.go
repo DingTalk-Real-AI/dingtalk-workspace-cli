@@ -73,7 +73,7 @@ func TestCrossPlatformCoverageAicardTemplateValidationFailures(t *testing.T) {
 		}, "Cannot validate the template"},
 		{"schema", invalid, func(*testing.T) {}, "Template violates the A2UI protocol"},
 		{"preflight", aicardTestSnapshot, func(t *testing.T) {
-			testseam.Swap(t, &aicardPreflight, func(*a2ui.Protocol, []string, string) (map[string]any, error) {
+			testseam.Swap(t, &aicardExistingContentPreflight, func(*a2ui.Protocol, []string, string) (map[string]any, error) {
 				return nil, errAicardTemplateInjected
 			})
 		}, "Template initialization is invalid"},

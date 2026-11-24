@@ -30,6 +30,7 @@ var expectedPackagedSkillTargets = []string{
 	".cursor/skills/dingtalk-shared",
 	".qoder/skills/dingtalk-shared",
 	".qoderwork/skills/dingtalk-shared",
+	".workbuddy/skills/dingtalk-shared",
 	".gemini/skills/dingtalk-shared",
 	".codex/skills/dingtalk-shared",
 	".zcode/skills/dingtalk-shared",

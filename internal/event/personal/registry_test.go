@@ -253,7 +253,7 @@ func TestCrossPlatformCoverageVoIPEventCatalogDefinitionAndSchema(t *testing.T) 
 	wantProperties := []string{
 		"type", "event_id", "timestamp", "subscribe_id", "biz_id", "corp_id", "org_id", "target_uid",
 		"call_id", "caller_uid", "caller_corp_id", "callee_uid", "callee_corp_id", "call_type",
-		"room_id", "create_time", "event_time",
+		"room_id", "sdk_app_id", "sdk_expire_time", "sdk_token", "create_time", "event_time",
 	}
 	if len(properties) != len(wantProperties) {
 		t.Fatalf("schema.properties = %#v, want exactly %d fields", properties, len(wantProperties))
@@ -1047,6 +1047,36 @@ func TestBuildRuleParamGroup(t *testing.T) {
 	}
 	if param["openConversationId"] != "cid-1" {
 		t.Fatalf("param = %#v", param)
+	}
+}
+
+func TestBuildRuleParamGroupRejectsMultiValue(t *testing.T) {
+	groupEvents := []string{
+		EventInChat, EventReadGroup, EventRecallGroup, EventReactionGroup,
+		EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded,
+	}
+	multiValues := []string{"cid-1,cid-2", "cid-1, cid-2", ",cid-1", "cid-1,", "cid-1，cid-2"}
+
+	for _, eventKey := range groupEvents {
+		t.Run(eventKey, func(t *testing.T) {
+			for _, groupID := range multiValues {
+				if _, _, err := BuildRuleParam(eventKey, RuleOptions{GroupID: groupID}); err == nil ||
+					!strings.Contains(err.Error(), "--group 仅支持单个 openConversationId，多群请分别创建订阅") {
+					t.Fatalf("BuildRuleParam(%q) error = %v, want single-group rejection", groupID, err)
+				}
+			}
+			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil ||
+				!strings.Contains(err.Error(), "--group is required for "+eventKey) {
+				t.Fatalf("BuildRuleParam() error = %v, want group requirement", err)
+			}
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{GroupID: " cid-1 "})
+			if err != nil {
+				t.Fatalf("BuildRuleParam(single) error = %v", err)
+			}
+			if rule != "group" || param["openConversationId"] != "cid-1" {
+				t.Fatalf("rule = %q, param = %#v", rule, param)
+			}
+		})
 	}
 }
 

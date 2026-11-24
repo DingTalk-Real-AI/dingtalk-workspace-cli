@@ -64,7 +64,7 @@ func TestCrossPlatformCoveragePersonalVoIPEventListSchemaAndValidation(t *testin
 	if !ok {
 		t.Fatalf("VoIP schema properties = %#v", schemaBody["properties"])
 	}
-	for _, name := range []string{"biz_id", "call_id", "caller_uid", "callee_uid", "room_id", "event_time"} {
+	for _, name := range []string{"biz_id", "call_id", "caller_uid", "callee_uid", "room_id", "sdk_app_id", "sdk_expire_time", "sdk_token", "event_time"} {
 		if _, ok := properties[name].(map[string]any); !ok {
 			t.Fatalf("VoIP schema property %s = %#v", name, properties[name])
 		}
@@ -77,6 +77,9 @@ func TestCrossPlatformCoveragePersonalVoIPEventListSchemaAndValidation(t *testin
 		if property["type"] != "string" {
 			t.Fatalf("VoIP schema property %s type = %#v, want string", name, property["type"])
 		}
+	}
+	if property := properties["sdk_token"].(map[string]any); !strings.Contains(property["description"].(string), "--include-voip-sdk-token") {
+		t.Fatalf("VoIP sdk_token schema does not document explicit opt-in: %#v", property)
 	}
 
 	if err := validatePersonalBusinessEventOptions(personal.EventVoIPCallReceiveInvite, personalConsumeOptions{}); err != nil {

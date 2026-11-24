@@ -23,10 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newConfigCommand() *cobra.Command {
-	// Product-level Agent routing for the one config command that is part of
-	// the Agent surface (config policy show). config list stays a reviewed
-	// exclusion: it is a user-operated control.
+func newConfigCommand(flags *GlobalFlags) *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "config",
 		HelpReferences: contract.HelpReferences{
@@ -34,15 +31,18 @@ func newConfigCommand() *cobra.Command {
 			Documentation: []contract.HelpDocumentation{
 				contract.SkillDocumentation("错误码与恢复指南", "dingtalk-shared", "references/error-codes.md"),
 				contract.SkillDocumentation("Schema 使用指南", "dingtalk-shared", "references/schema-usage.md"),
+				{Label: "核心 HTTP 代理配置", URL: "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/docs/network-proxy.md"},
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "查看当前二进制的本机配置状态，包括内置的指令裁剪策略",
+			AgentSummary: "查看本机配置及指令裁剪策略，管理核心 HTTP 网络配置",
 			UseWhen: []string{
 				"命令返回 command_denied，需要确认当前二进制的指令裁剪策略",
+				"需要设置代理、直连例外或解释生效配置",
 			},
 			AvoidWhen: []string{
 				"查询钉钉业务数据或命令用法时使用对应产品命令或 dws schema，不要使用 config",
+				"配置解释不证明网络可达，也不覆盖尚未接入的网络链路",
 			},
 		},
 	})
@@ -57,7 +57,7 @@ func newConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newConfigListCommand(), newConfigPolicyCommand())
+	cmd.AddCommand(newConfigListCommand(), newConfigPolicyCommand(), newNetworkConfigCommand(flags))
 	return cmd
 }
 

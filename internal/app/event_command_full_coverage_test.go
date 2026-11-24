@@ -67,6 +67,11 @@ func TestCrossPlatformCoverageEventConsumeCommandAllBranchesCoverage(t *testing.
 		t.Fatal("app debug-raw-events succeeded")
 	}
 	userFlag := makeApp()
+	sdkToken := makeApp()
+	_ = sdkToken.Flags().Set("include-voip-sdk-token", "true")
+	if err := sdkToken.RunE(sdkToken, nil); err == nil || !strings.Contains(err.Error(), "only supported with --as user") {
+		t.Fatalf("app SDK token error = %v", err)
+	}
 	_ = userFlag.Flags().Set("subscribe-id", "sub")
 	if err := userFlag.RunE(userFlag, nil); err == nil {
 		t.Fatal("app personal flag succeeded")

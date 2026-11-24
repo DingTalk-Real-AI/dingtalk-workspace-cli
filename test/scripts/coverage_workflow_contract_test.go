@@ -205,7 +205,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	}
 
 	baselineJob := admission[baselineStart:metadataStart]
-	if !strings.Contains(baselineJob, "timeout-minutes: 30") {
+	if !strings.Contains(baselineJob, "timeout-minutes: 45") {
 		t.Error("coverage-baseline must retain enough headroom for an authoritative cold-cache fallback")
 	}
 	cachePath := "coverage-cache.txt"

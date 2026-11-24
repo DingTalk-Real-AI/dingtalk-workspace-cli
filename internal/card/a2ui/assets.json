@@ -122,14 +122,14 @@
     "UserPicker": [],
     "Video": []
   },
-  "explainSha256": "4ff5ed7a1f80cab16bd8ac845a76dc2170fb301ba2ded1ef8a4670fcd0e9f80a",
+  "explainSha256": "13c1b2b0d338b94af1e7893bfd6f587880a34d459526cb9bb984481490512dff",
   "manifest": {
     "a2ui-validation-rules.json": "4e2cf54e53967023",
     "agent-to-renderer.json": "ecd62c9b8d911c60",
-    "catalog-components-common.json": "f2eb7da12397e8c4",
+    "catalog-components-common.json": "a87ffa7c761236d8",
     "catalog-components-composition.json": "f4e21dde9c1f586e",
     "catalog-components-inputs.json": "9a10ccdf3609e313",
-    "catalog-components-specialized.json": "a1a3bc52202886c6",
+    "catalog-components-specialized.json": "c4b9eaf6b71b8204",
     "catalog-functions-core.json": "ac696b86604e76ce",
     "catalog-functions-expressions.json": "2bffead993f46297",
     "catalog-functions-host-actions.json": "1ca445cf85542830",

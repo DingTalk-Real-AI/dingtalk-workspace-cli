@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"log/slog"
 	"net"
@@ -384,7 +385,7 @@ func oidcJSONRequestWithTrace(ctx context.Context, configured *http.Client, endp
 		}
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Do(req)
+	resp, err := netpolicy.Do(&client, req)
 	if err != nil {
 		slog.Debug("auth.oidc.request_failed", "endpoint", logEndpoint, "error", err, "elapsed_ms", time.Since(started).Milliseconds())
 		return 0, nil, "", oidcNetworkError(ctx, err, "OIDC portal connection failed")

@@ -150,6 +150,25 @@ func TestCrossPlatformCoverageUniversalSkillInstallTargetsUseCanonical(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageSkillInstallClassificationIgnoresHostPaths(t *testing.T) {
+	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) {
+		t.Fatal("Agent classification must not resolve HOME")
+		return "", nil
+	})
+	testseam.Swap(t, &skillSetupGetenv, func(string) string {
+		t.Fatal("Agent classification must not read custom paths")
+		return ""
+	})
+	for target, want := range map[string]bool{
+		"agents": true, "cursor": true, "codex": true, "opencode": true,
+		"workbuddy": false, "claude": false, "qoder": false, "missing-agent": false,
+	} {
+		if got := isUniversalSkillInstallTarget(target); got != want {
+			t.Errorf("classify %s = %v, want %v", target, got, want)
+		}
+	}
+}
+
 func TestResolveSkillTargetPathCurrentDir(t *testing.T) {
 	// Test "." target returns current working directory
 	cwd, err := os.Getwd()
@@ -487,6 +506,7 @@ func TestSupportedTargets(t *testing.T) {
 		"agents", "claude", "cursor", "codex", "zcode", "opencode", "qoder",
 		"gemini", "github", "windsurf", "augment", "cline",
 		"amp", "kiro", "trae", "openclaw", "hermes",
+		"workbuddy",
 		".",
 	}
 	for _, expected := range expectedTargets {

@@ -278,6 +278,11 @@ func (r *runtimeRunner) SupportsMCPTool(ctx context.Context, product, tool strin
 }
 
 func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, profile)
+	if networkErr != nil {
+		return nil, networkErr
+	}
 	if r == nil || r.transport == nil {
 		return nil, fmt.Errorf("runtime transport is not configured")
 	}
@@ -388,6 +393,11 @@ func (r *runtimeRunner) RunReadOnly(ctx context.Context, invocation executor.Inv
 }
 
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, authpkg.RuntimeProfile())
+	if networkErr != nil {
+		return executor.Result{}, networkErr
+	}
 	if r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
@@ -476,6 +486,13 @@ func resolveMultiProfileSelections(configDir, rawSelector string) ([]multiProfil
 }
 
 func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor.Invocation, selections []multiProfileSelection) (executor.Result, error) {
+	if invocation.CanonicalProduct == "outbound-call" {
+		return executor.Result{}, apperrors.NewValidation(
+			"外呼命令一次只能指定一个 profile；请移除逗号分隔的多个身份。",
+			apperrors.WithReason("outbound_call_multi_profile_unsupported"),
+			apperrors.WithExecutionStarted(false),
+		)
+	}
 	previousProfile := authpkg.RuntimeProfile()
 	defer authpkg.SetRuntimeProfile(previousProfile)
 
@@ -651,6 +668,10 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 }
 
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
+	ctx, retErr = r.withNetworkContext(ctx, authpkg.RuntimeProfile())
+	if retErr != nil {
+		return executor.Result{}, retErr
+	}
 	ctx = r.withDelegatorContext(ctx)
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
@@ -682,21 +703,32 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	fl := invocationTransport.FileLogger
 
 	defer func() {
-		var errCat, errReason string
-		if retErr != nil {
+		auditErr := retErr
+		if invocation.CanonicalProduct == "outbound-call" && retErr != nil {
+			// Upstream errors can echo the complete prompt. Redact only the log
+			// projection; callers must retain the original error for classification.
+			category := apperrors.CategoryInternal
 			var typed *apperrors.Error
 			if errors.As(retErr, &typed) {
+				category = typed.Category
+			}
+			auditErr = &apperrors.Error{Category: category, Reason: "outbound_call_failed"}
+		}
+		var errCat, errReason string
+		if auditErr != nil {
+			var typed *apperrors.Error
+			if errors.As(auditErr, &typed) {
 				errCat = string(typed.Category)
 				errReason = typed.Reason
 			} else {
 				errCat = "unknown"
-				errReason = retErr.Error()
+				errReason = auditErr.Error()
 			}
 		}
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(ctx, auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(ctx, auditSink, execID, invokeStart, invocation, endpoint, auditErr, version)
 	}()
 
 	// Check whether this product belongs to an HTTP plugin. Every accepted
@@ -835,6 +867,11 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	// Do not persist credential response bodies in transport diagnostics.
 	if aitableprotocol.IsSQLSheetKeyOperation(invocation.CanonicalProduct, invocation.Tool) {
+		tc.FileLogger = nil
+		tc.SnapshotRecorder = nil
+	}
+	// Outbound responses may echo user IDs and full prompts in free-form text.
+	if invocation.CanonicalProduct == "outbound-call" {
 		tc.FileLogger = nil
 		tc.SnapshotRecorder = nil
 	}
@@ -1137,6 +1174,11 @@ func (r *runtimeRunner) resolveAuthSnapshot(ctx context.Context) (AccessTokenSna
 }
 
 func (r *runtimeRunner) resolveAuthSnapshotForProfile(ctx context.Context, profile string) (AccessTokenSnapshot, error) {
+	var networkErr error
+	ctx, networkErr = r.withNetworkContext(ctx, profile)
+	if networkErr != nil {
+		return AccessTokenSnapshot{}, networkErr
+	}
 	explicitToken := ""
 	if r != nil && r.globalFlags != nil {
 		explicitToken = r.globalFlags.Token
@@ -1448,7 +1490,7 @@ func extractMCPErrorMessage(result transport.ToolCallResult) string {
 // so they can be diagnosed offline. These errors arrive as HTTP 200 responses
 // and would otherwise not be captured by transport-level logging.
 func logBusinessError(logger *slog.Logger, reason string, inv executor.Invocation, content map[string]any, diag apperrors.ServerDiagnostics) {
-	if logger == nil {
+	if logger == nil || inv.CanonicalProduct == "outbound-call" {
 		return
 	}
 	attrs := []any{

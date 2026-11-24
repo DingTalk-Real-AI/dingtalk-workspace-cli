@@ -3,13 +3,32 @@ package transport
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
+
+func TestCrossPlatformCoverageResponseReadFailurePreservesCause(t *testing.T) {
+	for _, cause := range []error{context.DeadlineExceeded, context.Canceled, io.ErrUnexpectedEOF} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			client := NewClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(iotest.ErrReader(cause))}, nil
+			})})
+			client.MaxRetries = 0
+			_, err := client.CallTool(context.Background(), "https://mcp.dingtalk.com/server", "query_records", map[string]any{})
+			var classified *apperrors.Error
+			if !errors.Is(err, cause) || !errors.As(err, &classified) || classified.Operation != "tools/call" ||
+				classified.Category != apperrors.CategoryDiscovery || classified.Reason != "tools_call_response_read_failed" {
+				t.Fatalf("read failure lost its classification or cause: %#v", err)
+			}
+		})
+	}
+}
 
 func TestHTTPStatusErrorIncludesCallMetadata(t *testing.T) {
 	err := httpStatusError("tools/call", "https://mcp.dingtalk.com/server", http.StatusTooManyRequests, "", "")

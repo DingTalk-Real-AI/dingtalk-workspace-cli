@@ -133,9 +133,10 @@ promptscript|1|-
 adal|0|.adal/skills
 universal|1|.config/agents/skills'
 
-# DWS-only compatibility and old wrong global paths. Qoderwork remains a
-# non-universal install target; the other entries verify migration cleanup.
+# DWS-only compatibility and old wrong global paths. Qoderwork and WorkBuddy
+# remain non-universal install targets; the other entries verify migration cleanup.
 LEGACY_AGENT_CLEANUP_REGISTRY='dws-qoderwork|0|.qoderwork/skills
+dws-workbuddy|0|.workbuddy/skills
 dws-legacy-github|1|.github/skills
 dws-legacy-amp|1|.amp/skills
 dws-legacy-cline|1|.cline/skills
@@ -167,6 +168,26 @@ seed_specific_agent_homes() {
   done
 }
 
+# Unicode White_Space, matching Go strings.TrimSpace and PowerShell Trim().
+# Match complete UTF-8 byte sequences so LC_ALL=C cannot split a character.
+trim_workbuddy_config_dir() {
+  _tw_value=$1
+  while :; do
+    _tw_before=$_tw_value
+    for _tw_bytes in '\0011' '\0012' '\0013' '\0014' '\0015' '\0040' '\0302\0205' '\0302\0240' '\0341\0232\0200' \
+      '\0342\0200\0200' '\0342\0200\0201' '\0342\0200\0202' '\0342\0200\0203' '\0342\0200\0204' '\0342\0200\0205' \
+      '\0342\0200\0206' '\0342\0200\0207' '\0342\0200\0210' '\0342\0200\0211' '\0342\0200\0212' \
+      '\0342\0200\0250' '\0342\0200\0251' '\0342\0200\0257' '\0342\0201\0237' '\0343\0200\0200'; do
+      _tw_space=$(printf '%b_' "$_tw_bytes")
+      _tw_space=${_tw_space%_}
+      while :; do case "$_tw_value" in "$_tw_space"*) _tw_value=${_tw_value#"$_tw_space"} ;; *) break ;; esac; done
+      while :; do case "$_tw_value" in *"$_tw_space") _tw_value=${_tw_value%"$_tw_space"} ;; *) break ;; esac; done
+    done
+    [ "$_tw_value" = "$_tw_before" ] && break
+  done
+  printf '%s\n' "$_tw_value"
+}
+
 resolve_agent_base() {
   home_root="$1"; id="$2"; default_path="$3"
   case "$id" in
@@ -175,6 +196,9 @@ resolve_agent_base() {
     codex) printf '%s\n' "${CODEX_HOME:-$home_root/.codex}/skills" ;;
     grok) printf '%s\n' "${GROK_HOME:-$home_root/.grok}/skills" ;;
     hermes-agent) printf '%s\n' "${HERMES_HOME:-$home_root/.hermes}/skills" ;;
+    dws-workbuddy)
+      workbuddy_config=$(trim_workbuddy_config_dir "${WORKBUDDY_CONFIG_DIR:-}")
+      printf '%s\n' "${workbuddy_config:-$home_root/.workbuddy}/skills" ;;
     mistral-vibe) printf '%s\n' "${VIBE_HOME:-$home_root/.vibe}/skills" ;;
     amp|replit|universal) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/agents/skills" ;;
     crush|devin|goose|kimchi|opencode) printf '%s\n' "${XDG_CONFIG_HOME:-$home_root/.config}/${default_path#.config/}" ;;
@@ -203,8 +227,9 @@ with_isolated_agent_env() (
   GROK_HOME="$isolated_home/.grok"
   HERMES_HOME="$isolated_home/.hermes"
   VIBE_HOME="$isolated_home/.vibe"
+  WORKBUDDY_CONFIG_DIR="$isolated_home/.workbuddy"
   XDG_CONFIG_HOME="$isolated_home/.config"
-  export HOME AUTOHAND_HOME CLAUDE_CONFIG_DIR CODEX_HOME GROK_HOME HERMES_HOME VIBE_HOME XDG_CONFIG_HOME
+  export HOME AUTOHAND_HOME CLAUDE_CONFIG_DIR CODEX_HOME GROK_HOME HERMES_HOME VIBE_HOME WORKBUDDY_CONFIG_DIR XDG_CONFIG_HOME
   "$@"
 )
 
