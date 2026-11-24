@@ -1819,6 +1819,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
       RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
@@ -1863,11 +1864,16 @@ jobs:
             --remote origin \
             --branch main
 
-      - name: Setup Node.js
+      - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      # npm 11.21 adds OIDC authentication for dist-tag operations. The main
+      # package's deterministic packing remains pinned in pack-npm-package.sh.
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
 
       - name: Install archive tooling
         run: sudo apt-get update && sudo apt-get install -y zip unzip
@@ -1898,6 +1904,7 @@ jobs:
           ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
           DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            DWS_STAGE_NPM_SPLITS="${{ vars.DWS_STAGE_NPM_SPLITS || '0' }}" \
             ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"
 
       - name: Verify immutable npm package without publication credentials
@@ -1973,10 +1980,16 @@ jobs:
             echo "semver=$semver"
           } >> "$GITHUB_OUTPUT"
 
+      # Enable after all seven packages trust this repository's release.yml.
+      # Resources precede the main channel; the old all-platform tarball stays
+      # unchanged for historical repair and older installers.
+      - name: Publish platform and skill packages
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && vars.DWS_STAGE_NPM_SPLITS == '1' }}
+        run: node ./scripts/release/publish-npm-splits.cjs "$GITHUB_WORKSPACE/dist/npm-split" --publish
+
       - name: Publish missing version to npm channel
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.published != 'true' }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
           SEMVER: ${{ steps.npm-state.outputs.semver }}
         run: |
@@ -1996,7 +2009,6 @@ jobs:
       - name: Advance npm channel for an existing exact version
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.advance_channel == 'true' }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
           SEMVER: ${{ steps.npm-state.outputs.semver }}
         run: |
@@ -2129,6 +2141,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     steps:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
@@ -2256,11 +2269,14 @@ jobs:
           path: release-source
           persist-credentials: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
 
       - name: Download and verify GitHub release assets
         env:
@@ -2331,8 +2347,6 @@ jobs:
       - name: Backfill exact version to npm
         if: ${{ steps.npm.outputs.published != 'true' }}
         run: npm publish "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz" --access public --tag backfill --ignore-scripts --registry=https://registry.npmjs.org
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   coverage-baseline-confirmation:
     name: Confirm Formula coverage baseline

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -49,8 +50,8 @@ var (
 	newUpgradeReleaseClient           = func() upgradeReleaseClient { return upgrade.NewClient() }
 	newUpgradeRollback                = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
 	prepareUpgradeNPMPackage          = upgrade.PrepareNPMPackage
-	resolveUpgradePlatformRelease     = upgrade.ResolvePlatformRelease
-	downloadUpgradePlatformAsset      = upgrade.DownloadPlatformAsset
+	resolveUpgradePlatformRelease     = upgrade.ResolvePlatformReleaseForSource
+	downloadUpgradePlatformAsset      = upgrade.DownloadPlatformAssetForSource
 	ensureUpgradeDirs                 = upgrade.EnsureUpgradeDirectories
 	cleanupUpgradeStale               = upgrade.CleanupStaleFiles
 	upgradeNeedsUpgrade               = upgrade.NeedsUpgrade
@@ -98,6 +99,7 @@ func newUpgradeCommand() *cobra.Command {
 		flagSkipSkills bool
 		flagAll        bool
 		flagBeta       bool
+		flagSource     string
 	)
 
 	cmd := &cobra.Command{
@@ -109,8 +111,16 @@ func newUpgradeCommand() *cobra.Command {
 独立安装升级前会自动备份，可通过 --rollback 回滚。
 npm/pnpm/Homebrew 安装交由原包管理器升级；不支持 --skip-skills 或 --rollback。
 Windows 包管理器安装会给出手动升级命令，请退出当前进程后执行。
+--source auto（默认）优先 GitHub，网络失败时尝试同版本 npmmirror 分包。
+--source github 或 npmmirror 固定下载来源，失败时不切换来源。
+显式来源覆盖 DWS_UPGRADE_* 来源配置；auto 保留这些环境变量的既有行为。
+github 模式仍从 npmjs 主包检查版本和弃用状态；npmmirror 模式从镜像主包检查。
+npm/pnpm 安装支持 auto、npmmirror；Homebrew 安装仅支持 auto。
 独立安装每次升级都会按新版本官方清单全量覆盖预制 Skill；--force 仅额外允许重装当前版本。`,
 		Example: `  dws upgrade                    # 交互式升级到最新版本
+  dws upgrade --source auto      # 自动选择下载来源（默认）
+  dws upgrade --source github    # 固定使用 GitHub 平台资源
+  dws upgrade --source npmmirror # 固定使用 npmmirror 平台分包
   dws upgrade --check            # 仅检查是否有新版本
   dws upgrade --list             # 列出最近版本
   dws upgrade --list --all       # 列出所选轨道的全部版本
@@ -135,6 +145,13 @@ Windows 包管理器安装会给出手动升级命令，请退出当前进程后
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			format := resolveUpgradeFormat(cmd)
 			track := upgradeTrack(flagBeta)
+			source, err := upgrade.ParseDownloadSource(flagSource)
+			if err != nil {
+				return apperrors.NewValidation(err.Error())
+			}
+			if flagRollback && source != upgrade.SourceAuto {
+				return apperrors.NewValidation("--rollback 使用本地备份，不能同时指定 --source github 或 npmmirror")
+			}
 			if flagBeta && flagVersion != "" {
 				return fmt.Errorf("--beta 与 --version 不能同时使用；安装指定 beta 版本请直接使用 --version vX.Y.Z-beta.N")
 			}
@@ -159,6 +176,7 @@ Windows 包管理器安装会给出手动升级命令，请退出当前进程后
 				yes:           yes,
 				dryRun:        dryRun,
 				track:         track,
+				source:        source,
 			})
 		},
 	}
@@ -171,6 +189,10 @@ Windows 包管理器安装会给出手动升级命令，请退出当前进程后
 	cmd.Flags().BoolVar(&flagRollback, "rollback", false, "回滚到上一版本")
 	cmd.Flags().BoolVar(&flagForce, "force", false, "即使已是最新版本也强制重新安装当前版本")
 	cmd.Flags().BoolVar(&flagSkipSkills, "skip-skills", false, "跳过技能包更新")
+	cmd.Flags().StringVar(&flagSource, "source", string(upgrade.SourceAuto), "下载来源：auto 自动回退；github、npmmirror 固定来源")
+	_ = cmd.RegisterFlagCompletionFunc("source", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"auto", "github", "npmmirror"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	return cmd
 }
@@ -182,12 +204,21 @@ type upgradeOptions struct {
 	yes           bool
 	dryRun        bool
 	track         upgrade.ReleaseTrack
+	source        upgrade.DownloadSource
+}
+
+func upgradeClientForSource(source upgrade.DownloadSource) upgradeReleaseClient {
+	if source == "" || source == upgrade.SourceAuto {
+		return newUpgradeReleaseClient()
+	}
+	return upgrade.NewClientForSource(source)
 }
 
 // --- dws upgrade --check ---
 
 func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTrack) error {
-	client := newUpgradeReleaseClient()
+	source, _ := cmd.Flags().GetString("source")
+	client := upgradeClientForSource(upgrade.DownloadSource(source))
 
 	if format != "json" {
 		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(track))))
@@ -243,7 +274,8 @@ func runUpgradeCheck(cmd *cobra.Command, format string, track upgrade.ReleaseTra
 // runUpgradeList displays available versions. When limit > 0, only the most
 // recent `limit` versions are shown; pass 0 to show all (--all flag).
 func runUpgradeList(cmd *cobra.Command, format string, limit int, track upgrade.ReleaseTrack) error {
-	client := newUpgradeReleaseClient()
+	source, _ := cmd.Flags().GetString("source")
+	client := upgradeClientForSource(upgrade.DownloadSource(source))
 
 	if format != "json" {
 		fmt.Printf("  %s\n", ugDim(fmt.Sprintf("获取版本列表%s...", upgradeTrackSuffix(track))))
@@ -413,13 +445,22 @@ func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills 
 }
 
 func runUpgrade(ctx context.Context, opts upgradeOptions) error {
+	if opts.source == "" {
+		opts.source = upgrade.SourceAuto
+	}
+	if _, err := upgrade.ParseDownloadSource(string(opts.source)); err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
 	fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(opts.track))))
 
 	install, err := detectUpgradeInstallation()
 	if err != nil {
 		return err
 	}
-	client := newUpgradeReleaseClient()
+	if opts.source != upgrade.SourceAuto && install.manager != "" && (install.manager == "brew" || opts.source == upgrade.SourceGitHub) {
+		return apperrors.NewValidation(fmt.Sprintf("%s 安装不支持 --source %s，请使用 --source auto 通过原包管理器升级", install.manager, opts.source))
+	}
+	client := upgradeClientForSource(opts.source)
 	var release *upgrade.ReleaseInfo
 
 	if opts.targetVersion != "" {
@@ -454,7 +495,17 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		return runManagedUpgrade(ctx, install, release, opts)
 	}
 
-	platformRelease, err := resolveUpgradePlatformRelease(ctx, release, opts.skipSkills)
+	fmt.Printf("  下载模式: %s\n", opts.source)
+	currentSource, currentAttempt := "", ""
+	ctx = upgrade.WithDownloadObserver(ctx, func(event upgrade.DownloadEvent) {
+		currentSource = event.Source
+		currentAttempt = ""
+		if event.Kind == "attempt" {
+			currentAttempt = fmt.Sprintf("，尝试 %d/%d", event.Attempt, event.MaxAttempts)
+		}
+		writeUpgradeDownloadEvent(os.Stdout, event)
+	})
+	platformRelease, err := resolveUpgradePlatformRelease(ctx, release, opts.skipSkills, opts.source)
 	if err != nil {
 		return err
 	}
@@ -464,7 +515,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		for _, asset := range release.Assets {
 			total += asset.Size
 		}
-		fmt.Printf("  下载来源: GitHub 同版本平台资产 (%.2f MiB)\n", float64(total)/1024/1024)
+		fmt.Printf("  同版本资源: %.2f MiB\n", float64(total)/1024/1024)
 	}
 
 	// --dry-run: preview only. Resolve the platform asset so a missing build is
@@ -537,8 +588,12 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		for _, asset := range release.Assets {
 			archivePath := filepath.Join(tmpDir, asset.Name)
 			err := downloadUpgradePlatformAsset(ctx, asset, archivePath, func(percent float64, downloaded, total int64) {
-				fmt.Printf("\r  %s 下载 %s [%s] %5.1f%% (%.2f/%.2f MiB)", stepFmt(2), asset.Name, ugCyan(progressBar(percent)), percent, float64(downloaded)/1024/1024, float64(total)/1024/1024)
-			})
+				if total > 0 {
+					fmt.Printf("\r  %s 下载 %s [来源 %s%s] [%s] %5.1f%% (%.2f/%.2f MiB)", stepFmt(2), asset.Name, currentSource, currentAttempt, ugCyan(progressBar(percent)), percent, float64(downloaded)/1024/1024, float64(total)/1024/1024)
+				} else {
+					fmt.Printf("\r  %s 下载 %s [来源 %s%s] 已下载 %.2f MiB", stepFmt(2), asset.Name, currentSource, currentAttempt, float64(downloaded)/1024/1024)
+				}
+			}, opts.source)
 			fmt.Println()
 			if err != nil {
 				return fmt.Errorf("准备平台资产 %s 失败: %w", asset.Name, err)
@@ -722,6 +777,28 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s\n", ugDim("如遇问题，运行 dws upgrade --rollback 回滚"))
 
 	return nil
+}
+
+func writeUpgradeDownloadEvent(w io.Writer, event upgrade.DownloadEvent) {
+	switch event.Kind {
+	case "source":
+		fmt.Fprintf(w, "\n  当前来源: %s（%s）", event.Source, event.Resource)
+		if event.Reason != "" {
+			fmt.Fprintf(w, "；原因: %s", event.Reason)
+		}
+		fmt.Fprintln(w)
+	case "switch":
+		fmt.Fprintf(w, "\n  切换来源: %s → %s（%s）；原因: %s\n", event.Previous, event.Source, event.Resource, event.Reason)
+	case "attempt":
+		fmt.Fprintf(w, "\n  当前来源: %s；下载 %s；尝试 %d/%d", event.Source, event.Resource, event.Attempt, event.MaxAttempts)
+		if event.Attempt > 1 {
+			fmt.Fprintf(w, "，重试 %d/%d；原因: %s；等待 %s", event.Attempt-1, event.MaxAttempts-1, event.Reason, event.RetryDelay)
+		}
+		if event.ResumeBytes > 0 {
+			fmt.Fprintf(w, "；从 %.2f MiB 续传", float64(event.ResumeBytes)/1024/1024)
+		}
+		fmt.Fprintln(w)
+	}
 }
 
 // strictVerifyFile performs SHA256 verification with strict semantics:

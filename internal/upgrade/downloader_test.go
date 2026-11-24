@@ -69,10 +69,10 @@ func TestDownload_HTTP500_RetriesAndFails(t *testing.T) {
 		t.Fatal("expected error after retries")
 	}
 
-	// 500 is not retriable (no "connection reset" pattern), so only 1 attempt
+	// Transient HTTP 500 responses consume the bounded attempt budget.
 	got := atomic.LoadInt32(&attempts)
-	if got != 1 {
-		t.Errorf("attempts = %d, want 1 (500 is not retriable)", got)
+	if got != 2 {
+		t.Errorf("attempts = %d, want 2", got)
 	}
 }
 

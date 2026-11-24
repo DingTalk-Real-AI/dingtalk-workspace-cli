@@ -54,3 +54,9 @@ done
 [ -f "$PKG_ROOT/assets/checksums.txt" ] || { printf 'checksums.txt is missing\n' >&2; exit 1; }
 
 printf 'Staged npm package %s at %s\n' "$SEMVER" "$PKG_ROOT"
+
+# Keep existing all-platform packaging compatible. Split staging is opt-in
+# until the publisher has established ownership of every new package name.
+if [ "${DWS_STAGE_NPM_SPLITS:-0}" = "1" ]; then
+  node "$SCRIPT_DIR/stage-npm-splits.cjs" "$DIST_DIR" "$SEMVER"
+fi

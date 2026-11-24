@@ -250,7 +250,11 @@ func (c *Client) getBoundedJSON(ctx context.Context, endpoint string, target any
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s 返回 HTTP %d", source, resp.StatusCode)
+		status := resp.StatusCode
+		if source == "GitHub Release" && status == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+			status = http.StatusTooManyRequests
+		}
+		return fmt.Errorf("%s 返回 HTTP %d: %w", source, resp.StatusCode, &downloadHTTPError{status: status})
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
