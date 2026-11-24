@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -165,15 +166,21 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 	}
 	text, err := CallMCPToolTextOnServerContext(cmd.Context(), sportServerID, tool, args)
 	if err != nil {
+		if tool == "is_org_admin" {
+			return nil, classifySportOrgAdminChannelError(err)
+		}
 		return nil, err
 	}
 	body, err := sportDecodeObject(text)
-	if err != nil || body["success"] != true {
-		if tool == "is_org_admin" {
-			// 三态语义：success=false 表示组织服务查询不可用，绝不能当作非管理员。
-			return nil, apperrors.NewAPI("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=" + fmt.Sprint(body["errorCode"]) + "）：不能当作非管理员，请稍后重试")
-		}
-		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult 或缺少 success=true，不能把异常当成空结果")
+	if err != nil {
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（解码失败），不能把异常当成空结果")
+	}
+	success, present := body["success"]
+	if !present {
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（缺少 success 字段），不能把异常当成空结果")
+	}
+	if success != true {
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（success 非 true），不能把异常当成空结果")
 	}
 	if paged {
 		page, ok := body["result"].(map[string]any)
@@ -216,6 +223,25 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 		}
 	}
 	return output.Success(body), nil
+}
+
+// classifySportOrgAdminChannelError 把统一调用通道提前分类的业务错误映射回
+// is_org_admin 的三态语义：显式 success=false（如 QW_ADMIN_CHECK_FAILED）表示
+// 组织管理员查询服务不可用，必须提示稍后重试，绝不能当作非管理员；其余错误（未
+// 登录、网关、非业务错误等）原样返回。
+func classifySportOrgAdminChannelError(err error) error {
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
+		return err
+	}
+	var body map[string]any
+	if json.Unmarshal([]byte(cliErr.Message), &body) != nil {
+		return err
+	}
+	if success, ok := body["success"].(bool); !ok || success {
+		return err
+	}
+	return apperrors.NewAPI(fmt.Sprintf("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=%v，errorMsg=%v）：不能当作非管理员，请稍后重试", body["errorCode"], body["errorMsg"]))
 }
 
 func sportReadPageSchema(row string) string {

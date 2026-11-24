@@ -131,9 +131,10 @@ func TestSportOrgAdminResults(t *testing.T) {
 		fake := &sportFakeCaller{text: `{"success":false,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, blocks: 1}
 		InitDepsForTest(t, fake)
 		err := runSportCommand(t, "org", "admin")
-		// success=false 由统一通道按业务错误体分类，携带 errorMsg 作为 API 错误返回，不会产出 result=false 的结果。
-		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "组织管理员服务查询不可用") {
-			t.Fatalf("success=false 应作为组织服务不可用错误返回：%v", err)
+		// 显式 success=false 由统一通道按业务错误体拦截，再经 is_org_admin 专用分类
+		// 还原三态语义：服务不可用必须提示稍后重试，不能产出 result=false 的结果。
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "组织管理员服务查询不可用") || !strings.Contains(err.Error(), "请稍后重试") {
+			t.Fatalf("success=false 应作为提示稍后重试的组织服务不可用错误返回：%v", err)
 		}
 	})
 
@@ -141,8 +142,17 @@ func TestSportOrgAdminResults(t *testing.T) {
 		fake := &sportFakeCaller{text: `{"result":false}`, blocks: 1}
 		InitDepsForTest(t, fake)
 		err := runSportCommand(t, "org", "admin")
-		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "不能当作非管理员") {
-			t.Fatalf("缺 success 应报组织服务不可用而非 false：%v", err)
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "缺少 success 字段") {
+			t.Fatalf("缺 success 应报无效回执而非服务不可用：%v", err)
+		}
+	})
+
+	t.Run("success 非 true 视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":0}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "success 非 true") {
+			t.Fatalf("success 类型异常应报无效回执：%v", err)
 		}
 	})
 
@@ -164,6 +174,60 @@ func TestSportOrgAdminResults(t *testing.T) {
 		}
 		if envelope["dry_run"] != true || len(fake.calls) != 0 {
 			t.Fatalf("预览不得调用工具：%v", envelope)
+		}
+	})
+}
+
+// TestSportOrgAdminChannelErrorClassification 覆盖 is_org_admin 对统一通道
+// 提前分类错误的专用映射：只有显式 success=false 的业务错误才转换为「服务不可用，
+// 请稍后重试」的三态语义，其余错误必须原样透出。
+func TestSportOrgAdminChannelErrorClassification(t *testing.T) {
+	t.Run("普通错误原样返回", func(t *testing.T) {
+		fake := &sportFakeCaller{err: errors.New("boom")}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) == ExitAPI {
+			t.Fatalf("普通错误不应被转成 API 服务不可用：%v", err)
+		}
+	})
+
+	t.Run("鉴权类 CLI 错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeAuthTokenExpired, Message: "token expired"}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeAuthTokenExpired {
+			t.Fatalf("鉴权错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("非 JSON 业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: "not-json"}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError {
+			t.Fatalf("非 JSON 业务错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("缺 success 的业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: `{"errorCode":"QW_X"}`}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError || !strings.Contains(classified.Message, "QW_X") {
+			t.Fatalf("缺 success 的业务错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("success=true 的业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: `{"success":true,"errorCode":"QW_X"}`}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError {
+			t.Fatalf("success=true 的业务错误应保持原分类：%v", err)
 		}
 	})
 }
