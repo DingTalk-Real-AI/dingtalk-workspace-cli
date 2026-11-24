@@ -30,9 +30,11 @@ func VerifySHA256(filePath, expectedHash string) error {
 	return nil
 }
 
+var verifyOpen = os.Open
+
 // ComputeSHA256 computes the SHA256 hash of a file.
 func ComputeSHA256(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := verifyOpen(filePath)
 	if err != nil {
 		return "", fmt.Errorf("读取文件失败: %w", err)
 	}

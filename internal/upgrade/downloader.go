@@ -30,7 +30,11 @@ type DownloadConfig struct {
 	CheckRedirect func(*http.Request, []*http.Request) error
 }
 
-var downloadAfter = time.After
+var (
+	downloadAfter      = time.After
+	downloadCreateTemp = os.CreateTemp
+	downloadOpenFile   = os.OpenFile
+)
 
 // DefaultDownloadConfig returns sensible download defaults.
 func DefaultDownloadConfig() *DownloadConfig {
@@ -71,7 +75,7 @@ func DownloadWithConfig(ctx context.Context, url, destPath string, cfg *Download
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 		return 0, &downloadFileError{fmt.Errorf("创建目录失败: %w", err)}
 	}
-	partial, err := os.CreateTemp(filepath.Dir(destPath), ".dws-download-*")
+	partial, err := downloadCreateTemp(filepath.Dir(destPath), ".dws-download-*")
 	if err != nil {
 		return 0, &downloadFileError{err}
 	}
@@ -236,7 +240,7 @@ func downloadAttempt(ctx context.Context, url, destPath string, cfg *DownloadCon
 	if appendFile {
 		flags = os.O_WRONLY | os.O_APPEND
 	}
-	out, err := os.OpenFile(destPath, flags, 0600)
+	out, err := downloadOpenFile(destPath, flags, 0600)
 	if err != nil {
 		return 0, &downloadFileError{fmt.Errorf("创建文件失败: %w", err)}
 	}

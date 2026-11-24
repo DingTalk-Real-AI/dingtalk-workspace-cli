@@ -20,6 +20,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageUpgradeSourceCommand(t *testing.T) {
@@ -97,6 +98,18 @@ func TestCrossPlatformCoverageUpgradeSourceValidation(t *testing.T) {
 			t.Fatalf("args=%v error=%v, want validation/3", args, err)
 		}
 	}
+	if err := runUpgrade(t.Context(), upgradeOptions{source: "bad"}); apperrors.ExitCode(err) != 3 {
+		t.Fatalf("invalid internal source error=%v, want validation/3", err)
+	}
+	cmd := newUpgradeCommand()
+	complete, ok := cmd.GetFlagCompletionFunc("source")
+	if !ok {
+		t.Fatal("source completion is missing")
+	}
+	choices, directive := complete(cmd, nil, "")
+	if strings.Join(choices, ",") != "auto,github,npmmirror" || directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("source completion = %v, %v", choices, directive)
+	}
 	for _, manager := range []string{"npm", "pnpm", "brew"} {
 		t.Run(manager, func(t *testing.T) {
 			testseam.Swap(t, &detectUpgradeInstallation, func() (upgradeInstallation, error) { return upgradeInstallation{manager: manager}, nil })
@@ -109,9 +122,10 @@ func TestCrossPlatformCoverageUpgradeSourceValidation(t *testing.T) {
 
 func TestCrossPlatformCoverageUpgradeSourceProgressOutput(t *testing.T) {
 	var out bytes.Buffer
+	writeUpgradeDownloadEvent(&out, upgrade.DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "完整 npm 包", Reason: "历史版本兼容"})
 	writeUpgradeDownloadEvent(&out, upgrade.DownloadEvent{Kind: "switch", Previous: "github", Source: "npmmirror", Resource: "platform.tgz", Reason: "HTTP 503"})
 	writeUpgradeDownloadEvent(&out, upgrade.DownloadEvent{Kind: "attempt", Source: "npmmirror", Resource: "platform.tgz", Attempt: 2, MaxAttempts: 3, Reason: "下载超时或停滞", RetryDelay: time.Second, ResumeBytes: 1 << 20})
-	for _, want := range []string{"github → npmmirror", "HTTP 503", "当前来源: npmmirror", "尝试 2/3", "重试 1/2", "等待 1s", "从 1.00 MiB 续传"} {
+	for _, want := range []string{"历史版本兼容", "github → npmmirror", "HTTP 503", "当前来源: npmmirror", "尝试 2/3", "重试 1/2", "等待 1s", "从 1.00 MiB 续传"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("missing %q in %s", want, out.String())
 		}

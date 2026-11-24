@@ -22,6 +22,11 @@ const publicNPMMirror = "https://registry.npmmirror.com"
 var publicSplitVersion = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-beta\.[1-9][0-9]*)?$`)
 var errNPMSplitUnavailable = errors.New("目标版本尚无 npm 平台分包")
 
+var (
+	npmSplitMkdirTemp = os.MkdirTemp
+	npmSplitStat      = os.Stat
+)
+
 type npmSplitManifest struct {
 	npmManifest
 	Upgrade struct {
@@ -156,7 +161,7 @@ func downloadNPMSplitAsset(ctx context.Context, asset GitHubAsset, dest string, 
 	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
 		return err
 	}
-	stage, err := os.MkdirTemp(filepath.Dir(dest), ".npm-split-")
+	stage, err := npmSplitMkdirTemp(filepath.Dir(dest), ".npm-split-")
 	if err != nil {
 		return err
 	}
@@ -177,7 +182,7 @@ func downloadNPMSplitAsset(ctx context.Context, asset GitHubAsset, dest string, 
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(archive)
+	f, err := npmPackageOpen(archive)
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,7 @@ func downloadNPMSplitAsset(ctx context.Context, asset GitHubAsset, dest string, 
 	if asset.Name == skillsZipName {
 		file = prepared.SkillsArchivePath
 	}
-	info, err := os.Stat(file)
+	info, err := npmSplitStat(file)
 	if err != nil {
 		return err
 	}
