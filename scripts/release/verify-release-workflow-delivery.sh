@@ -403,9 +403,21 @@ if channels.get("conclusion") not in {"success", "failure"}:
     fail("channel publication job was not completed with a conclusive result")
 
 steps = channels.get("steps", [])
+prepared = [job for job in jobs if job.get("name") == "Prepare and verify npm packages"]
+if prepared:
+    preparation = one_job("Prepare and verify npm packages")
+    if preparation.get("conclusion") != "success":
+        fail("credential-free npm preparation did not succeed")
+    for name in ("Verify immutable npm package without publication credentials", "Require unchanged verified tarballs", "Upload sealed npm handoff"):
+        matches = [step for step in preparation.get("steps", []) if step.get("name") == name]
+        if len(matches) != 1 or matches[0].get("conclusion") != "success" or matches[0].get("status") != "completed":
+            fail(f"required npm preparation step {name!r} did not succeed")
+# Historical sealed runs predate the job split. Their recorded installation
+# check stays valid; new runs must prove the separate preparation and handoff.
+verification_step = "Verify sealed npm handoff" if prepared else "Verify immutable npm package without publication credentials"
 for name in (
     "Download and verify immutable GitHub Release",
-    "Verify immutable npm package without publication credentials",
+    verification_step,
     "Inspect npm channel state",
     "Verify npm channel delivery",
 ):

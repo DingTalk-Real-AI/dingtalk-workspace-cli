@@ -8,8 +8,24 @@ const path = require("path");
 const child = require("child_process");
 const crypto = require("crypto");
 
+// Resolve the JavaScript CLI, never execute a .cmd through spawnSync. This
+// preserves argument boundaries (including spaces/metacharacters) on Windows.
+function npmEntrypoint() {
+  if (process.env.npm_execpath && path.basename(process.env.npm_execpath) === "npm-cli.js" && fs.existsSync(process.env.npm_execpath)) return process.env.npm_execpath;
+  const directories = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const directory of directories) {
+    const executable = path.join(directory, process.platform === "win32" ? "npm.cmd" : "npm");
+    if (!fs.existsSync(executable)) continue;
+    const resolved = fs.realpathSync(executable);
+    if (path.basename(resolved) === "npm-cli.js") return resolved;
+    const cli = path.join(path.dirname(resolved), "node_modules", "npm", "bin", "npm-cli.js");
+    if (fs.existsSync(cli)) return cli;
+  }
+  throw new Error("Cannot locate npm-cli.js; install npm or run through npm exec");
+}
+
 function npm(args, cwd) {
-  const result = child.spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
+  const result = child.spawnSync(process.execPath, [npmEntrypoint(), ...args], {
     cwd, encoding: "utf8", env: { ...process.env, NPM_CONFIG_AUDIT: "false", NPM_CONFIG_FUND: "false" },
     ...(args[0] === "publish" ? { stdio: "inherit" } : {}),
   });
@@ -110,4 +126,5 @@ async function main() {
     await new Promise(resolve => setTimeout(resolve, 15000));
   }
 }
-main().catch(error => { process.stderr.write(error.message + "\n"); process.exitCode = 1; });
+if (require.main === module) main().catch(error => { process.stderr.write(error.message + "\n"); process.exitCode = 1; });
+module.exports = { npmEntrypoint, npm };

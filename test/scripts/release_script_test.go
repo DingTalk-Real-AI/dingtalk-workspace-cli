@@ -1420,6 +1420,17 @@ required_steps = [
     "Inspect npm channel state",
     "Verify npm channel delivery",
 ]
+if os.environ.get("SEPARATE_PREPARATION") == "1":
+    required_steps[1] = "Verify sealed npm handoff"
+    jobs.append({
+        "name": "Prepare and verify npm packages",
+        "status": "completed",
+        "conclusion": os.environ.get("PREPARATION_CONCLUSION", "success"),
+        "head_sha": commit,
+        "steps": [{"name": name, "status": "completed", "conclusion": os.environ.get("PREPARATION_STEP_CONCLUSION", "success")} for name in (
+            "Verify immutable npm package without publication credentials", "Require unchanged verified tarballs", "Upload sealed npm handoff",
+        )],
+    })
 jobs.append({
     "name": "Publish npm and mirrors",
     "status": "completed",
@@ -1499,6 +1510,14 @@ esac
 	if output, err := run(repairArgs("oss")); err != nil ||
 		!strings.Contains(output, "failed exact-tag push run 77") {
 		t.Fatalf("safe channel repair delivery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run(repairArgs("oss"), "SEPARATE_PREPARATION=1"); err != nil {
+		t.Fatalf("separate verified handoff rejected: %v %s", err, output)
+	}
+	for _, failure := range []string{"PREPARATION_CONCLUSION=failure", "PREPARATION_STEP_CONCLUSION=failure"} {
+		if output, err := run(repairArgs("oss"), "SEPARATE_PREPARATION=1", failure); err == nil {
+			t.Fatalf("failed preparation accepted: %s %s", failure, output)
+		}
 	}
 	if output, err := run(
 		repairArgs("oss"),

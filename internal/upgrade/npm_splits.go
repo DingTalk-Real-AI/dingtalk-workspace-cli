@@ -72,7 +72,7 @@ func mirrorSplitClient(ctx context.Context, version string) (*Client, *ReleaseIn
 }
 
 func resolveMirrorSplitRelease(ctx context.Context, release *ReleaseInfo, skipSkills bool) (*ReleaseInfo, error) {
-	client, mirrored, err := mirrorSplitClient(ctx, release.Version)
+	client, _, err := mirrorSplitClient(ctx, release.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -81,12 +81,17 @@ func resolveMirrorSplitRelease(ctx context.Context, release *ReleaseInfo, skipSk
 		names = append(names, skillsZipName)
 	}
 	result := *release
-	result.NPM = mirrored.NPM
 	result.Assets = nil
 	for _, name := range names {
 		asset, err := resolveNPMSplitAsset(ctx, client, release.Version, name)
 		if err != nil {
 			return nil, err
+		}
+		anchor := release.NPM.Upgrade
+		expected, ok := anchor.Assets[name]
+		if anchor.Format != 1 || anchor.Edition != "public" || !ok ||
+			asset.Size != expected.Size || !strings.EqualFold(asset.Digest, "sha256:"+expected.SHA256) {
+			return nil, fmt.Errorf("npm 分包缺少官方主包校验依据或与其不一致: %s", name)
 		}
 		result.Assets = append(result.Assets, asset)
 	}

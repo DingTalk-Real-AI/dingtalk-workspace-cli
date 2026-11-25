@@ -55,8 +55,7 @@ done
 
 printf 'Staged npm package %s at %s\n' "$SEMVER" "$PKG_ROOT"
 
-# Keep existing all-platform packaging compatible. Split staging is opt-in
-# until the publisher has established ownership of every new package name.
-if [ "${DWS_STAGE_NPM_SPLITS:-0}" = "1" ]; then
-  node "$SCRIPT_DIR/stage-npm-splits.cjs" "$DIST_DIR" "$SEMVER"
-fi
+# The frozen template opts in to the main manifest. Historical templates keep
+# their original bytes even when this trusted tool stages them during repair.
+rm -rf "$DIST_DIR/npm-split"
+node "$SCRIPT_DIR/stage-npm-splits.cjs" "$DIST_DIR" "$SEMVER" --main

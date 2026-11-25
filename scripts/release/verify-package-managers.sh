@@ -352,17 +352,20 @@ verify_npm() {
   need_cmd diff
   need_file "$NPM_STAGE_DIR/package.json"
 
-  tarball_name="$(
-    cd "$NPM_STAGE_DIR"
-    HOME="$TMP_ROOT/npm-pack-home" npm_config_cache="$TMP_ROOT/npm-pack-cache" npm pack --silent
-  )"
-  tarball_path="$NPM_STAGE_DIR/$tarball_name"
+  tarball_path="${DWS_VERIFY_NPM_TARBALL:-}"
+  if [ -z "$tarball_path" ]; then
+    tarball_name="$(
+      cd "$NPM_STAGE_DIR"
+      HOME="$TMP_ROOT/npm-pack-home" npm_config_cache="$TMP_ROOT/npm-pack-cache" npm pack --silent --ignore-scripts
+    )"
+    tarball_path="$NPM_STAGE_DIR/$tarball_name"
+  fi
   need_file "$tarball_path"
 
   verify_npm_install "$tarball_path" "specific-agent-roots"
   verify_npm_install "$tarball_path" "generic-fallback"
 
-  rm -f "$tarball_path"
+  [ -n "${DWS_VERIFY_NPM_TARBALL:-}" ] || rm -f "$tarball_path"
 }
 
 verify_brew() {

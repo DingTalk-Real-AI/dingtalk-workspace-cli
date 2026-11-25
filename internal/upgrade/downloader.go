@@ -164,6 +164,13 @@ type downloadFileError struct{ err error }
 func (e *downloadFileError) Error() string { return e.err.Error() }
 func (e *downloadFileError) Unwrap() error { return e.err }
 
+// Only errors returned while reading an HTTP response body get this transport
+// classification. File writes, limits and integrity failures stay distinct.
+type downloadReadError struct{ err error }
+
+func (e *downloadReadError) Error() string { return "读取下载数据失败: " + e.err.Error() }
+func (e *downloadReadError) Unwrap() error { return e.err }
+
 var errRestartDownload = errors.New("资源身份或范围已改变，需要重新下载")
 
 func downloadAttempt(ctx context.Context, url, destPath string, cfg *DownloadConfig, state *downloadState) (int64, error) {
@@ -292,7 +299,7 @@ func downloadAttempt(ctx context.Context, url, destPath string, cfg *DownloadCon
 		return 0, fmt.Errorf("下载停滞 timeout: %w", context.DeadlineExceeded)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("读取下载数据失败: %w", err)
+		return 0, &downloadReadError{err}
 	}
 	if state.total >= 0 && state.offset != state.total {
 		return 0, io.ErrUnexpectedEOF
@@ -400,6 +407,10 @@ func isRetriable(err error) bool {
 	var fileErr *downloadFileError
 	if errors.As(err, &fileErr) || errors.Is(err, context.Canceled) {
 		return false
+	}
+	var readErr *downloadReadError
+	if errors.As(err, &readErr) {
+		return true
 	}
 	if errors.Is(err, errRestartDownload) {
 		return true
