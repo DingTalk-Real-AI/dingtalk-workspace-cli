@@ -16,6 +16,7 @@ shift 3
 tools_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 scratch="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-.}}/dws-platform-tests.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+scratch="$(CDPATH= cd -- "$scratch" && pwd -P)"
 pattern='^(TestAllShortcuts|TestCrossPlatformCoverage)'
 app_package=''
 : > "$scratch/packages"
@@ -36,9 +37,14 @@ if [ "$#" -gt 0 ]; then
 fi
 
 if [ -n "$app_package" ]; then
-	# Discover on this OS, then include every selected top-level test exactly
-	# once. Exact anchors also avoid accidentally rerunning prefix neighbours.
-	go test -list "$pattern" "$app_package" > "$scratch/list"
+	# Build the instrumented executable once. Run it in the package directory
+	# like go test, using a fresh process and profile for each batch.
+	app_dir="$(go list -f '{{.Dir}}' "$app_package")"
+	app_binary="$scratch/app.test$(go env GOEXE)"
+	go test -c -coverpkg="$coverpkg" -covermode=atomic -o "$app_binary" "$app_package"
+	(cd "$app_dir" && "$app_binary" -test.list "$pattern") > "$scratch/list"
+
+	# Exact anchors keep every selected top-level test in just one batch.
 	awk '/^(TestAllShortcuts|TestCrossPlatformCoverage)/ {
 		if (count % 12 == 0) {
 			if (count) print ")$"
@@ -52,8 +58,8 @@ if [ -n "$app_package" ]; then
 	while IFS= read -r batch_pattern; do
 		batch=$((batch + 1))
 		printf 'native app coverage batch %s: %s\n' "$batch" "$batch_pattern"
-		go test -count=1 -timeout="$timeout" -run "$batch_pattern" \
-			-coverpkg="$coverpkg" -coverprofile="$scratch/app-$batch.txt" -covermode=atomic "$app_package"
+		(cd "$app_dir" && "$app_binary" -test.count=1 -test.timeout "$timeout" \
+			-test.paniconexit0 -test.run "$batch_pattern" -test.coverprofile "$scratch/app-$batch.txt")
 	done < "$scratch/batches"
 fi
 

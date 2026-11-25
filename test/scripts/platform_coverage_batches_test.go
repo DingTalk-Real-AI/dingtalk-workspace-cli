@@ -42,12 +42,15 @@ import (
 )
 func record(t *testing.T) {
  t.Helper()
+ if _, err := os.Stat("app.go"); err != nil { t.Fatal(err) }
  helper.FromApp()
  Value()
+ executable, err := os.Executable()
+ if err != nil { t.Fatal(err) }
  f, err := os.OpenFile(os.Getenv("PLATFORM_TEST_LOG"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
  if err != nil { t.Fatal(err) }
  defer f.Close()
- fmt.Fprintf(f, "%s %d\n", t.Name(), os.Getpid())
+ fmt.Fprintf(f, "%s\t%d\t%s\n", t.Name(), os.Getpid(), executable)
 }
 func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 `
@@ -75,16 +78,21 @@ func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 	}
 	seen := make(map[string]bool)
 	processes := make(map[string]int)
+	executables := make(map[string]bool)
 	for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 || seen[fields[0]] {
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) != 3 || seen[fields[0]] {
 			t.Fatalf("duplicate or malformed execution: %q", line)
 		}
 		seen[fields[0]] = true
 		processes[fields[1]]++
+		executables[fields[2]] = true
 	}
 	if len(seen) != 26 || !seen["TestAllShortcutsApp"] || len(processes) != 3 {
 		t.Fatalf("executed tests = %d, processes = %v; log:\n%s", len(seen), processes, log)
+	}
+	if len(executables) != 1 {
+		t.Errorf("app batches ran %d different test binaries, want 1", len(executables))
 	}
 	for pid, count := range processes {
 		if count > 12 {
