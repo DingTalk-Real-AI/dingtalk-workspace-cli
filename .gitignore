@@ -12,6 +12,8 @@ dist/
 .tmp-bin/
 .worktrees/
 .pytest_cache/
+.playwright-mcp/
+/.playwright-mcp/
 .venv*/
 var/
 .DS_Store

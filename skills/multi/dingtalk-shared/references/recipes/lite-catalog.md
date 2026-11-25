@@ -25,8 +25,7 @@
 
 ### list-today-meetings
 
-**优先**：加载 `dingtalk-calendar` sub-skill 后按其「今天/明天/本周日程」recipe 执行；该自动化脚本只在 `dingtalk-calendar` 包内可用。
-备选：`dws calendar event list --start "<今日起始ISO>" --end "<今日结束ISO>"`（须加 `--format json`）
+加载 `dingtalk-calendar` sub-skill 后按其 SOP-1 执行（今天/昨天/明天/本周或指定时间窗）。由脚本或 CLI 降级流程先发现一次日历本，再按真实 ID 查询本人钉钉、邮箱主日历并逐本取完分页；共享入口不另查一遍。不得退回单次默认 `event list` 并将结果当成全部日程。该自动化脚本只在 `dingtalk-calendar` 包内可用。
 
 ### check-users-busy
 
