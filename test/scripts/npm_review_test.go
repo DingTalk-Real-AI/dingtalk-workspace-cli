@@ -131,9 +131,9 @@ func TestNPMSealedVerifierUsesHistoricalContractAndExactTarball(t *testing.T) {
 		}
 	}
 	tarball := filepath.Join(dist, "npm-publish.tgz")
-	writeScriptTestFile(t, tarball, []byte("the original sealed tarball"), 0o644)
-	writeScriptTestFile(t, filepath.Join(stage, "package.json"), []byte(`{"version":"1.0.68"}`), 0o644)
-	writeScriptTestFile(t, filepath.Join(source, "scripts", "release", "verify-package-managers.sh"), []byte(`#!/bin/sh
+	mustWriteFile(t, tarball, []byte("the original sealed tarball"), 0o644)
+	mustWriteFile(t, filepath.Join(stage, "package.json"), []byte(`{"version":"1.0.68"}`), 0o644)
+	mustWriteFile(t, filepath.Join(source, "scripts", "release", "verify-package-managers.sh"), []byte(`#!/bin/sh
 set -eu
 test "$1" = --npm-only
 test "$2" = --expected-version
@@ -145,7 +145,7 @@ test -f "$VERIFY_TEST_HOME/.legacy-agent/skills/verified"
 test ! -e "$VERIFY_TEST_HOME/.workbuddy"
 rm "$stage/$name"
 `), 0o755)
-	writeScriptTestFile(t, filepath.Join(bin, "npm"), []byte(`#!/bin/sh
+	mustWriteFile(t, filepath.Join(bin, "npm"), []byte(`#!/bin/sh
 set -eu
 test "$1" = install
 cmp -s "$3" "$DWS_VERIFY_FIXED_TARBALL"
