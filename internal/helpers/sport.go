@@ -21,8 +21,8 @@ import (
 // ──────────────────────────────────────────────────────────
 // dws sport — 企业运动健康（钉钉运动）
 //
-// CLI 接入工具清单（37 个）；get_user_org_list 已在 MCP 平台下线，CLI 不接入：
-//   get_org_step_participate_status,
+// CLI 接入工具清单（38 个）；get_user_org_list 已在 MCP 平台下线，CLI 不接入：
+//   get_org_step_participate_status, is_org_admin,
 //   list_emp_step_ranking, list_dept_step_ranking, list_emp_ranking_in_dept,
 //   get_emp_step_ext_info, get_emp_step_infos, get_dept_step_infos_by_dept_id,
 //   get_org_health_step_info, get_org_total_step_count,
@@ -46,7 +46,7 @@ func newSportCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sport",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "钉钉企业运动健康：步数榜单、企业及我的比赛、个人达标与比赛排行、比赛管理邀请审批、统计与报表导出",
+			AgentSummary: "钉钉企业运动健康：步数榜单、企业及我的比赛、个人达标与比赛排行、比赛管理邀请审批、统计与报表导出、企业管理员判定",
 			UseWhen: []string{
 				"用户要查企业步数概况、总步数或员工/部门步数排行与明细",
 				"用户要列出企业或我的比赛、查询可参与数量、我的参与期次与达标进度、比赛 TopN 或全员排行榜",
@@ -54,6 +54,7 @@ func newSportCommand() *cobra.Command {
 				"用户要统计比赛的参与/达标人数、逐日趋势或发送开赛播报",
 				"用户要邀请员工或群参加比赛、编辑或删除比赛、审批成员发起的比赛",
 				"用户要导出比赛数据或历史步数报表，或查询已受理比赛导出任务",
+				"受限操作（导出、删除、审批等）前判断当前用户是否企业管理员，提前做话术分流",
 			},
 			AvoidWhen: []string{
 				"个人运动手环、运动 App 私人数据不属于企业运动榜，不要调用",
@@ -76,6 +77,7 @@ func newSportCommand() *cobra.Command {
 
 命令结构:
   dws sport org status                企业是否开通步数榜
+  dws sport org admin                 判断当前用户是否企业管理员
   dws sport step org-info             企业单日步数概况
   dws sport step org-total            企业区间总步数
   dws sport step emp-ranking          全企业员工步数排行
@@ -168,7 +170,7 @@ func sportRequiredParam(name, property, description string) contract.ParamDecl {
 // ── org：前置确认 ─────────────────────────────────────────
 
 func newSportOrgGroup() *cobra.Command {
-	orgCmd := sportGroupCommand(&cobra.Command{Use: "org", Short: "企业开通状态", RunE: GroupRunE})
+	orgCmd := sportGroupCommand(&cobra.Command{Use: "org", Short: "企业开通状态与管理员判定", RunE: GroupRunE})
 	statusCmd := NewLeafCommand(LeafSpec{
 		Use:           "status",
 		Short:         "查询企业是否开通步数榜",
@@ -194,7 +196,7 @@ func newSportOrgGroup() *cobra.Command {
 		},
 	})
 
-	orgCmd.AddCommand(statusCmd)
+	orgCmd.AddCommand(statusCmd, newSportOrgAdminCmd())
 	return orgCmd
 }
 
@@ -623,7 +625,7 @@ func newSportCompetitionCreateCmd() *cobra.Command {
 		Short: "创建企业运动比赛（写操作，无幂等）",
 		Long: `创建绑定钉钉群的运动比赛。真实写操作且无幂等，务必先与用户逐项确认；禁止用试探性参数反复创建。查询已有比赛用 sport competition config；编辑用 update（须先查详情并完整回传），删除用 delete（仅创建人、不可恢复），不要默认删除重建。
 
-当前仅支持 FIXED（固定不循环）比赛：服务端 Schema 将 groupId 与 firstPeriodEndDate 列为无条件必填，而工具描述仍声称循环模式可省结束日期，契约冲突期间 RECURRING 创建在 CLI 侧阻断；不要用空值或猜测日期绕过。
+当前仅支持 FIXED（固定不循环）比赛：服务端 Schema 无法表达群标识二选一，CLI 以 at-least-one 约束表达——--group-id 与 --open-conversation-id 至少一个，也可同时传（都传时服务端以群 id 为准）；RECURRING 创建在 CLI 侧阻断，不要用空值或猜测日期绕过。
 
 字段说明：
   --name              比赛名称（必填）
@@ -633,12 +635,12 @@ func newSportCompetitionCreateCmd() *cobra.Command {
   --end-date          首期结束日期 yyyyMMdd（必填）
   --goal-value        每日目标值 >0，单位随运动类型（必填）
   --target-day-value  周期内需达标天数 >0，不得超过单期实际天数（必填）
-  --group-id          绑定群 id，群必须属于当前企业（必填；open-conversation-id 仅是可选补充，不能替代）
+  --group-id          绑定群数字 cid（群必须属于当前企业）；与 --open-conversation-id 至少一个，都传时以本值优先
   --need-signup       true=须手动报名；false=自动视为已报名（必填）
   --allow-free-join   是否允许非群成员凭分享链接报名（必填）
   --cover-image-url   封面图 URL，优先使用官方默认头图（必填）
   --daily-limit       可选，每日运动量上限，必须 ≥ goal-value
-  --open-conversation-id 可选，群会话 id 补充字段
+  --open-conversation-id 可选，群会话 id（cid...== 加密形态）；与 --group-id 至少一个，只传本值时服务端换取数字群 cid 补到 groupId
 
 操作人 --user-id 是该 MCP 服务所绑定企业内的服务侧 userId，取当前会话已验证可用的值。返回 ruleCode 与 status：1=已生效（群主/管理员创建），0=待群主审批（普通成员创建）。`,
 		Example:       `  dws sport competition create --user-id 0123456789 --name 走路挑战赛 --sport-type WALK --competition-type FIXED --start-date 20261111 --end-date 20261130 --goal-value 8000 --target-day-value 18 --group-id 123456 --need-signup false --allow-free-join false --cover-image-url "https://gw.alicdn.com/imgextra/i2/O1CN01Pa9N1djducB1WPcg_!!6000000007915-2-tps-750-580.png" --format json`,
@@ -654,15 +656,16 @@ func newSportCompetitionCreateCmd() *cobra.Command {
 			{Name: "end-date", Bind: "firstPeriodEndDate", Required: true, Trim: true, Usage: "首期结束日期 yyyyMMdd（必填）"},
 			{Name: "goal-value", Bind: "goalValue", Required: true, Trim: true, Usage: "每日目标值 >0，单位步/米/千卡（必填）"},
 			{Name: "target-day-value", Bind: "targetDayValue", Required: true, Trim: true, Usage: "周期内需达标天数 >0（必填）"},
-			{Name: "group-id", Bind: "groupId", Required: true, Trim: true, Usage: "绑定群 id（必填）"},
+			{Name: "group-id", Bind: "groupId", Trim: true, OmitEmpty: true, Usage: "绑定群数字 cid，与 open-conversation-id 至少一个；都传时以群 id 为准"},
 			{Name: "need-signup", Bind: "needSignup", Required: true, Trim: true, Enum: []string{"true", "false"}, Usage: "是否需报名确认（必填）"},
 			{Name: "allow-free-join", Bind: "allowFreeJoin", Required: true, Trim: true, Enum: []string{"true", "false"}, Usage: "是否允许非群成员报名（必填）"},
 			{Name: "cover-image-url", Bind: "coverImageUrl", Required: true, Trim: true, Usage: "封面图 URL，优先官方默认头图（必填）"},
 			{Name: "daily-limit", Bind: "dailyLimit", Trim: true, OmitEmpty: true, Usage: "每日运动量上限，≥ goal-value（可选）"},
-			{Name: "open-conversation-id", Bind: "openConversationId", Trim: true, OmitEmpty: true, Usage: "群会话 id，可选补充（可选）"},
+			{Name: "open-conversation-id", Bind: "openConversationId", Trim: true, OmitEmpty: true, Usage: "群会话 id（cid...== 加密形态），与 group-id 至少一个；只传本值时服务端换取数字群 cid（可选）"},
 			{Name: "period-type", Bind: "periodType", Hidden: true, OmitEmpty: true, Usage: "循环周期类型；RECURRING 创建当前被阻断，不要传"},
 			{Name: "cycle-count", Bind: "cycleCount", Hidden: true, OmitEmpty: true, Usage: "循环场次；RECURRING 创建当前被阻断，不要传"},
 		},
+		Constraints: []corecmd.Constraint{{Kind: corecmd.AtLeastOne, Flags: []string{"group-id", "open-conversation-id"}}},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
 			Confirmation: "user_required", Idempotency: "non_idempotent",
@@ -690,12 +693,12 @@ func newSportCompetitionCreateCmd() *cobra.Command {
 				sportRequiredParam("end-date", "firstPeriodEndDate", "首期结束日期 yyyyMMdd"),
 				sportRequiredParam("goal-value", "goalValue", "每日目标值 >0"),
 				sportRequiredParam("target-day-value", "targetDayValue", "周期内需达标天数 >0"),
-				sportRequiredParam("group-id", "groupId", "绑定群 id"),
+				sportParam("group-id", "groupId", "绑定群数字 cid，与会话 id 至少一个"),
 				sportRequiredParam("need-signup", "needSignup", "是否需报名确认"),
 				sportRequiredParam("allow-free-join", "allowFreeJoin", "是否允许非群成员报名"),
 				sportRequiredParam("cover-image-url", "coverImageUrl", "封面图 URL"),
 				sportParam("daily-limit", "dailyLimit", "每日运动量上限，≥ goalValue"),
-				sportParam("open-conversation-id", "openConversationId", "群会话 id，可选补充"),
+				sportParam("open-conversation-id", "openConversationId", "群会话 id（cid...==），与群 id 至少一个；只传本值时服务端换取数字 cid"),
 			},
 		},
 	})
