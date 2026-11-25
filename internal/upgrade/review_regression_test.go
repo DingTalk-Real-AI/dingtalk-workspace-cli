@@ -72,11 +72,7 @@ func TestCrossPlatformCoverageNPMSplitMainAuthority(t *testing.T) {
 					registry = publicNPMMirror
 				}
 				resolved, err := ResolvePlatformReleaseForSource(t.Context(), npmManifestToRelease(main, registry), true, source)
-				if mode == "absent" && source == SourceNPMMirror {
-					if err != nil || resolved != nil {
-						t.Fatalf("legacy mirror must retain whole-package path: %+v %v", resolved, err)
-					}
-				} else if mode == "valid" {
+				if mode == "valid" {
 					if err != nil || resolved == nil || len(resolved.Assets) != 1 {
 						t.Fatalf("valid authority: %v %+v", err, resolved)
 					}

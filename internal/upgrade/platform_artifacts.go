@@ -50,7 +50,7 @@ func ResolvePlatformReleaseForSource(ctx context.Context, release *ReleaseInfo, 
 	if registry == publicNPMMirror {
 		// Legacy main packages authenticate the complete tarball with their SRI.
 		// Later split backfills must not change that version's installation path.
-		if pkg.Upgrade == nil {
+		if source == SourceAuto && pkg.Upgrade == nil {
 			reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "完整 npm 包", Reason: "该历史主包未声明平台资源，使用整包兼容路径"})
 			return nil, nil
 		}
