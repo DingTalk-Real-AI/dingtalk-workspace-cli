@@ -232,12 +232,12 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 // 组织管理员查询服务不可用，必须提示稍后重试，绝不能当作非管理员；其余错误（未
 // 登录、网关、非业务错误等）原样返回。
 //
-// 生产链路中 success=false 在 app runner 已被 detectBusinessError 分类为
-// reason=business_error 的 *apperrors.Error；直接实现 ToolCaller 的调用方则由
-// parseMCPToolTextResult 分类为 *CLIError。两种形态都要识别。
+// 生产 runner 的业务失败返回 reason=business_error，isError=true 返回
+// reason=mcp_tool_error；只改写 API 类别，鉴权、取消和其他已分类错误原样透出。
+// 直接 ToolCaller 的业务失败则由 parseMCPToolTextResult 分类为 *CLIError。
 func classifySportOrgAdminChannelError(err error) error {
 	var appErr *apperrors.Error
-	if errors.As(err, &appErr) && appErr.Reason == "business_error" {
+	if errors.As(err, &appErr) && appErr.Category == apperrors.CategoryAPI && (appErr.Reason == "business_error" || appErr.Reason == "mcp_tool_error") {
 		// 保留服务端诊断（Server Code、Trace），只替换面向用户的语义与恢复建议。
 		classified := *appErr
 		classified.Message = fmt.Sprintf("is_org_admin 调用失败（组织管理员查询不可用，errorMsg=%s）：不能当作非管理员，请稍后重试", appErr.Message)
@@ -260,7 +260,7 @@ func classifySportOrgAdminChannelError(err error) error {
 	return apperrors.NewAPI(fmt.Sprintf("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=%v，errorMsg=%v）：不能当作非管理员，请稍后重试", body["errorCode"], body["errorMsg"]), apperrors.WithHint(sportOrgAdminRetryHint))
 }
 
-const sportOrgAdminRetryHint = "组织管理员判定服务暂不可用：不能当作非管理员处理，请稍后重试"
+const sportOrgAdminRetryHint = "管理员身份判定失败，不能当作非管理员；请稍后重试，持续失败请保留 Server Code 联系服务端"
 
 func sportReadPageSchema(row string) string {
 	return `{"type":"object","description":"当前页业务数据；分页控制信息见 meta.pagination，不含 total","properties":{"list":{"type":"array","description":"当前页记录，空列表是合法业务结果","items":` + row + `}}}`

@@ -24,7 +24,7 @@ import (
 // TestSportOrgAdminLeafSchemaPublishesTriStateResult 验证 sport.is_org_admin
 // 的最终 embedded Schema 投影：full 与 compact 都必须发布布尔三态 result（true=
 // 管理员 / false=确认非管理员 / success=false 时报错），无业务入参，且两个投影
-// 的 Result 完全一致。runtime delivery 见 TestSportOrgAdminRuntimeDelivery。
+// 的 Result 完全一致。runtime delivery 见 TestCrossPlatformCoverageSportOrgAdminRuntimeDelivery。
 func TestSportOrgAdminLeafSchemaPublishesTriStateResult(t *testing.T) {
 	full := executeShortcutSchemaQuery(t, "--cli-path", "sport org admin")
 	compact := executeShortcutSchemaQuery(t, "--cli-path", "sport org admin", "--compact")
@@ -65,11 +65,11 @@ func TestSportOrgAdminLeafSchemaPublishesTriStateResult(t *testing.T) {
 	}
 }
 
-// TestSportOrgAdminRuntimeDelivery 经 NewRootCommand → runtimeRunner → HTTP →
+// TestCrossPlatformCoverageSportOrgAdminRuntimeDelivery 经 NewRootCommand → runtimeRunner → HTTP →
 // ToolCaller adapter → helper 的真实生产链路执行 sport org admin，并用最终
 // embedded Schema 发布的 data_schema 校验实际交付的 data。helper 同包测试的 fake
 // ToolCaller 会绕过 runner 的业务错误拦截与 success 补写，不能代替本用例。
-func TestSportOrgAdminRuntimeDelivery(t *testing.T) {
+func TestCrossPlatformCoverageSportOrgAdminRuntimeDelivery(t *testing.T) {
 	validators := map[string]*jsonschema.Schema{}
 	for _, compact := range []bool{false, true} {
 		query := []string{"--cli-path", "sport org admin"}
@@ -92,14 +92,19 @@ func TestSportOrgAdminRuntimeDelivery(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name    string
-		text    string
-		want    any
-		wantErr []string
+		name       string
+		text       string
+		isError    bool
+		want       any
+		wantErr    []string
+		wantReason string
 	}{
 		{name: "管理员", text: `{"success":true,"result":true,"errorCode":null,"errorMsg":null}`, want: true},
 		{name: "确认非管理员", text: `{"success":true,"result":false,"errorCode":null,"errorMsg":null}`, want: false},
-		{name: "组织服务不可用", text: `{"success":false,"result":null,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, wantErr: []string{"组织管理员服务查询不可用", "不能当作非管理员", "请稍后重试"}},
+		{name: "组织服务不可用", text: `{"success":false,"result":null,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, wantErr: []string{"组织管理员服务查询不可用", "不能当作非管理员", "请稍后重试"}, wantReason: "business_error"},
+		{name: "isError 组织服务不可用", text: `{"success":false,"result":null,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, isError: true, wantErr: []string{"组织管理员服务查询不可用", "不能当作非管理员", "请稍后重试"}, wantReason: "mcp_tool_error"},
+		// 需求方接受的兼容边界：框架补 success=true，不能据此宣称原始回执带有 success。
+		{name: "缺 success 的框架兼容边界", text: `{"result":false}`, want: false},
 		{name: "result 非布尔", text: `{"success":true,"result":"yes"}`, wantErr: []string{"缺少布尔 result"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,7 +130,7 @@ func TestSportOrgAdminRuntimeDelivery(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				if err := json.NewEncoder(w).Encode(map[string]any{
 					"jsonrpc": "2.0", "id": request.ID,
-					"result": map[string]any{"content": []map[string]any{{"type": "text", "text": tc.text}}},
+					"result": map[string]any{"content": []map[string]any{{"type": "text", "text": tc.text}}, "isError": tc.isError},
 				}); err != nil {
 					t.Error(err)
 				}
@@ -157,7 +162,14 @@ func TestSportOrgAdminRuntimeDelivery(t *testing.T) {
 			if calls.Load() != 1 {
 				t.Fatalf("HTTP calls=%d，应且仅应调用一次 is_org_admin", calls.Load())
 			}
+			stdout, readErr := os.ReadFile(capture.Name())
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if tc.wantErr != nil {
+				if len(bytes.TrimSpace(stdout)) != 0 {
+					t.Fatalf("失败不能交付成功的判定 data：%s", stdout)
+				}
 				var failure *apperrors.Error
 				if !errors.As(err, &failure) || failure.Category != apperrors.CategoryAPI || apperrors.ExitCode(err) != 1 {
 					t.Fatalf("应返回 API 错误而不是判定结果：%v", err)
@@ -168,17 +180,13 @@ func TestSportOrgAdminRuntimeDelivery(t *testing.T) {
 						t.Fatalf("错误缺少 %q：message=%q hint=%q", want, failure.Message, failure.Hint)
 					}
 				}
-				if tc.name == "组织服务不可用" && failure.ServerDiag.ServerErrorCode != "QW_ADMIN_CHECK_FAILED" {
-					t.Fatalf("应保留服务端错误码：%#v", failure.ServerDiag)
+				if tc.wantReason != "" && (failure.Reason != tc.wantReason || failure.ServerDiag.ServerErrorCode != "QW_ADMIN_CHECK_FAILED" || !strings.Contains(failure.Hint, "请稍后重试")) {
+					t.Fatalf("应保留错误类型、服务端错误码并补重试提示：%#v", failure)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("合法判定不应报错：%v; stderr=%s", err, &stderr)
-			}
-			stdout, err := os.ReadFile(capture.Name())
-			if err != nil {
-				t.Fatal(err)
 			}
 			var envelope map[string]any
 			if err := json.Unmarshal(stdout, &envelope); err != nil {

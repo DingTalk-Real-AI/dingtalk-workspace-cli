@@ -178,10 +178,9 @@ func TestSportOrgAdminResults(t *testing.T) {
 	})
 }
 
-// TestSportOrgAdminChannelErrorClassification 覆盖 is_org_admin 对统一通道
-// 提前分类错误的专用映射：只有显式 success=false 的业务错误才转换为「服务不可用，
-// 请稍后重试」的三态语义，其余错误必须原样透出。
-func TestSportOrgAdminChannelErrorClassification(t *testing.T) {
+// TestCrossPlatformCoverageSportOrgAdminChannelErrorClassification 覆盖管理员判定
+// 的 API 业务错误及 MCP 错误分流，鉴权和非业务错误保持原分类。
+func TestCrossPlatformCoverageSportOrgAdminChannelErrorClassification(t *testing.T) {
 	t.Run("普通错误原样返回", func(t *testing.T) {
 		fake := &sportFakeCaller{err: errors.New("boom")}
 		InitDepsForTest(t, fake)
@@ -253,13 +252,38 @@ func TestSportOrgAdminChannelErrorClassification(t *testing.T) {
 		}
 	})
 
+	t.Run("runner MCP 错误转换为稍后重试并保留诊断", func(t *testing.T) {
+		diag := apperrors.ServerDiagnostics{ServerErrorCode: "QW_ADMIN_CHECK_FAILED", TraceID: "trace-mcp"}
+		upstream := apperrors.NewAPI("组织服务异常", apperrors.WithReason("mcp_tool_error"), apperrors.WithServerDiag(diag))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *apperrors.Error
+		if !errors.As(err, &classified) || classified.Category != apperrors.CategoryAPI || classified.Reason != "mcp_tool_error" || !strings.Contains(classified.Hint, "请稍后重试") || !strings.Contains(classified.Message, "不能当作非管理员") {
+			t.Fatalf("MCP 错误应保持 API 分类并补恢复建议：%v", err)
+		}
+		if !reflect.DeepEqual(classified.ServerDiag, diag) || !errors.Is(err, upstream) {
+			t.Fatalf("MCP 错误应保留诊断和错误链：%#v", classified)
+		}
+	})
+
+	t.Run("鉴权类 runner 错误不改为服务不可用", func(t *testing.T) {
+		upstream := &apperrors.Error{Category: apperrors.CategoryAuth, Reason: "mcp_tool_error", Message: "permission denied"}
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err != upstream || apperrors.ExitCode(err) != apperrors.ExitCodeAuth {
+			t.Fatalf("鉴权错误必须原样透出：%v", err)
+		}
+	})
+
 	t.Run("非业务的 runner 错误保持原分类", func(t *testing.T) {
-		upstream := apperrors.NewAPI("tool error", apperrors.WithReason("mcp_tool_error"))
+		upstream := apperrors.NewAPI("tool error", apperrors.WithReason("network_error"))
 		fake := &sportFakeCaller{err: upstream}
 		InitDepsForTest(t, fake)
 		err := runSportCommand(t, "org", "admin")
 		if !errors.Is(err, upstream) || strings.Contains(err.Error(), "稍后重试") {
-			t.Fatalf("非 business_error 不应改写：%v", err)
+			t.Fatalf("非业务或 MCP 错误不应改写：%v", err)
 		}
 	})
 }
