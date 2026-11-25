@@ -12,6 +12,7 @@ dist/
 .tmp-bin/
 .worktrees/
 .pytest_cache/
+.playwright-mcp/
 /.playwright-mcp/
 /doc/
 .venv*/
