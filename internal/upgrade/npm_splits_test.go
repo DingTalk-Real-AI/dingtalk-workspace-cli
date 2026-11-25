@@ -164,7 +164,7 @@ func TestCrossPlatformCoverageNPMSplitNetworkFallback(t *testing.T) {
 				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(body)))}, nil
 			})))
 			release := npmManifestToRelease(registryFixture("1.2.3"), defaultNPMRegistry)
-			release.NPM.Upgrade = npmUpgradeManifest{Format: 1, Edition: "public", Assets: map[string]npmUpgradeDigest{
+			release.NPM.Upgrade = &npmUpgradeManifest{Format: 1, Edition: "public", Assets: map[string]npmUpgradeDigest{
 				npmPackageBinaryName(runtime.GOOS, runtime.GOARCH): {SHA256: strings.Repeat("a", 64), Size: 10},
 				skillsZipName: {SHA256: strings.Repeat("a", 64), Size: 10},
 			}}

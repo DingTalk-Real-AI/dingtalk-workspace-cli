@@ -591,12 +591,26 @@ channels = [job for job in jobs if job.get("name") == "Publish npm and mirrors"]
 if len(channels) != 1:
     fail(f"expected exactly one npm publication job, found {len(channels)}")
 channel = channels[0]
+preparations = [job for job in jobs if job.get("name") == "Prepare and verify npm packages"]
+if len(preparations) > 1:
+    fail("duplicate npm preparation jobs")
+preparation_failed = False
+if preparations:
+    preparation = preparations[0]
+    if preparation.get("head_sha") != commit or preparation.get("status") != "completed":
+        fail("npm preparation did not complete at the release commit")
+    preparation_failed = preparation.get("conclusion") == "failure"
+    if preparation.get("conclusion") not in {"success", "failure"}:
+        fail("npm preparation is neither successful nor failed")
 if (
     channel.get("head_sha") != commit
     or channel.get("status") != "completed"
-    or channel.get("conclusion") not in {"success", "failure"}
+    or not (
+        channel.get("conclusion") in {"success", "failure"}
+        or (channel.get("conclusion") == "skipped" and preparation_failed)
+    )
 ):
-    fail("npm publication job is not a completed success/failure at the release commit")
+    fail("npm publication has no completed or failed-preparation recovery path at the release commit")
 PY
   rm -rf "$jobs_dir"
   return "$result"

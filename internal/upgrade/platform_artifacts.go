@@ -48,6 +48,12 @@ func ResolvePlatformReleaseForSource(ctx context.Context, release *ReleaseInfo, 
 		return nil, fmt.Errorf("npm 版本身份无效，拒绝解析平台资产")
 	}
 	if registry == publicNPMMirror {
+		// Legacy main packages authenticate the complete tarball with their SRI.
+		// Later split backfills must not change that version's installation path.
+		if pkg.Upgrade == nil {
+			reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "完整 npm 包", Reason: "该历史主包未声明平台资源，使用整包兼容路径"})
+			return nil, nil
+		}
 		reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "平台资源元数据"})
 		resolved, err := resolveMirrorSplitRelease(ctx, release, skipSkills)
 		if source == SourceAuto && errors.Is(err, errNPMSplitUnavailable) {

@@ -88,6 +88,9 @@ func resolveMirrorSplitRelease(ctx context.Context, release *ReleaseInfo, skipSk
 			return nil, err
 		}
 		anchor := release.NPM.Upgrade
+		if anchor == nil {
+			return nil, fmt.Errorf("npm 分包缺少官方主包校验依据: %s", name)
+		}
 		expected, ok := anchor.Assets[name]
 		if anchor.Format != 1 || anchor.Edition != "public" || !ok ||
 			asset.Size != expected.Size || !strings.EqualFold(asset.Digest, "sha256:"+expected.SHA256) {

@@ -37,7 +37,7 @@ type NPMPackage struct {
 	Version     string
 	TarballURL  string
 	Integrity   string
-	Upgrade     npmUpgradeManifest
+	Upgrade     *npmUpgradeManifest
 }
 
 // The main package, not an independently published resource package, owns the
@@ -120,10 +120,10 @@ func validRegistryURL(raw string) bool {
 }
 
 type npmManifest struct {
-	Name       string             `json:"name"`
-	Version    string             `json:"version"`
-	Deprecated string             `json:"deprecated"`
-	Upgrade    npmUpgradeManifest `json:"dwsUpgrade"`
+	Name       string              `json:"name"`
+	Version    string              `json:"version"`
+	Deprecated string              `json:"deprecated"`
+	Upgrade    *npmUpgradeManifest `json:"dwsUpgrade,omitempty"`
 	Dist       struct {
 		Tarball   string `json:"tarball"`
 		Integrity string `json:"integrity"`
@@ -275,7 +275,7 @@ func (c *Client) getBoundedJSON(ctx context.Context, endpoint string, target any
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return fmt.Errorf("读取 %s失败: %w", metadata, err)
+		return fmt.Errorf("读取 %s失败: %w", metadata, &downloadReadError{err})
 	}
 	if int64(len(body)) > limit {
 		return fmt.Errorf("%s超过大小限制", metadata)

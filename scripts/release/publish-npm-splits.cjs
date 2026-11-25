@@ -25,7 +25,10 @@ function npmEntrypoint() {
 }
 
 function npm(args, cwd) {
-  const result = child.spawnSync(process.execPath, [npmEntrypoint(), ...args], {
+  // POSIX version managers may expose an executable shim with no adjacent JS
+  // entrypoint. Keep PATH resolution there; Windows requires Node + npm-cli.js.
+  const windows = process.platform === "win32";
+  const result = child.spawnSync(windows ? process.execPath : "npm", windows ? [npmEntrypoint(), ...args] : args, {
     cwd, encoding: "utf8", env: { ...process.env, NPM_CONFIG_AUDIT: "false", NPM_CONFIG_FUND: "false" },
     ...(args[0] === "publish" ? { stdio: "inherit" } : {}),
   });

@@ -1225,6 +1225,8 @@ required = [
 ]
 if os.environ.get("MISSING_SEAL") == "1":
     required.remove("Seal cloud release tag")
+if os.environ.get("PREPARATION_CONCLUSION"):
+    required.append("Prepare and verify npm packages")
 jobs = []
 for name in required:
     job = {
@@ -1250,6 +1252,9 @@ for name in required:
             job["conclusion"] = "failure"
     elif name == "Publish npm and mirrors":
         job["conclusion"] = os.environ.get("CHANNEL_CONCLUSION", "success")
+    elif name == "Prepare and verify npm packages":
+        job["conclusion"] = os.environ["PREPARATION_CONCLUSION"]
+        job["head_sha"] = os.environ.get("PREPARATION_SHA", os.environ["RELEASE_COMMIT"])
     jobs.append(job)
 print(json.dumps({"jobs": jobs}))
 PY
@@ -1341,6 +1346,17 @@ esac
 		"PUBLISH_RELEASE_FAILURE=1",
 	); err == nil || strings.Contains(output, "npm-repair authority verified") {
 		t.Fatalf("npm repair accepted a failed immutable GitHub publication: err=%v\noutput:\n%s", err, output)
+	}
+	for _, preparation := range []string{"failure", "success", "cancelled", ""} {
+		output, err := runWithArgs([]string{"--npm-repair", tag, commit},
+			"RUN_CONCLUSION=failure", "CHANNEL_CONCLUSION=skipped", "PREPARATION_CONCLUSION="+preparation)
+		if (err == nil) != (preparation == "failure") {
+			t.Fatalf("repair after preparation=%q: err=%v output=%s", preparation, err, output)
+		}
+	}
+	if output, err := runWithArgs([]string{"--npm-repair", tag, commit},
+		"RUN_CONCLUSION=failure", "CHANNEL_CONCLUSION=skipped", "PREPARATION_CONCLUSION=failure", "PREPARATION_SHA="+strings.Repeat("c", 40)); err == nil {
+		t.Fatalf("repair accepted preparation from another commit: %s", output)
 	}
 }
 
@@ -2265,9 +2281,13 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 		want      string
 		doNotWant string
 		installer bool
+		sealed    bool
+		missing   bool
 	}{
 		{name: "prerelease", version: "v1.2.3-beta.1", channel: "prerelease", want: "/beta.txt", doNotWant: "/latest.txt", installer: false},
 		{name: "stable", version: "v1.2.3", channel: "stable", want: "/latest.txt", doNotWant: "/beta.txt", installer: true},
+		{name: "sealed stable installers", version: "v1.2.3", channel: "stable", want: "/latest.txt", doNotWant: "/beta.txt", installer: true, sealed: true},
+		{name: "missing sealed installer", version: "v1.2.3", channel: "stable", sealed: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -2294,7 +2314,26 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 				"OSSUTIL_LOG="+logPath,
 				"OSSUTIL_ARGS_LOG="+argsLogPath,
 			)
+			installers := filepath.Join(dist, "oss-installers")
+			if test.sealed {
+				for _, name := range []string{"install.sh", "install.ps1", "install-skills.sh"} {
+					if test.missing && name == "install-skills.sh" {
+						continue
+					}
+					mustWriteFile(t, filepath.Join(installers, name), []byte("sealed source installer"), 0o644)
+				}
+				cmd.Env = append(cmd.Env, "DWS_OSS_INSTALLERS_DIR="+installers)
+			}
 			output, err := cmd.CombinedOutput()
+			if test.missing {
+				if err == nil || !strings.Contains(string(output), "Missing sealed installer") {
+					t.Fatalf("missing sealed installer was accepted: %v %s", err, output)
+				}
+				if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+					t.Fatal("missing installer changed OSS objects before validation")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("sync-to-oss error = %v\noutput:\n%s", err, output)
 			}
@@ -2315,6 +2354,13 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 			argsData, err := os.ReadFile(argsLogPath)
 			if err != nil {
 				t.Fatalf("ReadFile(ossutil args log) error = %v", err)
+			}
+			if test.sealed {
+				for _, name := range []string{"install.sh", "install.ps1", "install-skills.sh"} {
+					if !strings.Contains(string(argsData), filepath.Join(installers, name)+"\n") {
+						t.Fatalf("OSS did not upload sealed installer %s: %s", name, argsData)
+					}
+				}
 			}
 			for _, forbidden := range []string{"test-key", "test-secret", "--access-key-id", "--access-key-secret"} {
 				if strings.Contains(string(argsData), forbidden) {

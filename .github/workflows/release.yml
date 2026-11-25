@@ -1853,6 +1853,17 @@ jobs:
           test -n "$EXPECTED_DIGEST"
           node "$GITHUB_WORKSPACE/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
 
+      - name: Revalidate publication authority
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await require('./scripts/release/verify-npm-publication-authority.cjs')({
+              github, context,
+              version: process.env.RELEASE_VERSION,
+              commit: process.env.RELEASE_COMMIT,
+              tagObject: process.env.RELEASE_TAG_OBJECT,
+            });
+
       - name: Inspect npm channel state
         id: npm-state
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
@@ -2018,6 +2029,7 @@ jobs:
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           DWS_REQUIRE_OSS: "1"
+          DWS_OSS_INSTALLERS_DIR: ${{ github.workspace }}/dist/oss-installers
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
@@ -2113,6 +2125,21 @@ jobs:
         run: |
           test -n "$EXPECTED_DIGEST"
           node "$GITHUB_WORKSPACE/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
+
+      - name: Revalidate publication authority
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ inputs.repair_npm_version }}
+          RELEASE_COMMIT: ${{ needs.prepare-npm-repair.outputs.commit_sha }}
+          RELEASE_TAG_OBJECT: ${{ needs.prepare-npm-repair.outputs.tag_object }}
+        with:
+          script: |
+            await require('./scripts/release/verify-npm-publication-authority.cjs')({
+              github, context,
+              version: process.env.RELEASE_VERSION,
+              commit: process.env.RELEASE_COMMIT,
+              tagObject: process.env.RELEASE_TAG_OBJECT,
+            });
 
       - name: Inspect npm version
         id: npm
@@ -2248,6 +2275,8 @@ jobs:
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
             DWS_STAGE_NPM_SPLITS="${{ vars.DWS_STAGE_NPM_SPLITS || '0' }}" \
             "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/stage-npm-package.sh" "$RELEASE_VERSION"
+          mkdir -p dist/oss-installers
+          cp scripts/install.sh scripts/install.ps1 scripts/install-skills.sh dist/oss-installers/
 
       - name: Pack and seal npm handoff
         id: package
@@ -2263,9 +2292,8 @@ jobs:
         run: |
           DWS_VERIFY_NPM_TARBALL="$GITHUB_WORKSPACE/dist/npm-publish.tgz" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-package-managers.sh" \
-            --npm-only \
-            --expected-version "$RELEASE_VERSION"
+            sh "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-sealed-npm-package.sh" \
+            "$GITHUB_WORKSPACE" "$RELEASE_VERSION"
 
 
       - name: Require unchanged verified tarballs
@@ -2279,7 +2307,7 @@ jobs:
           name: npm-channel-handoff
           path: dist/
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 31
 
   prepare-npm-repair:
     name: Prepare and verify npm repair
@@ -2293,6 +2321,8 @@ jobs:
     outputs:
       digest: ${{ steps.package.outputs.digest }}
       semver: ${{ steps.version.outputs.semver }}
+      commit_sha: ${{ steps.authority.outputs.commit_sha }}
+      tag_object: ${{ steps.authority.outputs.tag_object }}
     steps:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
@@ -2402,6 +2432,7 @@ jobs:
               return;
             }
             core.setOutput("commit_sha", commitSha);
+            core.setOutput("tag_object", ref.data.object.sha);
 
       - name: Require successful Release workflow delivery
         working-directory: tooling
@@ -2470,10 +2501,8 @@ jobs:
         run: |
           DWS_VERIFY_NPM_TARBALL="$GITHUB_WORKSPACE/dist/npm-publish.tgz" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-package-managers.sh" \
-              --npm-only \
-              --expected-version "$VERSION" \
-              --skip-skill-targets
+            sh "$GITHUB_WORKSPACE/tooling/scripts/release/verify-sealed-npm-package.sh" \
+            "$GITHUB_WORKSPACE/release-source" "$VERSION"
 
 
       - name: Require unchanged verified tarballs
@@ -2487,7 +2516,7 @@ jobs:
           name: npm-repair-handoff
           path: dist/
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 31
 
   coverage-baseline-confirmation:
     name: Confirm Formula coverage baseline
