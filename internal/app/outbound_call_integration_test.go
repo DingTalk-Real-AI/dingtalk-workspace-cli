@@ -23,6 +23,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -102,6 +103,120 @@ func TestCrossPlatformCoverageOutboundCallSchema(t *testing.T) {
 			if leaf["confirmation"] != confirmation {
 				t.Fatalf("confirmation = %#v, want %s", leaf["confirmation"], confirmation)
 			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageOutboundCallVoiceIntentDiscovery(t *testing.T) {
+	type selection struct {
+		AgentSummary string   `json:"agent_summary"`
+		UseWhen      []string `json:"use_when"`
+		AvoidWhen    []string `json:"avoid_when"`
+	}
+	for _, query := range []struct {
+		name string
+		args []string
+	}{
+		{"product", []string{"schema", "outbound-call"}},
+		{"create", []string{"schema", "--cli-path", "outbound-call create"}},
+	} {
+		var full selection
+		for _, compactArg := range []string{"--compact=false", "--compact=true"} {
+			root := NewRootCommand()
+			var stream bytes.Buffer
+			root.SetOut(&stream)
+			root.SetErr(&stream)
+			args := append([]string(nil), query.args...)
+			root.SetArgs(append(args, "--format", "json", compactArg))
+			if err := root.Execute(); err != nil {
+				t.Fatalf("%s %s: %v", query.name, compactArg, err)
+			}
+			payload := json.RawMessage(stream.Bytes())
+			if query.name == "product" {
+				var envelope struct {
+					Product json.RawMessage `json:"product"`
+				}
+				if err := json.Unmarshal(payload, &envelope); err != nil {
+					t.Fatal(err)
+				}
+				payload = envelope.Product
+			}
+			var delivered selection
+			if err := json.Unmarshal(payload, &delivered); err != nil {
+				t.Fatalf("%s %s: %v: %s", query.name, compactArg, err, &stream)
+			}
+			assertSelectionContains(t, query.name+" summary", delivered.AgentSummary,
+				[]string{"钉钉语音通话", "钉钉语音电话", "AI"})
+			if query.name == "create" {
+				assertSelectionContains(t, "create preparation", delivered.AgentSummary,
+					[]string{"contact", "userId"})
+			}
+			assertSelectionContains(t, query.name+" use_when", strings.Join(delivered.UseWhen, "\n"),
+				[]string{"钉钉语音通话", "钉钉语音电话", "用钉钉给张三打电话"})
+			assertSelectionContains(t, query.name+" avoid_when", strings.Join(delivered.AvoidWhen, "\n"),
+				[]string{"DING", "voip", "event", "本人手动"})
+			if compactArg == "--compact=false" {
+				full = delivered
+			} else if !reflect.DeepEqual(delivered, full) {
+				t.Fatalf("%s selection differs between compact and full Schema", query.name)
+			}
+		}
+	}
+
+	root := NewRootCommand()
+	var stream bytes.Buffer
+	root.SetOut(&stream)
+	root.SetErr(&stream)
+	root.SetArgs([]string{"schema", "--format", "json", "--compact"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var overview struct {
+		Products []struct {
+			ID           string `json:"id"`
+			AgentSummary string `json:"agent_summary"`
+		} `json:"products"`
+	}
+	if err := json.Unmarshal(stream.Bytes(), &overview); err != nil {
+		t.Fatal(err)
+	}
+	foundProduct := false
+	for _, product := range overview.Products {
+		if product.ID == "outbound-call" {
+			foundProduct = true
+			assertSelectionContains(t, "overview summary", product.AgentSummary,
+				[]string{"钉钉语音通话", "钉钉语音电话"})
+		}
+	}
+	if !foundProduct {
+		t.Fatal("hidden outbound-call product is missing from Schema discovery")
+	}
+
+	effective, err := cli.BuildEffectiveCommandRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := cli.BindEffectiveCommandRegistry(root, effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture, _, err := cli.BuildAgentSelectionEvalFixture(bound)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phrase := range []string{"钉钉语音通话", "钉钉语音电话", "用钉钉给张三打电话"} {
+		found := false
+		for _, scenario := range fixture.Cases {
+			if scenario.ExpectedCanonical == "outbound-call.create" &&
+				strings.Contains(scenario.Scenario, phrase) &&
+				!strings.Contains(scenario.Scenario, "AI") &&
+				!strings.Contains(scenario.Scenario, "外呼") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("selection fixture lacks %q scenario without AI/outbound terminology", phrase)
 		}
 	}
 }
