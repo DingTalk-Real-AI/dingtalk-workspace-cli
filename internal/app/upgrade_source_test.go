@@ -45,10 +45,15 @@ func TestCrossPlatformCoverageUpgradeSourceCommand(t *testing.T) {
 				var payload any
 				switch {
 				case req.URL.Path == "/dingtalk-workspace-cli/latest" || req.URL.Path == "/dingtalk-workspace-cli/9.9.9":
-					payload = map[string]any{"name": "dingtalk-workspace-cli", "version": "9.9.9", "dist": map[string]string{
-						"tarball":   "https://" + req.URL.Host + "/dingtalk-workspace-cli/-/dingtalk-workspace-cli-9.9.9.tgz",
-						"integrity": "sha512-" + base64.StdEncoding.EncodeToString(make([]byte, 64)),
-					}}
+					payload = map[string]any{"name": "dingtalk-workspace-cli", "version": "9.9.9",
+						"dist": map[string]string{
+							"tarball":   "https://" + req.URL.Host + "/dingtalk-workspace-cli/-/dingtalk-workspace-cli-9.9.9.tgz",
+							"integrity": "sha512-" + base64.StdEncoding.EncodeToString(make([]byte, 64)),
+						},
+						"dwsUpgrade": map[string]any{"format": 1, "edition": "public", "assets": map[string]any{
+							name: map[string]any{"size": 10, "sha256": strings.Repeat("a", 64)},
+						}},
+					}
 				case strings.HasPrefix(req.URL.Path, "/repos/"):
 					payload = map[string]any{"tag_name": "v9.9.9", "immutable": true, "assets": []map[string]any{{
 						"name": name, "size": 10, "digest": "sha256:" + strings.Repeat("a", 64),
