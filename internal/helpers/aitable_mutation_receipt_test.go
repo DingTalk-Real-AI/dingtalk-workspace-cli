@@ -90,3 +90,60 @@ func TestCrossPlatformCoverageLayoutConflictKeepsIndependentSeatEffect(t *testin
 		t.Fatalf("lost seat conflict evidence: %#v %v", typed, err)
 	}
 }
+
+func TestCrossPlatformCoverageAitableRecordRecoveryStageBoundaries(t *testing.T) {
+	if err := ClassifyAitableRecordMutationError("aitable", "record_upsert", map[string]any{"status": "success", "data": map[string]any{"updatedRecordIds": []any{"r"}}}); err != nil {
+		t.Fatal("successful record write was classified as a recovery error")
+	}
+	for _, code := range []string{"ATTACHMENT_PREPARATION_UNAVAILABLE", "CREATE_RECORDS_OUTCOME_UNKNOWN", "UPDATE_RECORDS_RESULT_UNKNOWN", "DUPLICATE_CLIENT_TOKEN", "UNREVIEWED_ERROR"} {
+		for _, stage := range []string{"PARTIALLY_COMPLETED", "OUTCOME_UNKNOWN", "COMMITTED_RESULT_UNAVAILABLE", "REJECTED", "NOT_ATTEMPTED", ""} {
+			for _, withToken := range []bool{false, true} {
+				token, tool := "", ""
+				if withToken {
+					token, tool = "original-token", "get_record_write_result"
+				}
+				want := code != "UNREVIEWED_ERROR" && (withToken || stage == "PARTIALLY_COMPLETED" || stage == "OUTCOME_UNKNOWN" || stage == "COMMITTED_RESULT_UNAVAILABLE") &&
+					(code == "DUPLICATE_CLIENT_TOKEN" || stage != "NOT_ATTEMPTED" && stage != "REJECTED")
+				if got := AitableRecordWriteNeedsReconciliation(code, stage, token, tool); got != want {
+					t.Fatalf("code=%s stage=%s token=%v: got=%v want=%v", code, stage, withToken, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAitableRecordRecoveryDropsSensitiveMessages(t *testing.T) {
+	for _, code := range []string{"ATTACHMENT_PREPARATION_UNAVAILABLE", "CREATE_RECORDS_OUTCOME_UNKNOWN", "UPDATE_RECORDS_RESULT_UNKNOWN", "DUPLICATE_CLIENT_TOKEN", "ATTACHMENT_WRITE_UNCONFIRMED", "DOWNSTREAM_UNAVAILABLE"} {
+		for _, summaryOnly := range []bool{false, true} {
+			details := map[string]any{"writeOutcome": "PARTIALLY_COMPLETED", "mutationSubmitted": true}
+			if code == "ATTACHMENT_WRITE_UNCONFIRMED" {
+				details["attachmentVerification"] = "unconfirmed"
+			}
+			if code == "DOWNSTREAM_UNAVAILABLE" {
+				details["groupOutcomes"] = map[string]any{"update": map[string]any{"requested": true, "error": map[string]any{"code": "UPDATE_RECORDS_RESULT_UNKNOWN", "details": map[string]any{"writeOutcome": "OUTCOME_UNKNOWN"}}}}
+			}
+			secret := "fileToken=private-file-canary https://upload.example.test/object?Signature=private-signature-canary"
+			upstream := map[string]any{"code": code, "retryable": false, "details": details}
+			body := map[string]any{"status": "error", "error": upstream, "summary": secret, "logId": "private-log-canary"}
+			if !summaryOnly {
+				upstream["message"] = secret
+			}
+			for _, classify := range []func(map[string]any) error{func(content map[string]any) error {
+				return ClassifyAitableRecordMutationError("aitable", "record_upsert", content)
+			}, func(content map[string]any) error {
+				raw, _ := json.Marshal(content)
+				return classifyAitableRecordTextForTest("aitable", "record_upsert", string(raw))
+			}} {
+				err := classify(body)
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Retryable || typed.Reason != code {
+					t.Fatalf("recovery classification changed: code=%s summaryOnly=%v err=%v", code, summaryOnly, err)
+				}
+				encoded, _ := json.Marshal(typed)
+				if strings.Contains(string(encoded), "private-") || strings.Contains(err.Error(), "private-") {
+					t.Errorf("recovery diagnostic retained an upstream message: code=%s summaryOnly=%v", code, summaryOnly)
+				}
+			}
+		}
+	}
+}

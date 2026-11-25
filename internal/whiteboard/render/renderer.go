@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	Version          = "opennodes-svg-v1"
+	Version          = "opennodes-svg-v2"
 	DefaultPadding   = 24.0
 	maximumNodeCount = 5000
 	maximumSVGBytes  = 8 * 1024 * 1024
@@ -55,13 +55,14 @@ type Result struct {
 }
 
 type renderer struct {
-	source    *opennodes.Source
-	items     []*item
-	byID      map[string]*item
-	warnings  []Warning
-	exact     int
-	approx    int
-	placehold int
+	source      *opennodes.Source
+	items       []*item
+	byID        map[string]*item
+	warnings    []Warning
+	exact       int
+	approx      int
+	placehold   int
+	layoutError error
 }
 
 type item struct {
@@ -101,6 +102,12 @@ func SVG(source *opennodes.Source) (*Result, error) {
 		r.worldPosition(current)
 	}
 	bounds := r.sceneBounds()
+	if r.layoutError != nil {
+		return nil, r.layoutError
+	}
+	if !isFinite(bounds.X) || !isFinite(bounds.Y) || !isFinite(bounds.Width) || !isFinite(bounds.Height) {
+		return nil, errors.New("scene bounds overflow SVG layout")
+	}
 
 	var body bytes.Buffer
 	body.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DWS OpenNodes semantic preview" viewBox="`)
@@ -119,6 +126,9 @@ func SVG(source *opennodes.Source) (*Result, error) {
 			continue
 		}
 		body.WriteString(r.renderItem(current))
+		if r.layoutError != nil {
+			return nil, r.layoutError
+		}
 		if body.Len() > maximumSVGBytes {
 			return nil, fmt.Errorf("rendered SVG exceeds %d bytes", maximumSVGBytes)
 		}
@@ -246,6 +256,17 @@ func (r *renderer) sceneBounds() Bounds {
 		}
 		add(current.worldX, current.worldY)
 		add(current.worldX+current.width, current.worldY+current.height)
+		switch current.nodeType {
+		case "text", "shape", "sticky", "stickynote", "frame":
+			value, centerY := textValueAndCenter(current)
+			_, height, err := layoutText(value, textFallbackFont(current))
+			if err != nil {
+				r.layoutError = err
+				continue
+			}
+			add(current.worldX, centerY-height/2)
+			add(current.worldX+current.width, centerY+height/2)
+		}
 	}
 	if math.IsInf(minX, 1) {
 		return Bounds{X: 0, Y: 0, Width: 640, Height: 360}
@@ -262,7 +283,7 @@ func (r *renderer) renderItem(current *item) string {
 		return r.placeholder(current, "节点身份无效，无法安全解析引用")
 	}
 	switch current.nodeType {
-	case "shape", "sticky":
+	case "shape", "sticky", "stickynote":
 		return r.renderShape(current)
 	case "text":
 		return r.renderTextNode(current)
@@ -286,7 +307,7 @@ func (r *renderer) renderItem(current *item) string {
 func (r *renderer) renderShape(current *item) string {
 	geometry, _ := stringValue(current.node["geometry"])
 	fill, stroke, strokeWidth, styleApproximate := style(current.node, "#f8fafc", "#64748b", 1.5)
-	if current.nodeType == "sticky" && fill == "#f8fafc" {
+	if (current.nodeType == "sticky" || current.nodeType == "stickynote") && fill == "#f8fafc" {
 		fill = "#fef3c7"
 	}
 	var element string
@@ -449,26 +470,30 @@ func (r *renderer) nodeText(current *item, value any) string {
 }
 
 func (r *renderer) nodeTextAt(current *item, value any, x, y float64, anchor string) string {
-	lines := textLines(value)
+	fontSize := textFallbackFont(current)
+	lines, totalHeight, err := layoutText(value, fontSize)
+	if err != nil {
+		r.layoutError = err
+		return ""
+	}
 	if len(lines) == 0 {
 		return ""
 	}
-	fontSize := 14.0
-	if styleObject, ok := current.node["style"].(map[string]any); ok {
-		if size, ok := positiveNumber(styleObject["fontSize"]); ok && size <= 256 {
-			fontSize = size
-		}
-	}
-	lineHeight := fontSize * 1.25
-	startY := y - float64(len(lines)-1)*lineHeight/2
+	top := y - totalHeight/2
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("  <text x=\"%s\" y=\"%s\" text-anchor=\"%s\" dominant-baseline=\"middle\" fill=\"#0f172a\" font-family=\"system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif\" font-size=\"%s\"%s>\n", number(x), number(startY), anchor, number(fontSize), rotation(current)))
-	for index, line := range lines {
-		dy := "0"
-		if index > 0 {
-			dy = number(lineHeight)
+	result.WriteString(fmt.Sprintf("  <text xml:space=\"preserve\" x=\"%s\" text-anchor=\"%s\" dominant-baseline=\"middle\" fill=\"#0f172a\" font-family=\"system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif\" font-size=\"%s\"%s>\n", number(x), anchor, number(fontSize), rotation(current)))
+	for _, line := range lines {
+		baseline := top + line.height/2
+		if !isFinite(baseline) {
+			r.layoutError = errors.New("text position overflows SVG layout")
+			return ""
 		}
-		result.WriteString(fmt.Sprintf("    <tspan x=\"%s\" dy=\"%s\">%s</tspan>\n", number(x), dy, escape(line)))
+		result.WriteString(fmt.Sprintf("    <tspan x=\"%s\" y=\"%s\" font-size=\"%s\" data-line-height=\"%s\">", number(x), number(baseline), number(line.fontSize), number(line.lineHeight)))
+		for _, run := range line.runs {
+			result.WriteString(fmt.Sprintf("<tspan font-size=\"%s\">%s</tspan>", number(run.fontSize), escape(run.text)))
+		}
+		result.WriteString("</tspan>\n")
+		top += line.height
 	}
 	result.WriteString("  </text>\n")
 	return result.String()

@@ -203,6 +203,9 @@ paired_files:
   - mono: references/products/sport.md
     multi: dingtalk-misc/references/sport.md
     mode: identical
+  - mono: scripts/read_import_headers.py
+    multi: dingtalk-aitable/scripts/read_import_headers.py
+    mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py
     mode: identical

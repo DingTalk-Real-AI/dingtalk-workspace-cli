@@ -58,12 +58,26 @@ dws sheet batch-update --node <NODE_ID> --operations '[
 
 ## 关键参数语义
 
+- `update` 子操作的 `index` 只能单独更新，不能与 `name` / `title` / `hidden` / `frozen-row-count` / `frozen-column-count` / `tab-color` 混用，即使值为 `0`、`false` 或空颜色。此限制仅适用于 batch；独立 `dws sheet update` 仍可组合这些属性。需要同时修改时，显式拆为两个 `update`，先更新其他属性，再单独更新 `index`，使用相同、稳定的 `sheet-id`。
 - `csv-put` 子操作用 `"auto-convert":false` 关闭非公式字段自动转换，向 MCP 透传为 `autoConvert:false`。首字符为 `=` 的字段仍按公式解析；`'=...` 是普通文本并保留前置单引号。缺省或 `true` 保持现有自动类型转换行为。
 - `delete-dimension` / `move-dimension` 与独立命令一致：`ROWS` 使用 1-based 行号，`COLUMNS` 使用列字母；DWS 负责转换成 batch API 的 0-based 索引，调用方不要提前减 1。其他子操作也应沿用对应 standalone 命令的公开坐标契约。
 - `set-dropdown` 的 Inline 模式使用 `options`；SourceRange 模式使用 `source-sheet-id` 与 `source-range`，两种模式必须且只能选一个。Inline 颜色写在 `options[].color`；顶层 `colors` / `source-colors` 和 SourceRange 颜色不支持。
 - `source-range` 按 `toolName` 解释：在 `set-dropdown` 中是候选项来源，在 `range fill` / `range copy-to` / `range move-to` 中是数据源区域。
 - `create-float-image` / `update-float-image` 在 batch 中只接受 `src` URL，不接受 `file`；本地文件必须先上传。
 - `group-dimension` 在 batch 中只适合默认展开分组；需要 `group-state=fold` 时调用独立命令。
+
+## 同时修改工作表属性与位置
+
+以下示例只预览请求；`NODE_ID` 和稳定的 `SHEET_ID` 必须替换为当前任务真实返回的 ID。两个子操作使用同一个 ID，避免改名后按旧名称定位失败。
+
+```bash
+dws sheet batch-update --node NODE_ID --dry-run --operations '[
+  {"toolName":"update","input":{"sheet-id":"SHEET_ID","frozen-row-count":2}},
+  {"toolName":"update","input":{"sheet-id":"SHEET_ID","index":0}}
+]'
+```
+
+先确认预览和精确目标，再按用户授权执行。两个子操作各占一个操作/结果索引，单批总数仍最多 20 条；CLI 不会自动拆分混合输入。非法组合在本地返回 validation（退出码 3），错误中的 `operations[N]` 仍对应原输入数组项，不会发出远程写请求。
 
 ## 返回值与批内依赖
 

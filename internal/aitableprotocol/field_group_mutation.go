@@ -10,10 +10,21 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
 
-// FieldGroupMutationError projects only reviewed stage codes. Retry guidance
-// requires both a known pre-submission stage and an explicit boolean hint;
+// FieldGroupMutationError is the legacy AI Table mutation boundary used by existing callers.
+// Exact record writes delegate to the record protocol before field-group handling.
+// Record error envelopes are replaced before legacy callers log diagnostics.
+// Field-group retry guidance requires both a known pre-submission stage and an explicit boolean hint;
 // neither raw diagnostics nor unknown outcomes authorize another write.
 func FieldGroupMutationError(product, tool string, body map[string]any) error {
+	if recordErr := classifyAitableRecordMutationError(product, tool, body); recordErr != nil {
+		clear(body)
+		body["status"] = "error"
+		body["error"] = map[string]any{
+			"code": recordErr.Reason, "message": recordErr.Message,
+			"retryable": false, "details": recordErr.Details,
+		}
+		return recordErr
+	}
 	if product != "aitable" {
 		return nil
 	}

@@ -5,6 +5,7 @@ package opennodes
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"sort"
@@ -16,6 +17,10 @@ import (
 // Editor/checkpoint run fields have a different layout; do not infer from them.
 // Full CSS color syntax and model compilation remain authoritative remotely.
 var linkProtocol = regexp.MustCompile(`(?i)^([a-z][a-z0-9+.-]*):`)
+
+// DefaultLineHeight is the explicit font-size multiplier for new MCP blocks.
+// Keep this contract aligned with draw-server OpenNodesLineHeight.ts.
+const DefaultLineHeight = 1.15
 
 func textIssue(path, code string) error {
 	return &NodeValidationError{Code: code, Path: path}
@@ -69,6 +74,7 @@ func validateTextObject(value any, path string, nodeID any) error {
 	if !ok || len(blocks) == 0 {
 		return textIssue(path+"/blocks", "invalidValue")
 	}
+	contentHeight := 0.0
 	for index, item := range blocks {
 		blockPath := fmt.Sprintf("%s/blocks/%d", path, index)
 		block, ok := item.(map[string]any)
@@ -78,7 +84,7 @@ func validateTextObject(value any, path string, nodeID any) error {
 		if _, present := block["verticalAlign"]; present {
 			return &VerticalAlignPlacementError{NodeID: nodeID, Path: blockPath + "/verticalAlign", ExpectedPath: path + "/verticalAlign"}
 		}
-		if err := textFields(block, blockPath, "type horizontalAlign runs", ""); err != nil {
+		if err := textFields(block, blockPath, "type horizontalAlign lineHeight runs", ""); err != nil {
 			return err
 		}
 		if _, present := block["type"]; !present {
@@ -90,15 +96,39 @@ func validateTextObject(value any, path string, nodeID any) error {
 		if err := textEnum(block, "horizontalAlign", blockPath, "left center right"); err != nil {
 			return err
 		}
+		lineHeight := DefaultLineHeight
+		if value, present := block["lineHeight"]; present {
+			var valid bool
+			lineHeight, valid = finiteNumber(value)
+			if !valid || lineHeight < 1 {
+				return textIssue(blockPath+"/lineHeight", "invalidValue")
+			}
+		}
 		runs, ok := block["runs"].([]any)
 		if !ok || len(runs) == 0 {
 			return textIssue(blockPath+"/runs", "invalidValue")
 		}
+		fontSize := 0.0
 		for index, run := range runs {
 			if err := validateTextRun(run, fmt.Sprintf("%s/runs/%d", blockPath, index), nodeID); err != nil {
 				return err
 			}
+			size := 14.0
+			if marks, ok := run.(map[string]any)["marks"].(map[string]any); ok {
+				if value, ok := finiteNumber(marks["fontSize"]); ok {
+					size = value
+				}
+			}
+			fontSize = math.Max(fontSize, size)
 		}
+		blockHeight := fontSize * lineHeight
+		if math.IsInf(blockHeight, 0) || math.IsNaN(blockHeight) {
+			return textIssue(blockPath+"/lineHeight", "invalidValue")
+		}
+		contentHeight += blockHeight
+	}
+	if math.IsInf(contentHeight, 0) || math.IsNaN(contentHeight) {
+		return textIssue(path+"/blocks", "invalidValue")
 	}
 	if err := textEnum(text, "verticalAlign", path, "top center bottom"); err != nil {
 		return err
@@ -111,9 +141,12 @@ func validateTextObject(value any, path string, nodeID any) error {
 			}
 			values = pair
 		}
-		for _, value := range values {
+		for index, value := range values {
 			number, ok := finiteNumber(value)
 			if !ok || number < 0 {
+				return textIssue(path+"/padding", "invalidValue")
+			}
+			if index == 0 && math.IsInf(contentHeight+number*2, 0) {
 				return textIssue(path+"/padding", "invalidValue")
 			}
 		}

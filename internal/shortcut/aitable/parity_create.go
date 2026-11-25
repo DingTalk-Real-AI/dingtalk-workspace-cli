@@ -26,7 +26,7 @@ func parityCompositeResultSpec() *contract.ResultSpec {
 var RecordBatchCreate = shortcut.Shortcut{
 	Service: "aitable", Command: "+record-batch-create", Product: serverMain,
 	Description: "批量新增记录，100 条分片并按返回 ID 独立验证；已有 recordId 明确拒绝",
-	Intent:      "仅新增一批记录时使用；每条 records.cells 独立取值，返回已创建 ID 和分片恢复进度。",
+	Intent:      "仅新增一批记录时使用；每条 records.cells 独立取值，返回已创建 ID 和分片恢复进度。" + recordAttachmentRecoveryHelp,
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"},
 	Contract:    aitableCompositeContractWithResult("+record-batch-create", "批量新增记录并逐批读回验证", "仅新增记录且需要分片与准确 ID 读回时", "更新已有行用 +record-update；有增有改用 +record-upsert", `dws aitable +record-batch-create --base-id B --table-id T --records '[{"cells":{"fldTitle":"任务"}}]'`, parityCompositeResultSpec()),

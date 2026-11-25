@@ -11,7 +11,7 @@ import (
 )
 
 func TestCrossPlatformCoverageAITableLegacyContractLedgerIsExact(t *testing.T) {
-	if got, want := len(reviewedAITableShortcutContractCommands), 53; got != want {
+	if got, want := len(reviewedAITableShortcutContractCommands), 52; got != want {
 		t.Fatalf("legacy contract migration ledger = %d, want %d", got, want)
 	}
 	for command := range reviewedAITableShortcutContractCommands {

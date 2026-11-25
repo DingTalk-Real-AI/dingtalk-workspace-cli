@@ -520,6 +520,360 @@ func TestCrossPlatformCoverageServerFailureClassifierTodoCreateUpstreamInternalE
 	}
 }
 
+func TestCrossPlatformCoverageServerFailureClassifierUpstreamHSFTimeout(t *testing.T) {
+	serverSaysRetryable := true
+	err := newServerFailureAPIError(
+		"HSFTimeOutException-HSF-0002\nerror message : Invalid call is removed because this request is already timeout.Timeout value is : 3000",
+		"business_error",
+		"The API returned a business-level error. Check required parameters and values.",
+		"doc",
+		"update_document_block",
+		apperrors.ServerDiagnostics{
+			TraceID:         "trace-hsf-timeout",
+			ServerErrorCode: "systemError",
+			ServerRetryable: &serverSaysRetryable,
+		},
+	)
+
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	if typed.Reason != "upstream_execution_timeout" || typed.Origin != "upstream_service" || typed.FailureStage != "upstream_execution" {
+		t.Fatalf("classification = reason %q origin %q stage %q", typed.Reason, typed.Origin, typed.FailureStage)
+	}
+	if typed.Category != apperrors.CategoryAPI {
+		t.Fatalf("category = %q, want api", typed.Category)
+	}
+	if !typed.RetryableSet || typed.Retryable {
+		t.Fatalf("retryability = (%v, %v), want explicit false even when the server says retryable", typed.RetryableSet, typed.Retryable)
+	}
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("execution_started = %v, want true for write-verb tools", typed.ExecutionStarted)
+	}
+	if typed.ServerDiag.ServerErrorCode != "systemError" || typed.ServerDiag.TraceID != "trace-hsf-timeout" {
+		t.Fatalf("original diagnostics discarded: %#v", typed.ServerDiag)
+	}
+	if !strings.Contains(typed.Hint, "--timeout") || !strings.Contains(typed.Hint, "超时上限") {
+		t.Fatalf("hint must explain the --timeout boundary and the upstream limit: %q", typed.Hint)
+	}
+	if !strings.Contains(typed.Message, "上游服务内部调用") || !strings.Contains(typed.Message, "--timeout") {
+		t.Fatalf("message = %q", typed.Message)
+	}
+	actions := strings.Join(typed.Actions, "\n")
+	if !strings.Contains(actions, "先回读/查询确认本次操作是否已生效") || !strings.Contains(actions, "缩小写入范围或拆分写入") {
+		t.Fatalf("write-tool recovery actions = %#v", typed.Actions)
+	}
+	for _, action := range typed.Actions {
+		if strings.Contains(action, "dws doctor") || strings.Contains(action, "调大 CLI --timeout 后重试") {
+			t.Fatalf("misleading action = %q", action)
+		}
+	}
+
+	payload := multiProfileErrorPayload(err)
+	for key, want := range map[string]any{
+		"category":          "api",
+		"reason":            "upstream_execution_timeout",
+		"origin":            "upstream_service",
+		"stage":             "upstream_execution",
+		"retryable":         false,
+		"execution_started": true,
+		"trace_id":          "trace-hsf-timeout",
+		"server_error_code": "systemError",
+	} {
+		if got := payload[key]; got != want {
+			t.Errorf("payload[%q] = %#v, want %#v", key, got, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierUpstreamHSFTimeoutCrossProduct(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		serverKey          string
+		tool               string
+		message            string
+		wantWriteSemantics bool
+	}{
+		{
+			name:               "aitable record write via plain already-timeout sentence",
+			serverKey:          "aitable",
+			tool:               "insert_records",
+			message:            "The request has already timeout, Timeout value is : 3000",
+			wantWriteSemantics: true,
+		},
+		{
+			name:               "empty tool name keeps read semantics",
+			serverKey:          "doc",
+			tool:               "",
+			message:            "HSFTimeOutException-HSF-0002: request already timeout, Timeout value is : 3000",
+			wantWriteSemantics: false,
+		},
+		{
+			name:               "todo read tool keeps generic guidance",
+			serverKey:          "todo",
+			tool:               "list_personal_todos",
+			message:            "HSFTimeOutException-HSF-0002: waiting response timeout",
+			wantWriteSemantics: false,
+		},
+		{
+			name:               "doc copy tool gains read-back semantics",
+			serverKey:          "doc",
+			tool:               "copy_document",
+			message:            "HSFTimeOutException-HSF-0002: copy aborted",
+			wantWriteSemantics: true,
+		},
+		{
+			name:               "settings read tool keeps read semantics despite set substring",
+			serverKey:          "ding",
+			tool:               "query_global_setting",
+			message:            "HSFTimeOutException-HSF-0002: query aborted",
+			wantWriteSemantics: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				tc.message,
+				"business_error",
+				"check parameters",
+				tc.serverKey,
+				tc.tool,
+				apperrors.ServerDiagnostics{ServerErrorCode: "systemError"},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason != "upstream_execution_timeout" {
+				t.Fatalf("reason = %q, want upstream_execution_timeout", typed.Reason)
+			}
+			if !typed.RetryableSet || typed.Retryable {
+				t.Fatalf("retryability = (%v, %v), want explicit false", typed.RetryableSet, typed.Retryable)
+			}
+			actions := strings.Join(typed.Actions, "\n")
+			if tc.wantWriteSemantics {
+				if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+					t.Fatalf("execution_started = %v, want true", typed.ExecutionStarted)
+				}
+				if !strings.Contains(actions, "先回读/查询确认本次操作是否已生效") {
+					t.Fatalf("write actions = %#v", typed.Actions)
+				}
+			} else {
+				if typed.ExecutionStarted != nil {
+					t.Fatalf("read tool must keep execution_started unknown: %v", typed.ExecutionStarted)
+				}
+				if strings.Contains(actions, "先回读/查询确认本次操作是否已生效") {
+					t.Fatalf("read-only guidance leaked write recovery actions: %#v", typed.Actions)
+				}
+			}
+			if !strings.Contains(typed.Hint, "--timeout") {
+				t.Fatalf("hint = %q", typed.Hint)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierWriteVerbToolMatrix(t *testing.T) {
+	for _, tc := range []struct {
+		tool string
+		want bool
+	}{
+		{"update_document_block", true},
+		{"delete_document_block", true},
+		{"send_ding_message", true},
+		{"recall_ding_message", true},
+		{"copy_document", true},
+		{"copy_base", true},
+		{"move_document", true},
+		{"rename_document", true},
+		{"write_jsonml", true},
+		{"save_doc_version", true},
+		{"save_global_setting", true},
+		{"import_data", true},
+		{"add_todo_comment", true},
+		{"add_calendar_participant", true},
+		{"set_file_publish", true},
+		{"submit_export_job", true},
+		{"globalsetting_save", true},
+		{"at_adjustment_rule_save", true},
+		{"batch_write_failed", true},
+		{"copy-document", true},
+		{"list_personal_todos", false},
+		{"get_document_content", false},
+		{"get_calendar_detail", false},
+		{"query_global_setting", false},
+		{"batch_query_group_chat_settings", false},
+		{"get_permission_setting", false},
+		{"crm_assets", false},
+		{"", false},
+	} {
+		if got := isWriteVerbServerTool(tc.tool); got != tc.want {
+			t.Errorf("isWriteVerbServerTool(%q) = %v, want %v", tc.tool, got, tc.want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierUpstreamHSFTimeoutPreservesPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		detail       string
+		wantInDetail string
+	}{
+		{
+			name:         "empty technical detail keeps the raw upstream payload",
+			detail:       "",
+			wantInDetail: "HSFTimeOutException-HSF-0002",
+		},
+		{
+			name:         "existing technical detail is left untouched",
+			detail:       "upstream service diagnostics already present",
+			wantInDetail: "upstream service diagnostics already present",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				"HSFTimeOutException-HSF-0002\nerror message : Invalid call is removed because this request is already timeout.Timeout value is : 3000",
+				"business_error",
+				"check parameters",
+				"doc",
+				"copy_document",
+				apperrors.ServerDiagnostics{ServerErrorCode: "systemError", TechnicalDetail: tc.detail},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason != "upstream_execution_timeout" {
+				t.Fatalf("reason = %q", typed.Reason)
+			}
+			if typed.ServerDiag.TechnicalDetail != tc.wantInDetail && !strings.Contains(typed.ServerDiag.TechnicalDetail, tc.wantInDetail) {
+				t.Fatalf("technical detail = %q, want %q", typed.ServerDiag.TechnicalDetail, tc.wantInDetail)
+			}
+			if tc.detail == "" {
+				if !strings.Contains(typed.ServerDiag.TechnicalDetail, "Timeout value is : 3000") {
+					t.Fatalf("original payload lost from technical detail: %q", typed.ServerDiag.TechnicalDetail)
+				}
+			}
+			if strings.Contains(typed.Message, "HSFTimeOutException") {
+				t.Fatalf("friendly message must stay clean: %q", typed.Message)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierUpstreamHSFTimeoutPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		message string
+		detail  string
+		code    string
+	}{
+		{
+			name:    "system error code with HSF payload still classifies as upstream timeout",
+			message: "system error: HSFTimeOutException-HSF-0002 request already timeout, Timeout value is : 3000",
+			code:    "999",
+		},
+		{
+			name:    "network error code with HSF payload still classifies as upstream timeout",
+			message: "HSFTimeOutException-HSF-0002 request already timeout, Timeout value is : 3000",
+			code:    "NETWORK_ERROR",
+		},
+		{
+			name:    "unavailable dependency detail with HSF payload still classifies as upstream timeout",
+			message: "HSFTimeOutException-HSF-0002 request already timeout, Timeout value is : 3000",
+			detail:  "connect: connection refused (111)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				tc.message,
+				"business_error",
+				"check parameters",
+				"doc",
+				"update_document_block",
+				apperrors.ServerDiagnostics{ServerErrorCode: tc.code, TechnicalDetail: tc.detail},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason != "upstream_execution_timeout" || typed.Origin != "upstream_service" {
+				t.Fatalf("HSF payload must outrank the generic %q branch: reason %q origin %q", tc.code, typed.Reason, typed.Origin)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierUpstreamHSFTimeoutNegatives(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		message    string
+		detail     string
+		code       string
+		serverKey  string
+		tool       string
+		wantReason string
+	}{
+		{
+			name:       "plain client timeout wording stays unclassified",
+			message:    "business error: Get \"https://mcp.example.com/call\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+			code:       "systemError",
+			serverKey:  "doc",
+			tool:       "update_document_block",
+			wantReason: "business_error",
+		},
+		{
+			name:       "parameter error keeps tool validation classification",
+			message:    "openCid or cid is required",
+			code:       "PARAM_ERROR",
+			serverKey:  "doc",
+			tool:       "update_document_block",
+			wantReason: "invalid_request",
+		},
+		{
+			name:       "network error with timeout wording but non-HSF shape stays dependency failure",
+			message:    "request timeout while reaching the MCP backend",
+			detail:     "connect: connection refused (111)",
+			code:       "NETWORK_ERROR",
+			serverKey:  "im",
+			tool:       "list_conversations",
+			wantReason: "backend_dependency_unavailable",
+		},
+		{
+			name:       "timeout word without HSF evidence does not match",
+			message:    "上游处理超时，请稍后重试",
+			code:       "systemError",
+			serverKey:  "doc",
+			tool:       "update_document_block",
+			wantReason: "business_error",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				tc.message,
+				"business_error",
+				"check parameters",
+				tc.serverKey,
+				tc.tool,
+				apperrors.ServerDiagnostics{ServerErrorCode: tc.code, TechnicalDetail: tc.detail},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason == "upstream_execution_timeout" {
+				t.Fatalf("HSF timeout branch matched a non-HSF failure: %#v", typed)
+			}
+			if typed.Reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", typed.Reason, tc.wantReason)
+			}
+			if typed.ExecutionStarted != nil && *typed.ExecutionStarted {
+				t.Fatalf("negative case must not claim execution started: %#v", typed)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageServerFailureClassifierUnknownFallsBack(t *testing.T) {
 	err := newServerFailureAPIError(
 		"business error: success=false",

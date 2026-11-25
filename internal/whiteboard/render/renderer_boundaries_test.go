@@ -70,7 +70,8 @@ func TestCrossPlatformCoverageSVGSupportedAndFallbackShapes(t *testing.T) {
 		}
 	}
 	result, err := SVG(&opennodes.Source{Nodes: []map[string]any{{"id": "text", "type": "shape", "angle": 45, "text": map[string]any{"text": "one\ntwo"}, "style": map[string]any{"fontSize": 20}}}})
-	if err != nil || result.ApproximateCount != 1 || !strings.Contains(string(result.SVG), "rotate(45") || !strings.Contains(string(result.SVG), `dy="25"`) {
+	// New blocks use 1.15 explicitly: 20px text has 23px baseline spacing.
+	if err != nil || result.ApproximateCount != 1 || !strings.Contains(string(result.SVG), "rotate(45") || !strings.Contains(string(result.SVG), `y="28.5"`) || !strings.Contains(string(result.SVG), `y="51.5"`) {
 		t.Fatalf("styled text=%#v err=%v", result, err)
 	}
 }

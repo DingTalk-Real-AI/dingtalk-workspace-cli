@@ -953,7 +953,7 @@ func runVerifiedDocMutation(
 		return verify == nil || verify(result, data)
 	})
 	if err != nil {
-		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationUnavailableError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	if verify != nil && !verify(result, verification) {
 		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
@@ -1012,7 +1012,7 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		return verifyUpdatedDocumentContent(data, expected, mode, format)
 	})
 	if err != nil {
-		return docVerificationError("doc.update", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return docVerificationUnavailableError("doc.update", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	if !verifyUpdatedDocumentContent(verification, expected, mode, format) {
 		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
@@ -2078,15 +2078,19 @@ func normalizeJSONMLForVerification(raw string) string {
 				if declared, ok := typed[1].(map[string]any); ok {
 					attrs, _ = normalize(declared).(map[string]any)
 					attrs = removeGeneratedJSONMLDefaults(tag, attrs)
+					if strings.EqualFold(tag, "root") {
+						attrs = removeDocumentSectionProperties(attrs)
+					}
 					start = 2
 				}
 			}
 			children := make([]any, 0, len(typed)-start)
 			for _, child := range typed[start:] {
 				normalized := normalize(child)
-				if normalized != nil {
-					children = append(children, normalized)
+				if normalized == nil || isEmptyJSONMLTextNode(normalized) {
+					continue
 				}
+				children = append(children, normalized)
 			}
 			if strings.EqualFold(tag, "span") && isGeneratedTextSpan(attrs) {
 				if len(children) == 1 {
@@ -2159,6 +2163,34 @@ func isGeneratedTextSpan(attrs map[string]any) bool {
 	}
 	value, ok := attrs["datatype"].(string)
 	return ok && (value == "text" || value == "leaf")
+}
+
+// removeDocumentSectionProperties drops the page setup the service stamps on a
+// full-document readback root. It describes the page, never the authored text,
+// so keeping it made every JSONML overwrite and create fail verification.
+func removeDocumentSectionProperties(attrs map[string]any) map[string]any {
+	out := make(map[string]any, len(attrs))
+	for key, value := range attrs {
+		if strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key)) == "sectpr" {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+// The service keeps a block's text node even when it is empty; the author may
+// have written no text node at all. An empty node carries no content, so it must
+// not decide the comparison either way. Unwrapping an empty generated text span
+// leaves an empty child array, which is just as empty.
+func isEmptyJSONMLTextNode(value any) bool {
+	switch typed := value.(type) {
+	case string:
+		return typed == ""
+	case []any:
+		return len(typed) == 0
+	}
+	return false
 }
 
 func executeExport(rt *shortcut.RuntimeContext) error {

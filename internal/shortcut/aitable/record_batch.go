@@ -227,23 +227,52 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 }
 
 type recordWriteFailure struct {
-	Status string `json:"status"`
-	Error  struct {
+	groupRecovery        bool
+	recoveryDecodeFailed bool
+	Status               string `json:"status"`
+	Error                struct {
 		Type      string `json:"type"`
 		Code      string `json:"code"`
 		Retryable *bool  `json:"retryable"`
 		Details   struct {
-			ClientToken      string   `json:"clientToken"`
-			ReconcileTool    string   `json:"reconcileTool"`
-			CreatedRecordIDs []string `json:"createdRecordIds"`
-			UpdatedRecordIDs []string `json:"updatedRecordIds"`
+			WriteOutcome           string         `json:"writeOutcome"`
+			MutationSubmitted      *bool          `json:"mutationSubmitted"`
+			ClientToken            string         `json:"clientToken"`
+			ReconcileTool          string         `json:"reconcileTool"`
+			CreatedRecordIDs       []string       `json:"createdRecordIds"`
+			UpdatedRecordIDs       []string       `json:"updatedRecordIds"`
+			AttachmentVerification string         `json:"attachmentVerification"`
+			AttachmentRecordIDs    []string       `json:"recordIds"`
+			AttachmentFieldIDs     []string       `json:"fieldIds"`
+			GroupOutcomes          map[string]any `json:"groupOutcomes"`
+			Readback               string         `json:"readback"`
+			MismatchedFieldID      string         `json:"mismatchedFieldId"`
 		} `json:"details"`
 	} `json:"error"`
 }
 
+// decodeRecordWriteFailure accepts structured recovery evidence without parsing
+// prose, and applies the same bounded projection to typed and legacy receipts.
 func decodeRecordWriteFailure(err error) recordWriteFailure {
 	var cliErr *helpers.CLIError
 	var appErr *apperrors.Error
+	// Single and mixed receipts arrive as typed errors; decode fields, not prose.
+	if errors.As(err, &appErr) && (appErr.Details["groupOutcomes"] != nil ||
+		appErr.Reason == "ATTACHMENT_PREPARATION_UNAVAILABLE" || appErr.Reason == "CREATE_RECORDS_OUTCOME_UNKNOWN" ||
+		appErr.Reason == "UPDATE_RECORDS_RESULT_UNKNOWN" || appErr.Reason == "DUPLICATE_CLIENT_TOKEN" ||
+		(appErr.Reason == "ATTACHMENT_WRITE_UNCONFIRMED" && appErr.Details["attachmentVerification"] == "unconfirmed")) {
+		var body recordWriteFailure
+		body.Status, body.Error.Code = "error", appErr.Reason
+		body.Error.Retryable = &appErr.Retryable
+		raw, marshalErr := json.Marshal(appErr.Details)
+		if marshalErr == nil && json.Unmarshal(raw, &body.Error.Details) == nil {
+			return projectRecordWriteGroups(body)
+		}
+		// Keep the recovery obligation, never any partially decoded targets.
+		body = recordWriteFailure{Status: "error", recoveryDecodeFailed: true}
+		body.Error.Code = appErr.Reason
+		return body
+	}
 	var raw string
 	if errors.As(err, &cliErr) && cliErr.Code == helpers.CodeMCPToolError {
 		raw = cliErr.Message
@@ -256,14 +285,30 @@ func decodeRecordWriteFailure(err error) recordWriteFailure {
 	if json.Unmarshal([]byte(raw), &body) != nil {
 		return recordWriteFailure{}
 	}
+	return projectRecordWriteGroups(body)
+}
+
+// projectRecordWriteGroups excludes arbitrary nested payloads from the final
+// composite result while preserving each group's independent recovery status.
+func projectRecordWriteGroups(body recordWriteFailure) recordWriteFailure {
+	body.Error.Details.GroupOutcomes, body.groupRecovery = helpers.ProjectAitableRecordGroupOutcomes(body.Error.Details.GroupOutcomes)
 	return body
 }
 
+// needsReconciliation includes independently uncertain groups, regardless of
+// which group's error was selected as the primary MCP error.
 func (body recordWriteFailure) needsReconciliation() bool {
-	return body.Status == "error" && (body.Error.Code == "DUPLICATE_CLIENT_TOKEN" ||
+	if !body.groupRecovery && body.Error.Code != "DUPLICATE_CLIENT_TOKEN" && body.Error.Code != "REQUEST_ID_CONFLICT" &&
+		(body.Error.Details.WriteOutcome == "NOT_ATTEMPTED" || body.Error.Details.WriteOutcome == "REJECTED") {
+		return false
+	}
+	return body.Status == "error" && (body.recoveryDecodeFailed || body.groupRecovery || body.Error.Code == "DUPLICATE_CLIENT_TOKEN" ||
+		body.Error.Code == "UPDATE_RECORDS_RESULT_UNKNOWN" ||
 		body.Error.Code == "REQUEST_ID_CONFLICT" ||
 		strings.HasSuffix(body.Error.Code, "_OUTCOME_UNKNOWN") ||
-		body.Error.Details.ReconcileTool == "get_record_write_result")
+		helpers.AitableRecordWriteNeedsReconciliation(body.Error.Code, body.Error.Details.WriteOutcome, body.Error.Details.ClientToken, body.Error.Details.ReconcileTool) ||
+		body.Error.Details.ReconcileTool == "get_record_write_result" ||
+		(body.Error.Code == "ATTACHMENT_WRITE_UNCONFIRMED" && body.Error.Details.AttachmentVerification == "unconfirmed"))
 }
 
 // A duplicate token rejects this attempt, not the original mutation. Even a
@@ -281,6 +326,11 @@ func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result composi
 		// A mismatched receipt cannot establish effects for this request. Keep
 		// the original recovery key, but do not promote its IDs to known facts.
 		details.CreatedRecordIDs, details.UpdatedRecordIDs = nil, nil
+		details.AttachmentVerification = ""
+		details.AttachmentRecordIDs, details.AttachmentFieldIDs = nil, nil
+		details.GroupOutcomes = nil
+		details.WriteOutcome, details.MutationSubmitted = "", nil
+		details.Readback, details.MismatchedFieldID = "", ""
 		result.Warnings = append(result.Warnings, "写入回执 token 与原请求不匹配；回执 ID 未采信，只能按原 token 对账。")
 	}
 	step.Status = "unknown"
@@ -291,6 +341,22 @@ func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result composi
 	result.Status = "unknown"
 	result.CompletedCount = offset
 	result.Verification = map[string]any{"status": "pending", "batchOffset": offset, "unverifiedCount": len(batch)}
+	if details.WriteOutcome != "" {
+		result.Verification["writeOutcome"] = details.WriteOutcome
+	}
+	if details.MutationSubmitted != nil {
+		result.Verification["mutationSubmitted"] = *details.MutationSubmitted
+	}
+	if len(details.GroupOutcomes) > 0 {
+		result.Verification["groupOutcomes"] = details.GroupOutcomes
+	}
+	if details.AttachmentVerification == "unconfirmed" {
+		result.Verification["attachmentVerification"] = "unconfirmed"
+		result.Verification["code"] = "ATTACHMENT_WRITE_UNCONFIRMED"
+		result.Verification["recordIds"] = details.AttachmentRecordIDs
+		result.Verification["fieldIds"] = details.AttachmentFieldIDs
+	}
+	copyRecordReadbackDiagnostics(result.Verification, details.Readback, details.MismatchedFieldID)
 	for _, group := range []struct {
 		name string
 		ids  []string
@@ -306,7 +372,9 @@ func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result composi
 	}
 	result.Checkpoint["nextOffset"], result.Checkpoint["batchSize"] = offset, recordBatchSize
 	result.Checkpoint["baseId"], result.Checkpoint["tableId"] = baseID, tableID
-	if clientToken != "" && aitableprotocol.ValidateClientToken(clientToken) == nil {
+	// MCP uses clientToken for creation only. A caller-supplied token on an
+	// update-only batch cannot establish a creation result to reconcile.
+	if recordBatchHasCreates(batch) && clientToken != "" && aitableprotocol.ValidateClientToken(clientToken) == nil {
 		result.Checkpoint["clientToken"] = clientToken
 		files, _ := result.Checkpoint["writeIntentFiles"].([]string)
 		var path string
@@ -317,8 +385,22 @@ func recordUpsertReconciliationError(rt *shortcut.RuntimeContext, result composi
 	}
 	if ids := recordIDs(batch); len(ids) > 0 {
 		result.Checkpoint["updateReadbackCommand"] = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", strings.Join(ids, ","))
+		if result.NextCommand == "" {
+			result.NextCommand = result.Checkpoint["updateReadbackCommand"].(string)
+		}
 	}
-	result.Warnings = append(result.Warnings, "创建分组结果未知；使用原 token 对账，并独立读回更新分组。禁止重放整个 upsert（包括同一 token）；没有原 token 时不能完成创建对账。")
+	if details.AttachmentVerification == "unconfirmed" {
+		if ids := uniqueStrings(details.AttachmentRecordIDs); len(ids) > 0 {
+			// Creation reconciliation does not verify attachment cells. Keep a
+			// separate read-back for acknowledged IDs, including created rows.
+			command := aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", strings.Join(ids, ","))
+			result.Checkpoint["attachmentReadbackCommand"] = command
+			if result.NextCommand == "" {
+				result.NextCommand = command
+			}
+		}
+	}
+	result.Warnings = append(result.Warnings, "写入结果或附件仍待核对；创建组使用原 token 对账，更新组按原记录 ID 独立读回。附件字段另按 checkpoint.attachmentReadbackCommand 核对已知 ID（若提供），创建对账不证明附件已确认。禁止重放整批写入（包括同一 token）；没有原 token 时不能完成创建对账。")
 	return compositeError(result, cause, false)
 }
 
@@ -484,7 +566,7 @@ func executeRecordBatches(
 			step.Status = "unknown"
 			step.Error = writeErr.Error()
 		}
-		if failure := decodeRecordWriteFailure(writeErr); tool == "record_upsert" && failure.needsReconciliation() {
+		if failure := decodeRecordWriteFailure(writeErr); (tool == "record_upsert" || tool == "update_records") && failure.needsReconciliation() {
 			return recordUpsertReconciliationError(rt, result, step, batch, offset, clientToken, writeErr, failure)
 		}
 		// A structured input rejection proves this batch was not accepted. Do
@@ -503,6 +585,11 @@ func executeRecordBatches(
 		}
 		verification, verifyErr := verifyRecordBatchEventually(rt, tool, baseID, tableID, batch, writeData, verify)
 		if verifyErr != nil {
+			if fields := recordAttachmentRecoveryFields(rt, baseID, tableID, batch); len(fields) > 0 {
+				cause := unconfirmedRecordAttachmentError(batch, writeData, fields, verifyErr)
+				failure := decodeRecordWriteFailure(cause)
+				return recordUpsertReconciliationError(rt, result, step, batch, offset, clientToken, cause, failure)
+			}
 			step.Status = "unknown"
 			if step.Error == "" {
 				step.Error = verifyErr.Error()
@@ -564,6 +651,9 @@ func executeRecordBatches(
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "offset": offset, "count": len(batch)})
 	}
 	result.Verification = map[string]any{"status": "verified", "verifiedCount": len(records)}
+	if len(recordAttachmentFields(records)) > 0 {
+		result.Verification["attachmentVerification"] = "verified"
+	}
 	result.Result = map[string]any{"processedCount": len(records), "batchCount": len(result.CompletedSteps)}
 	return rt.Output(result)
 }

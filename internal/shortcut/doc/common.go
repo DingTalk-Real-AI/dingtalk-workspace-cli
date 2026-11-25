@@ -322,6 +322,23 @@ func docUnknownWriteError(operation, stage, nodeID string, cause error) error {
 	return apperrors.NewAPI(transition.message, options...)
 }
 
+// docVerificationUnavailableError reports a write whose readback could not be
+// obtained at all. The write itself may well have landed, so the reason must
+// distinguish "could not confirm" from a content mismatch; callers re-read
+// the document instead of blind-retrying.
+func docVerificationUnavailableError(operation, stage, nodeID string, cause error, steps []map[string]any) error {
+	return docPartialWriteError(
+		operation,
+		"doc_write_verification_unavailable",
+		stage,
+		"文档写入已执行，但回读确认失败（非内容不一致）；写入可能已生效，请先读取目标文档确认实际内容，再决定是否恢复",
+		cause,
+		map[string]any{"nodeId": nodeID, "verified": false},
+		steps,
+		map[string]any{"available": false, "reason": "re-read the document to confirm whether the write landed"},
+	)
+}
+
 func docVerificationError(operation, stage, nodeID string, cause error, steps []map[string]any) error {
 	return docPartialWriteError(
 		operation,

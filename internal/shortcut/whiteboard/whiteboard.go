@@ -1401,6 +1401,14 @@ func normalizeRequestedReadback(value any, idMap map[string]string, field string
 		for key, child := range typed {
 			normalized[key] = normalizeRequestedReadback(child, idMap, key)
 		}
+		// The server materializes new-block defaults. An old service silently
+		// retaining legacy spacing must not be reported as a verified update.
+		if field == "blocks" {
+			if _, present := typed["lineHeight"]; !present {
+				// Keep synthesized defaults in the same decimal domain as decoded JSON.
+				normalized["lineHeight"] = json.Number(fmt.Sprint(opennodes.DefaultLineHeight))
+			}
+		}
 		if isRequestRef && requestScope == "request" && hasRequestID {
 			if realID := idMap[requestID]; realID != "" {
 				normalized["scope"] = "document"

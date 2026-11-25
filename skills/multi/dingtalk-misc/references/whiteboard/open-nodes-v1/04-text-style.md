@@ -64,6 +64,7 @@ interface OpenTextRun {
 interface OpenTextBlock {
   type: "paragraph" | "bulletList" | "orderedList";
   horizontalAlign?: "left" | "center" | "right";
+  lineHeight?: number;
   runs: OpenTextRun[];
 }
 
@@ -91,6 +92,10 @@ interface OpenText extends OpenTextWrite {
 - `blocks.length >= 1`，每个 block 的 `type` 必须是 `paragraph`、
   `bulletList` 或 `orderedList`。
 - 每个 block 都必须满足 `runs.length >= 1`。
+- `lineHeight` 是 block 级字号倍率，必须是有限数且 `>= 1`，支持 `1`、`1.15`、
+  `1.5`、`2`、`20/14` 等，不局限于菜单预设。省略的新写入显式保存 `1.15`；
+  该字段不写进 run marks，不等同于像素值、段间距或 padding。DWS 本地校验拒绝
+  非法值与派生行高溢出，返回 block 字段路径（validation / 退出码 3）。
 - run 的 `text` 不能包含 `\r`、`\n`、U+2028 或 U+2029。换行和列表项使用
   独立 block 表达；每一段或每个列表项应写成一个 block，而不是把原始换行符
   放进单个 run。
@@ -144,6 +149,12 @@ interface OpenText extends OpenTextWrite {
 
 同一 `OpenTextWrite` 结构适用于独立 text 节点、shape 文本、stickyNote 文本和
 frame title。
+
+支持此字段的服务端查询会保留显式行高。旧 CP 缺字段时不迁移原数据，查询返回
+旧文本叶子 CSS 基线 `1.5`，从而在 query→write 重建时保留旧间距；历史非法显式值
+标记 `text.lineHeight.unsupported` 和 `readOnly`，不能无损重写。旧版服务端可能
+仍丢失字段，必须核对实际消费的服务端 bundle 版本。DWS 更新后的读回校验会核对
+显式行高和省略时的 `1.15` 默认；校验失败保留已提交回执，仅只读对账，不能自动重提。
 
 下面三个 block 会生成两个无序列表项，其中第二项包含文字链接：
 

@@ -41,6 +41,8 @@ dws aitable +import-file --base-id <BASE_ID> --file ./data.xlsx \
 dws aitable +import-file --resume-import-id <IMPORT_ID> --timeout 30
 ```
 
+追加到已有表时，先用 `dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>` 读目标表字段。`--field-mapping` 的键必须逐字等于读回的字段名，大小写和空格都一致（用户写 amount、表里是 Amount，就写 Amount）；值必须逐字等于源文件表头。`--field-mapping` 只包含用户指定的列，以及名称、含义和单位都一致的同名列；其余源列不导入，目标字段留空。同名列不需要用户点名，默认一并映射，也不为此反问，用户明确说只导入某几列时才排除。原价与实付价、单价与总额、含税与不含税都算不一致，不能只因名称相近就映射。用户的说法与表头措辞不完全相同时（如「结算金额」与表头「实收结算金额」），只有唯一对应才采用，有多个可能对应时才向用户确认；用户已给出映射就直接执行，不再反问。源表头不确定时，用`python3 <本 Skill 目录>/scripts/read_import_headers.py <文件>`（按本 Skill 的实际路径替换）（多 Sheet 时用 `--sheet <工作表>` 指定，并在导入时用 `--src-sheet-name` 传入同一名称）；只读取源文件表头行，不读取数据行；该脚本只支持 CSV/XLSX 的首行表头；其他格式、表头不在首行或无法仅取表头时停止并请用户提供源表头，但读到的内容只用于确定映射，不用来写入、改写或补全导入数据，也不要自行解析文件后逐行 `record create`。
+
 `+import-file` 只接受 CSV/XLS/XLSX，自动校验本地普通文件并隐藏上传地址和凭据。导入触发后超时会保留 `importId` 并返回 `unknown`；必须先查目标表真实状态，不得重新申请上传地址、重复 PUT 或更换 importId。续等模式只允许 `--resume-import-id` 和可选 `--timeout`，不能改变目标表、表头、源 Sheet 或字段映射。下方手动命令仅用于诊断三段协议。
 
 ```bash
@@ -111,17 +113,17 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 > **追加导入失败常见原因**：Excel 列名与目标表字段名不一致（如 Excel 是"销售姓名"但表字段是"姓名"），导致自动匹配 0 个字段，报错 `"Failed to build import sheet infos from preview data"`。
 >
 > **解决方案**：
-> 1. **首选**：创建目标表时，字段名与 Excel 表头列名**保持完全一致**
-> 2. **备选**：传 `--field-mapping '{"目标字段名":"Excel列名"}'` 手动指定映射
-> 3. **兜底**：如果 import data 多次失败，改用 `record create` 逐条写入
+> 1. 核对源文件列名与已有目标表字段，按上述映射规则为 `+import-file` 显式提供 `--field-mapping '{"目标字段名":"Excel列名"}'`，不新建或修改目标表来迁就源列名。
+> 2. 明确写前拒绝时修正参数；结果未知时只读核对目标数据，不重复导入，也不改用 `record create` 重放。
 
 ### 适用场景
 
 - **新建表导入**：首次导入 Excel/CSV，让系统自动建表建字段
-- **追加到已有表**：已有数据表结构，需要把 Excel 数据批量写入 → 传 `--table-id`（推荐 xlsx）
+- **追加到已有表**：使用 `+import-file`，传 `--table-id` 和按上述规则确定的 `--field-mapping`（推荐 xlsx）
+- **只导入部分列**：仍使用 `+import-file`，通过显式 `--field-mapping` 选择源列，不自行解析后逐行写入
 - **需要指定表头行**：源文件前几行非数据（如注释行）→ `--header-row`（必须用 xlsx）
 - **多 Sheet 文件**：只导入特定 Sheet → `--src-sheet-name`（必须用 xlsx）
-- **不适用**：需要复杂字段级控制（如只导入部分列、数据转换）→ 解析后用 `record create`
+- **需要数据转换**：属于单独的数据处理需求，先与用户确认转换方案，不作为追加导入失败后的自动兜底
 
 > **导入数据无法整体撤销**：文件一旦导入成功，数据即写入表中，没有"撤销导入"操作。如需清理导入的测试数据，只能手动通过 `record delete` 逐条或批量删除记录；如果是新建表模式导入的，可以直接 `table delete` 删除整张表。因此：
 > - 测试/验证场景建议导入到**独立的测试表或测试 Base**，用完后整体删除

@@ -28,6 +28,17 @@ dws aitable +chart-templates --chart-types SUMMARY,HISTOGRAM,PIE --format json
 - 卡片标题用 `config.name`，`config.title` 不是标题别名；创建可省略 name，更新省略时保留原名，不提交空白名称。
 - Dashboard 完整 config 缺少结构时才调用一次 `dashboard config-example`，不默认读取两种全量模板。
 
+
+## 颜色配置
+
+- 普通图表和抽奖用 `colors` 选择色板，当前为 `COLOR_PALETTE_1..7`；1 跟随主题。各色板的颜色序列与视觉含义以模板 `documentation.common` 为准。精确配色使用 `colorValues="#E54C00&&#22B989"`，其优先级高于预设，切回预设时清空。
+- NPS 使用 `colorSetName`：默认跟随主题，专用色组为字符串 `"0".."9"`，三色依次对应贬损者、中立者、推荐者；自定义 `colorValues` 必须三色。不要混用普通图表色板。
+- SUMMARY/STATISTICS 的条件颜色写 `conditionalStyles=[{"operator":"gte","value":100,"colors":{"colors":"#22B989"}}]`；静态 `colors` 保持字符串。PROGRESS 改用规则颜色键 `strokeColor`，80% 的阈值传 `80`；指标卡百分比按原始比例，例如 80% 为 `0.8`。
+- `conditionalStyles` 按数组顺序取第一条命中规则，只使用该规则中的颜色；`eq` 不会自动优先。例：`gte 0` 红在前、`eq 80` 绿在后，80 显示红色；需要优先的例外规则放在前面。
+- 停用 SUMMARY/STATISTICS 的条件文字颜色时，将 `rangeColorEnabled_colors` 设为 JSON 布尔 `false`；PROGRESS 的条件填充颜色使用 `rangeColorEnabled_strokeColor=false`。保留原 `conditionalStyles`，关闭后回退到对应的静态 `colors`/`strokeColor`，未配置静态颜色时使用主题默认。重新启用同一键设为 `true`；各颜色属性的开关互不影响。
+- 比较符为 `lt/lte/gt/gte/eq/between`，between 使用闭区间 `[min,max]`；其他细节以公共说明为准。已有规则继续保留，不能把条件对象放入静态颜色字段。
+- 仅在必需颜色信息仍不明确时，可用 `dws aitable chart widgets-example` 查询一次带注释原文并复用；说明缺失本身不触发额外读取。
+
 ## 指标选择
 
 SUMMARY 展示单个聚合数字，HISTOGRAM 比较分类，PIE 展示分布占比。记录计数用 `measureType=record-count`；其中冗余 measure 不决定聚合方式。改为字段统计时，同时切换为 `measureType=field` 并设置真实字段及公式，不能只替换 sum。

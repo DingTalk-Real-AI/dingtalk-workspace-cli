@@ -64,11 +64,33 @@ def run_dws(args: list) -> Optional[Dict[str, Any]]:
         return None
 
 
-def upload_to_oss(upload_url: str, file_path: Path, mime_type: str) -> bool:
-    """通过 HTTP PUT 上传文件到 OSS。"""
+def resolve_upload_headers(raw_headers: Any, mime_type: str) -> Dict[str, str]:
+    headers = {'content-type': mime_type}
+    if raw_headers is None:
+        return headers
+    if not isinstance(raw_headers, dict):
+        raise ValueError('返回的 uploadHeaders 无效')
+    seen = set()
+    for name, value in raw_headers.items():
+        if (not isinstance(name, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name)
+                or not isinstance(value, str) or not value.strip()
+                or any((ord(char) < 32 and char != '\t') or ord(char) == 127 or ord(char) > 255 for char in value)):
+            raise ValueError('返回的 uploadHeaders 无效')
+        key = name.lower()
+        if key in seen:
+            raise ValueError('返回的 uploadHeaders 重复')
+        seen.add(key)
+        headers[key] = value
+    # 老服务的空头回执沿用请求 MIME；签名头必须优先且不追加 charset。
+    return headers
+
+
+def upload_to_oss(upload_url: str, file_path: Path, headers: Dict[str, str]) -> bool:
+    """通过 HTTP PUT 上传文件到 OSS，原样使用签名请求头。"""
     file_data = file_path.read_bytes()
     req = Request(upload_url, data=file_data, method='PUT')
-    req.add_header('Content-Type', mime_type)
+    for name, value in headers.items():
+        req.add_header(name, value)
 
     try:
         with urlopen(req, timeout=120) as resp:
@@ -136,12 +158,18 @@ def upload_attachment(base_id: str, file_path_str: str) -> Optional[Dict[str, An
     file_token = data.get('fileToken', '')
 
     if not upload_url or not file_token:
-        print(f"错误：返回数据缺少 uploadUrl 或 fileToken: {json.dumps(data, ensure_ascii=False)}", file=sys.stderr)
+        print("错误：返回数据缺少 uploadUrl 或 fileToken，未上传文件", file=sys.stderr)
+        return None
+
+    try:
+        upload_headers = resolve_upload_headers(data.get('uploadHeaders'), mime_type)
+    except ValueError as error:
+        print(f"错误：{error}，未上传文件", file=sys.stderr)
         return None
 
     # 步骤 2: PUT 文件到 OSS
     print(f"步骤 2/3: 上传文件到 OSS...", file=sys.stderr)
-    if not upload_to_oss(upload_url, file_path, mime_type):
+    if not upload_to_oss(upload_url, file_path, upload_headers):
         return None
 
     # 步骤 3: 返回 fileToken
@@ -150,7 +178,7 @@ def upload_attachment(base_id: str, file_path_str: str) -> Optional[Dict[str, An
         "fileToken": file_token,
         "fileName": file_name,
         "size": file_size,
-        "mimeType": mime_type,
+        "mimeType": upload_headers['content-type'],
     }
 
     return output
