@@ -172,6 +172,68 @@ func TestCrossPlatformCoverageNPMSplitLegacyMainKeepsWholePackage(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageNPMSplitMissingMirrorKeepsWholePackage(t *testing.T) {
+	testseam.Swap(t, &upgradeEditionName, func() string { return "open" })
+	archive := npmPackageTestGzip(t, npmPackageTestTar(t, npmPackageTestEntries(runtime.GOOS, runtime.GOARCH)))
+	main := registryFixture("1.2.3")
+	main.Upgrade = &npmUpgradeManifest{Format: 1, Edition: "public", Assets: map[string]npmUpgradeDigest{
+		npmPackageBinaryName(runtime.GOOS, runtime.GOARCH): {SHA256: strings.Repeat("a", 64), Size: 10},
+	}}
+	main.Dist.Tarball, main.Dist.Integrity = publicNPMMirror+"/package.tgz", npmPackageTestSRI(archive)
+	mainBody, err := json.Marshal(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []DownloadSource{SourceAuto, SourceNPMMirror} {
+		t.Run(string(source), func(t *testing.T) {
+			var splitCalls, packageCalls int
+			testseam.Swap(t, &http.DefaultTransport, http.RoundTripper(upgradeRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host != "registry.npmmirror.com" {
+					t.Fatalf("mirror source contacted %s", req.URL.Host)
+				}
+				status, body := http.StatusOK, mainBody
+				switch {
+				case req.URL.Path == "/package.tgz":
+					packageCalls++
+					body = archive
+				case req.URL.Path != "/"+npmPackageName+"/1.2.3":
+					splitCalls++
+					status, body = http.StatusNotFound, []byte(`{}`)
+				}
+				return &http.Response{StatusCode: status, Header: make(http.Header), ContentLength: int64(len(body)), Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+			})))
+			var wholePackageEvents int
+			ctx := WithDownloadObserver(t.Context(), func(event DownloadEvent) {
+				if event.Kind == "source" && event.Source == "npmmirror" && event.Resource == "完整 npm 包" && event.Reason != "" {
+					wholePackageEvents++
+				}
+			})
+			release := npmManifestToRelease(main, publicNPMMirror)
+			resolved, err := ResolvePlatformReleaseForSource(ctx, release, true, source)
+			if resolved != nil || splitCalls != 1 || packageCalls != 0 {
+				t.Fatalf("unexpected resolution: %+v err=%v split=%d package=%d", resolved, err, splitCalls, packageCalls)
+			}
+			if source == SourceNPMMirror {
+				if !errors.Is(err, errNPMSplitUnavailable) || wholePackageEvents != 0 {
+					t.Fatalf("pinned mirror lost split requirement: %v events=%d", err, wholePackageEvents)
+				}
+				return
+			}
+			if err != nil || wholePackageEvents != 1 {
+				t.Fatalf("auto lost missing-split compatibility: %v events=%d", err, wholePackageEvents)
+			}
+			prepared, err := PrepareNPMPackage(t.Context(), *release.NPM, t.TempDir(), true, nil)
+			if err != nil || prepared.BinaryArchivePath == "" || packageCalls != 1 {
+				t.Fatalf("whole-package preparation failed: %+v %v requests=%d", prepared, err, packageCalls)
+			}
+			release.NPM.Integrity = npmPackageTestSRI([]byte("different official bytes"))
+			if _, err := PrepareNPMPackage(t.Context(), *release.NPM, t.TempDir(), true, nil); err == nil {
+				t.Fatal("missing-split fallback bypassed main package SRI")
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDownloadHTTP2StreamReset(t *testing.T) {
 	ready := make(chan time.Time)
 	close(ready)
