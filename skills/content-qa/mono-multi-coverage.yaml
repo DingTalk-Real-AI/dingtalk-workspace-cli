@@ -188,6 +188,9 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: scripts/calendar_today_agenda.py
+    multi: dingtalk-calendar/scripts/calendar_today_agenda.py
+    mode: identical
   - mono: references/products/mind.md
     multi: dingtalk-misc/references/mind.md
     mode: identical
