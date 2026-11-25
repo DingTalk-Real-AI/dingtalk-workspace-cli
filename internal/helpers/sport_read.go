@@ -177,6 +177,8 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 	}
 	success, present := body["success"]
 	if !present {
+		// 生产 app runner 会给缺 success 的对象回执补 success=true（全产品统一约定），
+		// 本分支只拦截不经 runner 的直接 ToolCaller；服务端 ServiceResult 始终携带 success。
 		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（缺少 success 字段），不能把异常当成空结果")
 	}
 	if success != true {
@@ -229,7 +231,21 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 // is_org_admin 的三态语义：显式 success=false（如 QW_ADMIN_CHECK_FAILED）表示
 // 组织管理员查询服务不可用，必须提示稍后重试，绝不能当作非管理员；其余错误（未
 // 登录、网关、非业务错误等）原样返回。
+//
+// 生产链路中 success=false 在 app runner 已被 detectBusinessError 分类为
+// reason=business_error 的 *apperrors.Error；直接实现 ToolCaller 的调用方则由
+// parseMCPToolTextResult 分类为 *CLIError。两种形态都要识别。
 func classifySportOrgAdminChannelError(err error) error {
+	var appErr *apperrors.Error
+	if errors.As(err, &appErr) && appErr.Reason == "business_error" {
+		// 保留服务端诊断（Server Code、Trace），只替换面向用户的语义与恢复建议。
+		classified := *appErr
+		classified.Message = fmt.Sprintf("is_org_admin 调用失败（组织管理员查询不可用，errorMsg=%s）：不能当作非管理员，请稍后重试", appErr.Message)
+		classified.Hint = sportOrgAdminRetryHint
+		classified.Actions = append([]string{sportOrgAdminRetryHint}, appErr.Actions...)
+		classified.Cause = err
+		return &classified
+	}
 	var cliErr *CLIError
 	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
 		return err
@@ -241,8 +257,10 @@ func classifySportOrgAdminChannelError(err error) error {
 	if success, ok := body["success"].(bool); !ok || success {
 		return err
 	}
-	return apperrors.NewAPI(fmt.Sprintf("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=%v，errorMsg=%v）：不能当作非管理员，请稍后重试", body["errorCode"], body["errorMsg"]))
+	return apperrors.NewAPI(fmt.Sprintf("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=%v，errorMsg=%v）：不能当作非管理员，请稍后重试", body["errorCode"], body["errorMsg"]), apperrors.WithHint(sportOrgAdminRetryHint))
 }
+
+const sportOrgAdminRetryHint = "组织管理员判定服务暂不可用：不能当作非管理员处理，请稍后重试"
 
 func sportReadPageSchema(row string) string {
 	return `{"type":"object","description":"当前页业务数据；分页控制信息见 meta.pagination，不含 total","properties":{"list":{"type":"array","description":"当前页记录，空列表是合法业务结果","items":` + row + `}}}`

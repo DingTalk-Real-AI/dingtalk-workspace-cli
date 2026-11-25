@@ -230,6 +230,38 @@ func TestSportOrgAdminChannelErrorClassification(t *testing.T) {
 			t.Fatalf("success=true 的业务错误应保持原分类：%v", err)
 		}
 	})
+
+	// 生产 app runner 把 success=false 分类成 reason=business_error 的 *apperrors.Error。
+	t.Run("runner 业务错误转换为稍后重试并保留诊断", func(t *testing.T) {
+		diag := apperrors.ServerDiagnostics{ServerErrorCode: "QW_ADMIN_CHECK_FAILED", TraceID: "trace-1"}
+		upstream := apperrors.NewAPI("下游异常", apperrors.WithReason("business_error"), apperrors.WithServerDiag(diag), apperrors.WithActions("保留 Trace ID"))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *apperrors.Error
+		if !errors.As(err, &classified) || apperrors.ExitCode(err) != ExitAPI || classified.Reason != "business_error" {
+			t.Fatalf("应保留 API/business_error 分类：%v", err)
+		}
+		if !strings.Contains(classified.Message, "下游异常") || !strings.Contains(classified.Message, "不能当作非管理员") || !strings.Contains(classified.Hint, "请稍后重试") {
+			t.Fatalf("应提示稍后重试并保留服务端信息：message=%q hint=%q", classified.Message, classified.Hint)
+		}
+		if classified.ServerDiag.ServerErrorCode != "QW_ADMIN_CHECK_FAILED" || classified.ServerDiag.TraceID != "trace-1" || len(classified.Actions) != 2 || classified.Actions[1] != "保留 Trace ID" || !errors.Is(err, upstream) {
+			t.Fatalf("应保留服务端诊断与原始恢复建议：%#v", classified)
+		}
+		if original, ok := upstream.(*apperrors.Error); !ok || original.Hint != "" || len(original.Actions) != 1 {
+			t.Fatalf("不得改写上游错误对象：%#v", upstream)
+		}
+	})
+
+	t.Run("非业务的 runner 错误保持原分类", func(t *testing.T) {
+		upstream := apperrors.NewAPI("tool error", apperrors.WithReason("mcp_tool_error"))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if !errors.Is(err, upstream) || strings.Contains(err.Error(), "稍后重试") {
+			t.Fatalf("非 business_error 不应改写：%v", err)
+		}
+	})
 }
 
 func TestSportCallerDryRunSkipsToolCall(t *testing.T) {
