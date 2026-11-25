@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -426,6 +427,23 @@ func isRetriable(err error) bool {
 	}
 	if os.IsTimeout(err) {
 		return true
+	}
+	// net/http's bundled HTTP/2 StreamError is unexported and does not
+	// implement net.Error. Restrict matching to a peer reset returned by Do,
+	// so redirects, certificate failures and protocol violations stay fatal.
+	var requestErr *url.Error
+	if errors.As(err, &requestErr) {
+		parts := strings.SplitN(requestErr.Err.Error(), "; ", 3)
+		const prefix = "stream error: stream ID "
+		if len(parts) == 3 && strings.HasPrefix(parts[0], prefix) && parts[2] == "received from peer" {
+			streamID, parseErr := strconv.ParseUint(strings.TrimPrefix(parts[0], prefix), 10, 32)
+			if parseErr == nil && streamID > 0 {
+				switch parts[1] {
+				case "INTERNAL_ERROR", "REFUSED_STREAM", "CANCEL":
+					return true
+				}
+			}
+		}
 	}
 	errStr := err.Error()
 	for _, pattern := range []string{"connection reset", "connection refused", "timeout", "temporary failure", "eof"} {

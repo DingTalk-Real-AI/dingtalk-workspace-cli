@@ -218,7 +218,7 @@ const cli=path.join(root,'node_modules','npm','bin','npm-cli.js');
 fs.writeFileSync(cli,'process.stdout.write(JSON.stringify(process.argv.slice(2)))');
 Object.defineProperty(process,'platform',{value:'win32'}); process.env.PATH=root; delete process.env.npm_execpath;
 const {npmEntrypoint,npm}=require(process.argv[1]);
-assert.strictEqual(npmEntrypoint(),cli);
+assert.strictEqual(npmEntrypoint(),fs.realpathSync(cli));
 const args=['pack','a path & literal $(no-shell).tgz','--ignore-scripts'];
 const result=npm(args,root); assert.strictEqual(result.status,0); assert.deepStrictEqual(JSON.parse(result.stdout),args);
 `

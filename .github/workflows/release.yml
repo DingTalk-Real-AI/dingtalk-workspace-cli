@@ -2412,25 +2412,18 @@ jobs:
               core.setFailed(`${version} is not a public immutable GitHub Release`);
               return;
             }
-            const expectedAssets = new Set([
-              "dws-darwin-amd64.tar.gz",
-              "dws-darwin-arm64.tar.gz",
-              "dws-linux-amd64.tar.gz",
-              "dws-linux-arm64.tar.gz",
-              "dws-windows-amd64.zip",
-              "dws-windows-arm64.zip",
-              "dws-skills.zip",
-              "checksums.txt",
-            ]);
+            // Asset layout belongs to the target sealed source. Preserve the
+            // immutable remote inventory for the shared download/verifier gate.
             const assetNames = release.data.assets.map((asset) => asset.name);
             if (
-              assetNames.length !== expectedAssets.size ||
-              assetNames.some((name) => !expectedAssets.has(name)) ||
-              new Set(assetNames).size !== expectedAssets.size
+              !assetNames.includes("checksums.txt") ||
+              new Set(assetNames).size !== assetNames.length ||
+              assetNames.some((name) => !/^(?:checksums\.txt|dws-[A-Za-z0-9._-]+\.(?:tar\.gz|zip))$/.test(name))
             ) {
-              core.setFailed(`${version} does not contain the exact release asset set`);
+              core.setFailed(`${version} contains unsafe, duplicate or incomplete release asset names`);
               return;
             }
+            core.setOutput("asset_names", JSON.stringify(assetNames));
             core.setOutput("commit_sha", commitSha);
             core.setOutput("tag_object", ref.data.object.sha);
 
@@ -2464,17 +2457,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.repair_npm_version }}
+          DWS_RELEASE_ASSET_NAMES: ${{ steps.authority.outputs.asset_names }}
         run: |
           set -eu
           mkdir -p dist
           gh release download "$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --dir dist \
-            --pattern 'dws-*' \
-            --pattern 'checksums.txt' \
             --clobber
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
+          node "$GITHUB_WORKSPACE/tooling/scripts/release/verify-sealed-release-assets.cjs" \
+            "$GITHUB_WORKSPACE/release-source" "$VERSION" "$GITHUB_WORKSPACE/dist"
 
       - name: Stage target npm package
         env:
