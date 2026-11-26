@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavior regression cases for the calendar Skill's primary-calendar agenda."""
+"""Behavior regression cases for the calendar Skill's owned-calendar agenda."""
 
 import contextlib
 import importlib.util
@@ -25,7 +25,8 @@ def book(cid, name=None, kind="primary", role="owner"):
     return {"calendarId": cid, "summary": name or cid, "type": kind, "privilege": role}
 
 
-BOOKS = [book("primary", "我的日历（钉钉）"), book("opaque-mail-id", "我的日历（邮箱）")]
+BOOKS = [book("primary", "我的日历（钉钉）"),
+         book("opaque-mail-id", "我的日历（person@example.com）", kind="shared")]
 
 
 def event(eid="event-1", hour=9, status="confirmed", uid=None):
@@ -71,8 +72,9 @@ class CalendarAgendaTest(unittest.TestCase):
 
     def test_first_query_includes_mail_interview_and_excludes_other_calendars(self):
         other = [book("shared", kind="shared", role="reader"),
+                 book("shared-writer", kind="shared", role="writer"),
                  book("subscribed", kind="subscribed"),
-                 book("team", kind="team")]
+                 book("team", kind="team"), book("public", kind="public")]
         ding = [event("d" + str(i), i + 8) for i in range(4)]
         ding += [event("cancel-1", 13, "cancelled"), event("cancel-2", 14, "canceled")]
         interview = event("interview", 16)
@@ -87,11 +89,30 @@ class CalendarAgendaTest(unittest.TestCase):
         self.assertEqual(sum(cmd[1:4] == ["calendar", "book", "list"] for cmd in calls), 1)
         self.assertEqual([cmd[cmd.index("--calendar-id") + 1] for cmd in calls[1:]],
                          ["primary", "opaque-mail-id"])
+        self.assertEqual(result["calendars"][1]["type"], "shared")
+        self.assertEqual(result["calendars"][1]["privilege"], "owner")
         found = result["events"][-1]
         self.assertEqual(found["start"], "2026-11-24T16:00:00+08:00")
         self.assertEqual(found["sources"][0]["calendarId"], "opaque-mail-id")
         self.assertEqual(found["sources"][0]["eventId"], "interview")
         self.assertEqual(found["sources"][0]["responseStatus"], "accepted")
+
+    def test_owned_calendar_selection_does_not_depend_on_name_or_primary_id(self):
+        for kind in ("primary", "shared"):
+            with self.subTest(kind=kind):
+                owned = book("opaque-personal-id", "项目安排", kind=kind)
+                code, result, calls = self.invoke([
+                    reply([BOOKS[0], owned]), reply(page([])), reply(page([event("personal")])),
+                ])
+                self.assertEqual(code, 0)
+                self.assertTrue(result["complete"])
+                self.assertEqual(result["counts"]["total"], 1)
+                self.assertEqual([b["calendarId"] for b in result["calendars"]],
+                                 ["primary", "opaque-personal-id"])
+                self.assertEqual(calls[2][calls[2].index("--calendar-id") + 1],
+                                 "opaque-personal-id")
+                self.assertEqual(result["events"][0]["sources"][0]["calendarId"],
+                                 "opaque-personal-id")
 
     def test_pagination_is_independent_and_each_book_is_discovered_once(self):
         code, result, calls = self.invoke([
@@ -176,6 +197,8 @@ class CalendarAgendaTest(unittest.TestCase):
     def test_unknown_ownership_or_type_does_not_guess_by_name_or_id(self):
         for uncertain in (book("mail", "我的邮箱主日历", kind="unknown"),
                           book("mail", role=""), {"calendarId": "mail", "summary": "邮箱"},
+                          book("mail", kind="shared", role=""),
+                          book("mail", kind="shared", role="unknown"),
                           {"summary": "我的日历", "type": "primary", "privilege": "owner"}):
             with self.subTest(uncertain=uncertain):
                 code, result, calls = self.invoke([reply([BOOKS[0], uncertain]), reply(page([]))])
@@ -192,15 +215,17 @@ class CalendarAgendaTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_explicit_calendar_scope_can_select_shared_calendar(self):
-        shared = book("shared", kind="shared", role="reader")
-        code, result, calls = self.invoke(
-            [reply(BOOKS + [shared]), reply(page([event()]))],
-            WINDOW + ["--calendar-id", "shared", "--calendar-id", "shared"],
-        )
-        self.assertEqual(code, 0)
-        self.assertEqual(result["scope"], "specified_calendars")
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(result["calendars"][0]["calendarId"], "shared")
+        for role in ("reader", "writer", "owner"):
+            with self.subTest(role=role):
+                shared = book("shared", kind="shared", role=role)
+                code, result, calls = self.invoke(
+                    [reply(BOOKS + [shared]), reply(page([event()]))],
+                    WINDOW + ["--calendar-id", "shared", "--calendar-id", "shared"],
+                )
+                self.assertEqual(code, 0)
+                self.assertEqual(result["scope"], "specified_calendars")
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(result["calendars"][0]["calendarId"], "shared")
         code, result, calls = self.invoke([reply(BOOKS)], WINDOW + ["--calendar-id", "missing"])
         self.assertEqual(code, 1)
         self.assertEqual(len(calls), 1)

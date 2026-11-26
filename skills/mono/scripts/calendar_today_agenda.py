@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""汇总本人钉钉、邮箱主日历，先发现日历本，再逐本完整翻页。
+"""汇总本人拥有的钉钉、邮箱日历，先发现日历本，再逐本完整翻页。
 
 用法:
     python calendar_today_agenda.py [today|yesterday|tomorrow|week]
@@ -113,18 +113,19 @@ def select_calendars(rows, requested, report):
                 fail(report, "selection", "不能确认指定日历本可读取", cid)
                 continue
         else:
-            if kind in ("shared", "subscribed", "team", "public"):
+            if kind in ("subscribed", "team", "public"):
                 continue
             if role in ("reader", "writer", "freebusy", "none"):
                 continue
-            if kind != "primary" or role != "owner":
-                fail(report, "selection", "不能确认日历本属于本人主日历，未按名称或 ID 猜测", cid)
+            # Owned mailbox calendars can be shared; also check ownership.
+            if kind not in ("primary", "shared") or role != "owner":
+                fail(report, "selection", "不能确认日历本属于本人日历，未按名称或 ID 猜测", cid)
                 continue
         selected.append(dict(book, complete=False, pages=0))
     if not selected:
         fail(report, "selection", "未发现可确认的目标日历本，不能判断是否有日程")
     if not requested and len(selected) == 1:
-        report["notes"].append("本次仅发现 1 本可确认的本人主日历；未确认钉钉和邮箱双主日历均已返回，结果仅覆盖所列日历。")
+        report["notes"].append("本次仅纳入 1 本可确认的本人日历；不能据此确认钉钉和邮箱日历均已覆盖，结果仅覆盖所列日历。")
     report["notes"].append("查询范围以本次日历本列表为准；未返回的日历不代表不存在，未查询的日历不计入汇总。")
     return selected
 
@@ -338,7 +339,7 @@ def run(argv=None):
             "discoveryCommand": command(["calendar", "book", "list"], args.profile),
             "eventCommandTemplate": command(event_args("<calendarId-from-book-list>", start, end), args.profile),
             "requestedCalendarIds": args.calendar_id or [],
-            "instructions": "先发现一次日历本；默认选 type=primary 且 privilege=owner；逐本翻页，后续页追加 --cursor <nextCursor>，每本最多 20 页。占位符必须替换为真实返回值。",
+            "instructions": "先发现一次日历本；默认选 privilege=owner 且 type 为 primary 或 shared；逐本翻页，后续页追加 --cursor <nextCursor>，每本最多 20 页。占位符必须替换为真实返回值。",
         }
         if args.format == "json":
             print(json.dumps(preview, ensure_ascii=False, indent=2))

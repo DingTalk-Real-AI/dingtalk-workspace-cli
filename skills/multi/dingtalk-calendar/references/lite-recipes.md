@@ -6,8 +6,8 @@
 
 ### list-today-meetings
 
-**优先**：`python scripts/calendar_today_agenda.py [today|yesterday|tomorrow|week] --format json`；指定时间窗改用成对的 `--start/--end`。脚本内部只发现一次日历本，再逐本汇总本人钉钉和邮箱主日历，不要在脚本前重复发现。
-备选：按 [Skill 的 SOP-1](../SKILL.md#sop-1-查日程list-events) 先 `book list`，再对每本 `type=primary`、`privilege=owner` 的真实 `calendarId` 执行 `event list --calendar-id <CALENDAR_ID>`，使用相同时间窗与 profile 并取完各自分页。用户指定日历时按指定范围；不能把默认主日历结果当成全部日程，失败不能报“暂无日程”。
+**优先**：`python scripts/calendar_today_agenda.py [today|yesterday|tomorrow|week] --format json`；指定时间窗改用成对的 `--start/--end`。脚本内部只发现一次日历本，再逐本汇总本人钉钉和邮箱日历，不要在脚本前重复发现。
+备选：按 [Skill 的 SOP-1](../SKILL.md#sop-1-查日程list-events) 先 `book list`，再对每本 `privilege=owner` 且 `type` 为 `primary` 或 `shared` 的真实 `calendarId` 执行 `event list --calendar-id <CALENDAR_ID>`，使用相同时间窗与 profile 并取完各自分页。用户指定日历时按指定范围；不能把默认主日历结果当成全部日程，失败不能报“暂无日程”。
 
 ### check-users-busy
 

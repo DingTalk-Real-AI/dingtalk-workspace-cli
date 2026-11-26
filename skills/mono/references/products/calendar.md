@@ -4,9 +4,9 @@
 
 - **二级子命令（必选其一）**：`event`（日程）、`attendee`（参会人）、`room`（会议室）、`busy`（闲忙）、`attachment`（日程附件）、`book`（我能看哪些日历本）、`acl`（我的日历共享给了谁）。`dws calendar` 后**必须**紧跟上述之一；**禁止**只执行 `dws calendar`（无子命令）。
 - **个人日程 / 给自己留时间块 / 专注时段**：统一走 **`dws calendar event create`**。当前**没有**单独的 `personal schedule create` / `calendar create` 命令。
-- **查我的日程**：优先 `python scripts/calendar_today_agenda.py [today|yesterday|tomorrow|week] --format json`；脚本先发现一次日历本，再完整查询自己的钉钉和邮箱主日历。CLI 降级必须采用下文「查询日程列表」的同一流程，不能只查默认主日历。
+- **查我的日程**：优先 `python scripts/calendar_today_agenda.py [today|yesterday|tomorrow|week] --format json`；脚本先发现一次日历本，再完整查询自己的钉钉和邮箱日历。CLI 降级必须采用下文「查询日程列表」的同一流程，不能只查默认主日历。
 - **查循环日程实例**：`dws calendar event instances --id <EVENT_ID> --start "<ISO-8601>" --end "<ISO-8601>" --format json`，用于按时间范围展开重复日程的每一个实例。**注意：此接口只能查询重复性日程；普通非循环日程将查不到任何实例信息。**
-- **查用户日历本列表**：`dws calendar book list --format json`，返回 `calendarId`、`summary`、`type`、`privilege`。本人主日历按 `type=primary` 且 `privilege=owner` 识别，不限于 ID 为 `primary` 的一本；共享/订阅日历不自动计入“我的日程”。
+- **查用户日历本列表**：`dws calendar book list --format json`，返回 `calendarId`、`summary`、`type`、`privilege`。本人日历按 `privilege=owner` 且 `type` 为 `primary` 或 `shared` 识别，不限于 ID 为 `primary` 的一本；仅有 `reader/writer` 权限的共享日历及订阅、团队、公共日历不自动计入“我的日程”。
 - **CLI 不存在**独立的 `dws calendar list`；若误跑无子命令的 `dws calendar`，会打印整段 Usage，**切勿**将该段 help 当作工具结果再次塞进对话（会急剧增加 token 与首字延迟）。
 - **必须**遵循指令说明进行调用。**绝对禁止**使用虚构指令，使用虚构参数。
 
@@ -21,7 +21,7 @@
 
 
 ## 核心概念
-日历（calendar）：日程的容器。本人可能同时拥有钉钉和邮箱主日历；`primary` 仅代表默认主日历，不能代表全部本人主日历。日历 ID 来自 `book list` 的 `calendarId`，类型与归属来自 `type` / `privilege`；订阅、团队及他人共享日历另按用户指定范围查询。
+日历（calendar）：日程的容器。本人可能同时拥有钉钉和邮箱日历；`primary` 仅代表默认主日历，不能代表全部本人日历。日历 ID 来自 `book list` 的 `calendarId`，类型与归属来自 `type` / `privilege`；订阅、团队及他人共享日历另按用户指定范围查询。
 日程（event）：日历中的单个日程，包含起止时间、地点、标题、参会人等属性。支持单次日程和重复日程(有recurrence rule的日程，又称SeriesMaster)，遵循RFC5545 iCalendar国际标准。
 日程实例（event instance）：日程的具体时间实例，可以通过event list指令查询时间段内的所有实例。1个普通日程和对应1个Instance，而1个重复性日程(SeriesMaster)对应N个Instance（同属一个日程序列）。
   - 同一个日程序列具有相同的iCalUid，并且重复性日程，其eventId和iCalUid的值相同。因此可以通过重复性日程实例的iCalUid得到重复性日程(SeriesMaster)的eventId
@@ -31,7 +31,7 @@
 忙闲时间（busy）：查询用户在指定时间段的忙闲状态，查询会议室在指定时间段的预定状态，用于会议时间协调。
 会议室（room）：room是 会议室 ，room可视为日程的资源类参会人，需要加入日程完成预订。注意和location区分，location只是地点，和room不同。
 访问控制 (acl)：用户可通过设置acl将自己的日历访问权限授予给他人（即：共享日历），授予后，他人就可以查看日历下的日程信息。通过 `dws calendar acl list` 可查看当前要用户已经授权出去的权限。若 privilege >= reader，可查询此日历下的日程数据。若 privilege >= writer ，可操作（创建/修改/删除/响应等）此日历下的日程数据。
-共享日历：将自己日历的访问权限授予给他人，用于协作。通过 `dws calendar book list` 查询当前用户日历列表，其中type == `shared` 即他人共享给当前用户的日历。
+共享日历：将日历访问权限授予他人，用于协作。`book list` 中 `type=shared` 也可能是本人邮箱日历，归属须结合 `privilege` 判断：`owner` 属于本人拥有的日历；`reader/writer` 仅表示可读取或编辑，默认不纳入个人日程。
 订阅日历：创建一个公共日历供他人订阅，他人订阅后即可查询日历下的日程数据。通过 `dws calendar book list` 查询当前用户日历列表，其中type == `subscribed` 即当前用户已订阅的日历。注意：订阅日历下的日程无参会人概念，无法执行 attendee 相关指令，也无法添加会议室。
 
 ## 命令概览
@@ -108,7 +108,7 @@ dws calendar acl delete [flags]
 
 ### 查询日程列表
 
-**完整查询流程**：优先使用配套脚本，由脚本执行一次 `book list`；不可用时 Agent 执行 `dws calendar book list --format json`（本次已有结果则复用）。默认选取所有 `type=primary` 且 `privilege=owner` 的条目，分别执行 `dws calendar event list --calendar-id <CALENDAR_ID> --start "<起始ISO>" --end "<结束ISO>" --limit 100 --format json`。两类主日历使用相同 profile 和时间窗，每本独立跟随 `nextCursor`，直到 `hasMore=false` 且游标为空；最多每本 20 页。用户指定日历时仅查指定范围。
+**完整查询流程**：优先使用配套脚本，由脚本执行一次 `book list`；不可用时 Agent 执行 `dws calendar book list --format json`（本次已有结果则复用）。默认选取所有 `privilege=owner` 且 `type` 为 `primary` 或 `shared` 的条目，分别执行 `dws calendar event list --calendar-id <CALENDAR_ID> --start "<起始ISO>" --end "<结束ISO>" --limit 100 --format json`。两类日历使用相同 profile 和时间窗，每本独立跟随 `nextCursor`，直到 `hasMore=false` 且游标为空；最多每本 20 页。用户指定日历时仅查指定范围。
 
 **完整性与来源**：单次默认查询或 `+agenda/+today/+tomorrow/+week` 不等于完整个人日程。查询失败、结构异常、游标重复/矛盾或达到页数上限时，保留部分结果并说明不完整，不能报“暂无日程”。未发现邮箱日历要说明实际发现范围；类型或归属不明不能按名字猜选。合并时保留取消状态与来源 `calendarId` / `eventId`；同本按 ID 与实例起止去重，跨本仅凭共同 `iCalUid` 与相同实例起止合并并保留来源。后续详情/参会人查询沿用该来源的 `--calendar-id`，不能回到默认日历。
 ```
@@ -477,7 +477,7 @@ Example:
 ```
 > 查询"我能看哪些日历本"，包含：我的主日历、他人共享**给我**的日历、订阅的公共/团队日历。注意区分：`acl list` 是查"我的日历共享**给了谁**"，方向相反。
 > 共享日历本中有来自 xxx 的，且权限大于reader，那么通过 `event list --calendar-id <xxx的日历本id> `可查到xxx完整的日程安排。
-> `primary` 是默认主日历 ID，邮箱主日历可能有其他真实 `calendarId`。“查我的日程”应先发现并查询所有本人主日历；每本显式传 `--calendar-id`。这不改变创建日程等写操作的原有默认目标。
+> `primary` 是默认主日历 ID，邮箱日历可能有其他真实 `calendarId`。“查我的日程”应先发现并查询所有本人日历；每本显式传 `--calendar-id`。这不改变创建日程等写操作的原有默认目标。
 
 ### 查询指定日历本
 ```
@@ -490,7 +490,7 @@ Flags:
       --id string   日历 ID (必填，默认主日历可用 primary，其他 ID 来自 book list)
 ```
 
-> **说明**：根据 `book list` 返回的 `calendarId` 查询指定日历的详细信息；`primary` 仅指默认主日历，其他本人主日历也必须使用其真实 ID。
+> **说明**：根据 `book list` 返回的 `calendarId` 查询指定日历的详细信息；`primary` 仅指默认主日历，其他本人日历也必须使用其真实 ID。
 
 ### 搜索日历本
 ```
@@ -655,7 +655,7 @@ Flags:
 - 添加 → `attachment add`（先用钉盘上传得 fileId，再 `attachment add --files <fileId>:<name>`）
 
 用户说"我有几个日历/查所有日历/别人共享给我的日历/他人共享给我的日历本":
-- 列表 → `book list`（返回 `calendarId` / `type` / `privilege`，含本人、订阅及共享日历；默认个人日程选 `type=primary` 且 `privilege=owner`）
+- 列表 → `book list`（返回 `calendarId` / `type` / `privilege`，含本人、订阅及共享日历；默认个人日程选 `privilege=owner` 且 `type` 为 `primary` 或 `shared`）
 - 查指定日历本 → `book get --id <CALENDAR_ID>`
 - 按名称搜索日历本 → `book search --query "关键词"`
 - 修改日历本名称/描述 → `book update --id <CALENDAR_ID> --summary "新名"`
@@ -761,7 +761,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - **搜房无结果**：在符合早停/用户限定范围内，`room search`（含按分组逐组查）全部返回空或无空闲 → 应**直接向用户报错/说明失败**并结束订房；**禁止**假设 roomId、禁止无合法 `roomId` 时调用 `room add` / `event create --rooms` 试探、禁止用 `event get` 等绕路推断 roomId
 - **自动化校验**：凡涉及 `room add` / `event create --rooms` 的流程，`--rooms` 只能填上游 `room search`（或等价接口）返回 JSON 中的 **`rooms[].roomId`**；不得以会议室展示名、楼层文案或用户口语当作 `roomId`
 - **附件**：`attachment add` 仅负责挂载，**不上传**文件；fileId 必须先通过钉盘流程取得；`--files` 多附件用 `<fileId>:<name>` 元素逗号分隔
-- **日历本**：使用 `book list` 返回的 `calendarId`；查个人日程时发现并逐本查询本人主日历，`event list` / 后续 `event get` 均显式传来源 `--calendar-id`，不能遗漏邮箱主日历。
+- **日历本**：使用 `book list` 返回的 `calendarId`；查个人日程时发现并逐本查询本人日历，`event list` / 后续 `event get` 均显式传来源 `--calendar-id`，不能遗漏邮箱日历。
 - **分页查询**：`event list` / `event instances` 均支持 `--limit`（控制每页条数，默认/最大 100）和 `--cursor`（翻页游标）；**首次查询无需传 `--cursor`**，仅当返回体中包含 `nextCursor` 时，将其作为 `--cursor` 传入可获取下一页
 - **循环日程实例**：`event instances` 用于按时间范围展开重复日程（SeriesMaster）的每一个实例；**普通非循环日程调用该命令将查不到任何实例信息**
 - **日程分享**：`event share-info` 获取日程的分享信息（主题、组织人、地点、入会信息等）；`--language` 控制文案语言（中文场景传 zh-CN）
@@ -772,13 +772,13 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
-| [calendar_today_agenda.py](../../scripts/calendar_today_agenda.py) | 发现并汇总本人钉钉、邮箱主日历（含完整性和来源） | `python calendar_today_agenda.py yesterday --format json` |
+| [calendar_today_agenda.py](../../scripts/calendar_today_agenda.py) | 发现并汇总本人钉钉、邮箱日历（含完整性和来源） | `python calendar_today_agenda.py yesterday --format json` |
 | [calendar_schedule_meeting.py](../scripts/calendar_schedule_meeting.py) | 一键创建日程+添加参会人+预定会议室；搜房失败时输出明确原因并返回非零退出码 | `python calendar_schedule_meeting.py --title "复盘会" --start "2026-03-15T14:00" --end "2026-03-15T15:00" --users userId1 --book-room` |
 | [calendar_free_slot_finder.py](../scripts/calendar_free_slot_finder.py) | 查询多人共同空闲时段 | `python calendar_free_slot_finder.py --users userId1,userId2 --date 2026-03-15` |
 
 脚本默认 `today`，还支持 `yesterday|tomorrow|week`，日期按北京时间计算，时间窗采用 `[start,end)`。指定时间窗用成对且带时区的 `--start/--end`，不与日期预设混用；`--profile <PROFILE>` 只接受单账号并透传所有调用；显式选日历可重复传 `--calendar-id <CALENDAR_ID>`，ID 必须存在于本次发现结果。脚本内部只发现一次，不要在调用脚本前再查询日历本。
 
-默认输出文本，Agent 使用 `--format json`：`range` 为查询时间窗，`calendars[]` 为所选日历及各自 `complete/pages`，`events[]` 为按时间排序的日程及 `sources[]`（日历 ID、日程 ID、原状态），`counts` 区分 `active/cancelled/unknown/total`，`failures/notes` 说明失败和范围限制。`complete=true` 只表示所列日历全部取完，不表示所有可访问日历或未返回的邮箱也已覆盖；状态冲突/缺失归入 `unknown`。跨日历没有共同稳定身份时不按标题合并。
+默认输出文本，Agent 使用 `--format json`：`range` 为查询时间窗，`calendars[]` 为所选日历及各自 `complete/pages`，`events[]` 为按时间排序的日程及 `sources[]`（日历 ID、日程 ID、原状态），`counts` 区分 `active/cancelled/unknown/total`，`failures/notes` 说明失败和范围限制。`complete=true` 只表示所列日历全部取完，不表示所有可访问日历或未返回的邮箱也已覆盖；状态冲突/缺失归入 `unknown`。跨日历没有共同稳定身份时不按标题合并。 默认 `scope=discovered_own_primary_calendars` 保留为兼容标识，实际范围按上述本人日历规则确定，包含 `shared + owner`。
 
 退出码 `0` 表示所列范围完整，`1` 表示失败或部分完成（仍输出已取得的结果），`2` 表示参数错误。`--dry-run` 不请求远端，只展示发现命令和带占位符的逐本查询模板；不能将模板当作已取得日历或日程。脚本不发起闲忙查询，也不推断“全天可自由安排”。
 
