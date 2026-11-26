@@ -41,8 +41,12 @@ if [ -n "$app_package" ]; then
 	# like go test, using a fresh process and profile for each batch.
 	app_dir="$(go list -f '{{.Dir}}' "$app_package")"
 	app_binary="$scratch/app.test$(go env GOEXE)"
+	coverage_dir="$scratch"
+	case "$app_binary" in
+		*.exe) coverage_dir="$(cygpath -am "$scratch")" ;;
+	esac
 	go test -c -coverpkg="$coverpkg" -covermode=atomic -o "$app_binary" "$app_package"
-	(cd "$app_dir" && "$app_binary" -test.list "$pattern") > "$scratch/list"
+	(cd "$app_dir" && "$app_binary" "-test.list=$pattern") > "$scratch/list"
 
 	# Exact anchors keep every selected top-level test in just one batch.
 	awk '/^(TestAllShortcuts|TestCrossPlatformCoverage)/ {
@@ -58,8 +62,10 @@ if [ -n "$app_package" ]; then
 	while IFS= read -r batch_pattern; do
 		batch=$((batch + 1))
 		printf 'native app coverage batch %s: %s\n' "$batch" "$batch_pattern"
-		(cd "$app_dir" && "$app_binary" -test.count=1 -test.timeout "$timeout" \
-			-test.paniconexit0 -test.run "$batch_pattern" -test.coverprofile "$scratch/app-$batch.txt")
+		# Match go test's single argv entry per flag so app tests that inspect
+		# os.Args cannot interpret flag values as CLI commands.
+		(cd "$app_dir" && "$app_binary" -test.count=1 "-test.timeout=$timeout" \
+			-test.paniconexit0 "-test.run=$batch_pattern" "-test.coverprofile=$coverage_dir/app-$batch.txt")
 	done < "$scratch/batches"
 fi
 

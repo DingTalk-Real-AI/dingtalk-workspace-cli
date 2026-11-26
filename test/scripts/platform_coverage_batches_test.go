@@ -37,12 +37,16 @@ func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 import (
  "fmt"
  "os"
+ "strings"
  "testing"
  "example.com/platform-fixture/internal/helper"
 )
 func record(t *testing.T) {
  t.Helper()
  if _, err := os.Stat("app.go"); err != nil { t.Fatal(err) }
+ for _, arg := range os.Args[1:] {
+  if !strings.HasPrefix(arg, "-test.") { t.Fatalf("unexpected process argument: %q", arg) }
+ }
  helper.FromApp()
  Value()
  executable, err := os.Executable()
