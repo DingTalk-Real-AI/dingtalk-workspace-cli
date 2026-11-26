@@ -363,10 +363,8 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 				command := newUpgradeCommand()
 				command.Flags().Bool("yes", false, "")
 				command.Flags().Bool("dry-run", false, "")
-				_ = command.Flags().Set("yes", "true")
-				_ = command.Flags().Set("force", "true")
-				_ = command.Flags().Set("skip-skills", "true")
-				if err := command.RunE(command, nil); err != nil {
+				command.SetArgs([]string{"--yes", "--force", "--skip-skills"})
+				if err := corecmd.ExecuteForTest(command); err != nil {
 					t.Fatalf("default upgrade command = %v", err)
 				}
 			}

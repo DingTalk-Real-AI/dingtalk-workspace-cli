@@ -19,6 +19,7 @@
 #   OSS_PREFIX   (default: dws)
 #   DIST_DIR     (default: ./dist)
 #   VERSION      (default: derived from `git describe`)
+#   DWS_OSS_INSTALLERS_DIR (sealed installer directory; default: ./scripts)
 #
 # Gating: if the required OSS_* vars are unset, the script exits 0 with a notice
 # (so it can be wired into release.yml without breaking forks that lack secrets).
@@ -29,6 +30,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$SCRIPT_DIR/release-lib.sh"
 
 DIST_DIR="${DIST_DIR:-dist}"
+INSTALLERS_DIR="${DWS_OSS_INSTALLERS_DIR:-scripts}"
 OSS_PREFIX="${OSS_PREFIX:-dws}"
 
 # ── Gate: skip cleanly when credentials are not configured ────────────────────
@@ -179,6 +181,14 @@ else
 fi
 
 # ── Upload binaries + checksums + skills ──────────────────────────────────────
+if [ "$CHANNEL" = "stable" ] && [ "$update_pointer" -eq 1 ] && [ -n "${DWS_OSS_INSTALLERS_DIR:-}" ]; then
+  for s in install.sh install.ps1 install-skills.sh; do
+    [ -f "$INSTALLERS_DIR/$s" ] || {
+      echo "Missing sealed installer: $INSTALLERS_DIR/$s" >&2
+      exit 1
+    }
+  done
+fi
 uploaded=0
 for f in "$DIST_DIR"/dws-*.tar.gz "$DIST_DIR"/dws-*.zip "$DIST_DIR"/checksums.txt; do
   [ -f "$f" ] || continue
@@ -208,7 +218,7 @@ fi
 installer_summary=""
 if [ "$CHANNEL" = "stable" ] && [ "$update_pointer" -eq 1 ]; then
   for s in install.sh install.ps1 install-skills.sh; do
-    [ -f "scripts/$s" ] && oss_cp "scripts/$s" "${OSS_PREFIX}/$s"
+    [ -f "$INSTALLERS_DIR/$s" ] && oss_cp "$INSTALLERS_DIR/$s" "${OSS_PREFIX}/$s"
   done
   installer_summary=" + stable install scripts"
 fi

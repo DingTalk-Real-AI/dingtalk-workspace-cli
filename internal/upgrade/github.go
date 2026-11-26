@@ -73,11 +73,13 @@ type GitHubRelease struct {
 
 // GitHubAsset represents a release asset (downloadable file).
 type GitHubAsset struct {
-	Name               string `json:"name"`
-	Size               int64  `json:"size"`
-	Digest             string `json:"digest"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	ContentType        string `json:"content_type"`
+	// NPM identifies a verified platform package, never a raw archive URL.
+	NPM                *NPMPackage `json:"-"`
+	Name               string      `json:"name"`
+	Size               int64       `json:"size"`
+	Digest             string      `json:"digest"`
+	BrowserDownloadURL string      `json:"browser_download_url"`
+	ContentType        string      `json:"content_type"`
 }
 
 // ReleaseInfo is the simplified view of a release used throughout the upgrade flow.

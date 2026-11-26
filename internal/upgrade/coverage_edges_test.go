@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 type upgradeRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -548,33 +550,33 @@ func TestCrossPlatformCoverageVersionPrereleaseEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageDownloaderRetryControlEdges(t *testing.T) {
-	originalAfter := downloadAfter
-	t.Cleanup(func() { downloadAfter = originalAfter })
-
+	var requests atomic.Int32
 	truncated := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
 		w.Header().Set("Content-Length", "10")
 		_, _ = io.WriteString(w, "x")
 	}))
 	defer truncated.Close()
 	cfg := DefaultDownloadConfig()
 	cfg.MaxRetries = 1
-	if _, err := DownloadWithConfig(t.Context(), truncated.URL, filepath.Join(t.TempDir(), "out"), cfg); err == nil || !strings.Contains(err.Error(), "重试 1 次") {
-		t.Fatalf("retry exhaustion = %v", err)
+	if _, err := DownloadWithConfig(t.Context(), truncated.URL, filepath.Join(t.TempDir(), "out"), cfg); !errors.Is(err, io.ErrUnexpectedEOF) || !strings.Contains(err.Error(), "尝试 1 次，重试 0 次") || requests.Load() != 1 {
+		t.Fatalf("retry exhaustion = %v, requests = %d", err, requests.Load())
 	}
 
 	ready := make(chan time.Time)
 	close(ready)
-	downloadAfter = func(time.Duration) <-chan time.Time { return ready }
+	testseam.Swap(t, &downloadAfter, func(time.Duration) <-chan time.Time { return ready })
 	cfg.MaxRetries = 7
-	if _, err := DownloadWithConfig(t.Context(), truncated.URL, filepath.Join(t.TempDir(), "out"), cfg); err == nil {
-		t.Fatal("retry exhaustion with capped backoff succeeded")
+	requests.Store(0)
+	if _, err := DownloadWithConfig(t.Context(), truncated.URL, filepath.Join(t.TempDir(), "out"), cfg); !errors.Is(err, io.ErrUnexpectedEOF) || !strings.Contains(err.Error(), "尝试 7 次，重试 6 次") || requests.Load() != 7 {
+		t.Fatalf("retry exhaustion with capped backoff = %v, requests = %d", err, requests.Load())
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	downloadAfter = func(time.Duration) <-chan time.Time {
+	testseam.Swap(t, &downloadAfter, func(time.Duration) <-chan time.Time {
 		cancel()
 		return make(chan time.Time)
-	}
+	})
 	cfg.MaxRetries = 2
 	if _, err := DownloadWithConfig(ctx, truncated.URL, filepath.Join(t.TempDir(), "out"), cfg); !errors.Is(err, context.Canceled) {
 		t.Fatalf("backoff cancellation = %v", err)

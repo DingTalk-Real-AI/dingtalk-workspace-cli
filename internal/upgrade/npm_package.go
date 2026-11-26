@@ -182,6 +182,15 @@ func validNPMPackagePath(name string) bool {
 }
 
 func extractNPMPackage(ctx context.Context, r io.Reader, pkg NPMPackage, stage string, skipSkills bool, goos, goarch string) (PreparedNPMPackage, error) {
+	binaryName := npmPackageBinaryName(goos, goarch)
+	selected := map[string]bool{binaryName: true}
+	if !skipSkills {
+		selected[skillsZipName] = true
+	}
+	return extractNPMPackageAssets(ctx, r, pkg, stage, selected, binaryName)
+}
+
+func extractNPMPackageAssets(ctx context.Context, r io.Reader, pkg NPMPackage, stage string, selected map[string]bool, binaryName string) (PreparedNPMPackage, error) {
 	var result PreparedNPMPackage
 	gz, err := gzip.NewReader(npmPackageContextReader{ctx, r})
 	if err != nil {
@@ -191,11 +200,6 @@ func extractNPMPackage(ctx context.Context, r io.Reader, pkg NPMPackage, stage s
 	// 同时限制已选中与未选中成员，防止跳过其他平台时展开压缩炸弹。
 	bounded := &io.LimitedReader{R: gz, N: npmPackageMaxExpanded + 1}
 	tr := tar.NewReader(bounded)
-	binaryName := npmPackageBinaryName(goos, goarch)
-	selected := map[string]bool{binaryName: true}
-	if !skipSkills {
-		selected[skillsZipName] = true
-	}
 	seen := map[string]bool{}
 	digests := map[string]string{}
 	var manifest []byte

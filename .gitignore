@@ -14,6 +14,7 @@ dist/
 .pytest_cache/
 .playwright-mcp/
 /.playwright-mcp/
+/doc/
 .venv*/
 var/
 .DS_Store

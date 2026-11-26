@@ -54,3 +54,8 @@ done
 [ -f "$PKG_ROOT/assets/checksums.txt" ] || { printf 'checksums.txt is missing\n' >&2; exit 1; }
 
 printf 'Staged npm package %s at %s\n' "$SEMVER" "$PKG_ROOT"
+
+# The frozen template opts in to the main manifest. Historical templates keep
+# their original bytes even when this trusted tool stages them during repair.
+rm -rf "$DIST_DIR/npm-split"
+node "$SCRIPT_DIR/stage-npm-splits.cjs" "$DIST_DIR" "$SEMVER" --main

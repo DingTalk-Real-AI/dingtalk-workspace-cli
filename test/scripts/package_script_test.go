@@ -2187,9 +2187,9 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 	}
 
 	sections := map[string]string{
-		"release":          releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n"),
-		"publish-release":  releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n"),
-		"publish-channels": releaseWorkflowSection(t, workflow, "  publish-channels:\n", "\n  mirror-gitee-release:\n"),
+		"release":         releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n"),
+		"publish-release": releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n"),
+		"prepare-npm":     releaseWorkflowSection(t, workflow, "  prepare-npm:\n", "\n  prepare-npm-repair:\n"),
 	}
 	for name, section := range sections {
 		for _, required := range []string{
@@ -2471,7 +2471,7 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 			name:      "channel publication",
 			start:     "  publish-channels:\n",
 			end:       "\n  mirror-gitee-release:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' && needs.prepare-npm.result == 'success' }}`,
 		},
 		{
 			name:      "Gitee mirror",

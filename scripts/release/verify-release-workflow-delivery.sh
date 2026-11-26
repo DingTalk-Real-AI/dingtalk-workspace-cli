@@ -403,9 +403,21 @@ if channels.get("conclusion") not in {"success", "failure"}:
     fail("channel publication job was not completed with a conclusive result")
 
 steps = channels.get("steps", [])
+prepared = [job for job in jobs if job.get("name") == "Prepare and verify npm packages"]
+if prepared:
+    preparation = one_job("Prepare and verify npm packages")
+    if preparation.get("conclusion") != "success":
+        fail("credential-free npm preparation did not succeed")
+    for name in ("Verify immutable npm package without publication credentials", "Require unchanged verified tarballs", "Upload sealed npm handoff"):
+        matches = [step for step in preparation.get("steps", []) if step.get("name") == name]
+        if len(matches) != 1 or matches[0].get("conclusion") != "success" or matches[0].get("status") != "completed":
+            fail(f"required npm preparation step {name!r} did not succeed")
+# Historical sealed runs predate the job split. Their recorded installation
+# check stays valid; new runs must prove the separate preparation and handoff.
+verification_step = "Verify sealed npm handoff" if prepared else "Verify immutable npm package without publication credentials"
 for name in (
     "Download and verify immutable GitHub Release",
-    "Verify immutable npm package without publication credentials",
+    verification_step,
     "Inspect npm channel state",
     "Verify npm channel delivery",
 ):
@@ -579,12 +591,26 @@ channels = [job for job in jobs if job.get("name") == "Publish npm and mirrors"]
 if len(channels) != 1:
     fail(f"expected exactly one npm publication job, found {len(channels)}")
 channel = channels[0]
+preparations = [job for job in jobs if job.get("name") == "Prepare and verify npm packages"]
+if len(preparations) > 1:
+    fail("duplicate npm preparation jobs")
+preparation_failed = False
+if preparations:
+    preparation = preparations[0]
+    if preparation.get("head_sha") != commit or preparation.get("status") != "completed":
+        fail("npm preparation did not complete at the release commit")
+    preparation_failed = preparation.get("conclusion") == "failure"
+    if preparation.get("conclusion") not in {"success", "failure"}:
+        fail("npm preparation is neither successful nor failed")
 if (
     channel.get("head_sha") != commit
     or channel.get("status") != "completed"
-    or channel.get("conclusion") not in {"success", "failure"}
+    or not (
+        channel.get("conclusion") in {"success", "failure"}
+        or (channel.get("conclusion") == "skipped" and preparation_failed)
+    )
 ):
-    fail("npm publication job is not a completed success/failure at the release commit")
+    fail("npm publication has no completed or failed-preparation recovery path at the release commit")
 PY
   rm -rf "$jobs_dir"
   return "$result"

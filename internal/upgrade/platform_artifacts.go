@@ -7,24 +7,60 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const platformArchiveMaxBytes int64 = 128 << 20
 
 // ResolvePlatformRelease 将官方 npm 精确版本绑定到同 tag 的不可变 GitHub 资产。
 // 返回 nil 表示来源不适用：显式 GitHub、自定义 Registry 和内部发行版保留原协议。
-// 官方资产解析失败直接返回错误，不能悄悄降级成全平台 npm 包下载。
+// 网络错误可切换同版本 npm 平台分包，不隐式改为下载全平台 npm 包。
 func ResolvePlatformRelease(ctx context.Context, release *ReleaseInfo, skipSkills bool) (*ReleaseInfo, error) {
-	if release.NPM == nil || !publicUpgradeEdition(upgradeEditionName()) || strings.TrimRight(release.NPM.RegistryURL, "/") != defaultNPMRegistry {
+	return ResolvePlatformReleaseForSource(ctx, release, skipSkills, SourceAuto)
+}
+
+// ResolvePlatformReleaseForSource pins explicit sources; only auto may switch.
+func ResolvePlatformReleaseForSource(ctx context.Context, release *ReleaseInfo, skipSkills bool, source DownloadSource) (*ReleaseInfo, error) {
+	source = source.normalized()
+	if _, err := ParseDownloadSource(string(source)); err != nil {
+		return nil, err
+	}
+	if source != SourceAuto && (release == nil || release.NPM == nil || !publicUpgradeEdition(upgradeEditionName())) {
+		return nil, fmt.Errorf("--source %s 需要公共主包的有效版本信息", source)
+	}
+	if release == nil || release.NPM == nil || !publicUpgradeEdition(upgradeEditionName()) {
 		return nil, nil
 	}
 	pkg := release.NPM
+	registry := strings.TrimRight(pkg.RegistryURL, "/")
+	if source == SourceGitHub && registry != defaultNPMRegistry || source == SourceNPMMirror && registry != publicNPMMirror {
+		return nil, fmt.Errorf("主包 Registry 与 --source %s 不一致", source)
+	}
+	if registry != defaultNPMRegistry && registry != publicNPMMirror {
+		return nil, nil
+	}
 	if pkg.Name != npmPackageName || pkg.Version != release.Version || !validNPMVersion(release.Version) {
 		return nil, fmt.Errorf("npm 版本身份无效，拒绝解析平台资产")
+	}
+	if registry == publicNPMMirror {
+		// Legacy main packages authenticate the complete tarball with their SRI.
+		// Later split backfills must not change that version's installation path.
+		if source == SourceAuto && pkg.Upgrade == nil {
+			reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "完整 npm 包", Reason: "该历史主包未声明平台资源，使用整包兼容路径"})
+			return nil, nil
+		}
+		reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "平台资源元数据"})
+		resolved, err := resolveMirrorSplitRelease(ctx, release, skipSkills)
+		if source == SourceAuto && errors.Is(err, errNPMSplitUnavailable) {
+			reportDownload(ctx, DownloadEvent{Kind: "source", Source: "npmmirror", Resource: "完整 npm 包", Reason: "该历史版本没有平台分包，使用整包兼容路径"})
+			return nil, nil
+		}
+		return resolved, err
 	}
 	expectedTarball := defaultNPMRegistry + "/" + npmPackageName + "/-/" + npmPackageName + "-" + release.Version + ".tgz"
 	if pkg.TarballURL != expectedTarball {
@@ -32,10 +68,20 @@ func ResolvePlatformRelease(ctx context.Context, release *ReleaseInfo, skipSkill
 	}
 	// 复用有界元数据读取；本机凭据仅通过专属 transport 附加到官方 GitHub API。
 	client := &Client{httpClient: &http.Client{
-		Timeout:   httpTimeout,
+		Timeout:   8 * time.Second,
 		Transport: githubMetadataTransport{base: http.DefaultTransport, token: platformGitHubToken(ctx)},
 	}}
-	return resolvePlatformRelease(ctx, client, release, skipSkills, runtime.GOOS, runtime.GOARCH)
+	reportDownload(ctx, DownloadEvent{Kind: "source", Source: "github", Resource: "平台资源元数据"})
+	resolved, err := resolvePlatformRelease(ctx, client, release, skipSkills, runtime.GOOS, runtime.GOARCH)
+	if err == nil || source != SourceAuto || ctx.Err() != nil || !canFallbackPlatform(err) {
+		return resolved, err
+	}
+	reportDownload(ctx, DownloadEvent{Kind: "switch", Previous: "github", Source: "npmmirror", Resource: "平台资源元数据", Reason: downloadFailureReason(err)})
+	mirrored, mirrorErr := resolveMirrorSplitRelease(ctx, release, skipSkills)
+	if mirrorErr != nil {
+		return nil, errors.Join(err, fmt.Errorf("npmmirror 同版本平台分包不可用: %w", mirrorErr))
+	}
+	return mirrored, nil
 }
 
 func resolvePlatformRelease(ctx context.Context, client *Client, release *ReleaseInfo, skipSkills bool, goos, goarch string) (*ReleaseInfo, error) {
@@ -88,7 +134,17 @@ func validatePlatformAsset(asset GitHubAsset) error {
 	if err != nil || len(digest) != sha256.Size {
 		return fmt.Errorf("平台资产缺少有效 SHA256: %s", asset.Name)
 	}
-	if asset.Size <= 0 || asset.Size > platformArchiveMaxBytes || !validRegistryURL(asset.BrowserDownloadURL) {
+	assetURL := asset.BrowserDownloadURL
+	if asset.NPM != nil {
+		suffix, err := npmSplitSuffix(asset.Name)
+		pkg := asset.NPM
+		if err != nil || pkg.Name != npmPackageName+"-"+suffix || !publicSplitVersion.MatchString(pkg.Version) ||
+			pkg.RegistryURL != publicNPMMirror || !validNPMIntegrity(pkg.Integrity) {
+			return fmt.Errorf("npm 平台分包身份无效")
+		}
+		assetURL = pkg.TarballURL
+	}
+	if asset.Size <= 0 || asset.Size > platformArchiveMaxBytes || !validRegistryURL(assetURL) {
 		return fmt.Errorf("平台资产大小或地址无效: %s", asset.Name)
 	}
 	return nil
@@ -106,8 +162,23 @@ func platformAssetRedirect(req *http.Request, via []*http.Request) error {
 
 // DownloadPlatformAsset 下载单个资产；大小和摘要均符合清单后才允许解压或安装。
 func DownloadPlatformAsset(ctx context.Context, asset GitHubAsset, dest string, progress func(float64, int64, int64)) error {
+	return DownloadPlatformAssetForSource(ctx, asset, dest, progress, SourceAuto)
+}
+
+// DownloadPlatformAssetForSource never falls back when a source is pinned.
+func DownloadPlatformAssetForSource(ctx context.Context, asset GitHubAsset, dest string, progress func(float64, int64, int64), source DownloadSource) error {
+	source = source.normalized()
+	if _, err := ParseDownloadSource(string(source)); err != nil {
+		return err
+	}
+	if source == SourceGitHub && asset.NPM != nil || source == SourceNPMMirror && asset.NPM == nil {
+		return fmt.Errorf("平台资源与 --source %s 不一致", source)
+	}
 	if err := validatePlatformAsset(asset); err != nil {
 		return err
+	}
+	if asset.NPM != nil {
+		return downloadNPMSplitAsset(ctx, asset, dest, progress)
 	}
 	cfg := DefaultDownloadConfig()
 	cfg.MaxBytes = asset.Size
@@ -119,6 +190,14 @@ func DownloadPlatformAsset(ctx context.Context, asset GitHubAsset, dest string, 
 	}
 	size, err := DownloadWithConfig(ctx, asset.BrowserDownloadURL, dest, cfg)
 	if err != nil {
+		if source == SourceAuto && ctx.Err() == nil && canFallbackPlatform(err) && publicUpgradeEdition(upgradeEditionName()) {
+			reportDownload(ctx, DownloadEvent{Kind: "switch", Previous: "github", Source: "npmmirror", Resource: asset.Name, Reason: downloadFailureReason(err)})
+			mirrored, mirrorErr := mirrorForGitHubAsset(ctx, asset)
+			if mirrorErr == nil {
+				return downloadNPMSplitAsset(ctx, mirrored, dest, progress)
+			}
+			return errors.Join(err, fmt.Errorf("npmmirror 同版本资源不可用: %w", mirrorErr))
+		}
 		return err
 	}
 	if size != asset.Size {

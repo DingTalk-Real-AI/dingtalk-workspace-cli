@@ -1813,98 +1813,56 @@ jobs:
 
   publish-channels:
     name: Publish npm and mirrors
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
-    needs: [release-contract, publish-release]
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' && needs.prepare-npm.result == 'success' }}
+    needs: [release-contract, publish-release, prepare-npm]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
     env:
       RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
       RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
       RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
     steps:
-      - name: Check out sealed release source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-contract.outputs.release_commit }}
-          persist-credentials: false
-          fetch-depth: 0
-
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          path: tmp/trusted-release-tooling
           persist-credentials: false
 
-      - name: Fetch release branch and official tags
-        run: |
-          git fetch --force origin \
-            '+refs/heads/main:refs/remotes/origin/main'
-          git fetch --force --no-tags \
-            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
-            '+refs/tags/v*:refs/tags/v*' \
-            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
-
-      - name: Verify sealed tag before executing channel source
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
-
-      - name: Revalidate sealed contract
-        run: |
-          ./scripts/release/release-contract.sh \
-            --channel "${{ needs.release-contract.outputs.channel }}" \
-            --version "$RELEASE_VERSION" \
-            --context ci \
-            --remote origin \
-            --branch main
-
-      - name: Setup Node.js
+      - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
 
       - name: Download and verify immutable GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eu
-          release_state="$(
-            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
-              --jq '[.draft, .immutable] | @tsv'
-          )"
-          test "$release_state" = "$(printf 'false\ttrue')" || {
-            echo "GitHub Release must be public and immutable before channel publication." >&2
-            exit 1
-          }
-          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
-          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
-            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
-          mkdir -p dist
-          gh release download "$RELEASE_VERSION" \
-            --dir dist \
-            --pattern 'dws-*' \
-            --pattern 'checksums.txt' \
-            --clobber
-          ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
-          DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
-            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            ./scripts/release/stage-npm-package.sh "$RELEASE_VERSION"
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-channel-handoff
+          path: dist
 
-      - name: Verify immutable npm package without publication credentials
+      - name: Verify sealed npm handoff
+        env:
+          EXPECTED_DIGEST: ${{ needs.prepare-npm.outputs.digest }}
         run: |
-          ./scripts/release/verify-package-managers.sh \
-            --npm-only \
-            --expected-version "$RELEASE_VERSION"
+          test -n "$EXPECTED_DIGEST"
+          node "$GITHUB_WORKSPACE/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
+
+      - name: Revalidate publication authority
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await require('./scripts/release/verify-npm-publication-authority.cjs')({
+              github, context,
+              version: process.env.RELEASE_VERSION,
+              commit: process.env.RELEASE_COMMIT,
+              tagObject: process.env.RELEASE_TAG_OBJECT,
+            });
 
       - name: Inspect npm channel state
         id: npm-state
@@ -1919,9 +1877,7 @@ jobs:
           if [ "$RELEASE_CHANNEL" = "prerelease" ]; then npm_tag=beta; fi
           current="$(npm view dingtalk-workspace-cli "dist-tags.$npm_tag")"
           local_integrity="$(
-            ./scripts/release/pack-npm-package.sh \
-              "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
-              "$RUNNER_TEMP/dingtalk-workspace-cli.tgz"
+            node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write("sha512-"+c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$GITHUB_WORKSPACE/dist/npm-publish.tgz"
           )"
           version_error="$RUNNER_TEMP/npm-version-error.log"
           if existing="$(npm view "dingtalk-workspace-cli@$semver" version 2>"$version_error")"; then
@@ -1973,10 +1929,21 @@ jobs:
             echo "semver=$semver"
           } >> "$GITHUB_OUTPUT"
 
+      # Enable after all seven packages trust this repository's release.yml.
+      # Resources precede the main channel; the old all-platform tarball stays
+      # unchanged for historical repair and older installers.
+      - name: Publish platform and skill packages
+        if: ${{ github.repository_owner == 'DingTalk-Real-AI' && vars.DWS_STAGE_NPM_SPLITS == '1' }}
+        run: |
+          if [ -f dist/npm-split/index.json ]; then
+            node ./scripts/release/publish-npm-splits.cjs "$GITHUB_WORKSPACE/dist/npm-split" --publish
+          else
+            echo "Historical package has no split capability; preserving its sealed main package."
+          fi
+
       - name: Publish missing version to npm channel
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.published != 'true' }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
           SEMVER: ${{ steps.npm-state.outputs.semver }}
         run: |
@@ -1987,7 +1954,7 @@ jobs:
             echo "Refusing to move npm $NPM_TAG backwards from v$current to v$SEMVER" >&2
             exit 1
           fi
-          npm publish "$RUNNER_TEMP/dingtalk-workspace-cli.tgz" \
+          npm publish "$GITHUB_WORKSPACE/dist/npm-publish.tgz" \
             --access public \
             --tag "$NPM_TAG" \
             --ignore-scripts \
@@ -1996,7 +1963,6 @@ jobs:
       - name: Advance npm channel for an existing exact version
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' && steps.npm-state.outputs.advance_channel == 'true' }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ steps.npm-state.outputs.npm_tag }}
           SEMVER: ${{ steps.npm-state.outputs.semver }}
         run: |
@@ -2063,6 +2029,7 @@ jobs:
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           DWS_REQUIRE_OSS: "1"
+          DWS_OSS_INSTALLERS_DIR: ${{ github.workspace }}/dist/oss-installers
 
   mirror-gitee-release:
     name: Mirror immutable release to Gitee
@@ -2122,6 +2089,228 @@ jobs:
           DWS_REQUIRE_GITEE: "1"
 
   repair-npm:
+    needs: [dispatch-contract, prepare-npm-repair]
+    if: ${{ needs.prepare-npm-repair.result == 'success' && needs.dispatch-contract.outputs.mode == 'repair_npm' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js for npm trusted publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
+
+      - name: Download and verify immutable GitHub Release
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-repair-handoff
+          path: dist
+
+      - name: Verify sealed npm handoff
+        env:
+          EXPECTED_DIGEST: ${{ needs.prepare-npm-repair.outputs.digest }}
+        run: |
+          test -n "$EXPECTED_DIGEST"
+          node "$GITHUB_WORKSPACE/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
+
+      - name: Revalidate publication authority
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ inputs.repair_npm_version }}
+          RELEASE_COMMIT: ${{ needs.prepare-npm-repair.outputs.commit_sha }}
+          RELEASE_TAG_OBJECT: ${{ needs.prepare-npm-repair.outputs.tag_object }}
+        with:
+          script: |
+            await require('./scripts/release/verify-npm-publication-authority.cjs')({
+              github, context,
+              version: process.env.RELEASE_VERSION,
+              commit: process.env.RELEASE_COMMIT,
+              tagObject: process.env.RELEASE_TAG_OBJECT,
+            });
+
+      - name: Inspect npm version
+        id: npm
+        env:
+          SEMVER: ${{ needs.prepare-npm-repair.outputs.semver }}
+        run: |
+          set -eu
+          local_integrity="$(
+            node -e 'const fs=require("fs"),c=require("crypto"); process.stdout.write("sha512-"+c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$GITHUB_WORKSPACE/dist/npm-publish.tgz"
+          )"
+          version_error="$RUNNER_TEMP/npm-version-error.log"
+          if existing="$(npm view "dingtalk-workspace-cli@$SEMVER" version 2>"$version_error")"; then
+            if [ "$existing" != "$SEMVER" ]; then
+              echo "npm returned unexpected version $existing for $SEMVER" >&2
+              exit 1
+            fi
+          elif grep -Eq 'E404|404 Not Found' "$version_error"; then
+            existing=""
+          else
+            cat "$version_error" >&2
+            exit 1
+          fi
+          if [ "$existing" = "$SEMVER" ]; then
+            remote_integrity="$(npm view "dingtalk-workspace-cli@$SEMVER" dist.integrity)"
+            if [ -z "$remote_integrity" ] || [ "$remote_integrity" != "$local_integrity" ]; then
+              echo "npm $SEMVER integrity differs from the immutable release package." >&2
+              echo "local:  $local_integrity" >&2
+              echo "remote: $remote_integrity" >&2
+              exit 1
+            fi
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Backfill exact version to npm
+        if: ${{ steps.npm.outputs.published != 'true' }}
+        run: npm publish "$GITHUB_WORKSPACE/dist/npm-publish.tgz" --access public --tag backfill --ignore-scripts --registry=https://registry.npmjs.org
+
+  prepare-npm:
+    name: Prepare and verify npm packages
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.publish-release.result == 'success' }}
+    needs: [release-contract, publish-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+      RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}
+    outputs:
+      digest: ${{ steps.package.outputs.digest }}
+    steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check out trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tmp/trusted-release-tooling
+          persist-credentials: false
+
+      - name: Fetch release branch and official tags
+        run: |
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+          git fetch --force --no-tags \
+            https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli.git \
+            '+refs/tags/v*:refs/tags/v*' \
+            '+refs/tags/withdrawn/v*:refs/tags/withdrawn/v*'
+
+      - name: Verify sealed tag before executing channel source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+
+      - name: Revalidate sealed contract
+        run: |
+          ./scripts/release/release-contract.sh \
+            --channel "${{ needs.release-contract.outputs.channel }}" \
+            --version "$RELEASE_VERSION" \
+            --context ci \
+            --remote origin \
+            --branch main
+
+      - name: Setup Node.js for npm trusted publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # npm 11.21 adds OIDC authentication for dist-tag operations. The main
+      # package's deterministic packing remains pinned in pack-npm-package.sh.
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Download and verify immutable GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          release_state="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
+              --jq '[.draft, .immutable] | @tsv'
+          )"
+          test "$release_state" = "$(printf 'false\ttrue')" || {
+            echo "GitHub Release must be public and immutable before channel publication." >&2
+            exit 1
+          }
+          ./scripts/release/verify-github-release-assets.sh "$RELEASE_VERSION"
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
+            "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
+          mkdir -p dist
+          gh release download "$RELEASE_VERSION" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
+          DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE" \
+            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            DWS_STAGE_NPM_SPLITS="${{ vars.DWS_STAGE_NPM_SPLITS || '0' }}" \
+            "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/stage-npm-package.sh" "$RELEASE_VERSION"
+          mkdir -p dist/oss-installers
+          cp scripts/install.sh scripts/install.ps1 scripts/install-skills.sh dist/oss-installers/
+
+      - name: Pack and seal npm handoff
+        id: package
+        run: |
+          set -eu
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/pack-npm-package.sh" \
+            "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
+            "$GITHUB_WORKSPACE/dist/npm-publish.tgz"
+          digest="$(node "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/npm-handoff-digest.cjs" dist)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Verify immutable npm package without publication credentials
+        run: |
+          DWS_VERIFY_NPM_TARBALL="$GITHUB_WORKSPACE/dist/npm-publish.tgz" \
+            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            sh "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-sealed-npm-package.sh" \
+            "$GITHUB_WORKSPACE" "$RELEASE_VERSION"
+
+
+      - name: Require unchanged verified tarballs
+        env:
+          EXPECTED_DIGEST: ${{ steps.package.outputs.digest }}
+        run: node "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
+
+      - name: Upload sealed npm handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-channel-handoff
+          path: dist/
+          if-no-files-found: error
+          retention-days: 31
+
+  prepare-npm-repair:
+    name: Prepare and verify npm repair
     needs: dispatch-contract
     if: ${{ needs.dispatch-contract.outputs.mode == 'repair_npm' && github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
     runs-on: ubuntu-latest
@@ -2129,6 +2318,11 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      digest: ${{ steps.package.outputs.digest }}
+      semver: ${{ steps.version.outputs.semver }}
+      commit_sha: ${{ steps.authority.outputs.commit_sha }}
+      tag_object: ${{ steps.authority.outputs.tag_object }}
     steps:
       - name: Check out trusted release tooling
         uses: actions/checkout@v4
@@ -2218,26 +2412,20 @@ jobs:
               core.setFailed(`${version} is not a public immutable GitHub Release`);
               return;
             }
-            const expectedAssets = new Set([
-              "dws-darwin-amd64.tar.gz",
-              "dws-darwin-arm64.tar.gz",
-              "dws-linux-amd64.tar.gz",
-              "dws-linux-arm64.tar.gz",
-              "dws-windows-amd64.zip",
-              "dws-windows-arm64.zip",
-              "dws-skills.zip",
-              "checksums.txt",
-            ]);
+            // Asset layout belongs to the target sealed source. Preserve the
+            // immutable remote inventory for the shared download/verifier gate.
             const assetNames = release.data.assets.map((asset) => asset.name);
             if (
-              assetNames.length !== expectedAssets.size ||
-              assetNames.some((name) => !expectedAssets.has(name)) ||
-              new Set(assetNames).size !== expectedAssets.size
+              !assetNames.includes("checksums.txt") ||
+              new Set(assetNames).size !== assetNames.length ||
+              assetNames.some((name) => !/^(?:checksums\.txt|dws-[A-Za-z0-9._-]+\.(?:tar\.gz|zip))$/.test(name))
             ) {
-              core.setFailed(`${version} does not contain the exact release asset set`);
+              core.setFailed(`${version} contains unsafe, duplicate or incomplete release asset names`);
               return;
             }
+            core.setOutput("asset_names", JSON.stringify(assetNames));
             core.setOutput("commit_sha", commitSha);
+            core.setOutput("tag_object", ref.data.object.sha);
 
       - name: Require successful Release workflow delivery
         working-directory: tooling
@@ -2256,29 +2444,31 @@ jobs:
           path: release-source
           persist-credentials: false
 
-      - name: Setup Node.js
+      - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Install npm with OIDC dist-tag support
+        run: npm install --global npm@11.21.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
 
       - name: Download and verify GitHub release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.repair_npm_version }}
+          DWS_RELEASE_ASSET_NAMES: ${{ steps.authority.outputs.asset_names }}
         run: |
           set -eu
           mkdir -p dist
           gh release download "$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --dir dist \
-            --pattern 'dws-*' \
-            --pattern 'checksums.txt' \
             --clobber
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-release-artifacts.sh" "$VERSION"
+          node "$GITHUB_WORKSPACE/tooling/scripts/release/verify-sealed-release-assets.cjs" \
+            "$GITHUB_WORKSPACE/release-source" "$VERSION" "$GITHUB_WORKSPACE/dist"
 
-      - name: Stage and verify target npm package
+      - name: Stage target npm package
         env:
           VERSION: ${{ inputs.repair_npm_version }}
         run: |
@@ -2286,53 +2476,39 @@ jobs:
           DWS_PACKAGE_SOURCE_ROOT="$GITHUB_WORKSPACE/release-source" \
             DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
             "$GITHUB_WORKSPACE/tooling/scripts/release/stage-npm-package.sh" "$VERSION"
-          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
-            "$GITHUB_WORKSPACE/tooling/scripts/release/verify-package-managers.sh" \
-              --npm-only \
-              --expected-version "$VERSION" \
-              --skip-skill-targets
 
-      - name: Inspect npm version
-        id: npm
-        env:
-          SEMVER: ${{ steps.version.outputs.semver }}
+      - name: Pack and seal npm handoff
+        id: package
         run: |
           set -eu
-          local_integrity="$(
-            "$GITHUB_WORKSPACE/tooling/scripts/release/pack-npm-package.sh" \
-              "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
-              "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz"
-          )"
-          version_error="$RUNNER_TEMP/npm-version-error.log"
-          if existing="$(npm view "dingtalk-workspace-cli@$SEMVER" version 2>"$version_error")"; then
-            if [ "$existing" != "$SEMVER" ]; then
-              echo "npm returned unexpected version $existing for $SEMVER" >&2
-              exit 1
-            fi
-          elif grep -Eq 'E404|404 Not Found' "$version_error"; then
-            existing=""
-          else
-            cat "$version_error" >&2
-            exit 1
-          fi
-          if [ "$existing" = "$SEMVER" ]; then
-            remote_integrity="$(npm view "dingtalk-workspace-cli@$SEMVER" dist.integrity)"
-            if [ -z "$remote_integrity" ] || [ "$remote_integrity" != "$local_integrity" ]; then
-              echo "npm $SEMVER integrity differs from the immutable release package." >&2
-              echo "local:  $local_integrity" >&2
-              echo "remote: $remote_integrity" >&2
-              exit 1
-            fi
-            echo "published=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
+          "$GITHUB_WORKSPACE/tooling/scripts/release/pack-npm-package.sh" \
+            "$GITHUB_WORKSPACE/dist/npm/dingtalk-workspace-cli" \
+            "$GITHUB_WORKSPACE/dist/npm-publish.tgz"
+          digest="$(node "$GITHUB_WORKSPACE/tooling/scripts/release/npm-handoff-digest.cjs" dist)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-      - name: Backfill exact version to npm
-        if: ${{ steps.npm.outputs.published != 'true' }}
-        run: npm publish "$RUNNER_TEMP/dingtalk-workspace-cli-repair.tgz" --access public --tag backfill --ignore-scripts --registry=https://registry.npmjs.org
+      - name: Verify immutable npm package without publication credentials
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.repair_npm_version }}
+        run: |
+          DWS_VERIFY_NPM_TARBALL="$GITHUB_WORKSPACE/dist/npm-publish.tgz" \
+            DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            sh "$GITHUB_WORKSPACE/tooling/scripts/release/verify-sealed-npm-package.sh" \
+            "$GITHUB_WORKSPACE/release-source" "$VERSION"
+
+
+      - name: Require unchanged verified tarballs
+        env:
+          EXPECTED_DIGEST: ${{ steps.package.outputs.digest }}
+        run: node "$GITHUB_WORKSPACE/tooling/scripts/release/npm-handoff-digest.cjs" dist "$EXPECTED_DIGEST"
+
+      - name: Upload sealed npm handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-repair-handoff
+          path: dist/
+          if-no-files-found: error
+          retention-days: 31
 
   coverage-baseline-confirmation:
     name: Confirm Formula coverage baseline
