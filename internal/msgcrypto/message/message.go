@@ -7,6 +7,7 @@ package message
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -156,7 +157,7 @@ func (c *Client) PolicyDecision(ctx context.Context, rt Runtime, opts Options) (
 	return PolicyDecision{Policy: policy, Enabled: policyRequiresEncryption(policy.Mode)}, nil
 }
 
-func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (DecryptResult, error) {
+func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (res DecryptResult, retErr error) {
 	layer := strings.TrimSpace(opts.Layer)
 	if layer == "" {
 		layer = "full"
@@ -170,7 +171,11 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 		if err != nil {
 			return DecryptResult{}, err
 		}
-		defer closeSession(session)
+		defer func() {
+			if closeErr := closeSession(session); closeErr != nil {
+				retErr = errors.Join(retErr, closeErr)
+			}
+		}()
 		plain, err := session.Cipher.DecryptMessage(ctx, session.CorpID, session.StaffID, []byte(opts.Ciphertext))
 		if err != nil {
 			return DecryptResult{}, err
@@ -204,7 +209,7 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 	return DecryptResult{Layer: layer, Plaintext: plaintext, DingCiphertext: dingCiphertext, KeyVersion: item.KeyVersion}, nil
 }
 
-func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Options, items []BatchDecryptItem) (BatchDecryptResult, error) {
+func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Options, items []BatchDecryptItem) (res BatchDecryptResult, retErr error) {
 	items = normalizeBatchDecryptItems(items)
 	if len(items) == 0 {
 		return BatchDecryptResult{}, nil
@@ -213,7 +218,11 @@ func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Optio
 	if err != nil {
 		return BatchDecryptResult{}, err
 	}
-	defer closeSession(session)
+	defer func() {
+		if closeErr := closeSession(session); closeErr != nil {
+			retErr = errors.Join(retErr, closeErr)
+		}
+	}()
 	dingItems := make([]map[string]any, 0, len(items))
 	result := BatchDecryptResult{}
 	for _, item := range items {
@@ -272,10 +281,11 @@ func (c *Client) openSession(ctx context.Context, rt Runtime, opts Options, poli
 	})
 }
 
-func closeSession(session *Session) {
+func closeSession(session *Session) error {
 	if session != nil && session.Close != nil {
-		_ = session.Close()
+		return session.Close()
 	}
+	return nil
 }
 
 func (c *Client) policy(ctx context.Context, rt Runtime, corpID string, opts Options) (Policy, error) {

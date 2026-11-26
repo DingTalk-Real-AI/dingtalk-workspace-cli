@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 type fakeTokenSnapshotProvider struct {
@@ -194,19 +195,11 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 		}
 	})
 	t.Run("open_session_stateless_token_uses_ephemeral_keystore_and_cleans_up", func(t *testing.T) {
-		oldAvailable := sessionAvailable
-		oldIdentity := sessionCurrentIdentity
-		oldOpen := sessionOpenBackend
-		t.Cleanup(func() {
-			sessionAvailable = oldAvailable
-			sessionCurrentIdentity = oldIdentity
-			sessionOpenBackend = oldOpen
-		})
-		sessionAvailable = func() bool { return true }
-		sessionCurrentIdentity = func(context.Context, string) (Identity, error) {
+		testseam.Swap(t, &sessionAvailable, func() bool { return true })
+		testseam.Swap(t, &sessionCurrentIdentity, func(context.Context, string) (Identity, error) {
 			t.Fatal("stateless OpenSession must not read local OAuth identity")
 			return Identity{}, nil
-		}
+		})
 
 		// Missing corpID fails with ErrNoCorpID without touching OAuth.
 		if _, err := OpenSession(context.Background(), SessionOptions{
@@ -217,10 +210,10 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 
 		var gotConfig Config
 		cipher := &fakeCipher{}
-		sessionOpenBackend = func(_ context.Context, cfg Config) (Cipher, error) {
+		testseam.Swap(t, &sessionOpenBackend, func(_ context.Context, cfg Config) (Cipher, error) {
 			gotConfig = cfg
 			return cipher, nil
-		}
+		})
 		session, err := OpenSession(context.Background(), SessionOptions{
 			AccessToken: "stateless-token",
 			ClientID:    "custom-client",
@@ -254,24 +247,16 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 		}
 	})
 	t.Run("open_session_stateless_cleans_up_ephemeral_dir_on_backend_error", func(t *testing.T) {
-		oldAvailable := sessionAvailable
-		oldOpen := sessionOpenBackend
-		oldMkdirTemp := sessionMkdirTemp
-		t.Cleanup(func() {
-			sessionAvailable = oldAvailable
-			sessionOpenBackend = oldOpen
-			sessionMkdirTemp = oldMkdirTemp
-		})
-		sessionAvailable = func() bool { return true }
+		testseam.Swap(t, &sessionAvailable, func() bool { return true })
 		var createdDir string
-		sessionMkdirTemp = func(dir, pattern string) (string, error) {
+		testseam.Swap(t, &sessionMkdirTemp, func(dir, pattern string) (string, error) {
 			d, err := os.MkdirTemp(t.TempDir(), pattern)
 			createdDir = d
 			return d, err
-		}
-		sessionOpenBackend = func(context.Context, Config) (Cipher, error) {
+		})
+		testseam.Swap(t, &sessionOpenBackend, func(context.Context, Config) (Cipher, error) {
 			return nil, errors.New("boom")
-		}
+		})
 		if _, err := OpenSession(context.Background(), SessionOptions{
 			AccessToken: "stateless-token",
 			CorpID:      "corp-stateless",
@@ -285,10 +270,30 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 			t.Fatalf("ephemeral dir should be cleaned on backend failure, stat err = %v", err)
 		}
 
-		// MkdirTemp error propagates cleanly.
-		sessionMkdirTemp = func(string, string) (string, error) {
-			return "", errors.New("no temp space")
+		// Cleanup failure on backend error is joined and surfaced instead of silently dropped.
+		testseam.Swap(t, &sessionRemoveAll, func(string) error {
+			return os.ErrPermission
+		})
+		if _, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+		}); err == nil || !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), "初始化加解密后端失败") {
+			t.Fatalf("joined backend+cleanup err = %v", err)
 		}
+		testseam.Swap(t, &sessionOpenBackend, func(context.Context, Config) (Cipher, error) {
+			return nil, ErrUnavailable
+		})
+		if _, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+		}); err == nil || !errors.Is(err, ErrUnavailable) || !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("joined ErrUnavailable+cleanup err = %v", err)
+		}
+
+		// MkdirTemp error propagates cleanly.
+		testseam.Swap(t, &sessionMkdirTemp, func(string, string) (string, error) {
+			return "", errors.New("no temp space")
+		})
 		if _, err := OpenSession(context.Background(), SessionOptions{
 			AccessToken: "stateless-token",
 			CorpID:      "corp-stateless",
@@ -296,17 +301,44 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 			t.Fatalf("mkdir temp err = %v", err)
 		}
 	})
-	t.Run("open_session_stateless_preserves_explicit_keystore_dir", func(t *testing.T) {
-		oldAvailable := sessionAvailable
-		oldOpen := sessionOpenBackend
-		t.Cleanup(func() {
-			sessionAvailable = oldAvailable
-			sessionOpenBackend = oldOpen
-		})
-		sessionAvailable = func() bool { return true }
-		sessionOpenBackend = func(context.Context, Config) (Cipher, error) {
+	t.Run("close_preserves_ephemeral_path_and_returns_cleanup_error_until_removed", func(t *testing.T) {
+		testseam.Swap(t, &sessionAvailable, func() bool { return true })
+		testseam.Swap(t, &sessionOpenBackend, func(context.Context, Config) (Cipher, error) {
 			return &fakeCipher{}, nil
+		})
+		removeCalls := 0
+		testseam.Swap(t, &sessionRemoveAll, func(path string) error {
+			removeCalls++
+			if removeCalls == 1 {
+				return os.ErrPermission
+			}
+			return os.RemoveAll(path)
+		})
+		session, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+		})
+		if err != nil {
+			t.Fatalf("OpenSession() = %v", err)
 		}
+		if err := session.Close(); !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("first Close() = %v, want os.ErrPermission", err)
+		}
+		if session.ephemeralKeystoreDir == "" {
+			t.Fatal("ephemeralKeystoreDir must be retained when cleanup fails")
+		}
+		if err := session.Close(); err != nil {
+			t.Fatalf("second Close() = %v, want nil", err)
+		}
+		if removeCalls != 2 || session.ephemeralKeystoreDir != "" {
+			t.Fatalf("removeCalls=%d ephemeralKeystoreDir=%q", removeCalls, session.ephemeralKeystoreDir)
+		}
+	})
+	t.Run("open_session_stateless_preserves_explicit_keystore_dir", func(t *testing.T) {
+		testseam.Swap(t, &sessionAvailable, func() bool { return true })
+		testseam.Swap(t, &sessionOpenBackend, func(context.Context, Config) (Cipher, error) {
+			return &fakeCipher{}, nil
+		})
 		explicitDir := t.TempDir()
 		session, err := OpenSession(context.Background(), SessionOptions{
 			AccessToken: "stateless-token",

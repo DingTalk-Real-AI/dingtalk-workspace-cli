@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -251,6 +252,65 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		// Verify shortcutchat setter accepts nil reset and re-injection cleanly.
 		shortcutchat.SetMessageReadCryptoClient(nil)
 		shortcutchat.SetMessageReadCryptoClient(newAppMessageCryptoClient())
+	})
+	t.Run("stateless_context_cache_and_profile_fallback_edges", func(t *testing.T) {
+		// nil context handling for both context setter and getter.
+		if _, ok := messageCryptoAuthFromContext(nil); ok {
+			t.Fatal("messageCryptoAuthFromContext(nil) should be false")
+		}
+		//lint:ignore SA1012 intentionally exercising nil-context defensive guard
+		ctxFromNil := withMessageCryptoAuthContext(nil, "tok-nil", "cid-nil")
+		gotCtx, ok := messageCryptoAuthFromContext(ctxFromNil)
+		if !ok || gotCtx.ExplicitToken != "tok-nil" || gotCtx.ClientID != "cid-nil" {
+			t.Fatalf("gotCtx = %#v, ok=%v", gotCtx, ok)
+		}
+
+		// nil/empty cache guards and capacity eviction.
+		var nilCache *statelessTokenIdentityCache
+		if _, ok := nilCache.Get("tok"); ok {
+			t.Fatal("nil cache Get should return false")
+		}
+		nilCache.Set("tok", messagecrypto.Identity{CorpID: "corp"})
+
+		cache := newStatelessTokenIdentityCache()
+		if _, ok := cache.Get(""); ok {
+			t.Fatal("empty token Get should return false")
+		}
+		cache.Set("", messagecrypto.Identity{CorpID: "corp"})
+		cache.Set("tok", messagecrypto.Identity{CorpID: " "})
+		for i := 0; i < maxStatelessTokenIdentityCacheEntries; i++ {
+			cache.Set(fmt.Sprintf("tok-%d", i), messagecrypto.Identity{CorpID: "corp"})
+		}
+		// Inserting one more entry triggers eviction via clear(c.entries).
+		cache.Set("tok-overflow", messagecrypto.Identity{CorpID: "corp-overflow"})
+		if _, ok := cache.Get("tok-0"); ok {
+			t.Fatal("expected earlier entry to be evicted on capacity overflow")
+		}
+		if got, ok := cache.Get("tok-overflow"); !ok || got.CorpID != "corp-overflow" {
+			t.Fatalf("overflow entry = %#v, %v", got, ok)
+		}
+
+		// json.Marshal failure branch and nested result map fallback branch.
+		client := newAppMessageCryptoClient()
+		ctxMarshalErr := withMessageCryptoAuthContext(context.Background(), "tok-marshal-err", "")
+		if _, err := client.IdentityWithRuntime(ctxMarshalErr, &appCryptoFakeRuntime{
+			readData: map[string]any{"bad": make(chan int)},
+		}, ""); err == nil || !strings.Contains(err.Error(), "解析当前用户身份响应失败") {
+			t.Fatalf("marshal error = %v", err)
+		}
+
+		ctxNested := withMessageCryptoAuthContext(context.Background(), "tok-nested", "")
+		nestedID, err := client.IdentityWithRuntime(ctxNested, &appCryptoFakeRuntime{
+			readData: map[string]any{
+				"result": map[string]any{
+					"corpId":  "corp-nested",
+					"staffId": "staff-nested",
+				},
+			},
+		}, "")
+		if err != nil || nestedID.CorpID != "corp-nested" || nestedID.StaffID != "staff-nested" {
+			t.Fatalf("nested identity = %#v, %v", nestedID, err)
+		}
 	})
 }
 

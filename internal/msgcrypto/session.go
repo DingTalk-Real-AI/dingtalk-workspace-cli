@@ -45,15 +45,19 @@ func (s *Session) Close() error {
 	if s == nil {
 		return nil
 	}
-	var err error
+	var closeErr error
 	if s.Cipher != nil {
-		err = s.Cipher.Close()
+		closeErr = s.Cipher.Close()
 	}
+	var removeErr error
 	if s.ephemeralKeystoreDir != "" {
-		_ = sessionRemoveAll(s.ephemeralKeystoreDir)
-		s.ephemeralKeystoreDir = ""
+		if err := sessionRemoveAll(s.ephemeralKeystoreDir); err != nil {
+			removeErr = fmt.Errorf("清理临时密钥目录失败: %w", err)
+		} else {
+			s.ephemeralKeystoreDir = ""
+		}
 	}
-	return err
+	return errors.Join(closeErr, removeErr)
 }
 
 // SessionOptions configures OpenSession.
@@ -172,13 +176,16 @@ func OpenSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 	}
 	cipher, err := sessionOpenBackend(ctx, cfg)
 	if err != nil {
+		var cleanupErr error
 		if ephemeralDir != "" {
-			_ = sessionRemoveAll(ephemeralDir)
+			if rerr := sessionRemoveAll(ephemeralDir); rerr != nil {
+				cleanupErr = fmt.Errorf("清理临时密钥目录失败: %w", rerr)
+			}
 		}
 		if errors.Is(err, ErrUnavailable) {
-			return nil, err
+			return nil, errors.Join(err, cleanupErr)
 		}
-		return nil, fmt.Errorf("初始化加解密后端失败: %w", err)
+		return nil, errors.Join(fmt.Errorf("初始化加解密后端失败: %w", err), cleanupErr)
 	}
 	return &Session{
 		Cipher:               cipher,
