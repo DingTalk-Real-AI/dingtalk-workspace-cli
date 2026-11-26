@@ -53,7 +53,7 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "今天 / 昨天 / 明天 / 本周日程" | `python scripts/calendar_today_agenda.py [today\|yesterday\|tomorrow\|week] --format json`（脚本先发现日历本，再汇总本人主日历） |
+| "今天 / 昨天 / 明天 / 本周日程" | `python scripts/calendar_today_agenda.py [today\|yesterday\|tomorrow\|week] --format json`（脚本先发现日历本，再汇总本人日历） |
 | "某个时间段的日程" | `python scripts/calendar_today_agenda.py --start "<起始ISO>" --end "<结束ISO>" --format json` |
 | "约会议（含参会人 + 会议室）" | 先搜房取 `roomId`，再一次 `event create --attendees <ids> --rooms <roomId>`；复杂降级才用 `calendar_schedule_meeting.py` |
 | "多人共同空闲" | `python scripts/calendar_free_slot_finder.py --users <ids> --date <yyyy-MM-dd>` |
@@ -83,12 +83,12 @@ metadata:
 
 **触发**：今天/昨天/明天/本周日程/我有什么会/某时段日程。
 
-1. **首选脚本**：按意图表执行 `calendar_today_agenda.py`；脚本内先执行一次 `dws calendar book list --format json`，Agent 不另查一遍。默认汇总返回中所有 `type=primary` 且 `privilege=owner` 的日历，覆盖自己的钉钉和邮箱主日历；排除共享、订阅和团队日历。ID 取真实 `calendarId`，不能只认 `primary`，也不能按名称或编码猜邮箱 ID。
+1. **首选脚本**：按意图表执行 `calendar_today_agenda.py`；脚本内先执行一次 `dws calendar book list --format json`，Agent 不另查一遍。默认汇总返回中 `privilege=owner` 且 `type` 为 `primary` 或 `shared` 的本人日历，覆盖钉钉及邮箱日历；排除订阅、团队、公共日历及仅有 `reader/writer` 权限的日历。邮箱日历可能返回 `type=shared`，不能仅凭该类型排除本人拥有的日历。ID 取真实 `calendarId`，不能只认 `primary`，也不能按名称或编码猜邮箱 ID。
 2. **明确范围**：用户指定日历本时，脚本加 `--calendar-id <CALENDAR_ID>`（可重复）；指定账号时加单个 `--profile <PROFILE>`。预设日期用北京时间，指定时间窗须成对传入带时区的 `--start/--end`，不能与日期预设混用。
 3. **CLI 降级**：脚本不可用时，先查一次 `book list` 并按上述规则选日历；逐本执行 `dws calendar event list --calendar-id <CALENDAR_ID> --start "<起始ISO>" --end "<结束ISO>" --limit 100 --format json`。同一 profile、相同时间窗，分别跟随 `nextCursor`，直到 `hasMore=false` 且游标为空；最多每本 20 页，游标重复、状态矛盾或达到上限均报告不完整。已有本次发现结果时直接复用，不能重复发现。
 4. **汇总与后续**：依据 `complete/calendars/failures` 说明实际覆盖范围；按时间排序，保留取消状态与 `sources` 中的日历 ID、日程 ID。同一本按日程 ID 与实例起止时间去重；跨本仅凭相同 `iCalUid` 与实例起止时间合并并保留所有来源，不能按标题合并循环实例。展示有效、取消、状态未确认的分项计数及必要明细，不贴整段 JSON；后续 get/参会人查询必须带对应来源的 `--calendar-id`。
 
-**范围边界**：未发现邮箱主日历要说明实际发现范围，不能宣称邮箱没有日程；归属/类型不明、请求或分页失败要保留已取得的数据并说明不完整，不能输出“暂无日程”。只有所列日历全部成功且取完，才能对该范围给出空结果。一次不带日历 ID 的 `event list` 或 `+agenda/+today/+tomorrow/+week` 不能替代此流程。脚本正常输出 JSON 后仍可能以退出码 1 表示部分结果，不能丢弃其成功部分。
+**范围边界**：未发现邮箱日历要说明实际发现范围，不能宣称邮箱没有日程；归属/类型不明、请求或分页失败要保留已取得的数据并说明不完整，不能输出“暂无日程”。只有所列日历全部成功且取完，才能对该范围给出空结果。一次不带日历 ID 的 `event list` 或 `+agenda/+today/+tomorrow/+week` 不能替代此流程。脚本正常输出 JSON 后仍可能以退出码 1 表示部分结果，不能丢弃其成功部分。
 
 **禁止**：用 `event list` 替代闲忙查询（查闲忙走 SOP-3）、编造时间窗口、用非 ISO 时间格式。输出字段与脚本参数详见 [calendar.md](references/calendar.md#自动化脚本)。
 
