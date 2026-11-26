@@ -1,10 +1,12 @@
-# VoIP 通话（个人语音视频通话）命令参考
+# VoIP 通话纪要自动开启设置
 
 命令前缀统一为 `dws voip`，属于 dingtalk-misc 长尾能力，不在 `dws --help` 展示；仍可直接执行 `dws voip --help` 和各叶子命令。所有调用追加 `--format json`。命令树已发布到 Agent Schema；参数、约束或确认语义不确定时，优先读取精确 compact leaf Schema（`dws schema "voip minutes auto-start" --compact`），仅在 Schema 不可用或与 Cobra 实际行为发生漂移时读取同一叶子的 `--help`。不要直接调用 MCP、HTTP API 或自行猜测工具名。
 
 ## 能力范围与前置条件
 
-覆盖个人 VoIP 通话（1v1 音视频通话）设置：通话纪要自动开启开关。后端工具 `set_voip_minutes_auto_start` 由钉钉视频会议云端 MCP 服务承载。
+仅覆盖当前用户的个人 VoIP 通话（1v1 音视频通话）纪要自动开启开关，不发起通话。后端工具 `set_voip_minutes_auto_start` 由钉钉视频会议云端 MCP 服务承载。
+
+用户要求“给某人打电话/发起钉钉语音通话/电话提醒或确认事项”时，转到 [AI 语音外呼](outbound-call.md)，先说明由 AI 助手代为通话，再按其流程预览并确认；电话/短信 DING 强提醒走 [DING 消息](ding.md)。
 
 前置条件：当前登录用户身份（目标用户由服务端按登录态确定，调用方不传 uid）。
 

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 企业自建应用三方事件发送（dws event send），以及钉钉个人 IM、OA 审批、VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、和事件Schema 查询、实时消费。命令前缀：dws event。
+description: 企业自建应用三方事件发送（dws event send），以及钉钉个人 IM、OA 审批、收到的 VoIP 通话邀请、待办、日历、互动卡片、好友与听记事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、收到的 VoIP 通话邀请、待办创建/更新/删除、日程创建/新增参与/修改/取消、好友申请/好友添加成功、听记创建/纪要生成，或互动卡片回调，以及应用事件发现、和事件Schema 查询、实时消费。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -33,7 +33,7 @@ metadata:
 | 监听全部单聊或全部群消息 | `dws event +listen-im --kind <all-direct|all-group>`（`user_im_message_receive_o2o_all`/`user_im_message_receive_group_all`）；只有用户明确要求“全部”时使用 |
 | 群改名、成员进退、群解散 | EventKey 为 `user_im_group_updated`、`user_im_group_member_added`、`user_im_group_member_exited`、`user_im_group_disbanded`，读取 [EventKey 索引](references/event-im-keys.md) |
 | OA 审批任务或实例事件 | [OA 参考](references/event-oa.md)：`event consume` |
-| VoIP 通话邀请 | [VoIP 参考](references/event-voip.md)：`event consume` |
+| 监听收到的 VoIP 通话邀请 | [来电邀请监听](references/event-voip.md)：`event consume`，不发起通话 |
 | 待办创建/更新/删除 | [Todo 参考](references/event-todo.md)：`event consume` 与 `--role-types` |
 | 日程创建/新增参与/修改/取消 | [日历参考](references/event-calendar.md)：`event consume user_calendar_event_changed` |
 | 好友申请/添加成功 | [好友参考](references/event-contact.md)：`event consume` |
