@@ -7,6 +7,7 @@ package msgcrypto
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -190,6 +191,140 @@ func TestCrossPlatformCoverageMessageCryptoSession(t *testing.T) {
 		}
 		if _, err := OpenSession(context.Background(), SessionOptions{}); err == nil || !strings.Contains(err.Error(), "初始化加解密后端失败") {
 			t.Fatalf("OpenSession wrapped error = %v", err)
+		}
+	})
+	t.Run("open_session_stateless_token_uses_ephemeral_keystore_and_cleans_up", func(t *testing.T) {
+		oldAvailable := sessionAvailable
+		oldIdentity := sessionCurrentIdentity
+		oldOpen := sessionOpenBackend
+		t.Cleanup(func() {
+			sessionAvailable = oldAvailable
+			sessionCurrentIdentity = oldIdentity
+			sessionOpenBackend = oldOpen
+		})
+		sessionAvailable = func() bool { return true }
+		sessionCurrentIdentity = func(context.Context, string) (Identity, error) {
+			t.Fatal("stateless OpenSession must not read local OAuth identity")
+			return Identity{}, nil
+		}
+
+		// Missing corpID fails with ErrNoCorpID without touching OAuth.
+		if _, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+		}); !errors.Is(err, ErrNoCorpID) {
+			t.Fatalf("OpenSession(no corpID) = %v, want ErrNoCorpID", err)
+		}
+
+		var gotConfig Config
+		cipher := &fakeCipher{}
+		sessionOpenBackend = func(_ context.Context, cfg Config) (Cipher, error) {
+			gotConfig = cfg
+			return cipher, nil
+		}
+		session, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			ClientID:    "custom-client",
+			CorpID:      "corp-stateless",
+			CLIVersion:  "1.2.3",
+		})
+		if err != nil {
+			t.Fatalf("OpenSession(stateless) = %v", err)
+		}
+		if session.CorpID != "corp-stateless" || session.StaffID != "dws-safechat" {
+			t.Fatalf("session identity = %#v", session)
+		}
+		portal, ok := gotConfig.AuthCode.(*PortalAuthCode)
+		if !ok || portal.AccessToken != "stateless-token" || portal.ClientID != "custom-client" || portal.snapshot != nil || portal.refresh != nil {
+			t.Fatalf("authCode provider = %#v", gotConfig.AuthCode)
+		}
+		if session.KeystoreDir == "" {
+			t.Fatal("expected ephemeral keystore dir")
+		}
+		if _, err := os.Stat(session.KeystoreDir); err != nil {
+			t.Fatalf("ephemeral keystore dir should exist before Close: %v", err)
+		}
+		if err := session.Close(); err != nil {
+			t.Fatalf("Close() = %v", err)
+		}
+		if cipher.closeCount != 1 {
+			t.Fatalf("closeCount = %d, want 1", cipher.closeCount)
+		}
+		if _, err := os.Stat(session.KeystoreDir); !os.IsNotExist(err) {
+			t.Fatalf("ephemeral keystore dir should be removed on Close, stat err = %v", err)
+		}
+	})
+	t.Run("open_session_stateless_cleans_up_ephemeral_dir_on_backend_error", func(t *testing.T) {
+		oldAvailable := sessionAvailable
+		oldOpen := sessionOpenBackend
+		oldMkdirTemp := sessionMkdirTemp
+		t.Cleanup(func() {
+			sessionAvailable = oldAvailable
+			sessionOpenBackend = oldOpen
+			sessionMkdirTemp = oldMkdirTemp
+		})
+		sessionAvailable = func() bool { return true }
+		var createdDir string
+		sessionMkdirTemp = func(dir, pattern string) (string, error) {
+			d, err := os.MkdirTemp(t.TempDir(), pattern)
+			createdDir = d
+			return d, err
+		}
+		sessionOpenBackend = func(context.Context, Config) (Cipher, error) {
+			return nil, errors.New("boom")
+		}
+		if _, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+		}); err == nil {
+			t.Fatal("expected error")
+		}
+		if createdDir == "" {
+			t.Fatal("expected temp dir to be created")
+		}
+		if _, err := os.Stat(createdDir); !os.IsNotExist(err) {
+			t.Fatalf("ephemeral dir should be cleaned on backend failure, stat err = %v", err)
+		}
+
+		// MkdirTemp error propagates cleanly.
+		sessionMkdirTemp = func(string, string) (string, error) {
+			return "", errors.New("no temp space")
+		}
+		if _, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+		}); err == nil || !strings.Contains(err.Error(), "创建临时密钥目录失败") {
+			t.Fatalf("mkdir temp err = %v", err)
+		}
+	})
+	t.Run("open_session_stateless_preserves_explicit_keystore_dir", func(t *testing.T) {
+		oldAvailable := sessionAvailable
+		oldOpen := sessionOpenBackend
+		t.Cleanup(func() {
+			sessionAvailable = oldAvailable
+			sessionOpenBackend = oldOpen
+		})
+		sessionAvailable = func() bool { return true }
+		sessionOpenBackend = func(context.Context, Config) (Cipher, error) {
+			return &fakeCipher{}, nil
+		}
+		explicitDir := t.TempDir()
+		session, err := OpenSession(context.Background(), SessionOptions{
+			AccessToken: "stateless-token",
+			CorpID:      "corp-stateless",
+			StaffID:     "staff-42",
+			KeystoreDir: explicitDir,
+		})
+		if err != nil {
+			t.Fatalf("OpenSession() = %v", err)
+		}
+		if session.KeystoreDir != explicitDir || session.StaffID != "staff-42" {
+			t.Fatalf("session = %#v", session)
+		}
+		if err := session.Close(); err != nil {
+			t.Fatalf("Close() = %v", err)
+		}
+		if _, err := os.Stat(explicitDir); err != nil {
+			t.Fatalf("explicit keystore dir must not be deleted on Close: %v", err)
 		}
 	})
 }

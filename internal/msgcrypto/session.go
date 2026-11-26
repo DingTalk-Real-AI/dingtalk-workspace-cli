@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -34,14 +35,25 @@ type Session struct {
 	CorpID      string
 	StaffID     string
 	KeystoreDir string
+
+	ephemeralKeystoreDir string
 }
 
-// Close releases the underlying cipher.
+// Close releases the underlying cipher and removes any session-scoped
+// ephemeral keystore directory created for stateless token auth.
 func (s *Session) Close() error {
-	if s == nil || s.Cipher == nil {
+	if s == nil {
 		return nil
 	}
-	return s.Cipher.Close()
+	var err error
+	if s.Cipher != nil {
+		err = s.Cipher.Close()
+	}
+	if s.ephemeralKeystoreDir != "" {
+		_ = sessionRemoveAll(s.ephemeralKeystoreDir)
+		s.ephemeralKeystoreDir = ""
+	}
+	return err
 }
 
 // SessionOptions configures OpenSession.
@@ -51,6 +63,10 @@ type SessionOptions struct {
 	KeyServer           string
 	AllowedRedirectHost string
 	KeystoreDir         string
+	AccessToken         string
+	ClientID            string
+	CorpID              string
+	StaffID             string
 	Debug               bool
 	Logf                func(format string, args ...any)
 }
@@ -59,6 +75,8 @@ var (
 	sessionAvailable        = Available
 	sessionOpenBackend      = Open
 	sessionCurrentIdentity  = CurrentIdentity
+	sessionMkdirTemp        = os.MkdirTemp
+	sessionRemoveAll        = os.RemoveAll
 	sessionNewOAuthProvider = func(configDir string) tokenSnapshotProvider {
 		return auth.NewOAuthProvider(configDir, nil)
 	}
@@ -88,15 +106,36 @@ func CurrentIdentity(ctx context.Context, configDir string) (Identity, error) {
 	return Identity{CorpID: corpID, StaffID: staffID}, nil
 }
 
-// OpenSession opens a SafeChat cipher for the current login organization.
+// OpenSession opens a SafeChat cipher for the current login organization, or
+// for an explicit stateless access token when opts.AccessToken is set.
 func OpenSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 	if !sessionAvailable() {
 		return nil, ErrUnavailable
 	}
-	identity, err := sessionCurrentIdentity(ctx, opts.ConfigDir)
-	if err != nil {
-		return nil, err
+	explicitToken := strings.TrimSpace(opts.AccessToken)
+	stateless := explicitToken != ""
+
+	var (
+		identity Identity
+		err      error
+	)
+	if stateless {
+		corpID := strings.TrimSpace(opts.CorpID)
+		if corpID == "" {
+			return nil, ErrNoCorpID
+		}
+		staffID := strings.TrimSpace(opts.StaffID)
+		if staffID == "" {
+			staffID = "dws-safechat"
+		}
+		identity = Identity{CorpID: corpID, StaffID: staffID}
+	} else {
+		identity, err = sessionCurrentIdentity(ctx, opts.ConfigDir)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	keyServer := strings.TrimSpace(opts.KeyServer)
 	if keyServer == "" {
 		keyServer = DefaultSafeChatKeyServer
@@ -105,26 +144,48 @@ func OpenSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 	if allowedHost == "" {
 		allowedHost = DefaultSafeChatRedirectHost
 	}
+
+	keystoreDir := strings.TrimSpace(opts.KeystoreDir)
+	ephemeralDir := ""
+	if stateless && keystoreDir == "" {
+		ephemeralDir, err = sessionMkdirTemp("", "dws-safechat-*")
+		if err != nil {
+			return nil, fmt.Errorf("创建临时密钥目录失败: %w", err)
+		}
+		keystoreDir = ephemeralDir
+	}
+
+	var authCode AuthCodeProvider
+	if stateless {
+		authCode = NewStaticTokenPortalAuthCode(explicitToken, opts.ClientID, identity.CorpID, opts.CLIVersion)
+	} else {
+		authCode = NewPortalAuthCode(configDirOrDefault(opts.ConfigDir), opts.CLIVersion)
+	}
+
 	cfg := Config{
-		AuthCode:            NewPortalAuthCode(configDirOrDefault(opts.ConfigDir), opts.CLIVersion),
+		AuthCode:            authCode,
 		KeyServer:           keyServer,
 		AllowedRedirectHost: allowedHost,
-		KeystoreDir:         strings.TrimSpace(opts.KeystoreDir),
+		KeystoreDir:         keystoreDir,
 		Debug:               opts.Debug,
 		Logf:                opts.Logf,
 	}
 	cipher, err := sessionOpenBackend(ctx, cfg)
 	if err != nil {
+		if ephemeralDir != "" {
+			_ = sessionRemoveAll(ephemeralDir)
+		}
 		if errors.Is(err, ErrUnavailable) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("初始化加解密后端失败: %w", err)
 	}
 	return &Session{
-		Cipher:      cipher,
-		CorpID:      identity.CorpID,
-		StaffID:     identity.StaffID,
-		KeystoreDir: cfg.withDefaults().KeystoreDir,
+		Cipher:               cipher,
+		CorpID:               identity.CorpID,
+		StaffID:              identity.StaffID,
+		KeystoreDir:          cfg.withDefaults().KeystoreDir,
+		ephemeralKeystoreDir: ephemeralDir,
 	}, nil
 }
 

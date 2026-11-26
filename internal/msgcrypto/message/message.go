@@ -50,6 +50,7 @@ type SessionOptions struct {
 	KeyServer           string
 	AllowedRedirectHost string
 	KeystoreDir         string
+	Runtime             Runtime
 }
 
 type Options struct {
@@ -129,10 +130,11 @@ type PolicyDecision struct {
 }
 
 type Client struct {
-	Identity     func(context.Context, string) (Identity, error)
-	OpenSession  func(context.Context, SessionOptions) (*Session, error)
-	BackendReady func() bool
-	PolicyCache  *PolicyCache
+	Identity            func(context.Context, string) (Identity, error)
+	IdentityWithRuntime func(context.Context, Runtime, string) (Identity, error)
+	OpenSession         func(context.Context, SessionOptions) (*Session, error)
+	BackendReady        func() bool
+	PolicyCache         *PolicyCache
 }
 
 func DefaultClient() *Client {
@@ -143,7 +145,7 @@ func DefaultClient() *Client {
 }
 
 func (c *Client) PolicyDecision(ctx context.Context, rt Runtime, opts Options) (PolicyDecision, error) {
-	identity, err := c.currentIdentity(ctx, opts.ConfigDir)
+	identity, err := c.currentIdentity(ctx, rt, opts.ConfigDir)
 	if err != nil {
 		return PolicyDecision{}, err
 	}
@@ -164,7 +166,7 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 	}
 	dingCiphertext := strings.TrimSpace(opts.Ciphertext)
 	if layer == "full" || layer == "safechat" {
-		session, err := c.openSession(ctx, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
+		session, err := c.openSession(ctx, rt, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
 		if err != nil {
 			return DecryptResult{}, err
 		}
@@ -207,7 +209,7 @@ func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Optio
 	if len(items) == 0 {
 		return BatchDecryptResult{}, nil
 	}
-	session, err := c.openSession(ctx, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
+	session, err := c.openSession(ctx, rt, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
 	if err != nil {
 		return BatchDecryptResult{}, err
 	}
@@ -244,14 +246,17 @@ func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Optio
 	return result, nil
 }
 
-func (c *Client) currentIdentity(ctx context.Context, configDir string) (Identity, error) {
+func (c *Client) currentIdentity(ctx context.Context, rt Runtime, configDir string) (Identity, error) {
+	if c != nil && c.IdentityWithRuntime != nil {
+		return c.IdentityWithRuntime(ctx, rt, configDir)
+	}
 	if c != nil && c.Identity != nil {
 		return c.Identity(ctx, configDir)
 	}
 	return Identity{}, fmt.Errorf("msgcrypto/message: identity provider is not configured")
 }
 
-func (c *Client) openSession(ctx context.Context, opts Options, policy Policy) (*Session, error) {
+func (c *Client) openSession(ctx context.Context, rt Runtime, opts Options, policy Policy) (*Session, error) {
 	if c == nil || c.OpenSession == nil {
 		return nil, fmt.Errorf("msgcrypto/message: SafeChat session provider is not configured")
 	}
@@ -263,6 +268,7 @@ func (c *Client) openSession(ctx context.Context, opts Options, policy Policy) (
 		KeyServer:           keyServer,
 		AllowedRedirectHost: redirectHost,
 		KeystoreDir:         opts.KeystoreDir,
+		Runtime:             rt,
 	})
 }
 

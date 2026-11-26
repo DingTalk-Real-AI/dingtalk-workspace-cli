@@ -232,6 +232,96 @@ func TestCrossPlatformCoveragePortalAuthCodeRemainingEdges(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePortalAuthCodeStatelessToken(t *testing.T) {
+	constructed := NewStaticTokenPortalAuthCode(" static-tok ", " static-client ", " corp-1 ", "2.0.0")
+	if constructed.AccessToken != "static-tok" || constructed.ClientID != "static-client" || constructed.CorpID != "corp-1" || constructed.CLIVersion != "2.0.0" {
+		t.Fatalf("constructed = %#v", constructed)
+	}
+	if constructed.snapshot != nil || constructed.refresh != nil {
+		t.Fatalf("stateless provider must not wire OAuth snapshot/refresh: %#v", constructed)
+	}
+
+	var got auth.VendorAuthCodeInput
+	p := &PortalAuthCode{
+		AccessToken: "explicit-token",
+		ClientID:    "explicit-client",
+		CorpID:      "corp-from-provider",
+		CLIVersion:  "2.0.0",
+		snapshot: func(context.Context, string) (*auth.TokenData, error) {
+			t.Fatal("stateless mode must not read local OAuth snapshot")
+			return nil, nil
+		},
+		refresh: func(context.Context, string, string) (string, error) {
+			t.Fatal("stateless mode must not refresh local OAuth token")
+			return "", nil
+		},
+		fetch: func(_ context.Context, in auth.VendorAuthCodeInput) (*auth.VendorAuthCodeResult, error) {
+			got = in
+			return &auth.VendorAuthCodeResult{AuthCode: "stateless-code", ExpiresIn: 120}, nil
+		},
+	}
+	code, err := p.AuthCode(context.Background())
+	if err != nil || code != "stateless-code" {
+		t.Fatalf("AuthCode() = %q, %v", code, err)
+	}
+	if got.AccessToken != "explicit-token" || got.ClientID != "explicit-client" || got.CorpID != "corp-from-provider" || got.LoginRegion != "" {
+		t.Fatalf("got input = %#v", got)
+	}
+
+	// Fallback clientID when explicit ClientID is empty.
+	pFallback := &PortalAuthCode{
+		AccessToken: "explicit-token",
+		clientID:    func() string { return "default-client-id" },
+		fetch: func(_ context.Context, in auth.VendorAuthCodeInput) (*auth.VendorAuthCodeResult, error) {
+			got = in
+			return &auth.VendorAuthCodeResult{AuthCode: "fallback-code"}, nil
+		},
+	}
+	if code, err := pFallback.AuthCodeForCorp(context.Background(), "corp-2"); err != nil || code != "fallback-code" {
+		t.Fatalf("AuthCodeForCorp() = %q, %v", code, err)
+	}
+	if got.ClientID != "default-client-id" || got.CorpID != "corp-2" {
+		t.Fatalf("fallback input = %#v", got)
+	}
+
+	// TOKEN_INVALID must NOT trigger refresh or retry in stateless mode.
+	var invalidCalls atomic.Int32
+	pInvalid := &PortalAuthCode{
+		AccessToken: "bad-token",
+		ClientID:    "client",
+		refresh: func(context.Context, string, string) (string, error) {
+			t.Fatal("stateless mode must not call refresh on TOKEN_INVALID")
+			return "refreshed", nil
+		},
+		fetch: func(context.Context, auth.VendorAuthCodeInput) (*auth.VendorAuthCodeResult, error) {
+			invalidCalls.Add(1)
+			return nil, &auth.VendorAuthCodeError{Code: auth.VendorAuthCodeTokenInvalid, Message: "invalid"}
+		},
+	}
+	if _, err := pInvalid.AuthCodeForCorp(context.Background(), "corp"); err == nil || !containsError(err, auth.VendorAuthCodeTokenInvalid) {
+		t.Fatalf("TOKEN_INVALID err = %v", err)
+	}
+	if invalidCalls.Load() != 1 {
+		t.Fatalf("TOKEN_INVALID fetch calls = %d, want 1", invalidCalls.Load())
+	}
+
+	// Retryable 429 still retries once in stateless mode.
+	var retryCalls atomic.Int32
+	pRetry := &PortalAuthCode{
+		AccessToken: "good-token",
+		ClientID:    "client",
+		fetch: func(context.Context, auth.VendorAuthCodeInput) (*auth.VendorAuthCodeResult, error) {
+			if retryCalls.Add(1) == 1 {
+				return nil, &auth.HTTPStatusError{StatusCode: http.StatusTooManyRequests}
+			}
+			return &auth.VendorAuthCodeResult{AuthCode: "retried-code"}, nil
+		},
+	}
+	if code, err := pRetry.AuthCodeForCorp(context.Background(), "corp"); err != nil || code != "retried-code" || retryCalls.Load() != 2 {
+		t.Fatalf("retryable stateless = %q, %v, calls=%d", code, err, retryCalls.Load())
+	}
+}
+
 func containsError(err error, text string) bool {
 	return err != nil && strings.Contains(err.Error(), text)
 }

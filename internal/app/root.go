@@ -1081,6 +1081,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// install a store at construction time, so add one lazily when those
 			// trees are executed for compatibility and policy tests.
 			executionCtx, _ := output.WithResultStore(cmd.Context())
+			executionCtx = withMessageCryptoAuthContext(executionCtx, flags.Token, flags.ClientID)
 			cmd.SetContext(executionCtx)
 			// WithResultStore above guarantees the reset precondition.
 			_ = output.ResetResultStore(executionCtx)

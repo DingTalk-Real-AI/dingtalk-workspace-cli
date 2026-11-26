@@ -29,11 +29,19 @@ const VendorSafeChat = "safechat"
 // PortalAuthCode mints a one-shot 免登 authCode from portal
 // POST /oauth2/vendorAuthCode. It does not cache the code: goProxy spends it
 // immediately. Do not wrap this in CachedAuthCode.
+//
+// When AccessToken is set, PortalAuthCode operates in stateless mode: it uses
+// the explicit bearer token directly (with ClientID / default auth.ClientID),
+// never reads local OAuth storage, and never attempts token refresh on
+// TOKEN_INVALID.
 type PortalAuthCode struct {
-	ConfigDir  string
-	Vendor     string
-	CLIVersion string
-	HTTPClient *http.Client
+	ConfigDir   string
+	Vendor      string
+	CLIVersion  string
+	AccessToken string
+	ClientID    string
+	CorpID      string
+	HTTPClient  *http.Client
 
 	clientID func() string
 	snapshot func(ctx context.Context, configDir string) (*auth.TokenData, error)
@@ -60,9 +68,27 @@ func NewPortalAuthCode(configDir, cliVersion string) *PortalAuthCode {
 	}
 }
 
+// NewStaticTokenPortalAuthCode returns a stateless provider that mints
+// one-shot vendorAuthCode using an explicit access token without reading or
+// refreshing local OAuth credentials.
+func NewStaticTokenPortalAuthCode(accessToken, clientID, corpID, cliVersion string) *PortalAuthCode {
+	return &PortalAuthCode{
+		AccessToken: strings.TrimSpace(accessToken),
+		ClientID:    strings.TrimSpace(clientID),
+		CorpID:      strings.TrimSpace(corpID),
+		Vendor:      VendorSafeChat,
+		CLIVersion:  cliVersion,
+		clientID:    auth.ClientID,
+		fetch:       auth.FetchVendorAuthCode,
+	}
+}
+
 // AuthCode mints a code for the logged-in organization. Prefer AuthCodeForCorp
 // when goProxy already has a corpID.
 func (p *PortalAuthCode) AuthCode(ctx context.Context) (string, error) {
+	if strings.TrimSpace(p.AccessToken) != "" {
+		return p.AuthCodeForCorp(ctx, p.CorpID)
+	}
 	snap, err := p.loadSnapshot(ctx)
 	if err != nil {
 		return "", err
@@ -77,13 +103,30 @@ func (p *PortalAuthCode) AuthCodeForCorp(ctx context.Context, corpID string) (st
 	if corpID == "" {
 		return "", ErrNoCorpID
 	}
-	snap, err := p.loadSnapshot(ctx)
-	if err != nil {
-		return "", err
-	}
-	token := strings.TrimSpace(snap.AccessToken)
-	if token == "" {
-		return "", fmt.Errorf("msgcrypto: access token is empty")
+	explicitToken := strings.TrimSpace(p.AccessToken)
+	stateless := explicitToken != ""
+
+	var (
+		snap  *auth.TokenData
+		token string
+		err   error
+	)
+	if stateless {
+		snap = &auth.TokenData{
+			AccessToken: explicitToken,
+			ClientID:    strings.TrimSpace(p.ClientID),
+			CorpID:      corpID,
+		}
+		token = explicitToken
+	} else {
+		snap, err = p.loadSnapshot(ctx)
+		if err != nil {
+			return "", err
+		}
+		token = strings.TrimSpace(snap.AccessToken)
+		if token == "" {
+			return "", fmt.Errorf("msgcrypto: access token is empty")
+		}
 	}
 
 	result, err := p.fetchOnce(ctx, snap, token, corpID)
@@ -93,6 +136,9 @@ func (p *PortalAuthCode) AuthCodeForCorp(ctx context.Context, corpID string) (st
 
 	var verr *auth.VendorAuthCodeError
 	if errors.As(err, &verr) && verr.Code == auth.VendorAuthCodeTokenInvalid {
+		if stateless {
+			return "", err
+		}
 		refreshed, rerr := p.doRefresh(ctx, token)
 		if rerr == nil && refreshed != "" && refreshed != token {
 			result, err = p.fetchOnce(ctx, snap, refreshed, corpID)
