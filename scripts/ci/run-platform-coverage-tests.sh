@@ -46,7 +46,7 @@ if [ -n "$app_package" ]; then
 		*.exe) coverage_dir="$(cygpath -am "$scratch")" ;;
 	esac
 	go test -c -coverpkg="$coverpkg" -covermode=atomic -o "$app_binary" "$app_package"
-	(cd "$app_dir" && "$app_binary" "-test.list=$pattern") > "$scratch/list"
+	(cd "$app_dir" && "$app_binary" "-test.list=$pattern") </dev/null > "$scratch/list"
 
 	# Exact anchors keep every selected top-level test in just one batch.
 	awk '/^(TestAllShortcuts|TestCrossPlatformCoverage)/ {
@@ -62,10 +62,10 @@ if [ -n "$app_package" ]; then
 	while IFS= read -r batch_pattern; do
 		batch=$((batch + 1))
 		printf 'native app coverage batch %s: %s\n' "$batch" "$batch_pattern"
-		# Match go test's single argv entry per flag so app tests that inspect
-		# os.Args cannot interpret flag values as CLI commands.
+		# Match go test's flag formatting and empty stdin. The batch file
+		# supplies the shell loop and must not be visible to the test binary.
 		(cd "$app_dir" && "$app_binary" -test.count=1 "-test.timeout=$timeout" \
-			-test.paniconexit0 "-test.run=$batch_pattern" "-test.coverprofile=$coverage_dir/app-$batch.txt")
+			-test.paniconexit0 "-test.run=$batch_pattern" "-test.coverprofile=$coverage_dir/app-$batch.txt") </dev/null
 	done < "$scratch/batches"
 fi
 

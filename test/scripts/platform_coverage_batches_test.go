@@ -36,6 +36,7 @@ func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 	appTests := `package app
 import (
  "fmt"
+ "io"
  "os"
  "strings"
  "testing"
@@ -46,6 +47,9 @@ func record(t *testing.T) {
  if _, err := os.Stat("app.go"); err != nil { t.Fatal(err) }
  for _, arg := range os.Args[1:] {
   if !strings.HasPrefix(arg, "-test.") { t.Fatalf("unexpected process argument: %q", arg) }
+ }
+ if n, err := os.Stdin.Read(make([]byte, 1)); n != 0 || err != io.EOF {
+  t.Fatalf("test stdin must be empty: read %d bytes, error %v", n, err)
  }
  helper.FromApp()
  Value()
