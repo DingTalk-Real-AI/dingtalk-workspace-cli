@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -68,7 +69,8 @@ func newAitableAppCommand() *cobra.Command {
 		Short: "更新应用外观配置",
 		Long: `更新指定 Base 唯一 App 的名称、外观、图标、导航布局或主题。
 至少提供一个待更新字段，未提供的字段保持不变；--icon 是完整 JSON 对象并整体替换原图标。
-如果底层尚无 App，服务端会先幂等创建默认 App，再应用本次更新。主题类字符串按 MCP 原样透传。`,
+如果底层尚无 App，服务端会先幂等创建默认 App，再应用本次更新。主题及颜色协议如下：
+` + aitableprotocol.AppThemeHelp + "\n" + aitableprotocol.AppNavThemeHelp + "\n" + aitableprotocol.AppAppearanceHelp,
 		Example:       "  dws aitable app update --base-id BASE_ID --name \"销售应用\"",
 		Tool:          "update_app",
 		OutputRollout: output.RolloutUnifiedActive,
@@ -77,11 +79,11 @@ func newAitableAppCommand() *cobra.Command {
 		Flags: []LeafFlag{
 			aitableAppBaseIDFlag(),
 			{Name: "name", Usage: "新的 App 名称", Bind: "name", Trim: true, OmitEmpty: true},
-			{Name: "appearance", Usage: "新的外观模式，按 MCP 枚举原样传递", Bind: "appearance", Trim: true, OmitEmpty: true},
+			{Name: "appearance", Usage: aitableprotocol.AppAppearanceHelp, Bind: "appearance", Trim: true, OmitEmpty: true},
 			aitableAppJSONObjectFlag("icon", "icon", "新的 App 图标 JSON 对象，整体替换且 type 必填", false, validateAitableAppTypedObject("icon")),
-			{Name: "nav-theme-type", Usage: "新的导航主题类型，按 MCP 枚举原样传递", Bind: "navThemeType", Trim: true, OmitEmpty: true},
+			{Name: "nav-theme-type", Usage: aitableprotocol.AppNavThemeHelp, Bind: "navThemeType", Trim: true, OmitEmpty: true},
 			{Name: "navigation-layout", Usage: "新的导航布局，按 MCP 枚举原样传递", Bind: "navigationLayout", Trim: true, OmitEmpty: true},
-			{Name: "theme-type", Usage: "新的主题类型，按 MCP 枚举原样传递", Bind: "themeType", Trim: true, OmitEmpty: true},
+			{Name: "theme-type", Usage: aitableprotocol.AppThemeHelp, Bind: "themeType", Trim: true, OmitEmpty: true},
 		},
 		Constraints: []LeafConstraint{{
 			Kind:        corecmd.AtLeastOne,
@@ -125,7 +127,7 @@ func newAitableAppCommand() *cobra.Command {
 			{Name: "name", Usage: "页面名称 (必填)", Bind: "name", Trim: true, Required: true},
 			{Name: "before-page-id", Usage: "插入到此页面之前；省略或空值表示追加到末尾", Bind: "beforePageId", Trim: true, OmitEmpty: true},
 			aitableAppJSONObjectFlag("icon", "icon", "页面图标 JSON 对象，type 必填", false, validateAitableAppTypedObject("icon")),
-			aitableAppJSONObjectFlag("background", "background", "页面背景 JSON 对象，type 必填", false, validateAitableAppTypedObject("background")),
+			aitableAppJSONObjectFlag("background", "background", aitableprotocol.AppBackgroundHelp, false, validateAitableAppTypedObject("background")),
 		},
 		Contract: aitableAppContract(
 			"app_page_create", "aitable app page create", "create_app_page",
@@ -208,7 +210,7 @@ func newAitableAppCommand() *cobra.Command {
 			aitableAppBaseIDFlag(),
 			aitableAppPageIDFlag(),
 			{Name: "name", Usage: "新的页面名称", Bind: "name", Trim: true, OmitEmpty: true},
-			aitableAppJSONObjectFlag("background", "background", "新的页面背景 JSON 对象，整体替换且 type 必填", false, validateAitableAppTypedObject("background")),
+			aitableAppJSONObjectFlag("background", "background", aitableprotocol.AppBackgroundHelp, false, validateAitableAppTypedObject("background")),
 			aitableAppJSONObjectFlag("icon", "icon", "新的页面图标 JSON 对象，整体替换且 type 必填", false, validateAitableAppTypedObject("icon")),
 			{Name: "hidden-menu", Usage: "是否在导航菜单中隐藏页面；显式 false 表示重新显示", Kind: LeafBool, Bind: "hiddenMenu"},
 		},

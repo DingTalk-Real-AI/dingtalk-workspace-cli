@@ -1049,7 +1049,7 @@ func buildUpdateSheetArgs(input map[string]any, rejectMixed bool) (map[string]an
 	hasProperty := nameSet || titleSet || hiddenSet || input["frozen-row-count"] != nil ||
 		input["frozen-column-count"] != nil || input["tab-color"] != nil
 	if rejectMixed && indexSet && hasProperty {
-		return nil, fmt.Errorf("index 只能单独更新，不能与 name/title/hidden/frozen counts/tab-color 混用")
+		return nil, apperrors.NewValidation("batch-update 的 update 子操作中，index 只能单独更新，不能与 name/title/hidden/frozen-row-count/frozen-column-count/tab-color 混用；请拆为两个 update：先更新其他属性，再单独更新 index，使用相同、稳定的 sheet-id")
 	}
 	if !indexSet && !hasProperty {
 		return nil, fmt.Errorf("name/title/index/hidden/frozen-row-count/frozen-column-count/tab-color 至少指定一个")
@@ -1529,6 +1529,12 @@ range fill/copy-to/move-to 中表示待填充、复制或移动的数据源区�
 set-dropdown 不接受顶层 colors/source-colors；Inline 颜色应写在 options[].color，
 SourceRange 颜色写入暂不支持。
 
+batch-update 的 update 子操作中，index 只能单独更新，不能与 name/title/hidden/
+frozen-row-count/frozen-column-count/tab-color 混用（包括 0、false 和空颜色）。
+需要同时修改时，在 --operations 中显式拆为两个 update：先更新其他属性，再单独更新 index，
+使用相同、稳定的 sheet-id。两个子操作各占一个操作/结果索引，单批总数仍最多 20 条。
+这条限制仅适用于 batch；独立 dws sheet update 仍可组合 index 与其他属性。
+
 新增子操作执行严格本地校验：未知字段、错误 JSON 类型、把整数或布尔值写成
 字符串，以及 float-image 的 file 本地上传模式都会在发请求前拒绝。
 批内不支持 $ref 或引用前序结果；create 返回的服务端原始 data（含 ID 时）只能
@@ -1554,6 +1560,12 @@ number/boolean 类型；--dry-run 展示的是这个带转义的实际远端参�
     {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
     {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}},
     {"toolName":"csv-put","input":{"sheet-id":"Sheet1","start-cell":"C1","csv":"001,2026/8/1,=1+1,\u0027=1+1","auto-convert":false}}
+  ]'
+
+  # 同时修改属性和位置：先属性后 index，使用真实返回的稳定 SHEET_ID；仅预览
+  dws sheet batch-update --node NODE_ID --dry-run --operations '[
+    {"toolName":"update","input":{"sheet-id":"SHEET_ID","frozen-row-count":2}},
+    {"toolName":"update","input":{"sheet-id":"SHEET_ID","index":0}}
   ]'
 
   # 宽松模式

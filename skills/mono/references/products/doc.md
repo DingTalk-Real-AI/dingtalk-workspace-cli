@@ -1139,6 +1139,7 @@ EOF
 - `upload` 是三步自动完成的流程 (获取凭证 → OSS 上传 → 提交入库)，无需手动分步操作
 - `download` 是两步自动完成的流程 (获取下载链接 → HTTP GET 下载)，支持自动推断文件名；`--output` 可指定文件路径或目录
 - `media insert` 是三步自动完成的流程 (获取附件上传凭证 → OSS 上传 → 插入附件块到文档)，无需手动分步操作
+- `media insert` 成功回执的 `verified` 只表示服务端结构回读确认（`verificationScope=structural`），`clientVisibility=unknown`；若用户反馈网页端显示空「插入资料」模块或图片不显示，通常是本地网络/代理拦截 OSS/alidocs 预览域名所致，让用户调整网络后刷新即可，不要重复插入
 - `media insert` 的 `--mime-type` 可选，不指定时根据文件扩展名自动推断；支持常见文件类型 (PDF、Office、图片、视频、压缩包等)
 - `media insert` 与 `upload` 的区别：`upload` 将文件上传到文档空间/知识库作为独立文件；`media insert` 将文件作为附件块插入到文档正文中
 - `media download` 用于获取文档正文中附件的临时下载链接，`--resource-id` 可通过 `block list` 返回的 attachment 块获取

@@ -35,6 +35,88 @@ func TestAITableDatasourceUpdateDocumentsOptionalConfigPreservation(t *testing.T
 	}
 }
 
+// 追加到已有表时，按目标字段和源表头构建服务端导入映射。
+func TestAITableAppendImportRoutesUseServerSideMapping(t *testing.T) {
+	skill, err := FS.ReadFile("multi/dingtalk-aitable/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row string
+	for _, line := range strings.Split(string(skill), "\n") {
+		if strings.HasPrefix(line, "| 将本地 CSV/XLSX/XLS 追加到已有表 |") {
+			row = line
+		}
+	}
+	if row == "" {
+		t.Fatal("missing append-to-existing-table golden route")
+	}
+	for _, required := range []string{"dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>", "dws aitable +import-file", "--table-id <TABLE_ID>", "--field-mapping",
+		"逐字使用 `field list` 读回的字段名", "值使用源文件表头原文", "不再反问", "只读取源文件表头行，不读取数据行", "scripts/read_import_headers.py", "读到的内容只用于确定映射", "不用来写入、改写或补全导入数据", "不逐行 `record create`", "名称、含义和单位都一致", "同名列不需要用户点名，默认一并映射，也不为此反问", "先触发 Runtime 确认门禁"} {
+		if !strings.Contains(row, required) {
+			t.Errorf("append import route missing %q", required)
+		}
+	}
+	for _, path := range []string{
+		"multi/dingtalk-aitable/references/aitable/aitable-export-import.md",
+		"mono/references/products/aitable/aitable-export-import.md",
+	} {
+		data, err := FS.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		for _, required := range []string{"先用 `dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>` 读目标表字段",
+			"键必须逐字等于读回的字段名", "值必须逐字等于源文件表头", "有多个可能对应时才向用户确认", "用户已给出映射就直接执行，不再反问",
+			"`--field-mapping` 只包含用户指定的列", "同名列不需要用户点名，默认一并映射，也不为此反问", "不能只因名称相近就映射", "只读取源文件表头行，不读取数据行", "scripts/read_import_headers.py", "读到的内容只用于确定映射", "不用来写入、改写或补全导入数据", "不要自行解析文件后逐行 `record create`", "**只导入部分列**：仍使用 `+import-file`", "结果未知时只读核对目标数据"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing %q", path, required)
+			}
+		}
+		for _, forbidden := range []string{
+			"scripts/import_records.py <baseId> <tableId> <file>",
+			"如果 import data 多次失败，改用 `record create`",
+			"如只导入部分列、数据转换",
+			"三步导入后 `import data",
+			"表头由 DWS 识别",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s retains conflicting append import guidance %q", path, forbidden)
+			}
+		}
+	}
+	for _, path := range []string{
+		"mono/references/best_practices/06-data-analytics.md",
+		"multi/dingtalk-aitable/references/06-data-analytics.md",
+	} {
+		data, err := FS.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, recipe, ok := strings.Cut(string(data), "| create-aitable-record |")
+		if !ok {
+			t.Fatalf("%s missing create-aitable-record recipe", path)
+		}
+		recipe, _, _ = strings.Cut(recipe, "\n")
+		_, appendRoute, ok := strings.Cut(recipe, "**追加到已有表**")
+		if !ok {
+			t.Fatalf("%s missing append-to-existing-table route", path)
+		}
+		appendRoute, _, _ = strings.Cut(appendRoute, "<br>")
+		for _, required := range []string{"CSV/XLSX/XLS", "dws aitable +import-file --base-id <baseId> --file <file> --table-id <tableId> --field-mapping", "先 `field list` 读目标表字段",
+			"映射的键逐字使用读回的字段名", "用户指定的列", "名称、含义和单位都一致", "同名列不需要用户点名，默认一并映射，也不为此反问", "不再反问", "只读取源文件表头行，不读取数据行", "scripts/read_import_headers.py", "读到的内容只用于确定映射", "不用来写入、改写或补全导入数据", "不逐行 `record create`", "先触发 Runtime 确认门禁"} {
+			if !strings.Contains(appendRoute, required) {
+				t.Errorf("%s append route missing %q", path, required)
+			}
+		}
+		if strings.Contains(appendRoute, "import_records.py") {
+			t.Errorf("%s routes file append to import_records.py", path)
+		}
+		if !strings.Contains(recipe, "**已有结构化记录写入**：仅此场景使用 `python scripts/import_records.py <baseId> <tableId> records.json [batch_size]`") {
+			t.Errorf("%s must reserve import_records.py for existing structured records", path)
+		}
+	}
+}
+
 func TestAITableImportGoldenRoutesDoNotBypassConfirmation(t *testing.T) {
 	unsafeExample := regexp.MustCompile("dws aitable \\+import-file[^`\\n]*--yes")
 	if err := fs.WalkDir(FS, ".", func(path string, entry fs.DirEntry, err error) error {

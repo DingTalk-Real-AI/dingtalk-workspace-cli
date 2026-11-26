@@ -10,7 +10,7 @@
 | `form update` | 更新表单标题或描述 |
 | `form delete` | 删除表单视图（不可逆） |
 | `form field list` | 列出表单可见字段 |
-| `form field update` | 更新字段必填/描述 |
+| `form field update` | 更新字段必填、描述或条件显隐 |
 | `form field hide` | 在表单中隐藏/显示字段（不影响底层数据表字段） |
 | `form share get` | 获取分享配置 |
 | `form share url` | 获取标准填写链接，可用 `--qr-file form.png` 生成本地二维码 |
@@ -100,7 +100,12 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
   - `form create --name "表单名"`（推荐，语义清晰）
   - `view create --view-type FormDesigner --name "表单名"`（底层一致）
 - `form update` 支持 `--title` 与 `--name` 两个等价参数；至少需传一项
-- `form field update` 必须传 `--required` 或 `--field-description` 至少一项
+- `form field update` 至少传 `--required`、`--field-description`、`--display-condition` 或 `--clear-display-condition=true` 一项；`--required=false` 明确关闭必填，`--clear-display-condition=false` 不清除条件且单独传入不算更新。
+- 两个更新入口均将 `--field-description=""` 视为省略，不清空已有说明，仍须有其他有效更新；纯空白文本报参数错误，非空文本保留首尾空白。
+- 条件仅支持本表单单选 eq、单层 and/or、1至20条，值用选项ID。例：`--display-condition '{"operator":"and","operands":[{"operator":"eq","operands":["来源字段ID","选项ID"]}]}'`；`--clear-display-condition=true` 显式清除，不能与设置同时用，不能传空对象清除。两种操作均保留必填和固定隐藏。
+- 读回先检查 `displayConditionStatus`：仅 available 下，`displayCondition=null` 或条件键缺失均表示已确认无规则；unknown、unsupported 或状态缺失时，即使条件为 null 也不能确认无规则或清除成功。条件题仍列出，固定隐藏题继续不返回。必要时用 `+view-get` 读原始 `custom.displayFilters`。
+- 写入检查 `verificationStatus`、`completedOperations` 和独立读回 `actual`；仅 verified 算完成。多项更新非原子，pending/unknown/partial 不重放写入，只读核对原目标。服务端仍缺少新能力时说明部署缺口，不编造菜单或用永久隐藏、取消必填代替跳题。
+- 故障回执评审或恢复分析中，读回成功但条件不匹配仍须停止后续写入；available 且无条件不授权重发设置或进入清除。不得以“新的纠正性写入”改称原设置重发，不主动给重发命令或请求确认重发；等待用户处理未确认状态，原 partial_failure/退出7/pending 保持。
 - `form field hide` 仅控制字段在表单中的可见性，不影响底层数据表字段
 - **题目管理**与字段管理本质相同（题目 = 表格字段）：
   - `form questions create` 与 `field create` 入参完全一致（`--fields` JSON 或 `--name --type`）
@@ -122,7 +127,7 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
 | `form field list` | 列出表单字段 | `--base-id` `--table-id` `--view-id` | 返回 fieldId/name/type/required/hidden/description（hidden=true 的字段不在此返回） |
-| `form field update` | 更新表单字段 | `--base-id` `--table-id` `--view-id` `--field-id` | `--required` 或 `--field-description` 至少一项 |
+| `form field update` | 更新表单字段及条件显隐 | `--base-id` `--table-id` `--view-id` `--field-id` | required/field-description/display-condition/clear-display-condition=true 至少一项 |
 | `form field hide` | 切换字段隐藏 | `--base-id` `--table-id` `--view-id` `--field-id` `--hidden` | `--hidden true` 隐藏 / `--hidden false` 显示 |
 
 ## form questions 子命令

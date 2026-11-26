@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
@@ -44,12 +46,11 @@ func TestCrossPlatformCoverageRecordUpsertIntentBeforeLostResponse(t *testing.T)
 		if intent.Version != 2 || intent.Operation != "record_upsert" || intent.BaseID != "b" || intent.TableID != "t" || intent.State != "prepared" || intent.ClientToken != args["clientToken"] || len(intent.Identity) != 64 || intent.RequestDigest != hex.EncodeToString(sum[:]) || intent.RecordCount != 1 || intent.CreateCount != 1 || intent.BatchOffset != 0 {
 			t.Fatalf("wrong original intent: %#v", intent)
 		}
-		info, err := os.Stat(file)
-		if err != nil {
+		if err := aitableTaskFilePrivacyError(file); err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != 0600 || strings.Contains(string(raw), "private-cell-value") {
-			t.Fatalf("unsafe persisted content/permissions: %v", info.Mode())
+		if strings.Contains(string(raw), "private-cell-value") {
+			t.Fatal("write intent persisted private cell content")
 		}
 		return "", errors.New("response lost after dispatch")
 	}}
@@ -63,8 +64,15 @@ func TestCrossPlatformCoverageRecordUpsertIntentBeforeLostResponse(t *testing.T)
 	if len(files) != 1 || files[0] != file || result.Checkpoint["clientToken"] != caller.calls[0].args["clientToken"] {
 		t.Fatalf("recovery evidence lost: %#v", result.Checkpoint)
 	}
-	if !strings.Contains(result.NextCommand, "+record-write-result") || !strings.Contains(result.NextCommand, file) {
-		t.Fatalf("missing bound read-only recovery command: %s", result.NextCommand)
+	intentArg := helpers.ShellQuoteArg(file)
+	if runtime.GOOS == "windows" {
+		// Windows paths require quoting and therefore use the existing safe
+		// placeholder; the checkpoint above must still retain the actual file.
+		intentArg = "REPLACE_VALUE"
+	}
+	wantCommand := fmt.Sprintf("dws aitable +record-write-result --base-id b --table-id t --client-token %s --write-intent %s", caller.calls[0].args["clientToken"], intentArg)
+	if result.NextCommand != wantCommand {
+		t.Fatalf("read-only recovery command = %q, want %q", result.NextCommand, wantCommand)
 	}
 }
 

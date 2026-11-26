@@ -175,10 +175,16 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 			result.Status = "unknown"
 			return compositeError(result, err, false)
 		}
+		headers, err := attachmentUploadHeaders(prepareData, mimeType)
+		if err != nil {
+			result.Status = "partial_success"
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken})
+			return compositeError(result, err, false)
+		}
 		// validateAttachmentUploadURL has already rejected every URL shape for
 		// which NewRequestWithContext can fail; PUT is a fixed valid method.
 		request, _ := http.NewRequestWithContext(rt.Command().Context(), http.MethodPut, uploadURL, file)
-		request.Header.Set("Content-Type", mimeType)
+		request.Header = headers
 		request.ContentLength = info.Size()
 		response, err := attachmentHTTPDo(request)
 		if err != nil {
@@ -194,6 +200,7 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 			return compositeError(result, fmt.Errorf("attachment HTTP PUT returned status %d (close error: %v)", response.StatusCode, closeErr), false)
 		}
 		files[index].token = fileToken
+		files[index].mimeType = headers.Get("Content-Type")
 		desired = append(desired, map[string]any{"fileToken": fileToken})
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "HTTP PUT", "fileToken": fileToken, "fileName": info.Name(), "size": info.Size()})
 	}
@@ -220,7 +227,7 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 	}
 	result.CompletedCount = len(files)
 	result.Verification = map[string]any{"status": "verified", "attachmentCount": len(readBack), "fileName": info.Name(), "size": info.Size()}
-	result.Result = map[string]any{"fileToken": files[0].token, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType, "attachmentCount": len(readBack)}
+	result.Result = map[string]any{"fileToken": files[0].token, "fileName": info.Name(), "size": info.Size(), "mimeType": files[0].mimeType, "attachmentCount": len(readBack)}
 	if len(files) > 1 {
 		uploaded := []map[string]any{}
 		for _, item := range files {
@@ -233,6 +240,56 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 		result.Warnings = append(result.Warnings, "record write response was an error, but the attachment cell was proven by read-back")
 	}
 	return rt.Output(result)
+}
+
+func attachmentUploadHeaders(data map[string]any, fallbackMIME string) (http.Header, error) {
+	headers := http.Header{"Content-Type": []string{fallbackMIME}}
+	// 真实 MCP 回执保留 status/data 外层；仅展开已知信封，不能在任意配置子树中搜索签名头。
+	for depth := 0; depth < 4; depth++ {
+		if _, exists := data["uploadHeaders"]; exists {
+			break
+		}
+		if nested, ok := data["data"].(map[string]any); ok {
+			data = nested
+		} else if nested, ok := data["result"].(map[string]any); ok {
+			data = nested
+		} else {
+			break
+		}
+	}
+	raw, exists := data["uploadHeaders"]
+	if !exists || raw == nil {
+		return headers, nil
+	}
+	values, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("prepare_attachment_upload returned invalid uploadHeaders")
+	}
+	seen := map[string]bool{}
+	for name, rawValue := range values {
+		value, ok := rawValue.(string)
+		if !ok || name == "" || strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("prepare_attachment_upload returned invalid uploadHeaders")
+		}
+		for _, char := range name {
+			if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", char)) {
+				return nil, fmt.Errorf("prepare_attachment_upload returned invalid uploadHeaders")
+			}
+		}
+		for _, char := range value {
+			if char < 32 && char != '\t' || char == 127 {
+				return nil, fmt.Errorf("prepare_attachment_upload returned invalid uploadHeaders")
+			}
+		}
+		canonical := http.CanonicalHeaderKey(name)
+		if seen[canonical] {
+			return nil, fmt.Errorf("prepare_attachment_upload returned duplicate uploadHeaders")
+		}
+		seen[canonical] = true
+		headers.Set(canonical, value)
+	}
+	// 老服务返回空对象时沿用请求 MIME；新服务签名头的值原样优先，不能再次推断或追加 charset。
+	return headers, nil
 }
 
 func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {

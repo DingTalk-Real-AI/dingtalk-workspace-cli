@@ -30,7 +30,7 @@ var RecordUpsertByKey = shortcut.Shortcut{
 	Command:     "+record-upsert-by-key",
 	Product:     serverMain,
 	Description: "按唯一字段值有则更新、无则创建记录，并读回验证",
-	Intent:      "已知一个应当唯一的 fieldId/value、希望幂等同步一条记录时使用；先完整查询键值，0 条创建、1 条更新、2 条以上停止，写后再次查询并验证所有传入 cells。",
+	Intent:      "已知一个应当唯一的 fieldId/value、希望幂等同步一条记录时使用；先完整查询键值，0 条创建、1 条更新、2 条以上停止，写后再次查询并验证所有传入 cells。" + recordAttachmentRecoveryHelp,
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -164,6 +164,26 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 			return record, newRecordFieldTypeResolver(rt, baseID, tableID).verify(record, cells)
 		})
 	if verifyErr != nil {
+		batch := []map[string]any{writeRecord}
+		if fields := recordAttachmentRecoveryFields(rt, baseID, tableID, batch); len(fields) > 0 {
+			// A resolved attachment often omits the upload token. That is an
+			// unconfirmed identity, never evidence that the write should replay.
+			result.Status = "unknown"
+			result.Verification = map[string]any{"status": "pending", "attachmentVerification": "unconfirmed", "code": "ATTACHMENT_WRITE_UNCONFIRMED", "fieldIds": fields}
+			addRecordReadbackDiagnostics(result.Verification, verifyErr)
+			result.Checkpoint = map[string]any{"baseId": baseID, "tableId": tableID, "keyFieldId": keyFieldID, "keyValue": keyValue}
+			filters, _ := json.Marshal(map[string]any{"operator": "and", "operands": []any{map[string]any{"operator": "eq", "operands": []any{keyFieldID, keyValue}}}})
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--filters", string(filters))
+			if preflight != nil {
+				result.Checkpoint["recordId"] = recordID(preflight)
+				result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", recordID(preflight))
+			} else if verified != nil {
+				result.Checkpoint["recordId"] = recordID(verified)
+			}
+			result.Plan[0].Arguments = nil
+			result.Warnings = append(result.Warnings, "附件写入尚未确认；仅按原记录 ID 或唯一键只读核对，禁止重放写入。")
+			return compositeError(result, unconfirmedRecordAttachmentError(batch, writeData, fields, verifyErr), false)
+		}
 		result.Status = "unknown"
 		result.FailedCount = 1
 		// An update targets a known record ID and is safe to retry. A create whose
@@ -197,6 +217,9 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 	result.Verification = map[string]any{
 		"status": "verified", "recordId": verifiedID,
 		"checkedFields": sortedMapKeys(cells),
+	}
+	if len(recordAttachmentFields([]map[string]any{writeRecord})) > 0 {
+		result.Verification["attachmentVerification"] = "verified"
 	}
 	result.Result = map[string]any{"action": action, "recordId": verifiedID, "record": verified}
 	if writeErr != nil {
@@ -353,13 +376,13 @@ func verifyRecordCells(record map[string]any, expected map[string]any, fieldType
 		got, exists := actual[fieldID]
 		fieldType := fieldTypes[fieldID]
 		if !exists {
-			if isMultiSelectFieldType(fieldType) && isEmptyJSONList(want) {
+			if (isMultiSelectFieldType(fieldType) || strings.EqualFold(fieldType, "attachment")) && isEmptyJSONList(want) {
 				continue
 			}
-			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
+			return &recordReadbackMismatchError{fieldID: fieldID}
 		}
 		if !recordCellValueEqual(got, want, fieldType) {
-			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
+			return &recordReadbackMismatchError{fieldID: fieldID}
 		}
 	}
 	return nil
@@ -373,6 +396,9 @@ func verifyRecordCells(record map[string]any, expected map[string]any, fieldType
 // omit or return null for an empty multi-select, so that projection is accepted
 // only after get_fields proves the field type.
 func recordCellValueEqual(got, want any, fieldType string) bool {
+	if strings.EqualFold(fieldType, "attachment") {
+		return recordAttachmentValueEqual(got, want)
+	}
 	if reflect.DeepEqual(got, want) {
 		return true
 	}
@@ -458,6 +484,9 @@ func recordCellsMayNeedFields(record map[string]any, expected map[string]any) bo
 	if !ok {
 		return false
 	}
+	if len(recordAttachmentFields([]map[string]any{{"cells": expected}})) > 0 {
+		return true
+	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
 		if !exists {
@@ -535,7 +564,8 @@ func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeRe
 
 func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
 	exactErr := verifyRecordCells(record, expected, nil)
-	if exactErr == nil || !recordCellsMayNeedFields(record, expected) {
+	attachment := len(recordAttachmentFields([]map[string]any{{"cells": expected}})) > 0
+	if (exactErr == nil && !attachment) || !recordCellsMayNeedFields(record, expected) {
 		return exactErr
 	}
 	fieldTypes, err := r.resolve()
@@ -545,6 +575,11 @@ func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[str
 	canonical, err := recordVerificationCells(expected, record["cells"].(map[string]any), r.fields)
 	if err != nil {
 		return pendingRecordReadback(err)
+	}
+	for _, fieldID := range recordAttachmentFields([]map[string]any{{"cells": canonical}}) {
+		if !strings.EqualFold(fieldTypes[fieldID], "attachment") {
+			return pendingRecordReadback(fmt.Errorf("cannot establish attachment type for field %s", fieldID))
+		}
 	}
 	return verifyRecordCells(record, canonical, fieldTypes)
 }

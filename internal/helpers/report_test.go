@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -292,6 +293,19 @@ func TestCrossPlatformCoverageReportContentsValidationMatrix(t *testing.T) {
 		t.Fatalf("valid non-text = %#v, %v", validNonText, err)
 	}
 
+	// template get 返回的 field_type 不局限于 1/2/3/5/7/8/9（GitHub #1324 报告 16；
+	// 本企业真实模板存在 13 与 15），CLI 必须原样透传而非本地拒绝。
+	for _, raw := range []any{"13", float64(13), json.Number("13"), "15", "16", float64(16)} {
+		item := map[string]any{"key": "销售指标", "sort": 0, "content": "3", "type": raw, "contentType": "origin"}
+		if err := validateAndNormalizeReportContents([]map[string]any{item}); err != nil {
+			t.Errorf("passthrough field_type %v rejected: %v", raw, err)
+			continue
+		}
+		if item["type"] != fmt.Sprintf("%v", raw) {
+			t.Errorf("field_type %v normalized to %#v", raw, item["type"])
+		}
+	}
+
 	invalid := [][]map[string]any{
 		nil, {nil},
 		{{"sort": 1, "content": "x", "type": "1", "contentType": "markdown"}},
@@ -306,6 +320,10 @@ func TestCrossPlatformCoverageReportContentsValidationMatrix(t *testing.T) {
 		{{"key": "k", "sort": 1, "content": "x", "contentType": "markdown"}},
 		{{"key": "k", "sort": 1, "content": "x", "type": map[string]any{}, "contentType": "markdown"}},
 		{{"key": "k", "sort": 1, "content": "x", "type": "bad", "contentType": "markdown"}},
+		{{"key": "k", "sort": 1, "content": "x", "type": "0", "contentType": "origin"}},
+		{{"key": "k", "sort": 1, "content": "x", "type": float64(0), "contentType": "origin"}},
+		{{"key": "k", "sort": 1, "content": "x", "type": "-1", "contentType": "origin"}},
+		{{"key": "k", "sort": 1, "content": "x", "type": "1.5", "contentType": "origin"}},
 		{{"key": "k", "sort": 1, "content": "x", "type": "1"}},
 		{{"key": "k", "sort": 1, "content": "x", "type": "1", "contentType": 1}},
 		{{"key": "k", "sort": 1, "content": "x", "type": "1", "contentType": "origin"}},

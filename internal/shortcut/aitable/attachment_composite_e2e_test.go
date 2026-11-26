@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -36,36 +37,89 @@ func attachmentRecordJSON(t *testing.T, fieldID string, attachments []any) strin
 func TestCrossPlatformCoverageAttachmentPutPerformsHTTPAndReadBackE2E(t *testing.T) {
 	filePath := writeAttachmentFixture(t, "actual attachment bytes")
 	fileName := filepath.Base(filePath)
-	uploaded := false
+	var uploaded atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		body, _ := io.ReadAll(request.Body)
-		if request.Method != http.MethodPut || request.Header.Get("Content-Type") != "text/plain" || string(body) != "actual attachment bytes" {
+		if request.Method != http.MethodPut || request.Header.Get("Content-Type") != "application/custom-signed" ||
+			request.Header.Get("X-Upload-Signed") != "exact signed value" || string(body) != "actual attachment bytes" {
 			t.Errorf("upload request = method:%s type:%s body:%q", request.Method, request.Header.Get("Content-Type"), body)
 			http.Error(w, "bad upload", http.StatusBadRequest)
 			return
 		}
-		uploaded = true
+		uploaded.Store(true)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: attachmentRecordJSON(t, "field", []any{})},
-		{text: mustJSONText(t, map[string]any{"uploadUrl": server.URL + "/put", "fileToken": "ft1"})},
+		{text: mustJSONText(t, map[string]any{"status": "success", "data": map[string]any{"uploadUrl": server.URL + "/put", "fileToken": "ft1",
+			"uploadHeaders": map[string]any{"content-type": "application/custom-signed", "X-Upload-Signed": "exact signed value"}}})},
 		{text: ""},
 		{text: attachmentRecordJSON(t, "field", []any{map[string]any{"filename": fileName, "size": len("actual attachment bytes")}})},
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+attachment-put",
 		"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--file", filePath, "--mode", "replace", "--mime-type", "text/plain", "--yes")
-	if err != nil || !uploaded {
-		t.Fatalf("attachment put = output:%q err:%v uploaded:%v", out, err, uploaded)
+	if err != nil || !uploaded.Load() {
+		t.Fatalf("attachment put = output:%q err:%v uploaded:%v", out, err, uploaded.Load())
 	}
-	for _, want := range []string{`"status": "recovered"`, `"fileToken": "ft1"`, `"attachmentCount": 1`, `"status": "verified"`} {
+	for _, want := range []string{`"status": "recovered"`, `"fileToken": "ft1"`, `"attachmentCount": 1`, `"status": "verified"`, `"mimeType": "application/custom-signed"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("attachment output missing %s: %s", want, out)
 		}
 	}
 	if len(caller.calls) != 4 || caller.calls[1].tool != "prepare_attachment_upload" || caller.calls[2].tool != "update_records" {
 		t.Fatalf("attachment calls = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAttachmentPutValidatesSignedHeadersBeforeHTTP(t *testing.T) {
+	filePath := writeAttachmentFixture(t, "bytes")
+	for _, tc := range []struct {
+		name    string
+		headers any
+		valid   bool
+	}{
+		{"legacy null", nil, true},
+		{"legacy empty", map[string]any{}, true},
+		{"extra signed header", map[string]any{"X-Upload-Token": "signed"}, true},
+		{"wrong shape", []any{}, false},
+		{"empty name", map[string]any{"": "value"}, false},
+		{"wrong value", map[string]any{"Content-Type": true}, false},
+		{"empty value", map[string]any{"Content-Type": " "}, false},
+		{"invalid name", map[string]any{"Bad Name": "value"}, false},
+		{"invalid value", map[string]any{"Content-Type": "private\r\nsecret"}, false},
+		{"duplicate type", map[string]any{"content-type": "one", "Content-Type": "two"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var hits atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				hits.Add(1)
+				if request.Header.Get("Content-Type") != "text/plain" {
+					t.Errorf("legacy Content-Type = %q", request.Header.Get("Content-Type"))
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			steps := []upsertByKeyStep{
+				{text: attachmentRecordJSON(t, "field", []any{})},
+				{text: mustJSONText(t, map[string]any{"result": map[string]any{"uploadUrl": server.URL, "fileToken": "ft1", "uploadHeaders": tc.headers}})},
+			}
+			if tc.valid {
+				steps = append(steps, upsertByKeyStep{text: ""}, upsertByKeyStep{text: attachmentRecordJSON(t, "field",
+					[]any{map[string]any{"filename": filepath.Base(filePath), "size": 5}})})
+			}
+			caller := &upsertByKeyCaller{steps: steps}
+			out, err := runAITableCompositeCLI(t, caller, "+attachment-put", "--base-id", "base", "--table-id", "table",
+				"--record-id", "record", "--field-id", "field", "--file", filePath, "--mode", "replace", "--mime-type", "text/plain", "--yes")
+			if tc.valid {
+				if err != nil || hits.Load() != 1 || len(caller.calls) != 4 {
+					t.Fatalf("valid headers: output=%q err=%v hits=%d calls=%d", out, err, hits.Load(), len(caller.calls))
+				}
+			} else if err == nil || hits.Load() != 0 || len(caller.calls) != 2 || !strings.Contains(err.Error(), "partial_success") ||
+				strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("invalid headers: output=%q err=%v hits=%d calls=%d", out, err, hits.Load(), len(caller.calls))
+			}
+		})
 	}
 }
 

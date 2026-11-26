@@ -103,9 +103,9 @@ func TestCrossPlatformCoverageTemplatesPreferConfirmedProjectionAndExplicitLegac
 			if forceLegacy {
 				args = append(args, "--server-filter=false")
 			}
-			out, err := runAITableCompositeCLI(t, caller, "+chart-templates", args...)
-			if err != nil || len(caller.calls) != 1 || !strings.Contains(out, `"LINE"`) {
-				t.Fatalf("out=%s error=%v calls=%#v", out, err, caller.calls)
+			out, diagnostic, err := runAITableCompositeCLIWithDiagnostics(t, context.Background(), caller, "+chart-templates", args...)
+			if err != nil || diagnostic != "" || len(caller.calls) != 1 || !strings.Contains(out, `"LINE"`) {
+				t.Fatalf("out=%s stderr=%s error=%v calls=%#v", out, diagnostic, err, caller.calls)
 			}
 		}
 	}
@@ -148,8 +148,11 @@ func TestCrossPlatformCoverageTemplateDocumentationReachesCLIWithoutRefetch(t *t
 				return string(receipt), nil
 			}
 			out, diagnostic, err := runAITableCompositeCLIWithDiagnostics(t, context.Background(), caller, "+chart-templates", "--chart-types", "LINE")
-			if err != nil || diagnostic != "" || len(caller.calls) != 1 {
+			if err != nil || len(caller.calls) != 1 {
 				t.Fatalf("out=%s err=%v calls=%#v", out, err, caller.calls)
+			}
+			if diagnostic != "" {
+				t.Fatalf("successful template lookup wrote stderr: %s", diagnostic)
 			}
 			var envelope map[string]any
 			if err := json.Unmarshal([]byte(out), &envelope); err != nil {
