@@ -204,7 +204,7 @@ func applyCryptoDisabledGuidance(err error) error {
 	if typed.Cause == nil && typed.ServerDiag.TraceID != "" {
 		typed.Cause = fmt.Errorf("trace_id %s", typed.ServerDiag.TraceID)
 	}
-	return typed
+	return err
 }
 
 var _ messagecrypto.Runtime = chatCryptoRuntime{}
