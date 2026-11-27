@@ -13,6 +13,7 @@
 | `+datasource-sync` | 手动触发一次同步（最多 5 张表） | 写 |
 | `+datasource-sync-status` | 查询同步任务状态（含未找到、未知状态） | 读 |
 | `+datasource-get-config` | 获取数据源表当前同步配置 | 读 |
+| `datasource plugin-create` | 创建插件数据源表（目前仅 AI 听记）并触发首次同步 | 写 |
 
 ## 典型工作流
 
@@ -179,6 +180,21 @@ dws aitable +datasource-create --base-id BASE_ID --datasource-type OA \
 
 返回新建数据源表 tableId 和同步任务 taskId。创建后自动触发一次全量同步，需用 `+datasource-sync-status` 查最终结果。
 
+### datasource plugin-create — 创建插件数据源表（AI 听记）
+
+```bash
+dws aitable datasource plugin-create --base-id BASE_ID --plugin-type minutes --format json
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--base-id` | 是 | 目标 Base ID |
+| `--plugin-type` | 是 | 插件类型，目前仅支持 `minutes`（AI 听记），区分大小写 |
+
+CLI 一次性完成建表、保存并发布同步流程、触发首次手动同步，返回 `pluginType` / `baseId` / `tableId` / `flowId` / `documentUrl`。成功仅表示已触发首次同步，不代表同步完成；不返回 taskId，不能用 `+datasource-sync-status` 跟进。
+
+该命令非幂等。超时、返回缺少 tableId/flowId 等结果不明情形会以 `create_outcome_unknown` 失败且不可重试：先用 `table get` 只读核对该 Base 是否已出现新的插件数据源表，确认不存在后再决定是否重新创建。
+
 ### +datasource-update — 更新数据源配置
 
 ```bash
@@ -261,6 +277,7 @@ dws aitable +datasource-get-config --base-id BASE_ID --table-id TABLE_ID --forma
 | 能力 | 状态 |
 |------|------|
 | OA 审批数据源 | 已支持 |
+| AI 听记插件数据源 | 已支持（`datasource plugin-create`，仅创建并触发首次同步） |
 | 其他数据源类型 | 待后续开放 |
 | 全量同步 | 已支持 |
 | 增量同步 | 待后续开放 |

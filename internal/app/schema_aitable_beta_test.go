@@ -57,7 +57,7 @@ func TestCrossPlatformCoverageAitableBetaWaitAndSafetyDelivery(t *testing.T) {
 	for _, path := range []string{
 		"aitable base create", "aitable base copy", "aitable record create", "aitable record create-sub",
 		"aitable view create", "aitable view duplicate", "aitable form submit", "aitable dashboard create",
-		"aitable chart create", "aitable advperm role-create", "aitable section create", "aitable datasource create", "aitable create",
+		"aitable chart create", "aitable advperm role-create", "aitable section create", "aitable datasource create", "aitable datasource plugin-create", "aitable create",
 	} {
 		tool := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
 		if tool["idempotency"] != "non_idempotent" {

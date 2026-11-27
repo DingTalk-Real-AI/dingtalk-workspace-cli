@@ -189,6 +189,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 | 将本地 CSV/XLSX/XLS 追加到已有表 | `dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>` → `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH> --table-id <TABLE_ID> --field-mapping '{"目标字段名":"源列名"}'` | 映射的键逐字使用 `field list` 读回的字段名（用户写 amount、表里是 Amount 就写 Amount），值使用源文件表头原文；只映射用户指定的列，以及名称、含义和单位都一致的同名列（同名列不需要用户点名，默认一并映射，也不为此反问，用户明确说只导入某几列时才排除），其余源列不导入、目标字段留空；原价与实付价、单价与总额、含税与不含税都算不一致；用户已给出映射时直接执行，不再反问；源表头不确定时，用`python3 <本 Skill 目录>/scripts/read_import_headers.py <文件>`（按本 Skill 的实际路径替换）（多 Sheet 时用 `--sheet <工作表>` 指定，并在导入时用 `--src-sheet-name` 传入同一名称）；只读取源文件表头行，不读取数据行；该脚本只支持 CSV/XLSX 的首行表头；其他格式、表头不在首行或无法仅取表头时停止并请用户提供源表头，读到的内容只用于确定映射，不用来写入、改写或补全导入数据，也不逐行 `record create`；同样先触发 Runtime 确认门禁 |
 | 将本地 CSV/XLSX/XLS 导入新表 | `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH>` | 存储示例不预置 `--yes`；首次调用先触发 Runtime 确认门禁，取得明确确认后由执行方追加。DWS 在进程内完成申请凭证、空 Content-Type PUT 和 `import data`，且不暴露签名 URL；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
 | 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；processCode/name/iconUrl/url 从 list-sources 原样透传，创建后用 `+datasource-sync-status` 查同步结果 |
+| 接入 AI 听记插件数据源 | `dws aitable datasource plugin-create --base-id <ID> --plugin-type minutes` | `--plugin-type` 目前仅支持 `minutes`；成功仅表示已触发首次同步。不返回 taskId，不能用 `+datasource-sync-status` 跟进；结果不明时禁止重试，先用 `table get` 只读核对是否已出现新表 |
 
 ### 简单 leaf
 
@@ -210,7 +211,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 
 命令接在 `dws aitable` 后；资源 ID 使用 `--base-id/--table-id/--field-id/--view-id/--dashboard-id/--page-id/--widget-id`，改名使用 `--name`。应用模式所有命令都要求 `--base-id`；`app widget create` 另要求包含 `chartType` 的 `--config` 和包含 `x/y/w/h` 的 `--layout`。`+table-copy` 参数不规则，执行前只读其 leaf Schema。不读操作 Reference、Help 或产品 Catalog。
 
-数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建、更新、同步、查状态和查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。
+数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建、更新、同步、查状态和查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。AI 听记插件数据源用原生命令 `datasource plugin-create`。
 
 ## 执行约束
 
@@ -250,7 +251,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 - 删除不可逆，按 Runtime confirmation 核对真实目标；`base list` 只是最近访问。字段零/多候选、类型不明时停止；多批写保留已完成批次和续跑位置。
 - 评论 create/reply 非幂等，评论写操作未知状态时先 `comment list` 对账，不自动重放；delete 只删除本人评论且不可恢复，关联回复处理不作保证。
 - `app get` / `app page list` 在 App 不存在时会初始化默认 App，属于幂等条件写；`app page/widget create` 非幂等且不自动重试。删除 Page 会级联删除全部 Widget，删除 Widget 会同步清理布局，均需独立确认。
-- 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。
+- 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。`datasource plugin-create` 非幂等，超时或结果不明时不得自动重试。
 
 ## 按需加载（复杂 JSON 与恢复语义）
 
