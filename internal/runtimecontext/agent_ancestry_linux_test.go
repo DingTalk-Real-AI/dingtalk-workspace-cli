@@ -22,14 +22,14 @@ func TestCrossPlatformCoverageLinuxAncestryHelpers(t *testing.T) {
 	for _, bad := range [][]byte{
 		[]byte("invalid"),
 		[]byte("1 (cmd) S 2"),
-		[]byte("1 (cmd) S bad 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21"),
-		[]byte("1 (cmd) S 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 bad"),
+		[]byte("1 (cmd) S bad 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"),
+		[]byte("1 (cmd) S 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 bad"),
 	} {
 		if _, _, _, ok := parseLinuxProcStat(bad); ok {
 			t.Fatalf("accepted invalid stat %q", bad)
 		}
 	}
-	comm, ppid, start, ok := parseLinuxProcStat([]byte("42 (my (host)) S 10 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 987654"))
+	comm, ppid, start, ok := parseLinuxProcStat([]byte("42 (my (host)) S 10 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 987654"))
 	if !ok || comm != "my (host)" || ppid != 10 || start != 987654 {
 		t.Fatalf("parsed = %q %d %d %v", comm, ppid, start, ok)
 	}
