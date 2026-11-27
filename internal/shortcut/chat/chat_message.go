@@ -450,6 +450,16 @@ type messageDecryptLedger struct {
 
 var messageReadCryptoClient = newMessageReadCryptoClient()
 
+// SetMessageReadCryptoClient injects the app-owned SafeChat/Ding crypto client
+// for chat message read shortcuts. nil restores the package default client.
+func SetMessageReadCryptoClient(client *messagecrypto.Client) {
+	if client == nil {
+		messageReadCryptoClient = newMessageReadCryptoClient()
+		return
+	}
+	messageReadCryptoClient = client
+}
+
 var (
 	messageReadCurrentIdentity = msgcrypto.CurrentIdentity
 	messageReadOpenSession     = msgcrypto.OpenSession

@@ -840,10 +840,27 @@ func newRootPresentationCommand() *cobra.Command {
 	return newRootCommandWithMode(context.Background(), nil, false, true, true)
 }
 
+func consumeTokenInvocationFlag(root *cobra.Command, flags *GlobalFlags) {
+	if root == nil || flags == nil {
+		return
+	}
+	tokenFlag := root.PersistentFlags().Lookup("token")
+	tokenSet := tokenFlag != nil && tokenFlag.Changed
+	token := ""
+	if tokenSet {
+		token = flags.Token
+	}
+	flags.Token = token
+	if tokenFlag != nil {
+		tokenFlag.Changed = false
+	}
+}
+
 func consumeCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen *bool) {
 	if root == nil || flags == nil || invocationSeen == nil {
 		return
 	}
+	consumeTokenInvocationFlag(root, flags)
 
 	clientIDFlag := root.PersistentFlags().Lookup("client-id")
 	clientSecretFlag := root.PersistentFlags().Lookup("client-secret")
@@ -886,12 +903,16 @@ func discardCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, i
 	if flags != nil {
 		flags.ClientID = ""
 		flags.ClientSecret = ""
+		flags.Token = ""
 	}
 	if root != nil {
 		if flag := root.PersistentFlags().Lookup("client-id"); flag != nil {
 			flag.Changed = false
 		}
 		if flag := root.PersistentFlags().Lookup("client-secret"); flag != nil {
+			flag.Changed = false
+		}
+		if flag := root.PersistentFlags().Lookup("token"); flag != nil {
 			flag.Changed = false
 		}
 	}
@@ -1066,6 +1087,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			if isAuthExchangeCommand(cmd) || isAuthProviderLoginCommand(cmd) || isAuthOIDCExchangeCommand(cmd) {
 				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
 				// 清除前次调用安装的全局凭据；本次 flags 在 RunE 或早退时清理。
+				consumeTokenInvocationFlag(cmd.Root(), flags)
 				if credentialInvocationSeen {
 					authpkg.SetClientCredentials("", "")
 				}
@@ -1081,6 +1103,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// install a store at construction time, so add one lazily when those
 			// trees are executed for compatibility and policy tests.
 			executionCtx, _ := output.WithResultStore(cmd.Context())
+			executionCtx = withMessageCryptoAuthContext(executionCtx, flags.Token, flags.ClientID)
 			cmd.SetContext(executionCtx)
 			// WithResultStore above guarantees the reset precondition.
 			_ = output.ResetResultStore(executionCtx)
@@ -1152,7 +1175,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) (err error) {
-			defer flags.network.close()
+			defer func() {
+				flags.Token = ""
+				flags.network.close()
+			}()
 			if rootVersionShortCircuit {
 				rootVersionShortCircuit = false
 				rootVersionRequested = false

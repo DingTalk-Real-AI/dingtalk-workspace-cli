@@ -445,6 +445,17 @@ func TestCrossPlatformCoverageMessageDecryptHelperEdges(t *testing.T) {
 		if _, err := client.OpenSession(context.Background(), messagecrypto.SessionOptions{}); err == nil || err.Error() != "open failed" {
 			t.Fatalf("OpenSession error = %v", err)
 		}
+
+		prevClient := messageReadCryptoClient
+		t.Cleanup(func() { SetMessageReadCryptoClient(prevClient) })
+		SetMessageReadCryptoClient(client)
+		if messageReadCryptoClient != client {
+			t.Fatal("SetMessageReadCryptoClient did not install client")
+		}
+		SetMessageReadCryptoClient(nil)
+		if messageReadCryptoClient == nil || messageReadCryptoClient == client {
+			t.Fatal("SetMessageReadCryptoClient(nil) should restore default client")
+		}
 	})
 
 	messages := []map[string]any{

@@ -189,3 +189,23 @@ func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
 		}
 	})
 }
+
+func TestCrossPlatformCoverageApplyCryptoDisabledGuidancePreservesJoinedCleanupError(t *testing.T) {
+	businessErr := &apperrors.Error{Message: "raw crypto disabled"}
+	businessErr.ServerDiag.ServerErrorCode = "CRYPTO_DISABLED"
+	businessErr.ServerDiag.TraceID = "trace-join-1"
+	cleanupErr := errors.New("cleanup temp keystore failed")
+	joined := errors.Join(businessErr, cleanupErr)
+
+	got := applyCryptoDisabledGuidance(joined)
+	if !errors.Is(got, businessErr) {
+		t.Fatalf("business error dropped from joined error: %v", got)
+	}
+	if !errors.Is(got, cleanupErr) {
+		t.Fatalf("cleanup error dropped from joined error: %v", got)
+	}
+	var typed *apperrors.Error
+	if !errors.As(got, &typed) || typed.Message != messagecrypto.CryptoDisabledGuidance || typed.Hint != messagecrypto.CryptoDisabledGuidance {
+		t.Fatalf("guidance rewrite missing on typed error: %#v", typed)
+	}
+}

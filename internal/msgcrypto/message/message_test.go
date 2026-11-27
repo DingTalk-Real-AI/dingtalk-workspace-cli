@@ -557,6 +557,65 @@ func TestParseBatchDecryptResultsShouldParseJsonNumberKeyVersion(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePolicyDecisionShouldPreferIdentityWithRuntimeAndPassRuntimeToOpenSession(t *testing.T) {
+	rt := &fakeRuntime{
+		read: map[string]any{"result": map[string]any{"mode": ModeRequired, "ttlSeconds": 60}},
+		write: map[string]any{"result": map[string]any{"items": []any{
+			map[string]any{"messageId": "manual", "status": "success", "plaintextContent": "hello"},
+		}}},
+	}
+	cipher := &fakeCipher{}
+	var gotIdentityRT Runtime
+	var gotSessionRT Runtime
+	var closeErr error
+	client := &Client{
+		Identity: func(context.Context, string) (Identity, error) {
+			t.Fatal("Identity should not be called when IdentityWithRuntime is configured")
+			return Identity{}, nil
+		},
+		IdentityWithRuntime: func(_ context.Context, runtime Runtime, _ string) (Identity, error) {
+			gotIdentityRT = runtime
+			return Identity{CorpID: "corp-rt", StaffID: "staff-rt"}, nil
+		},
+		OpenSession: func(_ context.Context, opts SessionOptions) (*Session, error) {
+			gotSessionRT = opts.Runtime
+			return &Session{Cipher: cipher, CorpID: "corp-rt", StaffID: "staff-rt", Close: func() error { return closeErr }}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  NewPolicyCache(time.Now),
+	}
+
+	decision, err := client.PolicyDecision(context.Background(), rt, testOptions())
+	if err != nil || !decision.Enabled {
+		t.Fatalf("PolicyDecision() = %#v, %v", decision, err)
+	}
+	if gotIdentityRT != rt {
+		t.Fatalf("IdentityWithRuntime runtime = %#v, want %#v", gotIdentityRT, rt)
+	}
+
+	res, err := client.DecryptInbound(context.Background(), rt, Options{Layer: "full", Ciphertext: "safe-cipher"})
+	if err != nil || res.Plaintext != "hello" {
+		t.Fatalf("DecryptInbound() = %#v, %v", res, err)
+	}
+	if gotSessionRT != rt {
+		t.Fatalf("OpenSession runtime = %#v, want %#v", gotSessionRT, rt)
+	}
+
+	// Session cleanup errors must surface from both DecryptInbound and BatchDecryptInbound.
+	closeErr = errors.New("cleanup failed")
+	if _, err := client.DecryptInbound(context.Background(), rt, Options{Layer: "safechat", Ciphertext: "safe-cipher"}); !errors.Is(err, closeErr) {
+		t.Fatalf("DecryptInbound close error = %v, want %v", err, closeErr)
+	}
+	if _, err := client.BatchDecryptInbound(context.Background(), rt, Options{}, []BatchDecryptItem{
+		{MessageID: "manual", Ciphertext: "safe-cipher"},
+	}); !errors.Is(err, closeErr) {
+		t.Fatalf("BatchDecryptInbound close error = %v, want %v", err, closeErr)
+	}
+	if err := closeSession(nil); err != nil {
+		t.Fatalf("closeSession(nil) = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageMessageCryptoPackage(t *testing.T) {
 	cases := []struct {
 		name string
@@ -568,6 +627,7 @@ func TestCrossPlatformCoverageMessageCryptoPackage(t *testing.T) {
 		{"policy_required", TestPolicyDecisionShouldReturnEnabledWhenPolicyRequiresCrypto},
 		{"identity_error", TestPolicyDecisionShouldReturnIdentityError},
 		{"missing_identity_provider", TestPolicyDecisionShouldFailWithoutIdentityProvider},
+		{"identity_with_runtime", TestCrossPlatformCoveragePolicyDecisionShouldPreferIdentityWithRuntimeAndPassRuntimeToOpenSession},
 		{"policy_read_error", TestPolicyDecisionShouldReturnPolicyReadError},
 		{"unknown_policy_mode", TestPolicyDecisionShouldRejectUnknownPolicyMode},
 		{"plain_ack_fail_closed", TestPolicyDecisionShouldRejectMissingModeWithPolicyPayload},
