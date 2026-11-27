@@ -6,8 +6,10 @@ package runtimecontext
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,7 +100,10 @@ func TestCrossPlatformCoverageAgentCacheWriteDoesNotBlockAndLateResultIsNotCache
 		})
 		t.Cleanup(func() {
 			close(release)
-			<-finished
+			select {
+			case <-finished:
+			case <-time.After(time.Second):
+			}
 		})
 
 		p := &agentProvider{
@@ -164,6 +169,155 @@ func TestCrossPlatformCoverageAgentCacheWriteDoesNotBlockAndLateResultIsNotCache
 			t.Fatal("late native result was persisted to cache")
 		}
 	})
+
+	t.Run("blocked cache lookup respects collection timeout", func(t *testing.T) {
+		testseam.Swap(t, &agentCacheKey, func() (string, bool) { return "blocked-key", true })
+		started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		testseam.Swap(t, &agentCacheLookup, func(string) (AgentSnapshot, bool) {
+			close(started)
+			defer close(finished)
+			<-release
+			return AgentSnapshot{State: StateReady, AgentID: 7}, true
+		})
+		t.Cleanup(func() {
+			close(release)
+			select {
+			case <-finished:
+			case <-time.After(time.Second):
+			}
+		})
+
+		p := &agentProvider{
+			locate:   successfulLocator,
+			timeout:  15 * time.Millisecond,
+			useCache: true,
+			collect: func(string, string) ([]byte, int32, error) {
+				t.Error("native collect should not run during blocked lookup")
+				return nil, 0, nil
+			},
+		}
+		got := p.resolve()
+		if got.State != StateTimeout || got.ErrorCategory != "collection_timeout" {
+			t.Fatalf("expected timeout during blocked lookup, got %+v", got)
+		}
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("expected cache lookup to start")
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAgentCacheTransientShellNormalizationAndPrune(t *testing.T) {
+	t.Setenv(disableAgentCacheEnv, "")
+	host := ancestorProcess{PID: 82299, PPID: 1, StartTime: 999888777, Comm: "host-agent"}
+
+	testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
+		return []ancestorProcess{
+			{PID: 10001, PPID: 82299, StartTime: 111, Comm: "-zsh"},
+			host,
+		}, true
+	})
+	key1, ok := computeAgentCacheKey()
+	if !ok {
+		t.Fatal("expected key1")
+	}
+
+	testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
+		return []ancestorProcess{
+			{PID: 10002, PPID: 10003, StartTime: 222, Comm: "cmd.exe"},
+			{PID: 10003, PPID: 82299, StartTime: 221, Comm: "bash"},
+			host,
+		}, true
+	})
+	key2, ok := computeAgentCacheKey()
+	if !ok || key1 != key2 {
+		t.Fatalf("transient wrapper shells changed cache key: %q vs %q", key1, key2)
+	}
+
+	// Single-layer shell ancestry must not be stripped to empty, and non-shell chains stay intact.
+	single := normalizeAncestryForCache([]ancestorProcess{{PID: 77, PPID: 1, StartTime: 1, Comm: "zsh"}})
+	if len(single) != 1 || single[0].PID != 77 {
+		t.Fatalf("single shell stripped: %+v", single)
+	}
+	nonShell := normalizeAncestryForCache([]ancestorProcess{host, {PID: 2, PPID: 1, StartTime: 1, Comm: "launchd"}})
+	if len(nonShell) != 2 || nonShell[0].PID != host.PID {
+		t.Fatalf("non-shell chain altered: %+v", nonShell)
+	}
+
+	// Bounded pruning removes expired files and caps total cache entries across many chains.
+	cacheDir := t.TempDir()
+	now := time.Unix(1_795_700_000, 0)
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return cacheDir, nil })
+	testseam.Swap(t, &agentCacheNow, func() time.Time { return now })
+	testseam.Swap(t, &agentCacheMaxEntries, 3)
+
+	samplePath, ok := agentCacheFilePath("k0")
+	if !ok {
+		t.Fatal("expected sample path")
+	}
+	dir := filepath.Dir(samplePath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Put a non-.json file and an expired .json file.
+	tmpFile := filepath.Join(dir, "ignore.tmp")
+	if err := os.WriteFile(tmpFile, []byte("tmp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expiredFile := filepath.Join(dir, "expired.json")
+	if err := os.WriteFile(expiredFile, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldMod := now.Add(-agentCacheTTL - time.Minute)
+	if err := os.Chtimes(expiredFile, oldMod, oldMod); err != nil {
+		t.Fatal(err)
+	}
+
+	validSnap := AgentSnapshot{State: StateReady, raw: []byte(`{"agent":7,"match_tier":"high"}`)}
+	for i := range 6 {
+		key := fmt.Sprintf("chain-%d", i)
+		storeCachedAgentSnapshot(key, validSnap)
+		p, _ := agentCacheFilePath(key)
+		ts := now.Add(time.Duration(i) * time.Second)
+		_ = os.Chtimes(p, ts, ts)
+	}
+	// Make keepPath the oldest timestamp so pruneAgentCacheDir exercises skipping keepPath.
+	keepPath, _ := agentCacheFilePath("chain-5")
+	oldestValid := now.Add(-time.Minute)
+	_ = os.Chtimes(keepPath, oldestValid, oldestValid)
+	extraPath := filepath.Join(dir, "extra.json")
+	if err := os.WriteFile(extraPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chtimes(extraPath, now, now)
+	pruneAgentCacheDir(dir, keepPath)
+
+	if _, err := os.Stat(expiredFile); !os.IsNotExist(err) {
+		t.Fatal("expired cache file was not removed")
+	}
+	if _, err := os.Stat(keepPath); err != nil {
+		t.Fatalf("keepPath was unexpectedly removed: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonCount := 0
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".json") {
+			jsonCount++
+		}
+	}
+	if jsonCount > 3 {
+		t.Fatalf("json cache files = %d, want <= 3", jsonCount)
+	}
+
+	// Error tolerance branches in pruneAgentCacheDir.
+	pruneAgentCacheDir(filepath.Join(t.TempDir(), "missing"), "")
+	testseam.Swap(t, &agentCacheLstat, func(string) (os.FileInfo, error) { return nil, errors.New("stat failed") })
+	pruneAgentCacheDir(dir, keepPath)
 }
 
 func TestCrossPlatformCoverageAgentCacheEdgeCasesAndAncestryWalker(t *testing.T) {

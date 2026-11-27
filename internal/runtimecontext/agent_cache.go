@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -29,6 +30,10 @@ type ancestorProcess struct {
 	Comm      string `json:"comm"`
 }
 
+// cachedAgentRecord stores the validated host-agent snapshot keyed by the
+// normalized ancestor process chain (excluding transient wrapper shells).
+// With full_info=0, the SDK "process" object describes the matched long-lived
+// host agent process rather than the ephemeral dws child process itself.
 type cachedAgentRecord struct {
 	Version        int             `json:"version"`
 	PayloadVersion string          `json:"payload_version"`
@@ -39,15 +44,18 @@ type cachedAgentRecord struct {
 }
 
 var (
-	agentCacheNow      = time.Now
-	agentCacheAncestry = func() ([]ancestorProcess, bool) {
+	agentCacheNow        = time.Now
+	agentCacheMaxEntries = 64
+	agentCacheAncestry   = func() ([]ancestorProcess, bool) {
 		return collectProcessAncestry(agentCacheMaxDepth)
 	}
+	agentCacheKey        = computeAgentCacheKey
 	agentCacheLookup     = loadCachedAgentSnapshot
 	agentCacheStore      = storeCachedAgentSnapshot
 	agentCacheReadFile   = os.ReadFile
 	agentCacheWriteFile  = os.WriteFile
 	agentCacheRenameFile = os.Rename
+	agentCacheLstat      = os.Lstat
 )
 
 func walkProcessAncestry(startPID, maxDepth int, minPID int, lookup func(int) (ancestorProcess, bool)) ([]ancestorProcess, bool) {
@@ -74,6 +82,28 @@ func walkProcessAncestry(startPID, maxDepth int, minPID int, lookup func(int) (a
 	return chain, len(chain) > 0
 }
 
+// normalizeAncestryForCache drops immediate transient wrapper shells (e.g. an
+// ephemeral "zsh -lc ..." spawned per tool call) when a longer-lived ancestor
+// exists above them, so consecutive tool calls from the same host agent share
+// one cache key instead of creating a new entry per shell invocation.
+func normalizeAncestryForCache(chain []ancestorProcess) []ancestorProcess {
+	for len(chain) > 1 && isTransientShell(chain[0].Comm) {
+		chain = chain[1:]
+	}
+	return chain
+}
+
+func isTransientShell(comm string) bool {
+	name := strings.ToLower(strings.TrimPrefix(filepath.Base(strings.TrimSpace(comm)), "-"))
+	name = strings.TrimSuffix(name, ".exe")
+	switch name {
+	case "sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "cmd", "powershell", "pwsh":
+		return true
+	default:
+		return false
+	}
+}
+
 func agentCacheDisabled() bool {
 	v := strings.TrimSpace(os.Getenv(disableAgentCacheEnv))
 	return v != "" && v != "0" && !strings.EqualFold(v, "false")
@@ -87,6 +117,7 @@ func computeAgentCacheKey() (string, bool) {
 	if !ok || len(chain) == 0 {
 		return "", false
 	}
+	chain = normalizeAncestryForCache(chain)
 	var exeSize, exeModUnix int64
 	if executable, err := osExecutable(); err == nil {
 		if resolved, err := evalSymlinks(executable); err == nil {
@@ -135,7 +166,7 @@ func loadCachedAgentSnapshot(key string) (AgentSnapshot, bool) {
 	if !ok {
 		return AgentSnapshot{}, false
 	}
-	info, err := os.Lstat(path)
+	info, err := agentCacheLstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > agentCacheMaxFileBytes {
 		return AgentSnapshot{}, false
 	}
@@ -191,5 +222,53 @@ func storeCachedAgentSnapshot(key string, snapshot AgentSnapshot) {
 	}
 	if err := agentCacheRenameFile(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
+		return
+	}
+	pruneAgentCacheDir(dir, path)
+}
+
+func pruneAgentCacheDir(dir, keepPath string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	now := agentCacheNow()
+	type cacheEntry struct {
+		path    string
+		modTime time.Time
+	}
+	kept := make([]cacheEntry, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		fullPath := filepath.Join(dir, name)
+		info, err := agentCacheLstat(fullPath)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if fullPath != keepPath && now.Sub(info.ModTime()) > agentCacheTTL {
+			_ = os.Remove(fullPath)
+			continue
+		}
+		kept = append(kept, cacheEntry{path: fullPath, modTime: info.ModTime()})
+	}
+	if len(kept) <= agentCacheMaxEntries {
+		return
+	}
+	sort.Slice(kept, func(i, j int) bool {
+		return kept[i].modTime.Before(kept[j].modTime)
+	})
+	excess := len(kept) - agentCacheMaxEntries
+	for _, item := range kept {
+		if excess <= 0 {
+			break
+		}
+		if item.path == keepPath {
+			continue
+		}
+		_ = os.Remove(item.path)
+		excess--
 	}
 }
