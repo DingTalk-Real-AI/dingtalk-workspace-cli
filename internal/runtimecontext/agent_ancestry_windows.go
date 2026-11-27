@@ -12,60 +12,67 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+type windowsProcEntry struct {
+	ppid int
+	comm string
+}
+
+var (
+	windowsCreateProcessSnapshot = windows.CreateToolhelp32Snapshot
+	windowsGetProcessTimes       = windows.GetProcessTimes
+)
+
 func collectProcessAncestry(maxDepth int) ([]ancestorProcess, bool) {
-	pid := os.Getppid()
-	if pid <= 0 || maxDepth <= 0 {
+	procs, ok := windowsSnapshotProcesses()
+	if !ok {
 		return nil, false
 	}
-	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	return walkProcessAncestry(os.Getppid(), maxDepth, 1, func(pid int) (ancestorProcess, bool) {
+		return windowsLookupProcess(procs, pid)
+	})
+}
+
+func windowsLookupProcess(procs map[int]windowsProcEntry, pid int) (ancestorProcess, bool) {
+	info, exists := procs[pid]
+	if !exists {
+		return ancestorProcess{}, false
+	}
+	return ancestorProcess{
+		PID:       pid,
+		PPID:      info.ppid,
+		StartTime: windowsProcessStartTime(pid),
+		Comm:      info.comm,
+	}, true
+}
+
+func windowsSnapshotProcesses() (map[int]windowsProcEntry, bool) {
+	snapshot, err := windowsCreateProcessSnapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return nil, false
 	}
 	defer windows.CloseHandle(snapshot)
 
-	type procInfo struct {
-		ppid int
-		comm string
-	}
-	procs := make(map[int]procInfo)
+	procs := make(map[int]windowsProcEntry)
 	var entry windows.ProcessEntry32
 	entry.Size = uint32(unsafe.Sizeof(entry))
 	for err := windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
-		procs[int(entry.ProcessID)] = procInfo{
+		procs[int(entry.ProcessID)] = windowsProcEntry{
 			ppid: int(entry.ParentProcessID),
 			comm: windows.UTF16ToString(entry.ExeFile[:]),
 		}
 	}
+	return procs, true
+}
 
-	chain := make([]ancestorProcess, 0, maxDepth)
-	seen := make(map[int]struct{}, maxDepth)
-	for len(chain) < maxDepth && pid > 0 {
-		if _, dup := seen[pid]; dup {
-			break
-		}
-		seen[pid] = struct{}{}
-		info, exists := procs[pid]
-		if !exists {
-			break
-		}
-		var startTime int64
-		if handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid)); err == nil {
-			var creation, exit, kernel, user windows.Filetime
-			if windows.GetProcessTimes(handle, &creation, &exit, &kernel, &user) == nil {
-				startTime = creation.Nanoseconds()
-			}
-			_ = windows.CloseHandle(handle)
-		}
-		chain = append(chain, ancestorProcess{
-			PID:       pid,
-			PPID:      info.ppid,
-			StartTime: startTime,
-			Comm:      info.comm,
-		})
-		if info.ppid <= 0 || info.ppid == pid {
-			break
-		}
-		pid = info.ppid
+func windowsProcessStartTime(pid int) int64 {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return 0
 	}
-	return chain, len(chain) > 0
+	defer windows.CloseHandle(handle)
+	var creation, exit, kernel, user windows.Filetime
+	if windowsGetProcessTimes(handle, &creation, &exit, &kernel, &user) != nil {
+		return 0
+	}
+	return creation.Nanoseconds()
 }

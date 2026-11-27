@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,9 +43,36 @@ var (
 	agentCacheAncestry = func() ([]ancestorProcess, bool) {
 		return collectProcessAncestry(agentCacheMaxDepth)
 	}
-	agentCacheLookup = loadCachedAgentSnapshot
-	agentCacheStore  = storeCachedAgentSnapshot
+	agentCacheLookup     = loadCachedAgentSnapshot
+	agentCacheStore      = storeCachedAgentSnapshot
+	agentCacheReadFile   = os.ReadFile
+	agentCacheWriteFile  = os.WriteFile
+	agentCacheRenameFile = os.Rename
 )
+
+func walkProcessAncestry(startPID, maxDepth int, minPID int, lookup func(int) (ancestorProcess, bool)) ([]ancestorProcess, bool) {
+	if startPID < minPID || maxDepth <= 0 {
+		return nil, false
+	}
+	chain := make([]ancestorProcess, 0, maxDepth)
+	seen := make(map[int]struct{}, maxDepth)
+	for pid := startPID; len(chain) < maxDepth && pid >= minPID; {
+		if _, dup := seen[pid]; dup {
+			break
+		}
+		seen[pid] = struct{}{}
+		proc, ok := lookup(pid)
+		if !ok {
+			break
+		}
+		chain = append(chain, proc)
+		if proc.PPID < minPID || proc.PPID == pid {
+			break
+		}
+		pid = proc.PPID
+	}
+	return chain, len(chain) > 0
+}
 
 func agentCacheDisabled() bool {
 	v := strings.TrimSpace(os.Getenv(disableAgentCacheEnv))
@@ -69,7 +97,8 @@ func computeAgentCacheKey() (string, bool) {
 			exeModUnix = info.ModTime().UnixNano()
 		}
 	}
-	material, err := json.Marshal(struct {
+	// Fixed primitive struct; json.Marshal cannot fail.
+	material, _ := json.Marshal(struct {
 		Version        int               `json:"v"`
 		PayloadVersion string            `json:"pv"`
 		Target         string            `json:"t"`
@@ -86,9 +115,6 @@ func computeAgentCacheKey() (string, bool) {
 		ExeMod:         exeModUnix,
 		Chain:          chain,
 	})
-	if err != nil {
-		return "", false
-	}
 	sum := sha256.Sum256(material)
 	return hex.EncodeToString(sum[:]), true
 }
@@ -113,7 +139,7 @@ func loadCachedAgentSnapshot(key string) (AgentSnapshot, bool) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > agentCacheMaxFileBytes {
 		return AgentSnapshot{}, false
 	}
-	data, err := os.ReadFile(path)
+	data, err := agentCacheReadFile(path)
 	if err != nil {
 		return AgentSnapshot{}, false
 	}
@@ -124,8 +150,7 @@ func loadCachedAgentSnapshot(key string) (AgentSnapshot, bool) {
 	if record.Version != agentCacheFormatVersion || record.PayloadVersion != PayloadVersion || record.Key != key || record.ErrorCode != 0 {
 		return AgentSnapshot{}, false
 	}
-	now := agentCacheNow().Unix()
-	age := now - record.CreatedAtUnix
+	age := agentCacheNow().Unix() - record.CreatedAtUnix
 	if age < 0 || time.Duration(age)*time.Second > agentCacheTTL {
 		return AgentSnapshot{}, false
 	}
@@ -159,26 +184,12 @@ func storeCachedAgentSnapshot(key string, snapshot AgentSnapshot) {
 	if err != nil || len(data) > agentCacheMaxFileBytes {
 		return
 	}
-	tmp, err := os.CreateTemp(dir, ".agent-*.tmp")
-	if err != nil {
-		return
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
+	tmpPath := filepath.Join(dir, fmt.Sprintf(".agent-%d-%d.tmp", os.Getpid(), agentCacheNow().UnixNano()))
+	if err := agentCacheWriteFile(tmpPath, data, 0o600); err != nil {
 		_ = os.Remove(tmpPath)
 		return
 	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := agentCacheRenameFile(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 	}
 }

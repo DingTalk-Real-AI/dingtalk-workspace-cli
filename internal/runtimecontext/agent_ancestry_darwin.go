@@ -12,34 +12,18 @@ import (
 )
 
 func collectProcessAncestry(maxDepth int) ([]ancestorProcess, bool) {
-	pid := os.Getppid()
-	if pid <= 1 || maxDepth <= 0 {
-		return nil, false
+	return walkProcessAncestry(os.Getppid(), maxDepth, 2, darwinLookupProcess)
+}
+
+func darwinLookupProcess(pid int) (ancestorProcess, bool) {
+	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	if err != nil || kp == nil {
+		return ancestorProcess{}, false
 	}
-	chain := make([]ancestorProcess, 0, maxDepth)
-	seen := make(map[int]struct{}, maxDepth)
-	for len(chain) < maxDepth && pid > 1 {
-		if _, dup := seen[pid]; dup {
-			break
-		}
-		seen[pid] = struct{}{}
-		kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
-		if err != nil || kp == nil {
-			break
-		}
-		ppid := int(kp.Eproc.Ppid)
-		comm := unix.ByteSliceToString(kp.Proc.P_comm[:])
-		startNS := kp.Proc.P_starttime.Sec*1_000_000_000 + int64(kp.Proc.P_starttime.Usec)*1_000
-		chain = append(chain, ancestorProcess{
-			PID:       pid,
-			PPID:      ppid,
-			StartTime: startNS,
-			Comm:      comm,
-		})
-		if ppid <= 1 || ppid == pid {
-			break
-		}
-		pid = ppid
-	}
-	return chain, len(chain) > 0
+	return ancestorProcess{
+		PID:       pid,
+		PPID:      int(kp.Eproc.Ppid),
+		StartTime: kp.Proc.P_starttime.Sec*1_000_000_000 + int64(kp.Proc.P_starttime.Usec)*1_000,
+		Comm:      unix.ByteSliceToString(kp.Proc.P_comm[:]),
+	}, true
 }

@@ -13,38 +13,27 @@ import (
 	"strings"
 )
 
+var linuxReadProcStat = os.ReadFile
+
 func collectProcessAncestry(maxDepth int) ([]ancestorProcess, bool) {
-	pid := os.Getppid()
-	if pid <= 1 || maxDepth <= 0 {
-		return nil, false
+	return walkProcessAncestry(os.Getppid(), maxDepth, 2, linuxLookupProcess)
+}
+
+func linuxLookupProcess(pid int) (ancestorProcess, bool) {
+	data, err := linuxReadProcStat(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return ancestorProcess{}, false
 	}
-	chain := make([]ancestorProcess, 0, maxDepth)
-	seen := make(map[int]struct{}, maxDepth)
-	for len(chain) < maxDepth && pid > 1 {
-		if _, dup := seen[pid]; dup {
-			break
-		}
-		seen[pid] = struct{}{}
-		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-		if err != nil {
-			break
-		}
-		comm, ppid, startTicks, ok := parseLinuxProcStat(data)
-		if !ok {
-			break
-		}
-		chain = append(chain, ancestorProcess{
-			PID:       pid,
-			PPID:      ppid,
-			StartTime: startTicks,
-			Comm:      comm,
-		})
-		if ppid <= 1 || ppid == pid {
-			break
-		}
-		pid = ppid
+	comm, ppid, startTicks, ok := parseLinuxProcStat(data)
+	if !ok {
+		return ancestorProcess{}, false
 	}
-	return chain, len(chain) > 0
+	return ancestorProcess{
+		PID:       pid,
+		PPID:      ppid,
+		StartTime: startTicks,
+		Comm:      comm,
+	}, true
 }
 
 func parseLinuxProcStat(data []byte) (comm string, ppid int, startTime int64, ok bool) {

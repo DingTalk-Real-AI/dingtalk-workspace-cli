@@ -4,6 +4,10 @@
 package runtimecontext
 
 import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +22,7 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	testseam.Swap(t, &agentCacheNow, func() time.Time { return now })
 	testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
 		return []ancestorProcess{
-			{PID: 4242, PPID: 1001, StartTime: 123456789, Comm: "codex"},
+			{PID: 4242, PPID: 1001, StartTime: 123456789, Comm: "host"},
 		}, true
 	})
 	t.Setenv(disableAgentCacheEnv, "")
@@ -37,19 +41,16 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 		}
 	}
 
-	// First call misses cache, collects natively, and populates cache.
 	first := newCachingProvider().resolve()
 	if first.State != StateReady || first.AgentID != 7 || calls.Load() != 1 {
 		t.Fatalf("first = %+v calls=%d", first, calls.Load())
 	}
 
-	// Second call hits cache and avoids native collection completely.
 	second := newCachingProvider().resolve()
 	if second.State != StateReady || second.AgentID != 7 || second.OS != "mac" || string(second.JSON()) != string(raw) || calls.Load() != 1 {
 		t.Fatalf("second = %+v calls=%d", second, calls.Load())
 	}
 
-	// Explicit env opt-out bypasses cache.
 	t.Setenv(disableAgentCacheEnv, "1")
 	bypass := newCachingProvider().resolve()
 	if bypass.State != StateReady || calls.Load() != 2 {
@@ -57,7 +58,6 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	}
 	t.Setenv(disableAgentCacheEnv, "")
 
-	// Advancing past TTL invalidates the cached entry.
 	now = now.Add(agentCacheTTL + time.Second)
 	expired := newCachingProvider().resolve()
 	if expired.State != StateReady || calls.Load() != 3 {
@@ -65,34 +65,136 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageAgentCacheSkipsFailuresAndCollectsAncestry(t *testing.T) {
-	cacheDir := t.TempDir()
-	testseam.Swap(t, &userCacheDir, func() (string, error) { return cacheDir, nil })
-	testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
-		return []ancestorProcess{{PID: 9999, PPID: 1, StartTime: 555, Comm: "zsh"}}, true
+func TestCrossPlatformCoverageAgentCacheEdgeCasesAndAncestryWalker(t *testing.T) {
+	// Default ancestry closure exercises collectProcessAncestry on the live platform.
+	if chain, ok := agentCacheAncestry(); !ok || len(chain) == 0 {
+		t.Fatalf("agentCacheAncestry returned ok=%v len=%d", ok, len(chain))
+	}
+
+	// walkProcessAncestry edge branches: invalid start, lookup failure, cycle, and root stop.
+	if _, ok := walkProcessAncestry(1, 4, 2, func(int) (ancestorProcess, bool) { return ancestorProcess{}, true }); ok {
+		t.Fatal("accepted pid below minPID")
+	}
+	if _, ok := walkProcessAncestry(10, 0, 2, func(int) (ancestorProcess, bool) { return ancestorProcess{}, true }); ok {
+		t.Fatal("accepted zero maxDepth")
+	}
+	if _, ok := walkProcessAncestry(10, 4, 2, func(int) (ancestorProcess, bool) { return ancestorProcess{}, false }); ok {
+		t.Fatal("accepted failed lookup")
+	}
+	cyclic, ok := walkProcessAncestry(10, 6, 2, func(pid int) (ancestorProcess, bool) {
+		if pid == 10 {
+			return ancestorProcess{PID: 10, PPID: 20}, true
+		}
+		return ancestorProcess{PID: 20, PPID: 10}, true
 	})
+	if !ok || len(cyclic) != 2 {
+		t.Fatalf("cyclic walk = %+v, %v", cyclic, ok)
+	}
+	rooted, ok := walkProcessAncestry(10, 6, 2, func(pid int) (ancestorProcess, bool) {
+		return ancestorProcess{PID: pid, PPID: 1}, true
+	})
+	if !ok || len(rooted) != 1 {
+		t.Fatalf("rooted walk = %+v, %v", rooted, ok)
+	}
+
+	// computeAgentCacheKey with empty ancestry.
 	t.Setenv(disableAgentCacheEnv, "")
-
-	var calls atomic.Int32
-	for range 2 {
-		p := &agentProvider{
-			locate:   successfulLocator,
-			timeout:  time.Second,
-			useCache: true,
-			collect: func(string, string) ([]byte, int32, error) {
-				calls.Add(1)
-				return nil, 1004, nil
-			},
-		}
-		if got := p.resolve(); got.State != StateError {
-			t.Fatalf("got = %+v", got)
-		}
-	}
-	if calls.Load() != 2 {
-		t.Fatalf("failed result was cached: calls=%d", calls.Load())
+	testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) { return nil, false })
+	if _, ok := computeAgentCacheKey(); ok {
+		t.Fatal("empty ancestry produced key")
 	}
 
-	if chain, ok := collectProcessAncestry(agentCacheMaxDepth); !ok || len(chain) == 0 {
-		t.Fatalf("collectProcessAncestry returned ok=%v len=%d", ok, len(chain))
+	// agentCacheFilePath with empty key or failing userCacheDir.
+	if _, ok := agentCacheFilePath(""); ok {
+		t.Fatal("empty key produced path")
 	}
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return "", errors.New("no cache") })
+	if _, ok := agentCacheFilePath("abc"); ok {
+		t.Fatal("missing cache dir produced path")
+	}
+	if _, ok := loadCachedAgentSnapshot("abc"); ok {
+		t.Fatal("loaded with missing cache dir")
+	}
+	storeCachedAgentSnapshot("abc", AgentSnapshot{State: StateReady, raw: []byte(`{"agent":1,"match_tier":"high"}`)})
+
+	// Cache directory setup for read/write failure branches.
+	cacheDir := t.TempDir()
+	now := time.Unix(1_795_700_000, 0)
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return cacheDir, nil })
+	testseam.Swap(t, &agentCacheNow, func() time.Time { return now })
+
+	key := "testkey"
+	path, ok := agentCacheFilePath(key)
+	if !ok {
+		t.Fatal("expected valid path")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Failed snapshot is not stored.
+	storeCachedAgentSnapshot(key, AgentSnapshot{State: StateError, ErrorCode: 1004})
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("error snapshot should not be stored")
+	}
+
+	// ReadFile failure branch.
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &agentCacheReadFile, func(string) ([]byte, error) { return nil, errors.New("read failed") })
+	if _, ok := loadCachedAgentSnapshot(key); ok {
+		t.Fatal("loaded despite read error")
+	}
+	testseam.Swap(t, &agentCacheReadFile, os.ReadFile)
+
+	// Malformed JSON branch.
+	if err := os.WriteFile(path, []byte(`not-json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := loadCachedAgentSnapshot(key); ok {
+		t.Fatal("loaded malformed json")
+	}
+
+	// Version/key mismatch branch.
+	if err := os.WriteFile(path, []byte(`{"version":999,"payload_version":"old","key":"other"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := loadCachedAgentSnapshot(key); ok {
+		t.Fatal("loaded mismatched metadata")
+	}
+
+	// Invalid embedded raw agent JSON branch.
+	badRaw := `{"version":1,"payload_version":"` + PayloadVersion + `","key":"testkey","created_at_unix":1795700000,"error_code":0,"raw":{"match_tier":"none"}}`
+	if err := os.WriteFile(path, []byte(badRaw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := loadCachedAgentSnapshot(key); ok {
+		t.Fatal("loaded invalid agent payload")
+	}
+
+	// Oversized snapshot skips write.
+	storeCachedAgentSnapshot(key, AgentSnapshot{
+		State: StateReady,
+		raw:   bytes.Repeat([]byte("a"), agentCacheMaxFileBytes+1),
+	})
+
+	// WriteFile failure branch.
+	validSnap := AgentSnapshot{State: StateReady, raw: []byte(`{"agent":7,"match_tier":"high"}`)}
+	testseam.Swap(t, &agentCacheWriteFile, func(string, []byte, os.FileMode) error { return errors.New("disk full") })
+	storeCachedAgentSnapshot(key, validSnap)
+	testseam.Swap(t, &agentCacheWriteFile, os.WriteFile)
+
+	// Rename failure branch.
+	testseam.Swap(t, &agentCacheRenameFile, func(string, string) error { return errors.New("rename failed") })
+	storeCachedAgentSnapshot(key, validSnap)
+	testseam.Swap(t, &agentCacheRenameFile, os.Rename)
+
+	// MkdirAll failure branch (cache root is a regular file).
+	fileAsDir := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(fileAsDir, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return fileAsDir, nil })
+	storeCachedAgentSnapshot(key, validSnap)
 }
