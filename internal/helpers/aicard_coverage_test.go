@@ -74,9 +74,11 @@ func TestCrossPlatformCoverageAicardCommandInjectedFailures(t *testing.T) {
 		}
 	})
 	t.Run("preflight failure", func(t *testing.T) {
-		testseam.Swap(t, &aicardPreflight, func(*a2ui.Protocol, []string, string) (map[string]any, error) {
+		failed := func(*a2ui.Protocol, []string, string) (map[string]any, error) {
 			return nil, errors.New("preflight input failed")
-		})
+		}
+		testseam.Swap(t, &aicardPreflight, failed)
+		testseam.Swap(t, &aicardExistingContentPreflight, failed)
 		for _, args := range [][]string{{"lint", "--file", file, "--preflight", "new-card"}, {"preview", "--file", file, "--dry-run"}} {
 			caller := &aicardCaller{}
 			result, code, err := executeAicard(t, caller, args...)

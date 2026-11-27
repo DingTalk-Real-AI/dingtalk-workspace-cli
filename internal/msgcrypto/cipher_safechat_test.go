@@ -25,7 +25,58 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 )
+
+func TestCrossPlatformCoverageSafeChatAuthCodeUsesOpenedNetworkPolicy(t *testing.T) {
+	direct := "direct"
+	policy, err := netpolicy.Resolve(netpolicy.Settings{}, netpolicy.Overrides{Proxy: &direct}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A fallback to the current environment would fail rather than finding the
+	// direct override used to open the key-server transport.
+	t.Setenv("DWS_PROXY", "http://proxy.invalid/path")
+	check := func(ctx context.Context, stage string) {
+		t.Helper()
+		if got, err := netpolicy.Current(ctx); err != nil || got != policy {
+			t.Fatalf("%s lost the key-server policy: %v", stage, err)
+		}
+	}
+	var fetched, refreshed int
+	fetch := &PortalAuthCode{
+		snapshot: func(ctx context.Context, _ string) (*auth.TokenData, error) {
+			check(ctx, "snapshot")
+			return &auth.TokenData{AccessToken: "stale", ClientID: "fixture"}, nil
+		},
+		refresh: func(ctx context.Context, _, _ string) (string, error) {
+			check(ctx, "refresh")
+			refreshed++
+			return "fresh", nil
+		},
+		fetch: func(ctx context.Context, in auth.VendorAuthCodeInput) (*auth.VendorAuthCodeResult, error) {
+			check(ctx, "auth-code")
+			fetched++
+			if in.AccessToken == "stale" {
+				return nil, &auth.VendorAuthCodeError{Code: auth.VendorAuthCodeTokenInvalid}
+			}
+			return &auth.VendorAuthCodeResult{AuthCode: "fixture-code"}, nil
+		},
+	}
+	cipher, err := Open(netpolicy.WithPolicy(context.Background(), policy), Config{
+		KeystoreDir: t.TempDir(), AuthCode: fetch, KeyServer: "https://key.example.test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cipher.Close() })
+	backend := cipher.(*trackedCipher).backend.(*safechatCipher)
+	if code, err := backend.authCodeHook("corp", ""); err != nil || code != "fixture-code" || fetched != 2 || refreshed != 1 {
+		t.Fatalf("hook result %q / %v, fetches %d, refreshes %d", code, err, fetched, refreshed)
+	}
+}
 
 // These tests exercise the real vendor backend, which means they link
 // libsafechat.a and initialise the C library. They never reach the key server:
@@ -41,6 +92,22 @@ func TestCrossPlatformCoverageBackendIsReportedAvailable(t *testing.T) {
 	}
 	if !strings.Contains(BackendVersion, "safechat") {
 		t.Fatalf("BackendVersion = %q, want it to name the vendor SDK", BackendVersion)
+	}
+}
+
+func TestCrossPlatformCoverageOpenRejectsInvalidProxyConfiguration(t *testing.T) {
+	t.Setenv("DWS_PROXY", "http://proxy.example/bad")
+	cipher, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("fixture"),
+		KeyServer:   "https://key.example.test",
+	})
+	if cipher != nil {
+		cipher.Close()
+		t.Fatal("backend opened with an invalid proxy")
+	}
+	if err == nil || !strings.Contains(err.Error(), "invalid proxy URL") {
+		t.Fatalf("Open() error = %v, want invalid proxy", err)
 	}
 }
 

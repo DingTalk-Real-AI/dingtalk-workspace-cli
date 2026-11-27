@@ -790,7 +790,7 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "filters", Type: shortcut.FlagString, Desc: aitableprotocol.RecordFiltersHelp + "；先用 field get 完整读一遍表头，确定字段和类型。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
 		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 普通查询时作为每个请求的页大小，上限 100；按 ID 查询仍按最多 20 条分片（可选）"},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "准确视图 ID；读取其筛选/排序，显式 filters/sort 覆盖；与 record-ids 互斥"},
 		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
 		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},
@@ -850,12 +850,12 @@ var RecordUpdate = shortcut.Shortcut{
 	Command:     "+record-update",
 	Product:     serverMain,
 	Description: "批量更新记录，自动按 100 条分片并逐批读回验证",
-	Intent:      "当你要批量修改已有行的字段值（每条须带 recordId）时使用；自动按 100 条分片，任一批失败或读回不一致即非零退出并给出 nextOffset。",
+	Intent:      "当你要批量修改已有行的字段值（每条须带 recordId）时使用；自动按 100 条分片并逐批读回。写入已提交但结果 unknown、PARTIALLY_COMPLETED 或附件 [] 清空后读回失败时，保持 unknown 和 retryable=false，不重放、不按 nextOffset 继续写入。只读核对模板（尚未执行）：dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <RECORD_ID> --format json。读回只证明当前字段值，不证明首次操作的历史归因；清空按字段类型与空值契约核验，当前值可 verified，原回执保留，无须重新写入以刷新 verified。" + recordAttachmentRecoveryHelp + "\n\n" + aitableprotocol.RecordRecoveryReviewHelp,
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
-		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，如 '[{\"recordId\":\"rec\",\"cells\":{...}}]'", Required: true},
+		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，如 '[{\"recordId\":\"rec\",\"cells\":{...}}]'。" + aitableprotocol.RecordWriteInputHelp + aitableprotocol.AttachmentReferenceHelp, Required: true},
 	},
 	Tips:    []string{`dws aitable +record-update --base-id B --table-id T --records '[{"recordId":"rec","cells":{"fldStatusId":"已完成"}}]'`},
 	Execute: executeRecordUpdateBatches,
@@ -1049,12 +1049,12 @@ var RecordUpsert = shortcut.Shortcut{
 	Command:     "+record-upsert",
 	Product:     serverHelper,
 	Description: "按 recordId 自动拆分 create/update，按 100 条分片并读回验证",
-	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。包含创建的批次在发出前将原 token、身份和请求摘要原子保存到 DWS 配置目录 aitable/write-intents；保存失败时不发出该批写入。恢复文件仅证明准备过请求，不证明写入成功；通过原 token 只读对账创建分组，更新分组须独立核对。clientToken 仅作用于创建分组；超时或回执丢失时禁止重放整个 upsert（即使使用同一 token），使用原 token 对账创建分组，并按输入 recordId 独立读回更新分组。",
+	Intent:      "当一批数据中部分新增、部分更新时使用；按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。包含创建的批次在发出前将原 token、身份和请求摘要原子保存到 DWS 配置目录 aitable/write-intents；保存失败时不发出该批写入。clientToken 仅作用于创建分组；超时或回执丢失时禁止重放整个 upsert（即使使用同一 token），按原 token 只读对账创建分组，并按输入 recordId 独立读回更新分组；创建结果不能证明更新已生效。更新分组只读核对模板（尚未执行）：dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <RECORD_ID> --format json。" + recordWriteIntentRecoveryHelp + recordAttachmentRecoveryHelp + "\n\n" + aitableprotocol.RecordRecoveryReviewHelp,
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
-		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，单次最多 100 条", Required: true},
+		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，单次最多 100 条。" + aitableprotocol.RecordWriteInputHelp + aitableprotocol.AttachmentReferenceHelp, Required: true},
 		{Name: "client-token", Type: shortcut.FlagString, Desc: "可选 UUID v4；写入结果不明时必须复用原值对账"},
 	},
 	Tips:    []string{`dws aitable +record-upsert --base-id B --table-id T --records '[{"cells":{"fldTitle":"任务"}}]' --client-token <NEW_UUID_V4>`},
@@ -1242,7 +1242,7 @@ var AttachmentUpload = shortcut.Shortcut{
 	Command:     "+attachment-upload",
 	Product:     serverMain,
 	Description: "为 attachment 字段申请 OSS 直传地址（uploadUrl / fileToken）",
-	Intent:      "当你要往 attachment（附件）字段上传文件、需要先申请 OSS 直传地址时使用；返回 uploadUrl 和 fileToken，供你直传文件后再写入记录。",
+	Intent:      "当你要往 attachment（附件）字段上传文件、需要先申请 OSS 直传地址时使用；返回 uploadUrl、uploadHeaders 和 fileToken，PUT 时原样携带 uploadHeaders，上传后再写入记录。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -1274,7 +1274,7 @@ var ViewGet = shortcut.Shortcut{
 	Command:     "+view-get",
 	Product:     serverMain,
 	Description: "获取视图完整信息（列顺序、筛选、排序、分组等）",
-	Intent:      "当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。",
+	Intent:      "当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。" + "\n" + aitableprotocol.ConditionalFormatReadHelp,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1296,7 +1296,7 @@ var ViewGet = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "获取视图完整信息（列顺序、筛选、排序、分组等）",
-			UseWhen:      []string{"当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。"},
+			UseWhen:      []string{"当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。" + "\n" + aitableprotocol.ConditionalFormatReadHelp},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +view-get --base-id B --table-id T"},
 		},
@@ -1713,17 +1713,17 @@ var ViewSetFillColorRule = shortcut.Shortcut{
 	Command:     "+view-set-fill-color-rule",
 	Product:     serverMain,
 	Description: "全量覆盖 Grid 视图的条件填色规则（传 '[]' 清空）",
-	Intent:      "当你要为 Grid 视图设置条件填色（按规则给符合条件的行/单元格上色），或传空数组清空所有填色规则时使用；会全量覆盖该视图的填色规则。",
+	Intent:      "当你要为 Grid 视图设置条件填色（按规则给符合条件的行/单元格上色），或传空数组清空所有填色规则时使用；会全量覆盖该视图的填色规则。\n" + aitableprotocol.ConditionalFormatHelp,
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "View ID", Required: true},
-		{Name: "json", Type: shortcut.FlagString, Desc: "conditionalFormats JSON 数组", Required: true},
+		{Name: "json", Type: shortcut.FlagString, Desc: "conditionalFormats JSON 数组（最多 40 条、整组替换；颜色用 red_light 等英文语义名）", Required: true},
 	},
 	Tips: []string{`dws aitable +view-set-fill-color-rule --base-id B --table-id T --view-id V --json '[]'`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		arr, err := parseJSONAny("json", rt.Str("json"))
+		arr, err := aitableprotocol.ParseConditionalFormatsJSON(rt.Str("json"))
 		if err != nil {
 			return err
 		}
@@ -1909,7 +1909,7 @@ var FormFieldList = shortcut.Shortcut{
 	Command:     "+form-field-list",
 	Product:     serverHelper,
 	Description: "列出表单视图当前可见的字段及其配置",
-	Intent:      "当你要查看某表单当前放出了哪些字段供填写及其是否必填等配置时使用；返回表单可见字段列表。",
+	Intent:      "查看表单可见字段及条件题配置；displayConditionStatus=available 时条件 null 或缺失表示无条件，unknown/unsupported/状态缺失不能证明无条件。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1953,35 +1953,57 @@ var FormFieldList = shortcut.Shortcut{
 
 // FormFieldUpdate 更新表单字段（update_form_field，server: aitable）。
 var FormFieldUpdate = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+form-field-update",
-	Product:     serverHelper,
-	Description: "更新表单字段的必填状态或描述",
-	Intent:      "当你要把表单里某个字段设为必填/非必填，或补充其填写说明时使用；会实际更新该表单字段的配置。",
-	Risk:        shortcut.RiskWrite,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+form-field-update",
+	Product:       serverHelper,
+	Description:   "更新表单字段必填、描述或条件显隐",
+	Intent:        "按本表单单选答案显示题目；支持单层and/or与1至20个eq，值用选项ID。clear-display-condition=true清除条件并保留必填、固定隐藏。至少一项有效更新；多项非原子。查看verificationStatus与completedOperations，pending/unknown只读核对，不自动重放。",
+	Risk:          shortcut.RiskWrite,
+	Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Contract: corecmd.ContractDecl{
+		Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "shortcut_form_field_update", CanonicalPath: "aitable.shortcut_form_field_update", CLIPath: "aitable +form-field-update", PrimaryCLIPath: "aitable +form-field-update"},
+		Description: "更新表单字段必填、描述和条件显隐，并独立读回。",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: reviewedAITableShortcutInterfaceReason},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "修改表单题目条件显隐、必填或描述。",
+			UseWhen:      []string{"需要在是否担任管理岗等单选为是时显示题目，并保留必填时"},
+			AvoidWhen:    []string{"永久隐藏用 +form-field-hide；只读当前配置用 +form-field-list"},
+			Examples:     []string{"dws aitable +form-field-update --base-id B --table-id T --view-id V --field-id F --required true"},
+		},
+		Parameters: helpers.AitableFormFieldUpdateParameters(),
+		Result:     helpers.AitableFormFieldUpdateResultSpec(),
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"required", "field-description", "display-condition", "clear-display-condition"}, Description: helpers.AitableFormFieldUpdateConstraint}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		_, err := helpers.AitableFormFieldUpdateParams(rt.Command())
+		return err
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "表单 View ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "Field ID", Required: true},
-		{Name: "required", Type: shortcut.FlagBool, Desc: "是否必填（可选）"},
-		{Name: "field-description", Type: shortcut.FlagString, Desc: "字段描述（可选）"},
+		{Name: "required", Type: shortcut.FlagBool, Desc: "是否必填（可选）；" + helpers.AitableFormFieldUpdateConstraint},
+		{Name: "field-description", Type: shortcut.FlagString, Desc: "字段描述（可选）；空字符串省略，纯空白报错；" + helpers.AitableFormFieldUpdateConstraint},
+		{Name: "display-condition", Type: shortcut.FlagString, Desc: "整体替换显示条件 JSON：单层and/or与1至20个eq [字段ID,选项ID]；" + helpers.AitableFormFieldUpdateConstraint},
+		{Name: "clear-display-condition", Type: shortcut.FlagBool, Desc: "仅true清除条件，保留必填和固定隐藏；" + helpers.AitableFormFieldUpdateConstraint},
 	},
 	Tips: []string{`dws aitable +form-field-update --base-id B --table-id T --view-id V --field-id F --required true`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
+		params, err := helpers.AitableFormFieldUpdateParams(rt.Command())
+		if err != nil {
+			return err
+		}
+		for key, value := range map[string]any{
 			"baseId":  rt.Str("base-id"),
 			"tableId": rt.Str("table-id"),
 			"viewId":  rt.Str("view-id"),
 			"fieldId": rt.Str("field-id"),
+		} {
+			params[key] = value
 		}
-		if rt.Changed("required") {
-			params["required"] = rt.Bool("required")
-		}
-		if rt.Changed("field-description") {
-			params["fieldDescription"] = rt.Str("field-description")
-		}
-		return rt.CallMCP("update_form_field", params)
+		return helpers.RunAitableFormFieldUpdate(rt.Command(), params)
 	},
 }
 

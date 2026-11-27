@@ -4058,12 +4058,12 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   url → {"text":"显示文字","link":"https://..."}；也兼容直接传 URL 字符串
   richText → {"markdown":"**加粗**\n普通文字\n"}
   telephone/email/barcode/idCard → 字符串
-  attachment → 本地文件用 dws aitable +attachment-put 上传并写入已有记录；也可传 [{"fileToken":"ft_xxx"}] 或 [{"url":"https://..."}]；URL 转存异步执行，需回读确认附件可用
+  attachment → 见下方附件引用协议
   unidirectionalLink/bidirectionalLink → {"linkedRecordIds":["recXXX","recYYY"]}
   creator/lastModifier/createdTime/lastModifiedTime → 系统自动回填，不建议手动写入
 
 Windows 用户注意：如果 --records JSON 很长（超过命令行长度限制），请使用 --records-file 参数指定一个 JSON 文件路径，
-CLI 会自动从文件中读取内容作为 --records 的值。这样可以避免 shell 引号转义和命令行截断问题。`,
+CLI 会自动从文件中读取内容作为 --records 的值。这样可以避免 shell 引号转义和命令行截断问题。` + "\n\n" + aitableprotocol.AttachmentReferenceHelp,
 		Example: `  dws aitable record create --base-id BASE_ID --table-id TABLE_ID --records '[{"cells":{"fldTextId":"文本内容","fldNumId":123}}]'
   dws aitable record create --base-id BASE_ID --table-id TABLE_ID --records-file ./data/records.json
   # 查询 baseId: dws aitable base list
@@ -4230,7 +4230,10 @@ records 的 cells 写入格式与 record create 相同，无需手动写入 hier
 records 为待更新的记录内容列表 JSON 数组，单次最多 100 条。
 每条记录必须包含 recordId 和 cells 字段。cells 的写入格式与 record create 相同（详见 record create --help）。
 
-Windows 用户注意：如果 --records JSON 很长，请使用 --records-file 参数指定一个 JSON 文件路径。`,
+cells key 支持 fieldId 或当前表内精确匹配的唯一字段名；fieldId 是推荐写法，不是 cells 唯一合法的字段寻址方式。
+独立回读只证明当前值，不证明首次操作的历史归因。清空期望为空列表，字段类型与空值契约成立且独立回读确认为空时，当前值可 verified；原 unknown/unconfirmed 回执保留，不为刷新 verified 而再次写入。
+
+Windows 用户注意：如果 --records JSON 很长，请使用 --records-file 参数指定一个 JSON 文件路径。` + "\n\n" + aitableprotocol.RecordWriteInputHelp + "\n\n" + aitableprotocol.AtomicRecordAttachmentRecoveryHelp + "\n\n" + aitableprotocol.AttachmentReferenceHelp + "\n\n" + aitableprotocol.RecordRecoveryReviewHelp,
 		Example: `  dws aitable record update --base-id BASE_ID --table-id TABLE_ID --records '[{"recordId":"recXXX","cells":{"fldStatusId":"已完成"}}]'
   dws aitable record update --base-id BASE_ID --table-id TABLE_ID --records-file ./data/updates.json
   # 查询 baseId: dws aitable base list
@@ -4358,6 +4361,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 
 单次最多 100 条；超出请拆分多次调用。
 cells 写入格式与 record update / record create 相同（详见 record create --help）。
+附件清空优先使用 []。上游链路可能丢弃显式 null，不要依赖 null 清空；未传入的字段保持原值。
 只读字段（formula / filterUp / lookup / 系统字段）不能写入。
 
 CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 调用 update_records；
@@ -4632,7 +4636,9 @@ cells 写入格式见 record create --help（key 支持 fieldId 或当前表内�
 
 返回 data: {createdRecordIds: [...], updatedRecordIds: [...]}，分别按链路汇总。
 
-Windows 用户注意：如果 --records JSON 很长，请使用 --records-file 参数指定一个 JSON 文件路径。`,
+
+
+Windows 用户注意：如果 --records JSON 很长，请使用 --records-file 参数指定一个 JSON 文件路径。` + "\n\n" + aitableprotocol.RecordWriteInputHelp + "\n\n" + aitableprotocol.AtomicRecordAttachmentRecoveryHelp + "\n\n" + aitableprotocol.AttachmentReferenceHelp + "\n\n" + aitableprotocol.RecordRecoveryReviewHelp,
 		Example: `  # 混合：第 1 条更新（带 recordId），第 2 条创建（不带）
   dws aitable record upsert --base-id BASE_ID --table-id TABLE_ID --records '[
     {"recordId":"rec1","cells":{"fldStatusId":"已完成"}},
@@ -4865,20 +4871,25 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 		Long: `为 attachment 字段文件申请带容量校验的 OSS 直传地址。
 
 该命令只负责准备上传（获取 uploadUrl 和 fileToken），不直接上传文件。
-实际文件需由客户端在 MCP 外通过 PUT 请求上传到返回的 uploadUrl。
+实际文件需由客户端在 MCP 外通过 PUT 请求上传到返回的 uploadUrl，并原样携带返回的 uploadHeaders。
 
 完整流程:
   1. dws aitable attachment upload --base-id <BASE_ID> --file-name photo.png --size 1024
-     → 获取 uploadUrl 和 fileToken
-  2. curl -X PUT "<uploadUrl>" -H "Content-Type: image/png" --data-binary @photo.png
+     → 获取 uploadUrl、uploadHeaders 和 fileToken
+  2. 为 uploadHeaders 的每一项分别传入 -H；以下假设还返回 X-Upload-Signed：
+     curl -X PUT "<uploadUrl>" \
+       -H "Content-Type: <uploadHeaders 中 Content-Type 的原值>" \
+       -H "X-Upload-Signed: <uploadHeaders 中 X-Upload-Signed 的原值>" \
+       --data-binary @photo.png
      → 上传文件到 OSS
   3. dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
        --records '[{"cells":{"fldAttachId":[{"fileToken":"<fileToken>"}]}}]'
      → 将 fileToken 写入 attachment 字段
 
 注意:
-  上传文件到 uploadUrl 时，PUT 请求必须携带 Content-Type header，
-  且其值必须是该文件的具体 MIME type（如 image/png、application/pdf）。`,
+  PUT 请求必须原样携带返回的 uploadHeaders，其中 Content-Type 是本次签名使用的 MIME type。
+  未返回 X-Upload-Signed 时删除对应 -H 行；返回其他头时继续逐项添加 -H，不只传示例中的两个头。
+  省略 mime-type 时同样使用返回值，不自行猜测或追加 charset。`,
 		Example: `  dws aitable attachment upload --base-id BASE_ID --file-name report.xlsx --size 204800
   dws aitable attachment upload --base-id BASE_ID --file-name photo.png --size 1024 --mime-type image/png
   # 查询 baseId: dws aitable base list`,
@@ -4998,7 +5009,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 		Long: `获取指定数据表（Table）中的视图（View）完整信息，包括列顺序、筛选、排序、分组、条件格式、自定义配置等。
 支持两种模式：
 - 显式选择：传入 --view-ids，按入参顺序返回这些视图；单次最多 10 个。
-- 默认全量：省略 --view-ids，返回当前表下全部视图，顺序与当前表视图目录一致。`,
+- 默认全量：省略 --view-ids，返回当前表下全部视图，顺序与当前表视图目录一致。` + "\n" + aitableprotocol.ConditionalFormatReadHelp,
 		Example: `  dws aitable view get --base-id BASE_ID --table-id TABLE_ID
   dws aitable view get --base-id BASE_ID --table-id TABLE_ID --view-ids view1,view2
   # 查询 baseId: dws aitable base list
@@ -5563,7 +5574,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 		Short: "更新视图 timebar 配置（仅 Gantt）",
 		Long: `按属性局部更新 Gantt 视图的 ganttTimebar 配置。
 子字段：startField / endField (date 字段) / displayFieldId / timelineScale (year|quarter|month|weeks) /
-colorConfigs (JSON 数组) / officialHoliday (bool)。`,
+colorConfigs (JSON 数组) / officialHoliday (bool)。
+` + aitableprotocol.GanttColorHelp,
 		Example: `  dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
   dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -5616,7 +5628,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.ganttTimebar", Required: boolPtr(false)},
-				{Name: "color-configs", Property: "config.ganttTimebar.colorConfigs"},
+				{Name: "color-configs", Property: "config.ganttTimebar.colorConfigs", Description: aitableprotocol.GanttColorHelp},
 				{Name: "display-field-id", Property: "config.ganttTimebar.displayFieldId"},
 				{Name: "end-field", Property: "config.ganttTimebar.endField"},
 				{Name: "official-holiday", Property: "config.ganttTimebar.officialHoliday"},
@@ -6295,28 +6307,20 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 	viewUpdateFillColorRuleCmd := &cobra.Command{
 		Use:   "fill-color-rule",
 		Short: "更新视图数据高亮规则",
-		Long: `全量覆盖指定 Grid 视图的条件填色规则。仅支持 --json 入口，每项规则结构：
-  {type: cell|row|column|preRow, formatFieldId, format: {color}, filters: [{fieldId, symbol, value?}]}
-- color 必须用 FORMAT_COLORS 代号（如 firstLine1..firstLine11），不支持 hex
-- symbol 取 GT/LT/GTE/LTE/EQ/NE/CONTAIN/EXCLUSIVE/EXIST/UN_EXIST/ALL_OF/ANY_OF/NONE_OF/BEFORE/AFTER/NOT_BEFORE/NOT_AFTER/DATE_EQ/FROM_NOW/DATE_BETWEEN
-- 传 --json '[]' 清空当前视图所有填色规则`,
+		Long:  aitableprotocol.ConditionalFormatHelp,
 		Example: `  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[]'
-  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"firstLine5"},"filters":[{"fieldId":"fldX","symbol":"GT","value":100}]}]'`,
+  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"red_light"},"filters":[{"fieldId":"fldX","symbol":"EQ","value":true}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
 			}
 			jsonStr, _ := cmd.Flags().GetString("json")
 			if jsonStr == "" {
-				return fmt.Errorf("必须指定 --json 传入 conditionalFormats JSON 数组")
+				return apperrors.NewValidation("必须指定 --json 传入 conditionalFormats JSON 数组")
 			}
-			var parsed any
-			if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
-				return fmt.Errorf("--json 解析失败: %v", err)
-			}
-			arr, ok := parsed.([]any)
-			if !ok {
-				return fmt.Errorf("--json 必须是 JSON 数组，got %T", parsed)
+			arr, err := aitableprotocol.ParseConditionalFormatsJSON(jsonStr)
+			if err != nil {
+				return err
 			}
 			toolArgs, err := commonViewArgs(cmd)
 			if err != nil {
@@ -6863,6 +6867,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "列出表单字段",
 		Long: `列出指定表单视图当前可见的字段及其配置。
 返回每个字段的 fieldId、name、type、required、hidden、description。
+条件题仍返回；displayConditionStatus=available 时条件 null 或缺失表示无条件，unknown/unsupported/状态缺失不能证明无条件。
 注意：hidden=true 的字段不会出现在此返回（它们在表单中已隐藏）；如需查看全部字段请用 field get。`,
 		Example: `  dws aitable form field list --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -6901,13 +6906,19 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		},
 	})
 
-	formFieldUpdateCmd := &cobra.Command{
+	formFieldUpdateExamples := []string{
+		`dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --display-condition '{"operator":"and","operands":[{"operator":"eq","operands":["SOURCE_FIELD_ID","OPTION_ID"]}]}'`,
+		`dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --clear-display-condition=true`,
+	}
+	formFieldUpdateCmd := NewLeafCommand(LeafSpec{
 		Use:   "update",
 		Short: "更新表单字段",
-		Long: `更新表单视图中某个字段的必填状态或描述。
---required 或 --field-description 至少传入一项。`,
-		Example: `  dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --required true
-  dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id FIELD_ID --field-description "请填写真实姓名"`,
+		Long: `更新表单字段必填、描述或条件显隐。至少传入一项更新。
+--display-condition 为单层 and/or 根与 eq [本表单单选字段ID,选项ID]，最多20条。
+--clear-display-condition=true 显式清除条件，与设置互斥，保留必填和固定隐藏。
+省略/null/false 不清除；不能用空对象代替清除。写后检查 verificationStatus 与 completedOperations。
+多项更新非原子；未验证时返回 partial_failure，只读核对，禁止自动重放。`,
+		Example: "  " + strings.Join(formFieldUpdateExamples, "\n  "),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id", "field-id"); err != nil {
 				return err
@@ -6922,21 +6933,28 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				"viewId":  mustGetFlag(cmd, "view-id"),
 				"fieldId": mustGetFlag(cmd, "field-id"),
 			}
-			if v, _ := cmd.Flags().GetString("required"); v != "" {
-				required, err := parseBoolFlag(cmd, "required")
-				if err != nil {
-					return err
-				}
-				toolArgs["required"] = required
+			changes, err := AitableFormFieldUpdateParams(cmd)
+			if err != nil {
+				return err
 			}
-			if v, _ := cmd.Flags().GetString("field-description"); v != "" {
-				toolArgs["fieldDescription"] = v
+			for key, value := range changes {
+				toolArgs[key] = value
 			}
-			return callAitableHelperToolContext(cmd.Context(), "update_form_field", toolArgs)
+			return RunAitableFormFieldUpdate(cmd, toolArgs)
 		},
-	}
-	DeclareLeafMetadata(formFieldUpdateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        aitableSafetyWrite(),
+		Constraints:   []LeafConstraint{{Kind: corecmd.Custom, Flags: []string{"required", "field-description", "display-condition", "clear-display-condition"}, Description: AitableFormFieldUpdateConstraint}},
+		Flags: []LeafFlag{
+			{Name: "base-id", Kind: LeafString, Usage: "所属 Base ID (必填)"},
+			{Name: "table-id", Kind: LeafString, Usage: "所属 Table ID (必填)"},
+			{Name: "view-id", Kind: LeafString, Usage: "目标表单视图 ID (必填)"},
+			{Name: "field-id", Kind: LeafString, Usage: "目标字段 ID（通过 form field list 获取）(必填)"},
+			{Name: "required", Kind: LeafString, Usage: "设置字段在表单中的必填状态 (true/false，可选)；" + AitableFormFieldUpdateConstraint},
+			{Name: "field-description", Kind: LeafString, Usage: "设置字段在表单中的描述文案（可选）；空字符串省略，纯空白报错；" + AitableFormFieldUpdateConstraint},
+			{Name: "display-condition", Kind: LeafString, Usage: "整体替换条件 JSON：单层 and/or、1至20个 eq [字段ID,选项ID]；" + AitableFormFieldUpdateConstraint},
+			{Name: "clear-display-condition", Kind: LeafBool, Usage: "显式清除条件（保留必填与固定隐藏）；" + AitableFormFieldUpdateConstraint},
+		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -6945,14 +6963,16 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				CLIPath:        "aitable form field update",
 				PrimaryCLIPath: "aitable form field update",
 			},
-			Description: "更新表单字段展示属性。",
+			Description: "更新表单字段必填、描述和条件显隐，返回独立读回状态。",
 			Interface:   aitableCompositeInterface("Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "更新表单字段展示属性。",
-				UseWhen:      []string{"需要改表单中某字段的展示/必填等属性时"},
+				AgentSummary: "更新表单字段必填、描述或条件显隐；保留未传配置。",
+				UseWhen:      []string{"需要根据是否担任管理岗等单选答案显示题目，并保留显示时必填；或修改字段必填、描述时"},
 				AvoidWhen:    []string{"隐藏字段用 form field hide；真正增删字段用 field create/delete 或 form questions"},
-				Examples:     []string{"dws aitable form field update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --field-id <FIELD_ID>"},
+				Examples:     formFieldUpdateExamples,
 			},
+			Parameters: AitableFormFieldUpdateParameters(),
+			Result:     AitableFormFieldUpdateResultSpec(),
 		},
 	})
 
@@ -9762,7 +9782,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordGroupStatsCmd.Flags().String("data-version", "", "可选数据版本；通常省略以使用最新版本")
 	recordCreateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordCreateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
-	recordCreateCmd.Flags().String("records", "", "待创建的记录列表 JSON 数组，单次最多 100 条 (必填)")
+	recordCreateCmd.Flags().String("records", "", "待创建的记录列表 JSON 数组，单次最多 100 条 (必填)。"+aitableprotocol.AttachmentReferenceHelp)
 	recordCreateCmd.Flags().String("records-file", "", "从文件读取 records JSON（替代 --records，适合 Windows 或超长数据）")
 	recordCreateCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；调用前持久化，超时后保留原值并只读对账，禁止自动重放")
 	recordCreateCmd.Flags().String("fields", "", "--records 的别名（兼容 LLM 常见误用）")
@@ -9780,7 +9800,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCreateSubCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；调用前持久化，超时后只读核实父子关系，禁止自动重放")
 	recordUpdateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpdateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
-	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)")
+	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)。"+aitableprotocol.RecordWriteInputHelp+aitableprotocol.AttachmentReferenceHelp)
 	recordUpdateCmd.Flags().String("records-file", "", "从文件读取 records JSON（替代 --records，适合 Windows 或超长数据）")
 	recordUpdateCmd.Flags().String("fields", "", "--records 的别名（兼容 LLM 常见误用）")
 	_ = recordUpdateCmd.Flags().MarkHidden("fields")
@@ -9817,7 +9837,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// record upsert：复用 record update 的 records / records-file / fields 三种入参方式
 	recordUpsertCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpsertCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
-	recordUpsertCmd.Flags().String("records", "", "待 upsert 的记录内容列表 JSON 数组，单次最多 100 条；带 recordId 的走更新，不带的走创建 (必填，可改用 --records-file)")
+	recordUpsertCmd.Flags().String("records", "", "待 upsert 的记录内容列表 JSON 数组，单次最多 100 条；带 recordId 的走更新，不带的走创建 (必填，可改用 --records-file)。"+aitableprotocol.RecordWriteInputHelp+aitableprotocol.AttachmentReferenceHelp)
 	recordUpsertCmd.Flags().String("records-file", "", "从文件读取 records JSON（避免命令行长度限制）；与 --records 互斥，优先级更高")
 	recordUpsertCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键，仅作用于不带 recordId 的创建分组；调用前持久化，超时后只读对账，禁止自动重放")
 	recordUpsertCmd.Flags().String("fields", "", "--records 的别名 (兼容旧用法)")
@@ -9990,7 +10010,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	viewUpdateTimebarCmd.Flags().String("end-field", "", "结束日期字段 ID")
 	viewUpdateTimebarCmd.Flags().String("display-field-id", "", "时间条上显示的标题字段 ID")
 	viewUpdateTimebarCmd.Flags().String("timeline-scale", "", "时间尺度: year|quarter|month|weeks")
-	viewUpdateTimebarCmd.Flags().String("color-configs", "", "颜色配置 JSON 数组")
+	viewUpdateTimebarCmd.Flags().String("color-configs", "", "颜色规则 JSON 数组：FILTER 固定/条件色或 SINGLE_OPTION 跟随单选字段；完整示例见本命令 help")
 	viewUpdateTimebarCmd.Flags().Bool("official-holiday", false, "是否标注法定节假日")
 	viewUpdateTimebarCmd.Flags().String("json", "", "完整 ganttTimebar 子块 JSON")
 	// aggregate: Grid 专属
@@ -10106,12 +10126,6 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	formFieldListCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	formFieldListCmd.Flags().String("table-id", "", "所属 Table ID (必填)")
 	formFieldListCmd.Flags().String("view-id", "", "目标表单视图 ID (必填)")
-	formFieldUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
-	formFieldUpdateCmd.Flags().String("table-id", "", "所属 Table ID (必填)")
-	formFieldUpdateCmd.Flags().String("view-id", "", "目标表单视图 ID (必填)")
-	formFieldUpdateCmd.Flags().String("field-id", "", "目标字段 ID（通过 form field list 获取）(必填)")
-	formFieldUpdateCmd.Flags().String("required", "", "设置字段在表单中的必填状态 (true/false)")
-	formFieldUpdateCmd.Flags().String("field-description", "", "设置字段在表单中的描述文案")
 	formFieldHideCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	formFieldHideCmd.Flags().String("table-id", "", "所属 Table ID (必填)")
 	formFieldHideCmd.Flags().String("view-id", "", "目标表单视图 ID (必填)")

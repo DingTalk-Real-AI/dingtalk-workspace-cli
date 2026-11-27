@@ -594,13 +594,13 @@ func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification
 		t.Fatalf("unknown write was replayed or verified: %#v", unknown.history)
 	}
 
-	verificationFailure := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
-	err = runDocCoverage(t, Update, verificationFailure, "--node", "n", "--command", "append", "--content", "x", "--yes")
-	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" || typed.Details["status"] != "partial_success" {
-		t.Fatalf("verification failure = %#v", err)
+	readbackUnavailable := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
+	err = runDocCoverage(t, Update, readbackUnavailable, "--node", "n", "--command", "append", "--content", "x", "--yes")
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_unavailable" || typed.Details["status"] != "partial_success" {
+		t.Fatalf("readback unavailable = %#v", err)
 	}
-	if len(verificationFailure.history) != 2 || verificationFailure.history[1].tool != "get_document_content" {
-		t.Fatalf("verification calls = %#v", verificationFailure.history)
+	if len(readbackUnavailable.history) != 2 || readbackUnavailable.history[1].tool != "get_document_content" {
+		t.Fatalf("verification calls = %#v", readbackUnavailable.history)
 	}
 }
 

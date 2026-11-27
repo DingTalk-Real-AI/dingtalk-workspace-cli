@@ -50,7 +50,7 @@ func TestCrossPlatformCoverageRecordUpsertVerifyFailureKeepsSentToken(t *testing
 // they must never read or change the operator's real DWS profile directory.
 func setupRecordWriteTestProfile(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := aitablePrivateTempDir(t)
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	if err := os.WriteFile(filepath.Join(dir, "profiles.json"), []byte(`{"version":3,"currentProfile":"corp:user","profiles":[{"name":"test","corpId":"corp","userId":"user","status":"active"}]}`), 0600); err != nil {
 		t.Fatal(err)

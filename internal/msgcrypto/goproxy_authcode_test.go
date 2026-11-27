@@ -48,7 +48,7 @@ func (p *corpCountingProvider) AuthCodeForCorp(_ context.Context, corpID string)
 
 func TestCrossPlatformCoverageMintAuthCodeForProxyUsesCorpProvider(t *testing.T) {
 	inner := &corpCountingProvider{}
-	code, err := mintAuthCodeForProxy(inner, "sso.anhei.test", "ding_corp", "https://sso.anhei.test/login")
+	code, err := mintAuthCodeForProxy(context.Background(), inner, "sso.anhei.test", "ding_corp", "https://sso.anhei.test/login")
 	if err != nil || code != "code-for-ding_corp" {
 		t.Fatalf("mint = %q, %v; want code-for-ding_corp, nil", code, err)
 	}
@@ -68,13 +68,13 @@ func TestCrossPlatformCoverageMintAuthCodeForProxyInvalidatesUnconsumedCache(t *
 		t.Fatalf("seed fetches = %d, want 1", got)
 	}
 
-	code, err := mintAuthCodeForProxy(cache, "sso.anhei.test", "ding_corp", "https://sso.anhei.test/login")
+	code, err := mintAuthCodeForProxy(context.Background(), cache, "sso.anhei.test", "ding_corp", "https://sso.anhei.test/login")
 	if err != nil || code != "once" {
 		t.Fatalf("mint = %q, %v; want once, nil", code, err)
 	}
 
 	// Cache was invalidated after spend; next mint hits upstream again.
-	if _, err := mintAuthCodeForProxy(cache, "sso.anhei.test", "ding_corp", "sso.anhei.test"); err != nil {
+	if _, err := mintAuthCodeForProxy(context.Background(), cache, "sso.anhei.test", "ding_corp", "sso.anhei.test"); err != nil {
 		t.Fatalf("second mint: %v", err)
 	}
 	if got := inner.callCount(); got != 2 {
@@ -84,7 +84,7 @@ func TestCrossPlatformCoverageMintAuthCodeForProxyInvalidatesUnconsumedCache(t *
 
 func TestCrossPlatformCoverageMintAuthCodeForProxyRejectsDomainMismatchWithoutFetching(t *testing.T) {
 	inner := &corpCountingProvider{code: "once"}
-	_, err := mintAuthCodeForProxy(inner, "sso.anhei.test", "ding_corp", "evil.example.test")
+	_, err := mintAuthCodeForProxy(context.Background(), inner, "sso.anhei.test", "ding_corp", "evil.example.test")
 	if !errors.Is(err, ErrRedirectHostMismatch) {
 		t.Fatalf("mint = %v, want ErrRedirectHostMismatch", err)
 	}
@@ -94,7 +94,7 @@ func TestCrossPlatformCoverageMintAuthCodeForProxyRejectsDomainMismatchWithoutFe
 }
 
 func TestCrossPlatformCoverageMintAuthCodeForProxyRequiresProvider(t *testing.T) {
-	if _, err := mintAuthCodeForProxy(nil, "", "ding_corp", ""); !errors.Is(err, ErrNoAuthCodeProvider) {
+	if _, err := mintAuthCodeForProxy(context.Background(), nil, "", "ding_corp", ""); !errors.Is(err, ErrNoAuthCodeProvider) {
 		t.Fatalf("mint = %v, want ErrNoAuthCodeProvider", err)
 	}
 }
@@ -102,24 +102,24 @@ func TestCrossPlatformCoverageMintAuthCodeForProxyRequiresProvider(t *testing.T)
 func TestCrossPlatformCoverageMintAuthCodeForProxyInvalidatesOnFailure(t *testing.T) {
 	inner := &countingProvider{err: errors.New("boom")}
 	cache := NewCachedAuthCode(inner, time.Hour)
-	if _, err := mintAuthCodeForProxy(cache, "", "ding_corp", ""); err == nil || !strings.Contains(err.Error(), "boom") {
+	if _, err := mintAuthCodeForProxy(context.Background(), cache, "", "ding_corp", ""); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("provider error = %v", err)
 	}
 	inner.mu.Lock()
 	inner.err = nil
 	inner.code = ""
 	inner.mu.Unlock()
-	if code, err := mintAuthCodeForProxy(cache, "", "ding_corp", ""); err != nil || code == "" {
+	if code, err := mintAuthCodeForProxy(context.Background(), cache, "", "ding_corp", ""); err != nil || code == "" {
 		t.Fatalf("post-error mint = %q, %v", code, err)
 	}
 
 	empty := &corpCountingProvider{code: ""}
-	if _, err := mintAuthCodeForProxy(AuthCodeFunc(func(context.Context) (string, error) {
+	if _, err := mintAuthCodeForProxy(context.Background(), AuthCodeFunc(func(context.Context) (string, error) {
 		return "", nil
 	}), "", "ding_corp", ""); !errors.Is(err, ErrNoAuthCode) {
 		t.Fatalf("empty provider err = %v", err)
 	}
-	if code, err := mintAuthCodeForProxy(empty, "", "ding_corp", ""); err != nil || code != "code-for-ding_corp" {
+	if code, err := mintAuthCodeForProxy(context.Background(), empty, "", "ding_corp", ""); err != nil || code != "code-for-ding_corp" {
 		t.Fatalf("corp provider sanity = %q, %v", code, err)
 	}
 }

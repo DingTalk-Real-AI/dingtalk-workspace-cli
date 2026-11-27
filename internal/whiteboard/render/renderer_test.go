@@ -30,7 +30,7 @@ func TestCrossPlatformCoverageOpenNodesSVGGoldenAndDeterminism(t *testing.T) {
 			{"id":"child","type":"shape","parentId":"frame","x":40,"y":50,"width":120,"height":60,"geometry":"dml:roundRect","style":{"fill":{"type":"solid","color":"#DBEAFE"}},"text":{"blocks":[{"type":"paragraph","runs":[{"text":"开始"}]}]}},
 			{"id":"outside","type":"shape","x":520,"y":160,"width":120,"height":60,"geometry":"dml:rect"},
 			{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"child"},"anchor":{"mode":"fixed","side":"right"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"outside"},"anchor":{"mode":"fixed","side":"left"},"marker":{"catalogId":"arrow.filled"}},"routing":"straight"},
-			{"id":"photo","type":"image","x":520,"y":260,"width":100,"height":80,"url":"https://secret.example/image.png"}
+			{"id":"photo","type":"image","x":520,"y":260,"width":100,"height":80,"resource":{"kind":"managed","resourceId":"fixture-photo","url":"https://secret.example/image.png"},"intrinsicWidth":100,"intrinsicHeight":80}
 		]}`)
 	first, err := SVG(source)
 	if err != nil {
@@ -54,7 +54,8 @@ func TestCrossPlatformCoverageOpenNodesSVGGoldenAndDeterminism(t *testing.T) {
 	}
 	sum := sha256.Sum256(first.SVG)
 	gotGolden := hex.EncodeToString(sum[:])
-	const wantGolden = "cf795dd2403ac4f66f050ad940e163bc68b74b3ca02f2880100f068a527d751a"
+	// SVG v2 retains paragraph metrics and font sizes instead of a fixed 1.25 ratio.
+	const wantGolden = "835388d8522b95f24abbc90016505d2f96b4468ae206b7a6a25b39149ffb9c98"
 	if gotGolden != wantGolden {
 		t.Fatalf("SVG golden digest=%s", gotGolden)
 	}

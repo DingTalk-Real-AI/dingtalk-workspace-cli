@@ -7,32 +7,43 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
 // VerifySHA256 verifies a file against its expected SHA256 hash.
 func VerifySHA256(filePath, expectedHash string) error {
+	expectedHash = strings.ToLower(strings.TrimSpace(expectedHash))
+	decoded, err := hex.DecodeString(expectedHash)
+	if err != nil || len(decoded) != sha256.Size {
+		return fmt.Errorf("无效的 SHA256 校验值")
+	}
 	actual, err := ComputeSHA256(filePath)
 	if err != nil {
 		return err
 	}
 
-	expectedHash = strings.ToLower(strings.TrimSpace(expectedHash))
 	if actual != expectedHash {
 		return fmt.Errorf("SHA256 mismatch: want %s, got %s", expectedHash[:16], actual[:16])
 	}
 	return nil
 }
 
+var verifyOpen = os.Open
+
 // ComputeSHA256 computes the SHA256 hash of a file.
 func ComputeSHA256(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
+	file, err := verifyOpen(filePath)
 	if err != nil {
 		return "", fmt.Errorf("读取文件失败: %w", err)
 	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("读取文件失败: %w", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // ParseChecksumFile parses a SHA256SUMS-style file.

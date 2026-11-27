@@ -19,6 +19,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	stdimage "image"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -325,6 +327,10 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 	if err := archive.Close(); err != nil {
 		t.Fatal(err)
 	}
+	var imageBytes bytes.Buffer
+	if err := png.Encode(&imageBytes, stdimage.NewRGBA(stdimage.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
 	for path, content := range map[string][]byte{
 		filepath.Join(root, "ai-interview-invite.json"):          []byte(`{"candidateInfoList":[{"candidateId":"c","jobId":"j","bizFlowId":"f"}],"sendSms":false,"sendMail":false}`),
 		filepath.Join(root, "ai-interview-question-add.json"):    []byte(`{"questionGroupCode":"PROFESSIONAL_SKILL","description":"请介绍仓库管理经验","examinationPoint":"仓库管理","evaluationMethod":"SCORING","questionType":"QUESTION_ANSWER","answerTime":180000}`),
@@ -343,7 +349,7 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 		batch:           []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
 		job:             []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
 		binary:          []byte("%PDF-1.4\n%%EOF\n"),
-		image:           {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
+		image:           imageBytes.Bytes(),
 		secret:          []byte("dry-run-secret-fixture"),
 	} {
 		if err := os.WriteFile(path, content, 0o600); err != nil {

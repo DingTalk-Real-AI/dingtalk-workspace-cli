@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"log/slog"
 	"net"
@@ -746,6 +747,9 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			"failed to read JSON-RPC response",
 			apperrors.WithOperation(request.Method),
 			apperrors.WithReason(reasonForMethod(request.Method, "response_read_failed")),
+			// Keep the typed read failure so read-only recovery can distinguish
+			// a timed-out response body from an arbitrary truncated connection.
+			apperrors.WithCause(err),
 			apperrors.WithHint(i18n.T("检查服务连通性后重试；如持续失败，请确认 MCP 服务响应正常。")),
 			apperrors.WithActions(discoveryActions("")...),
 			apperrors.WithTraceID(headerTraceID),
@@ -905,7 +909,7 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			WroteHeaders: func() { written.Store(true) },
 			WroteRequest: func(httptrace.WroteRequestInfo) { written.Store(true) },
 		}))
-		resp, err := c.HTTPClient.Do(req)
+		resp, err := netpolicy.Do(c.HTTPClient, req)
 		if err != nil {
 			lastErr = err
 			requestNotSent = requestNotSent && !written.Load() && requestFailureBeforeSend(err)

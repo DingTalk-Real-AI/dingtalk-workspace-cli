@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"net/http"
 	"net/url"
 	"os"
@@ -1398,7 +1399,7 @@ func RevokeTokenRemoteForData(ctx context.Context, tokenData *TokenData) error {
 		return fmt.Errorf("creating logout request: %w", err)
 	}
 
-	resp, err := tokenLogoutHTTPClient.Do(req)
+	resp, err := netpolicy.Do(tokenLogoutHTTPClient, req)
 	if err != nil {
 		return fmt.Errorf("calling logout endpoint: %w", err)
 	}
@@ -1430,7 +1431,7 @@ func revokeTokenViaMCP(ctx context.Context, tokenData *TokenData, clientID strin
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := tokenRevokeHTTPClient.Do(req)
+	resp, err := netpolicy.Do(tokenRevokeHTTPClient, req)
 	if err != nil {
 		return fmt.Errorf("calling revoke endpoint: %w", err)
 	}

@@ -167,6 +167,29 @@ func TestInjectPluginConfigEnvDoesNotOverride(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePluginCannotInjectCoreNetworkEnvironment(t *testing.T) {
+	loader := &Loader{PluginsDir: t.TempDir(), CLIVersion: "1.0.0"}
+	// Exercise the absent-env branch as well as mixed-case keys on Windows.
+	keys := []string{"DWS_PROXY", "dws_proxy", "DWS_NO_PROXY", "Dws_No_Proxy", "DWS_CA_BUNDLE", "dws_ca_bundle"}
+	for _, name := range keys {
+		t.Setenv(name, "restore")
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, key := range keys {
+		loader.SetPluginConfig("demo-devtool", key, "plugin-value")
+	}
+	if loader.InjectPluginConfigEnv() {
+		t.Fatal("plugin injected process network settings")
+	}
+	for _, key := range keys {
+		if _, ok := os.LookupEnv(key); ok {
+			t.Errorf("unexpected environment override %s", key)
+		}
+	}
+}
+
 func TestSetPluginConfigOverwritesExisting(t *testing.T) {
 	dir := t.TempDir()
 	loader := &Loader{PluginsDir: dir, CLIVersion: "1.0.0"}

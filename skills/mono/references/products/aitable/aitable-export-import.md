@@ -112,17 +112,17 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 > **追加导入失败常见原因**：Excel 列名与目标表字段名不一致（如 Excel 是"销售姓名"但表字段是"姓名"），导致自动匹配 0 个字段，报错 `"Failed to build import sheet infos from preview data"`。
 >
 > **解决方案**：
-> 1. **首选**：创建目标表时，字段名与 Excel 表头列名**保持完全一致**
-> 2. **备选**：传 `--field-mapping '{"目标字段名":"Excel列名"}'` 手动指定映射
-> 3. **兜底**：如果 import data 多次失败，改用 `record create` 逐条写入
+> 1. 核对源文件列名与已有目标表字段，按上述映射规则为 `+import-file` 显式提供 `--field-mapping '{"目标字段名":"Excel列名"}'`，不新建或修改目标表来迁就源列名。
+> 2. 明确写前拒绝时修正参数；结果未知时只读核对目标数据，不重复导入，也不改用 `record create` 重放。
 
 ### 适用场景
 
 - **新建表导入**：首次导入 Excel/CSV，让系统自动建表建字段
-- **追加到已有表**：已有数据表结构，需要把 Excel 数据批量写入 → 传 `--table-id`（推荐 xlsx）
+- **追加到已有表**：使用 `+import-file`，传 `--table-id` 和按上述规则确定的 `--field-mapping`（推荐 xlsx）
+- **只导入部分列**：仍使用 `+import-file`，通过显式 `--field-mapping` 选择源列，不自行解析后逐行写入
 - **需要指定表头行**：源文件前几行非数据（如注释行）→ `--header-row`（必须用 xlsx）
 - **多 Sheet 文件**：只导入特定 Sheet → `--src-sheet-name`（必须用 xlsx）
-- **不适用**：需要复杂字段级控制（如只导入部分列、数据转换）→ 解析后用 `record create`
+- **需要数据转换**：属于单独的数据处理需求，先与用户确认转换方案，不作为追加导入失败后的自动兜底
 
 > **导入数据无法整体撤销**：文件一旦导入成功，数据即写入表中，没有"撤销导入"操作。如需清理导入的测试数据，只能手动通过 `record delete` 逐条或批量删除记录；如果是新建表模式导入的，可以直接 `table delete` 删除整张表。因此：
 > - 测试/验证场景建议导入到**独立的测试表或测试 Base**，用完后整体删除
@@ -140,8 +140,10 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 |---------|------|------------|------|
 | "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务** | `dws aitable +import-file --base-id <baseId> --file <file>`（推荐；首次调用触发确认门禁，确认后由执行方追加确认参数）；手动三步仅用于诊断 | 服务端解析文件，**新建数据表**，自动识别表头 |
 | "把这个 Excel 导入新表 / 自动建表" | 同上 | 同上 | 同上 |
-| "把这批记录追加到已有的『成员表』里" | **记录批量写入** | `python scripts/import_records.py <baseId> <tableId> <file>` | 走 `record create`，**写入已有 tableId**，需要字段名匹配 |
-| "Excel 列名和表字段对不上但要追加" | 文件导入 + 追加 + 字段映射 | 三步导入后 `import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 服务端按映射追加 |
+| "把这个 Excel/CSV 追加到已有的『成员表』里" | 文件导入 + 追加 | `dws aitable +import-file --base-id <baseId> --file <file> --table-id <tableId> --field-mapping '{"目标":"源"}'`（首次调用触发确认门禁） | 服务端识别表头并按映射追加；映射规则见下 |
+| "Excel 列名和表字段对不上但要追加" | 文件导入 + 追加 + 字段映射 | `dws aitable +import-file --base-id <baseId> --file <file> --table-id <tableId> --field-mapping '{"目标":"源"}'`（首次调用触发确认门禁） | 服务端按映射追加；映射规则见下 |
+
+追加到已有表时，先用 `dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>` 读目标表字段。`--field-mapping` 的键必须逐字等于读回的字段名，大小写和空格都一致（用户写 amount、表里是 Amount，就写 Amount）；值必须逐字等于源文件表头。`--field-mapping` 只包含用户指定的列，以及名称、含义和单位都一致的同名列；其余源列不导入，目标字段留空。同名列不需要用户点名，默认一并映射，也不为此反问，用户明确说只导入某几列时才排除。原价与实付价、单价与总额、含税与不含税都算不一致，不能只因名称相近就映射。用户的说法与表头措辞不完全相同时（如「结算金额」与表头「实收结算金额」），只有唯一对应才采用，有多个可能对应时才向用户确认；用户已给出映射就直接执行，不再反问。源表头不确定时，用`python3 <本 Skill 目录>/scripts/read_import_headers.py <文件>`（按本 Skill 的实际路径替换）（多 Sheet 时用 `--sheet <工作表>` 指定，并在导入时用 `--src-sheet-name` 传入同一名称）；只读取源文件表头行，不读取数据行；该脚本只支持 CSV/XLSX 的首行表头；其他格式、表头不在首行或无法仅取表头时停止并请用户提供源表头，但读到的内容只用于确定映射，不用来写入、改写或补全导入数据，也不要自行解析文件后逐行 `record create`。
 
 ## 大表 / 长任务超时续等
 

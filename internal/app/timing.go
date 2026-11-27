@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
 
@@ -383,17 +384,22 @@ func defaultPerfReportPath() string {
 	return filepath.Join(home, ".dws", perfReportDir, perfReportFile)
 }
 
-// sensitiveFlags are flag names whose values should be masked in commands.
+// sensitiveFlags contains canonical long flag names without the leading dashes.
 var sensitiveFlags = map[string]bool{
-	"--delegator-user-id":          true,
-	"--delegator-corp-id":          true,
-	"--delegator-open-dingtalk-id": true,
-	"--token":                      true,
-	"--code":                       true,
-	"--state":                      true,
-	"--client-secret":              true,
-	"--client-id":                  true,
-	"--password":                   true,
+	"callee":                     true,
+	"task":                       true,
+	"opening":                    true,
+	"delegator-user-id":          true,
+	"delegator-corp-id":          true,
+	"delegator-open-dingtalk-id": true,
+	"token":                      true,
+	"code":                       true,
+	"state":                      true,
+	"client-secret":              true,
+	"client-id":                  true,
+	"password":                   true,
+	"proxy":                      true,
+	"url":                        true, // May contain signed resource queries.
 }
 
 // SanitizeCommand redacts sensitive flag values from a command arg slice.
@@ -406,14 +412,12 @@ func SanitizeCommand(args []string) string {
 			skipNext = false
 			continue
 		}
-		if idx := strings.IndexByte(arg, '='); idx > 0 {
-			key := arg[:idx]
-			if sensitiveFlags[key] {
+		key, _, hasValue := strings.Cut(arg, "=")
+		if strings.HasPrefix(key, "--") && sensitiveFlags[cmdutil.Morph(key[2:])] {
+			if hasValue {
 				sanitized = append(sanitized, key+"=***")
 				continue
 			}
-		}
-		if sensitiveFlags[arg] {
 			skipNext = true
 		}
 		sanitized = append(sanitized, arg)

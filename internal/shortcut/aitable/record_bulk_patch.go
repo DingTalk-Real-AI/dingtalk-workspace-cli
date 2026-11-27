@@ -19,7 +19,7 @@ var RecordBulkPatch = shortcut.Shortcut{
 	Command:     "+record-bulk-patch",
 	Product:     serverMain,
 	Description: "完整查询目标记录后批量合并同一组 cells，自动分片并逐条读回验证",
-	Intent:      "当你要按 filters/关键词/recordIds 对一批已有记录应用相同字段补丁时使用；必须显式选择范围或 --all，并受 max-matches 写前上限保护。",
+	Intent:      "当你要按 filters/关键词/recordIds 对一批已有记录应用相同字段补丁时使用；必须显式选择范围或 --all，并受 max-matches 写前上限保护。" + recordAttachmentRecoveryHelp,
 	Risk:        shortcut.RiskHighWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent",

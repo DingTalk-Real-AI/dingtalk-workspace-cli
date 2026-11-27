@@ -49,9 +49,12 @@ metadata:
 
 ## 意图表
 
+以下脚本路径相对本 Skill 根目录；执行时使用实际安装目录中的脚本。
+
 | 用户说 | 命令 |
 |--------|------|
-| "今天 / 明天 / 本周日程" | `python scripts/calendar_today_agenda.py [today\|tomorrow\|week]` |
+| "今天 / 昨天 / 明天 / 本周日程" | `python scripts/calendar_today_agenda.py [today\|yesterday\|tomorrow\|week] --format json`（脚本先发现日历本，再汇总本人日历） |
+| "某个时间段的日程" | `python scripts/calendar_today_agenda.py --start "<起始ISO>" --end "<结束ISO>" --format json` |
 | "约会议（含参会人 + 会议室）" | 先搜房取 `roomId`，再一次 `event create --attendees <ids> --rooms <roomId>`；复杂降级才用 `calendar_schedule_meeting.py` |
 | "多人共同空闲" | `python scripts/calendar_free_slot_finder.py --users <ids> --date <yyyy-MM-dd>` |
 | "查闲忙" | `dws calendar busy search --users <userIds> --start "<ISO>" --end "<ISO>"` |
@@ -68,7 +71,7 @@ metadata:
 | 检查第 N 天冲突 | `dws calendar +conflicts --in-days <N> --format json`（今天 `N=0`） |
 | 查第 N 天空闲窗口 | `dws calendar +free-slots --from <开始小时> --to <结束小时> --in-days <N> --format json` |
 | 搜索空闲会议室 | `dws calendar room search --start "<ISO>" --end "<ISO>" [--group-id <ID>] --available --format json` |
-| 日程详情/参会人 | `dws calendar event get --id <EVENT_ID> --format json` / `dws calendar attendee list --event <EVENT_ID> --format json` |
+| 日程详情/参会人 | `dws calendar event get --id <EVENT_ID> --calendar-id <CALENDAR_ID> --format json` / `dws calendar attendee list --event <EVENT_ID> --calendar-id <CALENDAR_ID> --format json`（沿用列表中该日程的来源日历） |
 
 同一状态下，相同命令和相同参数只调用一次；只有发生写操作、拿到新游标，或首次结果明确不完整时才允许重查。按标题寻找日程时，从最可能且最窄的时间窗开始；一旦得到唯一匹配立即停止，不继续扫描其他月份。
 
@@ -78,13 +81,16 @@ metadata:
 
 ### SOP-1 查日程（list-events）
 
-**触发**：今天/明天/本周日程/我有什么会/某时段日程。
+**触发**：今天/昨天/明天/本周日程/我有什么会/某时段日程。
 
-1. **首选脚本（必须）**：`python scripts/calendar_today_agenda.py today|tomorrow|week`（聚合今日议程）。
-2. **降级 CLI（必须）**：脚本不可用时 `dws calendar event list --start "<起始ISO>" --end "<结束ISO>" --format json`；不传 `--start/--end` 默认查今天（00:00:00~23:59:59）。返回 `nextCursor` 时必须继续翻页，直到游标为空；不能把“单页成功”当成完整查询。
-3. **解析（必须）**：取真实 `eventId`、`attendees[]`、`start/end`；按需抽取，**禁止**把整段 JSON 原样贴出。用户要汇总或计数时，在本地完成聚合，只输出各分组计数和必要明细，避免逐条铺满答复导致后半段被截断。
+1. **首选脚本**：按意图表执行 `calendar_today_agenda.py`；脚本内先执行一次 `dws calendar book list --format json`，Agent 不另查一遍。默认汇总返回中 `privilege=owner` 且 `type` 为 `primary` 或 `shared` 的本人日历，覆盖钉钉及邮箱日历；排除订阅、团队、公共日历及仅有 `reader/writer` 权限的日历。邮箱日历可能返回 `type=shared`，不能仅凭该类型排除本人拥有的日历。ID 取真实 `calendarId`，不能只认 `primary`，也不能按名称或编码猜邮箱 ID。
+2. **明确范围**：用户指定日历本时，脚本加 `--calendar-id <CALENDAR_ID>`（可重复）；指定账号时加单个 `--profile <PROFILE>`。预设日期用北京时间，指定时间窗须成对传入带时区的 `--start/--end`，不能与日期预设混用。
+3. **CLI 降级**：脚本不可用时，先查一次 `book list` 并按上述规则选日历；逐本执行 `dws calendar event list --calendar-id <CALENDAR_ID> --start "<起始ISO>" --end "<结束ISO>" --limit 100 --format json`。同一 profile、相同时间窗，分别跟随 `nextCursor`，直到 `hasMore=false` 且游标为空；最多每本 20 页，游标重复、状态矛盾或达到上限均报告不完整。已有本次发现结果时直接复用，不能重复发现。
+4. **汇总与后续**：依据 `complete/calendars/failures` 说明实际覆盖范围；按时间排序，保留取消状态与 `sources` 中的日历 ID、日程 ID。同一本按日程 ID 与实例起止时间去重；跨本仅凭相同 `iCalUid` 与实例起止时间合并并保留所有来源，不能按标题合并循环实例。展示有效、取消、状态未确认的分项计数及必要明细，不贴整段 JSON；后续 get/参会人查询必须带对应来源的 `--calendar-id`。
 
-**禁止**：用 `event list` 替代闲忙查询（查闲忙走 SOP-3）、编造时间窗口、用非 ISO 时间格式。
+**范围边界**：未发现邮箱日历要说明实际发现范围，不能宣称邮箱没有日程；归属/类型不明、请求或分页失败要保留已取得的数据并说明不完整，不能输出“暂无日程”。只有所列日历全部成功且取完，才能对该范围给出空结果。一次不带日历 ID 的 `event list` 或 `+agenda/+today/+tomorrow/+week` 不能替代此流程。脚本正常输出 JSON 后仍可能以退出码 1 表示部分结果，不能丢弃其成功部分。
+
+**禁止**：用 `event list` 替代闲忙查询（查闲忙走 SOP-3）、编造时间窗口、用非 ISO 时间格式。输出字段与脚本参数详见 [calendar.md](references/calendar.md#自动化脚本)。
 
 ### SOP-2 建日程（create-event）
 

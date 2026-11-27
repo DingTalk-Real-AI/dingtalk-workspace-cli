@@ -83,7 +83,7 @@ Agent 必须结合投递路径判断 `EVENT_NOT_AVAILABLE` / `event.notAvailable
 | debug / publish | CLI 已声明受控调试与上线契约；仅四个真实阶段全部 true 且 `debugPassed=true` 才能继续。无阶段事实为 `debug_not_ready`，不能宣称已开放可跑通 |
 | DRAFT 及 ONLINE 上的未发布草稿版本 | 产品允许受控 debug 与体验人投递；不自动全量开放。debug 跑通与体验软开实现仍待办 |
 | OFFLINE、内置 pending/internal 项 | 不作为正式可消费承诺 |
-| 指定历史业务版本 Schema 查询 | camelCase 参数约定已知，当前消费 CLI 尚无选择入口，仍待补齐 |
+| 指定历史业务版本 Schema 查询 | 已支持 `--payload-schema-version`，以服务端返回的对应业务版本验收 |
 
 本次文档 review 不执行事件写入、调试、上线或真实业务推送；具体环境的 debug 依赖、publish 生效、scope 授权与端到端投递仍需用真实对象验收，不能从代码声明推导已部署。
 

@@ -518,7 +518,7 @@ func isWritableNode(node map[string]any) bool {
 		return support != "readOnly"
 	}
 	nodeType, _ := nonEmptyString(node["type"])
-	return containsString([]string{"shape", "text", "connector", "stickyNote", "frame", "group", "vector", "icon", "path"}, nodeType)
+	return containsString([]string{"shape", "text", "connector", "stickyNote", "frame", "group", "vector", "image", "icon", "path"}, nodeType)
 }
 
 func computeLogicalDiff(acc *diffAccumulator, current, proposed []map[string]any, identity *identityMapFile, comparison string) {

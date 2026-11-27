@@ -11,9 +11,31 @@ metadata:
 
 # 钉钉 AI 表格 Skill
 
+表单条件显隐使用 `aitable form field update --display-condition`（或 `+form-field-update`），清除用 `--clear-display-condition=true`。先用当前构建的 help/schema 确认入口；支持本表单单选 eq、单层 and/or、1至20条，值用选项ID。无接口能力时说明缺口，不能编造菜单。保留必填和固定隐藏，禁止用永久隐藏或取消必填替代跳题。查看 `verificationStatus/completedOperations/actual`；仅 verified 算完成，pending/unknown/partial 只读核对，不重放写入。读取先看 displayConditionStatus：available 下 displayCondition 为 null 或缺失均表示已确认无规则；unknown、unsupported 或状态缺失时，即使条件为 null 也不能确认无规则或清除成功。
+
+表单故障回执评审或恢复分析中，独立读回成功但条件不匹配时，只报告当前未完成并停止后续写入；available 且无条件不构成重发本次设置或进入后续清除的许可。不得把原设置重发称为“新的纠正性写入”绕过停止边界，不主动给出重发命令或请求用户确认重发；等待用户处理未确认状态，原 partial_failure/退出7/pending 保持。
+
 ## 业务操作优先与契约评审边界
 
 默认目标是完成用户明确提出的 AI 表格业务操作，包括查询、创建、更新、同步和其他已授权写入。契约评审是辅助场景，仅在用户明确要求核对合成 JSON、dry-run、参数合法性、Help/Schema 或恢复方案时启用；这类请求默认只读，不把评审要求扩展成线上业务操作。用户同时提出业务操作和契约核对时，先按真实业务目标执行必要的契约校验，再继续执行已明确授权的业务操作。
+
+## 记录恢复的执行与答复边界
+
+按当前回执选择相关指南：混合 `groupOutcomes` 读 [错误恢复的混合回执规则](references/aitable/aitable-error-recovery.md#混合记录写入回执)，`+record-write-result` 读 [记录操作的只读恢复](references/aitable-record-ops.md#写入未知结果的只读恢复)，附件与更新读 [attachment](references/aitable/aitable-attachment.md) / [record-update](references/aitable/aitable-record-update.md)。只读对应段落，无需列目录寻找同名命令文件。
+
+原子 `record upsert` 和 `+record-upsert` 都可保留上游 `error.details.groupOutcomes`；不能仅凭该字段判定调用了 Shortcut。只有含创建的 `+record-upsert` 保证自动保存恢复文件；不得凭指南补出本轮回执没有的 token、恢复文件或 `reconcileTool`。
+
+- **恢复参数** 使用原回执或 checkpoint 中的 Base、Table 和记录 ID。创建组按实际返回的 `acceptedRecordIds` 回读，更新组按原 `requestedRecordIds` 回读。已知创建记录 ID 时，即使缺少原 token，仍可按 ID 核对当前记录。
+- 更新/混合 upsert 的 `--records` 草稿顶层是数组 `[{"recordId":"<原记录ID>","cells":{}}]`；实际 cells 按原请求填写，创建项省略 recordId。原子入口已发布的 --records-file 文件顶层同样是数组，不给未发布此 flag 的 Shortcut 添加它。不得把 RPC 外层 `{"records":[...]}` 整个对象作为 flag 值或文件内容。
+- `+record-write-result` 仅在显式传入 `--write-intent` 时校验文件；确无原文件可省略，不会仅因缺文件必定 validation，也不保证查询成功。已有原文件仍必须从首次查询携带。纯更新不走创建 token 对账的原因是无创建分组，与缺文件无关。
+- 从原回执或 checkpoint 确认写入入口。Schema 只能查询命令契约；`+record-query` 用于读取实际记录。原写入入口未知时，按原记录 ID 只读核对，保留回执的未知状态。
+- `cells` key 支持 fieldId 或当前表内精确匹配的唯一字段名；“推荐 fieldId”不是“只能使用 fieldId”。目标字段确实缺失时才留缺口，不能把合法字段名自动改写为缺少字段 ID。按键入口的 `--key-field-id` 是独立参数，仍只接受字段 ID。
+- 含创建的 `+record-upsert` 每次用独立 UUID 文件名保存恢复文件，不覆盖此前文件；文件仅用于绑定原请求，不含 cells，也不证明写入成功。文件名与 clientToken 独立；原身份、端点、Base/Table 固定时，创建去重按 clientToken 核对，恢复文件名不参与创建去重。保持原 token、只换文件名时，创建分组继续沿用原 clientToken 的同一去重绑定和覆盖范围，文件名变化仅涉及本地恢复文件定位；去重是否实际命中须按原 token 只读核对，不能据此断言创建去重失效或成功，重复更新仍可能覆盖并发修改；换新 token（无论文件名保持还是更换）可能失去原创建请求去重绑定，增加重复创建风险，原写入可能尚未生效，因此不等于必然重复。不要将换 token 与换文件合并成同一结论，也不猜测重跑覆盖旧文件。unknown 或创建 ID 不完整时仍停止写入，本恢复流程不提供新 token/新文件补建路径；另一次写入授权不证明原范围已核实。
+- 记录写入为 `unknown`、`PARTIALLY_COMPLETED`、附件 `unconfirmed` 或 `retryable=false` 时，停止后续写入；checkpoint/nextOffset 只定位恢复范围，不证明剩余记录未执行，不授予续写、重放或换 token 的许可。创建 token 只核对创建组，更新按原记录 ID 独立回读。 创建 clientToken 只作用于创建分组，不保护更新；纯更新有无该 token 都不能据此安全重放。丢失创建去重绑定及重复创建风险只针对含创建分组的请求；纯更新没有创建分组，不套用该解释。更新停写依据是结果未知及可能覆盖并发修改，不能归因于缺少 token，也不暗示补 token 就安全。原范围未核实时继续停写并只读核对；本次恢复只列记录/字段的只读回读、有创建组时的原 token 只读对账，以及比对原请求期望值。补附件、重新上传和 +attachment-put 等附件写入口归入另立新写入，其前提是原未知范围已完成必要的独立只读核对、当前值与差异已明确，并有独立的新写入意图；“如需补附件”或新增授权本身不满足该核对前提。新授权不证明原范围已核实，不解除本恢复流程停写义务。另立新更新遵守该入口已发布契约，不凭空要求 token 或幂等参数，也不作为本次恢复的重发步骤。
+- 附件 unconfirmed 回执中，未确认项不计为失败；`failedCount` 为零时可省略。已知该回执属于零值省略时，省略 failedCount 与显式 failedCount=0 表达同一明确失败计数。计数结论为“明确失败计数为 0”；整体结果为“仍有未确认项，保持原 unknown/unconfirmed 并只读核对”。合并报告为“明确失败计数为 0，仍有未确认项”；计数为零成立，全部成功或全部失败均未据此得到证明。
+- 读回比对以原请求的期望 cells 为基准；缺少原请求的期望 cells 时，只报告当前记录是否存在及可读值，不能仅凭该次读回确认原更新生效或当前值符合原请求，历史归因仍未确认。
+- 分别报告原写入回执、当前值核验和历史归因。当前值已核验须同时具备字段类型/附件模式契约成立、独立回读符合原请求期望、非空附件所需稳定身份对应三项适用证据；这同样适用于后来建立 fileToken/resourceId 对应的非空附件，不只适用于 `[]` 清空。URL可访问或可下载只补充当前可用性，仍需核实该附件模式所需的稳定身份对应。清空不要求非空附件身份；缺对应证据的非空附件仍未确认。当前值已核验不证明首次写入由原请求造成，也不把原 unknown/unconfirmed 回执改成 verified，无须重新写入刷新回执。当前为空或非空只描述当前状态；缺少独立的原操作证据时，首次写入是否生效及历史归因保持未确认，不为任一历史经过分配概率。清空的目标值可重复设为 `[]`，值级幂等与并发安全分别判断；这不改变该入口已发布的幂等性契约。未知写入的停写依据是结果未核实及可能覆盖并发新增附件。原范围仍未核实时，下一步是按原 ID 只读核对；读回失败不转为申请新授权后重发，新授权本身不解除本恢复流程的停写义务。
+- `+record-query` 提供业务记录值，当前值核验依据实际字段值及相应空值/稳定身份对应证据，不以 `attachmentVerification` 为必要条件。该入口未承诺返回此诊断字段，不能要求必须返回 `attachmentVerification=verified`；缺少该诊断字段本身不构成核验失败，返回它也不能代替上述证据。Shortcut 回执的该字段描述本次自动核验状态；原回执的 verified/unconfirmed 与后续当前值是否已核验分别报告。
 
 ## 过程展示建议
 
@@ -164,6 +186,7 @@ Help/Schema 是离线契约查询，不调用线上业务，也不读写用户�
 | 创建并验证 Dashboard，按需创建 Chart | `dws aitable dashboard create --base-id <B> --name <名称>` → `dws aitable +dashboard-get --base-id <B> --dashboard-id <D>`；需要 Chart 时按下方“按需加载”处理 | 只使用创建返回的真实 dashboardId；失败时不要猜同义命令或更换 dashboardId |
 | 管理 AI 表格应用模式 | `dws aitable app get --base-id <B>` → `dws aitable app page list --base-id <B>` → 按需 `app page create/update/move/delete` 或 `app widget create/get/list/update/delete` | 一个 Base 只有一个面向用户的 App；页面 `pageId` 同时是对应 Dashboard ID。Widget 的 `config`/`layout` 是完整对象，更新前先读回；创建操作未知状态时不得自动重放 |
 | Base 内创建 Section 并移动节点 | `dws aitable +section-create --base-id <B> --name <名称>` → `dws aitable +section-move-node --base-id <B> --node-id <N> --new-parent-section-id <S>` → `dws aitable +section-list-nodes --base-id <B>` | Table、Dashboard、Section 都是 AITable 的 nsheet 节点；禁止改走 Wiki/Drive 文件夹或移动命令 |
+| 将本地 CSV/XLSX/XLS 追加到已有表 | `dws aitable field list --base-id <BASE_ID> --table-id <TABLE_ID>` → `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH> --table-id <TABLE_ID> --field-mapping '{"目标字段名":"源列名"}'` | 映射的键逐字使用 `field list` 读回的字段名（用户写 amount、表里是 Amount 就写 Amount），值使用源文件表头原文；只映射用户指定的列，以及名称、含义和单位都一致的同名列（同名列不需要用户点名，默认一并映射，也不为此反问，用户明确说只导入某几列时才排除），其余源列不导入、目标字段留空；原价与实付价、单价与总额、含税与不含税都算不一致；用户已给出映射时直接执行，不再反问；源表头不确定时，用`python3 <本 Skill 目录>/scripts/read_import_headers.py <文件>`（按本 Skill 的实际路径替换）（多 Sheet 时用 `--sheet <工作表>` 指定，并在导入时用 `--src-sheet-name` 传入同一名称）；只读取源文件表头行，不读取数据行；该脚本只支持 CSV/XLSX 的首行表头；其他格式、表头不在首行或无法仅取表头时停止并请用户提供源表头，读到的内容只用于确定映射，不用来写入、改写或补全导入数据，也不逐行 `record create`；同样先触发 Runtime 确认门禁 |
 | 将本地 CSV/XLSX/XLS 导入新表 | `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH>` | 存储示例不预置 `--yes`；首次调用先触发 Runtime 确认门禁，取得明确确认后由执行方追加。DWS 在进程内完成申请凭证、空 Content-Type PUT 和 `import data`，且不暴露签名 URL；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
 | 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；processCode/name/iconUrl/url 从 list-sources 原样透传，创建后用 `+datasource-sync-status` 查同步结果 |
 

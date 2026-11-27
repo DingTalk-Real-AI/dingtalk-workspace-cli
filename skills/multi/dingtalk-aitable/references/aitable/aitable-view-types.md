@@ -57,9 +57,11 @@ dws aitable view update card --base-id <B> --table-id <T> --view-id <GALLERY_V> 
 | `--end-field` | 结束日期 fieldId |
 | `--display-field-id` | 时间条标题 fieldId |
 | `--timeline-scale` | `year` / `quarter` / `month` / `weeks` |
-| `--color-configs` | 颜色配置 JSON 数组；清空传 `[]` |
+| `--color-configs` | `colorConfigs` 规则数组：`type=FILTER` 时 `value` 为视图筛选条件数组，`[]` 匹配全部；`type=SINGLE_OPTION` 时 `value` 为单选 fieldId，跟随选项颜色。清空传 `[]` |
 | `--official-holiday` | 是否标注法定节假日 |
 | `--json` | 完整 ganttTimebar 子块 |
+
+固定红色使用 `[{"type":"FILTER","value":[],"color":"#FFFFFF","bgColor":"","bgColorKey":"red_5"}]`；跟随单选字段使用 `[{"type":"SINGLE_OPTION","value":"fldStatus"}]`，按数组顺序匹配。`bgColorKey` 使用 `red/orange/yellow/lime/green/teal/lightblue/blue/purple/pink/grey` 加 `_0` 至 `_6`（0 最浅、6 最浓，实际色值跟随主题），不使用条件填色语义名、数字字符串或 HEX。精确背景色用 `bgColor="#FFF1F0"` 并将 `bgColorKey` 留空。
 
 ```bash
 # 第一步：创建并取得真实 viewId

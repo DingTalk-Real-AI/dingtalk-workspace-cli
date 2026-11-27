@@ -33,6 +33,8 @@ streaming 不是任意组件 Schema：
 A2UI 原子命令规则：
 
 - `send-a2ui-card` 调用 `im.create_and_send_a2ui_card`。
+- To reply to a source message in a group or direct conversation, pass `--reference-open-message-id '<openMessageId>'` to `send-a2ui-card`. It trims surrounding whitespace and sends the encrypted ID as nested `replyTo.referenceOpenMessageId`; omission leaves `replyTo` absent. An explicitly empty or whitespace-only value fails with validation exit code 3 before identity resolution or sending. The target service must support `replyTo` and authorize access to the source message.
+- Reply creation is available through `chat message send-a2ui-card`; `chat +messages-send --a2ui-messages` does not expose the reply option. Updates continue through `chat message update-a2ui-card` with the original `bizId`, without resending the reference ID.
 - 创建时可选 `--extension '{"scene":"example"}'`，接受 key 非空白、value 为字符串的 JSON 对象并透传为 `extension`；支持 `{}` 和空字符串值。省略时不携带该字段。业务 key 由服务端白名单控制，传入不代表已放行；系统字段保持服务端受控语义。`null`、非字符串值及空白 key 会在发送前拒绝。
 - 隐藏发送者头像：目标环境已将 `hide_avatar` 加入服务端白名单时，创建卡片可传 `--extension '{"hide_avatar":"true"}'`。值是字符串 `"true"`，不是布尔值；它是卡片消息扩展，不放入 A2UI `createSurface`、组件或 surface metadata。未放行时该业务 key 会被过滤，DWS 不会修改白名单；未知 key 的含义须先确认。此扩展不影响服务端生成的系统字段和权限元数据。
 - `update-a2ui-card` 调用 `im.update_a2ui_card`。

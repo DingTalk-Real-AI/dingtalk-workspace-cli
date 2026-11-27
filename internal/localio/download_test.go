@@ -477,11 +477,11 @@ func TestCrossPlatformCoverageSecureHTTPClientAndFilesystemEdges(t *testing.T) {
 	_ = SafeFilename("", "://bad")
 }
 
-func TestCrossPlatformCoverageSecureHTTPClientDisablesEnvironmentProxy(t *testing.T) {
+func TestCrossPlatformCoverageSecureHTTPClientUsesEnvironmentProxy(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
 	transport := SecureHTTPClient().Transport.(*http.Transport)
-	if transport.Proxy != nil {
-		t.Fatal("secure download client accepted an environment proxy")
+	if transport.Proxy == nil {
+		t.Fatal("secure download client ignored environment proxy")
 	}
 }
 

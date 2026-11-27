@@ -6,6 +6,117 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.70] - 2026-11-26
+
+This release promotes the sealed `v1.0.70-beta.1` contents to stable.
+
+### Added
+
+- **Core HTTP proxy configuration** — adds auto/explicit/direct routing, NO_PROXY overrides, per-profile network settings, additional CA trust and offline explanations for authentication, MCP/OpenAPI, SafeChat key requests and localio/chat file transfers. Downloads now honor environment proxies (#1625, #1574); Stream, whiteboard, installer and other independent clients retain their existing routing.
+
+- 新增 sport org admin：判断当前用户是否企业管理员（is_org_admin），只读无业务入参、身份平台注入，三态语义（管理员/非管理员/组织服务不可用报错），供导出删除审批等受限操作前权限预判与话术分流
+- competition create 绑定群改为 --group-id 与 --open-conversation-id 至少一个（可同传，群 id 优先），仅加密会话 id 也能创建比赛
+
+- **升级下载来源**：`dws upgrade --source auto|github|npmmirror` 支持自动回退或固定下载来源，并显示来源切换原因、重试次数、续传位置和下载进度。
+- **平台分包与可靠下载**：公共版独立安装可使用同版本 npmmirror 平台和技能分包；分包摘要绑定 GitHub Release 或官方主包声明，摘要冲突时拒绝安装。auto 模式显式配置 npmmirror Registry 时，未声明平台资源的历史主包保留整包 SRI 校验路径。归档和元数据支持响应头前及正文读取期间的 HTTP/2 断流恢复，下载支持有界重试、GitHub 二级限流回退、停滞超时和强 ETag 断点续传。
+- **npm 发布认证**：正常发布和 npm 修复改用 Trusted Publishing；安装验证在无 OIDC 发布权限的独立 job 执行，发布 job 仅接收并核对同一份 tarball 和完整交接摘要。可选发布六个平台分包和一个技能分包；历史主包保留原始打包字节并跳过不支持的分包，Windows 发布通过 Node 调用 npm JavaScript 入口。
+- **发布恢复**：发布重跑重新核验撤回标记、封板 tag 和 Release 状态；准备失败后可重新验包补发。npm 补发按目标封板版本核验完整资产集合与安装契约，兼容 OpenHarmony 引入前后的清单。OSS 安装脚本随封板资源一并交接，交接文件保留 31 天；POSIX npm 版本管理 shim 继续可用。
+
+### Changed
+
+- **AI 外呼指引** (#1654) — Help、Schema 和 Skill 指引将 AI 电话外呼指向 `outbound-call create`，并说明 `--task` 的四栏目、问句结尾和 `--opening` 开场白一致性要求。
+
+### Fixed
+
+- **邮箱日历默认查询** — 修复个人日程脚本将 `type=shared`、`privilege=owner` 的本人邮箱日历排除的问题。mono/multi Skill 默认通过 calendar 查询本人拥有的 primary/shared 日历，继续排除订阅、团队、公共日历及仅有读写权限的他人日历，并同步范围说明与回归用例；CLI、Schema 和脚本输出结构保持兼容。
+
+- **个人日程完整查询** — 日历 Skill 及 mono/multi 配套脚本先发现日历本，再按真实 ID 汇总本人拥有的钉钉、邮箱主日历，避免默认只查 primary 而漏掉邮箱日程。补齐逐本分页、来源保留、实例去重、取消状态和部分失败提示，支持昨天、指定时间窗及单账号查询；Go CLI 的默认语义与 Schema 不变。
+
+- 白板支持配置多行文本行距，读回和 SVG 渲染保留行距设置。
+- AI 表格支持表单字段条件显隐与写后核验。记录写入结果未知时保留只读恢复入口和附件核验状态。
+- AI 表格补齐条件填色、复选框和签名上传请求头处理。向已有表追加导入时按目标字段名和源表头映射。
+- 文档 JSONML 回读忽略服务端补全的页面设置与空文本节点，并区分回读失败和内容不一致。媒体插入回执说明客户端可见性的核验范围。
+- Sheet 批量更新明确工作表属性与位置的两步操作。日志提交接受模板返回的正整数 `field_type`。
+- 上游服务超时提供独立错误分类。写入结果可能未知时，提示先回读核对再决定是否重试。
+
+- **Outbound-call follow-up commands**: Fix task ID quoting in `meta.operation.next_command` so safe IDs work across shells. On Windows, values that cannot be safely inlined use a `TASK_ID` placeholder while the original ID remains available in `meta.operation.id` and the business receipt.
+
+## [1.0.70-beta.1] - 2026-11-26
+
+### Added
+
+- **Core HTTP proxy configuration** — adds auto/explicit/direct routing, NO_PROXY overrides, per-profile network settings, additional CA trust and offline explanations for authentication, MCP/OpenAPI, SafeChat key requests and localio/chat file transfers. Downloads now honor environment proxies (#1625, #1574); Stream, whiteboard, installer and other independent clients retain their existing routing.
+
+- 新增 sport org admin：判断当前用户是否企业管理员（is_org_admin），只读无业务入参、身份平台注入，三态语义（管理员/非管理员/组织服务不可用报错），供导出删除审批等受限操作前权限预判与话术分流
+- competition create 绑定群改为 --group-id 与 --open-conversation-id 至少一个（可同传，群 id 优先），仅加密会话 id 也能创建比赛
+
+- **升级下载来源**：`dws upgrade --source auto|github|npmmirror` 支持自动回退或固定下载来源，并显示来源切换原因、重试次数、续传位置和下载进度。
+- **平台分包与可靠下载**：公共版独立安装可使用同版本 npmmirror 平台和技能分包；分包摘要绑定 GitHub Release 或官方主包声明，摘要冲突时拒绝安装。auto 模式显式配置 npmmirror Registry 时，未声明平台资源的历史主包保留整包 SRI 校验路径。归档和元数据支持响应头前及正文读取期间的 HTTP/2 断流恢复，下载支持有界重试、GitHub 二级限流回退、停滞超时和强 ETag 断点续传。
+- **npm 发布认证**：正常发布和 npm 修复改用 Trusted Publishing；安装验证在无 OIDC 发布权限的独立 job 执行，发布 job 仅接收并核对同一份 tarball 和完整交接摘要。可选发布六个平台分包和一个技能分包；历史主包保留原始打包字节并跳过不支持的分包，Windows 发布通过 Node 调用 npm JavaScript 入口。
+- **发布恢复**：发布重跑重新核验撤回标记、封板 tag 和 Release 状态；准备失败后可重新验包补发。npm 补发按目标封板版本核验完整资产集合与安装契约，兼容 OpenHarmony 引入前后的清单。OSS 安装脚本随封板资源一并交接，交接文件保留 31 天；POSIX npm 版本管理 shim 继续可用。
+
+### Changed
+
+- **AI 外呼指引** (#1654) — Help、Schema 和 Skill 指引将 AI 电话外呼指向 `outbound-call create`，并说明 `--task` 的四栏目、问句结尾和 `--opening` 开场白一致性要求。
+
+### Fixed
+
+- **邮箱日历默认查询** — 修复个人日程脚本将 `type=shared`、`privilege=owner` 的本人邮箱日历排除的问题。mono/multi Skill 默认通过 calendar 查询本人拥有的 primary/shared 日历，继续排除订阅、团队、公共日历及仅有读写权限的他人日历，并同步范围说明与回归用例；CLI、Schema 和脚本输出结构保持兼容。
+
+- **个人日程完整查询** — 日历 Skill 及 mono/multi 配套脚本先发现日历本，再按真实 ID 汇总本人拥有的钉钉、邮箱主日历，避免默认只查 primary 而漏掉邮箱日程。补齐逐本分页、来源保留、实例去重、取消状态和部分失败提示，支持昨天、指定时间窗及单账号查询；Go CLI 的默认语义与 Schema 不变。
+
+- 白板支持配置多行文本行距，读回和 SVG 渲染保留行距设置。
+- AI 表格支持表单字段条件显隐与写后核验。记录写入结果未知时保留只读恢复入口和附件核验状态。
+- AI 表格补齐条件填色、复选框和签名上传请求头处理。向已有表追加导入时按目标字段名和源表头映射。
+- 文档 JSONML 回读忽略服务端补全的页面设置与空文本节点，并区分回读失败和内容不一致。媒体插入回执说明客户端可见性的核验范围。
+- Sheet 批量更新明确工作表属性与位置的两步操作。日志提交接受模板返回的正整数 `field_type`。
+- 上游服务超时提供独立错误分类。写入结果可能未知时，提示先回读核对再决定是否重试。
+
+- **Outbound-call follow-up commands**: Fix task ID quoting in `meta.operation.next_command` so safe IDs work across shells. On Windows, values that cannot be safely inlined use a `TASK_ID` placeholder while the original ID remains available in `meta.operation.id` and the business receipt.
+
+
+## [1.0.69] - 2026-11-19
+
+本版本将 `v1.0.69-beta.1` 晋级正式版，并纳入下方列出的 beta 后变更。
+
+### Added
+
+- **企业应用事件发送**（#1616）— 新增 `dws event send`，支持使用企业应用凭据投递第三方事件，从内联 JSON、文件或标准输入读取载荷。支持本地预览和接收方去重，并校验 `ACCEPTED`、`DUPLICATE` 回执。
+
+### Changed
+
+- **VoIP MeetingSDK 凭据**（#1619）— 优先读取 `callerUserId`，兼容 `callerUid`，并返回 SDK App ID 和有效期。动态 token 优先读取 `body.sdkAuth.sdkToken`，兼容旧消息头。需要使用 token 入会的数字员工可显式传入 `--include-voip-sdk-token`。常规输出继续隐藏敏感凭据。
+
+### Removed
+
+- **PR 准入**（#1615）— `ai-generated` 标签的 30 文件上限及路径限制已移除。九项准入检查和同级评审继续执行，`AI Behavior` 仍会拦截草稿或已过期的提交。
+
+### Changes since `v1.0.69-beta.1`
+
+### Added
+
+- Add WorkBuddy as a DWS Skill installation target: `dws skill setup --target workbuddy` and `dws skill install <skillId> workbuddy`. Installers and upgrades detect `~/.workbuddy` (or `WORKBUDDY_CONFIG_DIR`) and use the existing shared Skill links with a copy fallback. WorkBuddy connector plugin caches remain independently managed.
+
+- **AI 语音外呼** (#1635)：新增 `outbound-call create/detail`，支持创建外呼任务、查询状态与听记链接，包含执行确认、预览和提交结果不确定性保护。
+
+- `dws sport` 新增 7 个工具，保持 helpers 手写注册与隐藏的 misc 长尾入口：`competition invite/update/delete/audit/export/export-task`、`step export`；不接入 `get_user_org_list`。
+- 比赛邀请支持员工与群至少一个目标，工号保持字符串；编辑使用完整 `--request` JSON 对象（支持 `@文件`），保留数值与显式 null，拒绝遗漏字段导致的误清空；删除不可恢复、审批同意会补发广播，均需用户确认且不自动重放。
+- 比赛导出提交后返回 pending 与真实任务 ID；点查 PROCESSING/SUCCESS/FAILED 状态并保留 Long 精度、profile 及钉盘链接。步数报表只报告受理成功，无任务 ID、不自动等待或下载，文件由钉钉异步投递。
+- 新工具操作人及企业身份由平台注入；同步 Help、Agent Schema、mono/misc 命令参考，明确灰度、权限、频控、编辑状态差异与“受理不等于完成”的边界。旧 create 的 FIXED 限制和既有参数保持不变。
+
+- `dws sport competition` 新增 9 个只读命令，沿用 helpers 手写注册与隐藏的 misc 长尾入口：`list`（企业启用中的比赛）、`rank-top`（TopN 榜，支持 TOTAL 本期总榜）、`ranking`（全员分页排行榜）、`my-list` / `my-can-join-count`（我的比赛与可参与数量）、`my-participated` / `my-participated-count`（我参与过的期次与总数）、`activity-detail`（活动详情与我的报名状态）、`my-achievement`（我的达标进度）。同批材料中已接入的配置、期次与统计工具未重复注册。
+- 分页列表只取一页：源 `hasMore` / `nextCursor` 转为 `meta.pagination.endpoint_exhausted` / `next_token`，Long 游标保持精度，空页不当作结束；个人列表与全员排行首页发送 `cursor=null`，企业列表首页为 `0`。缺少 `success`、分页字段、非法计数或声明有下一页却无有效游标的回执均按错误返回，不当成空结果。
+- 企业与当前用户身份由平台注入，新命令不接受 `--user-id` / `--corp-id`；同步 Help、Agent Schema 与 mono/misc 命令参考。
+
+### Changed
+
+- `chat message send-a2ui-card` 支持引用原消息，入群审批命令支持通过、删除、忽略、拒绝和拉黑。
+- `whiteboard +insert-image` 支持在独立或内嵌白板插入本地 PNG/JPEG，并读回校验结果。
+- `sheet info` 对空值、非对象和无效 JSON 返回结构化 API 错误。
+- `event consume --group` 在提交订阅前拒绝逗号分隔的多群输入。
+- AI 表格普通记录查询支持更大的服务页，在分页不完整时返回明确的恢复指引。
+- `aicard chart` 支持离线查找预设和生成图表卡片，图表校验区分完整新卡与延迟注入数据的模板。
+
 ## [1.0.69-beta.1] - 2026-11-13
 
 ### Added

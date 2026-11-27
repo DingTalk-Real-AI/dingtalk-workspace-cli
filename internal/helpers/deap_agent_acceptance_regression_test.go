@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -130,52 +131,55 @@ func TestCrossPlatformCoverageEmployeeLifecycleDryRunDoesNotControlHost(t *testi
 
 // 慢请求期间仍会到达新快照；恢复后应立刻合并最新内容，不能再等完整节流周期。
 func TestCrossPlatformCoverageEmployeeStreamingSlowWriteCoalescesLatest(t *testing.T) {
-	r, e := employeeLedgerFixture(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	r.ctx = ctx
-	started, release := make(chan struct{}), make(chan struct{})
-	frames := make(chan string, 8)
-	surface := newEmployeeCardTestSurface()
-	updates := 0
-	testseam.Swap(t, &employeeA2UICall, func(_ context.Context, _ digitalEmployeeBinding, messages []map[string]any, args ...string) (map[string]any, error) {
-		if args[0] == "send-a2ui-card" {
-			return map[string]any{"bizId": "single"}, nil
-		}
-		surface.apply(messages)
-		if args[4] == "INPUTTING" {
-			updates++
-			if updates == 1 {
-				close(started)
-				<-release
-			} else {
-				frames <- surface.text("answer")
+	// Keep the throttle assertion independent of runner scheduling and disk latency.
+	synctest.Test(t, func(t *testing.T) {
+		r, e := employeeLedgerFixture(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		r.ctx = ctx
+		started, release := make(chan struct{}), make(chan struct{})
+		frames := make(chan string, 8)
+		surface := newEmployeeCardTestSurface()
+		updates := 0
+		testseam.Swap(t, &employeeA2UICall, func(_ context.Context, _ digitalEmployeeBinding, messages []map[string]any, args ...string) (map[string]any, error) {
+			if args[0] == "send-a2ui-card" {
+				return map[string]any{"bizId": "single"}, nil
 			}
+			surface.apply(messages)
+			if args[4] == "INPUTTING" {
+				updates++
+				if updates == 1 {
+					close(started)
+					<-release
+				} else {
+					frames <- surface.text("answer")
+				}
+			}
+			return map[string]any{"flowStatus": args[4]}, nil
+		})
+		f := &employeeProgressFixture{run: func(emit func(agentProgress)) (string, error) {
+			emit(agentProgress{ID: "answer", Kind: "answer", Text: "开头"})
+			<-started
+			for i := 1; i <= 100; i++ {
+				emit(agentProgress{ID: "answer", Kind: "answer", Text: strings.Repeat("字", i)})
+			}
+			time.Sleep(2 * employeeCardFlushInterval)
+			close(release)
+			select {
+			case text := <-frames:
+				if text != strings.Repeat("字", 100) {
+					t.Errorf("慢发送后发出了陈旧快照：%d", len([]rune(text)))
+				}
+			case <-time.After(employeeCardFlushInterval / 2):
+				t.Error("慢请求完成后额外等待了整个节流周期")
+			}
+			return "完整结果", nil
+		}}
+		record := employeeTaskRecord{}
+		if err := r.processCard(e, &record, f); err != nil || record.Status != "card_finished" || surface.text("answer") != "完整结果" {
+			t.Fatalf("最终结果未收尾：%+v %v", record, err)
 		}
-		return map[string]any{"flowStatus": args[4]}, nil
 	})
-	f := &employeeProgressFixture{run: func(emit func(agentProgress)) (string, error) {
-		emit(agentProgress{ID: "answer", Kind: "answer", Text: "开头"})
-		<-started
-		for i := 1; i <= 100; i++ {
-			emit(agentProgress{ID: "answer", Kind: "answer", Text: strings.Repeat("字", i)})
-		}
-		time.Sleep(2 * employeeCardFlushInterval)
-		close(release)
-		select {
-		case text := <-frames:
-			if text != strings.Repeat("字", 100) {
-				t.Errorf("慢发送后发出了陈旧快照：%d", len([]rune(text)))
-			}
-		case <-time.After(employeeCardFlushInterval / 2):
-			t.Error("慢请求完成后额外等待了整个节流周期")
-		}
-		return "完整结果", nil
-	}}
-	record := employeeTaskRecord{}
-	if err := r.processCard(e, &record, f); err != nil || record.Status != "card_finished" || surface.text("answer") != "完整结果" {
-		t.Fatalf("最终结果未收尾：%+v %v", record, err)
-	}
 }
 
 func TestCrossPlatformCoverageEmployeeCardFailureHasIndependentNotice(t *testing.T) {

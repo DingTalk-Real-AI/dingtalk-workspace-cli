@@ -99,6 +99,195 @@ func TestSportCallResultWithoutCallerFails(t *testing.T) {
 	}
 }
 
+func TestSportOrgAdminResults(t *testing.T) {
+	for _, tc := range []struct {
+		name, text string
+		want       any
+	}{
+		{"管理员", `{"success":true,"result":true,"errorCode":null,"errorMsg":null}`, true},
+		{"非管理员", `{"success":true,"result":false,"errorCode":null,"errorMsg":null}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &sportFakeCaller{text: tc.text, blocks: 1}
+			InitDepsForTest(t, fake)
+			envelope, err := runSportCommandOutput(t, "org", "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/is_org_admin" {
+				t.Fatalf("应调用 is_org_admin：%v", fake.calls)
+			}
+			if !reflect.DeepEqual(fake.arguments[0], map[string]any{}) {
+				t.Fatalf("无业务入参工具应发送空对象：%v", fake.arguments[0])
+			}
+			data, _ := envelope["data"].(map[string]any)
+			if data["result"] != tc.want || envelope["outcome"] != "success" {
+				t.Fatalf("三态结果错误：%v", envelope)
+			}
+		})
+	}
+
+	t.Run("组织服务不可用不得当作非管理员", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":false,"errorCode":"QW_ADMIN_CHECK_FAILED","errorMsg":"组织管理员服务查询不可用"}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		// 显式 success=false 由统一通道按业务错误体拦截，再经 is_org_admin 专用分类
+		// 还原三态语义：服务不可用必须提示稍后重试，不能产出 result=false 的结果。
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "组织管理员服务查询不可用") || !strings.Contains(err.Error(), "请稍后重试") {
+			t.Fatalf("success=false 应作为提示稍后重试的组织服务不可用错误返回：%v", err)
+		}
+	})
+
+	t.Run("缺 success 视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"result":false}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "缺少 success 字段") {
+			t.Fatalf("缺 success 应报无效回执而非服务不可用：%v", err)
+		}
+	})
+
+	t.Run("success 非 true 视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":0}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "success 非 true") {
+			t.Fatalf("success 类型异常应报无效回执：%v", err)
+		}
+	})
+
+	t.Run("result 非布尔视为无效回执", func(t *testing.T) {
+		fake := &sportFakeCaller{text: `{"success":true,"result":"yes"}`, blocks: 1}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) != ExitAPI || !strings.Contains(err.Error(), "缺少布尔 result") {
+			t.Fatalf("result 类型不符应报错：%v", err)
+		}
+	})
+
+	t.Run("dry-run 不调用 MCP", func(t *testing.T) {
+		fake := &sportFakeCaller{dryRun: true, err: errors.New("预览不得调用 MCP")}
+		InitDepsForTest(t, fake)
+		envelope, err := runSportCommandOutput(t, "org", "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if envelope["dry_run"] != true || len(fake.calls) != 0 {
+			t.Fatalf("预览不得调用工具：%v", envelope)
+		}
+	})
+}
+
+// TestCrossPlatformCoverageSportOrgAdminChannelErrorClassification 覆盖管理员判定
+// 的 API 业务错误及 MCP 错误分流，鉴权和非业务错误保持原分类。
+func TestCrossPlatformCoverageSportOrgAdminChannelErrorClassification(t *testing.T) {
+	t.Run("普通错误原样返回", func(t *testing.T) {
+		fake := &sportFakeCaller{err: errors.New("boom")}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err == nil || apperrors.ExitCode(err) == ExitAPI {
+			t.Fatalf("普通错误不应被转成 API 服务不可用：%v", err)
+		}
+	})
+
+	t.Run("鉴权类 CLI 错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeAuthTokenExpired, Message: "token expired"}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeAuthTokenExpired {
+			t.Fatalf("鉴权错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("非 JSON 业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: "not-json"}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError {
+			t.Fatalf("非 JSON 业务错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("缺 success 的业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: `{"errorCode":"QW_X"}`}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError || !strings.Contains(classified.Message, "QW_X") {
+			t.Fatalf("缺 success 的业务错误应保持原分类：%v", err)
+		}
+	})
+
+	t.Run("success=true 的业务错误保持原分类", func(t *testing.T) {
+		fake := &sportFakeCaller{err: &CLIError{Code: CodeMCPToolError, Message: `{"success":true,"errorCode":"QW_X"}`}}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *CLIError
+		if !errors.As(err, &classified) || classified.Code != CodeMCPToolError {
+			t.Fatalf("success=true 的业务错误应保持原分类：%v", err)
+		}
+	})
+
+	// 生产 app runner 把 success=false 分类成 reason=business_error 的 *apperrors.Error。
+	t.Run("runner 业务错误转换为稍后重试并保留诊断", func(t *testing.T) {
+		diag := apperrors.ServerDiagnostics{ServerErrorCode: "QW_ADMIN_CHECK_FAILED", TraceID: "trace-1"}
+		upstream := apperrors.NewAPI("下游异常", apperrors.WithReason("business_error"), apperrors.WithServerDiag(diag), apperrors.WithActions("保留 Trace ID"))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *apperrors.Error
+		if !errors.As(err, &classified) || apperrors.ExitCode(err) != ExitAPI || classified.Reason != "business_error" {
+			t.Fatalf("应保留 API/business_error 分类：%v", err)
+		}
+		if !strings.Contains(classified.Message, "下游异常") || !strings.Contains(classified.Message, "不能当作非管理员") || !strings.Contains(classified.Hint, "请稍后重试") {
+			t.Fatalf("应提示稍后重试并保留服务端信息：message=%q hint=%q", classified.Message, classified.Hint)
+		}
+		if classified.ServerDiag.ServerErrorCode != "QW_ADMIN_CHECK_FAILED" || classified.ServerDiag.TraceID != "trace-1" || len(classified.Actions) != 2 || classified.Actions[1] != "保留 Trace ID" || !errors.Is(err, upstream) {
+			t.Fatalf("应保留服务端诊断与原始恢复建议：%#v", classified)
+		}
+		if original, ok := upstream.(*apperrors.Error); !ok || original.Hint != "" || len(original.Actions) != 1 {
+			t.Fatalf("不得改写上游错误对象：%#v", upstream)
+		}
+	})
+
+	t.Run("runner MCP 错误转换为稍后重试并保留诊断", func(t *testing.T) {
+		diag := apperrors.ServerDiagnostics{ServerErrorCode: "QW_ADMIN_CHECK_FAILED", TraceID: "trace-mcp"}
+		upstream := apperrors.NewAPI("组织服务异常", apperrors.WithReason("mcp_tool_error"), apperrors.WithServerDiag(diag))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		var classified *apperrors.Error
+		if !errors.As(err, &classified) || classified.Category != apperrors.CategoryAPI || classified.Reason != "mcp_tool_error" || !strings.Contains(classified.Hint, "请稍后重试") || !strings.Contains(classified.Message, "不能当作非管理员") {
+			t.Fatalf("MCP 错误应保持 API 分类并补恢复建议：%v", err)
+		}
+		if !reflect.DeepEqual(classified.ServerDiag, diag) || !errors.Is(err, upstream) {
+			t.Fatalf("MCP 错误应保留诊断和错误链：%#v", classified)
+		}
+	})
+
+	t.Run("鉴权类 runner 错误不改为服务不可用", func(t *testing.T) {
+		upstream := &apperrors.Error{Category: apperrors.CategoryAuth, Reason: "mcp_tool_error", Message: "permission denied"}
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if err != upstream || apperrors.ExitCode(err) != apperrors.ExitCodeAuth {
+			t.Fatalf("鉴权错误必须原样透出：%v", err)
+		}
+	})
+
+	t.Run("非业务的 runner 错误保持原分类", func(t *testing.T) {
+		upstream := apperrors.NewAPI("tool error", apperrors.WithReason("network_error"))
+		fake := &sportFakeCaller{err: upstream}
+		InitDepsForTest(t, fake)
+		err := runSportCommand(t, "org", "admin")
+		if !errors.Is(err, upstream) || strings.Contains(err.Error(), "稍后重试") {
+			t.Fatalf("非业务或 MCP 错误不应改写：%v", err)
+		}
+	})
+}
+
 func TestSportCallerDryRunSkipsToolCall(t *testing.T) {
 	fake := &sportFakeCaller{dryRun: true, err: errors.New("预览不得调用 MCP")}
 	InitDepsForTest(t, fake)
@@ -211,6 +400,37 @@ func TestSportCreateRejectsTargetBeyondActualPeriod(t *testing.T) {
 	}
 }
 
+func TestSportCreateAcceptsOpenConversationIdOnly(t *testing.T) {
+	fake := &sportFakeCaller{text: `{"ruleCode":"R1","status":1}`, blocks: 1}
+	InitDepsForTest(t, fake)
+	err := runSportCommand(t, "competition", "create",
+		"--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK",
+		"--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130",
+		"--goal-value", "8000", "--target-day-value", "18",
+		"--open-conversation-id", "cidXXXXXXXX==",
+		"--need-signup", "false", "--allow-free-join", "false",
+		"--cover-image-url", "https://gw.alicdn.com/cover.png", "--yes")
+	if err != nil {
+		t.Fatalf("仅凭加密会话 id 创建不应报错: %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != sportServerID+"/create_competition" {
+		t.Fatalf("create 应调用 create_competition: %v", fake.calls)
+	}
+	want := map[string]any{
+		"userId": "0123456789",
+		"CompetitionCreateMcpRequest": map[string]any{
+			"competitionName": "走路挑战赛", "sportType": "WALK", "competitionType": "FIXED",
+			"firstPeriodStartDate": "20261111", "firstPeriodEndDate": "20261130",
+			"goalValue": "8000", "targetDayValue": "18",
+			"needSignup": "false", "allowFreeJoin": "false", "coverImageUrl": "https://gw.alicdn.com/cover.png",
+			"openConversationId": "cidXXXXXXXX==",
+		},
+	}
+	if !reflect.DeepEqual(fake.arguments[0], want) {
+		t.Fatalf("仅会话 id 时应只发 openConversationId，不发 groupId：got=%v want=%v", fake.arguments[0], want)
+	}
+}
+
 const sportUpdateFixture = `{"ruleCode":"RULE123","competitionName":"步行挑战","coverImageUrl":"https://example.com/cover.png","competitionType":"FIXED","firstPeriodStartDate":"20261201","firstPeriodEndDate":"20261231","periodType":null,"cycleCount":null,"goalValue":6000,"targetDayValue":20,"dailyLimit":null,"extra":null}`
 
 func TestSportNewToolsArgumentsAndConfirmation(t *testing.T) {
@@ -278,6 +498,8 @@ func TestSportNewToolsValidation(t *testing.T) {
 	cases := [][]string{
 		{"competition", "invite", "--rule-code", "RULE123"},
 		{"competition", "invite", "--rule-code", "RULE123", "--receiver-user-id", "  "},
+		{"competition", "create", "--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK", "--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130", "--goal-value", "8000", "--target-day-value", "18", "--need-signup", "false", "--allow-free-join", "false", "--cover-image-url", "https://gw.alicdn.com/cover.png"},
+		{"competition", "create", "--user-id", "0123456789", "--name", "走路挑战赛", "--sport-type", "WALK", "--competition-type", "FIXED", "--start-date", "20261111", "--end-date", "20261130", "--goal-value", "8000", "--target-day-value", "18", "--open-conversation-id", "  ", "--need-signup", "false", "--allow-free-join", "false", "--cover-image-url", "https://gw.alicdn.com/cover.png"},
 		{"competition", "audit", "--rule-code", "RULE123"},
 		{"competition", "audit", "--rule-code", "RULE123", "--approved=maybe"},
 		{"competition", "export", "--competition-code", "COMP456", "--export-scope", "STAFF"},

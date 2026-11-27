@@ -16,6 +16,7 @@ package app
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
@@ -23,6 +24,49 @@ import (
 // Match an explicit rejection of robotCode itself, not an unrelated invalid
 // parameter elsewhere in the error or a phrase stitched across diagnostics.
 var dingRobotRejectionPattern = regexp.MustCompile(`(?i)\b(?:robotcode(?:\s*:\s*|\s+(?:is\s+(?:in\s+)?)?)(?:invalid|not\s+valid|not\s+in\s+(?:the\s+)?org(?:anization)?)|invalid\s+robotcode)\b`)
+
+// Upstream services surface HSF call timeouts through MCP tool results with a
+// distinctive shape: the HSFTimeOutException class name, the HSF-0002 error
+// code, or the "already timeout ... Timeout value is : <n>" sentence. Generic
+// "timeout" wording (client transport timeouts, unrelated network errors) must
+// not match here — those have their own classification paths.
+var upstreamHSFTimeoutPattern = regexp.MustCompile(`hsftimeoutexception|hsf-0002|already\s+timeout[^\n]*timeout\s+value\s+is\s*:\s*[0-9]+`)
+
+// Write-verb tools may have taken effect on the server before the HSF timeout
+// was observed, so recovery guidance must demand a read-back before retrying.
+// The original nine verbs keep substring matching for any naming style. The
+// newer verbs match whole snake_case tokens only, because "set"/"add" appear
+// inside read-tool names such as query_global_setting or batch_query_group_chat_settings
+// and a substring match there would falsely demand read-back semantics.
+var writeVerbServerToolSubstrings = []string{
+	"create", "update", "delete", "append", "insert", "remove", "modify", "send", "recall",
+}
+
+var writeVerbServerToolTokens = []string{
+	"add", "set", "move", "rename", "copy", "write", "save", "import", "submit",
+}
+
+func isWriteVerbServerTool(tool string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(tool))
+	if normalized == "" {
+		return false
+	}
+	for _, verb := range writeVerbServerToolSubstrings {
+		if strings.Contains(normalized, verb) {
+			return true
+		}
+	}
+	for _, token := range strings.FieldsFunc(normalized, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		for _, verb := range writeVerbServerToolTokens {
+			if token == verb {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 type serverFailureClass struct {
 	category         apperrors.Category
@@ -43,9 +87,12 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 	text := strings.ToLower(strings.TrimSpace(message))
 	combined := text + " " + detail
 
-	// Prefer the explicit server code over incidental dependency or parameter
-	// wording. The classifier only improves recovery guidance; it does not
-	// invent retryability, a retry delay, or an execution state.
+	// Branch order is deliberate. RATE_LIMIT_ERROR's explicit code wins first;
+	// the distinctive upstream HSF timeout payload then outranks the generic
+	// 999/systemError, NETWORK_ERROR and PARAM_ERROR branches, because those
+	// codes alone cannot express the upstream timeout shape. The classifier
+	// only improves recovery guidance; it does not invent retryability, a
+	// retry delay, or an execution state.
 	if code == "RATE_LIMIT_ERROR" {
 		return serverFailureClass{
 			category: apperrors.CategoryAPI,
@@ -58,6 +105,38 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 				"持续失败时保留 Trace ID 和 Server Code 联系服务端排查",
 			},
 		}, true
+	}
+
+	// Upstream HSF timeouts are server-side hard limits (e.g. the HSF default
+	// 3 seconds); the CLI --timeout flag only governs the client request and
+	// cannot extend them, so guidance must point at the upstream limit and at
+	// confirming the operation result instead of raising --timeout.
+	if upstreamHSFTimeoutPattern.MatchString(combined) {
+		retryable := false
+		classified := serverFailureClass{
+			category:  apperrors.CategoryAPI,
+			message:   "上游服务内部调用超过其自身超时上限（如 HSF 默认 3 秒）后中止；CLI --timeout 仅控制客户端请求超时，无法延长该限制。",
+			reason:    "upstream_execution_timeout",
+			origin:    "upstream_service",
+			stage:     "upstream_execution",
+			retryable: &retryable,
+			hint:      "上游服务内部调用超过其自身超时上限后中止，调大 CLI --timeout 无法解决。请先确认操作结果，再决定是否重试。",
+			actions: []string{
+				"上游服务内部调用已超过其超时上限，调大 CLI --timeout 无法解决该问题",
+				"持续失败时保留 Trace ID 和 Server Code 联系服务端排查",
+			},
+		}
+		if isWriteVerbServerTool(tool) {
+			executionStarted := true
+			classified.executionStarted = &executionStarted
+			classified.actions = []string{
+				"先回读/查询确认本次操作是否已生效，确认未生效后再重试",
+				"大文档、大表格等大范围写入场景请缩小写入范围或拆分写入",
+				"上游服务内部调用已超过其超时上限，调大 CLI --timeout 无法解决该问题",
+				"持续失败时保留 Trace ID 和 Server Code 联系服务端排查",
+			}
+		}
+		return classified, true
 	}
 
 	if strings.EqualFold(strings.TrimSpace(serverKey), "ding") &&
@@ -175,6 +254,15 @@ func newServerFailureAPIError(
 	classifiedActions := false
 	classified, classifiedOK := classifyServerFailure(message, serverKey, tool, diag)
 	if classifiedOK {
+		// The HSF branch replaces the raw message with friendly guidance, so the
+		// upstream payload would vanish from stderr and the JSON error payload
+		// when it never reached technical_detail. Keep it reachable there for
+		// server-side troubleshooting.
+		if classified.reason == "upstream_execution_timeout" &&
+			strings.TrimSpace(diag.TechnicalDetail) == "" &&
+			strings.TrimSpace(message) != "" {
+			diag.TechnicalDetail = message
+		}
 		message = classified.message
 		if classified.reason != "" {
 			reason = classified.reason

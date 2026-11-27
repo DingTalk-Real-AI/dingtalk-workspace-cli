@@ -14,6 +14,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -1400,6 +1401,14 @@ func normalizeRequestedReadback(value any, idMap map[string]string, field string
 		for key, child := range typed {
 			normalized[key] = normalizeRequestedReadback(child, idMap, key)
 		}
+		// The server materializes new-block defaults. An old service silently
+		// retaining legacy spacing must not be reported as a verified update.
+		if field == "blocks" {
+			if _, present := typed["lineHeight"]; !present {
+				// Keep synthesized defaults in the same decimal domain as decoded JSON.
+				normalized["lineHeight"] = json.Number(fmt.Sprint(opennodes.DefaultLineHeight))
+			}
+		}
 		if isRequestRef && requestScope == "request" && hasRequestID {
 			if realID := idMap[requestID]; realID != "" {
 				normalized["scope"] = "document"
@@ -1445,6 +1454,20 @@ func requireRequestedValue(expected, actual any, path string) error {
 			readback, present := got[key]
 			if !present {
 				return responsecheck.Error(serverWhiteboard+"/"+toolUpdate, "readback_field_missing", fmt.Sprintf("%s.%s 未读回", path, key))
+			}
+			if key == "url" && strings.HasSuffix(path, ".resource") {
+				// Managed-resource readback may append this resourceId to the requested URL.
+				// Accept only that exact suffix; every other URL difference must fail below.
+				requestedURL, requestedOK := value.(string)
+				actualURL, actualOK := readback.(string)
+				resourceID, resourceOK := wanted["resourceId"].(string)
+				separator := "?"
+				if strings.Contains(requestedURL, "?") {
+					separator = "&"
+				}
+				if requestedOK && actualOK && resourceOK && resourceID != "" && actualURL == requestedURL+separator+"resourceId="+url.QueryEscape(resourceID) {
+					continue
+				}
 			}
 			if err := requireRequestedValue(value, readback, path+"."+key); err != nil {
 				return err
@@ -1571,5 +1594,5 @@ func mapsToAny(values []map[string]any) []any {
 }
 
 func init() {
-	shortcut.Register(Query, Diff, Update)
+	shortcut.Register(Query, Diff, Update, InsertImage)
 }

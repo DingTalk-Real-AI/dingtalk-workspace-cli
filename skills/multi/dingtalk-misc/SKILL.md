@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 钉钉独立白板（白板文件）的创建、绘图、保存和修改；文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写（dws whiteboard）。两类目标相互独立，不互相推断或切换；文档内白板卡片容器不属于本 skill。长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile/企业运动健康钉钉运动步数榜与运动比赛。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/独立白板带内容创建/独立白板节点读写/已有 nodeId 和 partId 的文档内嵌白板图形内容读写/单元格读写/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/搜索MCP市场/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作，或查询企业步数榜开通状态/企业步数概况/员工部门步数排行/多日步数明细/创建步数跑步综合运动挑战赛/比赛配置规则期次/开赛群播报/比赛报名参与达标趋势统计等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 独立脑图的带内容创建与主题读写使用 dws mind；空白脑图走 wiki，听记内置思维导图走 minutes。 钉钉独立白板（白板文件）的创建、绘图、保存和修改；文档内嵌白板仅在已有承载文档 nodeId 和 partId 时提供图形内容读写（dws whiteboard）。两类目标相互独立，不互相推断或切换；文档内白板卡片容器不属于本 skill。长尾产品集合技能，覆盖低频钉钉产品：AI语音外呼/OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile/企业运动健康钉钉运动步数榜与运动比赛。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/独立白板带内容创建/独立白板节点读写/已有 nodeId 和 partId 的文档内嵌白板图形内容读写/单元格读写/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/搜索MCP市场/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作，或查询企业步数榜开通状态/企业步数概况/员工部门步数排行/多日步数明细/创建步数跑步综合运动挑战赛/比赛配置规则期次/开赛群播报/比赛报名参与达标趋势统计等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。 发起钉钉语音通话、钉钉语音电话或用钉钉给某人打电话，属于 AI语音外呼（outbound-call），由 AI 助手代为通话；也可查询外呼任务状态与听记。
 metadata:
   cli_version: ">=1.0.61"
   category: product
@@ -14,6 +14,10 @@ metadata:
 ## 执行前路由
 
 本文件只负责产品路由。先由下表确定唯一产品：单一、清晰的 Mind、Whiteboard、Attendance、Report、Sheet 或 Dev 任务直接读取对应 reference（内含该任务所需的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
+
+通话相关请求按动作路由：给某人打电话、发起钉钉语音通话或让助手电话沟通 → [outbound-call.md](references/outbound-call.md)；开启/关闭通话纪要自动开启 → [voip.md](references/voip.md)；电话 DING、短信 DING 等强提醒 → [ding.md](references/ding.md)；监听收到的来电邀请 → [event-voip.md](../dingtalk-event/references/event-voip.md)。只读取命中的参考，不把“语音通话”一律分给 voip 或 event。
+
+普通“帮我打电话”无需包含“AI/外呼”关键词，先说明由 AI 助手代为通话，再按外呼流程补齐参数、预览并确认。用户明确要求本人手动通话、视频通话或打开拨号界面时，不擅自替换成 AI 外呼。voip/event 的局部能力限制不能作为“DWS 无法打电话”的依据。
 
 同一请求同时出现日报、周报或简报名称与审批人、抄送人、审批路径、审批单等审批意图时，审批意图优先，统一路由 OA 并读取 `oa.md`；本次任务不得执行 `dws report`。OA 中没有同名模板也不能降级提交 Report，只能交付 OA 搜索结果或请求消歧。只有用户明确要求提交钉钉日志，且没有审批流语义时，才路由 Report。
 
@@ -48,6 +52,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 原生 Markdown / `.md` 原文 / Markdown 版本比较 / 本地草稿 diff / 覆盖 Markdown / 局部替换 Markdown / Markdown 评论 | 原生 `.md` 文件读取、创建、版本或草稿对比、全量覆盖、局部替换与评论列表 | `dws markdown` | [markdown.md](references/markdown.md) |
 | 原生 HTML / `.html` 文件 / 新建 HTML 页面 / 上传 HTML 文件 / 读取 HTML 原文 / 覆盖 HTML / 局部替换 HTML | 原生 `.html`/`.htm` 文件读取、创建、全量覆盖与局部替换（钉盘或文档空间） | `dws html` | [html.md](references/html.md) |
 | PAT 授权 / 行为权限 / scope 授权 / 一次性授权 / 会话授权 / 永久授权 / 授权浏览器策略 | PAT 行为授权与本地浏览器策略 | `dws pat` | [pat.md](references/pat.md) |
+| 发起钉钉语音通话 / 帮我打个电话给张三 / 外呼一下李四 / AI打电话给XXX / 外呼 / 语音外呼 / 查询外呼状态和听记 | AI 语音外呼：发起通话、查询任务状态与听记链接 | `dws outbound-call` | [outbound-call.md](references/outbound-call.md) |
 | 钉钉运动 / 企业运动健康 / 步数榜 / 步数排行 / 部门步数 / 挑战赛 / 运动比赛 / 我的比赛 / 比赛排行榜 / 我的达标 / 开赛播报 / 比赛报名参与达标 / 比赛邀请 / 编辑删除审批比赛 / 比赛导出 / 步数报表 | 企业步数榜、企业与我的比赛及排行、比赛创建与管理邀请审批、统计及异步数据导出 | `dws sport` | [sport.md](references/sport.md) |
 | VoIP通话纪要自动开启 / 通话纪要自动开启 / 自动听记开关 / 通话自动纪要 | 个人 VoIP 通话（1v1 音视频通话）纪要自动开启设置（开启/关闭；目标用户按登录身份，需用户确认后写入） | `dws voip minutes auto-start` | [voip.md](references/voip.md) |
 | 切换组织 / 换组织 / 跨组织 / 多组织 / profile / 看登录了哪些组织 | 多组织 / profile 管理与跨组织取数 | `dws profile` / `dws auth` / `--profile` | [profile.md](references/profile.md) |

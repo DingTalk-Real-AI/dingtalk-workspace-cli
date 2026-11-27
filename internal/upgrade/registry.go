@@ -37,6 +37,21 @@ type NPMPackage struct {
 	Version     string
 	TarballURL  string
 	Integrity   string
+	Upgrade     *npmUpgradeManifest
+}
+
+// The main package, not an independently published resource package, owns the
+// expected release asset identities. Missing manifests remain valid for legacy
+// whole-package installation, but cannot authorize split-package execution.
+type npmUpgradeManifest struct {
+	Format  int                         `json:"format"`
+	Edition string                      `json:"edition"`
+	Assets  map[string]npmUpgradeDigest `json:"assets"`
+}
+
+type npmUpgradeDigest struct {
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 func init() {
@@ -105,9 +120,10 @@ func validRegistryURL(raw string) bool {
 }
 
 type npmManifest struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Deprecated string `json:"deprecated"`
+	Name       string              `json:"name"`
+	Version    string              `json:"version"`
+	Deprecated string              `json:"deprecated"`
+	Upgrade    *npmUpgradeManifest `json:"dwsUpgrade,omitempty"`
 	Dist       struct {
 		Tarball   string `json:"tarball"`
 		Integrity string `json:"integrity"`
@@ -192,7 +208,7 @@ func npmManifestToRelease(manifest npmManifest, registry string) *ReleaseInfo {
 		Version:    manifest.Version,
 		Prerelease: strings.Contains(core, "-"),
 		Assets:     assets,
-		NPM:        &NPMPackage{RegistryURL: registry, Name: manifest.Name, Version: manifest.Version, TarballURL: manifest.Dist.Tarball, Integrity: manifest.Dist.Integrity},
+		NPM:        &NPMPackage{RegistryURL: registry, Name: manifest.Name, Version: manifest.Version, TarballURL: manifest.Dist.Tarball, Integrity: manifest.Dist.Integrity, Upgrade: manifest.Upgrade},
 	}
 }
 
@@ -250,11 +266,16 @@ func (c *Client) getBoundedJSON(ctx context.Context, endpoint string, target any
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s 返回 HTTP %d", source, resp.StatusCode)
+		status := resp.StatusCode
+		if source == "GitHub Release" && status == http.StatusForbidden &&
+			(resp.Header.Get("X-RateLimit-Remaining") == "0" || retryAfterDuration(resp.Header.Get("Retry-After")) > 0) {
+			status = http.StatusTooManyRequests
+		}
+		return fmt.Errorf("%s 返回 HTTP %d: %w", source, resp.StatusCode, &downloadHTTPError{status: status})
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return fmt.Errorf("读取 %s失败: %w", metadata, err)
+		return fmt.Errorf("读取 %s失败: %w", metadata, &downloadReadError{err})
 	}
 	if int64(len(body)) > limit {
 		return fmt.Errorf("%s超过大小限制", metadata)

@@ -76,6 +76,8 @@ dws aitable view get row-height --view-id VIEW_ID --format json
 
 `view update fill-color-rule` **整组覆盖**，传 `--json '[]'` 清空所有规则。
 
+原生勾选条件用 `EQ` 与 JSON 布尔；计算结果为勾选的 formula/lookup/filterUp 也可传布尔，由服务端按字段 Schema 转换，普通文本 `"True"` 保持字符串。缺少字段或计算结果类型时返回 `FILL_COLOR_FIELD_SCHEMA_UNAVAILABLE`，整批不提交；保留原请求，等待 Schema 就绪，不猜类型、不改成文本规则或自动重放。清空规则不依赖字段类型。
+
 ### 规则结构
 
 每条规则 JSON 结构：
@@ -84,7 +86,7 @@ dws aitable view get row-height --view-id VIEW_ID --format json
 {
   "type": "cell" | "row" | "column" | "preRow",
   "formatFieldId": "fldX",                     // 命中规则后被高亮的字段（cell/column 类型有意义）
-  "format": { "color": "firstLine5" },         // ⚠️ 必须用 FORMAT_COLORS 代号，不接受 hex
+  "format": { "color": "green_strong" },         // 使用英文语义色名，例如 red_light
   "filters": [                                 // 当前固定 1 条
     {
       "fieldId": "fldX",                       // ⚠️ 不是 operands[0]
@@ -95,9 +97,16 @@ dws aitable view get row-height --view-id VIEW_ID --format json
 }
 ```
 
-### color 合法值（FORMAT_COLORS）
+### color 选色规则
 
-`firstLine1` ～ `firstLine11`（共 11 档色码，对应前端调色盘）。**不接受 `#FF0000` 这种 hex**。
+颜色使用英文语义名称。先选色系，再按用户要求的强调程度选样式。
+背景色格式为 {色系}_{强度}，强度共 5 档：
+faint=极淡半透明底；pale=较淡半透明底；light=浅实色底；medium=中等实色底；strong=最浓实色底。前两档会透出单元格底色，实际观感随明暗主题变化。
+色系可选 red（红）、orange（橙）、yellow（黄）、lime（黄绿/青柠）、green（绿）、teal（蓝绿/青）、lightblue（浅蓝）、blue（蓝）、purple（紫）、pink（粉）、grey（灰）。
+选色示例：浅红底用 red_light，极淡粉底用 pink_faint，醒目绿底用 green_strong。只要求背景填色时使用上述背景色。
+明确要求改文字时：text_{色系}=该色文字、透明背景；text_bg_{色系}=该色文字加同色极淡半透明底。例如 text_red 表示红字，text_bg_blue 表示蓝字配淡蓝底。
+使用上述英文名称，不支持 HEX 或自由文本颜色。
+设置回执和视图查询的已知颜色也使用相同英文语义名。回执 verified=true 才表示独立回读已确认；false 或缺失时先通过 view get 或 +view-get 只读核对，不能只凭请求回显声称颜色生效，也不要自动重放写入。
 
 ### filter.symbol 合法值
 
@@ -114,12 +123,12 @@ dws aitable view get row-height --view-id VIEW_ID --format json
 ### 典型用法
 
 ```bash
-# 1) 给金额字段 > 100 的单元格上 firstLine5 色
+# 1) 给金额字段 > 100 的单元格上 green_strong 色
 dws aitable view update fill-color-rule --view-id GRID_ID --json '[
   {
     "type":"cell",
     "formatFieldId":"fldAmount",
-    "format":{"color":"firstLine5"},
+    "format":{"color":"green_strong"},
     "filters":[{"fieldId":"fldAmount","symbol":"GT","value":100}]
   }
 ]'
@@ -174,7 +183,7 @@ dws aitable view update row-height --base-id $BASE --table-id $TABLE --view-id $
 
 # 3) 金额 > 100 的单元格上色
 dws aitable view update fill-color-rule --base-id $BASE --table-id $TABLE --view-id $VIEW --json "[
-  {\"type\":\"cell\",\"formatFieldId\":\"$FLD\",\"format\":{\"color\":\"firstLine5\"},
+  {\"type\":\"cell\",\"formatFieldId\":\"$FLD\",\"format\":{\"color\":\"red_light\"},
    \"filters\":[{\"fieldId\":\"$FLD\",\"symbol\":\"GT\",\"value\":100}]}
 ]"
 
@@ -194,5 +203,5 @@ dws aitable view duplicate --view-id viw_VIP_template --new-name "金牌客户-�
 ```bash
 # 看实际生效的 conditionalFormats
 dws aitable view get fill-color-rule --view-id VIEW_ID --format json
-# → 如果是 [] 说明上次写入失败；常见原因：color 用了 hex（必须 firstLineN）/ filter 用了 operator（必须 symbol）
+# → [] 表示当前无规则，也可能是合法清空；结合本次写入回执判断，不能据此自动重放。新规则使用语义色名，filter 使用 symbol。
 ```

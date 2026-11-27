@@ -775,6 +775,13 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 		insertedBlockID = verifiedBlockID
 	}
 
+	// verified 只覆盖服务端结构回读；网页/客户端能否渲染取决于本地网络对
+	// OSS/alidocs 预览域名的可达性，CLI 无法验证，须在回执中显式划清。
+	visibilityWarning := "附件已插入文档并通过服务端回读；若网页端显示「插入资料」空模块，通常是本地网络/代理拦截了 OSS/alidocs 预览域名，请调整网络后刷新，不要重复插入"
+	if inlineImage {
+		visibilityWarning = "图片已插入文档并通过服务端回读；若网页端不显示，通常是本地网络/代理拦截了 OSS/alidocs 预览域名，请调整网络后刷新，不要重复插入"
+	}
+
 	return emit(map[string]any{
 		"contractVersion": "doc.operation.v1",
 		"ok":              true,
@@ -785,12 +792,16 @@ func insertDocMediaFile(cmd *cobra.Command, nodeID, filePath string, emit func(a
 			"nodeId": nodeID, "resourceId": resourceID, "resourceUrl": resourceURL,
 			"blockId": insertedBlockID, "fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize,
 			"inserted": true, "verified": true,
+			"verificationScope":    "structural",
+			"clientVisibility":     "unknown",
+			"clientVisibilityNote": "回执 verified 仅表示服务端已回读到该媒体块；网页/客户端能否渲染展示取决于本地网络能否访问 OSS/alidocs 预览域名，CLI 无法验证",
 		},
+		"warnings": []string{visibilityWarning},
 		"steps": []map[string]any{
 			{"name": "resolve_upload", "status": "success"},
 			{"name": "upload_oss", "status": "success"},
 			{"name": "insert_block", "status": "success"},
-			{"name": "verify", "status": "success"},
+			{"name": "verify", "status": "success", "scope": "structural"},
 		},
 	})
 }

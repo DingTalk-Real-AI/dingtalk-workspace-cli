@@ -284,6 +284,8 @@ func newReportCommand() *cobra.Command {
 		Short: "提交一份新日报（按模版）",
 		Long: `按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，
 与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。
+contents[].type 直接填 template get 返回的 field_type 数值（含 1/2/3/5/7/8/9 之外的取值，如 13/15/16），
+也支持常用名称别名（text/number/single/date/multi/image/attachment）；type=1 时 contentType=markdown，其余类型用 origin。
 
 --to-user-ids 必填：无接收人的提交服务端仍会返回成功，但日志实际对任何人都不可见，因此 dws 侧强制要求接收人。
 长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；
@@ -1925,7 +1927,7 @@ func normalizeReportSort(item map[string]any, index int) (string, error) {
 func normalizeReportFieldType(v any, index int) (string, error) {
 	raw, ok := reportScalarToString(v)
 	if !ok {
-		return "", reportContentsValidationError(fmt.Sprintf("contents[%d].type must be one of 1/2/3/5/7/8/9", index))
+		return "", reportContentsValidationError(fmt.Sprintf("contents[%d].type must be a positive integer or its alias from template get field_type", index))
 	}
 	t := strings.ToLower(strings.TrimSpace(raw))
 	aliases := map[string]string{
@@ -1940,7 +1942,12 @@ func normalizeReportFieldType(v any, index int) (string, error) {
 	if normalized, ok := aliases[t]; ok {
 		return normalized, nil
 	}
-	return "", reportContentsValidationError(fmt.Sprintf("contents[%d].type=%q is invalid; use template get field_type, such as \"1\" for text", index, raw))
+	// template get 返回的 field_type 不局限于别名表（真实模板存在 13/15，
+	// GitHub #1324 报告 16）；正整数原样透传，由服务端 create_report 权威校验。
+	if n, err := strconv.Atoi(t); err == nil && n > 0 {
+		return t, nil
+	}
+	return "", reportContentsValidationError(fmt.Sprintf("contents[%d].type=%q is invalid; use the field_type returned by template get (positive integer, e.g. 1/13/16)", index, raw))
 }
 
 func normalizeReportContentType(v any, fieldType string, index int) (string, error) {

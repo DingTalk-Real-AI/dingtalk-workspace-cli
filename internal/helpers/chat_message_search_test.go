@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -690,10 +691,14 @@ func TestCrossPlatformCoverageNativeScopedSearchDryRunShowsCompositePlanWithoutC
 type chatChangedContractCaller struct {
 	calls        []chatMessageSearchCall
 	resolveUsers bool
+	callErr      error
 }
 
 func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
+	if c.callErr != nil {
+		return nil, c.callErr
+	}
 	text := `{}`
 	if toolName == "list_messages_by_ids" {
 		messageID := args["openMsgIds"].([]string)[0]
@@ -862,19 +867,70 @@ func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageChatAuditPassesThroughAllActions(t *testing.T) {
+	for _, status := range []string{"AuditApprove", "AuditDelete", "AuditIgnore", "AuditRefuse", "AuditBlock"} {
+		t.Run(status, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			err := executeChatChangedContract(t, caller,
+				"group", "audit-join-validation",
+				"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", status)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].productID != "im" || caller.calls[0].toolName != "audit_join_group" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			if caller.calls[0].args["status"] != status {
+				t.Fatalf("status = %#v, want %q", caller.calls[0].args["status"], status)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageChatAuditRejectsUnsupportedStatus(t *testing.T) {
-	caller := &chatChangedContractCaller{}
-	err := executeChatChangedContract(t, caller,
-		"group", "audit-join-validation",
-		"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", "AuditRefuse")
-	if err == nil {
-		t.Fatal("expected unsupported audit status error")
+	for _, status := range []string{"AuditApplying", "auditapprove", "AuditFoo"} {
+		t.Run(status, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			err := executeChatChangedContract(t, caller,
+				"group", "audit-join-validation",
+				"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", status)
+			if err == nil {
+				t.Fatal("expected unsupported audit status error")
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf("unsupported audit status %q", status)) {
+				t.Fatalf("error = %v, want unsupported status %q", err, status)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("unsupported status must not call MCP: %#v", caller.calls)
+			}
+		})
 	}
-	if !strings.Contains(err.Error(), `unsupported audit status "AuditRefuse"`) {
-		t.Fatalf("error = %v, want unsupported status", err)
-	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("unsupported status must not call MCP: %#v", caller.calls)
+}
+
+func TestCrossPlatformCoverageChatAuditPropagatesServerErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		serverErr string
+	}{
+		{name: "no permission", serverErr: "permission denied: only group owner/admin can audit"},
+		{name: "duplicate processing", serverErr: "audit record already processed"},
+		{name: "server rejected status", serverErr: "unsupported audit status from server"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{callErr: errors.New(tc.serverErr)}
+			err := executeChatChangedContract(t, caller,
+				"group", "audit-join-validation",
+				"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", "AuditApprove")
+			if err == nil {
+				t.Fatal("expected server error to propagate, got success")
+			}
+			if !strings.Contains(err.Error(), "audit_join_group") {
+				t.Fatalf("error = %v, want it attributed to im/audit_join_group", err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want exactly one MCP call", caller.calls)
+			}
+		})
 	}
 }
 

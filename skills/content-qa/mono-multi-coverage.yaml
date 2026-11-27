@@ -33,6 +33,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/contract.md
+  - mono: outbound-call
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/outbound-call.md
   - mono: sport
     multi_skill: dingtalk-misc
     multi_refs:
@@ -184,6 +188,9 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: scripts/calendar_today_agenda.py
+    multi: dingtalk-calendar/scripts/calendar_today_agenda.py
+    mode: identical
   - mono: references/products/mind.md
     multi: dingtalk-misc/references/mind.md
     mode: identical
@@ -195,6 +202,9 @@ paired_files:
     mode: identical
   - mono: references/products/sport.md
     multi: dingtalk-misc/references/sport.md
+    mode: identical
+  - mono: scripts/read_import_headers.py
+    multi: dingtalk-aitable/scripts/read_import_headers.py
     mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py

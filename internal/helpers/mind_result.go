@@ -68,7 +68,7 @@ func callMindResult(cmd *cobra.Command, tool string, args map[string]any) (outpu
 	if tool == "list_mind_nodes" {
 		return mindQueryResult(tool, args, receipt), nil
 	}
-	return mindBindRecoveryProfile(cmd, mindWriteResult(tool, args, receipt))
+	return bindRecoveryProfile(cmd, mindWriteResult(tool, args, receipt))
 }
 
 // Accept only the two documented projections: the flattened MCP result, or a
@@ -460,7 +460,7 @@ func mindRecoveryQuote(value string) string {
 
 // Resolve only non-sensitive metadata; never read credentials to build a hint.
 // Explicit selection remains usable if the metadata store is unavailable.
-func mindBindRecoveryProfile(cmd *cobra.Command, result output.CommandResult) (output.CommandResult, error) {
+func bindRecoveryProfile(cmd *cobra.Command, result output.CommandResult) (output.CommandResult, error) {
 	if result.Outcome() != output.OutcomePending {
 		return result, nil
 	}

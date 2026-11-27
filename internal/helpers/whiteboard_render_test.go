@@ -55,7 +55,7 @@ func TestCrossPlatformCoverageWhiteboardInvalidRunStopsRenderAndCreate(t *testin
 func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *testing.T) {
 	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[
 		{"id":"card","type":"shape","x":40,"y":30,"width":200,"height":100,"geometry":"dml:roundRect","text":{"blocks":[{"type":"paragraph","runs":[{"text":"<确认预览>"}]}]}},
-		{"id":"media","type":"image","x":280,"y":30,"width":120,"height":100,"url":"https://secret.example/image.png"}
+		{"id":"media","type":"image","x":280,"y":30,"width":120,"height":100,"resource":{"kind":"managed","resourceId":"fixture-media","url":"https://secret.example/image.png"},"intrinsicWidth":120,"intrinsicHeight":100}
 	]}`
 	sourcePath := writeWhiteboardFixture(t, source)
 	artifactPath := filepath.Join(t.TempDir(), "preview.svg")

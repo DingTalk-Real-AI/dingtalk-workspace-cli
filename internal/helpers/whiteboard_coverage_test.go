@@ -263,6 +263,39 @@ func TestCrossPlatformCoverageDocMediaUploadValidationAndSuccess(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDocMediaUploadSnapshotOriginalName(t *testing.T) {
+	caller := &whiteboardTestCaller{response: func(whiteboardTestCall, int) string {
+		return `{"uploadUrl":"https://upload.example.test/media","resourceId":"r","resourceUrl":"https://resource.example.test/photo.png"}`
+	}}
+	installWhiteboardTestCaller(t, caller)
+	snapshot := writeWhiteboardFixture(t, "staged bytes")
+	var uploadedPath string
+	SwapHTTPPutFileForTest(t, func(_ context.Context, _ string, _ map[string]string, path string, _ int64) error {
+		uploadedPath = path
+		return nil
+	})
+	cmd, _, err := newDocCommand().Find([]string{"media", "upload"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("node", "doc-1"); err != nil {
+		t.Fatal(err)
+	}
+	var receipt map[string]any
+	if err := RunDocMediaUploadWithFile(cmd, snapshot, "photo.png", func(data map[string]any) error {
+		receipt = data
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].args["fileName"] != "photo.png" || caller.calls[0].args["mimeType"] != "image/png" {
+		t.Fatalf("upload info calls = %#v", caller.calls)
+	}
+	if uploadedPath != snapshot || receipt["fileName"] != "photo.png" || receipt["resourceId"] != "r" {
+		t.Fatalf("uploaded path = %q, receipt = %#v", uploadedPath, receipt)
+	}
+}
+
 func TestCrossPlatformCoverageDocMediaUploadRemainingBranches(t *testing.T) {
 	file := writeWhiteboardFixture(t, "svg")
 

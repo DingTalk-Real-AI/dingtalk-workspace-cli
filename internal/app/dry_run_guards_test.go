@@ -149,6 +149,24 @@ func TestRuntimeRunnerReadOnlyClonePreservesGlobalDryRunBarrier(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageWhiteboardImageDryRunUsesExactReadRoute(t *testing.T) {
+	flags := &GlobalFlags{DryRun: true}
+	fallback := &capturingSuccessRunner{}
+	adapter := &toolCallerAdapter{flags: flags, runner: &runtimeRunner{globalFlags: flags, fallback: fallback}}
+	if _, err := adapter.CallReadTool(context.Background(), "whiteboard", "read_whiteboard_content", map[string]any{"nodeId": "doc", "partId": "part"}); err != nil {
+		t.Fatal(err)
+	}
+	if fallback.calls.Load() != 1 || fallback.invocation.DryRun || !flags.DryRun {
+		t.Fatalf("read-only route did not preserve barrier: calls=%d dry=%v", fallback.calls.Load(), flags.DryRun)
+	}
+	if _, err := adapter.CallTool(context.Background(), "whiteboard", "update_whiteboard", map[string]any{"nodeId": "doc"}); err != nil {
+		t.Fatal(err)
+	}
+	if fallback.calls.Load() != 1 {
+		t.Fatal("write escaped global dry-run barrier")
+	}
+}
+
 type countingErrorRunner struct {
 	calls atomic.Int64
 }

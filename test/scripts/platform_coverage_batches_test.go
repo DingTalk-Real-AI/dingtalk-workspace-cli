@@ -36,18 +36,29 @@ func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 	appTests := `package app
 import (
  "fmt"
+ "io"
  "os"
+ "strings"
  "testing"
  "example.com/platform-fixture/internal/helper"
 )
 func record(t *testing.T) {
  t.Helper()
+ if _, err := os.Stat("app.go"); err != nil { t.Fatal(err) }
+ for _, arg := range os.Args[1:] {
+  if !strings.HasPrefix(arg, "-test.") { t.Fatalf("unexpected process argument: %q", arg) }
+ }
+ if n, err := os.Stdin.Read(make([]byte, 1)); n != 0 || err != io.EOF {
+  t.Fatalf("test stdin must be empty: read %d bytes, error %v", n, err)
+ }
  helper.FromApp()
  Value()
+ executable, err := os.Executable()
+ if err != nil { t.Fatal(err) }
  f, err := os.OpenFile(os.Getenv("PLATFORM_TEST_LOG"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
  if err != nil { t.Fatal(err) }
  defer f.Close()
- fmt.Fprintf(f, "%s %d\n", t.Name(), os.Getpid())
+ fmt.Fprintf(f, "%s\t%d\t%s\n", t.Name(), os.Getpid(), executable)
 }
 func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 `
@@ -75,16 +86,21 @@ func TestNotSelected(t *testing.T) { t.Fatal("non-platform test ran") }
 	}
 	seen := make(map[string]bool)
 	processes := make(map[string]int)
+	executables := make(map[string]bool)
 	for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 || seen[fields[0]] {
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) != 3 || seen[fields[0]] {
 			t.Fatalf("duplicate or malformed execution: %q", line)
 		}
 		seen[fields[0]] = true
 		processes[fields[1]]++
+		executables[fields[2]] = true
 	}
 	if len(seen) != 26 || !seen["TestAllShortcutsApp"] || len(processes) != 3 {
 		t.Fatalf("executed tests = %d, processes = %v; log:\n%s", len(seen), processes, log)
+	}
+	if len(executables) != 1 {
+		t.Errorf("app batches ran %d different test binaries, want 1", len(executables))
 	}
 	for pid, count := range processes {
 		if count > 12 {

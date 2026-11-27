@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -165,11 +166,23 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 	}
 	text, err := CallMCPToolTextOnServerContext(cmd.Context(), sportServerID, tool, args)
 	if err != nil {
+		if tool == "is_org_admin" {
+			return nil, classifySportOrgAdminChannelError(err)
+		}
 		return nil, err
 	}
 	body, err := sportDecodeObject(text)
-	if err != nil || body["success"] != true {
-		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult 或缺少 success=true，不能把异常当成空结果")
+	if err != nil {
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（解码失败），不能把异常当成空结果")
+	}
+	success, present := body["success"]
+	if !present {
+		// 生产 app runner 会给缺 success 的对象回执补 success=true（全产品统一约定），
+		// 本分支只拦截不经 runner 的直接 ToolCaller；服务端 ServiceResult 始终携带 success。
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（缺少 success 字段），不能把异常当成空结果")
+	}
+	if success != true {
+		return nil, apperrors.NewAPI(tool + " 返回无效 ServiceResult（success 非 true），不能把异常当成空结果")
 	}
 	if paged {
 		page, ok := body["result"].(map[string]any)
@@ -192,6 +205,10 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 		return output.Success(body, output.WithMeta(&output.Meta{Count: output.NewCount(len(items)), Pagination: &output.Pagination{EndpointExhausted: !more, NextToken: next, Pages: 1, Items: len(items)}})), nil
 	}
 	switch tool {
+	case "is_org_admin":
+		if _, ok := body["result"].(bool); !ok {
+			return nil, apperrors.NewAPI(tool + " 缺少布尔 result 判定，不能当作非管理员")
+		}
 	case "get_competition_rank_top_n":
 		if _, ok := body["result"].([]any); !ok {
 			return nil, apperrors.NewAPI(tool + " 缺少 result 数组")
@@ -209,6 +226,41 @@ func sportReadServiceCallResult(cmd *cobra.Command, tool string, args map[string
 	}
 	return output.Success(body), nil
 }
+
+// classifySportOrgAdminChannelError 把统一调用通道提前分类的业务错误映射回
+// is_org_admin 的三态语义：显式 success=false（如 QW_ADMIN_CHECK_FAILED）表示
+// 组织管理员查询服务不可用，必须提示稍后重试，绝不能当作非管理员；其余错误（未
+// 登录、网关、非业务错误等）原样返回。
+//
+// 生产 runner 的业务失败返回 reason=business_error，isError=true 返回
+// reason=mcp_tool_error；只改写 API 类别，鉴权、取消和其他已分类错误原样透出。
+// 直接 ToolCaller 的业务失败则由 parseMCPToolTextResult 分类为 *CLIError。
+func classifySportOrgAdminChannelError(err error) error {
+	var appErr *apperrors.Error
+	if errors.As(err, &appErr) && appErr.Category == apperrors.CategoryAPI && (appErr.Reason == "business_error" || appErr.Reason == "mcp_tool_error") {
+		// 保留服务端诊断（Server Code、Trace），只替换面向用户的语义与恢复建议。
+		classified := *appErr
+		classified.Message = fmt.Sprintf("is_org_admin 调用失败（组织管理员查询不可用，errorMsg=%s）：不能当作非管理员，请稍后重试", appErr.Message)
+		classified.Hint = sportOrgAdminRetryHint
+		classified.Actions = append([]string{sportOrgAdminRetryHint}, appErr.Actions...)
+		classified.Cause = err
+		return &classified
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
+		return err
+	}
+	var body map[string]any
+	if json.Unmarshal([]byte(cliErr.Message), &body) != nil {
+		return err
+	}
+	if success, ok := body["success"].(bool); !ok || success {
+		return err
+	}
+	return apperrors.NewAPI(fmt.Sprintf("is_org_admin 返回 success=false（组织管理员查询不可用，errorCode=%v，errorMsg=%v）：不能当作非管理员，请稍后重试", body["errorCode"], body["errorMsg"]), apperrors.WithHint(sportOrgAdminRetryHint))
+}
+
+const sportOrgAdminRetryHint = "管理员身份判定失败，不能当作非管理员；请稍后重试，持续失败请保留 Server Code 联系服务端"
 
 func sportReadPageSchema(row string) string {
 	return `{"type":"object","description":"当前页业务数据；分页控制信息见 meta.pagination，不含 total","properties":{"list":{"type":"array","description":"当前页记录，空列表是合法业务结果","items":` + row + `}}}`
@@ -319,3 +371,17 @@ const sportRankingRowSchema = `{"type":"object","description":"全员排行榜�
 "nickName":{"type":"string","description":"用户昵称"},"avatar":{"type":"string","description":"头像 URL"},
 "cumulativeValue":{"type":"string","description":"累计运动值字符串，步数/米/卡路里"},
 "achievedDays":{"type":"number","description":"达标天数"},"rank":{"type":"number","description":"排名"}}}`
+
+const sportOrgAdminResultSchema = `{"type":"boolean","description":"是否企业管理员：true=管理员（企业主/子管理员）；false=确认非管理员；success=false 时本命令返回错误而非 false"}`
+
+// newSportOrgAdminCmd 判断当前用户是否企业管理员。无业务入参，操作人与企业由平台注入，不接受 user-id/corp-id；供受限操作前权限预判与话术分流。
+func newSportOrgAdminCmd() *cobra.Command {
+	const example = "dws sport org admin --format json"
+	return NewLeafCommand(LeafSpec{
+		Use: "admin", Short: "判断当前用户是否企业管理员",
+		Long:    "判断当前用户是否企业管理员（企业主与子管理员均算管理员），只读无副作用，不受灰度。三态语义：result=true=管理员；result=false=确认非管理员；调用失败（success=false，如 QW_ADMIN_CHECK_FAILED 组织服务查询不可用）时本命令返回错误而不是 false，绝不能当作非管理员处理，应提示用户稍后重试。典型用途是在导出、删除、审批等受限操作前预判权限并提前话术分流：非管理员时告知用户需联系企业管理员，避免直接调用受限工具拿失败码；预判与执行之间存在权限变化窗口，受限工具仍会服务端复查，两者结论以受限工具为准。",
+		Example: example, OutputRollout: output.RolloutUnifiedActive, Server: sportServerID, Tool: "is_org_admin",
+		ResultCall: sportReadServiceCallResult, Safety: sportReadLeaf(),
+		Contract: sportServiceContract("is_org_admin", "sport org admin", "org", "判断当前用户是否企业管理员（预发与生产口径一致）", "把调用失败当非管理员；判定结果不能代替受限工具的服务端权限复查", example, sportOrgAdminResultSchema),
+	})
+}

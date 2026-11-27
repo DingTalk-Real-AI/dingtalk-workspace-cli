@@ -14,7 +14,7 @@ import (
 const reviewedAITableShortcutInterfaceReason = "Reviewed AI Table Shortcut adapter: the executable CLI owns validation, orchestration, output projection, and confirmation; no single pinned MCP interface represents the complete command contract."
 
 // reviewedAITableShortcutContractCommands is the exact migration ledger for
-// the 53 executable AI Table shortcuts that were hidden only because they
+// the 52 executable AI Table shortcuts that were hidden only because they
 // predated typed Contract declarations. New shortcuts must declare Safety and
 // Contract directly and must never be added to this migration ledger.
 var reviewedAITableShortcutContractCommands = map[string]struct{}{
@@ -39,7 +39,6 @@ var reviewedAITableShortcutContractCommands = map[string]struct{}{
 	"+field-update":              {},
 	"+form-delete":               {},
 	"+form-field-hide":           {},
-	"+form-field-update":         {},
 	"+form-share-update":         {},
 	"+form-update":               {},
 	"+import-data":               {},

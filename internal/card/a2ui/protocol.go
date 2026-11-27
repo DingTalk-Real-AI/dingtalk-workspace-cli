@@ -23,6 +23,8 @@ import (
 //go:embed assets.json
 var assetsJSON []byte
 
+var protocolCompile = (*jsonschema.Compiler).Compile
+
 type assets struct {
 	ExplainSHA256   string            `json:"explainSha256"`
 	Manifest        map[string]string `json:"manifest"`
@@ -32,9 +34,11 @@ type assets struct {
 }
 
 type Protocol struct {
-	docs   map[string]map[string]any
-	assets assets
-	schema *jsonschema.Schema
+	docs                map[string]map[string]any
+	assets              assets
+	schema              *jsonschema.Schema
+	hasPureChartVariant bool
+	chartLegacySchema   *jsonschema.Schema
 }
 
 type Diagnostic struct {
@@ -170,9 +174,40 @@ func load(source fs.FS, assetData []byte) (*Protocol, error) {
 			return nil, err
 		}
 	}
-	p.schema, err = c.Compile(str(p.docs["agent-to-renderer.json"]["$id"]))
+	chartDefinition := object(object(p.docs["catalog-components-specialized.json"]["components"])["Chart"])
+	if guarded := object(chartDefinition["then"]); guarded != nil {
+		chartDefinition = guarded
+	}
+	chartData := object(object(chartDefinition["properties"])["data"])
+	chartOptions := array(chartData["anyOf"])
+	var chartLegacy map[string]any
+	for _, candidate := range chartOptions {
+		option := object(candidate)
+		if str(option["x-aicard-variant"]) == "pure-series" {
+			p.hasPureChartVariant = true
+		}
+		required := map[string]bool{}
+		for _, name := range array(option["required"]) {
+			required[str(name)] = true
+		}
+		if required["type"] && required["data"] {
+			chartLegacy = option
+		}
+	}
+	if chartLegacy != nil {
+		if err := c.AddResource("urn:dws:a2ui:chart-legacy", chartLegacy); err != nil {
+			return nil, err
+		}
+	}
+	p.schema, err = protocolCompile(c, str(p.docs["agent-to-renderer.json"]["$id"]))
 	if err != nil {
 		return nil, err
+	}
+	if chartLegacy != nil {
+		p.chartLegacySchema, err = protocolCompile(c, "urn:dws:a2ui:chart-legacy")
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Compile even references not reachable from the envelope. A stale fragment is a package error.
 	for _, doc := range p.docs {

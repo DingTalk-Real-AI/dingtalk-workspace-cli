@@ -6,6 +6,7 @@ package helpers
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
@@ -71,6 +72,15 @@ func classifyAitableMutationError(body map[string]any) error {
 	}
 	opts = append(opts, apperrors.WithDetails(projected))
 	return apperrors.NewAPI(businessErrorDisplayMessage(body, "Dashboard/chart write was rejected; retain the receipt"), opts...)
+}
+
+// ClassifyAitableRecordMutationError delegates to the AI Table protocol owner.
+func ClassifyAitableRecordMutationError(product, tool string, body map[string]any) error {
+	return aitableprotocol.ClassifyAitableRecordMutationError(product, tool, body)
+}
+
+func AitableRecordWriteNeedsReconciliation(code, outcome, token, tool string) bool {
+	return aitableprotocol.AitableRecordWriteNeedsReconciliation(code, outcome, token, tool)
 }
 
 // safeAitableChartCandidates allowlists only reconciliation identities and

@@ -32,7 +32,7 @@ func (f platformUpgradeTransport) RoundTrip(r *http.Request) (*http.Response, er
 // 从真实 Registry 查询、资产解析和 HTTP 下载进入升级流程；仅隔离本机安装和二进制执行。
 func TestCrossPlatformCoverageUpgradePlatformDownloads(t *testing.T) {
 	upgrade.SwapPlatformGitHubTokenForTest(t, func(context.Context) string { return "fixture-local-token" })
-	for _, mode := range []string{"success", "skip-skills", "dry-run", "managed-preview", "tampered", "wrong-version", "missing-release", "missing-skills"} {
+	for _, mode := range []string{"success", "unknown-progress-size", "skip-skills", "dry-run", "managed-preview", "tampered", "wrong-version", "missing-release", "missing-skills"} {
 		t.Run(mode, func(t *testing.T) {
 			for _, key := range []string{"DWS_UPGRADE_REGISTRY", "DWS_UPGRADE_URL", "DWS_UPGRADE_REPOSITORY", "GITHUB_TOKEN", "GH_TOKEN"} {
 				t.Setenv(key, "")
@@ -112,6 +112,12 @@ func TestCrossPlatformCoverageUpgradePlatformDownloads(t *testing.T) {
 				return nil
 			})
 			testseam.Swap(t, &cleanupUpgradeStale, func() {})
+			if mode == "unknown-progress-size" {
+				download := downloadUpgradePlatformAsset
+				testseam.Swap(t, &downloadUpgradePlatformAsset, func(ctx context.Context, asset upgrade.GitHubAsset, dest string, progress func(float64, int64, int64), source upgrade.DownloadSource) error {
+					return download(ctx, asset, dest, func(_ float64, n, _ int64) { progress(0, n, 0) }, source)
+				})
+			}
 			testseam.Swap(t, &upgradeMkdirTemp, func(string, string) (string, error) { return os.MkdirTemp(root, "upgrade-") })
 			testseam.Swap(t, &upgradeTryExecVersion, func(string) ([]byte, error) {
 				if mode == "wrong-version" {
@@ -129,8 +135,8 @@ func TestCrossPlatformCoverageUpgradePlatformDownloads(t *testing.T) {
 			})
 			preview := mode == "dry-run" || mode == "managed-preview"
 			err := runUpgrade(context.Background(), upgradeOptions{yes: true, force: true, skipSkills: mode == "skip-skills", dryRun: preview})
-			wantSuccess := mode == "success" || mode == "skip-skills" || preview
-			if (err == nil) != wantSuccess || replaced != (wantSuccess && !preview) || installed != (mode == "success") {
+			wantSuccess := mode == "success" || mode == "unknown-progress-size" || mode == "skip-skills" || preview
+			if (err == nil) != wantSuccess || replaced != (wantSuccess && !preview) || installed != (mode == "success" || mode == "unknown-progress-size") {
 				t.Fatalf("err=%v replaced=%v installed=%v", err, replaced, installed)
 			}
 			want := []string{"/dingtalk-workspace-cli/latest", releasePath}

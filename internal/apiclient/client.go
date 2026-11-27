@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/netpolicy"
 	"io"
 	"mime/multipart"
 	"net"
@@ -214,7 +215,7 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
 	}
 
-	resp, err := c.HTTPClient.Do(httpReq)
+	resp, err := netpolicy.Do(c.HTTPClient, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("executing HTTP request: %w", err)
 	}
@@ -278,7 +279,7 @@ func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequ
 		httpReq.Header.Set(requestmeta.DingTalkExtHeader, c.DingTalkExt)
 	}
 
-	resp, err := c.HTTPClient.Do(httpReq)
+	resp, err := netpolicy.Do(c.HTTPClient, httpReq)
 	if err != nil {
 		_ = pipeReader.CloseWithError(err)
 		<-writeDone

@@ -222,6 +222,52 @@ func TestCrossPlatformCoverageDocVerificationPreservesMeaning(t *testing.T) {
 	}
 }
 
+// The document service decorates JSONML it hands back with structure the author
+// never wrote: document-level section properties on the root element, and one
+// empty text node inside a block it rewrote. Both are layout, not content, so a
+// byte-level comparison reported doc_write_verification_failed for every JSONML
+// overwrite, create and block_replace even though the content had landed.
+func TestCrossPlatformCoverageDocJSONMLReadbackIgnoresGeneratedLayout(t *testing.T) {
+	expected := `["root",{},["h1",{},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"回读测试"]]],["p",{},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"第 1 段占位文字"]]],["code",{"syntax":"plaintext","theme":"default","fold":true,"code":"占位"}]]`
+	readback := `["root",{"sectPr":{"pgSz":{"w":1127,"h":1588},"pgMar":{"top":48,"bottom":48,"left":72,"right":72,"header":56.73,"footer":66.13,"gutter":0}}},["h1",{"uuid":"mwa599hsyj1t42kxc9"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"回读测试"]]],["p",{"uuid":"mwa599hsfks81mhimwn"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"第 1 段占位文字"]]],["code",{"syntax":"plaintext","theme":"default","fold":true,"code":"占位","uuid":"mwa599hsyw15nlgq4hm"}]]`
+	if !verifyUpdatedDocumentContent(map[string]any{"jsonml": readback}, expected, "overwrite", "jsonml") {
+		t.Fatal("document-level section properties on the readback root must not fail verification")
+	}
+
+	blockExpected := `["code",{"syntax":"plaintext","theme":"default","fold":true,"code":"替换后的代码"}]`
+	blockReadback := `["code",{"syntax":"plaintext","theme":"default","fold":true,"code":"替换后的代码","uuid":"mwa5b1abrvbyefeql2"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},""]]]`
+	blocks := map[string]any{
+		"blocks": []any{
+			map[string]any{"blockId": "mwa5b1abrvbyefeql2", "blockType": "code", "index": 2, "jsonml": blockReadback},
+		},
+		"hasMore": false,
+	}
+	if !blockContentEquals(blocks, "mwa5b1abrvbyefeql2", blockExpected, "jsonml") {
+		t.Fatal("a server-generated empty text node must not fail block verification")
+	}
+
+	// Section properties are dropped, but an attribute the author actually
+	// wrote on the root must survive the drop and still be compared.
+	rootExpected := `["root",{"data-id":"authored"},["p",{},"x"]]`
+	rootReadback := `["root",{"sectPr":{"pgSz":{"w":1127,"h":1588}},"data-id":"authored"},["p",{},"x"]]`
+	if !verifyUpdatedDocumentContent(map[string]any{"jsonml": rootReadback}, rootExpected, "overwrite", "jsonml") {
+		t.Fatal("dropping section properties must not drop authored root attributes")
+	}
+	rootReadbackDiverged := `["root",{"sectPr":{"pgSz":{"w":1127,"h":1588}},"data-id":"other"},["p",{},"x"]]`
+	if verifyUpdatedDocumentContent(map[string]any{"jsonml": rootReadbackDiverged}, rootExpected, "overwrite", "jsonml") {
+		t.Fatal("a root attribute the author never wrote must still fail verification")
+	}
+
+	// A child that is not a text node at all is content like any other; the
+	// empty-node skip must not swallow it.
+	if normalizeJSONMLForVerification(`["p",{},"a"]`) == normalizeJSONMLForVerification(`["p",{},"b"]`) {
+		t.Fatal("empty text handling must not erase authored text")
+	}
+	if normalizeJSONMLForVerification(`["p",{},123]`) == normalizeJSONMLForVerification(`["p",{},124]`) {
+		t.Fatal("non-text children must still be compared")
+	}
+}
+
 func TestCrossPlatformCoverageMarkdownSemanticRoundTrip(t *testing.T) {
 	input := strings.Join([]string{
 		"sales_data.xlsx",

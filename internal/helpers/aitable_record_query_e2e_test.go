@@ -282,6 +282,20 @@ func TestCrossPlatformCoverageRecordQueryCLISinglePageRejectsCursorRetry(t *test
 }
 
 // 只有结构化业务码可以触发丢弃策略；用户文本包含同名字符串不构成证据。
+func TestCrossPlatformCoverageRecordQueryIncompleteRecoveryDiscardsPriorResults(t *testing.T) {
+	for _, src := range []error{
+		apperrors.NewAPI("incomplete", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "QUERY_RECORDS_INCOMPLETE"}), apperrors.WithRetryable(true)),
+		&CLIError{Message: "incomplete", ServerCode: "QUERY_RECORDS_INCOMPLETE"},
+	} {
+		var got *apperrors.Error
+		if !errors.As(RecordQueryRecoveryError(src), &got) || got.Reason != "pagination_incomplete_read" || got.Retryable ||
+			got.Details["discard_previous_results"] != true || got.Details["restart_from_first_page"] != true ||
+			got.ServerDiag.ServerErrorCode != "QUERY_RECORDS_INCOMPLETE" || !strings.Contains(got.Hint, "含写入") {
+			t.Fatalf("unsafe incomplete-read recovery: %#v", got)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageRecordQueryRecoveryOnlyClassifiesKnownCodes(t *testing.T) {
 	for _, err := range []error{nil, errors.New("INVALID_CURSOR"), &CLIError{Message: "CURSOR_SNAPSHOT_CHANGED"},
 		apperrors.NewAPI("failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PERMISSION_DENIED"}))} {
