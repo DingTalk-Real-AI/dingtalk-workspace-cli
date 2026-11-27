@@ -20,6 +20,7 @@ import (
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	shortcutchat "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func init() {
@@ -30,9 +31,10 @@ func init() {
 }
 
 var (
-	appMessageCryptoCurrentIdentity = msgcrypto.CurrentIdentity
-	appMessageCryptoOpenSession     = msgcrypto.OpenSession
-	appMessageCryptoAvailable       = msgcrypto.Available
+	appMessageCryptoCurrentIdentity       = msgcrypto.CurrentIdentity
+	appMessageCryptoOpenSession           = msgcrypto.OpenSession
+	appMessageCryptoAvailable             = msgcrypto.Available
+	appMessageCryptoFetchProfileWithToken = fetchMessageCryptoProfileWithScopedToken
 )
 
 type messageCryptoAuthContextKey struct{}
@@ -171,18 +173,29 @@ func resolveStatelessTokenMessageCryptoIdentity(
 	if cached, ok := cache.Get(explicitToken); ok && strings.TrimSpace(cached.CorpID) != "" {
 		return cached, nil
 	}
-	if rt == nil {
-		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：缺少组织 corpId 且无可用 MCP 运行时查询当前用户身份")
+	var (
+		resolvedCorpID string
+		resolvedUserID string
+	)
+	if result, used, err := appMessageCryptoFetchProfileWithToken(ctx, explicitToken); used {
+		if err != nil {
+			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
+		}
+		resolvedCorpID, resolvedUserID = extractContactProfileIdentityFromToolResult(result)
+	} else {
+		if rt == nil {
+			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：缺少组织 corpId 且无可用 MCP 运行时查询当前用户身份")
+		}
+		data, err := rt.CallMCPReadData("contact", "get_current_user_profile", nil)
+		if err != nil {
+			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
+		}
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return messagecrypto.Identity{}, fmt.Errorf("解析当前用户身份响应失败: %w", err)
+		}
+		resolvedCorpID, resolvedUserID = extractContactProfileIdentity(raw, data)
 	}
-	data, err := rt.CallMCPReadData("contact", "get_current_user_profile", nil)
-	if err != nil {
-		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
-	}
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return messagecrypto.Identity{}, fmt.Errorf("解析当前用户身份响应失败: %w", err)
-	}
-	resolvedCorpID, resolvedUserID := extractContactProfileIdentity(raw, data)
 	if resolvedCorpID == "" {
 		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：contact/get_current_user_profile 未返回组织 corpId")
 	}
@@ -192,6 +205,38 @@ func resolveStatelessTokenMessageCryptoIdentity(
 	}
 	cache.Set(explicitToken, resolved)
 	return resolved, nil
+}
+
+func fetchMessageCryptoProfileWithScopedToken(ctx context.Context, explicitToken string) (*edition.ToolResult, bool, error) {
+	tokenCaller, ok := helpers.GetCaller().(tokenOverrideToolCaller)
+	if !ok {
+		return nil, false, nil
+	}
+	result, err := tokenCaller.CallToolWithToken(ctx, explicitToken, "contact", "get_current_user_profile", nil)
+	return result, true, err
+}
+
+func extractContactProfileIdentityFromToolResult(result *edition.ToolResult) (corpID, userID string) {
+	if result == nil {
+		return "", ""
+	}
+	if profile, ok := authpkg.ContactProfileIdentityFromToolResult(result); ok && strings.TrimSpace(profile.CorpID) != "" {
+		return strings.TrimSpace(profile.CorpID), strings.TrimSpace(profile.UserID)
+	}
+	for _, block := range result.Content {
+		text := strings.TrimSpace(block.Text)
+		if text == "" {
+			continue
+		}
+		var data map[string]any
+		if err := json.Unmarshal([]byte(text), &data); err != nil {
+			continue
+		}
+		if c, u := extractContactProfileIdentity([]byte(text), data); c != "" {
+			return c, u
+		}
+	}
+	return "", ""
 }
 
 func extractContactProfileIdentity(raw []byte, data map[string]any) (corpID, userID string) {
