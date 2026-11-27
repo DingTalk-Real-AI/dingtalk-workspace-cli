@@ -32,9 +32,18 @@ func TestItoaCoversSignedBoundaries(t *testing.T) {
 }
 
 func TestRawEvent_DedupKey_UsesEventID(t *testing.T) {
-	e := &RawEvent{EventID: "ev_abc"}
-	if got := e.DedupKey(); got != "ev_abc" {
-		t.Fatalf("DedupKey = %q, want %q", got, "ev_abc")
+	e := &RawEvent{EventID: "ev_abc", EventType: "im.message", SubscribeID: "sub-1"}
+	copy := *e
+	copy.Data = `{"differentEnvelope":true}`
+	copy.EventBornTime = 123
+	copy.ReceivedAt = copy.ReceivedAt.Add(1)
+	copy.Headers = map[string]string{"token": "must-not-affect-key"}
+	if got := e.DedupKey(); got == "" || got != copy.DedupKey() {
+		t.Fatalf("same delivery ID must dedup regardless of envelope: %q vs %q", got, copy.DedupKey())
+	}
+	copy.EventID = "ev_other"
+	if e.DedupKey() == copy.DedupKey() {
+		t.Fatal("different EventIDs must not dedup")
 	}
 }
 
@@ -48,9 +57,6 @@ func TestRawEvent_DedupKey_FallbackHashWhenIDEmpty(t *testing.T) {
 	if got == "" {
 		t.Fatal("fallback DedupKey should not be empty")
 	}
-	if !strings.HasPrefix(got, "im.message.receive_v1:1700000000000:") {
-		t.Fatalf("fallback DedupKey = %q, want prefix type:born_time:", got)
-	}
 	// Same content → same key
 	if got2 := e.DedupKey(); got2 != got {
 		t.Fatalf("DedupKey not deterministic: %q vs %q", got, got2)
@@ -60,6 +66,66 @@ func TestRawEvent_DedupKey_FallbackHashWhenIDEmpty(t *testing.T) {
 	e2.Data = `{"chat":"y"}`
 	if got3 := e2.DedupKey(); got3 == got {
 		t.Fatalf("different Data should yield different key, got same: %q", got)
+	}
+	e2 = *e
+	e2.EventBornTime++
+	if e2.DedupKey() == got {
+		t.Fatal("fallback must distinguish born time")
+	}
+}
+
+func TestCrossPlatformCoverageRawEventDedupRoutingIdentity(t *testing.T) {
+	for _, eventID := range []string{"same-business-event", ""} {
+		for name, mutate := range map[string]func(*RawEvent){
+			"subscription": func(e *RawEvent) { e.SubscribeID = "another-sub" },
+			"source":       func(e *RawEvent) { e.SourceID = "another-source" },
+			"tenant":       func(e *RawEvent) { e.EventCorpID = "another-corp" },
+			"app":          func(e *RawEvent) { e.EventUnifiedAppID = "another-app" },
+			"scope":        func(e *RawEvent) { e.EventScope = "another-scope" },
+			"event-type":   func(e *RawEvent) { e.EventType = "user_im_message_receive_user" },
+			"missing-sub":  func(e *RawEvent) { e.SubscribeID = "" },
+		} {
+			t.Run(eventID+"/"+name, func(t *testing.T) {
+				original := RawEvent{EventID: eventID, EventType: "user_im_message_receive_o2o",
+					SubscribeID: "current-sub", SourceID: "source", EventCorpID: "corp",
+					EventUnifiedAppID: "app", EventScope: "scope", Data: `{"msgId":"same"}`}
+				other := original
+				mutate(&other)
+				if original.DedupKey() == other.DedupKey() {
+					t.Fatal("distinct routing identities must survive dedup independently")
+				}
+			})
+		}
+	}
+}
+
+func TestCrossPlatformCoverageRawEventDedupFieldBoundariesAndIdentityKind(t *testing.T) {
+	a := RawEvent{SourceID: "a:b", EventCorpID: "c", EventID: "same"}
+	b := RawEvent{SourceID: "a", EventCorpID: "b:c", EventID: "same"}
+	if a.DedupKey() == b.DedupKey() {
+		t.Fatal("separator-containing fields must not collide")
+	}
+	fallback := RawEvent{Data: "same", EventBornTime: 123}
+	identified := fallback
+	identified.EventID = "123:0967115f2813a354" // Same literal as the fallback identity.
+	if fallback.DedupKey() == identified.DedupKey() {
+		t.Fatal("SDK ID and content fallback namespaces must differ")
+	}
+}
+
+func BenchmarkRawEvent_DedupKey(b *testing.B) {
+	for _, size := range []int{64, 64 * 1024} {
+		for _, id := range []string{"event-id", ""} {
+			b.Run(itoa(int64(size))+"/"+id, func(b *testing.B) {
+				e := RawEvent{EventID: id, EventType: "user_im_message_receive_o2o",
+					SubscribeID: "sub-current", SourceID: "source", Data: strings.Repeat("x", size)}
+				b.ReportAllocs()
+				b.ResetTimer()
+				for b.Loop() {
+					e.DedupKey()
+				}
+			})
+		}
 	}
 }
 
