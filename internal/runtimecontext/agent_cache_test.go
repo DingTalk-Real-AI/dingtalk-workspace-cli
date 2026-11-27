@@ -27,6 +27,20 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	})
 	t.Setenv(disableAgentCacheEnv, "")
 
+	stored := make(chan struct{}, 4)
+	testseam.Swap(t, &agentCacheStore, func(key string, snapshot AgentSnapshot) {
+		storeCachedAgentSnapshot(key, snapshot)
+		stored <- struct{}{}
+	})
+	waitStored := func() {
+		t.Helper()
+		select {
+		case <-stored:
+		case <-time.After(time.Second):
+			t.Fatal("async cache store did not complete")
+		}
+	}
+
 	raw := []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local"}`)
 	var calls atomic.Int32
 	newCachingProvider := func() *agentProvider {
@@ -45,6 +59,7 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	if first.State != StateReady || first.AgentID != 7 || calls.Load() != 1 {
 		t.Fatalf("first = %+v calls=%d", first, calls.Load())
 	}
+	waitStored()
 
 	second := newCachingProvider().resolve()
 	if second.State != StateReady || second.AgentID != 7 || second.OS != "mac" || string(second.JSON()) != string(raw) || calls.Load() != 1 {
@@ -63,6 +78,92 @@ func TestCrossPlatformCoverageAgentCacheRoundTripAndExpiry(t *testing.T) {
 	if expired.State != StateReady || calls.Load() != 3 {
 		t.Fatalf("expired = %+v calls=%d", expired, calls.Load())
 	}
+	waitStored()
+}
+
+func TestCrossPlatformCoverageAgentCacheWriteDoesNotBlockAndLateResultIsNotCached(t *testing.T) {
+	t.Run("blocked cache write still delivers native result", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		testseam.Swap(t, &userCacheDir, func() (string, error) { return cacheDir, nil })
+		testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
+			return []ancestorProcess{{PID: 5151, PPID: 1, StartTime: 111, Comm: "host"}}, true
+		})
+		t.Setenv(disableAgentCacheEnv, "")
+
+		started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		testseam.Swap(t, &agentCacheStore, func(string, AgentSnapshot) {
+			close(started)
+			defer close(finished)
+			<-release
+		})
+		t.Cleanup(func() {
+			close(release)
+			<-finished
+		})
+
+		p := &agentProvider{
+			locate:   successfulLocator,
+			timeout:  80 * time.Millisecond,
+			useCache: true,
+			collect: func(string, string) ([]byte, int32, error) {
+				return []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local"}`), 0, nil
+			},
+		}
+		got := p.resolve()
+		if got.State != StateReady || got.AgentID != 7 {
+			t.Fatalf("blocked cache write broke recognition: %+v", got)
+		}
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("expected async cache store to start")
+		}
+	})
+
+	t.Run("late native result after timeout is not persisted", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		testseam.Swap(t, &userCacheDir, func() (string, error) { return cacheDir, nil })
+		testseam.Swap(t, &agentCacheAncestry, func() ([]ancestorProcess, bool) {
+			return []ancestorProcess{{PID: 6161, PPID: 1, StartTime: 222, Comm: "host"}}, true
+		})
+		t.Setenv(disableAgentCacheEnv, "")
+
+		var storeCalls atomic.Int32
+		testseam.Swap(t, &agentCacheStore, func(key string, snapshot AgentSnapshot) {
+			storeCalls.Add(1)
+			storeCachedAgentSnapshot(key, snapshot)
+		})
+
+		release, completed := make(chan struct{}), make(chan struct{})
+		p := &agentProvider{
+			locate:   successfulLocator,
+			timeout:  10 * time.Millisecond,
+			useCache: true,
+			collect: func(string, string) ([]byte, int32, error) {
+				defer close(completed)
+				<-release
+				return []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local"}`), 0, nil
+			},
+		}
+
+		got := p.resolve()
+		if got.State != StateTimeout || got.ErrorCategory != "collection_timeout" || got.AgentID != 0 {
+			t.Fatalf("expected timeout snapshot, got %+v", got)
+		}
+		close(release)
+		<-completed
+
+		if storeCalls.Load() != 0 {
+			t.Fatalf("late native result triggered %d cache stores", storeCalls.Load())
+		}
+		key, ok := computeAgentCacheKey()
+		if !ok {
+			t.Fatal("expected cache key")
+		}
+		if _, hit := loadCachedAgentSnapshot(key); hit {
+			t.Fatal("late native result was persisted to cache")
+		}
+	})
 }
 
 func TestCrossPlatformCoverageAgentCacheEdgeCasesAndAncestryWalker(t *testing.T) {

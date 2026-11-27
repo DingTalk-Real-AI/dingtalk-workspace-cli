@@ -84,12 +84,17 @@ func (p *agentProvider) resolve() AgentSnapshot {
 			}
 			raw, code, err := p.collect(path, filepath.Join(filepath.Dir(path), "skt.bin"))
 			result = parseAgentResult(raw, code, err)
-			if cacheKey != "" {
-				agentCacheStore(cacheKey, result)
-			}
 		}()
 		select {
 		case p.result = <-done:
+			if cacheKey != "" && (p.result.State == StateReady || p.result.State == AgentUnknown) {
+				snapshot := p.result.clone()
+				store := agentCacheStore
+				go func() {
+					defer func() { _ = recover() }()
+					store(cacheKey, snapshot)
+				}()
+			}
 		case <-timer.C:
 			p.result = AgentSnapshot{State: StateTimeout, ErrorCategory: "collection_timeout"}
 		}
