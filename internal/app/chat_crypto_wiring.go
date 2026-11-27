@@ -158,7 +158,7 @@ func newAppMessageCryptoClient() *messagecrypto.Client {
 
 func resolveStatelessTokenMessageCryptoIdentity(
 	ctx context.Context,
-	rt messagecrypto.Runtime,
+	_ messagecrypto.Runtime,
 	explicitToken string,
 	cache *statelessTokenIdentityCache,
 ) (messagecrypto.Identity, error) {
@@ -173,29 +173,14 @@ func resolveStatelessTokenMessageCryptoIdentity(
 	if cached, ok := cache.Get(explicitToken); ok && strings.TrimSpace(cached.CorpID) != "" {
 		return cached, nil
 	}
-	var (
-		resolvedCorpID string
-		resolvedUserID string
-	)
-	if result, used, err := appMessageCryptoFetchProfileWithToken(ctx, explicitToken); used {
-		if err != nil {
-			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
-		}
-		resolvedCorpID, resolvedUserID = extractContactProfileIdentityFromToolResult(result)
-	} else {
-		if rt == nil {
-			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：缺少组织 corpId 且无可用 MCP 运行时查询当前用户身份")
-		}
-		data, err := rt.CallMCPReadData("contact", "get_current_user_profile", nil)
-		if err != nil {
-			return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
-		}
-		raw, err := json.Marshal(data)
-		if err != nil {
-			return messagecrypto.Identity{}, fmt.Errorf("解析当前用户身份响应失败: %w", err)
-		}
-		resolvedCorpID, resolvedUserID = extractContactProfileIdentity(raw, data)
+	result, used, err := appMessageCryptoFetchProfileWithToken(ctx, explicitToken)
+	if !used {
+		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：当前运行时不支持请求级令牌身份查询，请提供运行时 corpId 或使用支持请求级令牌的调用器")
 	}
+	if err != nil {
+		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 查询当前用户身份失败: %w", err)
+	}
+	resolvedCorpID, resolvedUserID := extractContactProfileIdentityFromToolResult(result)
 	if resolvedCorpID == "" {
 		return messagecrypto.Identity{}, fmt.Errorf("使用 --token 解密消息失败：contact/get_current_user_profile 未返回组织 corpId")
 	}
@@ -232,17 +217,14 @@ func extractContactProfileIdentityFromToolResult(result *edition.ToolResult) (co
 		if err := json.Unmarshal([]byte(text), &data); err != nil {
 			continue
 		}
-		if c, u := extractContactProfileIdentity([]byte(text), data); c != "" {
+		if c, u := extractContactProfileIdentityFromMap(data); c != "" {
 			return c, u
 		}
 	}
 	return "", ""
 }
 
-func extractContactProfileIdentity(raw []byte, data map[string]any) (corpID, userID string) {
-	if profile, ok := authpkg.ContactProfileIdentityFromJSON(raw); ok && strings.TrimSpace(profile.CorpID) != "" {
-		return strings.TrimSpace(profile.CorpID), strings.TrimSpace(profile.UserID)
-	}
+func extractContactProfileIdentityFromMap(data map[string]any) (corpID, userID string) {
 	src := data
 	if nested, ok := data["result"].(map[string]any); ok {
 		src = nested

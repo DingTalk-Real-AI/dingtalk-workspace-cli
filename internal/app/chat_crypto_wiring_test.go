@@ -98,8 +98,18 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		}
 	})
 	t.Run("stateless_token_resolves_identity_via_mcp_and_caches", func(t *testing.T) {
-		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(context.Context, string) (*edition.ToolResult, bool, error) {
-			return nil, false, nil
+		var fetchCalls atomic.Int32
+		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(_ context.Context, token string) (*edition.ToolResult, bool, error) {
+			fetchCalls.Add(1)
+			if token != "explicit-bearer-token" {
+				t.Fatalf("token = %q", token)
+			}
+			return &edition.ToolResult{
+				Content: []edition.ContentBlock{{
+					Type: "text",
+					Text: `{"result":[{"orgEmployeeModel":{"corpId":"ding-stateless-corp","userId":"staff-stateless-1"}}]}`,
+				}},
+			}, true, nil
 		})
 		testseam.Swap(t, &appMessageCryptoCurrentIdentity, func(context.Context, string) (msgcrypto.Identity, error) {
 			t.Fatal("stateless --token must not read local OAuth identity")
@@ -116,18 +126,7 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		})
 		testseam.Swap(t, &appMessageCryptoAvailable, func() bool { return true })
 
-		rt := &appCryptoFakeRuntime{
-			readData: map[string]any{
-				"result": []any{
-					map[string]any{
-						"orgEmployeeModel": map[string]any{
-							"corpId": "ding-stateless-corp",
-							"userId": "staff-stateless-1",
-						},
-					},
-				},
-			},
-		}
+		rt := &appCryptoFakeRuntime{readErr: errors.New("ordinary MCP runtime must not be called")}
 		client := newAppMessageCryptoClient()
 		ctx := withMessageCryptoAuthContext(context.Background(), "explicit-bearer-token", "explicit-client-id")
 
@@ -144,8 +143,8 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		if err != nil || id2 != id1 {
 			t.Fatalf("IdentityWithRuntime(2) = %#v, %v", id2, err)
 		}
-		if rt.readCalls.Load() != 1 {
-			t.Fatalf("contact/get_current_user_profile calls = %d, want 1", rt.readCalls.Load())
+		if fetchCalls.Load() != 1 || rt.readCalls.Load() != 0 {
+			t.Fatalf("fetchCalls=%d rt.readCalls=%d, want 1 and 0", fetchCalls.Load(), rt.readCalls.Load())
 		}
 
 		session, err := client.OpenSession(ctx, messagecrypto.SessionOptions{Runtime: rt})
@@ -189,9 +188,6 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		}
 	})
 	t.Run("stateless_token_identity_errors_never_fallback_to_oauth", func(t *testing.T) {
-		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(context.Context, string) (*edition.ToolResult, bool, error) {
-			return nil, false, nil
-		})
 		testseam.Swap(t, &appMessageCryptoCurrentIdentity, func(context.Context, string) (msgcrypto.Identity, error) {
 			t.Fatal("must not fall back to local OAuth")
 			return msgcrypto.Identity{}, nil
@@ -199,17 +195,41 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 		client := newAppMessageCryptoClient()
 		ctx := withMessageCryptoAuthContext(context.Background(), "token-no-corp", "")
 
-		if _, err := client.Identity(ctx, ""); err == nil || !strings.Contains(err.Error(), "无可用 MCP 运行时") {
+		// Custom helper caller without CallToolWithToken must fail closed and never call ordinary MCP.
+		prevCaller := helpers.GetCaller()
+		t.Cleanup(func() { helpers.InitDeps(prevCaller) })
+		helpers.InitDeps(appCryptoPlainToolCaller{t: t})
+		ordinaryRT := &appCryptoFakeRuntime{readErr: errors.New("ordinary MCP must not be called")}
+		if _, err := client.IdentityWithRuntime(ctx, ordinaryRT, ""); err == nil || !strings.Contains(err.Error(), "不支持请求级令牌身份查询") {
+			t.Fatalf("plain caller err = %v", err)
+		}
+		if ordinaryRT.readCalls.Load() != 0 {
+			t.Fatalf("ordinary MCP runtime was called %d times, want 0", ordinaryRT.readCalls.Load())
+		}
+		if _, err := client.Identity(ctx, ""); err == nil || !strings.Contains(err.Error(), "不支持请求级令牌身份查询") {
 			t.Fatalf("nil runtime err = %v", err)
 		}
-		if _, err := client.IdentityWithRuntime(ctx, &appCryptoFakeRuntime{readErr: errors.New("mcp down")}, ""); err == nil || !strings.Contains(err.Error(), "mcp down") {
+		if _, err := client.OpenSession(ctx, messagecrypto.SessionOptions{Runtime: ordinaryRT}); err == nil || !strings.Contains(err.Error(), "不支持请求级令牌身份查询") {
+			t.Fatalf("OpenSession plain caller err = %v", err)
+		}
+		if ordinaryRT.readCalls.Load() != 0 {
+			t.Fatalf("ordinary MCP runtime was called %d times on OpenSession, want 0", ordinaryRT.readCalls.Load())
+		}
+
+		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(context.Context, string) (*edition.ToolResult, bool, error) {
+			return nil, true, errors.New("mcp down")
+		})
+		if _, err := client.IdentityWithRuntime(ctx, ordinaryRT, ""); err == nil || !strings.Contains(err.Error(), "mcp down") {
 			t.Fatalf("mcp error = %v", err)
 		}
-		if _, err := client.IdentityWithRuntime(ctx, &appCryptoFakeRuntime{readData: map[string]any{"userId": "u1"}}, ""); err == nil || !strings.Contains(err.Error(), "未返回组织 corpId") {
+
+		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(context.Context, string) (*edition.ToolResult, bool, error) {
+			return &edition.ToolResult{
+				Content: []edition.ContentBlock{{Type: "text", Text: `{"userId":"u1"}`}},
+			}, true, nil
+		})
+		if _, err := client.IdentityWithRuntime(ctx, ordinaryRT, ""); err == nil || !strings.Contains(err.Error(), "未返回组织 corpId") {
 			t.Fatalf("missing corpId err = %v", err)
-		}
-		if _, err := client.OpenSession(ctx, messagecrypto.SessionOptions{}); err == nil {
-			t.Fatal("OpenSession should fail when identity resolution fails")
 		}
 	})
 	t.Run("root_command_propagates_token_to_chat_crypto_decrypt", func(t *testing.T) {
@@ -308,24 +328,18 @@ func TestCrossPlatformCoverageMessageCryptoWiring(t *testing.T) {
 			t.Fatalf("overflow entry = %#v, %v", got, ok)
 		}
 
-		// json.Marshal failure branch and nested result map fallback branch.
+		// Nested result map fallback branch via scoped token result.
 		client := newAppMessageCryptoClient()
-		ctxMarshalErr := withMessageCryptoAuthContext(context.Background(), "tok-marshal-err", "")
-		if _, err := client.IdentityWithRuntime(ctxMarshalErr, &appCryptoFakeRuntime{
-			readData: map[string]any{"bad": make(chan int)},
-		}, ""); err == nil || !strings.Contains(err.Error(), "解析当前用户身份响应失败") {
-			t.Fatalf("marshal error = %v", err)
-		}
-
+		testseam.Swap(t, &appMessageCryptoFetchProfileWithToken, func(context.Context, string) (*edition.ToolResult, bool, error) {
+			return &edition.ToolResult{
+				Content: []edition.ContentBlock{{
+					Type: "text",
+					Text: `{"result":{"corpId":"corp-nested","staffId":"staff-nested"}}`,
+				}},
+			}, true, nil
+		})
 		ctxNested := withMessageCryptoAuthContext(context.Background(), "tok-nested", "")
-		nestedID, err := client.IdentityWithRuntime(ctxNested, &appCryptoFakeRuntime{
-			readData: map[string]any{
-				"result": map[string]any{
-					"corpId":  "corp-nested",
-					"staffId": "staff-nested",
-				},
-			},
-		}, "")
+		nestedID, err := client.IdentityWithRuntime(ctxNested, nil, "")
 		if err != nil || nestedID.CorpID != "corp-nested" || nestedID.StaffID != "staff-nested" {
 			t.Fatalf("nested identity = %#v, %v", nestedID, err)
 		}
@@ -568,6 +582,20 @@ func (r *appCryptoFakeRuntime) CallMCPWriteDataStrict(string, string, map[string
 }
 
 func (r *appCryptoFakeRuntime) DryRun() bool { return false }
+
+type appCryptoPlainToolCaller struct {
+	t *testing.T
+}
+
+func (c appCryptoPlainToolCaller) CallTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
+	c.t.Fatal("ordinary ToolCaller.CallTool must not be called for stateless --token identity lookup")
+	return nil, errors.New("forbidden")
+}
+
+func (appCryptoPlainToolCaller) Format() string { return "json" }
+func (appCryptoPlainToolCaller) DryRun() bool   { return false }
+func (appCryptoPlainToolCaller) Fields() string { return "" }
+func (appCryptoPlainToolCaller) JQ() string     { return "" }
 
 type appSafeChatStubDecryptCipher struct {
 	plain []byte
