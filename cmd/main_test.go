@@ -203,32 +203,59 @@ func TestCrossPlatformCoverageReadyIdentityAndProcessExit(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageMainCollectsAgentBeforeHelpAndVersion(t *testing.T) {
-	for _, path := range []string{"help", "version"} {
-		t.Run(path, func(t *testing.T) {
-			t.Setenv("DO_NOT_TRACK", "")
-			testseam.Swap(t, &os.Args, []string{"dws", path})
-			collected := false
-			raw := []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local","process":{"pid":42},"future":{"v":1}}`)
-			testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
-				collected = true
-				return runtimecontext.AgentSnapshotForTest(raw, 0)
-			})
-			testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { return app.TelemetryIdentity{} })
-			testseam.Swap(t, &appExecute, func() (int, string, string) {
-				if !collected {
-					t.Fatal("public execution preceded Agent snapshot")
+func TestCrossPlatformCoverageMainCollectsAgentAsyncWithoutBlocking(t *testing.T) {
+	t.Run("ready snapshot attached", func(t *testing.T) {
+		for _, path := range []string{"help", "version"} {
+			t.Run(path, func(t *testing.T) {
+				t.Setenv("DO_NOT_TRACK", "")
+				testseam.Swap(t, &os.Args, []string{"dws", path})
+				raw := []byte(`{"agent":7,"match_tier":"high","os":"mac","execution_mode":"local","process":{"pid":42},"future":{"v":1}}`)
+				testseam.Swap(t, &snapshotAgentInfo, func() <-chan runtimecontext.AgentSnapshot {
+					ch := make(chan runtimecontext.AgentSnapshot, 1)
+					ch <- runtimecontext.AgentSnapshotForTest(raw, 0)
+					return ch
+				})
+				testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { return app.TelemetryIdentity{} })
+				testseam.Swap(t, &appExecute, func() (int, string, string) { return 0, path, "" })
+				testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
+					if event.AgentInfo == nil || string(event.AgentInfo.Result) != string(raw) {
+						t.Fatal("original process SDK object lost")
+					}
+				})
+				if run() != 0 {
+					t.Fatal("public execution failed")
 				}
-				return 0, path, ""
 			})
-			testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
-				if event.AgentInfo == nil || string(event.AgentInfo.Result) != string(raw) {
-					t.Fatal("original process SDK object lost")
-				}
-			})
-			if run() != 0 {
-				t.Fatal("public execution failed")
+		}
+	})
+
+	t.Run("slow collection does not block exit", func(t *testing.T) {
+		t.Setenv("DO_NOT_TRACK", "")
+		testseam.Swap(t, &os.Args, []string{"dws", "version"})
+		started, release, returned := make(chan struct{}), make(chan struct{}), make(chan struct{})
+		testseam.Swap(t, &resolveAgentInfo, func() runtimecontext.AgentSnapshot {
+			close(started)
+			defer close(returned)
+			<-release
+			return runtimecontext.AgentSnapshot{State: runtimecontext.StateReady}
+		})
+		defer func() { close(release); <-returned }()
+		testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { return app.TelemetryIdentity{} })
+		testseam.Swap(t, &appExecute, func() (int, string, string) { <-started; return 0, "version", "" })
+		testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
+			if event.AgentInfo != nil {
+				t.Fatalf("unexpected late agentInfo=%+v", event.AgentInfo)
 			}
 		})
-	}
+		done := make(chan int, 1)
+		go func() { done <- run() }()
+		select {
+		case code := <-done:
+			if code != 0 {
+				t.Fatal(code)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("command waited for slow agent collection")
+		}
+	})
 }

@@ -45,14 +45,15 @@ var errAgentTooLarge = errors.New("agent result exceeds limit")
 
 type agentCollector func(string, string) ([]byte, int32, error)
 type agentProvider struct {
-	once    sync.Once
-	result  AgentSnapshot
-	collect agentCollector
-	locate  libraryLocator
-	timeout time.Duration
+	once     sync.Once
+	result   AgentSnapshot
+	collect  agentCollector
+	locate   libraryLocator
+	timeout  time.Duration
+	useCache bool
 }
 
-var defaultAgentProvider = &agentProvider{collect: collectNativeAgent, locate: resolveLibraryPath, timeout: defaultTimeout}
+var defaultAgentProvider = &agentProvider{collect: collectNativeAgent, locate: resolveLibraryPath, timeout: defaultTimeout, useCache: true}
 
 // ResolveAgent collects full_info=0 in the original CLI process once. Timeout
 // publishes a final snapshot; a late native result is released and discarded.
@@ -60,6 +61,16 @@ func ResolveAgent() AgentSnapshot { return defaultAgentProvider.resolve() }
 
 func (p *agentProvider) resolve() AgentSnapshot {
 	p.once.Do(func() {
+		var cacheKey string
+		if p.useCache {
+			if key, ok := computeAgentCacheKey(); ok {
+				cacheKey = key
+				if cached, hit := agentCacheLookup(key); hit {
+					p.result = cached
+					return
+				}
+			}
+		}
 		done := make(chan AgentSnapshot, 1)
 		timer := time.NewTimer(p.timeout)
 		defer timer.Stop()
@@ -73,6 +84,9 @@ func (p *agentProvider) resolve() AgentSnapshot {
 			}
 			raw, code, err := p.collect(path, filepath.Join(filepath.Dir(path), "skt.bin"))
 			result = parseAgentResult(raw, code, err)
+			if cacheKey != "" {
+				agentCacheStore(cacheKey, result)
+			}
 		}()
 		select {
 		case p.result = <-done:

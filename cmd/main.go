@@ -26,6 +26,7 @@ import (
 
 var (
 	resolveAgentInfo          = runtimecontext.ResolveAgent
+	snapshotAgentInfo         = startAgentSnapshot
 	appExecute                = app.ExecuteWithTelemetry
 	runSchemaCacheBuilder     = app.RunSchemaCacheBuilder
 	resolveTelemetryIdentity  = app.ResolveTelemetryIdentity
@@ -48,7 +49,9 @@ func run() int {
 		return 0
 	}
 	// Only public CLI invocations collect ancestry; private workers return above.
-	agentInfo := resolveAgentInfo()
+	// Start asynchronously so local lightweight commands are not blocked by native
+	// signature verification; business requests synchronize via runtimecontext.Resolve.
+	agentInfo := snapshotAgentInfo()
 	optedOut := telemetry.OptedOut()
 	var identity <-chan app.TelemetryIdentity
 	if !optedOut {
@@ -63,7 +66,11 @@ func run() int {
 			Version: app.RawVersion(), Command: command, Path: path, ExitCode: code,
 			DurationMillis: finished.Sub(start).Milliseconds(), CompletedAtMillis: finished.UnixMilli(),
 			ErrorSummary: message,
-			AgentInfo:    telemetry.AgentInfoFromSnapshot(agentInfo),
+		}
+		select {
+		case value := <-agentInfo:
+			event.AgentInfo = telemetry.AgentInfoFromSnapshot(value)
+		default:
 		}
 		select {
 		case value := <-identity:
@@ -73,6 +80,16 @@ func run() int {
 		submitTelemetry(event)
 	}
 	return code
+}
+
+func startAgentSnapshot() <-chan runtimecontext.AgentSnapshot {
+	result := make(chan runtimecontext.AgentSnapshot, 1)
+	resolve := resolveAgentInfo
+	go func() {
+		defer func() { _ = recover() }()
+		result <- resolve()
+	}()
+	return result
 }
 
 func startTelemetryIdentity(args []string) <-chan app.TelemetryIdentity {

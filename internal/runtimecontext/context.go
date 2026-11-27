@@ -75,21 +75,40 @@ func (r Result) GoString() string { return r.String() }
 
 // HeaderValue composes independent UMID and Agent results into a bounded header.
 // Missing or failed Agent collection is represented by the integer agent_id=0.
+// When UMID collection does not reach StateReady, compact non-sensitive failure
+// diagnostics (umid_state, umid_err, umid_code, umid_ms) are included so server
+// logs can distinguish timeout, SDK callback errors, and local load failures.
 func (r Result) HeaderValue() (string, bool) {
 	payload := struct {
 		UMID          string `json:"umid,omitempty"`
 		AgentID       int64  `json:"agent_id"`
 		OS            string `json:"os,omitempty"`
 		ExecutionMode string `json:"execution_mode,omitempty"`
+		UMIDState     State  `json:"umid_state,omitempty"`
+		UMIDErr       string `json:"umid_err,omitempty"`
+		UMIDCode      *int32 `json:"umid_code,omitempty"`
+		UMIDMs        *int64 `json:"umid_ms,omitempty"`
 	}{AgentID: r.agent.AgentID, OS: r.agent.OS, ExecutionMode: r.agent.ExecutionMode}
 	if r.State == StateReady {
 		payload.UMID = r.token
+	} else if r.State != "" {
+		payload.UMIDState = r.State
+		payload.UMIDErr = r.ErrorCategory
+		if r.hasCallbackCode {
+			code := r.callbackCode
+			payload.UMIDCode = &code
+		}
+		if r.Elapsed > 0 {
+			ms := r.Elapsed.Milliseconds()
+			payload.UMIDMs = &ms
+		}
 	}
 	// 固定结构只含字符串和整数，JSON 编码不会失败。
 	raw, _ := json.Marshal(payload)
 	if len(raw) > maxHeaderBytes {
 		// Preserve the existing UMID when the combined extension reaches its limit.
 		payload.OS, payload.ExecutionMode = "", ""
+		payload.UMIDState, payload.UMIDErr, payload.UMIDCode, payload.UMIDMs = "", "", nil, nil
 		raw, _ = json.Marshal(payload)
 		if len(raw) > maxHeaderBytes && payload.UMID != "" {
 			raw, _ = json.Marshal(struct {
