@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -28,6 +29,9 @@ import (
 // levels, so skills/multi/<name>/SKILL.md is discoverable. A SKILL.md with
 // metadata.internal: true is hidden from default `npx skills add`.
 const publicSkillsCLIContainerDepth = 3
+
+// The Agent Skills specification limits descriptions to 1024 characters.
+const maxSkillDescriptionCharacters = 1024
 
 type publicSkillFrontmatter struct {
 	Name        string `yaml:"name"`
@@ -71,6 +75,9 @@ func TestPublicAgentSkillsCLIDiscoveryContract(t *testing.T) {
 		if parseErr != nil {
 			t.Errorf("%s: %v", relSlash, parseErr)
 			return nil
+		}
+		if characters := utf8.RuneCountInString(fm.Description); characters > maxSkillDescriptionCharacters {
+			t.Errorf("%s: description has %d Unicode characters, maximum is %d", relSlash, characters, maxSkillDescriptionCharacters)
 		}
 		found = append(found, foundSkill{
 			rel:      relSlash,
