@@ -45,37 +45,68 @@ var errAgentTooLarge = errors.New("agent result exceeds limit")
 
 type agentCollector func(string, string) ([]byte, int32, error)
 type agentProvider struct {
-	once    sync.Once
-	result  AgentSnapshot
-	collect agentCollector
-	locate  libraryLocator
-	timeout time.Duration
+	once     sync.Once
+	result   AgentSnapshot
+	collect  agentCollector
+	locate   libraryLocator
+	timeout  time.Duration
+	useCache bool
 }
 
-var defaultAgentProvider = &agentProvider{collect: collectNativeAgent, locate: resolveLibraryPath, timeout: defaultTimeout}
+var defaultAgentProvider = &agentProvider{collect: collectNativeAgent, locate: resolveLibraryPath, timeout: defaultTimeout, useCache: true}
 
 // ResolveAgent collects full_info=0 in the original CLI process once. Timeout
 // publishes a final snapshot; a late native result is released and discarded.
 func ResolveAgent() AgentSnapshot { return defaultAgentProvider.resolve() }
 
+type agentCollectOutcome struct {
+	snapshot  AgentSnapshot
+	cacheKey  string
+	fromCache bool
+}
+
 func (p *agentProvider) resolve() AgentSnapshot {
 	p.once.Do(func() {
-		done := make(chan AgentSnapshot, 1)
+		done := make(chan agentCollectOutcome, 1)
 		timer := time.NewTimer(p.timeout)
 		defer timer.Stop()
+		useCache := p.useCache
+		computeKey := agentCacheKey
+		lookupCache := agentCacheLookup
+		storeCache := agentCacheStore
 		go func() {
-			result := AgentSnapshot{State: StateError, ErrorCategory: "native_failed"}
-			defer func() { _ = recover(); done <- result }()
+			outcome := agentCollectOutcome{
+				snapshot: AgentSnapshot{State: StateError, ErrorCategory: "native_failed"},
+			}
+			defer func() { _ = recover(); done <- outcome }()
+			if useCache {
+				if key, ok := computeKey(); ok {
+					outcome.cacheKey = key
+					if cached, hit := lookupCache(key); hit {
+						outcome.snapshot = cached
+						outcome.fromCache = true
+						return
+					}
+				}
+			}
 			path, err := p.locate()
 			if err != nil {
-				result.State, result.ErrorCategory = StateUnavailable, classifyLocationError(err)
+				outcome.snapshot.State, outcome.snapshot.ErrorCategory = StateUnavailable, classifyLocationError(err)
 				return
 			}
 			raw, code, err := p.collect(path, filepath.Join(filepath.Dir(path), "skt.bin"))
-			result = parseAgentResult(raw, code, err)
+			outcome.snapshot = parseAgentResult(raw, code, err)
 		}()
 		select {
-		case p.result = <-done:
+		case outcome := <-done:
+			p.result = outcome.snapshot
+			if !outcome.fromCache && outcome.cacheKey != "" && (p.result.State == StateReady || p.result.State == AgentUnknown) {
+				snapshot := p.result.clone()
+				go func() {
+					defer func() { _ = recover() }()
+					storeCache(outcome.cacheKey, snapshot)
+				}()
+			}
 		case <-timer.C:
 			p.result = AgentSnapshot{State: StateTimeout, ErrorCategory: "collection_timeout"}
 		}

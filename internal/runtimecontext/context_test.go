@@ -1,6 +1,7 @@
 package runtimecontext
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -153,8 +154,29 @@ func TestCrossPlatformCoverageProviderFailureOutcomes(t *testing.T) {
 			if detail := result.DiagnosticDetail(); detail["error_category"] != test.wantError {
 				t.Fatalf("diagnostic detail = %#v", detail)
 			}
-			if value, ok := result.HeaderValue(); !ok || value != `{"agent_id":0}` {
-				t.Fatalf("unexpected header = %q, %v", value, ok)
+			value, ok := result.HeaderValue()
+			if !ok {
+				t.Fatalf("missing header for %s", test.name)
+			}
+			var decoded struct {
+				UMID      string `json:"umid"`
+				AgentID   *int64 `json:"agent_id"`
+				UMIDState State  `json:"umid_state"`
+				UMIDErr   string `json:"umid_err"`
+				UMIDCode  *int32 `json:"umid_code"`
+			}
+			if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+				t.Fatalf("invalid header json %q: %v", value, err)
+			}
+			if decoded.UMID != "" || decoded.AgentID == nil || *decoded.AgentID != 0 || decoded.UMIDState != test.wantState || decoded.UMIDErr != test.wantError {
+				t.Fatalf("unexpected header = %q", value)
+			}
+			if test.wantError == "callback_failed" {
+				if decoded.UMIDCode == nil || *decoded.UMIDCode != 42 {
+					t.Fatalf("missing callback code in header = %q", value)
+				}
+			} else if decoded.UMIDCode != nil {
+				t.Fatalf("unexpected callback code in header = %q", value)
 			}
 		})
 	}
@@ -201,6 +223,9 @@ func TestCrossPlatformCoverageProviderTimeoutIgnoresLateCallback(t *testing.T) {
 	result := provider.resolve()
 	if result.State != StateTimeout {
 		t.Fatalf("result = %#v", result)
+	}
+	if header, ok := result.HeaderValue(); !ok || !strings.Contains(header, `"umid_state":"timeout"`) || !strings.Contains(header, `"umid_err":"initialization_timeout"`) {
+		t.Fatalf("timeout header missing diagnostics: %q, %v", header, ok)
 	}
 	(<-late)([]byte("too-late"), 0, nil)
 	if second := provider.resolve(); second.State != StateTimeout || second.token != "" {
